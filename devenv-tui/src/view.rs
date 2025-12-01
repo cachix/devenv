@@ -663,6 +663,7 @@ fn build_summary_view_impl(
                 }
             }
         }
+
     }
 
     // Create layout with stats on left and help on right

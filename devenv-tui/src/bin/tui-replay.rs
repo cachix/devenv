@@ -31,6 +31,8 @@ struct Args {
 struct RawTraceEvent {
     timestamp: DateTime<Utc>,
     #[serde(default)]
+    level: Option<String>,
+    #[serde(default)]
     target: String,
     #[serde(default)]
     fields: TraceFields,
@@ -55,6 +57,8 @@ struct TraceFields {
     log_is_error: Option<bool>,
     message_level: Option<String>,
     message_text: Option<String>,
+    detail_key: Option<String>,
+    detail_value: Option<String>,
 }
 
 fn datetime_to_timestamp(dt: DateTime<Utc>) -> Timestamp {
@@ -143,7 +147,7 @@ impl EventProcessor {
 
         if let Some(ref event_type) = fields.event_type {
             match event_type.as_str() {
-                "start" => self.handle_start(fields, timestamp),
+                "start" => self.handle_start(fields, raw.level.as_deref(), timestamp),
                 "complete" => self.handle_complete(fields, timestamp),
                 _ => {}
             }
@@ -179,6 +183,18 @@ impl EventProcessor {
             return;
         }
 
+        if let (Some(key), Some(value)) = (&fields.detail_key, &fields.detail_value) {
+            if let Some(id) = fields.activity_id {
+                self.send(ActivityEvent::Detail {
+                    id,
+                    key: key.clone(),
+                    value: value.clone(),
+                    timestamp,
+                });
+            }
+            return;
+        }
+
         if let Some(ref text) = fields.message_text {
             let level = match fields.message_level.as_deref() {
                 Some("error") => LogLevel::Error,
@@ -196,7 +212,7 @@ impl EventProcessor {
         }
     }
 
-    fn handle_start(&mut self, fields: &TraceFields, timestamp: Timestamp) {
+    fn handle_start(&mut self, fields: &TraceFields, _trace_level: Option<&str>, timestamp: Timestamp) {
         let Some(id) = fields.activity_id else {
             return;
         };

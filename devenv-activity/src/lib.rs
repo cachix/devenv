@@ -160,6 +160,14 @@ pub enum ActivityEvent {
         timestamp: Timestamp,
     },
 
+    /// Additional detail/metadata for an activity (shown when expanded)
+    Detail {
+        id: u64,
+        key: String,
+        value: String,
+        timestamp: Timestamp,
+    },
+
     /// Message not tied to an activity
     Message {
         level: LogLevel,
@@ -265,7 +273,8 @@ pub enum LogLevel {
 }
 
 /// Activity span level (maps to tracing::Level)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// Used internally for tracing span configuration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum ActivityLevel {
     Error,
     Warn,
@@ -274,7 +283,6 @@ pub enum ActivityLevel {
     Debug,
     Trace,
 }
-
 
 // ---------------------------------------------------------------------------
 // ID Generation
@@ -633,6 +641,26 @@ impl Activity {
             timestamp: Timestamp::now(),
         });
     }
+
+    /// Add a detail/metadata to this activity (shown when expanded in TUI)
+    pub fn add_detail(&self, key: impl Into<String>, value: impl Into<String>) {
+        let _guard = self.span.enter();
+        let key_str = key.into();
+        let value_str = value.into();
+        tracing::trace!(
+            target: "devenv::activity",
+            activity_id = self.id,
+            detail_key = %key_str,
+            detail_value = %value_str,
+        );
+
+        send_activity_event(ActivityEvent::Detail {
+            id: self.id,
+            key: key_str,
+            value: value_str,
+            timestamp: Timestamp::now(),
+        });
+    }
 }
 
 impl Deref for Activity {
@@ -699,6 +727,7 @@ impl Drop for Activity {
 fn get_current_activity_id() -> Option<u64> {
     ACTIVITY_STACK.with(|stack| stack.borrow().last().copied())
 }
+
 /// Emit a standalone message not tied to an activity
 pub fn message(level: LogLevel, text: impl Into<String>) {
     let level_str = match level {

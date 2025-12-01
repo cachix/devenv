@@ -17,13 +17,13 @@
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{quote, ToTokens};
+use quote::{ToTokens, quote};
 use syn::{
+    Expr, ExprLit, FnArg, Ident, ItemFn, Lit, Pat, Token,
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
     spanned::Spanned,
-    Expr, ExprLit, FnArg, Ident, ItemFn, Lit, Pat, Token,
 };
 
 /// Arguments for the `#[activity]` attribute.
@@ -122,7 +122,12 @@ impl Parse for ActivityArgs {
             syn::Error::new(input.span(), "activity name is required as first argument")
         })?;
 
-        Ok(ActivityArgs { name, kind, level, skip })
+        Ok(ActivityArgs {
+            name,
+            kind,
+            level,
+            skip,
+        })
     }
 }
 
@@ -176,7 +181,12 @@ pub fn activity(args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Result<TokenStream2> {
-    let ActivityArgs { name, kind, level, skip } = args;
+    let ActivityArgs {
+        name,
+        kind,
+        level,
+        skip,
+    } = args;
 
     let fn_vis = &input_fn.vis;
     let fn_sig = &input_fn.sig;

@@ -383,3 +383,679 @@ fn test_nested_evaluation_with_children() {
     let output = render_to_string(&model);
     insta::assert_snapshot!(output);
 }
+
+/// Test that activity details can be added and are stored correctly.
+#[test]
+fn test_activity_with_details() {
+    use devenv_activity::ActivityEvent;
+    let mut model = new_test_model();
+
+    // Create a parent activity
+    let parent_event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Operation,
+        name: "Building shell".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(parent_event);
+
+    // Add a detail to the activity
+    let detail_event = ActivityEvent::Detail {
+        id: 1,
+        key: "command".to_string(),
+        value: "nix eval --json .#devenv.config".to_string(),
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(detail_event);
+
+    // Add another detail
+    let detail_event2 = ActivityEvent::Detail {
+        id: 1,
+        key: "args".to_string(),
+        value: "--warn-dirty false".to_string(),
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(detail_event2);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test multiple parallel builds running concurrently.
+#[test]
+fn test_multiple_parallel_builds() {
+    let mut model = new_test_model();
+
+    // Start multiple builds at different phases
+    let build1 = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Build,
+        name: "hello-2.12".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(build1);
+    model.apply_activity_event(ActivityEvent::Phase {
+        id: 1,
+        phase: "buildPhase".to_string(),
+        timestamp: Timestamp::now(),
+    });
+
+    let build2 = ActivityEvent::Start {
+        id: 2,
+        kind: ActivityKind::Build,
+        name: "openssl-3.0.0".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(build2);
+    model.apply_activity_event(ActivityEvent::Phase {
+        id: 2,
+        phase: "configurePhase".to_string(),
+        timestamp: Timestamp::now(),
+    });
+
+    let build3 = ActivityEvent::Start {
+        id: 3,
+        kind: ActivityKind::Build,
+        name: "python-3.11.5".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(build3);
+    model.apply_activity_event(ActivityEvent::Phase {
+        id: 3,
+        phase: "installPhase".to_string(),
+        timestamp: Timestamp::now(),
+    });
+
+    let build4 = ActivityEvent::Start {
+        id: 4,
+        kind: ActivityKind::Build,
+        name: "gcc-12.3.0".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(build4);
+    model.apply_activity_event(ActivityEvent::Phase {
+        id: 4,
+        phase: "unpackPhase".to_string(),
+        timestamp: Timestamp::now(),
+    });
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test parallel downloads and builds happening simultaneously.
+#[test]
+fn test_parallel_downloads_and_builds() {
+    let mut model = new_test_model();
+
+    // Two builds running
+    let build1 = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Build,
+        name: "hello-2.12".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(build1);
+    model.apply_activity_event(ActivityEvent::Phase {
+        id: 1,
+        phase: "buildPhase".to_string(),
+        timestamp: Timestamp::now(),
+    });
+
+    let build2 = ActivityEvent::Start {
+        id: 2,
+        kind: ActivityKind::Build,
+        name: "curl-8.1.0".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(build2);
+    model.apply_activity_event(ActivityEvent::Phase {
+        id: 2,
+        phase: "configurePhase".to_string(),
+        timestamp: Timestamp::now(),
+    });
+
+    // Three downloads in progress
+    let download1 = ActivityEvent::Start {
+        id: 3,
+        kind: ActivityKind::Fetch,
+        name: "openssl-3.0.0".to_string(),
+        parent: None,
+        detail: Some("https://cache.nixos.org".to_string()),
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(download1);
+    model.apply_activity_event(ActivityEvent::Progress {
+        id: 3,
+        progress: ProgressState::Determinate {
+            current: 15_000_000,
+            total: 30_000_000,
+            unit: Some(ProgressUnit::Bytes),
+        },
+        timestamp: Timestamp::now(),
+    });
+
+    let download2 = ActivityEvent::Start {
+        id: 4,
+        kind: ActivityKind::Fetch,
+        name: "glibc-2.37".to_string(),
+        parent: None,
+        detail: Some("https://cache.nixos.org".to_string()),
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(download2);
+    model.apply_activity_event(ActivityEvent::Progress {
+        id: 4,
+        progress: ProgressState::Determinate {
+            current: 8_000_000,
+            total: 10_000_000,
+            unit: Some(ProgressUnit::Bytes),
+        },
+        timestamp: Timestamp::now(),
+    });
+
+    let download3 = ActivityEvent::Start {
+        id: 5,
+        kind: ActivityKind::Fetch,
+        name: "python-3.11.5".to_string(),
+        parent: None,
+        detail: Some("https://cache.nixos.org".to_string()),
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(download3);
+    model.apply_activity_event(ActivityEvent::Progress {
+        id: 5,
+        progress: ProgressState::Determinate {
+            current: 1_000_000,
+            total: 50_000_000,
+            unit: Some(ProgressUnit::Bytes),
+        },
+        timestamp: Timestamp::now(),
+    });
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test cancelled activity shows in the TUI.
+#[test]
+fn test_task_cancelled() {
+    let mut model = new_test_model();
+
+    let start_event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Task,
+        name: "Running long task".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(start_event);
+
+    let complete_event = ActivityEvent::Complete {
+        id: 1,
+        outcome: devenv_activity::ActivityOutcome::Cancelled,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(complete_event);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test indeterminate progress shows in the TUI.
+#[test]
+fn test_indeterminate_progress() {
+    let mut model = new_test_model();
+
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Fetch,
+        name: "Downloading unknown size".to_string(),
+        parent: None,
+        detail: Some("https://example.com/large-file".to_string()),
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(event);
+
+    let progress_event = ActivityEvent::Progress {
+        id: 1,
+        progress: ProgressState::Indeterminate {
+            current: 42_000_000,
+            unit: Some(ProgressUnit::Bytes),
+        },
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(progress_event);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test build progressing through multiple phases.
+#[test]
+fn test_build_phase_transitions() {
+    let mut model = new_test_model();
+
+    let build_event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Build,
+        name: "complex-package-1.0".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(build_event);
+
+    // Progress through phases
+    model.apply_activity_event(ActivityEvent::Phase {
+        id: 1,
+        phase: "unpackPhase".to_string(),
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(ActivityEvent::Phase {
+        id: 1,
+        phase: "patchPhase".to_string(),
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(ActivityEvent::Phase {
+        id: 1,
+        phase: "configurePhase".to_string(),
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(ActivityEvent::Phase {
+        id: 1,
+        phase: "buildPhase".to_string(),
+        timestamp: Timestamp::now(),
+    });
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test command activity shows in the TUI.
+#[test]
+fn test_command_activity() {
+    let mut model = new_test_model();
+
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Command,
+        name: "Running script".to_string(),
+        parent: None,
+        detail: Some("./configure --prefix=/usr".to_string()),
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(event);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test activity with log messages shows in the TUI.
+#[test]
+fn test_activity_with_logs() {
+    let mut model = new_test_model();
+
+    let build_event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Build,
+        name: "my-package-1.0".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(build_event);
+
+    model.apply_activity_event(ActivityEvent::Phase {
+        id: 1,
+        phase: "buildPhase".to_string(),
+        timestamp: Timestamp::now(),
+    });
+
+    model.apply_activity_event(ActivityEvent::Log {
+        id: 1,
+        line: "Compiling main.c".to_string(),
+        is_error: false,
+        timestamp: Timestamp::now(),
+    });
+
+    model.apply_activity_event(ActivityEvent::Log {
+        id: 1,
+        line: "Compiling utils.c".to_string(),
+        is_error: false,
+        timestamp: Timestamp::now(),
+    });
+
+    model.apply_activity_event(ActivityEvent::Log {
+        id: 1,
+        line: "warning: unused variable 'x'".to_string(),
+        is_error: true,
+        timestamp: Timestamp::now(),
+    });
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test deep nesting (3+ levels) shows hierarchy correctly.
+#[test]
+fn test_deep_nesting() {
+    let mut model = new_test_model();
+
+    // Level 0: Root evaluation
+    let eval_event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Evaluate,
+        name: "devenv.nix".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(eval_event);
+
+    // Level 1: Build triggered during evaluation
+    let build_event = ActivityEvent::Start {
+        id: 2,
+        kind: ActivityKind::Build,
+        name: "wrapper-scripts".to_string(),
+        parent: Some(1),
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(build_event);
+    model.apply_activity_event(ActivityEvent::Phase {
+        id: 2,
+        phase: "buildPhase".to_string(),
+        timestamp: Timestamp::now(),
+    });
+
+    // Level 2: Fetch triggered during build
+    let fetch_event = ActivityEvent::Start {
+        id: 3,
+        kind: ActivityKind::Fetch,
+        name: "bash-5.2".to_string(),
+        parent: Some(2),
+        detail: Some("https://cache.nixos.org".to_string()),
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(fetch_event);
+    model.apply_activity_event(ActivityEvent::Progress {
+        id: 3,
+        progress: ProgressState::Determinate {
+            current: 500_000,
+            total: 1_000_000,
+            unit: Some(ProgressUnit::Bytes),
+        },
+        timestamp: Timestamp::now(),
+    });
+
+    // Level 3: Nested dependency fetch
+    let nested_fetch = ActivityEvent::Start {
+        id: 4,
+        kind: ActivityKind::Fetch,
+        name: "readline-8.2".to_string(),
+        parent: Some(3),
+        detail: Some("https://cache.nixos.org".to_string()),
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(nested_fetch);
+
+    // Level 4: Even deeper
+    let deep_fetch = ActivityEvent::Start {
+        id: 5,
+        kind: ActivityKind::Fetch,
+        name: "ncurses-6.4".to_string(),
+        parent: Some(4),
+        detail: Some("https://cache.nixos.org".to_string()),
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(deep_fetch);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test many concurrent activities (stress test for rendering).
+#[test]
+fn test_many_concurrent_activities() {
+    let mut model = new_test_model();
+
+    // Create 8 concurrent activities of various types
+    for i in 0..8 {
+        let (kind, name, detail, phase) = match i % 4 {
+            0 => (
+                ActivityKind::Build,
+                format!("package-{}", i),
+                None,
+                Some("buildPhase"),
+            ),
+            1 => (
+                ActivityKind::Fetch,
+                format!("dependency-{}", i),
+                Some("https://cache.nixos.org".to_string()),
+                None,
+            ),
+            2 => (ActivityKind::Task, format!("task-{}", i), None, None),
+            _ => (
+                ActivityKind::Evaluate,
+                format!("module-{}", i),
+                None,
+                None,
+            ),
+        };
+
+        let event = ActivityEvent::Start {
+            id: i as u64 + 1,
+            kind,
+            name,
+            parent: None,
+            detail,
+            timestamp: Timestamp::now(),
+        };
+        model.apply_activity_event(event);
+
+        if let Some(p) = phase {
+            model.apply_activity_event(ActivityEvent::Phase {
+                id: i as u64 + 1,
+                phase: p.to_string(),
+                timestamp: Timestamp::now(),
+            });
+        }
+
+        // Add progress to fetch activities
+        if i % 4 == 1 {
+            model.apply_activity_event(ActivityEvent::Progress {
+                id: i as u64 + 1,
+                progress: ProgressState::Determinate {
+                    current: (i as u64 + 1) * 1_000_000,
+                    total: 10_000_000,
+                    unit: Some(ProgressUnit::Bytes),
+                },
+                timestamp: Timestamp::now(),
+            });
+        }
+    }
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test mixed completed and active activities.
+#[test]
+fn test_mixed_completed_and_active() {
+    let mut model = new_test_model();
+
+    // Completed build
+    model.apply_activity_event(ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Build,
+        name: "dependency-a".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(ActivityEvent::Complete {
+        id: 1,
+        outcome: devenv_activity::ActivityOutcome::Success,
+        timestamp: Timestamp::now(),
+    });
+
+    // Failed build
+    model.apply_activity_event(ActivityEvent::Start {
+        id: 2,
+        kind: ActivityKind::Build,
+        name: "dependency-b".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(ActivityEvent::Complete {
+        id: 2,
+        outcome: devenv_activity::ActivityOutcome::Failed,
+        timestamp: Timestamp::now(),
+    });
+
+    // Active build
+    model.apply_activity_event(ActivityEvent::Start {
+        id: 3,
+        kind: ActivityKind::Build,
+        name: "main-package".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(ActivityEvent::Phase {
+        id: 3,
+        phase: "buildPhase".to_string(),
+        timestamp: Timestamp::now(),
+    });
+
+    // Active download
+    model.apply_activity_event(ActivityEvent::Start {
+        id: 4,
+        kind: ActivityKind::Fetch,
+        name: "runtime-dep".to_string(),
+        parent: None,
+        detail: Some("https://cache.nixos.org".to_string()),
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(ActivityEvent::Progress {
+        id: 4,
+        progress: ProgressState::Determinate {
+            current: 3_000_000,
+            total: 5_000_000,
+            unit: Some(ProgressUnit::Bytes),
+        },
+        timestamp: Timestamp::now(),
+    });
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test progress with files unit.
+#[test]
+fn test_progress_with_files_unit() {
+    let mut model = new_test_model();
+
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Operation,
+        name: "Copying files".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(event);
+
+    let progress_event = ActivityEvent::Progress {
+        id: 1,
+        progress: ProgressState::Determinate {
+            current: 150,
+            total: 500,
+            unit: Some(ProgressUnit::Files),
+        },
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(progress_event);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test progress with items unit.
+#[test]
+fn test_progress_with_items_unit() {
+    let mut model = new_test_model();
+
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Operation,
+        name: "Processing items".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(event);
+
+    let progress_event = ActivityEvent::Progress {
+        id: 1,
+        progress: ProgressState::Determinate {
+            current: 75,
+            total: 100,
+            unit: Some(ProgressUnit::Items),
+        },
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(progress_event);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test standalone message event.
+#[test]
+fn test_standalone_message() {
+    let mut model = new_test_model();
+
+    // Add an activity first
+    model.apply_activity_event(ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Build,
+        name: "my-package".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    });
+
+    // Add standalone messages at various levels
+    model.apply_activity_event(ActivityEvent::Message {
+        level: devenv_activity::LogLevel::Info,
+        text: "Build starting...".to_string(),
+        timestamp: Timestamp::now(),
+    });
+
+    model.apply_activity_event(ActivityEvent::Message {
+        level: devenv_activity::LogLevel::Warn,
+        text: "Cache miss, building from source".to_string(),
+        timestamp: Timestamp::now(),
+    });
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}

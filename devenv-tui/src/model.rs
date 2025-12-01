@@ -76,6 +76,13 @@ pub enum ActivityVariant {
     Unknown,
 }
 
+/// Key-value detail/metadata for an activity
+#[derive(Debug, Clone)]
+pub struct ActivityDetail {
+    pub key: String,
+    pub value: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct Activity {
     pub id: u64,
@@ -88,6 +95,8 @@ pub struct Activity {
     pub detail: Option<String>,
     pub variant: ActivityVariant,
     pub progress: Option<ProgressActivity>,
+    /// Additional details/metadata (shown when expanded)
+    pub details: Vec<ActivityDetail>,
 }
 
 #[derive(Debug)]
@@ -214,6 +223,9 @@ impl Model {
             } => {
                 self.handle_activity_log(id, line, is_error);
             }
+            ActivityEvent::Detail { id, key, value, .. } => {
+                self.handle_activity_detail(id, key, value);
+            }
             ActivityEvent::Message { level, text, .. } => {
                 self.handle_message(level, text);
             }
@@ -260,6 +272,7 @@ impl Model {
             detail,
             variant,
             progress: None,
+            details: Vec::new(),
         };
 
         if parent.is_none() {
@@ -267,6 +280,12 @@ impl Model {
         }
 
         self.activities.insert(id, activity);
+    }
+
+    fn handle_activity_detail(&mut self, id: u64, key: String, value: String) {
+        if let Some(activity) = self.activities.get_mut(&id) {
+            activity.details.push(ActivityDetail { key, value });
+        }
     }
 
     fn handle_activity_complete(&mut self, id: u64, outcome: ActivityOutcome) {
@@ -475,6 +494,11 @@ impl Model {
         }
 
         if let Some(activity) = self.activities.get(&activity_id) {
+            // Skip command activities (UserOperation) - they are internal details
+            if matches!(activity.variant, ActivityVariant::UserOperation) {
+                return;
+            }
+
             activities.push(DisplayActivity {
                 activity: activity.clone(),
                 depth,
