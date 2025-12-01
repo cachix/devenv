@@ -1820,7 +1820,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1870,7 +1870,7 @@ checksum = "0ce92ff622d6dadf7349484f42c93271a0d49b7cc4d466a936405bacbe10aa78"
 dependencies = [
  "cfg-if",
  "rustix 1.1.2",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3348,7 +3348,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-bindgen-raw"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aea27695219d42ffd68a90d7bf4545ee1e09ee2a"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#4bcf08c1c7aaba8525ba7f97f6f0ff1eb87a2aef"
 dependencies = [
  "bindgen",
  "pkg-config",
@@ -3357,7 +3357,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-expr"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aea27695219d42ffd68a90d7bf4545ee1e09ee2a"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#4bcf08c1c7aaba8525ba7f97f6f0ff1eb87a2aef"
 dependencies = [
  "anyhow",
  "cstr",
@@ -3373,7 +3373,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-fetchers"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aea27695219d42ffd68a90d7bf4545ee1e09ee2a"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#4bcf08c1c7aaba8525ba7f97f6f0ff1eb87a2aef"
 dependencies = [
  "anyhow",
  "cstr",
@@ -3387,7 +3387,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-flake"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aea27695219d42ffd68a90d7bf4545ee1e09ee2a"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#4bcf08c1c7aaba8525ba7f97f6f0ff1eb87a2aef"
 dependencies = [
  "anyhow",
  "cstr",
@@ -3404,7 +3404,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-store"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aea27695219d42ffd68a90d7bf4545ee1e09ee2a"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#4bcf08c1c7aaba8525ba7f97f6f0ff1eb87a2aef"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -3416,7 +3416,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-util"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aea27695219d42ffd68a90d7bf4545ee1e09ee2a"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#4bcf08c1c7aaba8525ba7f97f6f0ff1eb87a2aef"
 dependencies = [
  "anyhow",
  "ctor",
@@ -3426,7 +3426,7 @@ dependencies = [
 [[package]]
 name = "nix-cmd"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aea27695219d42ffd68a90d7bf4545ee1e09ee2a"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#4bcf08c1c7aaba8525ba7f97f6f0ff1eb87a2aef"
 dependencies = [
  "anyhow",
  "nix-bindings-bindgen-raw",
@@ -3437,7 +3437,7 @@ dependencies = [
 [[package]]
 name = "nix-compat"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#50b41ae7e05b423a7525b4dda53d372a71931506"
+source = "git+https://github.com/cachix/snix#f6c47f37151633e96d2c0e005433b5cd89a6ef2f"
 dependencies = [
  "bitflags 2.10.0",
  "bstr",
@@ -3464,7 +3464,7 @@ dependencies = [
 [[package]]
 name = "nix-compat-derive"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#50b41ae7e05b423a7525b4dda53d372a71931506"
+source = "git+https://github.com/cachix/snix#f6c47f37151633e96d2c0e005433b5cd89a6ef2f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4710,7 +4710,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4723,7 +4723,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4791,7 +4791,7 @@ dependencies = [
  "security-framework 3.5.1",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5369,9 +5369,10 @@ dependencies = [
 [[package]]
 name = "snix-build"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#50b41ae7e05b423a7525b4dda53d372a71931506"
+source = "git+https://github.com/cachix/snix#f6c47f37151633e96d2c0e005433b5cd89a6ef2f"
 dependencies = [
  "anyhow",
+ "async-stream",
  "blake3",
  "bstr",
  "bytes",
@@ -5400,7 +5401,7 @@ dependencies = [
 [[package]]
 name = "snix-castore"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#50b41ae7e05b423a7525b4dda53d372a71931506"
+source = "git+https://github.com/cachix/snix#f6c47f37151633e96d2c0e005433b5cd89a6ef2f"
 dependencies = [
  "astral-tokio-tar",
  "async-compression",
@@ -5456,7 +5457,7 @@ dependencies = [
 [[package]]
 name = "snix-eval"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#50b41ae7e05b423a7525b4dda53d372a71931506"
+source = "git+https://github.com/cachix/snix#f6c47f37151633e96d2c0e005433b5cd89a6ef2f"
 dependencies = [
  "bstr",
  "bytes",
@@ -5492,7 +5493,7 @@ dependencies = [
 [[package]]
 name = "snix-eval-builtin-macros"
 version = "0.0.1"
-source = "git+https://github.com/cachix/snix#50b41ae7e05b423a7525b4dda53d372a71931506"
+source = "git+https://github.com/cachix/snix#f6c47f37151633e96d2c0e005433b5cd89a6ef2f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5502,7 +5503,7 @@ dependencies = [
 [[package]]
 name = "snix-glue"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#50b41ae7e05b423a7525b4dda53d372a71931506"
+source = "git+https://github.com/cachix/snix#f6c47f37151633e96d2c0e005433b5cd89a6ef2f"
 dependencies = [
  "astral-tokio-tar",
  "async-compression",
@@ -5537,7 +5538,7 @@ dependencies = [
 [[package]]
 name = "snix-store"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#50b41ae7e05b423a7525b4dda53d372a71931506"
+source = "git+https://github.com/cachix/snix#f6c47f37151633e96d2c0e005433b5cd89a6ef2f"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -5593,7 +5594,7 @@ dependencies = [
 [[package]]
 name = "snix-tracing"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#50b41ae7e05b423a7525b4dda53d372a71931506"
+source = "git+https://github.com/cachix/snix#f6c47f37151633e96d2c0e005433b5cd89a6ef2f"
 dependencies = [
  "http",
  "opentelemetry",
@@ -6041,7 +6042,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.2",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
