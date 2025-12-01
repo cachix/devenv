@@ -1,5 +1,6 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
+use clap::Parser;
 use devenv_activity::{
     ActivityEvent, ActivityKind, ActivityOutcome, LogLevel, ProgressState, ProgressUnit, Timestamp,
 };
@@ -13,6 +14,17 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tokio_shutdown::Shutdown;
 use tracing::{info, warn};
+
+#[derive(Parser)]
+#[command(about = "Replay devenv trace files with TUI visualization")]
+struct Args {
+    /// Path to the trace file (JSONL format)
+    trace_file: PathBuf,
+
+    /// Replay speed multiplier (e.g., 2.0 for 2x speed, 0.5 for half speed)
+    #[arg(long, short, default_value = "1.0")]
+    speed: f64,
+}
 
 /// Raw trace event from JSON log format (tracing output)
 #[derive(Debug, Deserialize, Clone)]
@@ -274,6 +286,7 @@ async fn replay_events(
     mut stream: TraceStream,
     first_event: RawTraceEvent,
     processor: &mut EventProcessor,
+    speed: f64,
 ) -> Result<()> {
     let first_timestamp = first_event.timestamp;
     let start_time = Instant::now();
@@ -288,7 +301,8 @@ async fn replay_events(
         }
 
         let time_offset = event.timestamp.signed_duration_since(first_timestamp);
-        let target_elapsed = Duration::from_millis(time_offset.num_milliseconds().max(0) as u64);
+        let target_elapsed_ms = time_offset.num_milliseconds().max(0) as f64 / speed;
+        let target_elapsed = Duration::from_millis(target_elapsed_ms as u64);
 
         let current_elapsed = start_time.elapsed();
         if target_elapsed > current_elapsed {
@@ -312,27 +326,14 @@ async fn main() -> Result<()> {
     use tracing_subscriber::prelude::*;
     tracing_subscriber::registry().init();
 
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() != 2 {
-        eprintln!(
-            r"Usage: {} <trace-file.jsonl>
+    let args = Args::parse();
 
-Generate a trace file using:
-  devenv --trace-export-file=trace.jsonl <command>
-
-Or with JSON log format:
-  devenv --log-format=tracing-json <command> > trace.jsonl 2>&1
-
-Then replay with:
-  {} trace.jsonl",
-            args[0], args[0]
-        );
-        std::process::exit(1);
+    if args.speed <= 0.0 {
+        bail!("Speed must be greater than 0");
     }
 
-    let trace_path = PathBuf::from(&args[1]);
-    let file = File::open(&trace_path)
-        .with_context(|| format!("Failed to open trace file: {}", trace_path.display()))?;
+    let file = File::open(&args.trace_file)
+        .with_context(|| format!("Failed to open trace file: {}", args.trace_file.display()))?;
 
     let (tx, rx) = mpsc::unbounded_channel();
     let shutdown = Shutdown::new();
@@ -352,13 +353,13 @@ Then replay with:
         .next_event()?
         .with_context(|| "No valid trace entries found")?;
 
-    info!("Starting trace replay from: {}", trace_path.display());
+    info!("Starting trace replay from: {}", args.trace_file.display());
 
     let mut processor = EventProcessor::new(tx);
 
     // Race: replay events, TUI task, or Ctrl+C
     tokio::select! {
-        result = replay_events(stream, first_event, &mut processor) => {
+        result = replay_events(stream, first_event, &mut processor, args.speed) => {
             if let Err(e) = result {
                 warn!("Replay error: {e}");
             }

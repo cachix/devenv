@@ -1530,6 +1530,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "clap",
  "console 0.16.1",
  "crossterm 0.28.1",
  "devenv-activity",

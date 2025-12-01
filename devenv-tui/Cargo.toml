@@ -35,6 +35,9 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 miette = { workspace = true }
 
+# CLI argument parsing
+clap = { workspace = true }
+
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
