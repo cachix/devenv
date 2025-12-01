@@ -15,8 +15,6 @@ pub struct NixLogBridge {
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
     /// Current parent operation ID for correlating Nix activities
     current_operation_id: Arc<Mutex<Option<OperationId>>>,
-    /// Current parent activity ID for nesting Nix activities
-    current_parent_activity_id: Arc<Mutex<Option<u64>>>,
     /// Evaluation tracking state
     evaluation_state: Arc<Mutex<EvaluationState>>,
 }
@@ -48,7 +46,6 @@ impl NixLogBridge {
         Arc::new(Self {
             active_activities: Arc::new(Mutex::new(HashMap::new())),
             current_operation_id: Arc::new(Mutex::new(None)),
-            current_parent_activity_id: Arc::new(Mutex::new(None)),
             evaluation_state: Arc::new(Mutex::new(EvaluationState::default())),
         })
     }
@@ -57,10 +54,6 @@ impl NixLogBridge {
     pub fn set_current_operation(&self, operation_id: OperationId) {
         if let Ok(mut current) = self.current_operation_id.lock() {
             *current = Some(operation_id);
-        }
-        // Reset parent activity ID - Nix activities will be top-level
-        if let Ok(mut parent_id) = self.current_parent_activity_id.lock() {
-            *parent_id = None;
         }
     }
 
@@ -72,11 +65,6 @@ impl NixLogBridge {
 
         if let Ok(mut current) = self.current_operation_id.lock() {
             *current = None;
-        }
-
-        // Reset the parent activity ID
-        if let Ok(mut parent_id) = self.current_parent_activity_id.lock() {
-            *parent_id = None;
         }
 
         // Also reset the evaluation state for the next operation
@@ -259,14 +247,6 @@ impl NixLogBridge {
         }
     }
 
-    /// Get the current parent activity ID for nesting
-    fn get_parent_activity_id(&self) -> Option<u64> {
-        self.current_parent_activity_id
-            .lock()
-            .ok()
-            .and_then(|guard| *guard)
-    }
-
     /// Extract a string value from a Field
     fn extract_string_field(field: &Field) -> Option<String> {
         match field {
@@ -284,8 +264,6 @@ impl NixLogBridge {
         text: String,
         fields: Vec<Field>,
     ) {
-        let parent_id = self.get_parent_activity_id();
-
         match activity_type {
             ActivityType::Build => {
                 let derivation_path = fields
@@ -299,7 +277,6 @@ impl NixLogBridge {
                     activity_id,
                     ActivityKind::Build,
                     derivation_name,
-                    parent_id,
                     Some(derivation_path),
                 );
 
@@ -313,7 +290,6 @@ impl NixLogBridge {
                         activity_id,
                         ActivityKind::Fetch,
                         format!("Query {}", package_name),
-                        parent_id,
                         Some(store_path),
                     );
 
@@ -328,7 +304,6 @@ impl NixLogBridge {
                         activity_id,
                         ActivityKind::Fetch,
                         package_name,
-                        parent_id,
                         Some(store_path),
                     );
 
@@ -340,7 +315,6 @@ impl NixLogBridge {
                     activity_id,
                     ActivityKind::Fetch,
                     text,
-                    parent_id,
                     None,
                 );
 

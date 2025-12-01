@@ -300,13 +300,17 @@ impl Activity {
     }
 
     /// Start an activity with a specific external ID (for Nix integration)
+    ///
+    /// Uses the thread-local activity stack to determine the parent,
+    /// just like regular activities. The external ID allows correlating
+    /// with Nix's activity lifecycle events.
     pub fn start_with_id(
         id: u64,
         kind: ActivityKind,
         name: String,
-        parent: Option<u64>,
         detail: Option<String>,
     ) -> Self {
+        let parent = get_current_activity_id();
         Self::start_internal(id, kind, name, parent, detail)
     }
 
