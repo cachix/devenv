@@ -126,12 +126,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
-name = "assert_matches"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
-
-[[package]]
 name = "astral-tokio-tar"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1377,7 +1371,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-activity"
-version = "1.11.2"
+version = "1.11.3"
 dependencies = [
  "humantime",
  "serde",
@@ -1531,10 +1525,9 @@ dependencies = [
 
 [[package]]
 name = "devenv-tui"
-version = "1.11.2"
+version = "1.11.3"
 dependencies = [
  "anyhow",
- "assert_matches",
  "async-trait",
  "chrono",
  "console 0.16.1",
@@ -1549,15 +1542,12 @@ dependencies = [
  "iocraft",
  "miette",
  "once_cell",
- "pretty_assertions",
  "rand 0.8.5",
  "serde",
  "serde_json",
- "tempfile",
  "thiserror 2.0.16",
  "tokio",
  "tokio-shutdown",
- "tokio-test",
  "tracing",
  "tracing-subscriber",
 ]

@@ -66,20 +66,4 @@ name = "tui-replay"
 path = "src/bin/tui-replay.rs"
 
 [dev-dependencies]
-pretty_assertions = { workspace = true }
-tempfile = { workspace = true }
 insta = { version = "1.40", features = ["json"] }
-assert_matches = "1.5"
-tokio-test = "0.4"
-
-[[test]]
-name = "integration"
-path = "tests/integration/mod.rs"
-
-[[test]]
-name = "snapshot"
-path = "tests/snapshot/mod.rs"
-
-[[test]]
-name = "unit"
-path = "tests/unit/mod.rs"

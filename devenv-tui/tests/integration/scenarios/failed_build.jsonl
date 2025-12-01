@@ -1,8 +1,0 @@
-{"timestamp":"2025-01-14T10:00:00Z","level":"INFO","target":"devenv","fields":{"message":"Starting build","devenv.ui.operation.type":"BUILD","devenv.ui.operation.name":"Building failing-package","devenv.ui.operation.short_name":"failing-pkg"},"span_ids":{"span_id":"span-1","parent_span_id":null},"span_attrs":{"fields":{"devenv.ui.operation.type":"BUILD"}}}
-{"timestamp":"2025-01-14T10:00:01Z","level":"INFO","target":"devenv.nix.build","fields":{"activity_id":"1","phase":"configurePhase"},"span_ids":{"span_id":"span-1","parent_span_id":null}}
-{"timestamp":"2025-01-14T10:00:02Z","level":"INFO","target":"devenv.nix.build","fields":{"activity_id":"1","line":"Configuring package..."},"span_ids":{"span_id":"span-1","parent_span_id":null}}
-{"timestamp":"2025-01-14T10:00:03Z","level":"INFO","target":"devenv.nix.build","fields":{"activity_id":"1","phase":"buildPhase"},"span_ids":{"span_id":"span-1","parent_span_id":null}}
-{"timestamp":"2025-01-14T10:00:04Z","level":"INFO","target":"devenv.nix.build","fields":{"activity_id":"1","line":"Building package..."},"span_ids":{"span_id":"span-1","parent_span_id":null}}
-{"timestamp":"2025-01-14T10:00:05Z","level":"ERROR","target":"devenv.nix.build","fields":{"activity_id":"1","line":"error: compilation failed"},"span_ids":{"span_id":"span-1","parent_span_id":null}}
-{"timestamp":"2025-01-14T10:00:06Z","level":"ERROR","target":"devenv.nix.build","fields":{"activity_id":"1","line":"error: builder for '/nix/store/xyz-failing-package.drv' failed with exit code 1"},"span_ids":{"span_id":"span-1","parent_span_id":null}}
-{"timestamp":"2025-01-14T10:00:07Z","level":"ERROR","target":"devenv","fields":{"message":"Build failed"},"span_ids":{"span_id":"span-1","parent_span_id":null}}

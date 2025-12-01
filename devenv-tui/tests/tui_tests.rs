@@ -1,13 +1,16 @@
-//! End-to-end TUI snapshot tests.
+//! TUI snapshot tests.
 //!
-//! These tests verify that when events are fed into the model,
+//! These tests verify that when activity events are fed into the model,
 //! the TUI renders the expected output.
 
-use devenv_activity::{ActivityEvent, ActivityKind, ProgressState, ProgressUnit};
-use devenv_tui::Model;
-use std::time::SystemTime;
+use devenv_activity::{ActivityEvent, ActivityKind, ProgressState, ProgressUnit, Timestamp};
+use devenv_tui::{view::view, Model};
+use iocraft::prelude::*;
 
-use crate::test_utils::render::render_to_string;
+fn render_to_string(model: &Model, width: usize) -> String {
+    let mut element = view(model).into();
+    element.render(Some(width)).to_string()
+}
 
 /// Test that an empty model renders correctly.
 #[test]
@@ -28,7 +31,7 @@ fn test_single_build_activity() {
         name: "Building hello-world".to_string(),
         parent: None,
         detail: None,
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(event);
@@ -36,7 +39,7 @@ fn test_single_build_activity() {
     let phase_event = ActivityEvent::Phase {
         id: 1,
         phase: "buildPhase".to_string(),
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(phase_event);
@@ -56,7 +59,7 @@ fn test_download_with_progress() {
         name: "Downloading nixpkgs".to_string(),
         parent: None,
         detail: None,
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(event);
@@ -68,7 +71,7 @@ fn test_download_with_progress() {
             total: 10000,
             unit: Some(ProgressUnit::Bytes),
         },
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(progress_event);
@@ -88,7 +91,7 @@ fn test_task_running() {
         name: "Running tests".to_string(),
         parent: None,
         detail: None,
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(event);
@@ -108,13 +111,13 @@ fn test_multiple_activities() {
         name: "Building package-a".to_string(),
         parent: None,
         detail: None,
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     let build_phase_event = ActivityEvent::Phase {
         id: 1,
         phase: "buildPhase".to_string(),
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     let download_event = ActivityEvent::Start {
@@ -123,7 +126,7 @@ fn test_multiple_activities() {
         name: "Downloading package-b".to_string(),
         parent: None,
         detail: None,
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     let download_progress_event = ActivityEvent::Progress {
@@ -133,7 +136,7 @@ fn test_multiple_activities() {
             total: 5000,
             unit: Some(ProgressUnit::Bytes),
         },
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     let task_event = ActivityEvent::Start {
@@ -142,7 +145,7 @@ fn test_multiple_activities() {
         name: "Running setup".to_string(),
         parent: None,
         detail: None,
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(build_event);
@@ -166,7 +169,7 @@ fn test_task_success() {
         name: "Build completed".to_string(),
         parent: None,
         detail: None,
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(start_event);
@@ -174,7 +177,7 @@ fn test_task_success() {
     let complete_event = ActivityEvent::Complete {
         id: 1,
         outcome: devenv_activity::ActivityOutcome::Success,
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(complete_event);
@@ -194,7 +197,7 @@ fn test_task_failed() {
         name: "Tests failed".to_string(),
         parent: None,
         detail: None,
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(start_event);
@@ -202,7 +205,7 @@ fn test_task_failed() {
     let complete_event = ActivityEvent::Complete {
         id: 1,
         outcome: devenv_activity::ActivityOutcome::Failed,
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(complete_event);
@@ -222,7 +225,7 @@ fn test_evaluating_activity() {
         name: "Evaluating flake".to_string(),
         parent: None,
         detail: None,
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(event);
@@ -242,7 +245,7 @@ fn test_query_activity() {
         name: "Querying cache".to_string(),
         parent: None,
         detail: Some("https://cache.nixos.org".to_string()),
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(event);
@@ -262,7 +265,7 @@ fn test_fetch_tree_activity() {
         name: "Fetching github:NixOS/nixpkgs".to_string(),
         parent: None,
         detail: None,
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(event);
@@ -282,7 +285,7 @@ fn test_download_with_substituter() {
         name: "Downloading package".to_string(),
         parent: None,
         detail: Some("https://cache.nixos.org".to_string()),
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(event);
@@ -294,7 +297,7 @@ fn test_download_with_substituter() {
             total: 2000,
             unit: Some(ProgressUnit::Bytes),
         },
-        timestamp: SystemTime::now(),
+        timestamp: Timestamp::now(),
     };
 
     model.apply_activity_event(progress_event);
