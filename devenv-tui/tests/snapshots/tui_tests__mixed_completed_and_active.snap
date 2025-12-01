@@ -1,0 +1,9 @@
+---
+source: devenv-tui/tests/tui_tests.rs
+expression: output
+---
+ ⠋ Building main-package buildPhase                                  0.0s
+ Downloading runtime-dep                                             0.0s
+    ───────────────────────────────────────────────────3MB / 5MB at 30MB/s
+
+ 1 of 3 builds  │  0 of 1 downloads                                ↑↓ nav

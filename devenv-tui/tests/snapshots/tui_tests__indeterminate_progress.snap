@@ -2,7 +2,7 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ⠋ Downloading Fetching github:NixOS/nixpkgs 0.0s
+ ⠋ Downloading large-file.tar.gz 0.0s
 
 
 

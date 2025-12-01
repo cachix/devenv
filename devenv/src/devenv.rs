@@ -457,7 +457,6 @@ impl Devenv {
         args: &[String],
     ) -> Result<CommandResult> {
         let shell_cmd = self.prepare_shell(&cmd, args).await?;
-        devenv_activity::message(devenv_activity::LogLevel::Info, "Entering shell");
         Ok(CommandResult::Exec(shell_cmd.into_std()))
     }
 
@@ -605,11 +604,6 @@ impl Devenv {
         };
         self.container_copy(name, copy_args, Some("docker-daemon:"))
             .await?;
-
-        devenv_activity::message(
-            devenv_activity::LogLevel::Info,
-            format!("Running container {name}"),
-        );
 
         let sanitized_name = sanitize_container_name(name);
         let gc_root = self

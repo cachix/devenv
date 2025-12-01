@@ -1,6 +1,5 @@
 ---
 source: devenv-tui/tests/tui_tests.rs
-assertion_line: 384
 expression: output
 ---
  ⠋ Evaluating devenv.nix               0.0s

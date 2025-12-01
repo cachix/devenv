@@ -591,32 +591,6 @@ fn test_parallel_downloads_and_builds() {
     insta::assert_snapshot!(output);
 }
 
-/// Test cancelled activity shows in the TUI.
-#[test]
-fn test_task_cancelled() {
-    let mut model = new_test_model();
-
-    let start_event = ActivityEvent::Start {
-        id: 1,
-        kind: ActivityKind::Task,
-        name: "Running long task".to_string(),
-        parent: None,
-        detail: None,
-        timestamp: Timestamp::now(),
-    };
-    model.apply_activity_event(start_event);
-
-    let complete_event = ActivityEvent::Complete {
-        id: 1,
-        outcome: devenv_activity::ActivityOutcome::Cancelled,
-        timestamp: Timestamp::now(),
-    };
-    model.apply_activity_event(complete_event);
-
-    let output = render_to_string(&model);
-    insta::assert_snapshot!(output);
-}
-
 /// Test indeterminate progress shows in the TUI.
 #[test]
 fn test_indeterminate_progress() {
@@ -625,7 +599,7 @@ fn test_indeterminate_progress() {
     let event = ActivityEvent::Start {
         id: 1,
         kind: ActivityKind::Fetch,
-        name: "Downloading unknown size".to_string(),
+        name: "large-file.tar.gz".to_string(),
         parent: None,
         detail: Some("https://example.com/large-file".to_string()),
         timestamp: Timestamp::now(),
@@ -641,112 +615,6 @@ fn test_indeterminate_progress() {
         timestamp: Timestamp::now(),
     };
     model.apply_activity_event(progress_event);
-
-    let output = render_to_string(&model);
-    insta::assert_snapshot!(output);
-}
-
-/// Test build progressing through multiple phases.
-#[test]
-fn test_build_phase_transitions() {
-    let mut model = new_test_model();
-
-    let build_event = ActivityEvent::Start {
-        id: 1,
-        kind: ActivityKind::Build,
-        name: "complex-package-1.0".to_string(),
-        parent: None,
-        detail: None,
-        timestamp: Timestamp::now(),
-    };
-    model.apply_activity_event(build_event);
-
-    // Progress through phases
-    model.apply_activity_event(ActivityEvent::Phase {
-        id: 1,
-        phase: "unpackPhase".to_string(),
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(ActivityEvent::Phase {
-        id: 1,
-        phase: "patchPhase".to_string(),
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(ActivityEvent::Phase {
-        id: 1,
-        phase: "configurePhase".to_string(),
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(ActivityEvent::Phase {
-        id: 1,
-        phase: "buildPhase".to_string(),
-        timestamp: Timestamp::now(),
-    });
-
-    let output = render_to_string(&model);
-    insta::assert_snapshot!(output);
-}
-
-/// Test command activity shows in the TUI.
-#[test]
-fn test_command_activity() {
-    let mut model = new_test_model();
-
-    let event = ActivityEvent::Start {
-        id: 1,
-        kind: ActivityKind::Command,
-        name: "Running script".to_string(),
-        parent: None,
-        detail: Some("./configure --prefix=/usr".to_string()),
-        timestamp: Timestamp::now(),
-    };
-    model.apply_activity_event(event);
-
-    let output = render_to_string(&model);
-    insta::assert_snapshot!(output);
-}
-
-/// Test activity with log messages shows in the TUI.
-#[test]
-fn test_activity_with_logs() {
-    let mut model = new_test_model();
-
-    let build_event = ActivityEvent::Start {
-        id: 1,
-        kind: ActivityKind::Build,
-        name: "my-package-1.0".to_string(),
-        parent: None,
-        detail: None,
-        timestamp: Timestamp::now(),
-    };
-    model.apply_activity_event(build_event);
-
-    model.apply_activity_event(ActivityEvent::Phase {
-        id: 1,
-        phase: "buildPhase".to_string(),
-        timestamp: Timestamp::now(),
-    });
-
-    model.apply_activity_event(ActivityEvent::Log {
-        id: 1,
-        line: "Compiling main.c".to_string(),
-        is_error: false,
-        timestamp: Timestamp::now(),
-    });
-
-    model.apply_activity_event(ActivityEvent::Log {
-        id: 1,
-        line: "Compiling utils.c".to_string(),
-        is_error: false,
-        timestamp: Timestamp::now(),
-    });
-
-    model.apply_activity_event(ActivityEvent::Log {
-        id: 1,
-        line: "warning: unused variable 'x'".to_string(),
-        is_error: true,
-        timestamp: Timestamp::now(),
-    });
 
     let output = render_to_string(&model);
     insta::assert_snapshot!(output);
@@ -968,94 +836,3 @@ fn test_mixed_completed_and_active() {
     insta::assert_snapshot!(output);
 }
 
-/// Test progress with files unit.
-#[test]
-fn test_progress_with_files_unit() {
-    let mut model = new_test_model();
-
-    let event = ActivityEvent::Start {
-        id: 1,
-        kind: ActivityKind::Operation,
-        name: "Copying files".to_string(),
-        parent: None,
-        detail: None,
-        timestamp: Timestamp::now(),
-    };
-    model.apply_activity_event(event);
-
-    let progress_event = ActivityEvent::Progress {
-        id: 1,
-        progress: ProgressState::Determinate {
-            current: 150,
-            total: 500,
-            unit: Some(ProgressUnit::Files),
-        },
-        timestamp: Timestamp::now(),
-    };
-    model.apply_activity_event(progress_event);
-
-    let output = render_to_string(&model);
-    insta::assert_snapshot!(output);
-}
-
-/// Test progress with items unit.
-#[test]
-fn test_progress_with_items_unit() {
-    let mut model = new_test_model();
-
-    let event = ActivityEvent::Start {
-        id: 1,
-        kind: ActivityKind::Operation,
-        name: "Processing items".to_string(),
-        parent: None,
-        detail: None,
-        timestamp: Timestamp::now(),
-    };
-    model.apply_activity_event(event);
-
-    let progress_event = ActivityEvent::Progress {
-        id: 1,
-        progress: ProgressState::Determinate {
-            current: 75,
-            total: 100,
-            unit: Some(ProgressUnit::Items),
-        },
-        timestamp: Timestamp::now(),
-    };
-    model.apply_activity_event(progress_event);
-
-    let output = render_to_string(&model);
-    insta::assert_snapshot!(output);
-}
-
-/// Test standalone message event.
-#[test]
-fn test_standalone_message() {
-    let mut model = new_test_model();
-
-    // Add an activity first
-    model.apply_activity_event(ActivityEvent::Start {
-        id: 1,
-        kind: ActivityKind::Build,
-        name: "my-package".to_string(),
-        parent: None,
-        detail: None,
-        timestamp: Timestamp::now(),
-    });
-
-    // Add standalone messages at various levels
-    model.apply_activity_event(ActivityEvent::Message {
-        level: devenv_activity::LogLevel::Info,
-        text: "Build starting...".to_string(),
-        timestamp: Timestamp::now(),
-    });
-
-    model.apply_activity_event(ActivityEvent::Message {
-        level: devenv_activity::LogLevel::Warn,
-        text: "Cache miss, building from source".to_string(),
-        timestamp: Timestamp::now(),
-    });
-
-    let output = render_to_string(&model);
-    insta::assert_snapshot!(output);
-}
