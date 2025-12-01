@@ -11,7 +11,7 @@ pub mod view;
 pub use events::*;
 pub use model::{
     Activity, ActivityVariant, BuildActivity, DownloadActivity, Model, ProgressActivity,
-    QueryActivity, TaskActivity, TaskDisplayStatus,
+    QueryActivity, TaskActivity, TaskDisplayStatus, TerminalSize,
 };
 pub use model_events::UiEvent;
 

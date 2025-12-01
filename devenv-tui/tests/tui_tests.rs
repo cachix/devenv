@@ -7,23 +7,30 @@ use devenv_activity::{ActivityEvent, ActivityKind, ProgressState, ProgressUnit, 
 use devenv_tui::{view::view, Model};
 use iocraft::prelude::*;
 
-fn render_to_string(model: &Model, width: usize) -> String {
+const TEST_WIDTH: u16 = 80;
+const TEST_HEIGHT: u16 = 24;
+
+fn render_to_string(model: &Model) -> String {
     let mut element = view(model).into();
-    element.render(Some(width)).to_string()
+    element.render(Some(TEST_WIDTH as usize)).to_string()
+}
+
+fn new_test_model() -> Model {
+    Model::with_terminal_size(TEST_WIDTH, TEST_HEIGHT)
 }
 
 /// Test that an empty model renders correctly.
 #[test]
 fn test_empty_model() {
-    let model = Model::new();
-    let output = render_to_string(&model, 80);
+    let model = new_test_model();
+    let output = render_to_string(&model);
     insta::assert_snapshot!(output);
 }
 
 /// Test that a single build activity shows in the TUI.
 #[test]
 fn test_single_build_activity() {
-    let mut model = Model::new();
+    let mut model = new_test_model();
 
     let event = ActivityEvent::Start {
         id: 1,
@@ -44,14 +51,14 @@ fn test_single_build_activity() {
 
     model.apply_activity_event(phase_event);
 
-    let output = render_to_string(&model, 80);
+    let output = render_to_string(&model);
     insta::assert_snapshot!(output);
 }
 
 /// Test that a download activity with progress shows in the TUI.
 #[test]
 fn test_download_with_progress() {
-    let mut model = Model::new();
+    let mut model = new_test_model();
 
     let event = ActivityEvent::Start {
         id: 1,
@@ -76,14 +83,14 @@ fn test_download_with_progress() {
 
     model.apply_activity_event(progress_event);
 
-    let output = render_to_string(&model, 80);
+    let output = render_to_string(&model);
     insta::assert_snapshot!(output);
 }
 
 /// Test that a task activity shows in the TUI.
 #[test]
 fn test_task_running() {
-    let mut model = Model::new();
+    let mut model = new_test_model();
 
     let event = ActivityEvent::Start {
         id: 1,
@@ -96,14 +103,14 @@ fn test_task_running() {
 
     model.apply_activity_event(event);
 
-    let output = render_to_string(&model, 80);
+    let output = render_to_string(&model);
     insta::assert_snapshot!(output);
 }
 
 /// Test that multiple concurrent activities show in the TUI.
 #[test]
 fn test_multiple_activities() {
-    let mut model = Model::new();
+    let mut model = new_test_model();
 
     let build_event = ActivityEvent::Start {
         id: 1,
@@ -154,14 +161,14 @@ fn test_multiple_activities() {
     model.apply_activity_event(download_progress_event);
     model.apply_activity_event(task_event);
 
-    let output = render_to_string(&model, 80);
+    let output = render_to_string(&model);
     insta::assert_snapshot!(output);
 }
 
 /// Test task status lifecycle: pending -> running -> success.
 #[test]
 fn test_task_success() {
-    let mut model = Model::new();
+    let mut model = new_test_model();
 
     let start_event = ActivityEvent::Start {
         id: 1,
@@ -182,14 +189,14 @@ fn test_task_success() {
 
     model.apply_activity_event(complete_event);
 
-    let output = render_to_string(&model, 80);
+    let output = render_to_string(&model);
     insta::assert_snapshot!(output);
 }
 
 /// Test task failure shows in the TUI.
 #[test]
 fn test_task_failed() {
-    let mut model = Model::new();
+    let mut model = new_test_model();
 
     let start_event = ActivityEvent::Start {
         id: 1,
@@ -210,14 +217,14 @@ fn test_task_failed() {
 
     model.apply_activity_event(complete_event);
 
-    let output = render_to_string(&model, 80);
+    let output = render_to_string(&model);
     insta::assert_snapshot!(output);
 }
 
 /// Test evaluating activity shows in the TUI.
 #[test]
 fn test_evaluating_activity() {
-    let mut model = Model::new();
+    let mut model = new_test_model();
 
     let event = ActivityEvent::Start {
         id: 1,
@@ -230,14 +237,14 @@ fn test_evaluating_activity() {
 
     model.apply_activity_event(event);
 
-    let output = render_to_string(&model, 80);
+    let output = render_to_string(&model);
     insta::assert_snapshot!(output);
 }
 
 /// Test query activity shows in the TUI.
 #[test]
 fn test_query_activity() {
-    let mut model = Model::new();
+    let mut model = new_test_model();
 
     let event = ActivityEvent::Start {
         id: 1,
@@ -250,14 +257,14 @@ fn test_query_activity() {
 
     model.apply_activity_event(event);
 
-    let output = render_to_string(&model, 80);
+    let output = render_to_string(&model);
     insta::assert_snapshot!(output);
 }
 
 /// Test fetch tree activity shows in the TUI.
 #[test]
 fn test_fetch_tree_activity() {
-    let mut model = Model::new();
+    let mut model = new_test_model();
 
     let event = ActivityEvent::Start {
         id: 1,
@@ -270,14 +277,14 @@ fn test_fetch_tree_activity() {
 
     model.apply_activity_event(event);
 
-    let output = render_to_string(&model, 80);
+    let output = render_to_string(&model);
     insta::assert_snapshot!(output);
 }
 
 /// Test download with substituter info shows in the TUI.
 #[test]
 fn test_download_with_substituter() {
-    let mut model = Model::new();
+    let mut model = new_test_model();
 
     let event = ActivityEvent::Start {
         id: 1,
@@ -302,6 +309,6 @@ fn test_download_with_substituter() {
 
     model.apply_activity_event(progress_event);
 
-    let output = render_to_string(&model, 80);
+    let output = render_to_string(&model);
     insta::assert_snapshot!(output);
 }

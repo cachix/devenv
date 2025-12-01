@@ -1,6 +1,6 @@
 use crate::{
     components::*,
-    model::{Activity, ActivitySummary, ActivityVariant, Model, TaskDisplayStatus},
+    model::{Activity, ActivitySummary, ActivityVariant, Model, TaskDisplayStatus, TerminalSize},
 };
 use human_repr::{HumanCount, HumanDuration};
 use iocraft::Context;
@@ -18,6 +18,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     let spinner_frame = model.ui.spinner_frame;
     let selected_id = model.ui.selected_activity;
     let show_expanded_logs = model.ui.view_options.show_expanded_logs;
+    let terminal_size = model.ui.terminal_size;
 
     // Check if we have a selected build activity with logs FIRST
     let selected_activity = model.get_selected_activity();
@@ -143,8 +144,10 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     let total_height = dynamic_height + 2; // +1 for summary, +1 buffer to prevent overflow
 
     element! {
-        View(flex_direction: FlexDirection::Column, height: total_height, width: 100pct) {
-            #(children)
+        ContextProvider(value: Context::owned(terminal_size)) {
+            View(flex_direction: FlexDirection::Column, height: total_height, width: 100pct) {
+                #(children)
+            }
         }
     }
 }
@@ -162,8 +165,8 @@ struct ActivityRenderContext {
 
 /// Render a single activity (owned version)
 #[component]
-fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
-    let (terminal_width, _) = hooks.use_terminal_size();
+fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let terminal_width = hooks.use_context::<TerminalSize>().width;
     let ctx = hooks.use_context::<ActivityRenderContext>();
     let ActivityRenderContext {
         activity,
@@ -399,8 +402,8 @@ struct SummaryViewContext {
 
 /// Summary view component that adapts to terminal width
 #[component]
-fn SummaryView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
-    let (terminal_width, _) = hooks.use_terminal_size();
+fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let terminal_width = hooks.use_context::<TerminalSize>().width;
     let ctx = hooks.use_context::<SummaryViewContext>();
     let SummaryViewContext {
         summary,

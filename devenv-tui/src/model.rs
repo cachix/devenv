@@ -91,6 +91,13 @@ pub struct UiState {
     pub selected_activity: Option<u64>,
     pub scroll: ScrollState,
     pub view_options: ViewOptions,
+    pub terminal_size: TerminalSize,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TerminalSize {
+    pub width: u16,
+    pub height: u16,
 }
 
 #[derive(Debug)]
@@ -131,7 +138,14 @@ pub enum TaskDisplayStatus {
 }
 
 impl Model {
+    /// Create a new Model, querying the terminal for its size.
     pub fn new() -> Self {
+        let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
+        Self::with_terminal_size(width, height)
+    }
+
+    /// Create a new Model with a fixed terminal size (useful for tests).
+    pub fn with_terminal_size(width: u16, height: u16) -> Self {
         Self {
             message_log: VecDeque::new(),
             activities: HashMap::new(),
@@ -155,10 +169,16 @@ impl Model {
                     show_details: false,
                     show_expanded_logs: false,
                 },
+                terminal_size: TerminalSize { width, height },
             },
             app_state: AppState::Running,
             completed_messages: Vec::new(),
         }
+    }
+
+    /// Update terminal size (call on resize events).
+    pub fn set_terminal_size(&mut self, width: u16, height: u16) {
+        self.ui.terminal_size = TerminalSize { width, height };
     }
 
     pub fn apply_activity_event(&mut self, event: ActivityEvent) {
