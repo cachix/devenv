@@ -57,11 +57,16 @@ pub struct TaskActivity {
     pub duration: Option<std::time::Duration>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct EvaluatingActivity {
+    pub files_evaluated: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ActivityVariant {
     Task(TaskActivity),
     UserOperation,
-    Evaluating,
+    Evaluating(EvaluatingActivity),
     Build(BuildActivity),
     Download(DownloadActivity),
     Query(QueryActivity),
@@ -233,7 +238,7 @@ impl Model {
                 speed: None,
                 substituter: None,
             }),
-            ActivityKind::Evaluate => ActivityVariant::Evaluating,
+            ActivityKind::Evaluate => ActivityVariant::Evaluating(EvaluatingActivity::default()),
             ActivityKind::Task => ActivityVariant::Task(TaskActivity {
                 status: TaskDisplayStatus::Running,
                 duration: None,
@@ -352,14 +357,21 @@ impl Model {
         }
         logs.push_back(line.clone());
 
-        if let Some(activity) = self.activities.get_mut(&id)
-            && let ActivityVariant::Build(ref mut build) = activity.variant {
-                if is_error {
-                    build.log_stderr_lines.push(line);
-                } else {
-                    build.log_stdout_lines.push(line);
+        if let Some(activity) = self.activities.get_mut(&id) {
+            match &mut activity.variant {
+                ActivityVariant::Build(build) => {
+                    if is_error {
+                        build.log_stderr_lines.push(line);
+                    } else {
+                        build.log_stdout_lines.push(line);
+                    }
                 }
+                ActivityVariant::Evaluating(eval) => {
+                    eval.files_evaluated += 1;
+                }
+                _ => {}
             }
+        }
     }
 
     fn handle_message(&mut self, level: devenv_activity::LogLevel, text: String) {

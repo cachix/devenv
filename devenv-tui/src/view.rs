@@ -20,14 +20,17 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     let show_expanded_logs = model.ui.view_options.show_expanded_logs;
     let terminal_size = model.ui.terminal_size;
 
-    // Check if we have a selected build activity with logs FIRST
+    // Check if we have a selected activity with logs
     let selected_activity = model.get_selected_activity();
-    let build_logs = selected_activity
+    let selected_logs = selected_activity
         .as_ref()
-        .filter(|a| matches!(a.variant, ActivityVariant::Build(_)))
+        .filter(|a| {
+            matches!(a.variant, ActivityVariant::Build(_))
+                || matches!(a.variant, ActivityVariant::Evaluating(_))
+        })
         .and_then(|a| model.get_build_logs(a.id));
 
-    // Show all activities (including the selected build activity with inline logs)
+    // Show all activities (including the selected activity with inline logs)
     let activities_to_show: Vec<_> = active_activities.iter().collect();
 
     // Create owned activity elements
@@ -37,13 +40,15 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
             let activity = &display_activity.activity;
             let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
 
-            // Pass build logs if this is the selected build activity
-            let activity_build_logs =
-                if is_selected && matches!(activity.variant, ActivityVariant::Build(_)) {
-                    build_logs.cloned()
-                } else {
-                    None
-                };
+            // Pass logs if this is the selected build or evaluating activity
+            let activity_logs = if is_selected
+                && (matches!(activity.variant, ActivityVariant::Build(_))
+                    || matches!(activity.variant, ActivityVariant::Evaluating(_)))
+            {
+                selected_logs.cloned()
+            } else {
+                None
+            };
 
             element! {
                 ContextProvider(value: Context::owned(ActivityRenderContext {
@@ -51,7 +56,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
                     depth: display_activity.depth,
                     is_selected,
                     spinner_frame,
-                    build_logs: activity_build_logs,
+                    logs: activity_logs,
                     expanded_logs: show_expanded_logs,
                 })) {
                     ActivityItem
@@ -66,7 +71,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
             summary: summary.clone(),
             has_selection,
             expanded_logs: model.ui.view_options.show_expanded_logs,
-            showing_logs: build_logs.is_some(),
+            showing_logs: selected_logs.is_some(),
         })) {
             SummaryView
         }
@@ -97,13 +102,14 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
             }
         }
 
-        // Build activities use early return with custom height - account for it
+        // Build and evaluation activities use early return with custom height - account for it
         if is_selected
-            && matches!(display_activity.activity.variant, ActivityVariant::Build(_))
-            && let Some(logs) = build_logs.as_ref()
+            && (matches!(display_activity.activity.variant, ActivityVariant::Build(_))
+                || matches!(display_activity.activity.variant, ActivityVariant::Evaluating(_)))
+            && let Some(logs) = selected_logs.as_ref()
         {
-            let build_logs_component = BuildLogsComponent::new(Some(logs), show_expanded_logs);
-            total_height += build_logs_component.calculate_height(); // Add actual log height
+            let logs_component = BuildLogsComponent::new(Some(logs), show_expanded_logs);
+            total_height += logs_component.calculate_height();
         }
     }
     let min_height = 3; // Minimum height to show at least a few items
@@ -159,7 +165,7 @@ struct ActivityRenderContext {
     depth: usize,
     is_selected: bool,
     spinner_frame: usize,
-    build_logs: Option<VecDeque<String>>,
+    logs: Option<VecDeque<String>>,
     expanded_logs: bool,
 }
 
@@ -173,7 +179,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         depth,
         is_selected,
         spinner_frame,
-        build_logs,
+        logs,
         expanded_logs,
     } = &*ctx;
     let indent = "  ".repeat(*depth);
@@ -205,13 +211,12 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let mut build_elements = vec![main_line];
 
                 // Add build logs using the component
-                let build_logs_component =
-                    BuildLogsComponent::new(build_logs.as_ref(), *expanded_logs);
-                let log_elements = build_logs_component.render();
+                let logs_component = BuildLogsComponent::new(logs.as_ref(), *expanded_logs);
+                let log_elements = logs_component.render();
                 build_elements.extend(log_elements);
 
                 // Calculate total height: 1 (main line) + actual log viewport height
-                let log_viewport_height = build_logs_component.calculate_height();
+                let log_viewport_height = logs_component.calculate_height();
                 let total_height = (1 + log_viewport_height).min(50) as u32; // Cap total height to prevent overflow
                 return element! {
                     View(height: total_height, flex_direction: FlexDirection::Column) {
@@ -347,8 +352,48 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }
-        ActivityVariant::Evaluating => {
-            let suffix = activity.detail.clone();
+        ActivityVariant::Evaluating(eval_data) => {
+            // Show file count as suffix
+            let suffix = if eval_data.files_evaluated > 0 {
+                Some(format!("{} files", eval_data.files_evaluated))
+            } else {
+                activity.detail.clone()
+            };
+
+            // For selected evaluation activities, show expandable file list
+            if *is_selected && logs.is_some() {
+                let prefix = HierarchyPrefixComponent::new(indent.clone(), *depth)
+                    .with_spinner(*spinner_frame)
+                    .render();
+
+                let main_line = ActivityTextComponent::new(
+                    "evaluating".to_string(),
+                    activity.name.clone(),
+                    elapsed_str,
+                )
+                .with_suffix(suffix)
+                .with_selection(*is_selected)
+                .render(terminal_width, *depth, prefix);
+
+                // Create multi-line element with file list
+                let mut elements = vec![main_line];
+
+                // Add file list using the logs component
+                let logs_component = BuildLogsComponent::new(logs.as_ref(), *expanded_logs);
+                let log_elements = logs_component.render();
+                elements.extend(log_elements);
+
+                // Calculate total height
+                let log_viewport_height = logs_component.calculate_height();
+                let total_height = (1 + log_viewport_height).min(50) as u32;
+                return element! {
+                    View(height: total_height, flex_direction: FlexDirection::Column) {
+                        #(elements)
+                    }
+                }
+                .into_any();
+            }
+
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner(*spinner_frame)
                 .render();

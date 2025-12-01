@@ -1,9 +1,8 @@
 use devenv_activity::{Activity, ActivityKind};
 use devenv_eval_cache::Op;
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
 use tracing::{error, info, trace, warn};
 
 /// Simple operation ID type for correlating Nix activities
@@ -22,12 +21,6 @@ pub struct NixLogBridge {
 /// State for tracking file evaluations
 #[derive(Default)]
 struct EvaluationState {
-    /// Total number of files evaluated
-    total_files_evaluated: u64,
-    /// Recently evaluated files (for batching)
-    pending_files: VecDeque<String>,
-    /// Last time we sent an evaluation progress event
-    last_progress_update: Option<Instant>,
     /// The activity tracking the entire evaluation operation
     activity: Option<Activity>,
 }
@@ -59,19 +52,12 @@ impl NixLogBridge {
 
     /// Clear the current operation ID
     pub fn clear_current_operation(&self) {
-        // First flush any pending evaluation updates before clearing the operation
-        // This ensures the operation_id is still available for the flush
-        self.flush_evaluation_updates();
-
         if let Ok(mut current) = self.current_operation_id.lock() {
             *current = None;
         }
 
-        // Also reset the evaluation state for the next operation
+        // Reset the evaluation state for the next operation
         if let Ok(mut state) = self.evaluation_state.lock() {
-            state.total_files_evaluated = 0;
-            state.pending_files.clear();
-            state.last_progress_update = None;
             state.activity = None; // Drop the activity to end evaluation
         }
     }
@@ -106,26 +92,6 @@ impl NixLogBridge {
         }
     }
 
-    /// Flush any pending evaluation updates
-    fn flush_evaluation_updates(&self) {
-        let Ok(mut state) = self.evaluation_state.lock() else {
-            warn!("Failed to lock evaluation state for flushing");
-            return;
-        };
-
-        if state.pending_files.is_empty() {
-            return;
-        }
-
-        let files: Vec<String> = state.pending_files.drain(..).collect();
-        trace!("Flushing {} pending evaluation files", files.len());
-
-        // Emit progress event using stored activity
-        if let Some(ref activity) = state.activity {
-            activity.progress_indeterminate(state.total_files_evaluated);
-        }
-        let _ = files;
-    }
 
     /// Process a Nix internal log line and emit appropriate tracing events
     pub fn process_log_line(&self, line: &str) {
@@ -339,11 +305,6 @@ impl NixLogBridge {
         if let Ok(mut activities) = self.active_activities.lock()
             && let Some(activity_info) = activities.remove(&activity_id)
         {
-            // If this is the last activity, flush any pending evaluation updates
-            if activities.is_empty() {
-                self.flush_evaluation_updates();
-            }
-
             // Mark as failed if not successful, then drop to complete
             if !success {
                 activity_info.activity.fail();
@@ -428,41 +389,16 @@ impl NixLogBridge {
 
     /// Handle file evaluation events
     fn handle_file_evaluation(&self, file_path: std::path::PathBuf) {
-        const BATCH_SIZE: usize = 5;
-        const BATCH_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
-
         if let Ok(mut state) = self.evaluation_state.lock() {
-            let file_path_str = file_path.display().to_string();
-
-            // If this is the first file, create and store the evaluation activity
-            if state.total_files_evaluated == 0 && state.pending_files.is_empty() {
+            // If this is the first file, create the evaluation activity
+            if state.activity.is_none() {
                 let activity = Activity::evaluate("Nix evaluation");
                 state.activity = Some(activity);
             }
 
-            // Add to pending files
-            state.pending_files.push_back(file_path_str);
-            state.total_files_evaluated += 1;
-
-            // Check if we should send a batch update
-            let now = Instant::now();
-            let batch_full = state.pending_files.len() >= BATCH_SIZE;
-            let timeout_exceeded = state
-                .last_progress_update
-                .is_some_and(|last| now.duration_since(last) >= BATCH_TIMEOUT);
-            let should_send = batch_full || timeout_exceeded;
-
-            if should_send && !state.pending_files.is_empty() {
-                let _files: Vec<String> = state.pending_files.drain(..).collect();
-
-                // Emit progress event using stored activity
-                if let Some(ref activity) = state.activity {
-                    activity.progress_indeterminate(state.total_files_evaluated);
-                }
-                state.last_progress_update = Some(now);
-            } else if state.last_progress_update.is_none() {
-                // First file - set the timer
-                state.last_progress_update = Some(now);
+            // Log the file path to the evaluation activity
+            if let Some(ref activity) = state.activity {
+                activity.log(file_path.display().to_string());
             }
         }
     }
