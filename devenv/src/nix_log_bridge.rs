@@ -392,7 +392,7 @@ impl NixLogBridge {
         if let Ok(mut state) = self.evaluation_state.lock() {
             // If this is the first file, create the evaluation activity
             if state.activity.is_none() {
-                let activity = Activity::evaluate("Nix evaluation");
+                let activity = Activity::evaluate("");
                 state.activity = Some(activity);
             }
 
