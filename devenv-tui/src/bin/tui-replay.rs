@@ -8,6 +8,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
+use tokio::signal;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tokio_shutdown::Shutdown;
@@ -265,6 +266,47 @@ impl EventProcessor {
     }
 }
 
+async fn ctrl_c() {
+    signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
+}
+
+async fn replay_events(
+    mut stream: TraceStream,
+    first_event: RawTraceEvent,
+    processor: &mut EventProcessor,
+) -> Result<()> {
+    let first_timestamp = first_event.timestamp;
+    let start_time = Instant::now();
+    let mut event_count = 0;
+
+    processor.process(&first_event);
+
+    while let Some(event) = stream.next_event()? {
+        event_count += 1;
+        if event_count % 100 == 0 {
+            info!("Processed {} events", event_count);
+        }
+
+        let time_offset = event.timestamp.signed_duration_since(first_timestamp);
+        let target_elapsed = Duration::from_millis(time_offset.num_milliseconds().max(0) as u64);
+
+        let current_elapsed = start_time.elapsed();
+        if target_elapsed > current_elapsed {
+            let sleep_duration = target_elapsed - current_elapsed;
+            sleep(sleep_duration).await;
+        }
+
+        processor.process(&event);
+    }
+
+    info!(
+        "Replay finished. Processed {} total events.",
+        event_count + 1
+    );
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     use tracing_subscriber::prelude::*;
@@ -295,7 +337,7 @@ Then replay with:
     let (tx, rx) = mpsc::unbounded_channel();
     let shutdown = Shutdown::new();
 
-    let tui_task = tokio::spawn({
+    let mut tui_task = tokio::spawn({
         let shutdown = shutdown.clone();
         async move {
             match devenv_tui::app::run_app(rx, shutdown).await {
@@ -310,54 +352,33 @@ Then replay with:
         .next_event()?
         .with_context(|| "No valid trace entries found")?;
 
-    let first_timestamp = first_event.timestamp;
     info!("Starting trace replay from: {}", trace_path.display());
 
-    let start_time = Instant::now();
     let mut processor = EventProcessor::new(tx);
-    let mut event_count = 0;
 
-    processor.process(&first_event);
-
-    while let Some(event) = stream.next_event()? {
-        event_count += 1;
-        if event_count % 100 == 0 {
-            info!("Processed {} events", event_count);
-        }
-
-        let time_offset = event.timestamp.signed_duration_since(first_timestamp);
-        let target_elapsed = Duration::from_millis(time_offset.num_milliseconds().max(0) as u64);
-
-        let current_elapsed = start_time.elapsed();
-        if target_elapsed > current_elapsed {
-            let sleep_duration = target_elapsed - current_elapsed;
+    // Race: replay events, TUI task, or Ctrl+C
+    tokio::select! {
+        result = replay_events(stream, first_event, &mut processor) => {
+            if let Err(e) = result {
+                warn!("Replay error: {e}");
+            }
+            info!("Press Ctrl+C to exit the TUI");
+            // Replay finished, wait for TUI or Ctrl+C
             tokio::select! {
-                _ = sleep(sleep_duration) => {}
-                _ = shutdown.wait_for_shutdown() => {
-                    warn!("Replay interrupted by shutdown");
-                    sleep(Duration::from_millis(100)).await;
-                    return Ok(());
-                }
+                _ = &mut tui_task => {}
+                _ = ctrl_c() => {}
             }
         }
-
-        processor.process(&event);
-    }
-
-    info!(
-        "Replay finished. Processed {} total events.",
-        event_count + 1
-    );
-    info!("Press Ctrl+C to exit the TUI");
-
-    tokio::select! {
-        _ = tui_task => {
-            info!("TUI task completed");
+        _ = &mut tui_task => {
+            info!("TUI exited");
         }
-        _ = shutdown.wait_for_shutdown() => {
-            info!("Shutdown requested");
+        _ = ctrl_c() => {
+            info!("Interrupted");
         }
     }
+
+    // Restore terminal to normal state (disable raw mode, show cursor)
+    devenv_tui::app::restore_terminal();
 
     Ok(())
 }
