@@ -23,10 +23,10 @@ impl UiEvent {
                 use KeyCode::*;
                 match key_code {
                     Down => {
-                        model.select_next_build();
+                        model.select_next_activity();
                     }
                     Up => {
-                        model.select_previous_build();
+                        model.select_previous_activity();
                     }
                     Esc => {
                         model.ui.selected_activity = None;

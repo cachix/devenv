@@ -393,55 +393,56 @@ impl Model {
             .collect()
     }
 
-    pub fn get_active_build_ids(&self) -> Vec<u64> {
+    pub fn get_selectable_activity_ids(&self) -> Vec<u64> {
         self.activities
             .iter()
             .filter(|(_, activity)| {
                 matches!(activity.state, NixActivityState::Active)
-                    && matches!(activity.variant, ActivityVariant::Build(_))
+                    && matches!(
+                        activity.variant,
+                        ActivityVariant::Build(_) | ActivityVariant::Evaluating(_)
+                    )
             })
             .map(|(id, _)| *id)
             .collect()
     }
 
-    pub fn select_next_build(&mut self) {
-        let active_builds = self.get_active_build_ids();
-        if !active_builds.is_empty() {
+    pub fn select_next_activity(&mut self) {
+        let selectable = self.get_selectable_activity_ids();
+        if !selectable.is_empty() {
             match self.ui.selected_activity {
                 None => {
-                    self.ui.selected_activity = active_builds.first().copied();
+                    self.ui.selected_activity = selectable.first().copied();
                 }
                 Some(current_id) => {
-                    if let Some(current_pos) = active_builds.iter().position(|&id| id == current_id)
-                    {
-                        let next_pos = (current_pos + 1) % active_builds.len();
-                        self.ui.selected_activity = Some(active_builds[next_pos]);
+                    if let Some(current_pos) = selectable.iter().position(|&id| id == current_id) {
+                        let next_pos = (current_pos + 1) % selectable.len();
+                        self.ui.selected_activity = Some(selectable[next_pos]);
                     } else {
-                        self.ui.selected_activity = active_builds.first().copied();
+                        self.ui.selected_activity = selectable.first().copied();
                     }
                 }
             }
         }
     }
 
-    pub fn select_previous_build(&mut self) {
-        let active_builds = self.get_active_build_ids();
-        if !active_builds.is_empty() {
+    pub fn select_previous_activity(&mut self) {
+        let selectable = self.get_selectable_activity_ids();
+        if !selectable.is_empty() {
             match self.ui.selected_activity {
                 None => {
-                    self.ui.selected_activity = active_builds.last().copied();
+                    self.ui.selected_activity = selectable.last().copied();
                 }
                 Some(current_id) => {
-                    if let Some(current_pos) = active_builds.iter().position(|&id| id == current_id)
-                    {
+                    if let Some(current_pos) = selectable.iter().position(|&id| id == current_id) {
                         let prev_pos = if current_pos == 0 {
-                            active_builds.len() - 1
+                            selectable.len() - 1
                         } else {
                             current_pos - 1
                         };
-                        self.ui.selected_activity = Some(active_builds[prev_pos]);
+                        self.ui.selected_activity = Some(selectable[prev_pos]);
                     } else {
-                        self.ui.selected_activity = active_builds.last().copied();
+                        self.ui.selected_activity = selectable.last().copied();
                     }
                 }
             }
