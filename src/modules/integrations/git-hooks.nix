@@ -1,10 +1,9 @@
-{
-  pkgs,
-  self,
-  lib,
-  config,
-  inputs,
-  ...
+{ pkgs
+, self
+, lib
+, config
+, inputs
+, ...
 }:
 
 let
@@ -48,18 +47,19 @@ let
 
   githooksSubmodule =
     if git-hooks != null then
-      lib.types.submoduleWith {
-        modules = [
-          (git-hooks + "/modules/all-modules.nix")
-          {
-            rootSrc = self;
-            package = lib.mkDefault pkgs.pre-commit;
-            tools = import (git-hooks + "/nix/call-tools.nix") pkgs;
-          }
-        ];
-        specialArgs = { inherit pkgs; };
-        shorthandOnlyDefinesConfig = true;
-      }
+      lib.types.submoduleWith
+        {
+          modules = [
+            (git-hooks + "/modules/all-modules.nix")
+            {
+              rootSrc = self;
+              package = lib.mkDefault pkgs.prek;
+              tools = import (git-hooks + "/nix/call-tools.nix") pkgs;
+            }
+          ];
+          specialArgs = { inherit pkgs; };
+          shorthandOnlyDefinesConfig = true;
+        }
     else
       defaultModule;
 
@@ -91,6 +91,18 @@ in
   };
 
   config = lib.mkMerge [
+    {
+      changelogs = [
+        {
+          date = "2025-01-15";
+          title = "git-hooks.package is now pkgs.prek";
+          when = cfg.enable;
+          description = ''
+            The default package for git-hooks has been changed from `pkgs.pre-commit` to `pkgs.prek`.
+          '';
+        }
+      ];
+    }
     # Auto-enable when any hook is enabled, so other modules can check git-hooks.enable
     {
       git-hooks.enable = lib.mkDefault anyHookEnabled;
