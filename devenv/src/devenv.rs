@@ -8,7 +8,7 @@ use ::nix::unistd::Pid;
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{WithTitle, print_stderr};
-use devenv_activity::Activity;
+use devenv_activity::{Activity, activity};
 use devenv_core::{
     cachix::{CachixManager, CachixPaths},
     cli::GlobalOptions,
@@ -507,11 +507,7 @@ impl Devenv {
         Ok(CommandResult::Done(()))
     }
 
-    #[instrument(
-        name = "building_container",
-        skip(self),
-        fields(devenv.user_message = format!("Building {name} container"))
-    )]
+    #[activity(format!("Building {name} container"), kind = build)]
     pub async fn container_build(&mut self, name: &str) -> Result<CommandResult<String>> {
         // This container name is passed to the flake as an argument and tells the module system
         // that we're 1. building a container 2. which container we're building.
@@ -676,12 +672,7 @@ impl Devenv {
         Ok(CommandResult::Done(()))
     }
 
-    #[instrument(
-        skip(self),
-        fields(
-            devenv.user_message = "Searching options and packages",
-        )
-    )]
+    #[activity("Searching options and packages")]
     pub async fn search(&self, name: &str) -> Result<CommandResult> {
         let _ = self.assemble(false).await?;
 
@@ -1504,7 +1495,7 @@ impl Devenv {
         Ok(CommandResult::done())
     }
 
-    #[instrument(skip_all,fields(devenv.user_message = "Building shell"))]
+    #[activity("Building shell")]
     pub async fn get_dev_environment(&self, json: bool) -> Result<DevEnv> {
         let _ = self.assemble(false).await?;
 

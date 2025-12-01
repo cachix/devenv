@@ -135,11 +135,12 @@ impl ActivityTextComponent {
             depth,
         );
 
-        // Action word should be capitalized (handle empty strings)
-        let action_text = if self.action.is_empty() {
-            String::new()
-        } else {
-            format!(
+        let mut final_prefix = prefix_children;
+
+        // Only add action text if action is not empty
+        if !self.action.is_empty() {
+            // Action word should be capitalized
+            let action_text = format!(
                 "{}{}",
                 self.action
                     .chars()
@@ -148,17 +149,16 @@ impl ActivityTextComponent {
                     .to_uppercase()
                     .collect::<String>(),
                 &self.action[1..]
-            )
-        };
-        let mut final_prefix = prefix_children;
-        final_prefix.push(
-            element!(View(width: (action_text.len() + 1) as u32, flex_shrink: 0.0) {
-                View(margin_right: 1) {
-                    Text(content: action_text, color: COLOR_ACTIVE, weight: Weight::Bold)
-                }
-            })
-            .into_any(),
-        );
+            );
+            final_prefix.push(
+                element!(View(width: (action_text.len() + 1) as u32, flex_shrink: 0.0) {
+                    View(margin_right: 1) {
+                        Text(content: action_text, color: COLOR_ACTIVE, weight: Weight::Bold)
+                    }
+                })
+                .into_any(),
+            );
+        }
 
         element! {
             View(height: 1, flex_direction: FlexDirection::Row, padding_left: 1, padding_right: 1) {

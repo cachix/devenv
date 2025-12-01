@@ -1,5 +1,5 @@
 ---
-source: devenv-tui/tests/snapshot/tui_tests.rs
+source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ⠋ Unknown Querying cache 0.0s
+ ⠋ Querying cache 0.0s

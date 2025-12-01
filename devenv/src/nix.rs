@@ -1,6 +1,6 @@
 use crate::{devenv, nix_log_bridge::NixLogBridge, util};
 use async_trait::async_trait;
-use devenv_activity::{LogLevel, message};
+use devenv_activity::{Activity, LogLevel, message};
 use devenv_core::{
     cachix::{
         CacheMetadata, CachixCacheInfo, CachixConfig, CachixManager, StorePing,
@@ -23,7 +23,7 @@ use std::process;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::OnceCell;
-use tracing::{Instrument, debug, debug_span, error, info, instrument, warn};
+use tracing::{Instrument, debug, error, info, instrument, warn};
 
 // Nix-specific flake template
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -473,14 +473,10 @@ impl Nix {
             nix_bridge.set_current_operation(command_operation_id);
 
             let pretty_cmd = display_command(&cmd);
-            let span = debug_span!(
-                "Running command",
-                command = pretty_cmd.as_str(),
-                devenv.user_message = format!("Running command: {}", pretty_cmd)
-            );
+            let activity = Activity::command(&pretty_cmd, &pretty_cmd);
             let output = cached_cmd
                 .output(&mut cmd)
-                .instrument(span)
+                .instrument(activity.span())
                 .await
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
@@ -499,12 +495,8 @@ impl Nix {
             output
         } else {
             let pretty_cmd = display_command(&cmd);
-            let span = debug_span!(
-                "Running command",
-                command = pretty_cmd.as_str(),
-                devenv.user_message = format!("Running command: {}", pretty_cmd)
-            );
-            let output = span.in_scope(|| {
+            let activity = Activity::command(&pretty_cmd, &pretty_cmd);
+            let output = activity.in_scope(|| {
                 cmd.output()
                     .into_diagnostic()
                     .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))

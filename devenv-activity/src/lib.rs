@@ -28,6 +28,23 @@
 //! // Enter/exit manually
 //! let _guard = activity.enter();
 //! ```
+//!
+//! ## Using the `#[activity]` macro
+//!
+//! For cleaner instrumentation, use the `#[activity]` attribute macro:
+//!
+//! ```ignore
+//! use devenv_activity::activity;
+//!
+//! #[activity("Building shell")]
+//! async fn build_shell() -> Result<()> {
+//!     // Function body is automatically instrumented
+//!     Ok(())
+//! }
+//! ```
+
+// Re-export the activity macro
+pub use devenv_activity_macros::activity;
 
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -247,6 +264,18 @@ pub enum LogLevel {
     Trace,
 }
 
+/// Activity span level (maps to tracing::Level)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ActivityLevel {
+    Error,
+    Warn,
+    #[default]
+    Info,
+    Debug,
+    Trace,
+}
+
+
 // ---------------------------------------------------------------------------
 // ID Generation
 // ---------------------------------------------------------------------------
@@ -283,6 +312,7 @@ pub struct ActivityBuilder {
     detail: Option<String>,
     id: Option<u64>,
     parent: Option<Option<u64>>,
+    level: ActivityLevel,
 }
 
 impl ActivityBuilder {
@@ -294,7 +324,17 @@ impl ActivityBuilder {
             detail: None,
             id: None,
             parent: None,
+            level: ActivityLevel::default(),
         }
+    }
+
+    /// Set the tracing level for this activity's span.
+    ///
+    /// Default is INFO. Use DEBUG or TRACE for lower-level activities
+    /// that shouldn't appear in normal output.
+    pub fn level(mut self, level: ActivityLevel) -> Self {
+        self.level = level;
+        self
     }
 
     /// Set a detail string for the activity (e.g., full path, command).
@@ -328,7 +368,7 @@ impl ActivityBuilder {
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(get_current_activity_id);
-        Activity::start_internal(id, self.kind, self.name, parent, self.detail)
+        Activity::start_internal(id, self.kind, self.name, parent, self.detail, self.level)
     }
 }
 
@@ -385,10 +425,11 @@ impl Activity {
         Self::builder(ActivityKind::Task, name).start()
     }
 
-    /// Start a command activity
+    /// Start a command activity (defaults to DEBUG level)
     pub fn command(name: impl Into<String>, cmd: impl Into<String>) -> Self {
         Self::builder(ActivityKind::Command, name)
             .detail(cmd)
+            .level(ActivityLevel::Debug)
             .start()
     }
 
@@ -403,8 +444,17 @@ impl Activity {
         name: String,
         parent: Option<u64>,
         detail: Option<String>,
+        level: ActivityLevel,
     ) -> Self {
-        let span = span!(Level::TRACE, "activity", activity_id = id);
+        // Create span at the appropriate level.
+        // The span! macro requires compile-time level, so we match on the runtime level.
+        let span = match level {
+            ActivityLevel::Error => span!(Level::ERROR, "activity", activity_id = id),
+            ActivityLevel::Warn => span!(Level::WARN, "activity", activity_id = id),
+            ActivityLevel::Info => span!(Level::INFO, "activity", activity_id = id),
+            ActivityLevel::Debug => span!(Level::DEBUG, "activity", activity_id = id),
+            ActivityLevel::Trace => span!(Level::TRACE, "activity", activity_id = id),
+        };
 
         // Emit start event to tracing, using Empty for None values so they're omitted from JSON
         let kind_str = kind.to_string();

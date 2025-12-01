@@ -20,5 +20,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 humantime = { workspace = true }
 
+# Re-export macros
+devenv-activity-macros = { workspace = true }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

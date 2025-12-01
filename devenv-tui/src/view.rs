@@ -423,6 +423,19 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }
+        ActivityVariant::Devenv => {
+            let prefix = HierarchyPrefixComponent::new(indent, *depth)
+                .with_spinner(*spinner_frame)
+                .render();
+
+            return ActivityTextComponent::new(
+                "".to_string(), // No action prefix for devenv operations
+                activity.name.clone(),
+                elapsed_str,
+            )
+            .with_selection(*is_selected)
+            .render(terminal_width, *depth, prefix);
+        }
         ActivityVariant::Unknown => {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner(*spinner_frame)

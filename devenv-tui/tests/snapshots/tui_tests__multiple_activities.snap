@@ -6,6 +6,6 @@ expression: output
  ⠋ Building Building package-a buildPhase                            0.0s
  Downloading Downloading package-b                                   0.0s
     ─────────────────────────────────────────────────2.5kB / 5kB at 25kB/s
-  ⚡ Running setup                                                   0.0s
+ ⚡ Running setup                                                    0.0s
 
  0 of 1 builds  │  0 of 1 downloads                                ↑↓ nav

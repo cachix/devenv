@@ -71,6 +71,8 @@ pub enum ActivityVariant {
     Download(DownloadActivity),
     Query(QueryActivity),
     FetchTree,
+    /// Devenv-specific operations (e.g., "Building shell", "Entering shell")
+    Devenv,
     Unknown,
 }
 
@@ -244,7 +246,7 @@ impl Model {
                 duration: None,
             }),
             ActivityKind::Command => ActivityVariant::UserOperation,
-            ActivityKind::Operation => ActivityVariant::Unknown,
+            ActivityKind::Operation => ActivityVariant::Devenv,
         };
 
         let activity = Activity {

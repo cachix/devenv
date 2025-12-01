@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
   "devenv",
+  "devenv-activity",
+  "devenv-activity-macros",
   "devenv-cache-core",
   "devenv-core",
   "devenv-eval-cache",
@@ -26,6 +28,7 @@ repository = "https://github.com/cachix/devenv/"
 [workspace.dependencies]
 devenv = { path = "devenv" }
 devenv-activity = { path = "devenv-activity" }
+devenv-activity-macros = { path = "devenv-activity-macros" }
 devenv-core = { path = "devenv-core" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-run-tests = { path = "devenv-run-tests" }

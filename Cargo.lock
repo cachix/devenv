@@ -1373,12 +1373,22 @@ dependencies = [
 name = "devenv-activity"
 version = "1.11.3"
 dependencies = [
+ "devenv-activity-macros",
  "humantime",
  "serde",
  "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "devenv-activity-macros"
+version = "1.11.3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
 ]
 
 [[package]]
