@@ -260,6 +260,79 @@ fn next_id() -> u64 {
 }
 
 // ---------------------------------------------------------------------------
+// Activity Builder
+// ---------------------------------------------------------------------------
+
+/// Builder for creating activities with a fluent API.
+///
+/// # Example
+/// ```ignore
+/// // Simple activity
+/// let activity = Activity::builder(ActivityKind::Build, "my-package").start();
+///
+/// // Activity with all options
+/// let activity = Activity::builder(ActivityKind::Fetch, "downloading")
+///     .detail("/nix/store/...")
+///     .id(external_id)
+///     .parent(evaluation_id)
+///     .start();
+/// ```
+pub struct ActivityBuilder {
+    kind: ActivityKind,
+    name: String,
+    detail: Option<String>,
+    id: Option<u64>,
+    parent: Option<Option<u64>>,
+}
+
+impl ActivityBuilder {
+    /// Create a new activity builder with the given kind and name.
+    fn new(kind: ActivityKind, name: impl Into<String>) -> Self {
+        Self {
+            kind,
+            name: name.into(),
+            detail: None,
+            id: None,
+            parent: None,
+        }
+    }
+
+    /// Set a detail string for the activity (e.g., full path, command).
+    pub fn detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+
+    /// Set an explicit external ID for the activity.
+    ///
+    /// Use this for Nix integration where activities need to correlate
+    /// with Nix's internal activity IDs.
+    pub fn id(mut self, id: u64) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    /// Set an explicit parent activity ID.
+    ///
+    /// By default, the parent is determined from the thread-local activity stack.
+    /// Use this to override that behavior, e.g., for parallel activities that
+    /// should all share the same parent.
+    ///
+    /// Pass `Some(id)` to set a specific parent, or `None` to create a root activity.
+    pub fn parent(mut self, parent: Option<u64>) -> Self {
+        self.parent = Some(parent);
+        self
+    }
+
+    /// Start the activity and return the Activity guard.
+    pub fn start(self) -> Activity {
+        let id = self.id.unwrap_or_else(next_id);
+        let parent = self.parent.unwrap_or_else(get_current_activity_id);
+        Activity::start_internal(id, self.kind, self.name, parent, self.detail)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Activity Guard
 // ---------------------------------------------------------------------------
 
@@ -273,64 +346,51 @@ pub struct Activity {
 }
 
 impl Activity {
+    /// Create a new activity builder with the given kind and name.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let activity = Activity::builder(ActivityKind::Build, "my-package")
+    ///     .detail("/nix/store/...")
+    ///     .start();
+    /// ```
+    pub fn builder(kind: ActivityKind, name: impl Into<String>) -> ActivityBuilder {
+        ActivityBuilder::new(kind, name)
+    }
+
     /// Start a build activity
     pub fn build(name: impl Into<String>) -> Self {
-        Self::start(ActivityKind::Build, name.into(), None)
+        Self::builder(ActivityKind::Build, name).start()
     }
 
     /// Start a build activity with detail
     pub fn build_with_detail(name: impl Into<String>, detail: impl Into<String>) -> Self {
-        Self::start(ActivityKind::Build, name.into(), Some(detail.into()))
+        Self::builder(ActivityKind::Build, name).detail(detail).start()
     }
 
     /// Start a fetch activity
     pub fn fetch(name: impl Into<String>) -> Self {
-        Self::start(ActivityKind::Fetch, name.into(), None)
+        Self::builder(ActivityKind::Fetch, name).start()
     }
 
     /// Start an evaluate activity
     pub fn evaluate(name: impl Into<String>) -> Self {
-        Self::start(ActivityKind::Evaluate, name.into(), None)
+        Self::builder(ActivityKind::Evaluate, name).start()
     }
 
     /// Start a task activity
     pub fn task(name: impl Into<String>) -> Self {
-        Self::start(ActivityKind::Task, name.into(), None)
+        Self::builder(ActivityKind::Task, name).start()
     }
 
     /// Start a command activity
     pub fn command(name: impl Into<String>, cmd: impl Into<String>) -> Self {
-        Self::start(ActivityKind::Command, name.into(), Some(cmd.into()))
+        Self::builder(ActivityKind::Command, name).detail(cmd).start()
     }
 
     /// Start a generic operation
     pub fn operation(name: impl Into<String>) -> Self {
-        Self::start(ActivityKind::Operation, name.into(), None)
-    }
-
-    /// Start an activity with a specific external ID (for Nix integration)
-    ///
-    /// Uses the thread-local activity stack to determine the parent,
-    /// just like regular activities. The external ID allows correlating
-    /// with Nix's activity lifecycle events.
-    pub fn start_with_id(
-        id: u64,
-        kind: ActivityKind,
-        name: String,
-        detail: Option<String>,
-    ) -> Self {
-        let parent = get_current_activity_id();
-        Self::start_internal(id, kind, name, parent, detail)
-    }
-
-    /// Start an activity with explicit kind
-    fn start(kind: ActivityKind, name: String, detail: Option<String>) -> Self {
-        let id = next_id();
-
-        // Get parent from current span context
-        let parent = get_current_activity_id();
-
-        Self::start_internal(id, kind, name, parent, detail)
+        Self::builder(ActivityKind::Operation, name).start()
     }
 
     fn start_internal(

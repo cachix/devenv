@@ -255,6 +255,14 @@ impl NixLogBridge {
         }
     }
 
+    /// Get the current evaluation activity ID if one exists
+    fn get_evaluation_activity_id(&self) -> Option<u64> {
+        self.evaluation_state
+            .lock()
+            .ok()
+            .and_then(|state| state.activity.as_ref().map(|a| a.id()))
+    }
+
     /// Handle the start of a Nix activity
     fn handle_activity_start(
         &self,
@@ -264,6 +272,11 @@ impl NixLogBridge {
         text: String,
         fields: Vec<Field>,
     ) {
+        // Get the evaluation activity ID to use as parent for all Nix activities.
+        // This ensures parallel queries/downloads are children of the evaluation,
+        // not children of each other.
+        let parent_id = self.get_evaluation_activity_id();
+
         match activity_type {
             ActivityType::Build => {
                 let derivation_path = fields
@@ -273,12 +286,11 @@ impl NixLogBridge {
 
                 let derivation_name = extract_derivation_name(&derivation_path);
 
-                let activity = Activity::start_with_id(
-                    activity_id,
-                    ActivityKind::Build,
-                    derivation_name,
-                    Some(derivation_path),
-                );
+                let activity = Activity::builder(ActivityKind::Build, derivation_name)
+                    .id(activity_id)
+                    .detail(derivation_path)
+                    .parent(parent_id)
+                    .start();
 
                 self.insert_activity(activity_id, operation_id, activity_type, activity);
             }
@@ -286,12 +298,11 @@ impl NixLogBridge {
                 if let Some(store_path) = fields.first().and_then(Self::extract_string_field) {
                     let package_name = extract_package_name(&store_path);
 
-                    let activity = Activity::start_with_id(
-                        activity_id,
-                        ActivityKind::Fetch,
-                        format!("Query {}", package_name),
-                        Some(store_path),
-                    );
+                    let activity = Activity::builder(ActivityKind::Fetch, format!("Query {}", package_name))
+                        .id(activity_id)
+                        .detail(store_path)
+                        .parent(parent_id)
+                        .start();
 
                     self.insert_activity(activity_id, operation_id, activity_type, activity);
                 }
@@ -300,23 +311,20 @@ impl NixLogBridge {
                 if let Some(store_path) = fields.first().and_then(Self::extract_string_field) {
                     let package_name = extract_package_name(&store_path);
 
-                    let activity = Activity::start_with_id(
-                        activity_id,
-                        ActivityKind::Fetch,
-                        package_name,
-                        Some(store_path),
-                    );
+                    let activity = Activity::builder(ActivityKind::Fetch, package_name)
+                        .id(activity_id)
+                        .detail(store_path)
+                        .parent(parent_id)
+                        .start();
 
                     self.insert_activity(activity_id, operation_id, activity_type, activity);
                 }
             }
             ActivityType::FetchTree => {
-                let activity = Activity::start_with_id(
-                    activity_id,
-                    ActivityKind::Fetch,
-                    text,
-                    None,
-                );
+                let activity = Activity::builder(ActivityKind::Fetch, text)
+                    .id(activity_id)
+                    .parent(parent_id)
+                    .start();
 
                 self.insert_activity(activity_id, operation_id, activity_type, activity);
             }
