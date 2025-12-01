@@ -155,10 +155,10 @@
         "nixpkgs-regression": "nixpkgs-regression"
       },
       "locked": {
-        "lastModified": 1764177772,
+        "lastModified": 1764586258,
         "owner": "cachix",
         "repo": "nix",
-        "rev": "273c2eb22a369ec513372ab2e57432ad99348ca1",
+        "rev": "5927c5c9778a58b955d8356ccca909b22ac17118",
         "type": "github"
       },
       "original": {
@@ -170,10 +170,10 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1763948260,
+        "lastModified": 1764316264,
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "1c8ba8d3f7634acac4a2094eef7c32ad9106532c",
+        "rev": "9a7b80b6f82a71ea04270d7ba11b48855681c4b0",
         "type": "github"
       },
       "original": {
