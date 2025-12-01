@@ -1408,6 +1408,7 @@ impl NixBackend for NixRustBackend {
         let mut params = SearchParams::new()
             .to_miette()
             .wrap_err("Failed to create search params")?;
+
         params
             .add_regex(name)
             .to_miette()
