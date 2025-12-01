@@ -464,10 +464,15 @@ impl Model {
                 depth,
             });
 
-            for child in self.activities.values() {
-                if child.parent_id == Some(activity_id) {
-                    self.add_display_activity(activities, child.id, depth + 1, processed);
-                }
+            let mut children: Vec<_> = self
+                .activities
+                .values()
+                .filter(|child| child.parent_id == Some(activity_id))
+                .collect();
+            children.sort_by_key(|c| c.id);
+
+            for child in children {
+                self.add_display_activity(activities, child.id, depth + 1, processed);
             }
         }
     }
@@ -524,14 +529,10 @@ impl Model {
     }
 
     pub fn get_active_display_activities(&self) -> Vec<DisplayActivity> {
-        let mut activities: Vec<DisplayActivity> = self
-            .get_display_activities()
+        self.get_display_activities()
             .into_iter()
             .filter(|da| matches!(da.activity.state, NixActivityState::Active))
-            .collect();
-
-        activities.sort_by(|a, b| a.activity.variant.cmp(&b.activity.variant));
-        activities
+            .collect()
     }
 }
 

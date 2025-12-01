@@ -312,3 +312,74 @@ fn test_download_with_substituter() {
     let output = render_to_string(&model);
     insta::assert_snapshot!(output);
 }
+
+/// Test that Nix evaluation with nested child activities (builds, fetches, downloads) shows hierarchy.
+#[test]
+fn test_nested_evaluation_with_children() {
+    let mut model = new_test_model();
+
+    // Parent: Nix evaluation
+    let eval_event = ActivityEvent::Start {
+        id: 100,
+        kind: ActivityKind::Evaluate,
+        name: "devenv.nix".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(eval_event);
+
+    // Child: Fetch triggered during evaluation
+    let fetch_event = ActivityEvent::Start {
+        id: 101,
+        kind: ActivityKind::Fetch,
+        name: "github:NixOS/nixpkgs".to_string(),
+        parent: Some(100),
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(fetch_event);
+
+    // Child: Build triggered during evaluation
+    let build_event = ActivityEvent::Start {
+        id: 102,
+        kind: ActivityKind::Build,
+        name: "hello-2.12".to_string(),
+        parent: Some(100),
+        detail: None,
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(build_event);
+
+    let build_phase = ActivityEvent::Phase {
+        id: 102,
+        phase: "buildPhase".to_string(),
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(build_phase);
+
+    // Child: Download triggered during evaluation
+    let download_event = ActivityEvent::Start {
+        id: 103,
+        kind: ActivityKind::Fetch,
+        name: "openssl-3.0.0".to_string(),
+        parent: Some(100),
+        detail: Some("https://cache.nixos.org".to_string()),
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(download_event);
+
+    // Grandchild: Download triggered during build (nested 2 levels)
+    let nested_download_event = ActivityEvent::Start {
+        id: 104,
+        kind: ActivityKind::Fetch,
+        name: "glibc-2.35".to_string(),
+        parent: Some(102),
+        detail: Some("https://cache.nixos.org".to_string()),
+        timestamp: Timestamp::now(),
+    };
+    model.apply_activity_event(nested_download_event);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}

@@ -4,7 +4,6 @@ use devenv_activity::{
     ActivityEvent, ActivityKind, ActivityOutcome, LogLevel, ProgressState, ProgressUnit, Timestamp,
 };
 use serde::Deserialize;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -14,26 +13,35 @@ use tokio::time::sleep;
 use tokio_shutdown::Shutdown;
 use tracing::{info, warn};
 
-/// Raw trace event from JSON log format
+/// Raw trace event from JSON log format (tracing output)
 #[derive(Debug, Deserialize, Clone)]
 struct RawTraceEvent {
     timestamp: DateTime<Utc>,
     #[serde(default)]
     target: String,
     #[serde(default)]
-    fields: HashMap<String, serde_json::Value>,
+    fields: TraceFields,
 }
 
-fn get_string(fields: &HashMap<String, serde_json::Value>, key: &str) -> Option<String> {
-    fields.get(key).and_then(|v| match v {
-        serde_json::Value::String(s) => Some(s.clone()),
-        serde_json::Value::Number(n) => Some(n.to_string()),
-        _ => None,
-    })
-}
-
-fn get_u64(fields: &HashMap<String, serde_json::Value>, key: &str) -> Option<u64> {
-    fields.get(key).and_then(|v| v.as_u64())
+/// Typed fields from tracing output
+#[derive(Debug, Deserialize, Clone, Default)]
+struct TraceFields {
+    activity_id: Option<u64>,
+    event_type: Option<String>,
+    kind: Option<String>,
+    name: Option<String>,
+    parent: Option<u64>,
+    detail: Option<String>,
+    outcome: Option<String>,
+    progress_kind: Option<String>,
+    progress_current: Option<u64>,
+    progress_total: Option<u64>,
+    progress_unit: Option<String>,
+    phase: Option<String>,
+    log_line: Option<String>,
+    log_is_error: Option<bool>,
+    message_level: Option<String>,
+    message_text: Option<String>,
 }
 
 fn datetime_to_timestamp(dt: DateTime<Utc>) -> Timestamp {
@@ -120,7 +128,7 @@ impl EventProcessor {
         let fields = &raw.fields;
         let timestamp = datetime_to_timestamp(raw.timestamp);
 
-        if let Some(event_type) = get_string(fields, "event_type") {
+        if let Some(ref event_type) = fields.event_type {
             match event_type.as_str() {
                 "start" => self.handle_start(fields, timestamp),
                 "complete" => self.handle_complete(fields, timestamp),
@@ -129,31 +137,28 @@ impl EventProcessor {
             return;
         }
 
-        if get_string(fields, "progress_kind").is_some() {
+        if fields.progress_kind.is_some() {
             self.handle_progress(fields, timestamp);
             return;
         }
 
-        if let Some(phase) = get_string(fields, "phase") {
-            if let Some(id) = get_u64(fields, "activity_id") {
+        if let Some(ref phase) = fields.phase {
+            if let Some(id) = fields.activity_id {
                 self.send(ActivityEvent::Phase {
                     id,
-                    phase,
+                    phase: phase.clone(),
                     timestamp,
                 });
             }
             return;
         }
 
-        if let Some(line) = get_string(fields, "log_line") {
-            if let Some(id) = get_u64(fields, "activity_id") {
-                let is_error = fields
-                    .get("log_is_error")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
+        if let Some(ref line) = fields.log_line {
+            if let Some(id) = fields.activity_id {
+                let is_error = fields.log_is_error.unwrap_or(false);
                 self.send(ActivityEvent::Log {
                     id,
-                    line,
+                    line: line.clone(),
                     is_error,
                     timestamp,
                 });
@@ -161,8 +166,8 @@ impl EventProcessor {
             return;
         }
 
-        if let Some(text) = get_string(fields, "message_text") {
-            let level = match get_string(fields, "message_level").as_deref() {
+        if let Some(ref text) = fields.message_text {
+            let level = match fields.message_level.as_deref() {
                 Some("error") => LogLevel::Error,
                 Some("warn") => LogLevel::Warn,
                 Some("info") => LogLevel::Info,
@@ -172,22 +177,18 @@ impl EventProcessor {
             };
             self.send(ActivityEvent::Message {
                 level,
-                text,
+                text: text.clone(),
                 timestamp,
             });
         }
     }
 
-    fn handle_start(
-        &mut self,
-        fields: &HashMap<String, serde_json::Value>,
-        timestamp: Timestamp,
-    ) {
-        let Some(id) = get_u64(fields, "activity_id") else {
+    fn handle_start(&mut self, fields: &TraceFields, timestamp: Timestamp) {
+        let Some(id) = fields.activity_id else {
             return;
         };
 
-        let kind = match get_string(fields, "kind").as_deref() {
+        let kind = match fields.kind.as_deref() {
             Some("build") => ActivityKind::Build,
             Some("fetch") => ActivityKind::Fetch,
             Some("evaluate") => ActivityKind::Evaluate,
@@ -196,44 +197,27 @@ impl EventProcessor {
             _ => ActivityKind::Operation,
         };
 
-        let name = get_string(fields, "name").unwrap_or_else(|| "Unknown".to_string());
-
-        let parent = get_string(fields, "parent").and_then(|p| {
-            if p == "None" {
-                None
-            } else {
-                p.parse::<u64>().ok()
-            }
-        });
-
-        let detail = get_string(fields, "detail").and_then(|d| {
-            if d == "None" {
-                None
-            } else {
-                Some(d)
-            }
-        });
+        let name = fields
+            .name
+            .clone()
+            .unwrap_or_else(|| "Unknown".to_string());
 
         self.send(ActivityEvent::Start {
             id,
             kind,
             name,
-            parent,
-            detail,
+            parent: fields.parent,
+            detail: fields.detail.clone(),
             timestamp,
         });
     }
 
-    fn handle_complete(
-        &mut self,
-        fields: &HashMap<String, serde_json::Value>,
-        timestamp: Timestamp,
-    ) {
-        let Some(id) = get_u64(fields, "activity_id") else {
+    fn handle_complete(&mut self, fields: &TraceFields, timestamp: Timestamp) {
+        let Some(id) = fields.activity_id else {
             return;
         };
 
-        let outcome = match get_string(fields, "outcome").as_deref() {
+        let outcome = match fields.outcome.as_deref() {
             Some("success") => ActivityOutcome::Success,
             Some("failed") => ActivityOutcome::Failed,
             Some("cancelled") => ActivityOutcome::Cancelled,
@@ -247,28 +231,23 @@ impl EventProcessor {
         });
     }
 
-    fn handle_progress(
-        &mut self,
-        fields: &HashMap<String, serde_json::Value>,
-        timestamp: Timestamp,
-    ) {
-        let Some(id) = get_u64(fields, "activity_id") else {
+    fn handle_progress(&mut self, fields: &TraceFields, timestamp: Timestamp) {
+        let Some(id) = fields.activity_id else {
             return;
         };
 
-        let progress_kind = get_string(fields, "progress_kind");
-        let current = get_u64(fields, "progress_current").unwrap_or(0);
+        let current = fields.progress_current.unwrap_or(0);
 
-        let unit = match get_string(fields, "progress_unit").as_deref() {
+        let unit = match fields.progress_unit.as_deref() {
             Some("bytes") => Some(ProgressUnit::Bytes),
             Some("files") => Some(ProgressUnit::Files),
             Some("items") => Some(ProgressUnit::Items),
             _ => None,
         };
 
-        let progress = match progress_kind.as_deref() {
+        let progress = match fields.progress_kind.as_deref() {
             Some("determinate") => {
-                let total = get_u64(fields, "progress_total").unwrap_or(0);
+                let total = fields.progress_total.unwrap_or(0);
                 ProgressState::Determinate {
                     current,
                     total,

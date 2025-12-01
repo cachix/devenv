@@ -41,6 +41,15 @@ use tracing::{Level, Span, span};
 // Global sender for activity events (installed by ActivityHandle::install())
 static ACTIVITY_SENDER: OnceLock<mpsc::UnboundedSender<ActivityEvent>> = OnceLock::new();
 
+/// Helper to convert Option<T> to a tracing field value.
+/// Returns the value for Some, or Empty for None (which omits the field from JSON output).
+fn opt_field<T: tracing::Value>(opt: &Option<T>) -> &dyn tracing::Value {
+    match opt {
+        Some(v) => v,
+        None => &tracing::field::Empty,
+    }
+}
+
 /// Send an activity event to the registered channel (if any)
 fn send_activity_event(event: ActivityEvent) {
     if let Some(tx) = ACTIVITY_SENDER.get() {
@@ -333,7 +342,7 @@ impl Activity {
     ) -> Self {
         let span = span!(Level::TRACE, "activity", activity_id = id);
 
-        // Emit start event to tracing
+        // Emit start event to tracing, using Empty for None values so they're omitted from JSON
         let kind_str = kind.to_string();
         tracing::trace!(
             target: "devenv::activity",
@@ -341,8 +350,8 @@ impl Activity {
             event_type = "start",
             kind = %kind_str,
             name = %name,
-            parent = ?parent,
-            detail = ?detail,
+            parent = opt_field(&parent),
+            detail = opt_field(&detail),
         );
 
         // Send to channel if installed
