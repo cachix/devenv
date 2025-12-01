@@ -473,7 +473,9 @@ impl Nix {
             nix_bridge.set_current_operation(command_operation_id);
 
             let pretty_cmd = display_command(&cmd);
-            let activity = Activity::command(&pretty_cmd, &pretty_cmd);
+            let activity = Activity::command(&pretty_cmd)
+                .command(&pretty_cmd)
+                .start();
             let output = cached_cmd
                 .output(&mut cmd)
                 .instrument(activity.span())
@@ -495,7 +497,9 @@ impl Nix {
             output
         } else {
             let pretty_cmd = display_command(&cmd);
-            let activity = Activity::command(&pretty_cmd, &pretty_cmd);
+            let activity = Activity::command(&pretty_cmd)
+                .command(&pretty_cmd)
+                .start();
             let output = activity.in_scope(|| {
                 cmd.output()
                     .into_diagnostic()

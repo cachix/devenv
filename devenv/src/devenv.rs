@@ -468,7 +468,7 @@ impl Devenv {
     /// to return control to the caller with the command's output.
     pub async fn run_in_shell(&self, cmd: String, args: &[String]) -> Result<Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
-        let activity = Activity::operation("Running in shell");
+        let activity = Activity::operation("Running in shell").start();
         // Note that tokio's `output()` always configures stdout/stderr as pipes.
         // Use `spawn` + `wait_with_output` instead.
         let proc = shell_cmd
@@ -490,7 +490,7 @@ impl Devenv {
             None => "Updating devenv.lock".to_string(),
         };
 
-        let activity = Activity::operation(&msg);
+        let activity = Activity::operation(&msg).start();
         self.nix
             .update(input_name)
             .instrument(activity.span())
@@ -550,7 +550,7 @@ impl Devenv {
     ) -> Result<CommandResult> {
         let spec = self.container_build(name).await?.unwrap();
 
-        let activity = Activity::operation("Copying container");
+        let activity = Activity::operation("Copying container").start();
         async move {
             let sanitized_name = sanitize_container_name(name);
             let gc_root = self
@@ -635,7 +635,8 @@ impl Devenv {
             let activity = Activity::operation(format!(
                 "Removing non-existing symlinks in {}",
                 &self.devenv_home_gc.display()
-            ));
+            ))
+            .start();
             activity.in_scope(|| cleanup_symlinks(&self.devenv_home_gc))
         };
         let to_gc_len = to_gc.len();
@@ -647,7 +648,7 @@ impl Devenv {
         );
 
         {
-            let activity = Activity::operation("Running garbage collection");
+            let activity = Activity::operation("Running garbage collection").start();
             info!(
                 "If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
             );
@@ -765,7 +766,7 @@ impl Devenv {
 
     async fn load_tasks(&self) -> Result<Vec<tasks::TaskConfig>> {
         let tasks_json_file = {
-            let activity = Activity::operation("Evaluating tasks");
+            let activity = Activity::operation("Evaluating tasks").start();
             let gc_root = self.devenv_dot_gc.join("task-config");
             self.nix
                 .build(&["devenv.config.task.config"], None, Some(&gc_root))
@@ -959,7 +960,7 @@ impl Devenv {
 
         // collect tests
         let test_script = {
-            let activity = Activity::operation("Building tests");
+            let activity = Activity::operation("Building tests").start();
             let gc_root = self.devenv_dot_gc.join("test");
             let test_script = self
                 .nix
@@ -984,9 +985,7 @@ impl Devenv {
         // Disable the spinner for tests.
         // Tests can arbitrarily write to stdout/stderr at the moment.
         // Until that is changed, the spinner must be disabled.
-        let activity = Activity::operation("Running tests");
-        // TODO: Activity API doesn't currently support custom fields like devenv.no_spinner
-        // and test_script. Consider adding support for metadata/detail fields.
+        let activity = Activity::operation("Running tests").start();
         let result = async {
             process::Command::new(&test_script)
                 .env_clear()
@@ -1023,7 +1022,7 @@ impl Devenv {
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<CommandResult<Vec<PathBuf>>> {
-        let activity = Activity::operation("Building");
+        let activity = Activity::operation("Building").start();
         async move {
             let _ = self.assemble(false).await?;
             let attributes: Vec<String> = if attributes.is_empty() {
@@ -1078,7 +1077,7 @@ impl Devenv {
             bail!("No processes defined");
         }
 
-        let activity = Activity::operation("Building processes");
+        let activity = Activity::operation("Building processes").start();
         let proc_script_string = async {
             let gc_root = self.devenv_dot_gc.join("procfilescript");
             let paths = self
@@ -1091,7 +1090,7 @@ impl Devenv {
         .instrument(activity.span())
         .await?;
 
-        let activity = Activity::operation("Starting processes");
+        let activity = Activity::operation("Starting processes").start();
         async {
             let processes = processes.join(" ");
 

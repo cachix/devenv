@@ -1,5 +1,8 @@
 use crate::{LogMessage, LogSource, NixActivityState, OperationId};
-use devenv_activity::{ActivityEvent, ActivityKind, ActivityOutcome, ProgressState};
+use devenv_activity::{
+    ActivityEvent, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind, Message,
+    Operation, Task,
+};
 use std::collections::{HashMap, VecDeque};
 use std::time::Instant;
 
@@ -199,68 +202,188 @@ impl Model {
 
     pub fn apply_activity_event(&mut self, event: ActivityEvent) {
         match event {
-            ActivityEvent::Start {
+            ActivityEvent::Build(build_event) => self.handle_build_event(build_event),
+            ActivityEvent::Fetch(fetch_event) => self.handle_fetch_event(fetch_event),
+            ActivityEvent::Evaluate(eval_event) => self.handle_evaluate_event(eval_event),
+            ActivityEvent::Task(task_event) => self.handle_task_event(task_event),
+            ActivityEvent::Command(cmd_event) => self.handle_command_event(cmd_event),
+            ActivityEvent::Operation(op_event) => self.handle_operation_event(op_event),
+            ActivityEvent::Message(msg) => self.handle_message(msg),
+        }
+    }
+
+    fn handle_build_event(&mut self, event: Build) {
+        match event {
+            Build::Start {
+                id,
+                name,
+                parent,
+                derivation_path,
+                ..
+            } => {
+                let variant = ActivityVariant::Build(BuildActivity {
+                    phase: Some("preparing".to_string()),
+                    log_stdout_lines: Vec::new(),
+                    log_stderr_lines: Vec::new(),
+                });
+                self.create_activity(id, name, parent, derivation_path, variant);
+            }
+            Build::Complete { id, outcome, .. } => {
+                self.handle_activity_complete(id, outcome);
+            }
+            Build::Phase { id, phase, .. } => {
+                self.handle_activity_phase(id, phase);
+            }
+            Build::Progress {
+                id,
+                done,
+                expected,
+                ..
+            } => {
+                self.handle_item_progress(id, done, expected);
+            }
+            Build::Log {
+                id, line, is_error, ..
+            } => {
+                self.handle_activity_log(id, line, is_error);
+            }
+        }
+    }
+
+    fn handle_fetch_event(&mut self, event: Fetch) {
+        match event {
+            Fetch::Start {
                 id,
                 kind,
+                name,
+                parent,
+                url,
+                ..
+            } => {
+                let variant = match kind {
+                    FetchKind::Query => ActivityVariant::Query(QueryActivity { substituter: None }),
+                    FetchKind::Tree => ActivityVariant::FetchTree,
+                    FetchKind::Download => ActivityVariant::Download(DownloadActivity {
+                        size_current: Some(0),
+                        size_total: None,
+                        speed: None,
+                        substituter: None,
+                    }),
+                };
+                self.create_activity(id, name, parent, url, variant);
+            }
+            Fetch::Complete { id, outcome, .. } => {
+                self.handle_activity_complete(id, outcome);
+            }
+            Fetch::Progress {
+                id, current, total, ..
+            } => {
+                self.handle_byte_progress(id, current, total);
+            }
+        }
+    }
+
+    fn handle_evaluate_event(&mut self, event: Evaluate) {
+        match event {
+            Evaluate::Start {
+                id, name, parent, ..
+            } => {
+                let variant = ActivityVariant::Evaluating(EvaluatingActivity::default());
+                self.create_activity(id, name, parent, None, variant);
+            }
+            Evaluate::Complete { id, outcome, .. } => {
+                self.handle_activity_complete(id, outcome);
+            }
+            Evaluate::Log { id, line, .. } => {
+                // Evaluate logs count files
+                self.handle_activity_log(id, line, false);
+            }
+        }
+    }
+
+    fn handle_task_event(&mut self, event: Task) {
+        match event {
+            Task::Start {
+                id,
                 name,
                 parent,
                 detail,
                 ..
             } => {
-                self.handle_activity_start(id, kind, name, parent, detail);
+                let variant = ActivityVariant::Task(TaskActivity {
+                    status: TaskDisplayStatus::Running,
+                    duration: None,
+                });
+                self.create_activity(id, name, parent, detail, variant);
             }
-            ActivityEvent::Complete { id, outcome, .. } => {
+            Task::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
             }
-            ActivityEvent::Progress { id, progress, .. } => {
-                self.handle_activity_progress(id, progress);
+            Task::Progress {
+                id,
+                done,
+                expected,
+                ..
+            } => {
+                self.handle_item_progress(id, done, expected);
             }
-            ActivityEvent::Phase { id, phase, .. } => {
-                self.handle_activity_phase(id, phase);
-            }
-            ActivityEvent::Log {
+            Task::Log {
                 id, line, is_error, ..
             } => {
                 self.handle_activity_log(id, line, is_error);
             }
-            ActivityEvent::Detail { id, key, value, .. } => {
-                self.handle_activity_detail(id, key, value);
+        }
+    }
+
+    fn handle_command_event(&mut self, event: Command) {
+        match event {
+            Command::Start {
+                id,
+                name,
+                parent,
+                command,
+                ..
+            } => {
+                let variant = ActivityVariant::UserOperation;
+                self.create_activity(id, name, parent, command, variant);
             }
-            ActivityEvent::Message { level, text, .. } => {
-                self.handle_message(level, text);
+            Command::Complete { id, outcome, .. } => {
+                self.handle_activity_complete(id, outcome);
+            }
+            Command::Log {
+                id, line, is_error, ..
+            } => {
+                self.handle_activity_log(id, line, is_error);
             }
         }
     }
 
-    fn handle_activity_start(
+    fn handle_operation_event(&mut self, event: Operation) {
+        match event {
+            Operation::Start {
+                id,
+                name,
+                parent,
+                detail,
+                ..
+            } => {
+                let variant = ActivityVariant::Devenv;
+                self.create_activity(id, name, parent, detail, variant);
+            }
+            Operation::Complete { id, outcome, .. } => {
+                self.handle_activity_complete(id, outcome);
+            }
+        }
+    }
+
+    fn create_activity(
         &mut self,
         id: u64,
-        kind: ActivityKind,
         name: String,
         parent: Option<u64>,
         detail: Option<String>,
+        variant: ActivityVariant,
     ) {
-        let variant = match kind {
-            ActivityKind::Build => ActivityVariant::Build(BuildActivity {
-                phase: Some("preparing".to_string()),
-                log_stdout_lines: Vec::new(),
-                log_stderr_lines: Vec::new(),
-            }),
-            ActivityKind::Fetch => ActivityVariant::Download(DownloadActivity {
-                size_current: Some(0),
-                size_total: None,
-                speed: None,
-                substituter: None,
-            }),
-            ActivityKind::Evaluate => ActivityVariant::Evaluating(EvaluatingActivity::default()),
-            ActivityKind::Task => ActivityVariant::Task(TaskActivity {
-                status: TaskDisplayStatus::Running,
-                duration: None,
-            }),
-            ActivityKind::Command => ActivityVariant::UserOperation,
-            ActivityKind::Operation => ActivityVariant::Devenv,
-        };
-
         let activity = Activity {
             id,
             operation_id: OperationId::from_activity_id(id),
@@ -282,12 +405,6 @@ impl Model {
         self.activities.insert(id, activity);
     }
 
-    fn handle_activity_detail(&mut self, id: u64, key: String, value: String) {
-        if let Some(activity) = self.activities.get_mut(&id) {
-            activity.details.push(ActivityDetail { key, value });
-        }
-    }
-
     fn handle_activity_complete(&mut self, id: u64, outcome: ActivityOutcome) {
         if let Some(activity) = self.activities.get_mut(&id) {
             let success = matches!(outcome, ActivityOutcome::Success);
@@ -305,61 +422,52 @@ impl Model {
         }
     }
 
-    fn handle_activity_progress(&mut self, id: u64, progress: ProgressState) {
+    fn handle_item_progress(&mut self, id: u64, done: u64, expected: u64) {
         if let Some(activity) = self.activities.get_mut(&id) {
-            match progress {
-                ProgressState::Determinate {
-                    current,
-                    total,
-                    unit,
-                } => {
-                    let percent = if total > 0 {
-                        Some((current as f32 / total as f32) * 100.0)
-                    } else {
-                        None
-                    };
+            let percent = if expected > 0 {
+                Some((done as f32 / expected as f32) * 100.0)
+            } else {
+                None
+            };
 
-                    let unit_str = unit.map(|u| match u {
-                        devenv_activity::ProgressUnit::Bytes => "bytes".to_string(),
-                        devenv_activity::ProgressUnit::Files => "files".to_string(),
-                        devenv_activity::ProgressUnit::Items => "items".to_string(),
-                    });
+            activity.progress = Some(ProgressActivity {
+                current: Some(done),
+                total: Some(expected),
+                unit: Some("items".to_string()),
+                percent,
+            });
+        }
+    }
 
-                    activity.progress = Some(ProgressActivity {
-                        current: Some(current),
-                        total: Some(total),
-                        unit: unit_str,
-                        percent,
-                    });
-
-                    if let ActivityVariant::Download(ref mut download) = activity.variant {
-                        let speed = if let Some(prev_current) = download.size_current {
-                            let time_delta = 0.1;
-                            let bytes_delta = current.saturating_sub(prev_current) as f64;
-                            (bytes_delta / time_delta) as u64
-                        } else {
-                            0
-                        };
-
-                        download.size_current = Some(current);
-                        download.size_total = Some(total);
-                        download.speed = Some(speed);
-                    }
+    fn handle_byte_progress(&mut self, id: u64, current: u64, total: Option<u64>) {
+        if let Some(activity) = self.activities.get_mut(&id) {
+            let percent = total.map(|t| {
+                if t > 0 {
+                    (current as f32 / t as f32) * 100.0
+                } else {
+                    0.0
                 }
-                ProgressState::Indeterminate { current, unit } => {
-                    let unit_str = unit.map(|u| match u {
-                        devenv_activity::ProgressUnit::Bytes => "bytes".to_string(),
-                        devenv_activity::ProgressUnit::Files => "files".to_string(),
-                        devenv_activity::ProgressUnit::Items => "items".to_string(),
-                    });
+            });
 
-                    activity.progress = Some(ProgressActivity {
-                        current: Some(current),
-                        total: None,
-                        unit: unit_str,
-                        percent: None,
-                    });
-                }
+            activity.progress = Some(ProgressActivity {
+                current: Some(current),
+                total,
+                unit: Some("bytes".to_string()),
+                percent,
+            });
+
+            if let ActivityVariant::Download(ref mut download) = activity.variant {
+                let speed = if let Some(prev_current) = download.size_current {
+                    let time_delta = 0.1;
+                    let bytes_delta = current.saturating_sub(prev_current) as f64;
+                    (bytes_delta / time_delta) as u64
+                } else {
+                    0
+                };
+
+                download.size_current = Some(current);
+                download.size_total = total;
+                download.speed = Some(speed);
             }
         }
     }
@@ -396,8 +504,8 @@ impl Model {
         }
     }
 
-    fn handle_message(&mut self, level: devenv_activity::LogLevel, text: String) {
-        let log_msg = LogMessage::new(level.into(), text, LogSource::System, HashMap::new());
+    fn handle_message(&mut self, msg: Message) {
+        let log_msg = LogMessage::new(msg.level.into(), msg.text, LogSource::System, HashMap::new());
         self.add_log_message(log_msg);
     }
 

@@ -114,44 +114,48 @@ thread_local! {
     static ACTIVITY_STACK: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
 }
 
-/// All activity events
+/// All activity events - activity-first design
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "activity", rename_all = "lowercase")]
 pub enum ActivityEvent {
-    /// Activity started
+    Build(Build),
+    Fetch(Fetch),
+    Evaluate(Evaluate),
+    Task(Task),
+    Command(Command),
+    Operation(Operation),
+    Message(Message),
+}
+
+/// Build activity events - has Phase, Progress, Log
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "event", rename_all = "lowercase")]
+pub enum Build {
     Start {
         id: u64,
-        kind: ActivityKind,
         name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         parent: Option<u64>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        detail: Option<String>,
+        derivation_path: Option<String>,
         timestamp: Timestamp,
     },
-
-    /// Activity completed
     Complete {
         id: u64,
         outcome: ActivityOutcome,
         timestamp: Timestamp,
     },
-
-    /// Progress update
-    Progress {
-        id: u64,
-        progress: ProgressState,
-        timestamp: Timestamp,
-    },
-
-    /// Phase/step change
     Phase {
         id: u64,
         phase: String,
         timestamp: Timestamp,
     },
-
-    /// Log line from activity
+    Progress {
+        id: u64,
+        done: u64,
+        expected: u64,
+        timestamp: Timestamp,
+    },
     Log {
         id: u64,
         line: String,
@@ -159,96 +163,168 @@ pub enum ActivityEvent {
         is_error: bool,
         timestamp: Timestamp,
     },
-
-    /// Additional detail/metadata for an activity (shown when expanded)
-    Detail {
-        id: u64,
-        key: String,
-        value: String,
-        timestamp: Timestamp,
-    },
-
-    /// Message not tied to an activity
-    Message {
-        level: LogLevel,
-        text: String,
-        timestamp: Timestamp,
-    },
 }
 
-/// Explicit progress representation
+/// Fetch activity events - has FetchKind, byte Progress
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "lowercase")]
-pub enum ProgressState {
-    /// Known total amount
-    Determinate {
-        current: u64,
-        total: u64,
+#[serde(tag = "event", rename_all = "lowercase")]
+pub enum Fetch {
+    Start {
+        id: u64,
+        kind: FetchKind,
+        name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
-        unit: Option<ProgressUnit>,
+        parent: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        url: Option<String>,
+        timestamp: Timestamp,
     },
-    /// Unknown total, just tracking work done
-    Indeterminate {
+    Complete {
+        id: u64,
+        outcome: ActivityOutcome,
+        timestamp: Timestamp,
+    },
+    Progress {
+        id: u64,
         current: u64,
         #[serde(skip_serializing_if = "Option::is_none")]
-        unit: Option<ProgressUnit>,
+        total: Option<u64>,
+        timestamp: Timestamp,
     },
 }
 
-/// Unit of progress measurement
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// Type of fetch operation
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum ProgressUnit {
-    Bytes,
-    Files,
-    Items,
+pub enum FetchKind {
+    /// Downloading store paths from substituter
+    Download,
+    /// Querying path info from cache
+    Query,
+    /// Fetching git trees/flake inputs
+    Tree,
 }
 
-/// Generic kinds that map to any build tool
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum ActivityKind {
-    /// Building/compiling (Nix builds, compilation)
+/// Evaluate activity events - has Log only
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "event", rename_all = "lowercase")]
+pub enum Evaluate {
+    Start {
+        id: u64,
+        name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        parent: Option<u64>,
+        timestamp: Timestamp,
+    },
+    Complete {
+        id: u64,
+        outcome: ActivityOutcome,
+        timestamp: Timestamp,
+    },
+    Log {
+        id: u64,
+        line: String,
+        timestamp: Timestamp,
+    },
+}
+
+/// Task activity events - has Progress, Log
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "event", rename_all = "lowercase")]
+pub enum Task {
+    Start {
+        id: u64,
+        name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        parent: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+        timestamp: Timestamp,
+    },
+    Complete {
+        id: u64,
+        outcome: ActivityOutcome,
+        timestamp: Timestamp,
+    },
+    Progress {
+        id: u64,
+        done: u64,
+        expected: u64,
+        timestamp: Timestamp,
+    },
+    Log {
+        id: u64,
+        line: String,
+        #[serde(default)]
+        is_error: bool,
+        timestamp: Timestamp,
+    },
+}
+
+/// Command activity events - has Log only
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "event", rename_all = "lowercase")]
+pub enum Command {
+    Start {
+        id: u64,
+        name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        parent: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        command: Option<String>,
+        timestamp: Timestamp,
+    },
+    Complete {
+        id: u64,
+        outcome: ActivityOutcome,
+        timestamp: Timestamp,
+    },
+    Log {
+        id: u64,
+        line: String,
+        #[serde(default)]
+        is_error: bool,
+        timestamp: Timestamp,
+    },
+}
+
+/// Operation activity events - minimal (generic devenv operations)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "event", rename_all = "lowercase")]
+pub enum Operation {
+    Start {
+        id: u64,
+        name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        parent: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+        timestamp: Timestamp,
+    },
+    Complete {
+        id: u64,
+        outcome: ActivityOutcome,
+        timestamp: Timestamp,
+    },
+}
+
+/// Message - standalone (not an activity)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Message {
+    pub level: LogLevel,
+    pub text: String,
+    pub timestamp: Timestamp,
+}
+
+/// Activity type for tracking which kind of activity this is
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActivityType {
     Build,
-    /// Fetching/downloading (store paths, dependencies)
-    Fetch,
-    /// Evaluating expressions (Nix eval, config parsing)
+    Fetch(FetchKind),
     Evaluate,
-    /// User-defined task (devenv tasks)
     Task,
-    /// Shell command execution
     Command,
-    /// Generic operation
     Operation,
-}
-
-impl std::fmt::Display for ActivityKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ActivityKind::Build => write!(f, "build"),
-            ActivityKind::Fetch => write!(f, "fetch"),
-            ActivityKind::Evaluate => write!(f, "evaluate"),
-            ActivityKind::Task => write!(f, "task"),
-            ActivityKind::Command => write!(f, "command"),
-            ActivityKind::Operation => write!(f, "operation"),
-        }
-    }
-}
-
-impl std::str::FromStr for ActivityKind {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "build" => Ok(ActivityKind::Build),
-            "fetch" => Ok(ActivityKind::Fetch),
-            "evaluate" => Ok(ActivityKind::Evaluate),
-            "task" => Ok(ActivityKind::Task),
-            "command" => Ok(ActivityKind::Command),
-            "operation" => Ok(ActivityKind::Operation),
-            _ => Err(()),
-        }
-    }
 }
 
 /// Outcome of an activity
@@ -297,25 +373,237 @@ fn next_id() -> u64 {
 }
 
 // ---------------------------------------------------------------------------
-// Activity Builder
+// Activity Builders
 // ---------------------------------------------------------------------------
 
-/// Builder for creating activities with a fluent API.
-///
-/// # Example
-/// ```ignore
-/// // Simple activity
-/// let activity = Activity::builder(ActivityKind::Build, "my-package").start();
-///
-/// // Activity with all options
-/// let activity = Activity::builder(ActivityKind::Fetch, "downloading")
-///     .detail("/nix/store/...")
-///     .id(external_id)
-///     .parent(evaluation_id)
-///     .start();
-/// ```
-pub struct ActivityBuilder {
-    kind: ActivityKind,
+/// Builder for Build activities
+pub struct BuildBuilder {
+    name: String,
+    derivation_path: Option<String>,
+    id: Option<u64>,
+    parent: Option<Option<u64>>,
+    level: ActivityLevel,
+}
+
+impl BuildBuilder {
+    fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            derivation_path: None,
+            id: None,
+            parent: None,
+            level: ActivityLevel::default(),
+        }
+    }
+
+    pub fn derivation_path(mut self, path: impl Into<String>) -> Self {
+        self.derivation_path = Some(path.into());
+        self
+    }
+
+    pub fn id(mut self, id: u64) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    pub fn parent(mut self, parent: Option<u64>) -> Self {
+        self.parent = Some(parent);
+        self
+    }
+
+    pub fn level(mut self, level: ActivityLevel) -> Self {
+        self.level = level;
+        self
+    }
+
+    pub fn start(self) -> Activity {
+        let id = self.id.unwrap_or_else(next_id);
+        let parent = self.parent.unwrap_or_else(get_current_activity_id);
+
+        let span = create_span(id, self.level);
+
+        tracing::trace!(
+            target: "devenv::activity",
+            activity_id = id,
+            event_type = "start",
+            activity_type = "build",
+            name = %self.name,
+            parent = opt_field(&parent),
+            derivation_path = opt_field(&self.derivation_path),
+        );
+
+        send_activity_event(ActivityEvent::Build(Build::Start {
+            id,
+            name: self.name.clone(),
+            parent,
+            derivation_path: self.derivation_path,
+            timestamp: Timestamp::now(),
+        }));
+
+        ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
+
+        Activity {
+            span,
+            id,
+            activity_type: ActivityType::Build,
+            outcome: std::sync::Mutex::new(ActivityOutcome::Success),
+        }
+    }
+}
+
+/// Builder for Fetch activities
+pub struct FetchBuilder {
+    kind: FetchKind,
+    name: String,
+    url: Option<String>,
+    id: Option<u64>,
+    parent: Option<Option<u64>>,
+    level: ActivityLevel,
+}
+
+impl FetchBuilder {
+    fn new(kind: FetchKind, name: impl Into<String>) -> Self {
+        Self {
+            kind,
+            name: name.into(),
+            url: None,
+            id: None,
+            parent: None,
+            level: ActivityLevel::default(),
+        }
+    }
+
+    pub fn url(mut self, url: impl Into<String>) -> Self {
+        self.url = Some(url.into());
+        self
+    }
+
+    pub fn id(mut self, id: u64) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    pub fn parent(mut self, parent: Option<u64>) -> Self {
+        self.parent = Some(parent);
+        self
+    }
+
+    pub fn level(mut self, level: ActivityLevel) -> Self {
+        self.level = level;
+        self
+    }
+
+    pub fn start(self) -> Activity {
+        let id = self.id.unwrap_or_else(next_id);
+        let parent = self.parent.unwrap_or_else(get_current_activity_id);
+
+        let span = create_span(id, self.level);
+
+        let kind_str = match self.kind {
+            FetchKind::Download => "download",
+            FetchKind::Query => "query",
+            FetchKind::Tree => "tree",
+        };
+
+        tracing::trace!(
+            target: "devenv::activity",
+            activity_id = id,
+            event_type = "start",
+            activity_type = "fetch",
+            fetch_kind = kind_str,
+            name = %self.name,
+            parent = opt_field(&parent),
+            url = opt_field(&self.url),
+        );
+
+        send_activity_event(ActivityEvent::Fetch(Fetch::Start {
+            id,
+            kind: self.kind,
+            name: self.name.clone(),
+            parent,
+            url: self.url,
+            timestamp: Timestamp::now(),
+        }));
+
+        ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
+
+        Activity {
+            span,
+            id,
+            activity_type: ActivityType::Fetch(self.kind),
+            outcome: std::sync::Mutex::new(ActivityOutcome::Success),
+        }
+    }
+}
+
+/// Builder for Evaluate activities
+pub struct EvaluateBuilder {
+    name: String,
+    id: Option<u64>,
+    parent: Option<Option<u64>>,
+    level: ActivityLevel,
+}
+
+impl EvaluateBuilder {
+    fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            id: None,
+            parent: None,
+            level: ActivityLevel::default(),
+        }
+    }
+
+    pub fn id(mut self, id: u64) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    pub fn parent(mut self, parent: Option<u64>) -> Self {
+        self.parent = Some(parent);
+        self
+    }
+
+    pub fn level(mut self, level: ActivityLevel) -> Self {
+        self.level = level;
+        self
+    }
+
+    pub fn start(self) -> Activity {
+        let id = self.id.unwrap_or_else(next_id);
+        let parent = self.parent.unwrap_or_else(get_current_activity_id);
+
+        let span = create_span(id, self.level);
+
+        tracing::trace!(
+            target: "devenv::activity",
+            activity_id = id,
+            event_type = "start",
+            activity_type = "evaluate",
+            name = %self.name,
+            parent = opt_field(&parent),
+        );
+
+        send_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
+            id,
+            name: self.name.clone(),
+            parent,
+            timestamp: Timestamp::now(),
+        }));
+
+        ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
+
+        Activity {
+            span,
+            id,
+            activity_type: ActivityType::Evaluate,
+            outcome: std::sync::Mutex::new(ActivityOutcome::Success),
+        }
+    }
+}
+
+/// Builder for Task activities
+pub struct TaskBuilder {
     name: String,
     detail: Option<String>,
     id: Option<u64>,
@@ -323,11 +611,9 @@ pub struct ActivityBuilder {
     level: ActivityLevel,
 }
 
-impl ActivityBuilder {
-    /// Create a new activity builder with the given kind and name.
-    fn new(kind: ActivityKind, name: impl Into<String>) -> Self {
+impl TaskBuilder {
+    fn new(name: impl Into<String>) -> Self {
         Self {
-            kind,
             name: name.into(),
             detail: None,
             id: None,
@@ -336,47 +622,219 @@ impl ActivityBuilder {
         }
     }
 
-    /// Set the tracing level for this activity's span.
-    ///
-    /// Default is INFO. Use DEBUG or TRACE for lower-level activities
-    /// that shouldn't appear in normal output.
-    pub fn level(mut self, level: ActivityLevel) -> Self {
-        self.level = level;
-        self
-    }
-
-    /// Set a detail string for the activity (e.g., full path, command).
     pub fn detail(mut self, detail: impl Into<String>) -> Self {
         self.detail = Some(detail.into());
         self
     }
 
-    /// Set an explicit external ID for the activity.
-    ///
-    /// Use this for Nix integration where activities need to correlate
-    /// with Nix's internal activity IDs.
     pub fn id(mut self, id: u64) -> Self {
         self.id = Some(id);
         self
     }
 
-    /// Set an explicit parent activity ID.
-    ///
-    /// By default, the parent is determined from the thread-local activity stack.
-    /// Use this to override that behavior, e.g., for parallel activities that
-    /// should all share the same parent.
-    ///
-    /// Pass `Some(id)` to set a specific parent, or `None` to create a root activity.
     pub fn parent(mut self, parent: Option<u64>) -> Self {
         self.parent = Some(parent);
         self
     }
 
-    /// Start the activity and return the Activity guard.
+    pub fn level(mut self, level: ActivityLevel) -> Self {
+        self.level = level;
+        self
+    }
+
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(get_current_activity_id);
-        Activity::start_internal(id, self.kind, self.name, parent, self.detail, self.level)
+
+        let span = create_span(id, self.level);
+
+        tracing::trace!(
+            target: "devenv::activity",
+            activity_id = id,
+            event_type = "start",
+            activity_type = "task",
+            name = %self.name,
+            parent = opt_field(&parent),
+            detail = opt_field(&self.detail),
+        );
+
+        send_activity_event(ActivityEvent::Task(Task::Start {
+            id,
+            name: self.name.clone(),
+            parent,
+            detail: self.detail,
+            timestamp: Timestamp::now(),
+        }));
+
+        ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
+
+        Activity {
+            span,
+            id,
+            activity_type: ActivityType::Task,
+            outcome: std::sync::Mutex::new(ActivityOutcome::Success),
+        }
+    }
+}
+
+/// Builder for Command activities
+pub struct CommandBuilder {
+    name: String,
+    command: Option<String>,
+    id: Option<u64>,
+    parent: Option<Option<u64>>,
+    level: ActivityLevel,
+}
+
+impl CommandBuilder {
+    fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            command: None,
+            id: None,
+            parent: None,
+            level: ActivityLevel::Debug, // Commands default to DEBUG level
+        }
+    }
+
+    pub fn command(mut self, cmd: impl Into<String>) -> Self {
+        self.command = Some(cmd.into());
+        self
+    }
+
+    pub fn id(mut self, id: u64) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    pub fn parent(mut self, parent: Option<u64>) -> Self {
+        self.parent = Some(parent);
+        self
+    }
+
+    pub fn level(mut self, level: ActivityLevel) -> Self {
+        self.level = level;
+        self
+    }
+
+    pub fn start(self) -> Activity {
+        let id = self.id.unwrap_or_else(next_id);
+        let parent = self.parent.unwrap_or_else(get_current_activity_id);
+
+        let span = create_span(id, self.level);
+
+        tracing::trace!(
+            target: "devenv::activity",
+            activity_id = id,
+            event_type = "start",
+            activity_type = "command",
+            name = %self.name,
+            parent = opt_field(&parent),
+            command = opt_field(&self.command),
+        );
+
+        send_activity_event(ActivityEvent::Command(Command::Start {
+            id,
+            name: self.name.clone(),
+            parent,
+            command: self.command,
+            timestamp: Timestamp::now(),
+        }));
+
+        ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
+
+        Activity {
+            span,
+            id,
+            activity_type: ActivityType::Command,
+            outcome: std::sync::Mutex::new(ActivityOutcome::Success),
+        }
+    }
+}
+
+/// Builder for Operation activities
+pub struct OperationBuilder {
+    name: String,
+    detail: Option<String>,
+    id: Option<u64>,
+    parent: Option<Option<u64>>,
+    level: ActivityLevel,
+}
+
+impl OperationBuilder {
+    fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            detail: None,
+            id: None,
+            parent: None,
+            level: ActivityLevel::default(),
+        }
+    }
+
+    pub fn detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+
+    pub fn id(mut self, id: u64) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    pub fn parent(mut self, parent: Option<u64>) -> Self {
+        self.parent = Some(parent);
+        self
+    }
+
+    pub fn level(mut self, level: ActivityLevel) -> Self {
+        self.level = level;
+        self
+    }
+
+    pub fn start(self) -> Activity {
+        let id = self.id.unwrap_or_else(next_id);
+        let parent = self.parent.unwrap_or_else(get_current_activity_id);
+
+        let span = create_span(id, self.level);
+
+        tracing::trace!(
+            target: "devenv::activity",
+            activity_id = id,
+            event_type = "start",
+            activity_type = "operation",
+            name = %self.name,
+            parent = opt_field(&parent),
+            detail = opt_field(&self.detail),
+        );
+
+        send_activity_event(ActivityEvent::Operation(Operation::Start {
+            id,
+            name: self.name.clone(),
+            parent,
+            detail: self.detail,
+            timestamp: Timestamp::now(),
+        }));
+
+        ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
+
+        Activity {
+            span,
+            id,
+            activity_type: ActivityType::Operation,
+            outcome: std::sync::Mutex::new(ActivityOutcome::Success),
+        }
+    }
+}
+
+/// Helper to create a span at the given level
+fn create_span(id: u64, level: ActivityLevel) -> Span {
+    match level {
+        ActivityLevel::Error => span!(Level::ERROR, "activity", activity_id = id),
+        ActivityLevel::Warn => span!(Level::WARN, "activity", activity_id = id),
+        ActivityLevel::Info => span!(Level::INFO, "activity", activity_id = id),
+        ActivityLevel::Debug => span!(Level::DEBUG, "activity", activity_id = id),
+        ActivityLevel::Trace => span!(Level::TRACE, "activity", activity_id = id),
     }
 }
 
@@ -390,110 +848,39 @@ impl ActivityBuilder {
 pub struct Activity {
     span: Span,
     id: u64,
+    activity_type: ActivityType,
     outcome: std::sync::Mutex<ActivityOutcome>,
 }
 
 impl Activity {
-    /// Create a new activity builder with the given kind and name.
-    ///
-    /// # Example
-    /// ```ignore
-    /// let activity = Activity::builder(ActivityKind::Build, "my-package")
-    ///     .detail("/nix/store/...")
-    ///     .start();
-    /// ```
-    pub fn builder(kind: ActivityKind, name: impl Into<String>) -> ActivityBuilder {
-        ActivityBuilder::new(kind, name)
+    /// Create a builder for a Build activity
+    pub fn build(name: impl Into<String>) -> BuildBuilder {
+        BuildBuilder::new(name)
     }
 
-    /// Start a build activity
-    pub fn build(name: impl Into<String>) -> Self {
-        Self::builder(ActivityKind::Build, name).start()
+    /// Create a builder for a Fetch activity
+    pub fn fetch(kind: FetchKind, name: impl Into<String>) -> FetchBuilder {
+        FetchBuilder::new(kind, name)
     }
 
-    /// Start a build activity with detail
-    pub fn build_with_detail(name: impl Into<String>, detail: impl Into<String>) -> Self {
-        Self::builder(ActivityKind::Build, name)
-            .detail(detail)
-            .start()
+    /// Create a builder for an Evaluate activity
+    pub fn evaluate(name: impl Into<String>) -> EvaluateBuilder {
+        EvaluateBuilder::new(name)
     }
 
-    /// Start a fetch activity
-    pub fn fetch(name: impl Into<String>) -> Self {
-        Self::builder(ActivityKind::Fetch, name).start()
+    /// Create a builder for a Task activity
+    pub fn task(name: impl Into<String>) -> TaskBuilder {
+        TaskBuilder::new(name)
     }
 
-    /// Start an evaluate activity
-    pub fn evaluate(name: impl Into<String>) -> Self {
-        Self::builder(ActivityKind::Evaluate, name).start()
+    /// Create a builder for a Command activity
+    pub fn command(name: impl Into<String>) -> CommandBuilder {
+        CommandBuilder::new(name)
     }
 
-    /// Start a task activity
-    pub fn task(name: impl Into<String>) -> Self {
-        Self::builder(ActivityKind::Task, name).start()
-    }
-
-    /// Start a command activity (defaults to DEBUG level)
-    pub fn command(name: impl Into<String>, cmd: impl Into<String>) -> Self {
-        Self::builder(ActivityKind::Command, name)
-            .detail(cmd)
-            .level(ActivityLevel::Debug)
-            .start()
-    }
-
-    /// Start a generic operation
-    pub fn operation(name: impl Into<String>) -> Self {
-        Self::builder(ActivityKind::Operation, name).start()
-    }
-
-    fn start_internal(
-        id: u64,
-        kind: ActivityKind,
-        name: String,
-        parent: Option<u64>,
-        detail: Option<String>,
-        level: ActivityLevel,
-    ) -> Self {
-        // Create span at the appropriate level.
-        // The span! macro requires compile-time level, so we match on the runtime level.
-        let span = match level {
-            ActivityLevel::Error => span!(Level::ERROR, "activity", activity_id = id),
-            ActivityLevel::Warn => span!(Level::WARN, "activity", activity_id = id),
-            ActivityLevel::Info => span!(Level::INFO, "activity", activity_id = id),
-            ActivityLevel::Debug => span!(Level::DEBUG, "activity", activity_id = id),
-            ActivityLevel::Trace => span!(Level::TRACE, "activity", activity_id = id),
-        };
-
-        // Emit start event to tracing, using Empty for None values so they're omitted from JSON
-        let kind_str = kind.to_string();
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = id,
-            event_type = "start",
-            kind = %kind_str,
-            name = %name,
-            parent = opt_field(&parent),
-            detail = opt_field(&detail),
-        );
-
-        // Send to channel if installed
-        send_activity_event(ActivityEvent::Start {
-            id,
-            kind: kind.clone(),
-            name: name.clone(),
-            parent,
-            detail: detail.clone(),
-            timestamp: Timestamp::now(),
-        });
-
-        // Push to activity stack for parent tracking
-        ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
-
-        Self {
-            span,
-            id,
-            outcome: std::sync::Mutex::new(ActivityOutcome::Success),
-        }
+    /// Create a builder for an Operation activity
+    pub fn operation(name: impl Into<String>) -> OperationBuilder {
+        OperationBuilder::new(name)
     }
 
     /// Get the activity ID
@@ -502,8 +889,6 @@ impl Activity {
     }
 
     /// Get a cloned span for this activity.
-    ///
-    /// Useful when you need to pass a span by value, such as to `.instrument()`.
     pub fn span(&self) -> Span {
         self.span.clone()
     }
@@ -522,72 +907,78 @@ impl Activity {
         }
     }
 
-    /// Update progress (determinate)
-    pub fn progress(&self, current: u64, total: u64) {
+    /// Update progress (for Build and Task activities)
+    pub fn progress(&self, done: u64, expected: u64) {
         let _guard = self.span.enter();
         tracing::trace!(
             target: "devenv::activity",
             activity_id = self.id,
-            progress_kind = "determinate",
-            progress_current = current,
-            progress_total = total,
+            progress_done = done,
+            progress_expected = expected,
         );
 
-        send_activity_event(ActivityEvent::Progress {
-            id: self.id,
-            progress: ProgressState::Determinate {
-                current,
-                total,
-                unit: None,
-            },
-            timestamp: Timestamp::now(),
-        });
+        let event = match self.activity_type {
+            ActivityType::Build => ActivityEvent::Build(Build::Progress {
+                id: self.id,
+                done,
+                expected,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Task => ActivityEvent::Task(Task::Progress {
+                id: self.id,
+                done,
+                expected,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Fetch(_) => {
+                // For fetch, use progress_bytes instead
+                return;
+            }
+            _ => return,
+        };
+        send_activity_event(event);
     }
 
-    /// Update progress with byte unit
+    /// Update progress with bytes (for Fetch activities)
     pub fn progress_bytes(&self, current: u64, total: u64) {
         let _guard = self.span.enter();
         tracing::trace!(
             target: "devenv::activity",
             activity_id = self.id,
-            progress_kind = "determinate",
             progress_current = current,
             progress_total = total,
-            progress_unit = "bytes",
         );
 
-        send_activity_event(ActivityEvent::Progress {
-            id: self.id,
-            progress: ProgressState::Determinate {
+        if matches!(self.activity_type, ActivityType::Fetch(_)) {
+            send_activity_event(ActivityEvent::Fetch(Fetch::Progress {
+                id: self.id,
                 current,
-                total,
-                unit: Some(ProgressUnit::Bytes),
-            },
-            timestamp: Timestamp::now(),
-        });
+                total: Some(total),
+                timestamp: Timestamp::now(),
+            }));
+        }
     }
 
-    /// Update progress (indeterminate)
+    /// Update progress (indeterminate - for Fetch activities)
     pub fn progress_indeterminate(&self, current: u64) {
         let _guard = self.span.enter();
         tracing::trace!(
             target: "devenv::activity",
             activity_id = self.id,
-            progress_kind = "indeterminate",
             progress_current = current,
         );
 
-        send_activity_event(ActivityEvent::Progress {
-            id: self.id,
-            progress: ProgressState::Indeterminate {
+        if matches!(self.activity_type, ActivityType::Fetch(_)) {
+            send_activity_event(ActivityEvent::Fetch(Fetch::Progress {
+                id: self.id,
                 current,
-                unit: None,
-            },
-            timestamp: Timestamp::now(),
-        });
+                total: None,
+                timestamp: Timestamp::now(),
+            }));
+        }
     }
 
-    /// Update phase
+    /// Update phase (for Build activities only)
     pub fn phase(&self, phase: impl Into<String>) {
         let _guard = self.span.enter();
         let phase_str = phase.into();
@@ -597,11 +988,13 @@ impl Activity {
             phase = %phase_str,
         );
 
-        send_activity_event(ActivityEvent::Phase {
-            id: self.id,
-            phase: phase_str,
-            timestamp: Timestamp::now(),
-        });
+        if matches!(self.activity_type, ActivityType::Build) {
+            send_activity_event(ActivityEvent::Build(Build::Phase {
+                id: self.id,
+                phase: phase_str,
+                timestamp: Timestamp::now(),
+            }));
+        }
     }
 
     /// Log a line
@@ -615,12 +1008,33 @@ impl Activity {
             log_is_error = false,
         );
 
-        send_activity_event(ActivityEvent::Log {
-            id: self.id,
-            line: line_str,
-            is_error: false,
-            timestamp: Timestamp::now(),
-        });
+        let event = match self.activity_type {
+            ActivityType::Build => ActivityEvent::Build(Build::Log {
+                id: self.id,
+                line: line_str,
+                is_error: false,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Evaluate => ActivityEvent::Evaluate(Evaluate::Log {
+                id: self.id,
+                line: line_str,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Task => ActivityEvent::Task(Task::Log {
+                id: self.id,
+                line: line_str,
+                is_error: false,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Command => ActivityEvent::Command(Command::Log {
+                id: self.id,
+                line: line_str,
+                is_error: false,
+                timestamp: Timestamp::now(),
+            }),
+            _ => return,
+        };
+        send_activity_event(event);
     }
 
     /// Log an error
@@ -634,32 +1048,28 @@ impl Activity {
             log_is_error = true,
         );
 
-        send_activity_event(ActivityEvent::Log {
-            id: self.id,
-            line: line_str,
-            is_error: true,
-            timestamp: Timestamp::now(),
-        });
-    }
-
-    /// Add a detail/metadata to this activity (shown when expanded in TUI)
-    pub fn add_detail(&self, key: impl Into<String>, value: impl Into<String>) {
-        let _guard = self.span.enter();
-        let key_str = key.into();
-        let value_str = value.into();
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = self.id,
-            detail_key = %key_str,
-            detail_value = %value_str,
-        );
-
-        send_activity_event(ActivityEvent::Detail {
-            id: self.id,
-            key: key_str,
-            value: value_str,
-            timestamp: Timestamp::now(),
-        });
+        let event = match self.activity_type {
+            ActivityType::Build => ActivityEvent::Build(Build::Log {
+                id: self.id,
+                line: line_str,
+                is_error: true,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Task => ActivityEvent::Task(Task::Log {
+                id: self.id,
+                line: line_str,
+                is_error: true,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Command => ActivityEvent::Command(Command::Log {
+                id: self.id,
+                line: line_str,
+                is_error: true,
+                timestamp: Timestamp::now(),
+            }),
+            _ => return,
+        };
+        send_activity_event(event);
     }
 }
 
@@ -681,6 +1091,7 @@ impl Clone for Activity {
         Self {
             span: self.span.clone(),
             id: self.id,
+            activity_type: self.activity_type,
             outcome: std::sync::Mutex::new(outcome),
         }
     }
@@ -706,12 +1117,40 @@ impl Drop for Activity {
             outcome = %outcome_str,
         );
 
-        // Send to channel if installed
-        send_activity_event(ActivityEvent::Complete {
-            id: self.id,
-            outcome,
-            timestamp: Timestamp::now(),
-        });
+        // Send the correct Complete event based on activity type
+        let event = match self.activity_type {
+            ActivityType::Build => ActivityEvent::Build(Build::Complete {
+                id: self.id,
+                outcome,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Fetch(_) => ActivityEvent::Fetch(Fetch::Complete {
+                id: self.id,
+                outcome,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Evaluate => ActivityEvent::Evaluate(Evaluate::Complete {
+                id: self.id,
+                outcome,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Task => ActivityEvent::Task(Task::Complete {
+                id: self.id,
+                outcome,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Command => ActivityEvent::Command(Command::Complete {
+                id: self.id,
+                outcome,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Operation => ActivityEvent::Operation(Operation::Complete {
+                id: self.id,
+                outcome,
+                timestamp: Timestamp::now(),
+            }),
+        };
+        send_activity_event(event);
 
         // Pop from activity stack
         ACTIVITY_STACK.with(|stack| {
@@ -744,11 +1183,11 @@ pub fn message(level: LogLevel, text: impl Into<String>) {
         message_text = %text_str,
     );
 
-    send_activity_event(ActivityEvent::Message {
+    send_activity_event(ActivityEvent::Message(Message {
         level,
         text: text_str,
         timestamp: Timestamp::now(),
-    });
+    }));
 }
 // ---------------------------------------------------------------------------
 // Initialization
@@ -790,409 +1229,238 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_activity_kind_display_parse() {
-        let kinds = [
-            ActivityKind::Build,
-            ActivityKind::Fetch,
-            ActivityKind::Evaluate,
-            ActivityKind::Task,
-            ActivityKind::Command,
-            ActivityKind::Operation,
-        ];
-
-        for kind in kinds {
-            let s = kind.to_string();
-            let parsed: ActivityKind = s.parse().unwrap();
-            assert_eq!(parsed, kind);
-        }
-    }
-
-    #[test]
-    fn test_activity_event_serialization() {
-        let event = ActivityEvent::Start {
+    fn test_build_event_serialization() {
+        let event = ActivityEvent::Build(Build::Start {
             id: 123,
-            kind: ActivityKind::Build,
-            name: "test".to_string(),
-            parent: None,
-            detail: Some("detail".to_string()),
-            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
-        };
-
-        let json = serde_json::to_string(&event).unwrap();
-        let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
-
-        match parsed {
-            ActivityEvent::Start { id, name, .. } => {
-                assert_eq!(id, 123);
-                assert_eq!(name, "test");
-            }
-            _ => panic!("Expected Start event"),
-        }
-    }
-
-    #[test]
-    fn test_activity_event_start_json_structure() {
-        let event = ActivityEvent::Start {
-            id: 123,
-            kind: ActivityKind::Build,
             name: "test-package".to_string(),
             parent: Some(456),
-            detail: Some("building".to_string()),
+            derivation_path: Some("/nix/store/abc-test.drv".to_string()),
             timestamp: Timestamp(SystemTime::UNIX_EPOCH),
-        };
+        });
 
-        let json_str = serde_json::to_string(&event).unwrap();
-        let expected = r#"{"type":"start","id":123,"kind":"build","name":"test-package","parent":456,"detail":"building","timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
-        assert_eq!(json_str, expected);
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains(r#""activity":"build"#));
+        assert!(json.contains(r#""event":"start"#));
 
-        let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
-        match roundtrip {
-            ActivityEvent::Start {
-                id,
-                kind,
-                name,
-                parent,
-                detail,
-                ..
-            } => {
+        let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ActivityEvent::Build(Build::Start { id, name, .. }) => {
                 assert_eq!(id, 123);
-                assert_eq!(kind, ActivityKind::Build);
                 assert_eq!(name, "test-package");
-                assert_eq!(parent, Some(456));
-                assert_eq!(detail, Some("building".to_string()));
             }
-            _ => panic!("Expected Start event"),
+            _ => panic!("Expected Build::Start event"),
         }
     }
 
     #[test]
-    fn test_activity_event_start_optional_fields_omitted() {
-        let event = ActivityEvent::Start {
-            id: 123,
-            kind: ActivityKind::Fetch,
-            name: "test".to_string(),
+    fn test_fetch_event_with_kind() {
+        let event = ActivityEvent::Fetch(Fetch::Start {
+            id: 456,
+            kind: FetchKind::Download,
+            name: "pkg".to_string(),
             parent: None,
-            detail: None,
+            url: Some("https://cache.nixos.org".to_string()),
             timestamp: Timestamp(SystemTime::UNIX_EPOCH),
-        };
+        });
 
-        let json_str = serde_json::to_string(&event).unwrap();
-        let expected = r#"{"type":"start","id":123,"kind":"fetch","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
-        assert_eq!(json_str, expected);
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains(r#""activity":"fetch"#));
+        assert!(json.contains(r#""kind":"download"#));
+
+        let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ActivityEvent::Fetch(Fetch::Start { kind, .. }) => {
+                assert_eq!(kind, FetchKind::Download);
+            }
+            _ => panic!("Expected Fetch::Start event"),
+        }
     }
 
     #[test]
-    fn test_activity_event_complete_json_structure() {
-        let test_cases = [
-            (
-                ActivityOutcome::Success,
-                r#"{"type":"complete","id":789,"outcome":"success","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-            (
-                ActivityOutcome::Failed,
-                r#"{"type":"complete","id":789,"outcome":"failed","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-            (
-                ActivityOutcome::Cancelled,
-                r#"{"type":"complete","id":789,"outcome":"cancelled","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-        ];
-
-        for (outcome, expected) in test_cases {
-            let event = ActivityEvent::Complete {
-                id: 789,
-                outcome,
+    fn test_fetch_kinds() {
+        let kinds = [FetchKind::Download, FetchKind::Query, FetchKind::Tree];
+        for kind in kinds {
+            let event = ActivityEvent::Fetch(Fetch::Start {
+                id: 1,
+                kind,
+                name: "test".to_string(),
+                parent: None,
+                url: None,
                 timestamp: Timestamp(SystemTime::UNIX_EPOCH),
-            };
+            });
 
-            let json_str = serde_json::to_string(&event).unwrap();
-            assert_eq!(json_str, expected);
-
-            let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
-            match roundtrip {
-                ActivityEvent::Complete {
-                    id,
-                    outcome: rt_outcome,
-                    ..
-                } => {
-                    assert_eq!(id, 789);
-                    assert_eq!(rt_outcome, outcome);
+            let json = serde_json::to_string(&event).unwrap();
+            let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
+            match parsed {
+                ActivityEvent::Fetch(Fetch::Start { kind: parsed_kind, .. }) => {
+                    assert_eq!(parsed_kind, kind);
                 }
-                _ => panic!("Expected Complete event"),
+                _ => panic!("Expected Fetch::Start"),
             }
         }
     }
 
     #[test]
-    fn test_activity_event_progress_determinate_json_structure() {
-        let event = ActivityEvent::Progress {
-            id: 999,
-            progress: ProgressState::Determinate {
-                current: 50,
-                total: 100,
-                unit: Some(ProgressUnit::Bytes),
-            },
+    fn test_build_complete_event() {
+        let event = ActivityEvent::Build(Build::Complete {
+            id: 789,
+            outcome: ActivityOutcome::Success,
             timestamp: Timestamp(SystemTime::UNIX_EPOCH),
-        };
+        });
 
-        let json_str = serde_json::to_string(&event).unwrap();
-        let expected = r#"{"type":"progress","id":999,"progress":{"kind":"determinate","current":50,"total":100,"unit":"bytes"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
-        assert_eq!(json_str, expected);
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains(r#""event":"complete"#));
+        assert!(json.contains(r#""outcome":"success"#));
 
-        let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
-        match roundtrip {
-            ActivityEvent::Progress { id, progress, .. } => {
-                assert_eq!(id, 999);
-                match progress {
-                    ProgressState::Determinate {
-                        current,
-                        total,
-                        unit,
-                    } => {
-                        assert_eq!(current, 50);
-                        assert_eq!(total, 100);
-                        assert_eq!(unit, Some(ProgressUnit::Bytes));
-                    }
-                    _ => panic!("Expected Determinate progress"),
-                }
+        let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ActivityEvent::Build(Build::Complete { id, outcome, .. }) => {
+                assert_eq!(id, 789);
+                assert_eq!(outcome, ActivityOutcome::Success);
             }
-            _ => panic!("Expected Progress event"),
+            _ => panic!("Expected Build::Complete event"),
         }
     }
 
     #[test]
-    fn test_activity_event_progress_indeterminate_json_structure() {
-        let event = ActivityEvent::Progress {
-            id: 888,
-            progress: ProgressState::Indeterminate {
-                current: 42,
-                unit: Some(ProgressUnit::Items),
-            },
-            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
-        };
-
-        let json_str = serde_json::to_string(&event).unwrap();
-        let expected = r#"{"type":"progress","id":888,"progress":{"kind":"indeterminate","current":42,"unit":"items"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
-        assert_eq!(json_str, expected);
-
-        let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
-        match roundtrip {
-            ActivityEvent::Progress { id, progress, .. } => {
-                assert_eq!(id, 888);
-                match progress {
-                    ProgressState::Indeterminate { current, unit } => {
-                        assert_eq!(current, 42);
-                        assert_eq!(unit, Some(ProgressUnit::Items));
-                    }
-                    _ => panic!("Expected Indeterminate progress"),
-                }
-            }
-            _ => panic!("Expected Progress event"),
-        }
-    }
-
-    #[test]
-    fn test_activity_event_phase_json_structure() {
-        let event = ActivityEvent::Phase {
+    fn test_build_phase_event() {
+        let event = ActivityEvent::Build(Build::Phase {
             id: 111,
             phase: "configure".to_string(),
             timestamp: Timestamp(SystemTime::UNIX_EPOCH),
-        };
+        });
 
-        let json_str = serde_json::to_string(&event).unwrap();
-        let expected = r#"{"type":"phase","id":111,"phase":"configure","timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
-        assert_eq!(json_str, expected);
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains(r#""event":"phase"#));
 
-        let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
-        match roundtrip {
-            ActivityEvent::Phase { id, phase, .. } => {
-                assert_eq!(id, 111);
+        let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ActivityEvent::Build(Build::Phase { phase, .. }) => {
                 assert_eq!(phase, "configure");
             }
-            _ => panic!("Expected Phase event"),
+            _ => panic!("Expected Build::Phase event"),
         }
     }
 
     #[test]
-    fn test_activity_event_log_json_structure() {
-        let event = ActivityEvent::Log {
+    fn test_fetch_progress_event() {
+        let event = ActivityEvent::Fetch(Fetch::Progress {
+            id: 999,
+            current: 50,
+            total: Some(100),
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
+        });
+
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains(r#""event":"progress"#));
+        assert!(json.contains(r#""current":50"#));
+        assert!(json.contains(r#""total":100"#));
+
+        let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ActivityEvent::Fetch(Fetch::Progress { current, total, .. }) => {
+                assert_eq!(current, 50);
+                assert_eq!(total, Some(100));
+            }
+            _ => panic!("Expected Fetch::Progress event"),
+        }
+    }
+
+    #[test]
+    fn test_message_event() {
+        let event = ActivityEvent::Message(Message {
+            level: LogLevel::Info,
+            text: "Test message".to_string(),
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
+        });
+
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains(r#""activity":"message"#));
+        assert!(json.contains(r#""level":"info"#));
+
+        let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ActivityEvent::Message(msg) => {
+                assert_eq!(msg.level, LogLevel::Info);
+                assert_eq!(msg.text, "Test message");
+            }
+            _ => panic!("Expected Message event"),
+        }
+    }
+
+    #[test]
+    fn test_evaluate_log_event() {
+        let event = ActivityEvent::Evaluate(Evaluate::Log {
             id: 222,
-            line: "Building target...".to_string(),
+            line: "Evaluating file...".to_string(),
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
+        });
+
+        let json = serde_json::to_string(&event).unwrap();
+        let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ActivityEvent::Evaluate(Evaluate::Log { line, .. }) => {
+                assert_eq!(line, "Evaluating file...");
+            }
+            _ => panic!("Expected Evaluate::Log event"),
+        }
+    }
+
+    #[test]
+    fn test_task_progress_event() {
+        let event = ActivityEvent::Task(Task::Progress {
+            id: 333,
+            done: 5,
+            expected: 10,
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
+        });
+
+        let json = serde_json::to_string(&event).unwrap();
+        let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ActivityEvent::Task(Task::Progress { done, expected, .. }) => {
+                assert_eq!(done, 5);
+                assert_eq!(expected, 10);
+            }
+            _ => panic!("Expected Task::Progress event"),
+        }
+    }
+
+    #[test]
+    fn test_command_log_event() {
+        let event = ActivityEvent::Command(Command::Log {
+            id: 444,
+            line: "Running command...".to_string(),
             is_error: false,
             timestamp: Timestamp(SystemTime::UNIX_EPOCH),
-        };
+        });
 
-        let json_str = serde_json::to_string(&event).unwrap();
-        let expected = r#"{"type":"log","id":222,"line":"Building target...","is_error":false,"timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
-        assert_eq!(json_str, expected);
+        let json = serde_json::to_string(&event).unwrap();
+        let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ActivityEvent::Command(Command::Log { line, is_error, .. }) => {
+                assert_eq!(line, "Running command...");
+                assert!(!is_error);
+            }
+            _ => panic!("Expected Command::Log event"),
+        }
+    }
 
-        let error_event = ActivityEvent::Log {
-            id: 333,
-            line: "Error: compilation failed".to_string(),
-            is_error: true,
+    #[test]
+    fn test_operation_complete_event() {
+        let event = ActivityEvent::Operation(Operation::Complete {
+            id: 555,
+            outcome: ActivityOutcome::Failed,
             timestamp: Timestamp(SystemTime::UNIX_EPOCH),
-        };
+        });
 
-        let error_json_str = serde_json::to_string(&error_event).unwrap();
-        let expected_error = r#"{"type":"log","id":333,"line":"Error: compilation failed","is_error":true,"timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
-        assert_eq!(error_json_str, expected_error);
-    }
-
-    #[test]
-    fn test_activity_event_log_is_error_defaults_to_false() {
-        let json_str = r#"{"type":"log","id":444,"line":"some log","timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
-
-        let event: ActivityEvent = serde_json::from_str(json_str).unwrap();
-        match event {
-            ActivityEvent::Log { is_error, .. } => {
-                assert_eq!(is_error, false);
+        let json = serde_json::to_string(&event).unwrap();
+        let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ActivityEvent::Operation(Operation::Complete { outcome, .. }) => {
+                assert_eq!(outcome, ActivityOutcome::Failed);
             }
-            _ => panic!("Expected Log event"),
-        }
-    }
-
-    #[test]
-    fn test_activity_event_message_json_structure() {
-        let test_cases = [
-            (
-                LogLevel::Error,
-                r#"{"type":"message","level":"error","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-            (
-                LogLevel::Warn,
-                r#"{"type":"message","level":"warn","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-            (
-                LogLevel::Info,
-                r#"{"type":"message","level":"info","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-            (
-                LogLevel::Debug,
-                r#"{"type":"message","level":"debug","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-            (
-                LogLevel::Trace,
-                r#"{"type":"message","level":"trace","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-        ];
-
-        for (level, expected) in test_cases {
-            let event = ActivityEvent::Message {
-                level,
-                text: "Test message".to_string(),
-                timestamp: Timestamp(SystemTime::UNIX_EPOCH),
-            };
-
-            let json_str = serde_json::to_string(&event).unwrap();
-            assert_eq!(json_str, expected);
-
-            let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
-            match roundtrip {
-                ActivityEvent::Message {
-                    level: rt_level,
-                    text,
-                    ..
-                } => {
-                    assert_eq!(rt_level, level);
-                    assert_eq!(text, "Test message");
-                }
-                _ => panic!("Expected Message event"),
-            }
-        }
-    }
-
-    #[test]
-    fn test_all_activity_kinds_serialize() {
-        let test_cases = [
-            (
-                ActivityKind::Build,
-                r#"{"type":"start","id":1,"kind":"build","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-            (
-                ActivityKind::Fetch,
-                r#"{"type":"start","id":1,"kind":"fetch","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-            (
-                ActivityKind::Evaluate,
-                r#"{"type":"start","id":1,"kind":"evaluate","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-            (
-                ActivityKind::Task,
-                r#"{"type":"start","id":1,"kind":"task","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-            (
-                ActivityKind::Command,
-                r#"{"type":"start","id":1,"kind":"command","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-            (
-                ActivityKind::Operation,
-                r#"{"type":"start","id":1,"kind":"operation","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-        ];
-
-        for (kind, expected) in test_cases {
-            let event = ActivityEvent::Start {
-                id: 1,
-                kind: kind.clone(),
-                name: "test".to_string(),
-                parent: None,
-                detail: None,
-                timestamp: Timestamp(SystemTime::UNIX_EPOCH),
-            };
-
-            let json_str = serde_json::to_string(&event).unwrap();
-            assert_eq!(json_str, expected);
-
-            let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
-            match roundtrip {
-                ActivityEvent::Start { kind: rt_kind, .. } => {
-                    assert_eq!(rt_kind, kind);
-                }
-                _ => panic!("Expected Start event"),
-            }
-        }
-    }
-
-    #[test]
-    fn test_progress_unit_serialization() {
-        let test_cases = [
-            (
-                ProgressUnit::Bytes,
-                r#"{"type":"progress","id":1,"progress":{"kind":"indeterminate","current":10,"unit":"bytes"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-            (
-                ProgressUnit::Files,
-                r#"{"type":"progress","id":1,"progress":{"kind":"indeterminate","current":10,"unit":"files"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-            (
-                ProgressUnit::Items,
-                r#"{"type":"progress","id":1,"progress":{"kind":"indeterminate","current":10,"unit":"items"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
-            ),
-        ];
-
-        for (unit, expected) in test_cases {
-            let event = ActivityEvent::Progress {
-                id: 1,
-                progress: ProgressState::Indeterminate {
-                    current: 10,
-                    unit: Some(unit),
-                },
-                timestamp: Timestamp(SystemTime::UNIX_EPOCH),
-            };
-
-            let json_str = serde_json::to_string(&event).unwrap();
-            assert_eq!(json_str, expected);
-
-            let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
-            match roundtrip {
-                ActivityEvent::Progress { progress, .. } => match progress {
-                    ProgressState::Indeterminate { unit: rt_unit, .. } => {
-                        assert_eq!(rt_unit, Some(unit));
-                    }
-                    _ => panic!("Expected Indeterminate progress"),
-                },
-                _ => panic!("Expected Progress event"),
-            }
+            _ => panic!("Expected Operation::Complete event"),
         }
     }
 }

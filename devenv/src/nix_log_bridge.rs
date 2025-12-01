@@ -1,4 +1,4 @@
-use devenv_activity::{Activity, ActivityKind};
+use devenv_activity::{Activity, FetchKind};
 use devenv_eval_cache::Op;
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 use std::collections::HashMap;
@@ -250,9 +250,9 @@ impl NixLogBridge {
 
                 let derivation_name = extract_derivation_name(&derivation_path);
 
-                let activity = Activity::builder(ActivityKind::Build, derivation_name)
+                let activity = Activity::build(derivation_name)
                     .id(activity_id)
-                    .detail(derivation_path)
+                    .derivation_path(derivation_path)
                     .parent(parent_id)
                     .start();
 
@@ -263,9 +263,9 @@ impl NixLogBridge {
                     let package_name = extract_package_name(&store_path);
 
                     let activity =
-                        Activity::builder(ActivityKind::Fetch, format!("Query {}", package_name))
+                        Activity::fetch(FetchKind::Query, format!("Query {}", package_name))
                             .id(activity_id)
-                            .detail(store_path)
+                            .url(store_path)
                             .parent(parent_id)
                             .start();
 
@@ -276,9 +276,9 @@ impl NixLogBridge {
                 if let Some(store_path) = fields.first().and_then(Self::extract_string_field) {
                     let package_name = extract_package_name(&store_path);
 
-                    let activity = Activity::builder(ActivityKind::Fetch, package_name)
+                    let activity = Activity::fetch(FetchKind::Download, package_name)
                         .id(activity_id)
-                        .detail(store_path)
+                        .url(store_path)
                         .parent(parent_id)
                         .start();
 
@@ -286,7 +286,7 @@ impl NixLogBridge {
                 }
             }
             ActivityType::FetchTree => {
-                let activity = Activity::builder(ActivityKind::Fetch, text)
+                let activity = Activity::fetch(FetchKind::Tree, text)
                     .id(activity_id)
                     .parent(parent_id)
                     .start();
@@ -385,7 +385,7 @@ impl NixLogBridge {
         if let Ok(mut state) = self.evaluation_state.lock() {
             // If this is the first file, create the evaluation activity
             if state.activity.is_none() {
-                let activity = Activity::evaluate("");
+                let activity = Activity::evaluate("").start();
                 state.activity = Some(activity);
             }
 

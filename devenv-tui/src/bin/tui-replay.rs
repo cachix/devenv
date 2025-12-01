@@ -2,7 +2,8 @@ use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use devenv_activity::{
-    ActivityEvent, ActivityKind, ActivityOutcome, LogLevel, ProgressState, ProgressUnit, Timestamp,
+    ActivityEvent, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind, LogLevel, Message,
+    Operation, Task, Timestamp,
 };
 use serde::Deserialize;
 use std::fs::File;
@@ -31,8 +32,6 @@ struct Args {
 struct RawTraceEvent {
     timestamp: DateTime<Utc>,
     #[serde(default)]
-    level: Option<String>,
-    #[serde(default)]
     target: String,
     #[serde(default)]
     fields: TraceFields,
@@ -43,22 +42,24 @@ struct RawTraceEvent {
 struct TraceFields {
     activity_id: Option<u64>,
     event_type: Option<String>,
-    kind: Option<String>,
+    activity_type: Option<String>,
+    fetch_kind: Option<String>,
     name: Option<String>,
     parent: Option<u64>,
+    derivation_path: Option<String>,
+    url: Option<String>,
     detail: Option<String>,
+    command: Option<String>,
     outcome: Option<String>,
-    progress_kind: Option<String>,
+    progress_done: Option<u64>,
+    progress_expected: Option<u64>,
     progress_current: Option<u64>,
     progress_total: Option<u64>,
-    progress_unit: Option<String>,
     phase: Option<String>,
     log_line: Option<String>,
     log_is_error: Option<bool>,
     message_level: Option<String>,
     message_text: Option<String>,
-    detail_key: Option<String>,
-    detail_value: Option<String>,
 }
 
 fn datetime_to_timestamp(dt: DateTime<Utc>) -> Timestamp {
@@ -147,54 +148,40 @@ impl EventProcessor {
 
         if let Some(ref event_type) = fields.event_type {
             match event_type.as_str() {
-                "start" => self.handle_start(fields, raw.level.as_deref(), timestamp),
+                "start" => self.handle_start(fields, timestamp),
                 "complete" => self.handle_complete(fields, timestamp),
                 _ => {}
             }
             return;
         }
 
-        if fields.progress_kind.is_some() {
+        // Handle progress events (Build/Task use done/expected, Fetch uses current/total)
+        if fields.progress_done.is_some() || fields.progress_current.is_some() {
             self.handle_progress(fields, timestamp);
             return;
         }
 
+        // Handle phase events (Build only)
         if let Some(ref phase) = fields.phase {
             if let Some(id) = fields.activity_id {
-                self.send(ActivityEvent::Phase {
+                self.send(ActivityEvent::Build(Build::Phase {
                     id,
                     phase: phase.clone(),
                     timestamp,
-                });
+                }));
             }
             return;
         }
 
+        // Handle log events
         if let Some(ref line) = fields.log_line {
             if let Some(id) = fields.activity_id {
-                let is_error = fields.log_is_error.unwrap_or(false);
-                self.send(ActivityEvent::Log {
-                    id,
-                    line: line.clone(),
-                    is_error,
-                    timestamp,
-                });
+                self.handle_log(id, line.clone(), fields.log_is_error.unwrap_or(false), fields.activity_type.as_deref(), timestamp);
             }
             return;
         }
 
-        if let (Some(key), Some(value)) = (&fields.detail_key, &fields.detail_value) {
-            if let Some(id) = fields.activity_id {
-                self.send(ActivityEvent::Detail {
-                    id,
-                    key: key.clone(),
-                    value: value.clone(),
-                    timestamp,
-                });
-            }
-            return;
-        }
-
+        // Handle message events
         if let Some(ref text) = fields.message_text {
             let level = match fields.message_level.as_deref() {
                 Some("error") => LogLevel::Error,
@@ -204,38 +191,76 @@ impl EventProcessor {
                 Some("trace") => LogLevel::Trace,
                 _ => LogLevel::Info,
             };
-            self.send(ActivityEvent::Message {
+            self.send(ActivityEvent::Message(Message {
                 level,
                 text: text.clone(),
                 timestamp,
-            });
+            }));
         }
     }
 
-    fn handle_start(&mut self, fields: &TraceFields, _trace_level: Option<&str>, timestamp: Timestamp) {
+    fn handle_start(&mut self, fields: &TraceFields, timestamp: Timestamp) {
         let Some(id) = fields.activity_id else {
             return;
         };
 
-        let kind = match fields.kind.as_deref() {
-            Some("build") => ActivityKind::Build,
-            Some("fetch") => ActivityKind::Fetch,
-            Some("evaluate") => ActivityKind::Evaluate,
-            Some("task") => ActivityKind::Task,
-            Some("command") => ActivityKind::Command,
-            _ => ActivityKind::Operation,
+        let name = fields.name.clone().unwrap_or_else(|| "Unknown".to_string());
+        let parent = fields.parent;
+
+        let event = match fields.activity_type.as_deref() {
+            Some("build") => ActivityEvent::Build(Build::Start {
+                id,
+                name,
+                parent,
+                derivation_path: fields.derivation_path.clone(),
+                timestamp,
+            }),
+            Some("fetch") => {
+                let kind = match fields.fetch_kind.as_deref() {
+                    Some("download") => FetchKind::Download,
+                    Some("query") => FetchKind::Query,
+                    Some("tree") => FetchKind::Tree,
+                    _ => FetchKind::Download,
+                };
+                ActivityEvent::Fetch(Fetch::Start {
+                    id,
+                    kind,
+                    name,
+                    parent,
+                    url: fields.url.clone(),
+                    timestamp,
+                })
+            }
+            Some("evaluate") => ActivityEvent::Evaluate(Evaluate::Start {
+                id,
+                name,
+                parent,
+                timestamp,
+            }),
+            Some("task") => ActivityEvent::Task(Task::Start {
+                id,
+                name,
+                parent,
+                detail: fields.detail.clone(),
+                timestamp,
+            }),
+            Some("command") => ActivityEvent::Command(Command::Start {
+                id,
+                name,
+                parent,
+                command: fields.command.clone(),
+                timestamp,
+            }),
+            _ => ActivityEvent::Operation(Operation::Start {
+                id,
+                name,
+                parent,
+                detail: fields.detail.clone(),
+                timestamp,
+            }),
         };
 
-        let name = fields.name.clone().unwrap_or_else(|| "Unknown".to_string());
-
-        self.send(ActivityEvent::Start {
-            id,
-            kind,
-            name,
-            parent: fields.parent,
-            detail: fields.detail.clone(),
-            timestamp,
-        });
+        self.send(event);
     }
 
     fn handle_complete(&mut self, fields: &TraceFields, timestamp: Timestamp) {
@@ -250,11 +275,18 @@ impl EventProcessor {
             _ => ActivityOutcome::Success,
         };
 
-        self.send(ActivityEvent::Complete {
-            id,
-            outcome,
-            timestamp,
-        });
+        // We need the activity type to emit the correct Complete event.
+        // In replay, we might not have it tracked, so default to Operation.
+        let event = match fields.activity_type.as_deref() {
+            Some("build") => ActivityEvent::Build(Build::Complete { id, outcome, timestamp }),
+            Some("fetch") => ActivityEvent::Fetch(Fetch::Complete { id, outcome, timestamp }),
+            Some("evaluate") => ActivityEvent::Evaluate(Evaluate::Complete { id, outcome, timestamp }),
+            Some("task") => ActivityEvent::Task(Task::Complete { id, outcome, timestamp }),
+            Some("command") => ActivityEvent::Command(Command::Complete { id, outcome, timestamp }),
+            _ => ActivityEvent::Operation(Operation::Complete { id, outcome, timestamp }),
+        };
+
+        self.send(event);
     }
 
     fn handle_progress(&mut self, fields: &TraceFields, timestamp: Timestamp) {
@@ -262,32 +294,47 @@ impl EventProcessor {
             return;
         };
 
-        let current = fields.progress_current.unwrap_or(0);
+        // Build/Task progress uses done/expected
+        if let (Some(done), Some(expected)) = (fields.progress_done, fields.progress_expected) {
+            // Default to Build progress if activity_type is not specified
+            let event = match fields.activity_type.as_deref() {
+                Some("task") => ActivityEvent::Task(Task::Progress {
+                    id,
+                    done,
+                    expected,
+                    timestamp,
+                }),
+                _ => ActivityEvent::Build(Build::Progress {
+                    id,
+                    done,
+                    expected,
+                    timestamp,
+                }),
+            };
+            self.send(event);
+            return;
+        }
 
-        let unit = match fields.progress_unit.as_deref() {
-            Some("bytes") => Some(ProgressUnit::Bytes),
-            Some("files") => Some(ProgressUnit::Files),
-            Some("items") => Some(ProgressUnit::Items),
-            _ => None,
+        // Fetch progress uses current/total
+        if let Some(current) = fields.progress_current {
+            self.send(ActivityEvent::Fetch(Fetch::Progress {
+                id,
+                current,
+                total: fields.progress_total,
+                timestamp,
+            }));
+        }
+    }
+
+    fn handle_log(&mut self, id: u64, line: String, is_error: bool, activity_type: Option<&str>, timestamp: Timestamp) {
+        let event = match activity_type {
+            Some("build") => ActivityEvent::Build(Build::Log { id, line, is_error, timestamp }),
+            Some("evaluate") => ActivityEvent::Evaluate(Evaluate::Log { id, line, timestamp }),
+            Some("task") => ActivityEvent::Task(Task::Log { id, line, is_error, timestamp }),
+            Some("command") => ActivityEvent::Command(Command::Log { id, line, is_error, timestamp }),
+            _ => ActivityEvent::Build(Build::Log { id, line, is_error, timestamp }),
         };
-
-        let progress = match fields.progress_kind.as_deref() {
-            Some("determinate") => {
-                let total = fields.progress_total.unwrap_or(0);
-                ProgressState::Determinate {
-                    current,
-                    total,
-                    unit,
-                }
-            }
-            _ => ProgressState::Indeterminate { current, unit },
-        };
-
-        self.send(ActivityEvent::Progress {
-            id,
-            progress,
-            timestamp,
-        });
+        self.send(event);
     }
 }
 

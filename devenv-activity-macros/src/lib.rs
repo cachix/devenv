@@ -30,9 +30,11 @@ use syn::{
 ///
 /// Supports:
 /// - `#[activity("name")]` - Simple operation activity
-/// - `#[activity("name", kind = build)]` - Specify ActivityKind
+/// - `#[activity("name", kind = build)]` - Specify activity type (build, evaluate, task, command, operation)
 /// - `#[activity("name", level = debug)]` - Specify tracing Level (trace, debug, info, warn, error)
 /// - `#[activity("name", skip(arg1, arg2))]` - Skip certain arguments
+///
+/// Note: `fetch` is not available as a kind since it requires a FetchKind parameter.
 struct ActivityArgs {
     name: Expr,
     kind: Option<Ident>,
@@ -195,22 +197,6 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
 
     let is_async = fn_sig.asyncness.is_some();
 
-    // Generate the kind enum value
-    let kind_enum = match kind {
-        Some(ref k) => {
-            let kind_str = k.to_string();
-            match kind_str.as_str() {
-                "build" => quote! { devenv_activity::ActivityKind::Build },
-                "fetch" => quote! { devenv_activity::ActivityKind::Fetch },
-                "evaluate" => quote! { devenv_activity::ActivityKind::Evaluate },
-                "task" => quote! { devenv_activity::ActivityKind::Task },
-                "command" => quote! { devenv_activity::ActivityKind::Command },
-                "operation" | _ => quote! { devenv_activity::ActivityKind::Operation },
-            }
-        }
-        None => quote! { devenv_activity::ActivityKind::Operation },
-    };
-
     // Generate the level enum value (default to INFO)
     let level_enum = match level {
         Some(ref l) => {
@@ -226,11 +212,43 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
         None => quote! { devenv_activity::ActivityLevel::Info },
     };
 
-    // Generate the activity creation call using builder
-    let activity_create = quote! {
-        devenv_activity::Activity::builder(#kind_enum, #name)
-            .level(#level_enum)
-            .start()
+    // Generate the activity creation call using type-specific builders
+    let activity_create = match kind {
+        Some(ref k) => {
+            let kind_str = k.to_string();
+            match kind_str.as_str() {
+                "build" => quote! {
+                    devenv_activity::Activity::build(#name)
+                        .level(#level_enum)
+                        .start()
+                },
+                "evaluate" => quote! {
+                    devenv_activity::Activity::evaluate(#name)
+                        .level(#level_enum)
+                        .start()
+                },
+                "task" => quote! {
+                    devenv_activity::Activity::task(#name)
+                        .level(#level_enum)
+                        .start()
+                },
+                "command" => quote! {
+                    devenv_activity::Activity::command(#name)
+                        .level(#level_enum)
+                        .start()
+                },
+                "operation" | _ => quote! {
+                    devenv_activity::Activity::operation(#name)
+                        .level(#level_enum)
+                        .start()
+                },
+            }
+        }
+        None => quote! {
+            devenv_activity::Activity::operation(#name)
+                .level(#level_enum)
+                .start()
+        },
     };
 
     // Collect argument names that aren't skipped (for potential future use)
