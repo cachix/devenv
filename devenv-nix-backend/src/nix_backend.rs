@@ -22,7 +22,7 @@ use devenv_eval_cache::Output;
 use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use nix_bindings_expr::eval_state::{EvalState, EvalStateBuilder, gc_register_my_thread};
 use nix_bindings_expr::to_json::value_to_json;
-use nix_bindings_expr::value::ValueType;
+use nix_bindings_expr::{EvalCache, SearchParams, SearchResult, search};
 use nix_bindings_fetchers::FetchersSettings;
 use nix_bindings_flake::{
     EvalStateBuilderExt, FlakeReference, FlakeReferenceParseFlags, FlakeSettings, InputsLocker,
@@ -34,7 +34,6 @@ use nix_bindings_store::store::{GcAction, Store, TrustedFlag};
 use nix_bindings_util::settings;
 use nix_cmd::ReplExitStatus;
 use once_cell::sync::OnceCell;
-use regex::Regex;
 use ser_nix;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -75,132 +74,6 @@ struct PackageInfo {
     pname: String,
     version: String,
     description: String,
-}
-
-/// Helper function to recursively search through nixpkgs attribute tree
-/// Matches packages against query regex and extracts metadata
-fn search_packages(
-    eval_state: &mut EvalState,
-    root_attrset: &nix_bindings_expr::value::Value,
-    root_path: Vec<String>,
-    query_regex: &Regex,
-    results: &mut BTreeMap<String, PackageInfo>,
-    _depth: usize,
-    max_depth: usize,
-    max_results: usize,
-) -> Result<()> {
-    // Use iterative approach with explicit stack to avoid stack overflow
-    // Stack items: (attrset, path, depth)
-    let mut stack: Vec<(nix_bindings_expr::value::Value, Vec<String>, usize)> = vec![];
-    stack.push((root_attrset.clone(), root_path, 0));
-
-    while let Some((attrset, attr_path, depth)) = stack.pop() {
-        // Stop at max depth
-        if depth > max_depth {
-            continue;
-        }
-
-        // Stop if we have enough results
-        if results.len() >= max_results {
-            break;
-        }
-
-        // Get attribute names safely
-        let Ok(attr_names) = eval_state
-            .require_attrs_names_unsorted(&attrset)
-            .to_miette()
-        else {
-            continue; // Skip non-attrsets
-        };
-
-        for attr_name in attr_names {
-            let mut current_path = attr_path.clone();
-            current_path.push(attr_name.clone());
-            let path_str = current_path.join(".");
-
-            // Try to get the attribute - skip if it fails
-            let value = match eval_state
-                .require_attrs_select_opt(&attrset, &attr_name)
-                .to_miette()
-            {
-                Ok(Some(v)) => v,
-                Ok(None) => continue,
-                Err(_) => continue, // Skip broken attributes
-            };
-
-            // Try to get the pname (indicates this is a package)
-            let pname_result = eval_state
-                .require_attrs_select_opt(&value, "pname")
-                .to_miette();
-
-            if let Ok(Some(pname_val)) = pname_result {
-                // This looks like a derivation - extract metadata
-                if let Ok(pname_str) = eval_state.require_string(&pname_val).to_miette() {
-                    // Get version
-                    let version = eval_state
-                        .require_attrs_select_opt(&value, "version")
-                        .to_miette()
-                        .ok()
-                        .flatten()
-                        .and_then(|version_val| {
-                            eval_state.require_string(&version_val).to_miette().ok()
-                        })
-                        .unwrap_or_else(|| "unknown".to_string());
-
-                    // Get description from meta
-                    let description = eval_state
-                        .require_attrs_select_opt(&value, "meta")
-                        .to_miette()
-                        .ok()
-                        .flatten()
-                        .and_then(|meta_val| {
-                            eval_state
-                                .require_attrs_select_opt(&meta_val, "description")
-                                .to_miette()
-                                .ok()
-                                .flatten()
-                        })
-                        .and_then(|desc_val| eval_state.require_string(&desc_val).to_miette().ok())
-                        .unwrap_or_default();
-
-                    // Check if matches query (against path, name, or description)
-                    if query_regex.is_match(&path_str)
-                        || query_regex.is_match(&pname_str)
-                        || query_regex.is_match(&description)
-                    {
-                        results.insert(
-                            path_str,
-                            PackageInfo {
-                                pname: pname_str,
-                                version,
-                                description,
-                            },
-                        );
-                    }
-                }
-            } else {
-                // Not a package, check if we should recurse into this attrset
-                if let Ok(ValueType::AttrSet) = eval_state.value_type(&value).to_miette() {
-                    let should_recurse = eval_state
-                        .require_attrs_select_opt(&value, "recurseForDerivations")
-                        .to_miette()
-                        .ok()
-                        .flatten()
-                        .and_then(|recurse_val| {
-                            eval_state.require_bool(&recurse_val).to_miette().ok()
-                        })
-                        .unwrap_or_else(|| current_path.len() <= 2);
-
-                    if should_recurse {
-                        // Push to stack for iterative processing
-                        stack.push((value, current_path, depth + 1));
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
 }
 
 /// FFI-based Nix backend implementation using direct Rust bindings
@@ -1487,7 +1360,7 @@ impl NixBackend for NixRustBackend {
 
     async fn search(&self, name: &str, _options: Option<Options>) -> Result<Output> {
         // Search through pkgs from bootstrap/default.nix for packages matching the query
-        // Uses case-insensitive regex matching against package paths, names, and descriptions
+        // Uses the nix search C API which handles recurseForDerivations logic
         // Respects overlays, locked versions, and devenv configuration
 
         // Validate lock file before searching
@@ -1497,11 +1370,6 @@ impl NixBackend for NixRustBackend {
             .eval_state
             .lock()
             .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
-
-        // Compile query as case-insensitive regex
-        let query_regex = Regex::new(&format!("(?i){name}", name = regex::escape(name)))
-            .into_diagnostic()
-            .wrap_err("Failed to compile search query as regex")?;
 
         // Import default.nix to get the configured pkgs with overlays and settings
         let import_expr = self
@@ -1521,18 +1389,45 @@ impl NixBackend for NixRustBackend {
             .to_miette()
             .wrap_err("Failed to get pkgs attribute from devenv")?;
 
-        // Recursively search through the package tree
+        // Create EvalCache for efficient lazy traversal with optional SQLite caching
+        let cache = EvalCache::new(&mut eval_state, &pkgs, None)
+            .to_miette()
+            .wrap_err("Failed to create eval cache for pkgs")?;
+
+        let cursor = cache
+            .root()
+            .to_miette()
+            .wrap_err("Failed to get root cursor from eval cache")?;
+
+        // Configure search with the query pattern (case-insensitive)
+        let mut params = SearchParams::new()
+            .to_miette()
+            .wrap_err("Failed to create search params")?;
+        params
+            .add_regex(name)
+            .to_miette()
+            .wrap_err("Failed to add search regex")?;
+
+        // Collect results using the search API
         let mut results: BTreeMap<String, PackageInfo> = BTreeMap::new();
-        search_packages(
-            &mut eval_state,
-            &pkgs,
-            vec!["pkgs".to_string()],
-            &query_regex,
-            &mut results,
-            0,
-            5,   // max_depth
-            100, // max_results - limit to avoid long searches
-        )
+        let max_results = 100;
+
+        search(&cursor, Some(&params), |result: SearchResult| {
+            if results.len() >= max_results {
+                return false; // Stop searching
+            }
+
+            results.insert(
+                result.attr_path,
+                PackageInfo {
+                    pname: result.name,
+                    version: result.version,
+                    description: result.description,
+                },
+            );
+            true // Continue searching
+        })
+        .to_miette()
         .wrap_err("Search failed")?;
 
         // Convert results to JSON
