@@ -462,29 +462,14 @@ impl Nix {
                 }
             });
 
-            // Set current operation for Nix log correlation
-            // This allows Nix operations to be nested under the parent DEVENV operation
-            let cmd_string = display_command(&cmd);
-            // Use a simple hash of the command for the operation ID
-            use std::hash::{Hash, Hasher};
-            let mut cmd_hash = std::collections::hash_map::DefaultHasher::new();
-            cmd_string.hash(&mut cmd_hash);
-            let command_operation_id = format!("nix-cmd-{:x}", cmd_hash.finish());
-            nix_bridge.set_current_operation(command_operation_id);
-
             let pretty_cmd = display_command(&cmd);
-            let activity = Activity::command(&pretty_cmd)
-                .command(&pretty_cmd)
-                .start();
+            let activity = Activity::command(&pretty_cmd).command(&pretty_cmd).start();
             let output = cached_cmd
                 .output(&mut cmd)
                 .instrument(activity.span())
                 .await
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
-
-            // Clear bridge operation
-            nix_bridge.clear_current_operation();
 
             // Record cache status if applicable
             if output.cache_hit {
@@ -497,9 +482,7 @@ impl Nix {
             output
         } else {
             let pretty_cmd = display_command(&cmd);
-            let activity = Activity::command(&pretty_cmd)
-                .command(&pretty_cmd)
-                .start();
+            let activity = Activity::command(&pretty_cmd).command(&pretty_cmd).start();
             let output = activity.in_scope(|| {
                 cmd.output()
                     .into_diagnostic()

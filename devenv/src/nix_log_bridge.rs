@@ -5,15 +5,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tracing::{error, info, trace, warn};
 
-/// Simple operation ID type for correlating Nix activities
-pub type OperationId = String;
-
 /// Bridge that converts Nix internal logs to tracing events
 pub struct NixLogBridge {
     /// Current active operations and their associated Nix activities
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
-    /// Current parent operation ID for correlating Nix activities
-    current_operation_id: Arc<Mutex<Option<OperationId>>>,
     /// Evaluation tracking state
     evaluation_state: Arc<Mutex<EvaluationState>>,
 }
@@ -27,8 +22,6 @@ struct EvaluationState {
 
 /// Information about an active Nix activity
 struct NixActivityInfo {
-    #[allow(dead_code)]
-    operation_id: OperationId,
     activity_type: ActivityType,
     activity: Activity,
 }
@@ -37,28 +30,8 @@ impl NixLogBridge {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             active_activities: Arc::new(Mutex::new(HashMap::new())),
-            current_operation_id: Arc::new(Mutex::new(None)),
             evaluation_state: Arc::new(Mutex::new(EvaluationState::default())),
         })
-    }
-
-    /// Set the current operation ID for correlating Nix activities
-    pub fn set_current_operation(&self, operation_id: OperationId) {
-        if let Ok(mut current) = self.current_operation_id.lock() {
-            *current = Some(operation_id);
-        }
-    }
-
-    /// Clear the current operation ID
-    pub fn clear_current_operation(&self) {
-        if let Ok(mut current) = self.current_operation_id.lock() {
-            *current = None;
-        }
-
-        // Reset the evaluation state for the next operation
-        if let Ok(mut state) = self.evaluation_state.lock() {
-            state.activity = None; // Drop the activity to end evaluation
-        }
     }
 
     /// Returns a callback that can be used by any log source.
@@ -96,7 +69,7 @@ impl NixLogBridge {
         if let Some(parse_result) = InternalLog::parse(line) {
             match parse_result {
                 Ok(internal_log) => {
-                    self.handle_internal_log(internal_log);
+                    self.process_internal_log(internal_log);
                 }
                 Err(e) => {
                     warn!("Failed to parse Nix internal log: {} - line: {}", e, line);
@@ -105,86 +78,49 @@ impl NixLogBridge {
         }
     }
 
-    /// Process a parsed InternalLog directly
-    pub fn process_internal_log(&self, log: InternalLog) {
-        self.handle_internal_log(log);
-    }
-
-    /// Process stderr from a pipe, reading line by line and feeding to the bridge
-    pub fn process_stderr<R: std::io::Read>(
-        &self,
-        stderr: R,
-        logging: bool,
-    ) -> std::io::Result<()> {
-        use std::io::{BufRead, BufReader};
-
-        let reader = BufReader::new(stderr);
-        for line in reader.lines() {
-            let line = line?;
-
-            // Feed line to bridge for structured log processing
-            self.process_log_line(&line);
-
-            // Also output to terminal if logging is enabled
-            if logging {
-                eprintln!("{}", line);
-            }
-        }
-
-        Ok(())
-    }
-
     /// Handle a parsed InternalLog entry
-    fn handle_internal_log(&self, log: InternalLog) {
-        let current_op_id = self
-            .current_operation_id
-            .lock()
-            .ok()
-            .and_then(|guard| guard.clone());
+    fn process_internal_log(&self, log: InternalLog) {
+        match log {
+            InternalLog::Start {
+                id,
+                typ,
+                text,
+                fields,
+                ..
+            } => {
+                self.handle_activity_start(id, typ, text, fields);
+            }
+            InternalLog::Stop { id } => {
+                self.handle_activity_stop(id, true);
+            }
+            InternalLog::Result { id, typ, fields } => {
+                self.handle_activity_result(id, typ, fields);
+            }
+            InternalLog::SetPhase { phase } => {
+                // Find the most recent build activity and update its phase
+                if let Ok(activities) = self.active_activities.lock()
+                    && let Some((_, activity_info)) = activities
+                        .iter()
+                        .find(|(_, info)| info.activity_type == ActivityType::Build)
+                {
+                    activity_info.activity.phase(&phase);
+                }
+            }
+            InternalLog::Msg { level, ref msg, .. } => {
+                // First check if this is a file evaluation message
+                if let Some(op) = Op::from_internal_log(&log)
+                    && let Op::EvaluatedFile { source } = op
+                {
+                    self.handle_file_evaluation(source);
+                    return;
+                }
 
-        if let Some(operation_id) = current_op_id {
-            match log {
-                InternalLog::Start {
-                    id,
-                    typ,
-                    text,
-                    fields,
-                    ..
-                } => {
-                    self.handle_activity_start(operation_id, id, typ, text, fields);
-                }
-                InternalLog::Stop { id } => {
-                    self.handle_activity_stop(id, true);
-                }
-                InternalLog::Result { id, typ, fields } => {
-                    self.handle_activity_result(id, typ, fields);
-                }
-                InternalLog::SetPhase { phase } => {
-                    // Find the most recent build activity and update its phase
-                    if let Ok(activities) = self.active_activities.lock()
-                        && let Some((_, activity_info)) = activities
-                            .iter()
-                            .find(|(_, info)| info.activity_type == ActivityType::Build)
-                    {
-                        activity_info.activity.phase(&phase);
-                    }
-                }
-                InternalLog::Msg { level, ref msg, .. } => {
-                    // First check if this is a file evaluation message
-                    if let Some(op) = Op::from_internal_log(&log)
-                        && let Op::EvaluatedFile { source } = op
-                    {
-                        self.handle_file_evaluation(source);
-                        return;
-                    }
-
-                    // Handle regular log messages from Nix builds
-                    if level <= Verbosity::Warn {
-                        match level {
-                            Verbosity::Error => error!("{msg}"),
-                            Verbosity::Warn => warn!("{msg}"),
-                            _ => info!("{msg}"),
-                        }
+                // Handle regular log messages from Nix builds
+                if level <= Verbosity::Warn {
+                    match level {
+                        Verbosity::Error => error!("{msg}"),
+                        Verbosity::Warn => warn!("{msg}"),
+                        _ => info!("{msg}"),
                     }
                 }
             }
@@ -192,18 +128,11 @@ impl NixLogBridge {
     }
 
     /// Insert an activity into the active activities map
-    fn insert_activity(
-        &self,
-        activity_id: u64,
-        operation_id: OperationId,
-        activity_type: ActivityType,
-        activity: Activity,
-    ) {
+    fn insert_activity(&self, activity_id: u64, activity_type: ActivityType, activity: Activity) {
         if let Ok(mut activities) = self.active_activities.lock() {
             activities.insert(
                 activity_id,
                 NixActivityInfo {
-                    operation_id,
                     activity_type,
                     activity,
                 },
@@ -230,7 +159,6 @@ impl NixLogBridge {
     /// Handle the start of a Nix activity
     fn handle_activity_start(
         &self,
-        operation_id: OperationId,
         activity_id: u64,
         activity_type: ActivityType,
         text: String,
@@ -256,20 +184,19 @@ impl NixLogBridge {
                     .parent(parent_id)
                     .start();
 
-                self.insert_activity(activity_id, operation_id, activity_type, activity);
+                self.insert_activity(activity_id, activity_type, activity);
             }
             ActivityType::QueryPathInfo => {
                 if let Some(store_path) = fields.first().and_then(Self::extract_string_field) {
                     let package_name = extract_package_name(&store_path);
 
-                    let activity =
-                        Activity::fetch(FetchKind::Query, format!("Query {}", package_name))
-                            .id(activity_id)
-                            .url(store_path)
-                            .parent(parent_id)
-                            .start();
+                    let activity = Activity::fetch(FetchKind::Query, package_name)
+                        .id(activity_id)
+                        .url(store_path)
+                        .parent(parent_id)
+                        .start();
 
-                    self.insert_activity(activity_id, operation_id, activity_type, activity);
+                    self.insert_activity(activity_id, activity_type, activity);
                 }
             }
             ActivityType::CopyPath => {
@@ -282,7 +209,7 @@ impl NixLogBridge {
                         .parent(parent_id)
                         .start();
 
-                    self.insert_activity(activity_id, operation_id, activity_type, activity);
+                    self.insert_activity(activity_id, activity_type, activity);
                 }
             }
             ActivityType::FetchTree => {
@@ -291,7 +218,7 @@ impl NixLogBridge {
                     .parent(parent_id)
                     .start();
 
-                self.insert_activity(activity_id, operation_id, activity_type, activity);
+                self.insert_activity(activity_id, activity_type, activity);
             }
             _ => {
                 trace!("Unhandled Nix activity type: {:?}", activity_type);
@@ -301,15 +228,17 @@ impl NixLogBridge {
 
     /// Handle the stop of a Nix activity
     fn handle_activity_stop(&self, activity_id: u64, success: bool) {
-        if let Ok(mut activities) = self.active_activities.lock()
-            && let Some(activity_info) = activities.remove(&activity_id)
-        {
-            // Mark as failed if not successful, then drop to complete
-            if !success {
-                activity_info.activity.fail();
-            }
-            // Activity completes on drop
+        let Ok(mut activities) = self.active_activities.lock() else {
+            return;
+        };
+        let Some(activity_info) = activities.remove(&activity_id) else {
+            return;
+        };
+
+        if !success {
+            activity_info.activity.fail();
         }
+        // Activity completes on drop
     }
 
     /// Handle activity result messages (like progress updates)
