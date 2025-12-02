@@ -122,13 +122,13 @@ rmcp = { version = "0.7", features = ["server", "transport-io"] }
 rmcp-macros = "0.7"
 
 # Optional snix dependencies
-snix-eval = { git = "https://github.com/cachix/snix" }
-snix-glue = { git = "https://github.com/cachix/snix" }
-snix-castore = { git = "https://github.com/cachix/snix" }
-snix-store = { git = "https://github.com/cachix/snix" }
-snix-build = { git = "https://github.com/cachix/snix" }
-nix-compat = { git = "https://github.com/cachix/snix" }
-nix-compat-derive = { git = "https://github.com/cachix/snix" }
+snix-eval = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
+snix-glue = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
+snix-castore = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
+snix-store = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
+snix-build = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
+nix-compat = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
+nix-compat-derive = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
 
 [profile.release]
 strip = "symbols"
