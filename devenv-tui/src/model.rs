@@ -1,7 +1,6 @@
-use crate::{LogMessage, LogSource, NixActivityState};
 use devenv_activity::{
-    ActivityEvent, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind, Message,
-    Operation, Task,
+    ActivityEvent, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind, Message, Operation,
+    Task,
 };
 use std::collections::{HashMap, VecDeque};
 use std::time::Instant;
@@ -11,7 +10,7 @@ const MAX_LOG_LINES_PER_BUILD: usize = 1000;
 
 #[derive(Debug)]
 pub struct Model {
-    pub message_log: VecDeque<LogMessage>,
+    pub message_log: VecDeque<Message>,
     pub activities: HashMap<u64, Activity>,
     pub root_activities: Vec<u64>,
     pub build_logs: HashMap<u64, VecDeque<String>>,
@@ -234,10 +233,7 @@ impl Model {
                 self.handle_activity_phase(id, phase);
             }
             Build::Progress {
-                id,
-                done,
-                expected,
-                ..
+                id, done, expected, ..
             } => {
                 self.handle_item_progress(id, done, expected);
             }
@@ -260,9 +256,9 @@ impl Model {
                 ..
             } => {
                 let substituter = url.as_ref().and_then(|u| {
-                    url::Url::parse(u).ok().and_then(|parsed| {
-                        parsed.host_str().map(|h| h.to_string())
-                    })
+                    url::Url::parse(u)
+                        .ok()
+                        .and_then(|parsed| parsed.host_str().map(|h| h.to_string()))
                 });
                 let variant = match kind {
                     FetchKind::Query => ActivityVariant::Query(QueryActivity { substituter }),
@@ -324,10 +320,7 @@ impl Model {
                 self.handle_activity_complete(id, outcome);
             }
             Task::Progress {
-                id,
-                done,
-                expected,
-                ..
+                id, done, expected, ..
             } => {
                 self.handle_item_progress(id, done, expected);
             }
@@ -508,11 +501,10 @@ impl Model {
     }
 
     fn handle_message(&mut self, msg: Message) {
-        let log_msg = LogMessage::new(msg.level.into(), msg.text, LogSource::System, HashMap::new());
-        self.add_log_message(log_msg);
+        self.add_log_message(msg);
     }
 
-    pub fn add_log_message(&mut self, message: LogMessage) {
+    pub fn add_log_message(&mut self, message: Message) {
         self.message_log.push_back(message);
         if self.message_log.len() > MAX_LOG_MESSAGES {
             self.message_log.pop_front();
@@ -685,6 +677,16 @@ impl Model {
             .filter(|da| matches!(da.activity.state, NixActivityState::Active))
             .collect()
     }
+}
+
+/// State of a Nix activity
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NixActivityState {
+    Active,
+    Completed {
+        success: bool,
+        duration: std::time::Duration,
+    },
 }
 
 #[derive(Debug)]

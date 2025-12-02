@@ -1,4 +1,3 @@
-pub mod events;
 pub mod model_events;
 pub mod tracing_interface;
 
@@ -8,7 +7,6 @@ pub mod components;
 pub mod model;
 pub mod view;
 
-pub use events::*;
 pub use model::{
     Activity, ActivityVariant, BuildActivity, DownloadActivity, Model, ProgressActivity,
     QueryActivity, TaskActivity, TaskDisplayStatus, TerminalSize,
