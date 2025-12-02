@@ -1,4 +1,4 @@
-use crate::{LogMessage, LogSource, NixActivityState, OperationId};
+use crate::{LogMessage, LogSource, NixActivityState};
 use devenv_activity::{
     ActivityEvent, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind, Message,
     Operation, Task,
@@ -89,7 +89,6 @@ pub struct ActivityDetail {
 #[derive(Debug, Clone)]
 pub struct Activity {
     pub id: u64,
-    pub operation_id: OperationId,
     pub name: String,
     pub short_name: String,
     pub parent_id: Option<u64>,
@@ -391,7 +390,6 @@ impl Model {
     ) {
         let activity = Activity {
             id,
-            operation_id: OperationId::from_activity_id(id),
             name: name.clone(),
             short_name: name,
             parent_id: parent,
