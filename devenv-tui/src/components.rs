@@ -58,29 +58,27 @@ impl HierarchyPrefixComponent {
     pub fn render(&self) -> Vec<AnyElement<'static>> {
         let mut prefix_children = vec![];
 
-        // Add hierarchy indicator if indented
-        if self.depth > 0 {
-            // Show parent level indentation (depth-1) * 2 spaces
-            let parent_indent = "  ".repeat(self.depth - 1);
-            prefix_children.push(element!(Text(content: parent_indent)).into_any());
-            prefix_children.push(
-                element!(View(margin_right: 1) {
-                    Text(content: "└──", color: COLOR_HIERARCHY)
-                })
-                .into_any(),
-            );
-        } else {
-            // Top-level item, use the full indent
-            prefix_children.push(element!(Text(content: self.indent.clone())).into_any());
-        }
-
         // Show spinner for top-level items (depth == 0)
-        if self.depth == 0
-            && let Some(ref spinner_char) = self.spinner
-        {
+        if self.depth == 0 {
+            if let Some(ref spinner_char) = self.spinner {
+                prefix_children.push(
+                    element!(View(margin_right: 1) {
+                        Text(content: spinner_char, color: COLOR_ACTIVE)
+                    })
+                    .into_any(),
+                );
+            }
+        } else {
+            // Indented items: align hierarchy line with parent's first char (after spinner if any)
+            // Parent has: [spinner + space] + content, so we need 2 spaces for spinner width
+            // Then (depth-1) * 2 for additional nesting levels
+            let spinner_offset = if self.spinner.is_some() { 2 } else { 0 };
+            let nesting_indent = "  ".repeat(self.depth - 1);
+            let total_indent = format!("{}{}", " ".repeat(spinner_offset), nesting_indent);
+            prefix_children.push(element!(Text(content: total_indent)).into_any());
             prefix_children.push(
                 element!(View(margin_right: 1) {
-                    Text(content: spinner_char, color: COLOR_ACTIVE)
+                    Text(content: "⎿", color: COLOR_HIERARCHY)
                 })
                 .into_any(),
             );
@@ -394,11 +392,11 @@ pub fn calculate_display_info(
 ) -> (String, bool) {
     // Calculate base width without suffix: padding + indent + hierarchy + action + margin + name + margin + elapsed
     let indent_width = if depth > 0 {
-        (depth - 1) * 2
+        2 + (depth - 1) * 2 // spinner offset (2) + nesting indent
     } else {
-        depth * 2
-    }; // parent levels only
-    let hierarchy_width = if depth > 0 { 4 } else { 0 }; // "└──" + margin_right: 1 for indented items
+        0
+    };
+    let hierarchy_width = if depth > 0 { 2 } else { 0 }; // "⎿" + margin_right: 1 for indented items
     let action_width = action.len() + 1; // action + margin_right
     let name_margin_width = 1; // margin_right after name
     let elapsed_width = elapsed.len();
