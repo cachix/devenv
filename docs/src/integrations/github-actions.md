@@ -42,7 +42,7 @@ steps:
   with:
     name: devenv
 - name: Install devenv.sh
-  run: nix profile install nixpkgs#devenv
+  run: nix profile install nixpkgs/$(jq -r '.nodes.nixpkgs.locked.rev' devenv.lock)#devenv
 ```
 
 The above snippet does the following:
