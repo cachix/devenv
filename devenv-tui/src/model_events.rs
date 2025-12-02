@@ -1,3 +1,4 @@
+use crate::TerminalSize;
 use iocraft::KeyCode;
 
 /// Low-volume UI control events
@@ -11,6 +12,9 @@ pub enum UiEvent {
 
     /// Animation tick for spinner updates
     Tick,
+
+    /// Terminal size changed
+    Resize(TerminalSize),
 }
 
 impl UiEvent {
@@ -46,6 +50,10 @@ impl UiEvent {
                     model.ui.spinner_frame = (model.ui.spinner_frame + 1) % 10;
                     model.ui.last_spinner_update = now;
                 }
+            }
+
+            UiEvent::Resize(size) => {
+                model.set_terminal_size(size.width, size.height);
             }
         }
     }

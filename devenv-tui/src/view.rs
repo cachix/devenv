@@ -150,7 +150,9 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     );
 
     // Total height: activities (with inline logs) + summary line + buffer
-    let total_height = dynamic_height + 2; // +1 for summary, +1 buffer to prevent overflow
+    // Constrain to terminal height to prevent overflow when logs are expanded
+    let calculated_height = dynamic_height + 2; // +1 for summary, +1 buffer to prevent overflow
+    let total_height = calculated_height.min(terminal_size.height as u32);
 
     element! {
         ContextProvider(value: Context::owned(terminal_size)) {

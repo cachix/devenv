@@ -113,7 +113,7 @@ pub struct UiState {
     pub terminal_size: TerminalSize,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct TerminalSize {
     pub width: u16,
     pub height: u16,

@@ -29,7 +29,18 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let ui_sender = hooks.use_context::<UiSender>();
     let model = hooks.use_context::<Arc<Mutex<Model>>>();
     let shutdown = hooks.use_context::<Arc<Shutdown>>();
-    let (terminal_width, _terminal_height) = hooks.use_terminal_size();
+    let (terminal_width, terminal_height) = hooks.use_terminal_size();
+
+    // Track previous terminal size to detect changes
+    let mut prev_size = hooks.use_state(crate::TerminalSize::default);
+    let current_size = crate::TerminalSize {
+        width: terminal_width,
+        height: terminal_height,
+    };
+    if current_size != prev_size.get() {
+        prev_size.set(current_size);
+        ui_sender.send(crate::UiEvent::Resize(current_size));
+    }
 
     // Trigger periodic re-renders to pick up model changes from background event processing
     let mut tick = hooks.use_state(|| 0u64);
