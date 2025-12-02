@@ -1363,11 +1363,6 @@ impl NixBackend for NixRustBackend {
         // Uses the nix search C API which handles recurseForDerivations logic
         // Respects overlays, locked versions, and devenv configuration
 
-        // Register this thread with the GC (async may run on different threads)
-        let _gc_registration = gc_register_my_thread()
-            .to_miette()
-            .wrap_err("Failed to register GC thread")?;
-
         // Validate lock file before searching
         self.validate_lock_file().await?;
 
