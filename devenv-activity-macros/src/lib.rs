@@ -65,28 +65,25 @@ impl Parse for ActivityArgs {
                     let key = assign.left.to_token_stream().to_string();
                     match key.as_str() {
                         "kind" => {
-                            if let Expr::Path(path) = &*assign.right {
-                                if let Some(ident) = path.path.get_ident() {
+                            if let Expr::Path(path) = &*assign.right
+                                && let Some(ident) = path.path.get_ident() {
                                     kind = Some(ident.clone());
                                 }
-                            }
                         }
                         "level" => {
-                            if let Expr::Path(path) = &*assign.right {
-                                if let Some(ident) = path.path.get_ident() {
+                            if let Expr::Path(path) = &*assign.right
+                                && let Some(ident) = path.path.get_ident() {
                                     level = Some(ident.clone());
                                 }
-                            }
                         }
                         "skip" => {
                             // Parse skip(arg1, arg2)
                             if let Expr::Call(call) = &*assign.right {
                                 for arg in &call.args {
-                                    if let Expr::Path(path) = arg {
-                                        if let Some(ident) = path.path.get_ident() {
+                                    if let Expr::Path(path) = arg
+                                        && let Some(ident) = path.path.get_ident() {
                                             skip.push(ident.clone());
                                         }
-                                    }
                                 }
                             }
                         }
@@ -100,17 +97,15 @@ impl Parse for ActivityArgs {
                 }
                 // Handle skip(arg1, arg2) without assignment
                 Expr::Call(call) => {
-                    if let Expr::Path(path) = &*call.func {
-                        if path.path.is_ident("skip") {
+                    if let Expr::Path(path) = &*call.func
+                        && path.path.is_ident("skip") {
                             for arg in &call.args {
-                                if let Expr::Path(path) = arg {
-                                    if let Some(ident) = path.path.get_ident() {
+                                if let Expr::Path(path) = arg
+                                    && let Some(ident) = path.path.get_ident() {
                                         skip.push(ident.clone());
                                     }
-                                }
                             }
                         }
-                    }
                 }
                 _ => {
                     if name.is_none() {
@@ -204,9 +199,18 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
             match level_str.as_str() {
                 "trace" => quote! { devenv_activity::ActivityLevel::Trace },
                 "debug" => quote! { devenv_activity::ActivityLevel::Debug },
+                "info" => quote! { devenv_activity::ActivityLevel::Info },
                 "warn" => quote! { devenv_activity::ActivityLevel::Warn },
                 "error" => quote! { devenv_activity::ActivityLevel::Error },
-                "info" | _ => quote! { devenv_activity::ActivityLevel::Info },
+                _ => {
+                    return Err(syn::Error::new(
+                        l.span(),
+                        format!(
+                            "unknown level '{}', expected one of: trace, debug, info, warn, error",
+                            level_str
+                        ),
+                    ));
+                }
             }
         }
         None => quote! { devenv_activity::ActivityLevel::Info },
@@ -237,11 +241,20 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
                         .level(#level_enum)
                         .start()
                 },
-                "operation" | _ => quote! {
+                "operation" => quote! {
                     devenv_activity::Activity::operation(#name)
                         .level(#level_enum)
                         .start()
                 },
+                _ => {
+                    return Err(syn::Error::new(
+                        k.span(),
+                        format!(
+                            "unknown kind '{}', expected one of: build, evaluate, task, command, operation",
+                            kind_str
+                        ),
+                    ));
+                }
             }
         }
         None => quote! {
@@ -256,14 +269,13 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
         .inputs
         .iter()
         .filter_map(|arg| {
-            if let FnArg::Typed(pat_type) = arg {
-                if let Pat::Ident(pat_ident) = &*pat_type.pat {
+            if let FnArg::Typed(pat_type) = arg
+                && let Pat::Ident(pat_ident) = &*pat_type.pat {
                     let ident = &pat_ident.ident;
                     if !skip.iter().any(|s| s == ident) {
                         return Some(ident.clone());
                     }
                 }
-            }
             None
         })
         .collect();
