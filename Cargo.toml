@@ -109,6 +109,7 @@ which = "8.0.0"
 whoami = "1.6.1"
 xdg = "3.0.0"
 walkdir = "2.5"
+url = "2"
 
 # The version of rustls must match the version used by reqwest to set up rustls-platform-verifier.
 # If you encounter an error, lock these versions down.

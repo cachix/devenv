@@ -234,11 +234,12 @@ fn test_evaluating_activity() {
 fn test_query_activity() {
     let mut model = new_test_model();
 
-    let event = ActivityEvent::Operation(Operation::Start {
+    let event = ActivityEvent::Fetch(Fetch::Start {
         id: 1,
-        name: "Querying cache".to_string(),
+        kind: FetchKind::Query,
+        name: "7xyndmr0mgfissin0h5ggzb0b2i5drbz-cargo-vendor-dir".to_string(),
         parent: None,
-        detail: Some("https://cache.nixos.org".to_string()),
+        url: Some("https://some-cache.org".to_string()),
         timestamp: Timestamp::now(),
     });
 

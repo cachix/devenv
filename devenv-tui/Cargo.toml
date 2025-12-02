@@ -58,6 +58,9 @@ chrono = { workspace = true }
 # Human-readable formatting
 human-repr = "1.1"
 
+# URL parsing
+url = { workspace = true }
+
 # Random number generation
 rand = { workspace = true }
 

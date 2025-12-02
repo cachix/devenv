@@ -260,8 +260,13 @@ impl Model {
                 url,
                 ..
             } => {
+                let substituter = url.as_ref().and_then(|u| {
+                    url::Url::parse(u).ok().and_then(|parsed| {
+                        parsed.host_str().map(|h| h.to_string())
+                    })
+                });
                 let variant = match kind {
-                    FetchKind::Query => ActivityVariant::Query(QueryActivity { substituter: None }),
+                    FetchKind::Query => ActivityVariant::Query(QueryActivity { substituter }),
                     FetchKind::Tree => ActivityVariant::FetchTree,
                     FetchKind::Download => ActivityVariant::Download(DownloadActivity {
                         size_current: Some(0),

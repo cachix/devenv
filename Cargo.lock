@@ -1561,6 +1561,7 @@ dependencies = [
  "tokio-shutdown",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]

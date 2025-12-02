@@ -328,7 +328,10 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
         }
         ActivityVariant::Query(query_data) => {
-            let substituter = query_data.substituter.as_deref().unwrap_or("cache");
+            let suffix = query_data
+                .substituter
+                .as_ref()
+                .map(|s| format!("from {}", s));
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner(*spinner_frame)
                 .render();
@@ -338,7 +341,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.short_name.clone(),
                 elapsed_str,
             )
-            .with_suffix(Some(format!("on {}", substituter)))
+            .with_suffix(suffix)
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }
