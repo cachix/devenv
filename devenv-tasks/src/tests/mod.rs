@@ -3146,7 +3146,9 @@ echo "Dotfiles task executed successfully"
             // This is the expected case
         }
         other => {
-            panic!("Expected Skipped status on third run after dotfile modification, got: {other:?}");
+            panic!(
+                "Expected Skipped status on third run after dotfile modification, got: {other:?}"
+            );
         }
     }
 

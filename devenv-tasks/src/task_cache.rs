@@ -7,7 +7,7 @@ use devenv_cache_core::{
     file::TrackedFile,
     time,
 };
-use glob::{glob_with, MatchOptions};
+use glob::{MatchOptions, glob_with};
 use serde_json::Value;
 use sqlx::Row;
 use std::path::PathBuf;

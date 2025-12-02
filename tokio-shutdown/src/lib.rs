@@ -402,7 +402,8 @@ mod tests {
         assert!(cancelled.load(std::sync::atomic::Ordering::Relaxed));
     }
 
-    #[tokio::test]
+    // Use start_paused to make time deterministic and avoid race conditions
+    #[tokio::test(start_paused = true)]
     async fn test_multiple_tasks() {
         let shutdown = Shutdown::new();
 
