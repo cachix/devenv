@@ -16,10 +16,22 @@ async fn main() -> Result<()> {
     let shutdown = Shutdown::new();
     shutdown.install_signals().await;
 
-    tokio::select! {
+    let result = tokio::select! {
         result = run_devenv(shutdown.clone()) => result,
         _ = shutdown.wait_for_shutdown() => Ok(()),
+    };
+
+    // Wait for cleanup tasks to complete.
+    // NixRustBackend::drop() triggers shutdown when Devenv is dropped (above),
+    // which signals the cleanup task to run. The cleanup task has its own Arc
+    // to the cachix daemon, so it can complete even after the backend is dropped.
+    // This fallback handles edge cases where no backend was created.
+    if !shutdown.is_cancelled() {
+        shutdown.shutdown();
     }
+    shutdown.wait_for_shutdown_complete().await;
+
+    result
 }
 
 async fn run_devenv(shutdown: Arc<Shutdown>) -> Result<()> {
