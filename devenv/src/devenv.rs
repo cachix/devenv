@@ -233,6 +233,7 @@ impl Devenv {
         let cachix_paths = CachixPaths {
             trusted_keys: cachix_trusted_keys,
             netrc: devenv_dotfile.join("netrc"),
+            daemon_socket: None,
         };
         let cachix_manager = Arc::new(CachixManager::new(cachix_paths));
 
