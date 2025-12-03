@@ -267,6 +267,7 @@ impl Devenv {
             dot_gc: self.devenv_dot_gc.clone(),
             home_gc: self.devenv_home_gc.clone(),
         }
+    }
 
     /// Get the root directory of the devenv project (where devenv.nix is located)
     pub fn root(&self) -> &Path {
