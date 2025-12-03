@@ -55,6 +55,6 @@ jobs:
 
       - name: Run integration tests
         run: |
-          # Use --test-threads=1 because Nix C++ FFI has global state (Activity/logging system)
+          # Use -j 1 because Nix C++ FFI has global state (Activity/logging system)
           # that is not thread-safe when multiple EvalStates are used concurrently
-          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo test --all-features -- --test-threads=1
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo nextest run --all-features -j 1
