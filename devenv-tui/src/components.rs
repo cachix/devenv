@@ -632,3 +632,4 @@ impl<'a> BuildLogsComponent<'a> {
         1
     }
 }
+

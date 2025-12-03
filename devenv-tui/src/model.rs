@@ -3,10 +3,28 @@ use devenv_activity::{
     Task,
 };
 use std::collections::{HashMap, VecDeque};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const MAX_LOG_MESSAGES: usize = 1000;
 const MAX_LOG_LINES_PER_BUILD: usize = 1000;
+
+/// Configuration for limiting displayed child activities
+#[derive(Debug, Clone)]
+pub struct ChildActivityLimit {
+    /// Maximum number of child lines to show
+    pub max_lines: usize,
+    /// How long completed items stay visible after completion
+    pub linger_duration: Duration,
+}
+
+impl Default for ChildActivityLimit {
+    fn default() -> Self {
+        Self {
+            max_lines: 5,
+            linger_duration: Duration::from_secs(1),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Model {
@@ -579,11 +597,18 @@ impl Model {
     }
 
     pub fn get_display_activities(&self) -> Vec<DisplayActivity> {
+        self.get_display_activities_with_limit(&ChildActivityLimit::default())
+    }
+
+    pub fn get_display_activities_with_limit(
+        &self,
+        limit: &ChildActivityLimit,
+    ) -> Vec<DisplayActivity> {
         let mut activities = Vec::new();
         let mut processed = std::collections::HashSet::new();
 
         for &root_id in &self.root_activities {
-            self.add_display_activity(&mut activities, root_id, 0, &mut processed);
+            self.add_display_activity(&mut activities, root_id, 0, &mut processed, limit);
         }
 
         activities
@@ -595,6 +620,7 @@ impl Model {
         activity_id: u64,
         depth: usize,
         processed: &mut std::collections::HashSet<u64>,
+        limit: &ChildActivityLimit,
     ) {
         if !processed.insert(activity_id) {
             return;
@@ -606,20 +632,18 @@ impl Model {
                 return;
             }
 
+            // Get visible children with limiting (only applies if this activity has children)
+            let (visible_children, _total, _hidden_count) =
+                self.get_visible_children(activity_id, limit);
+
             activities.push(DisplayActivity {
                 activity: activity.clone(),
                 depth,
             });
 
-            let mut children: Vec<_> = self
-                .activities
-                .values()
-                .filter(|child| child.parent_id == Some(activity_id))
-                .collect();
-            children.sort_by_key(|c| c.id);
-
-            for child in children {
-                self.add_display_activity(activities, child.id, depth + 1, processed);
+            // Recursively add visible children
+            for child in visible_children {
+                self.add_display_activity(activities, child.id, depth + 1, processed, limit);
             }
         }
     }
@@ -680,6 +704,103 @@ impl Model {
             .into_iter()
             .filter(|da| matches!(da.activity.state, NixActivityState::Active))
             .collect()
+    }
+
+    /// Get children of an activity, limited by the provided config.
+    /// Prioritizes active activities, then lingering completed ones, then older completed ones.
+    /// Returns a tuple of (visible_children, total_children_count, hidden_count).
+    pub fn get_visible_children(
+        &self,
+        parent_id: u64,
+        limit: &ChildActivityLimit,
+    ) -> (Vec<&Activity>, usize, usize) {
+        let now = Instant::now();
+
+        // Get all children of this parent, excluding UserOperation
+        let mut all_children: Vec<_> = self
+            .activities
+            .values()
+            .filter(|a| {
+                a.parent_id == Some(parent_id)
+                    && !matches!(a.variant, ActivityVariant::UserOperation)
+            })
+            .collect();
+
+        let total_count = all_children.len();
+
+        // Sort by id for consistent ordering
+        all_children.sort_by_key(|a| a.id);
+
+        // Partition into active and completed
+        let (active, completed): (Vec<_>, Vec<_>) = all_children
+            .into_iter()
+            .partition(|a| matches!(a.state, NixActivityState::Active));
+
+        // Sort completed by completion time (most recent first)
+        let mut completed_with_time: Vec<_> = completed
+            .into_iter()
+            .map(|a| {
+                let completed_at = a.completed_at.unwrap_or(a.start_time);
+                (a, completed_at)
+            })
+            .collect();
+        completed_with_time.sort_by(|a, b| b.1.cmp(&a.1)); // Most recent first
+
+        // Separate lingering (within linger_duration) from older completed
+        let (lingering, older): (Vec<_>, Vec<_>) = completed_with_time
+            .into_iter()
+            .partition(|(_, completed_at)| now.duration_since(*completed_at) < limit.linger_duration);
+
+        // Build result: prioritize active, then lingering, then older
+        let mut result: Vec<&Activity> = Vec::new();
+
+        // Add all active items first (they always show)
+        for a in &active {
+            if result.len() >= limit.max_lines {
+                break;
+            }
+            result.push(a);
+        }
+
+        // Add lingering completed items
+        for (a, _) in &lingering {
+            if result.len() >= limit.max_lines {
+                break;
+            }
+            result.push(a);
+        }
+
+        // Fill remaining with older completed items
+        for (a, _) in &older {
+            if result.len() >= limit.max_lines {
+                break;
+            }
+            result.push(a);
+        }
+
+        // Sort final result by id for consistent display order
+        result.sort_by_key(|a| a.id);
+
+        let hidden_count = total_count.saturating_sub(result.len());
+        (result, total_count, hidden_count)
+    }
+
+    /// Check if an activity has any children
+    pub fn has_children(&self, activity_id: u64) -> bool {
+        self.activities
+            .values()
+            .any(|a| a.parent_id == Some(activity_id))
+    }
+
+    /// Get count of children for an activity
+    pub fn get_children_count(&self, activity_id: u64) -> usize {
+        self.activities
+            .values()
+            .filter(|a| {
+                a.parent_id == Some(activity_id)
+                    && !matches!(a.variant, ActivityVariant::UserOperation)
+            })
+            .count()
     }
 }
 

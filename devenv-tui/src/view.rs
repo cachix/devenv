@@ -36,29 +36,30 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     // Show all activities (including the selected activity with inline logs)
     let activities_to_show: Vec<_> = active_activities.iter().collect();
 
-    // Create owned activity elements
-    let activity_elements: Vec<_> = activities_to_show
-        .iter()
-        .map(|display_activity| {
-            let activity = &display_activity.activity;
-            let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
+    // Create owned activity elements, including hidden children indicators
+    let mut activity_elements: Vec<AnyElement<'static>> = Vec::new();
 
-            // Pass logs if this is the selected build or evaluating activity
-            let activity_logs = if is_selected
-                && (matches!(activity.variant, ActivityVariant::Build(_))
-                    || matches!(activity.variant, ActivityVariant::Evaluating(_)))
-            {
-                selected_logs.cloned()
-            } else {
-                None
-            };
+    for display_activity in activities_to_show.iter() {
+        let activity = &display_activity.activity;
+        let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
 
-            // Determine completion state
-            let completed = match &activity.state {
-                NixActivityState::Active => None,
-                NixActivityState::Completed { success, .. } => Some(*success),
-            };
+        // Pass logs if this is the selected build or evaluating activity
+        let activity_logs = if is_selected
+            && (matches!(activity.variant, ActivityVariant::Build(_))
+                || matches!(activity.variant, ActivityVariant::Evaluating(_)))
+        {
+            selected_logs.cloned()
+        } else {
+            None
+        };
 
+        // Determine completion state
+        let completed = match &activity.state {
+            NixActivityState::Active => None,
+            NixActivityState::Completed { success, .. } => Some(*success),
+        };
+
+        activity_elements.push(
             element! {
                 ContextProvider(value: Context::owned(ActivityRenderContext {
                     activity: activity.clone(),
@@ -72,9 +73,9 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
                     ActivityItem
                 }
             }
-            .into_any()
-        })
-        .collect();
+            .into_any(),
+        );
+    }
 
     let summary_view = element! {
         ContextProvider(value: Context::owned(SummaryViewContext {
@@ -90,7 +91,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
 
     // Calculate dynamic height based on all activities (including inline logs)
     let mut total_height = 0;
-    for display_activity in &activities_to_show {
+    for display_activity in activities_to_show.iter() {
         total_height += 1; // Base height for activity
 
         let is_selected = selected_id.is_some_and(|id| {
@@ -124,6 +125,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
             let logs_component = BuildLogsComponent::new(Some(logs), show_expanded_logs);
             total_height += logs_component.calculate_height();
         }
+
     }
     let min_height = 3; // Minimum height to show at least a few items
     let dynamic_height = total_height.max(min_height) as u32;
