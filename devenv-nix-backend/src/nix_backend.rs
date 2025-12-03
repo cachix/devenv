@@ -126,6 +126,10 @@ pub struct NixRustBackend {
     // The Boehm GC requires threads to be registered before using GC-allocated memory.
     #[allow(dead_code)]
     _gc_registration: nix_bindings_expr::eval_state::ThreadRegistrationGuard,
+
+    // Shutdown coordinator - stored so we can trigger shutdown in Drop
+    // This ensures cleanup tasks are signaled to exit when the backend is dropped
+    shutdown: Arc<Shutdown>,
 }
 
 // SAFETY: This is unsafe and relies on several assumptions about the Nix C++ library:
@@ -298,7 +302,49 @@ impl NixRustBackend {
         let activity_logger =
             crate::logger::setup_nix_logger().wrap_err("Failed to set up activity logger")?;
 
-        let cachix_daemon = Arc::new(tokio::sync::Mutex::new(None));
+        let cachix_daemon: Arc<
+            tokio::sync::Mutex<Option<crate::cachix_daemon::StreamingCachixDaemon>>,
+        > = Arc::new(tokio::sync::Mutex::new(None));
+
+        // Spawn cleanup task that waits for shutdown signal via cancellation token.
+        // The task registers with Shutdown so wait_for_shutdown_complete() waits for it.
+        // When shutdown is triggered (either by signal or by Drop), this task:
+        // 1. Sees the cancellation and runs cleanup
+        // 2. Unregisters from Shutdown (allowing wait_for_shutdown_complete to proceed)
+        // 3. Exits cleanly (no orphaned tasks)
+        let daemon_for_cleanup = cachix_daemon.clone();
+        let shutdown_for_task = shutdown.clone();
+        tokio::spawn(async move {
+            // Register with shutdown - if already cancelled, exit immediately
+            if !shutdown_for_task.register_task() {
+                return;
+            }
+
+            // Wait for shutdown signal
+            shutdown_for_task.cancellation_token().cancelled().await;
+
+            // Cleanup: finalize any queued cachix pushes
+            let daemon = {
+                let mut guard = daemon_for_cleanup.lock().await;
+                guard.take()
+            };
+
+            if let Some(daemon) = daemon {
+                tracing::info!("Finalizing cachix pushes on shutdown...");
+                match daemon.wait_for_completion(Duration::from_secs(300)).await {
+                    Ok(metrics) => {
+                        tracing::info!("{}", metrics.summary());
+                    }
+                    Err(e) => {
+                        tracing::warn!("Timeout waiting for cachix push completion: {}", e);
+                    }
+                }
+            }
+
+            // Unregister - this may trigger shutdown_complete notification
+            shutdown_for_task.unregister_task();
+        });
+
         let backend = Self {
             global_options,
             paths,
@@ -315,37 +361,8 @@ impl NixRustBackend {
             cached_import_expr: Arc::new(OnceCell::new()),
             _temp_files: temp_files,
             _gc_registration: gc_registration,
+            shutdown: shutdown.clone(),
         };
-
-        // Register cleanup task with shutdown coordinator
-        // This ensures cachix pushes complete gracefully when shutdown is triggered
-        let daemon_for_cleanup = cachix_daemon.clone();
-        let _ = tokio::spawn({
-            let shutdown_coordinator = shutdown.clone();
-            async move {
-                // Wait for shutdown signal
-                shutdown_coordinator.wait_for_shutdown().await;
-
-                // Finalize any queued cachix pushes
-                // Take the daemon out of the mutex (if present)
-                let daemon = {
-                    let mut guard = daemon_for_cleanup.lock().await;
-                    guard.take()
-                };
-
-                if let Some(daemon) = daemon {
-                    tracing::info!("Finalizing cachix pushes on shutdown...");
-                    match daemon.wait_for_completion(Duration::from_secs(300)).await {
-                        Ok(metrics) => {
-                            tracing::info!("{}", metrics.summary());
-                        }
-                        Err(e) => {
-                            tracing::warn!("Timeout waiting for cachix push completion: {}", e);
-                        }
-                    }
-                }
-            }
-        });
 
         Ok(backend)
     }
@@ -1665,5 +1682,17 @@ impl NixRustBackend {
         }
 
         ref_str.to_string()
+    }
+}
+
+impl Drop for NixRustBackend {
+    fn drop(&mut self) {
+        // Trigger shutdown to signal the cleanup task to run and exit.
+        // This is sync (doesn't wait), but ensures the task doesn't stay
+        // orphaned waiting for a shutdown that never comes.
+        // The cleanup task will run its cleanup code and then exit.
+        // Callers who want to wait for cleanup should call
+        // shutdown.wait_for_shutdown_complete().await before dropping.
+        self.shutdown.shutdown();
     }
 }
