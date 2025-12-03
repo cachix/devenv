@@ -51,6 +51,10 @@ let
           sourceInfo =
             if key == lockFile.root then
               rootSrc
+            # Path inputs pointing to project root (path = ".") should use rootSrc
+            # to avoid fetchTree hashing the entire project directory
+            else if node.locked.type or null == "path" && node.locked.path or null == "." then
+              rootSrc
             else
               let
                 locked = node.locked;

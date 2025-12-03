@@ -342,13 +342,19 @@ impl Config {
         // using the last config dir where each input was defined (from yaml_files order)
         for (_name, input) in config.inputs.iter_mut() {
             if let Some(url) = &input.url {
-                let (had_prefix, path_str) = if let Some(stripped) = url.strip_prefix("path:") {
+                let (had_prefix, full_path_str) = if let Some(stripped) = url.strip_prefix("path:")
+                {
                     (true, stripped)
                 } else if url.starts_with("./") || url.starts_with("../") {
                     (false, url.as_str())
                 } else {
                     continue;
                 };
+
+                // Separate path from query parameters (e.g., ".?dir=src/modules" -> ".", "?dir=src/modules")
+                let (path_str, query_params) = full_path_str
+                    .split_once('?')
+                    .map_or((full_path_str, ""), |(p, q)| (p, q));
 
                 // Try to resolve from each config directory and use the first valid one
                 // Start from the end (most recent config) for better accuracy
@@ -362,13 +368,18 @@ impl Config {
                 }
 
                 if let Some(rel_to_base) = normalized {
-                    let new_url = if had_prefix {
-                        format!(
-                            "path:{}",
-                            rel_to_base.strip_prefix("./").unwrap_or(&rel_to_base)
-                        )
+                    let query_suffix = if query_params.is_empty() {
+                        String::new()
                     } else {
-                        rel_to_base
+                        format!("?{}", query_params)
+                    };
+                    let new_url = if had_prefix {
+                        let stripped = rel_to_base.strip_prefix("./").unwrap_or(&rel_to_base);
+                        // Use "." for current directory when strip_prefix results in empty string
+                        let path_part = if stripped.is_empty() { "." } else { stripped };
+                        format!("path:{}{}", path_part, query_suffix)
+                    } else {
+                        format!("{}{}", rel_to_base, query_suffix)
                     };
                     input.url = Some(new_url);
                 }
