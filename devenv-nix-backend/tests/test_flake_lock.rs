@@ -11,6 +11,7 @@ use tokio_shutdown::Shutdown;
 // Import shared test utilities
 mod common;
 use common::create_test_cachix_manager;
+use common::get_current_system;
 
 /// Helper struct to keep NixArgs and its owned values alive together
 struct TestNixArgs {
@@ -36,7 +37,7 @@ impl TestNixArgs {
     ) -> NixArgs<'a> {
         NixArgs {
             version: "1.0.0",
-            system: "x86_64-linux",
+            system: get_current_system(),
             devenv_root: &paths.root,
             skip_local_src: false,
             devenv_dotfile: &paths.dotfile,
@@ -139,7 +140,11 @@ async fn test_create_flake_inputs() {
 
     let test_args = TestNixArgs::new(&paths);
     backend
-        .assemble(&test_args.to_nix_args(&paths, &config, config.nixpkgs_config("x86_64-linux")))
+        .assemble(&test_args.to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config(get_current_system()),
+        ))
         .await
         .expect("Failed to assemble backend");
 

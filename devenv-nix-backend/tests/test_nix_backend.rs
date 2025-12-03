@@ -19,6 +19,7 @@ use tokio_shutdown::Shutdown;
 // Import shared test utilities
 mod common;
 use common::create_test_cachix_manager;
+use common::get_current_system;
 use common::mock_cachix_daemon::MockCachixDaemon;
 
 /// Get the repo root directory (where Cargo.toml is) - for ignored tests only
@@ -93,7 +94,7 @@ impl TestNixArgs {
     ) -> NixArgs<'a> {
         NixArgs {
             version: "1.0.0",
-            system: "x86_64-linux",
+            system: get_current_system(),
             devenv_root: &paths.root,
             skip_local_src: false,
             devenv_dotfile: &paths.dotfile,
@@ -201,7 +202,8 @@ async fn test_backend_assemble() {
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
 
     let test_args = TestNixArgs::new(&paths);
-    let nix_args = test_args.to_nix_args(&paths, &config, config.nixpkgs_config("x86_64-linux"));
+    let nix_args =
+        test_args.to_nix_args(&paths, &config, config.nixpkgs_config(get_current_system()));
     let result = backend.assemble(&nix_args).await;
 
     assert!(
@@ -225,7 +227,7 @@ async fn test_backend_update_all_inputs() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -253,7 +255,7 @@ async fn test_backend_update_specific_input() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -284,7 +286,7 @@ async fn test_backend_eval_expression() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -328,7 +330,7 @@ async fn test_backend_eval_multiple_attributes() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -369,7 +371,7 @@ async fn test_backend_build_package() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -401,7 +403,7 @@ async fn test_backend_build_with_gc_root() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -436,7 +438,7 @@ async fn test_backend_dev_env() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -475,7 +477,7 @@ async fn test_backend_metadata() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -512,7 +514,7 @@ async fn test_backend_gc() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -545,7 +547,7 @@ async fn test_backend_search_simple() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -608,7 +610,7 @@ async fn test_backend_search_case_insensitive() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -651,7 +653,7 @@ async fn test_backend_search_regex_special_chars() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -688,7 +690,7 @@ async fn test_backend_search_empty_results() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -759,7 +761,7 @@ async fn test_metadata_standalone() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -787,7 +789,7 @@ async fn test_metadata_after_update() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -820,7 +822,7 @@ async fn test_full_backend_workflow() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -869,7 +871,7 @@ async fn test_backend_update_with_input_overrides() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -920,7 +922,7 @@ async fn test_backend_update_with_multiple_overrides() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -961,7 +963,7 @@ async fn test_eval_nonexistent_attribute() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1000,7 +1002,7 @@ async fn test_build_nonexistent_attribute() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1048,7 +1050,7 @@ async fn test_build_with_syntax_error_in_nix() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1090,7 +1092,7 @@ async fn test_metadata_with_corrupted_lock_file() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1136,7 +1138,7 @@ async fn test_gc_with_invalid_store_paths() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1300,7 +1302,7 @@ async fn test_update_with_invalid_override_input() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1343,7 +1345,7 @@ async fn test_eval_empty_attributes_array() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1384,7 +1386,7 @@ async fn test_build_empty_attributes_array() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1426,7 +1428,7 @@ async fn test_dev_env_bash_output_format() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1458,7 +1460,7 @@ async fn test_dev_env_multiple_calls_same_gc_root() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1491,7 +1493,7 @@ async fn test_dev_env_gc_root_already_exists_as_file() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1522,7 +1524,7 @@ async fn test_build_gc_root_already_exists() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1576,7 +1578,7 @@ async fn test_update_lock_file_already_exists() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1644,7 +1646,7 @@ async fn test_metadata_before_any_update() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1692,7 +1694,7 @@ async fn test_build_after_update_uses_new_lock() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1740,7 +1742,7 @@ async fn test_get_bash_returns_valid_path() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1784,7 +1786,7 @@ async fn test_get_bash_caching_with_gc_root() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1832,7 +1834,7 @@ async fn test_get_bash_with_refresh_cached_output() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1876,7 +1878,7 @@ async fn test_get_bash_returns_executable() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1930,7 +1932,7 @@ async fn test_search_matches_description_field() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -1988,7 +1990,7 @@ async fn test_search_with_very_long_query() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2039,7 +2041,7 @@ async fn test_search_with_unicode_characters() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2088,7 +2090,7 @@ async fn test_search_depth_limitation() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2144,7 +2146,7 @@ async fn test_gc_with_actual_nix_store_paths() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2204,7 +2206,7 @@ async fn test_gc_with_protected_gc_roots() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2274,7 +2276,7 @@ async fn test_gc_computes_closure_correctly() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2328,7 +2330,7 @@ async fn test_gc_reports_bytes_freed() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2383,7 +2385,7 @@ async fn test_gc_with_mixed_store_and_temp_paths() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2478,7 +2480,7 @@ async fn test_workflow_build_then_incremental_update() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2531,7 +2533,7 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2631,7 +2633,7 @@ inputs:
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2711,7 +2713,7 @@ inputs:
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2780,7 +2782,7 @@ async fn test_build_multiple_attributes_single_call() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2838,7 +2840,7 @@ async fn test_eval_state_mutex_under_concurrent_eval() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -2888,7 +2890,7 @@ async fn test_concurrent_build_operations() {
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble");
@@ -3017,7 +3019,7 @@ inputs:
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
-            config.nixpkgs_config("x86_64-linux"),
+            config.nixpkgs_config(get_current_system()),
         ))
         .await
         .expect("Failed to assemble backend");
