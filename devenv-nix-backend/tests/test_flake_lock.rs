@@ -126,7 +126,7 @@ async fn test_create_flake_inputs() {
         home_gc: temp_dir.path().join(".devenv/home-gc"),
     };
 
-    let cachix_manager = create_test_cachix_manager(temp_dir.path());
+    let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
     let backend = NixRustBackend::new(
         paths.clone(),
         config.clone(),
@@ -194,7 +194,7 @@ async fn test_selective_input_update() {
     let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
 
     // Create NixBackend
-    let cachix_manager = create_test_cachix_manager(temp_dir.path());
+    let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
     let backend = NixRustBackend::new(
         paths,
         config,
@@ -268,7 +268,7 @@ async fn test_full_workflow() {
     let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
 
     // 3. Create NixBackend
-    let cachix_manager = create_test_cachix_manager(temp_dir.path());
+    let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
     let backend = NixRustBackend::new(
         paths,
         config,

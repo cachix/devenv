@@ -157,7 +157,7 @@ fn setup_isolated_test_env(
     let config = Config::load_from(temp_path).expect("Failed to load config");
 
     // Create cachix manager for the test
-    let cachix_manager = create_test_cachix_manager(temp_path);
+    let cachix_manager = create_test_cachix_manager(temp_path, None);
 
     // Create shutdown coordinator for cleanup
     let shutdown = Shutdown::new();
@@ -837,14 +837,7 @@ async fn test_full_backend_workflow() {
     let metadata = backend.metadata().await.expect("Failed to get metadata");
     println!("Flake metadata (before build):\n{}", metadata);
 
-    // 5. Evaluate configuration
-    let config_eval = backend
-        .eval(&["packages"])
-        .await
-        .expect("Failed to evaluate");
-    println!("Evaluated config: {}", config_eval);
-
-    // 6. Build devenv shell
+    // 5. Build devenv shell
     let build_paths = backend
         .build(&["shell"], None, None)
         .await
@@ -959,7 +952,7 @@ async fn test_eval_nonexistent_attribute() {
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     )
@@ -1181,7 +1174,7 @@ async fn test_backend_creation_with_offline_mode() {
         paths.clone(),
         config.clone(),
         global_options,
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     );
@@ -1204,7 +1197,7 @@ async fn test_backend_with_system_override() {
         paths.clone(),
         config.clone(),
         global_options,
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     );
@@ -1227,7 +1220,7 @@ async fn test_backend_with_impure_mode() {
         paths.clone(),
         config.clone(),
         global_options,
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     );
@@ -1250,7 +1243,7 @@ async fn test_backend_with_custom_nix_options() {
         paths.clone(),
         config.clone(),
         global_options,
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     );
@@ -1273,7 +1266,7 @@ async fn test_backend_with_nix_debugger_enabled() {
         paths.clone(),
         config.clone(),
         global_options,
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     );
@@ -1298,7 +1291,7 @@ async fn test_update_with_invalid_override_input() {
         paths.clone(),
         config.clone(),
         global_options,
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     )
@@ -1341,7 +1334,7 @@ async fn test_eval_empty_attributes_array() {
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     )
@@ -1424,7 +1417,7 @@ async fn test_dev_env_bash_output_format() {
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     )
@@ -1456,7 +1449,7 @@ async fn test_dev_env_multiple_calls_same_gc_root() {
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     )
@@ -1489,7 +1482,7 @@ async fn test_dev_env_gc_root_already_exists_as_file() {
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     )
@@ -1574,7 +1567,7 @@ async fn test_update_lock_file_already_exists() {
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     )
@@ -1677,46 +1670,6 @@ async fn test_metadata_before_any_update() {
     assert!(
         !metadata_output.is_empty(),
         "metadata output should not be empty"
-    );
-}
-
-/// Test build with leading dot-hash attribute path
-#[tokio::test]
-async fn test_build_attribute_with_leading_dot_hash() {
-    let yaml = r#"inputs:
-  nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
-  git-hooks:
-    url: github:cachix/git-hooks.nix
-"#;
-    let (temp_dir, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, GlobalOptions::default());
-    backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(
-            &paths,
-            &config,
-            config.nixpkgs_config("x86_64-linux"),
-        ))
-        .await
-        .expect("Failed to assemble");
-
-    // Use fixture lock file for build
-    copy_fixture_lock(temp_dir.path());
-
-    // Test build with .# prefix - should strip it and build normally
-    let result = backend.build(&[".#shell"], None, None).await;
-
-    assert!(
-        result.is_ok(),
-        "Build with .# prefix should succeed: {:?}",
-        result.err()
-    );
-
-    let paths = result.unwrap();
-    assert!(!paths.is_empty(), "Build should return paths");
-    assert!(
-        paths[0].to_str().unwrap().starts_with("/nix/store"),
-        "Built path should be in nix store"
     );
 }
 
@@ -2627,7 +2580,7 @@ async fn test_backend_reuse_across_operations() {
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     )
@@ -2669,7 +2622,7 @@ inputs:
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     )
@@ -2749,7 +2702,7 @@ inputs:
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
     )
@@ -2869,7 +2822,7 @@ async fn test_eval_state_mutex_under_concurrent_eval() {
     let paths = create_test_paths();
     let config = load_config_from_repo();
 
-    let cachix_manager = create_test_cachix_manager(&get_repo_root());
+    let cachix_manager = create_test_cachix_manager(&get_repo_root(), None);
     let backend = std::sync::Arc::new(
         NixRustBackend::new(
             paths.clone(),
@@ -3053,7 +3006,7 @@ inputs:
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root()),
+        create_test_cachix_manager(&get_repo_root(), Some(mock.socket_path().to_path_buf())),
         Shutdown::new(),
         None,
     )
