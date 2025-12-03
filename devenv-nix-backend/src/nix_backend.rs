@@ -670,9 +670,13 @@ impl NixRustBackend {
                 // Parse the push cache name
                 if let Ok(push_cache) = serde_json::from_str::<Option<String>>(&push_cache_json) {
                     if push_cache.is_some() {
-                        // Start the daemon with default config
+                        // Start the daemon with config (using custom socket path if provided)
                         tracing::debug!("Starting cachix daemon for push operations");
-                        match crate::cachix_daemon::StreamingCachixDaemon::start(Default::default())
+                        let daemon_config = crate::cachix_daemon::DaemonConfig {
+                            socket_path: self.cachix_manager.paths.daemon_socket.clone(),
+                            ..Default::default()
+                        };
+                        match crate::cachix_daemon::StreamingCachixDaemon::start(daemon_config)
                             .await
                         {
                             Ok(daemon) => {

@@ -18,6 +18,8 @@ use tracing::{debug, warn};
 pub struct CachixPaths {
     pub trusted_keys: PathBuf,
     pub netrc: PathBuf,
+    /// Optional custom daemon socket path (for testing)
+    pub daemon_socket: Option<PathBuf>,
 }
 
 /// Manages Cachix binary cache configuration and integration
