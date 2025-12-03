@@ -31,7 +31,10 @@ impl Shutdown {
         })
     }
 
-    fn register_task(&self) -> bool {
+    /// Register a task with the shutdown coordinator.
+    /// Returns false if shutdown has already been triggered (task should exit immediately).
+    /// Call `unregister_task()` when the task completes to allow `wait_for_shutdown_complete()` to proceed.
+    pub fn register_task(&self) -> bool {
         // Skip registering tasks if cancellation has been requested
         if self.token.is_cancelled() {
             return false;
@@ -42,7 +45,9 @@ impl Shutdown {
         true
     }
 
-    fn unregister_task(&self) {
+    /// Unregister a task from the shutdown coordinator.
+    /// When the last task unregisters after shutdown is triggered, `wait_for_shutdown_complete()` will return.
+    pub fn unregister_task(&self) {
         let remaining = self
             .task_count
             .fetch_sub(1, Ordering::AcqRel)
