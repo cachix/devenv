@@ -71,6 +71,7 @@
     pkgs.cargo-machete # Find unused crates
     pkgs.cargo-edit # Adds the set-version command
     pkgs.cargo-insta # Snapshot testing for Rust
+    pkgs.cargo-nextest # Test runner with process isolation
     pkgs.protobuf # snix
     pkgs.dbus # secretspec
     pkgs.nixd # LSP for devenv lsp command
