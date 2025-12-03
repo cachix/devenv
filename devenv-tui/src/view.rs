@@ -470,6 +470,19 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }
+        ActivityVariant::Message(_) => {
+            let prefix = HierarchyPrefixComponent::new(indent, *depth)
+                .with_completed(Some(true))
+                .render();
+
+            return ActivityTextComponent::new(
+                "".to_string(),
+                activity.name.clone(),
+                "".to_string(),
+            )
+            .with_selection(*is_selected)
+            .render(terminal_width, *depth, prefix);
+        }
         ActivityVariant::Unknown => {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner(*spinner_frame)

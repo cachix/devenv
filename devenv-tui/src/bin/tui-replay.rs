@@ -1,15 +1,13 @@
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use clap::Parser;
-use devenv_activity::{
-    ActivityEvent, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind, LogLevel, Message,
-    Operation, Task, Timestamp,
-};
+use devenv_activity::ActivityEvent;
 use serde::Deserialize;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
+use thiserror::Error;
 use tokio::signal;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
@@ -27,47 +25,20 @@ struct Args {
     speed: f64,
 }
 
-/// Raw trace event from JSON log format (tracing output)
-#[derive(Debug, Deserialize, Clone)]
-struct RawTraceEvent {
-    timestamp: DateTime<Utc>,
-    #[serde(default)]
+/// Raw trace event as it appears in the JSONL file
+#[derive(Debug, Deserialize)]
+struct TraceEvent {
     target: String,
-    #[serde(default)]
-    fields: TraceFields,
+    timestamp: DateTime<Utc>,
+    fields: serde_json::Value,
 }
 
-/// Typed fields from tracing output
-#[derive(Debug, Deserialize, Clone, Default)]
-struct TraceFields {
-    activity_id: Option<u64>,
-    event_type: Option<String>,
-    activity_type: Option<String>,
-    fetch_kind: Option<String>,
-    name: Option<String>,
-    parent: Option<u64>,
-    derivation_path: Option<String>,
-    url: Option<String>,
-    detail: Option<String>,
-    command: Option<String>,
-    outcome: Option<String>,
-    progress_done: Option<u64>,
-    progress_expected: Option<u64>,
-    progress_current: Option<u64>,
-    progress_total: Option<u64>,
-    phase: Option<String>,
-    log_line: Option<String>,
-    log_is_error: Option<bool>,
-    message_level: Option<String>,
-    message_text: Option<String>,
-}
-
-fn datetime_to_timestamp(dt: DateTime<Utc>) -> Timestamp {
-    let duration = dt.signed_duration_since(DateTime::UNIX_EPOCH);
-    let system_time = SystemTime::UNIX_EPOCH
-        + Duration::from_secs(duration.num_seconds() as u64)
-        + Duration::from_nanos(duration.num_nanoseconds().unwrap_or(0) as u64 % 1_000_000_000);
-    Timestamp::from(system_time)
+#[derive(Debug, Error)]
+enum ActivityParseError {
+    #[error("not a devenv activity event")]
+    NotActivityEvent,
+    #[error("failed to deserialize activity: {0}")]
+    DeserializationError(#[from] serde_json::Error),
 }
 
 struct TraceStream {
@@ -85,7 +56,7 @@ impl TraceStream {
         }
     }
 
-    fn next_event(&mut self) -> Result<Option<RawTraceEvent>> {
+    fn next_event(&mut self) -> Result<Option<TraceEvent>> {
         loop {
             self.line_num += 1;
 
@@ -95,7 +66,7 @@ impl TraceStream {
                         continue;
                     }
 
-                    match serde_json::from_str::<RawTraceEvent>(&line) {
+                    match serde_json::from_str::<TraceEvent>(&line) {
                         Ok(event) => {
                             if self.first_timestamp.is_none() {
                                 self.first_timestamp = Some(event.timestamp);
@@ -124,235 +95,49 @@ impl TraceStream {
     }
 }
 
-/// Converts trace events to ActivityEvents and sends them via channel
-struct EventProcessor {
-    tx: mpsc::UnboundedSender<ActivityEvent>,
-}
-
-impl EventProcessor {
-    fn new(tx: mpsc::UnboundedSender<ActivityEvent>) -> Self {
-        Self { tx }
+/// Deserializes a trace event into an ActivityEvent.
+fn deserialize_activity(event: TraceEvent) -> Result<ActivityEvent, ActivityParseError> {
+    if event.target != "devenv::activity" {
+        return Err(ActivityParseError::NotActivityEvent);
     }
 
-    fn send(&self, event: ActivityEvent) {
-        let _ = self.tx.send(event);
-    }
+    // The event field contains the JSON-serialized ActivityEvent as a string
+    let event_json = event
+        .fields
+        .get("event")
+        .and_then(|v| v.as_str())
+        .ok_or(ActivityParseError::NotActivityEvent)?;
 
-    fn process(&mut self, raw: &RawTraceEvent) {
-        if raw.target != "devenv::activity" {
-            return;
-        }
-
-        let fields = &raw.fields;
-        let timestamp = datetime_to_timestamp(raw.timestamp);
-
-        if let Some(ref event_type) = fields.event_type {
-            match event_type.as_str() {
-                "start" => self.handle_start(fields, timestamp),
-                "complete" => self.handle_complete(fields, timestamp),
-                _ => {}
-            }
-            return;
-        }
-
-        // Handle progress events (Build/Task use done/expected, Fetch uses current/total)
-        if fields.progress_done.is_some() || fields.progress_current.is_some() {
-            self.handle_progress(fields, timestamp);
-            return;
-        }
-
-        // Handle phase events (Build only)
-        if let Some(ref phase) = fields.phase {
-            if let Some(id) = fields.activity_id {
-                self.send(ActivityEvent::Build(Build::Phase {
-                    id,
-                    phase: phase.clone(),
-                    timestamp,
-                }));
-            }
-            return;
-        }
-
-        // Handle log events
-        if let Some(ref line) = fields.log_line {
-            if let Some(id) = fields.activity_id {
-                self.handle_log(id, line.clone(), fields.log_is_error.unwrap_or(false), fields.activity_type.as_deref(), timestamp);
-            }
-            return;
-        }
-
-        // Handle message events
-        if let Some(ref text) = fields.message_text {
-            let level = match fields.message_level.as_deref() {
-                Some("error") => LogLevel::Error,
-                Some("warn") => LogLevel::Warn,
-                Some("info") => LogLevel::Info,
-                Some("debug") => LogLevel::Debug,
-                Some("trace") => LogLevel::Trace,
-                _ => LogLevel::Info,
-            };
-            self.send(ActivityEvent::Message(Message {
-                level,
-                text: text.clone(),
-                timestamp,
-            }));
-        }
-    }
-
-    fn handle_start(&mut self, fields: &TraceFields, timestamp: Timestamp) {
-        let Some(id) = fields.activity_id else {
-            return;
-        };
-
-        let name = fields.name.clone().unwrap_or_else(|| "Unknown".to_string());
-        let parent = fields.parent;
-
-        let event = match fields.activity_type.as_deref() {
-            Some("build") => ActivityEvent::Build(Build::Start {
-                id,
-                name,
-                parent,
-                derivation_path: fields.derivation_path.clone(),
-                timestamp,
-            }),
-            Some("fetch") => {
-                let kind = match fields.fetch_kind.as_deref() {
-                    Some("download") => FetchKind::Download,
-                    Some("query") => FetchKind::Query,
-                    Some("tree") => FetchKind::Tree,
-                    _ => FetchKind::Download,
-                };
-                ActivityEvent::Fetch(Fetch::Start {
-                    id,
-                    kind,
-                    name,
-                    parent,
-                    url: fields.url.clone(),
-                    timestamp,
-                })
-            }
-            Some("evaluate") => ActivityEvent::Evaluate(Evaluate::Start {
-                id,
-                name,
-                parent,
-                timestamp,
-            }),
-            Some("task") => ActivityEvent::Task(Task::Start {
-                id,
-                name,
-                parent,
-                detail: fields.detail.clone(),
-                timestamp,
-            }),
-            Some("command") => ActivityEvent::Command(Command::Start {
-                id,
-                name,
-                parent,
-                command: fields.command.clone(),
-                timestamp,
-            }),
-            _ => ActivityEvent::Operation(Operation::Start {
-                id,
-                name,
-                parent,
-                detail: fields.detail.clone(),
-                timestamp,
-            }),
-        };
-
-        self.send(event);
-    }
-
-    fn handle_complete(&mut self, fields: &TraceFields, timestamp: Timestamp) {
-        let Some(id) = fields.activity_id else {
-            return;
-        };
-
-        let outcome = match fields.outcome.as_deref() {
-            Some("success") => ActivityOutcome::Success,
-            Some("failed") => ActivityOutcome::Failed,
-            Some("cancelled") => ActivityOutcome::Cancelled,
-            _ => ActivityOutcome::Success,
-        };
-
-        // We need the activity type to emit the correct Complete event.
-        // In replay, we might not have it tracked, so default to Operation.
-        let event = match fields.activity_type.as_deref() {
-            Some("build") => ActivityEvent::Build(Build::Complete { id, outcome, timestamp }),
-            Some("fetch") => ActivityEvent::Fetch(Fetch::Complete { id, outcome, timestamp }),
-            Some("evaluate") => ActivityEvent::Evaluate(Evaluate::Complete { id, outcome, timestamp }),
-            Some("task") => ActivityEvent::Task(Task::Complete { id, outcome, timestamp }),
-            Some("command") => ActivityEvent::Command(Command::Complete { id, outcome, timestamp }),
-            _ => ActivityEvent::Operation(Operation::Complete { id, outcome, timestamp }),
-        };
-
-        self.send(event);
-    }
-
-    fn handle_progress(&mut self, fields: &TraceFields, timestamp: Timestamp) {
-        let Some(id) = fields.activity_id else {
-            return;
-        };
-
-        // Build/Task progress uses done/expected
-        if let (Some(done), Some(expected)) = (fields.progress_done, fields.progress_expected) {
-            // Default to Build progress if activity_type is not specified
-            let event = match fields.activity_type.as_deref() {
-                Some("task") => ActivityEvent::Task(Task::Progress {
-                    id,
-                    done,
-                    expected,
-                    timestamp,
-                }),
-                _ => ActivityEvent::Build(Build::Progress {
-                    id,
-                    done,
-                    expected,
-                    timestamp,
-                }),
-            };
-            self.send(event);
-            return;
-        }
-
-        // Fetch progress uses current/total
-        if let Some(current) = fields.progress_current {
-            self.send(ActivityEvent::Fetch(Fetch::Progress {
-                id,
-                current,
-                total: fields.progress_total,
-                timestamp,
-            }));
-        }
-    }
-
-    fn handle_log(&mut self, id: u64, line: String, is_error: bool, activity_type: Option<&str>, timestamp: Timestamp) {
-        let event = match activity_type {
-            Some("build") => ActivityEvent::Build(Build::Log { id, line, is_error, timestamp }),
-            Some("evaluate") => ActivityEvent::Evaluate(Evaluate::Log { id, line, timestamp }),
-            Some("task") => ActivityEvent::Task(Task::Log { id, line, is_error, timestamp }),
-            Some("command") => ActivityEvent::Command(Command::Log { id, line, is_error, timestamp }),
-            _ => ActivityEvent::Build(Build::Log { id, line, is_error, timestamp }),
-        };
-        self.send(event);
-    }
+    Ok(serde_json::from_str(event_json)?)
 }
 
 async fn ctrl_c() {
     signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
 }
 
+fn process_event(event: TraceEvent, tx: &mpsc::UnboundedSender<ActivityEvent>) {
+    match deserialize_activity(event) {
+        Ok(activity) => {
+            let _ = tx.send(activity);
+        }
+        Err(ActivityParseError::NotActivityEvent) => {}
+        Err(e) => {
+            info!("Failed to parse activity event: {}", e);
+        }
+    }
+}
+
 async fn replay_events(
     mut stream: TraceStream,
-    first_event: RawTraceEvent,
-    processor: &mut EventProcessor,
+    first_event: TraceEvent,
+    tx: &mpsc::UnboundedSender<ActivityEvent>,
     speed: f64,
 ) -> Result<()> {
     let first_timestamp = first_event.timestamp;
     let start_time = Instant::now();
     let mut event_count = 0;
 
-    processor.process(&first_event);
+    process_event(first_event, tx);
 
     while let Some(event) = stream.next_event()? {
         event_count += 1;
@@ -370,7 +155,7 @@ async fn replay_events(
             sleep(sleep_duration).await;
         }
 
-        processor.process(&event);
+        process_event(event, tx);
     }
 
     info!(
@@ -415,15 +200,12 @@ async fn main() -> Result<()> {
 
     info!("Starting trace replay from: {}", args.trace_file.display());
 
-    let mut processor = EventProcessor::new(tx);
-
     // Race: replay events, TUI task, or Ctrl+C
     tokio::select! {
-        result = replay_events(stream, first_event, &mut processor, args.speed) => {
+        result = replay_events(stream, first_event, &tx, args.speed) => {
             if let Err(e) = result {
                 warn!("Replay error: {e}");
             }
-            info!("Press Ctrl+C to exit the TUI");
             // Replay finished, wait for TUI or Ctrl+C
             tokio::select! {
                 _ = &mut tui_task => {}

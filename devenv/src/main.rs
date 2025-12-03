@@ -4,7 +4,7 @@ use devenv::{
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
     log,
 };
-use devenv_activity::{LogLevel, message};
+use devenv_activity::{ActivityLevel, message};
 use devenv_core::config::{self, Config};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use std::{process::Command, sync::Arc};
@@ -204,19 +204,19 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
             let command = if let Some(name) = name {
                 if copy {
                     message(
-                        LogLevel::Warn,
+                        ActivityLevel::Warn,
                         "The --copy flag is deprecated. Use `devenv container copy` instead.",
                     );
                     ContainerCommand::Copy { name }
                 } else if docker_run {
                     message(
-                        LogLevel::Warn,
+                        ActivityLevel::Warn,
                         "The --docker-run flag is deprecated. Use `devenv container run` instead.",
                     );
                     ContainerCommand::Run { name }
                 } else {
                     message(
-                        LogLevel::Warn,
+                        ActivityLevel::Warn,
                         "Calling `devenv container` without a subcommand is deprecated. Use `devenv container build {name}` instead.",
                     );
                     ContainerCommand::Build { name }

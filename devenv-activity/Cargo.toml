@@ -5,23 +5,25 @@ edition.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
-description = "Activity tracking system for devenv built on tracing"
+description = "Activity tracking system for devenv"
 
 [dependencies]
 # Tracing integration
-tracing = { workspace = true }
+tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["registry"] }
 
 # Async runtime (for channels)
 tokio = { workspace = true, features = ["sync"] }
 
 # Serialization
-serde = { workspace = true }
-serde_json = { workspace = true }
-humantime = { workspace = true }
+humantime.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+strum.workspace = true
 
 # Re-export macros
-devenv-activity-macros = { workspace = true }
+devenv-activity-macros.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

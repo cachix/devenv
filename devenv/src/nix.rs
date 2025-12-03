@@ -1,6 +1,6 @@
 use crate::{devenv, nix_log_bridge::NixLogBridge, util};
 use async_trait::async_trait;
-use devenv_activity::{Activity, LogLevel, message};
+use devenv_activity::{Activity, ActivityLevel, message};
 use devenv_core::{
     cachix::{
         CacheMetadata, CachixCacheInfo, CachixConfig, CachixManager, StorePing,
@@ -870,14 +870,14 @@ impl Nix {
             };
 
             message(
-                LogLevel::Info,
+                ActivityLevel::Info,
                 format!("Using Cachix caches: {}", caches.caches.pull.join(", "))
             );
             if !new_known_keys.is_empty() {
                 for (name, pubkey) in new_known_keys.iter() {
-                    info!(
-                        "Trusting {}.cachix.org on first use with the public key {}",
-                        name, pubkey
+                    message(
+                        ActivityLevel::Info,
+                        format!("Trusting {}.cachix.org on first use with the public key {}", name, pubkey)
                     );
                 }
             }

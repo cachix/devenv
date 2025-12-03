@@ -1,6 +1,6 @@
 use devenv_activity::{
-    ActivityEvent, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind, Message, Operation,
-    Task,
+    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind,
+    Message, Operation, Task,
 };
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -35,6 +35,7 @@ pub struct Model {
     pub ui: UiState,
     pub app_state: AppState,
     pub completed_messages: Vec<String>,
+    next_message_id: u64,
 }
 
 impl Default for Model {
@@ -83,6 +84,11 @@ pub struct EvaluatingActivity {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct MessageActivity {
+    pub level: ActivityLevel,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ActivityVariant {
     Task(TaskActivity),
     UserOperation,
@@ -93,6 +99,8 @@ pub enum ActivityVariant {
     FetchTree,
     /// Devenv-specific operations (e.g., "Building shell", "Entering shell")
     Devenv,
+    /// Standalone messages displayed as children of their parent activity
+    Message(MessageActivity),
     Unknown,
 }
 
@@ -210,6 +218,7 @@ impl Model {
             },
             app_state: AppState::Running,
             completed_messages: Vec::new(),
+            next_message_id: u64::MAX / 2,
         }
     }
 
@@ -523,7 +532,25 @@ impl Model {
     }
 
     fn handle_message(&mut self, msg: Message) {
-        self.add_log_message(msg);
+        self.add_log_message(msg.clone());
+
+        // Only create activity for messages with a parent
+        if msg.parent.is_some() {
+            let id = self.next_message_id;
+            self.next_message_id += 1;
+
+            let variant = ActivityVariant::Message(MessageActivity { level: msg.level });
+            self.create_activity(id, msg.text, msg.parent, None, variant);
+
+            // Mark message activities as immediately completed (they're just informational)
+            if let Some(activity) = self.activities.get_mut(&id) {
+                activity.state = NixActivityState::Completed {
+                    success: true,
+                    duration: std::time::Duration::ZERO,
+                };
+                activity.completed_at = Some(Instant::now());
+            }
+        }
     }
 
     pub fn add_log_message(&mut self, message: Message) {

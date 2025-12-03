@@ -55,27 +55,24 @@ use std::time::SystemTime;
 use tokio::sync::mpsc;
 use tracing::{Level, Span, span};
 
+// Re-export for convenience
+pub use tracing_subscriber::Registry;
+
 // Global sender for activity events (installed by ActivityHandle::install())
 static ACTIVITY_SENDER: OnceLock<mpsc::UnboundedSender<ActivityEvent>> = OnceLock::new();
 
-/// Helper to convert Option<T> to a tracing field value.
-/// Returns the value for Some, or Empty for None (which omits the field from JSON output).
-fn opt_field<T: tracing::Value>(opt: &Option<T>) -> &dyn tracing::Value {
-    match opt {
-        Some(v) => v,
-        None => &tracing::field::Empty,
-    }
-}
-
-/// Send an activity event to the registered channel (if any)
+/// Send an activity event to the registered channel and emit to tracing
 fn send_activity_event(event: ActivityEvent) {
+    // Emit to tracing for file export - serialize as JSON string
+    if let Ok(json) = serde_json::to_string(&event) {
+        tracing::trace!(target: "devenv::activity", event = json);
+    }
+
+    // Send to channel for TUI
     if let Some(tx) = ACTIVITY_SENDER.get() {
         let _ = tx.send(event);
     }
 }
-
-// Re-export for convenience
-pub use tracing_subscriber::Registry;
 
 /// RFC 3339 timestamp wrapper for SystemTime with proper serde serialization
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,7 +113,7 @@ thread_local! {
 
 /// All activity events - activity-first design
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "activity", rename_all = "lowercase")]
+#[serde(tag = "activity_kind", rename_all = "lowercase")]
 pub enum ActivityEvent {
     Build(Build),
     Fetch(Fetch),
@@ -132,6 +129,7 @@ pub enum ActivityEvent {
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Build {
     Start {
+        #[serde(alias = "activity_id")]
         id: u64,
         name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -141,22 +139,26 @@ pub enum Build {
         timestamp: Timestamp,
     },
     Complete {
+        #[serde(alias = "activity_id")]
         id: u64,
         outcome: ActivityOutcome,
         timestamp: Timestamp,
     },
     Phase {
+        #[serde(alias = "activity_id")]
         id: u64,
         phase: String,
         timestamp: Timestamp,
     },
     Progress {
+        #[serde(alias = "activity_id")]
         id: u64,
         done: u64,
         expected: u64,
         timestamp: Timestamp,
     },
     Log {
+        #[serde(alias = "activity_id")]
         id: u64,
         line: String,
         #[serde(default)]
@@ -170,6 +172,7 @@ pub enum Build {
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Fetch {
     Start {
+        #[serde(alias = "activity_id")]
         id: u64,
         kind: FetchKind,
         name: String,
@@ -180,11 +183,13 @@ pub enum Fetch {
         timestamp: Timestamp,
     },
     Complete {
+        #[serde(alias = "activity_id")]
         id: u64,
         outcome: ActivityOutcome,
         timestamp: Timestamp,
     },
     Progress {
+        #[serde(alias = "activity_id")]
         id: u64,
         current: u64,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -210,6 +215,7 @@ pub enum FetchKind {
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Evaluate {
     Start {
+        #[serde(alias = "activity_id")]
         id: u64,
         name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -217,11 +223,13 @@ pub enum Evaluate {
         timestamp: Timestamp,
     },
     Complete {
+        #[serde(alias = "activity_id")]
         id: u64,
         outcome: ActivityOutcome,
         timestamp: Timestamp,
     },
     Log {
+        #[serde(alias = "activity_id")]
         id: u64,
         line: String,
         timestamp: Timestamp,
@@ -233,6 +241,7 @@ pub enum Evaluate {
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Task {
     Start {
+        #[serde(alias = "activity_id")]
         id: u64,
         name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -242,17 +251,20 @@ pub enum Task {
         timestamp: Timestamp,
     },
     Complete {
+        #[serde(alias = "activity_id")]
         id: u64,
         outcome: ActivityOutcome,
         timestamp: Timestamp,
     },
     Progress {
+        #[serde(alias = "activity_id")]
         id: u64,
         done: u64,
         expected: u64,
         timestamp: Timestamp,
     },
     Log {
+        #[serde(alias = "activity_id")]
         id: u64,
         line: String,
         #[serde(default)]
@@ -266,6 +278,7 @@ pub enum Task {
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Command {
     Start {
+        #[serde(alias = "activity_id")]
         id: u64,
         name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -275,11 +288,13 @@ pub enum Command {
         timestamp: Timestamp,
     },
     Complete {
+        #[serde(alias = "activity_id")]
         id: u64,
         outcome: ActivityOutcome,
         timestamp: Timestamp,
     },
     Log {
+        #[serde(alias = "activity_id")]
         id: u64,
         line: String,
         #[serde(default)]
@@ -293,6 +308,7 @@ pub enum Command {
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Operation {
     Start {
+        #[serde(alias = "activity_id")]
         id: u64,
         name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -302,6 +318,7 @@ pub enum Operation {
         timestamp: Timestamp,
     },
     Complete {
+        #[serde(alias = "activity_id")]
         id: u64,
         outcome: ActivityOutcome,
         timestamp: Timestamp,
@@ -311,8 +328,10 @@ pub enum Operation {
 /// Message - standalone (not an activity)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
-    pub level: LogLevel,
+    pub level: ActivityLevel,
     pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent: Option<u64>,
     pub timestamp: Timestamp,
 }
 
@@ -337,20 +356,22 @@ pub enum ActivityOutcome {
     Cancelled,
 }
 
-/// Log level for standalone messages
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum LogLevel {
-    Error,
-    Warn,
-    Info,
+/// Activity level (maps to tracing::Level)
+#[derive(
     Debug,
-    Trace,
-}
-
-/// Activity span level (maps to tracing::Level)
-/// Used internally for tracing span configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Default,
+    strum::EnumString,
+    strum::Display,
+    serde_with::DeserializeFromStr,
+    serde_with::SerializeDisplay,
+)]
+#[strum(serialize_all = "snake_case")]
 pub enum ActivityLevel {
     Error,
     Warn,
@@ -422,16 +443,6 @@ impl BuildBuilder {
 
         let span = create_span(id, self.level);
 
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = id,
-            event_type = "start",
-            activity_type = "build",
-            name = %self.name,
-            parent = opt_field(&parent),
-            derivation_path = opt_field(&self.derivation_path),
-        );
-
         send_activity_event(ActivityEvent::Build(Build::Start {
             id,
             name: self.name.clone(),
@@ -499,23 +510,6 @@ impl FetchBuilder {
 
         let span = create_span(id, self.level);
 
-        let kind_str = match self.kind {
-            FetchKind::Download => "download",
-            FetchKind::Query => "query",
-            FetchKind::Tree => "tree",
-        };
-
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = id,
-            event_type = "start",
-            activity_type = "fetch",
-            fetch_kind = kind_str,
-            name = %self.name,
-            parent = opt_field(&parent),
-            url = opt_field(&self.url),
-        );
-
         send_activity_event(ActivityEvent::Fetch(Fetch::Start {
             id,
             kind: self.kind,
@@ -574,15 +568,6 @@ impl EvaluateBuilder {
         let parent = self.parent.unwrap_or_else(get_current_activity_id);
 
         let span = create_span(id, self.level);
-
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = id,
-            event_type = "start",
-            activity_type = "evaluate",
-            name = %self.name,
-            parent = opt_field(&parent),
-        );
 
         send_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
             id,
@@ -647,16 +632,6 @@ impl TaskBuilder {
         let parent = self.parent.unwrap_or_else(get_current_activity_id);
 
         let span = create_span(id, self.level);
-
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = id,
-            event_type = "start",
-            activity_type = "task",
-            name = %self.name,
-            parent = opt_field(&parent),
-            detail = opt_field(&self.detail),
-        );
 
         send_activity_event(ActivityEvent::Task(Task::Start {
             id,
@@ -723,16 +698,6 @@ impl CommandBuilder {
 
         let span = create_span(id, self.level);
 
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = id,
-            event_type = "start",
-            activity_type = "command",
-            name = %self.name,
-            parent = opt_field(&parent),
-            command = opt_field(&self.command),
-        );
-
         send_activity_event(ActivityEvent::Command(Command::Start {
             id,
             name: self.name.clone(),
@@ -797,16 +762,6 @@ impl OperationBuilder {
         let parent = self.parent.unwrap_or_else(get_current_activity_id);
 
         let span = create_span(id, self.level);
-
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = id,
-            event_type = "start",
-            activity_type = "operation",
-            name = %self.name,
-            parent = opt_field(&parent),
-            detail = opt_field(&self.detail),
-        );
 
         send_activity_event(ActivityEvent::Operation(Operation::Start {
             id,
@@ -910,13 +865,6 @@ impl Activity {
     /// Update progress (for Build and Task activities)
     pub fn progress(&self, done: u64, expected: u64) {
         let _guard = self.span.enter();
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = self.id,
-            progress_done = done,
-            progress_expected = expected,
-        );
-
         let event = match self.activity_type {
             ActivityType::Build => ActivityEvent::Build(Build::Progress {
                 id: self.id,
@@ -942,13 +890,6 @@ impl Activity {
     /// Update progress with bytes (for Fetch activities)
     pub fn progress_bytes(&self, current: u64, total: u64) {
         let _guard = self.span.enter();
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = self.id,
-            progress_current = current,
-            progress_total = total,
-        );
-
         if matches!(self.activity_type, ActivityType::Fetch(_)) {
             send_activity_event(ActivityEvent::Fetch(Fetch::Progress {
                 id: self.id,
@@ -962,12 +903,6 @@ impl Activity {
     /// Update progress (indeterminate - for Fetch activities)
     pub fn progress_indeterminate(&self, current: u64) {
         let _guard = self.span.enter();
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = self.id,
-            progress_current = current,
-        );
-
         if matches!(self.activity_type, ActivityType::Fetch(_)) {
             send_activity_event(ActivityEvent::Fetch(Fetch::Progress {
                 id: self.id,
@@ -982,12 +917,6 @@ impl Activity {
     pub fn phase(&self, phase: impl Into<String>) {
         let _guard = self.span.enter();
         let phase_str = phase.into();
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = self.id,
-            phase = %phase_str,
-        );
-
         if matches!(self.activity_type, ActivityType::Build) {
             send_activity_event(ActivityEvent::Build(Build::Phase {
                 id: self.id,
@@ -1001,13 +930,6 @@ impl Activity {
     pub fn log(&self, line: impl Into<String>) {
         let _guard = self.span.enter();
         let line_str = line.into();
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = self.id,
-            log_line = %line_str,
-            log_is_error = false,
-        );
-
         let event = match self.activity_type {
             ActivityType::Build => ActivityEvent::Build(Build::Log {
                 id: self.id,
@@ -1041,13 +963,6 @@ impl Activity {
     pub fn error(&self, line: impl Into<String>) {
         let _guard = self.span.enter();
         let line_str = line.into();
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = self.id,
-            log_line = %line_str,
-            log_is_error = true,
-        );
-
         let event = match self.activity_type {
             ActivityType::Build => ActivityEvent::Build(Build::Log {
                 id: self.id,
@@ -1099,23 +1014,11 @@ impl Clone for Activity {
 
 impl Drop for Activity {
     fn drop(&mut self) {
-        // Emit complete event to tracing
         let outcome = self
             .outcome
             .lock()
             .map(|o| *o)
             .unwrap_or(ActivityOutcome::Success);
-        let outcome_str = match outcome {
-            ActivityOutcome::Success => "success",
-            ActivityOutcome::Failed => "failed",
-            ActivityOutcome::Cancelled => "cancelled",
-        };
-        tracing::trace!(
-            target: "devenv::activity",
-            activity_id = self.id,
-            event_type = "complete",
-            outcome = %outcome_str,
-        );
 
         // Send the correct Complete event based on activity type
         let event = match self.activity_type {
@@ -1167,25 +1070,14 @@ fn get_current_activity_id() -> Option<u64> {
     ACTIVITY_STACK.with(|stack| stack.borrow().last().copied())
 }
 
-/// Emit a standalone message not tied to an activity
-pub fn message(level: LogLevel, text: impl Into<String>) {
-    let level_str = match level {
-        LogLevel::Error => "error",
-        LogLevel::Warn => "warn",
-        LogLevel::Info => "info",
-        LogLevel::Debug => "debug",
-        LogLevel::Trace => "trace",
-    };
+/// Emit a standalone message, associated with the current activity if one exists
+pub fn message(level: ActivityLevel, text: impl Into<String>) {
     let text_str = text.into();
-    tracing::trace!(
-        target: "devenv::activity",
-        message_level = level_str,
-        message_text = %text_str,
-    );
-
+    let parent = get_current_activity_id();
     send_activity_event(ActivityEvent::Message(Message {
         level,
         text: text_str,
+        parent,
         timestamp: Timestamp::now(),
     }));
 }
@@ -1239,7 +1131,7 @@ mod tests {
         });
 
         let json = serde_json::to_string(&event).unwrap();
-        assert!(json.contains(r#""activity":"build"#));
+        assert!(json.contains(r#""activity_kind":"build"#));
         assert!(json.contains(r#""event":"start"#));
 
         let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
@@ -1264,7 +1156,7 @@ mod tests {
         });
 
         let json = serde_json::to_string(&event).unwrap();
-        assert!(json.contains(r#""activity":"fetch"#));
+        assert!(json.contains(r#""activity_kind":"fetch"#));
         assert!(json.contains(r#""kind":"download"#));
 
         let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
@@ -1292,7 +1184,9 @@ mod tests {
             let json = serde_json::to_string(&event).unwrap();
             let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
             match parsed {
-                ActivityEvent::Fetch(Fetch::Start { kind: parsed_kind, .. }) => {
+                ActivityEvent::Fetch(Fetch::Start {
+                    kind: parsed_kind, ..
+                }) => {
                     assert_eq!(parsed_kind, kind);
                 }
                 _ => panic!("Expected Fetch::Start"),
@@ -1369,19 +1263,20 @@ mod tests {
     #[test]
     fn test_message_event() {
         let event = ActivityEvent::Message(Message {
-            level: LogLevel::Info,
+            level: ActivityLevel::Info,
             text: "Test message".to_string(),
+            parent: None,
             timestamp: Timestamp(SystemTime::UNIX_EPOCH),
         });
 
         let json = serde_json::to_string(&event).unwrap();
-        assert!(json.contains(r#""activity":"message"#));
+        assert!(json.contains(r#""activity_kind":"message"#));
         assert!(json.contains(r#""level":"info"#));
 
         let parsed: ActivityEvent = serde_json::from_str(&json).unwrap();
         match parsed {
             ActivityEvent::Message(msg) => {
-                assert_eq!(msg.level, LogLevel::Info);
+                assert_eq!(msg.level, ActivityLevel::Info);
                 assert_eq!(msg.text, "Test message");
             }
             _ => panic!("Expected Message event"),
