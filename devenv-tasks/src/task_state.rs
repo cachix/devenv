@@ -58,8 +58,16 @@ impl TaskState {
             return Ok(false);
         }
 
+        // Include the command path in the files to check, so that
+        // changes to the task's exec script or dependencies will invalidate the cache.
+        // This works because Nix store paths are content-addressed.
+        let mut files_to_check = self.task.exec_if_modified.clone();
+        if let Some(cmd) = &self.task.command {
+            files_to_check.push(cmd.clone());
+        }
+
         cache
-            .check_modified_files(&self.task.name, &self.task.exec_if_modified)
+            .check_modified_files(&self.task.name, &files_to_check)
             .await
     }
 
