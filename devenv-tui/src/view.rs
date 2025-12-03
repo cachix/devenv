@@ -1,6 +1,9 @@
 use crate::{
     components::*,
-    model::{Activity, ActivitySummary, ActivityVariant, Model, TaskDisplayStatus, TerminalSize},
+    model::{
+        Activity, ActivitySummary, ActivityVariant, Model, NixActivityState, TaskDisplayStatus,
+        TerminalSize,
+    },
 };
 use human_repr::{HumanCount, HumanDuration};
 use iocraft::Context;
@@ -11,7 +14,7 @@ use std::time::{Duration, Instant};
 
 /// Main view function that creates the UI
 pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
-    let active_activities = model.get_active_display_activities();
+    let active_activities = model.get_display_activities();
 
     let summary = model.calculate_summary();
     let has_selection = model.ui.selected_activity.is_some();
@@ -50,6 +53,12 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
                 None
             };
 
+            // Determine completion state
+            let completed = match &activity.state {
+                NixActivityState::Active => None,
+                NixActivityState::Completed { success, .. } => Some(*success),
+            };
+
             element! {
                 ContextProvider(value: Context::owned(ActivityRenderContext {
                     activity: activity.clone(),
@@ -58,6 +67,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
                     spinner_frame,
                     logs: activity_logs,
                     expanded_logs: show_expanded_logs,
+                    completed,
                 })) {
                     ActivityItem
                 }
@@ -172,6 +182,8 @@ struct ActivityRenderContext {
     spinner_frame: usize,
     logs: Option<VecDeque<String>>,
     expanded_logs: bool,
+    /// Completion state: None = active, Some(true) = success, Some(false) = failed
+    completed: Option<bool>,
 }
 
 /// Render a single activity (owned version)
@@ -186,6 +198,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         spinner_frame,
         logs,
         expanded_logs,
+        completed,
     } = &*ctx;
     let indent = "  ".repeat(*depth);
 
@@ -201,6 +214,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let phase = build_data.phase.as_deref().unwrap_or("building");
                 let prefix = HierarchyPrefixComponent::new(indent, *depth)
                     .with_spinner(*spinner_frame)
+                    .with_completed(*completed)
                     .render();
 
                 let main_line = ActivityTextComponent::new(
@@ -235,6 +249,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let phase = build_data.phase.as_deref().unwrap_or("building");
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner(*spinner_frame)
+                .with_completed(*completed)
                 .render();
 
             return ActivityTextComponent::new(
@@ -255,7 +270,9 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 TaskDisplayStatus::Skipped => "⏭️",
                 TaskDisplayStatus::Cancelled => "🚫",
             };
-            let prefix = HierarchyPrefixComponent::new(indent, *depth).render(); // No spinner for tasks, use status icon
+            let prefix = HierarchyPrefixComponent::new(indent, *depth)
+                .with_completed(*completed)
+                .render(); // No spinner for tasks, use status icon
 
             return ActivityTextComponent::new(
                 "".to_string(), // No action prefix for tasks
@@ -276,6 +293,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     *is_selected,
                     *spinner_frame,
                 )
+                .with_completed(*completed)
                 .render(terminal_width);
             } else if let Some(progress) = &activity.progress {
                 // Use generic progress if available
@@ -286,6 +304,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         *is_selected,
                         *spinner_frame,
                     )
+                    .with_completed(*completed)
                     .render(terminal_width);
                 } else {
                     // Show generic progress without percentage
@@ -298,6 +317,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     });
                     let prefix = HierarchyPrefixComponent::new(indent, *depth)
                         .with_spinner(*spinner_frame)
+                        .with_completed(*completed)
                         .render();
 
                     return ActivityTextComponent::new(
@@ -317,6 +337,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .map(|s| format!("from {}", s));
                 let prefix = HierarchyPrefixComponent::new(indent, *depth)
                     .with_spinner(*spinner_frame)
+                    .with_completed(*completed)
                     .render();
 
                 return ActivityTextComponent::new(
@@ -336,6 +357,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .map(|s| format!("from {}", s));
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner(*spinner_frame)
+                .with_completed(*completed)
                 .render();
 
             return ActivityTextComponent::new(
@@ -350,6 +372,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         ActivityVariant::FetchTree => {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner(*spinner_frame)
+                .with_completed(*completed)
                 .render();
 
             return ActivityTextComponent::new(
@@ -372,6 +395,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             if *is_selected && logs.is_some() {
                 let prefix = HierarchyPrefixComponent::new(indent.clone(), *depth)
                     .with_spinner(*spinner_frame)
+                    .with_completed(*completed)
                     .render();
 
                 let main_line = ActivityTextComponent::new(
@@ -404,6 +428,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner(*spinner_frame)
+                .with_completed(*completed)
                 .render();
 
             return ActivityTextComponent::new(
@@ -418,6 +443,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         ActivityVariant::UserOperation => {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner(*spinner_frame)
+                .with_completed(*completed)
                 .render();
 
             return ActivityTextComponent::new(
@@ -431,6 +457,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         ActivityVariant::Devenv => {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner(*spinner_frame)
+                .with_completed(*completed)
                 .render();
 
             return ActivityTextComponent::new(
@@ -444,6 +471,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         ActivityVariant::Unknown => {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner(*spinner_frame)
+                .with_completed(*completed)
                 .render();
 
             return ActivityTextComponent::new(

@@ -39,6 +39,8 @@ pub struct HierarchyPrefixComponent {
     pub indent: String,
     pub depth: usize,
     pub spinner: Option<String>,
+    /// Completion state: None = active, Some(true) = success, Some(false) = failed
+    pub completed: Option<bool>,
 }
 
 impl HierarchyPrefixComponent {
@@ -47,6 +49,7 @@ impl HierarchyPrefixComponent {
             indent,
             depth,
             spinner: None,
+            completed: None,
         }
     }
 
@@ -55,33 +58,87 @@ impl HierarchyPrefixComponent {
         self
     }
 
+    pub fn with_completed(mut self, completed: Option<bool>) -> Self {
+        self.completed = completed;
+        self
+    }
+
     pub fn render(&self) -> Vec<AnyElement<'static>> {
         let mut prefix_children = vec![];
 
-        // Show spinner for top-level items (depth == 0)
+        // Show spinner for top-level items (depth == 0), or completion indicator if completed
         if self.depth == 0 {
-            if let Some(ref spinner_char) = self.spinner {
-                prefix_children.push(
-                    element!(View(margin_right: 1) {
-                        Text(content: spinner_char, color: COLOR_ACTIVE)
-                    })
-                    .into_any(),
-                );
+            match self.completed {
+                Some(true) => {
+                    // Success - show checkmark
+                    prefix_children.push(
+                        element!(View(margin_right: 1) {
+                            Text(content: "✓", color: COLOR_COMPLETED)
+                        })
+                        .into_any(),
+                    );
+                }
+                Some(false) => {
+                    // Failed - show X
+                    prefix_children.push(
+                        element!(View(margin_right: 1) {
+                            Text(content: "✗", color: COLOR_FAILED)
+                        })
+                        .into_any(),
+                    );
+                }
+                None => {
+                    // Active - show spinner
+                    if let Some(ref spinner_char) = self.spinner {
+                        prefix_children.push(
+                            element!(View(margin_right: 1) {
+                                Text(content: spinner_char, color: COLOR_ACTIVE)
+                            })
+                            .into_any(),
+                        );
+                    }
+                }
             }
         } else {
             // Indented items: align hierarchy line with parent's first char (after spinner if any)
             // Parent has: [spinner + space] + content, so we need 2 spaces for spinner width
             // Then (depth-1) * 2 for additional nesting levels
-            let spinner_offset = if self.spinner.is_some() { 2 } else { 0 };
+            let spinner_offset = if self.spinner.is_some() || self.completed.is_some() {
+                2
+            } else {
+                0
+            };
             let nesting_indent = "  ".repeat(self.depth - 1);
             let total_indent = format!("{}{}", " ".repeat(spinner_offset), nesting_indent);
             prefix_children.push(element!(Text(content: total_indent)).into_any());
-            prefix_children.push(
-                element!(View(margin_right: 1) {
-                    Text(content: "⎿", color: COLOR_HIERARCHY)
-                })
-                .into_any(),
-            );
+
+            // For child items, show completion indicator before hierarchy line
+            match self.completed {
+                Some(true) => {
+                    prefix_children.push(
+                        element!(View(margin_right: 1) {
+                            Text(content: "✓", color: COLOR_COMPLETED)
+                        })
+                        .into_any(),
+                    );
+                }
+                Some(false) => {
+                    prefix_children.push(
+                        element!(View(margin_right: 1) {
+                            Text(content: "✗", color: COLOR_FAILED)
+                        })
+                        .into_any(),
+                    );
+                }
+                None => {
+                    prefix_children.push(
+                        element!(View(margin_right: 1) {
+                            Text(content: "⎿", color: COLOR_HIERARCHY)
+                        })
+                        .into_any(),
+                    );
+                }
+            }
         }
 
         prefix_children
@@ -261,6 +318,8 @@ pub struct DownloadActivityComponent<'a> {
     pub depth: usize,
     pub is_selected: bool,
     pub spinner_frame: usize,
+    /// Completion state: None = active, Some(true) = success, Some(false) = failed
+    pub completed: Option<bool>,
 }
 
 impl<'a> DownloadActivityComponent<'a> {
@@ -275,7 +334,13 @@ impl<'a> DownloadActivityComponent<'a> {
             depth,
             is_selected,
             spinner_frame,
+            completed: None,
         }
+    }
+
+    pub fn with_completed(mut self, completed: Option<bool>) -> Self {
+        self.completed = completed;
+        self
     }
 
     pub fn render(&self, terminal_width: u16) -> AnyElement<'static> {
@@ -286,7 +351,10 @@ impl<'a> DownloadActivityComponent<'a> {
         let mut elements = vec![];
 
         // First line: activity name
-        let prefix = HierarchyPrefixComponent::new(indent.clone(), self.depth).render();
+        let prefix = HierarchyPrefixComponent::new(indent.clone(), self.depth)
+            .with_spinner(self.spinner_frame)
+            .with_completed(self.completed)
+            .render();
 
         // Get substituter from download variant
         let substituter =

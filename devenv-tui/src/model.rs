@@ -93,6 +93,8 @@ pub struct Activity {
     pub parent_id: Option<u64>,
     pub start_time: Instant,
     pub state: NixActivityState,
+    /// When the activity completed (for lingering display)
+    pub completed_at: Option<Instant>,
     pub detail: Option<String>,
     pub variant: ActivityVariant,
     pub progress: Option<ProgressActivity>,
@@ -388,6 +390,7 @@ impl Model {
             parent_id: parent,
             start_time: Instant::now(),
             state: NixActivityState::Active,
+            completed_at: None,
             detail,
             variant,
             progress: None,
@@ -406,6 +409,7 @@ impl Model {
             let success = matches!(outcome, ActivityOutcome::Success);
             let duration = activity.start_time.elapsed();
             activity.state = NixActivityState::Completed { success, duration };
+            activity.completed_at = Some(Instant::now());
 
             if let ActivityVariant::Task(ref mut task) = activity.variant {
                 task.status = if success {
