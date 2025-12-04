@@ -50,3 +50,38 @@ body {
 .md-footer {
     display: block !important;
 }
+
+/* Badge styling for feature flags */
+.md-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2em;
+    font-size: 0.4em;
+    font-weight: 500;
+    padding: 0.2em 0.5em;
+    border-radius: 99em;
+    background: var(--md-default-fg-color--lightest);
+    color: var(--md-default-fg-color--light);
+    vertical-align: middle;
+    margin-left: 0.5em;
+    cursor: help;
+}
+
+.md-badge__icon {
+    display: flex;
+    align-items: center;
+}
+
+.md-badge__text {
+    white-space: nowrap;
+}
+
+.md-badge--cli {
+    background: #e8f4fd;
+    color: #1976d2;
+}
+
+[data-md-color-scheme="slate"] .md-badge--cli {
+    background: #1e3a5f;
+    color: #90caf9;
+}

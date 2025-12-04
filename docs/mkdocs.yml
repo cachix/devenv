@@ -6,6 +6,8 @@ repo_url: "https://github.com/cachix/devenv"
 edit_uri: "edit/main/docs"
 docs_dir: "src"
 strict: true
+hooks:
+  - src/overrides/hooks/shortcodes.py
 validation:
   omitted_files: warn
   absolute_links: relative_to_docs
@@ -50,6 +52,7 @@ theme:
     - content.action.edit
     - content.code.annotate
     - content.code.copy
+    - content.tooltips
 
     # Lazily process components on the page, like code blocks.
     # Mounting all of code blocks on the reference doc page takes several

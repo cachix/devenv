@@ -25,7 +25,7 @@ This approach:
 - Makes secret rotation easier
 - Follows the principle of least privilege
 
-## Configuration (Optional)
+## Configuration (optional) <!-- md:flag cli-feature -->
 
 If you do need secrets in your devenv environment:
 
