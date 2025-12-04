@@ -55,7 +55,7 @@ let
             else pkgs.writeScript "${name}-script" config.exec;
 
           # Prepare PATH with any additional packages
-          setupPath = lib.optionalString (config.packages != []) ''
+          setupPath = lib.optionalString (config.packages != [ ]) ''
             PATH="${pkgs.lib.makeBinPath config.packages}:$PATH"
           '';
         in

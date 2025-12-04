@@ -40,15 +40,16 @@
         let
           getOverlays =
             inputName: inputAttrs:
-            map (
-              overlay:
-              let
-                input =
-                  inputs.${inputName} or (throw "No such input `${inputName}` while trying to configure overlays.");
-              in
-              input.overlays.${overlay}
-                or (throw "Input `${inputName}` has no overlay called `${overlay}`. Supported overlays: ${nixpkgs.lib.concatStringsSep ", " (builtins.attrNames input.overlays)}")
-            ) inputAttrs.overlays or [ ];
+            map
+              (
+                overlay:
+                let
+                  input =
+                    inputs.${inputName} or (throw "No such input `${inputName}` while trying to configure overlays.");
+                in
+                  input.overlays.${overlay}
+                    or (throw "Input `${inputName}` has no overlay called `${overlay}`. Supported overlays: ${nixpkgs.lib.concatStringsSep ", " (builtins.attrNames input.overlays)}")
+              ) inputAttrs.overlays or [ ];
           overlays = nixpkgs.lib.flatten (nixpkgs.lib.mapAttrsToList getOverlays (devenv.inputs or { }));
           permittedUnfreePackages =
             devenv.nixpkgs.per-platform."${targetSystem}".permittedUnfreePackages
@@ -87,9 +88,9 @@
               else
                 ./. + (builtins.substring 1 255 path) + "/devenv.nix"
             else if lib.hasPrefix "../" path then
-              # For parent directory paths, concatenate with /.
-              # ./. refers to the directory containing this file (project root)
-              # So ./. + "/../shared" = <project-root>/../shared
+            # For parent directory paths, concatenate with /.
+            # ./. refers to the directory containing this file (project root)
+            # So ./. + "/../shared" = <project-root>/../shared
               if lib.hasSuffix ".nix" path then ./. + "/${path}" else ./. + "/${path}/devenv.nix"
             else
               let
@@ -180,13 +181,15 @@
               manualProfiles = vars.active_profiles;
               currentHostname = vars.hostname;
               currentUsername = vars.username;
-              hostnameProfiles = lib.optional (
-                currentHostname != ""
-                && builtins.hasAttr currentHostname (baseProject.config.profiles.hostname or { })
-              ) "hostname.${currentHostname}";
-              userProfiles = lib.optional (
-                currentUsername != "" && builtins.hasAttr currentUsername (baseProject.config.profiles.user or { })
-              ) "user.${currentUsername}";
+              hostnameProfiles = lib.optional
+                (
+                  currentHostname != ""
+                  && builtins.hasAttr currentHostname (baseProject.config.profiles.hostname or { })
+                ) "hostname.${currentHostname}";
+              userProfiles = lib.optional
+                (
+                  currentUsername != "" && builtins.hasAttr currentUsername (baseProject.config.profiles.user or { })
+                ) "user.${currentUsername}";
 
               # Ordered list of profiles to activate
               orderedProfiles = hostnameProfiles ++ userProfiles ++ manualProfiles;
@@ -227,137 +230,143 @@
                     userProfiles = map (n: "user.${n}") (builtins.attrNames (baseProject.config.profiles.user or { }));
                     allAvailableProfiles = availableProfiles ++ hostnameProfiles ++ userProfiles;
                   in
-                  baseProject.config.profiles.${profileName}
-                    or (throw "Profile '${profileName}' not found. Available profiles: ${lib.concatStringsSep ", " allAvailableProfiles}");
+                    baseProject.config.profiles.${profileName}
+                      or (throw "Profile '${profileName}' not found. Available profiles: ${lib.concatStringsSep ", " allAvailableProfiles}");
 
               # Fold over ordered profiles to build final list with extends
-              expandedProfiles = lib.foldl' (
-                acc: profileName:
-                let
-                  allProfileNames = resolveProfileExtends profileName [ ];
-                in
-                acc ++ allProfileNames
-              ) [ ] orderedProfiles;
+              expandedProfiles = lib.foldl'
+                (
+                  acc: profileName:
+                    let
+                      allProfileNames = resolveProfileExtends profileName [ ];
+                    in
+                    acc ++ allProfileNames
+                ) [ ]
+                orderedProfiles;
 
               # Map over expanded profiles and apply priorities
-              allPrioritizedModules = lib.imap0 (
-                index: profileName:
-                let
-                  # Decrement priority for each profile (lower = higher precedence)
-                  # Start with the next lowest priority after the default priority for values (100)
-                  profilePriority = (lib.modules.defaultOverridePriority - 1) - index;
-                  profileConfig = getProfileConfig profileName;
-
-                  # Check if an option type needs explicit override to resolve conflicts
-                  # Only apply overrides to LEAF values (scalars), not collection types that can merge
-                  typeNeedsOverride =
-                    type:
-                    if type == null then
-                      false
-                    else
-                      let
-                        typeName = type.name or type._type or "";
-
-                        # True leaf types that need priority resolution when they conflict
-                        isLeafType = builtins.elem typeName [
-                          "str"
-                          "int"
-                          "bool"
-                          "enum"
-                          "path"
-                          "package"
-                          "float"
-                          "anything"
-                        ];
-                      in
-                      if isLeafType then
-                        true
-                      else if typeName == "nullOr" then
-                        # For nullOr, check the wrapped type recursively
-                        let
-                          innerType =
-                            type.elemType
-                              or (if type ? nestedTypes && type.nestedTypes ? elemType then type.nestedTypes.elemType else null);
-                        in
-                        if innerType != null then typeNeedsOverride innerType else false
-                      else
-                        # Everything else (collections, submodules, etc.) should merge naturally
-                        false;
-
-                  # Check if a config path needs explicit override
-                  pathNeedsOverride =
-                    optionPath:
+              allPrioritizedModules = lib.imap0
+                (
+                  index: profileName:
                     let
-                      # Try direct option first
-                      directOption = lib.attrByPath optionPath null baseProject.options;
-                    in
-                    if directOption != null && lib.isOption directOption then
-                      typeNeedsOverride directOption.type
-                    else if optionPath != [ ] then
-                      # Check parent for freeform type
-                      let
-                        parentPath = lib.init optionPath;
-                        parentOption = lib.attrByPath parentPath null baseProject.options;
-                      in
-                      if parentOption != null && lib.isOption parentOption then
+                      # Decrement priority for each profile (lower = higher precedence)
+                      # Start with the next lowest priority after the default priority for values (100)
+                      profilePriority = (lib.modules.defaultOverridePriority - 1) - index;
+                      profileConfig = getProfileConfig profileName;
+
+                      # Check if an option type needs explicit override to resolve conflicts
+                      # Only apply overrides to LEAF values (scalars), not collection types that can merge
+                      typeNeedsOverride =
+                        type:
+                        if type == null then
+                          false
+                        else
+                          let
+                            typeName = type.name or type._type or "";
+
+                            # True leaf types that need priority resolution when they conflict
+                            isLeafType = builtins.elem typeName [
+                              "str"
+                              "int"
+                              "bool"
+                              "enum"
+                              "path"
+                              "package"
+                              "float"
+                              "anything"
+                            ];
+                          in
+                          if isLeafType then
+                            true
+                          else if typeName == "nullOr" then
+                          # For nullOr, check the wrapped type recursively
+                            let
+                              innerType =
+                                type.elemType
+                                  or (if type ? nestedTypes && type.nestedTypes ? elemType then type.nestedTypes.elemType else null);
+                            in
+                            if innerType != null then typeNeedsOverride innerType else false
+                          else
+                          # Everything else (collections, submodules, etc.) should merge naturally
+                            false;
+
+                      # Check if a config path needs explicit override
+                      pathNeedsOverride =
+                        optionPath:
                         let
-                          # Look for freeform type:
-                          # 1. Standard location: type.freeformType (primary)
-                          # 2. Nested location: type.nestedTypes.freeformType (evaluated form)
-                          freeformType = parentOption.type.freeformType or parentOption.type.nestedTypes.freeformType or null;
-                          elementType =
-                            if freeformType ? elemType then
-                              freeformType.elemType
-                            else if freeformType ? nestedTypes && freeformType.nestedTypes ? elemType then
-                              freeformType.nestedTypes.elemType
-                            else
-                              freeformType;
+                          # Try direct option first
+                          directOption = lib.attrByPath optionPath null baseProject.options;
                         in
-                        typeNeedsOverride elementType
-                      else
-                        false
-                    else
-                      false;
+                        if directOption != null && lib.isOption directOption then
+                          typeNeedsOverride directOption.type
+                        else if optionPath != [ ] then
+                        # Check parent for freeform type
+                          let
+                            parentPath = lib.init optionPath;
+                            parentOption = lib.attrByPath parentPath null baseProject.options;
+                          in
+                          if parentOption != null && lib.isOption parentOption then
+                            let
+                              # Look for freeform type:
+                              # 1. Standard location: type.freeformType (primary)
+                              # 2. Nested location: type.nestedTypes.freeformType (evaluated form)
+                              freeformType = parentOption.type.freeformType or parentOption.type.nestedTypes.freeformType or null;
+                              elementType =
+                                if freeformType ? elemType then
+                                  freeformType.elemType
+                                else if freeformType ? nestedTypes && freeformType.nestedTypes ? elemType then
+                                  freeformType.nestedTypes.elemType
+                                else
+                                  freeformType;
+                            in
+                            typeNeedsOverride elementType
+                          else
+                            false
+                        else
+                          false;
 
-                  # Support overriding both plain attrset modules and functions
-                  applyModuleOverride =
-                    config:
-                    if builtins.isFunction config then
-                      let
-                        wrapper = args: applyOverrideRecursive (config args) [ ];
-                      in
-                      lib.mirrorFunctionArgs config wrapper
-                    else
-                      applyOverrideRecursive config [ ];
+                      # Support overriding both plain attrset modules and functions
+                      applyModuleOverride =
+                        config:
+                        if builtins.isFunction config then
+                          let
+                            wrapper = args: applyOverrideRecursive (config args) [ ];
+                          in
+                          lib.mirrorFunctionArgs config wrapper
+                        else
+                          applyOverrideRecursive config [ ];
 
-                  # Apply overrides recursively based on option types
-                  applyOverrideRecursive =
-                    config: optionPath:
-                    if lib.isAttrs config && config ? _type then
-                      config # Don't touch values with existing type metadata
-                    else if lib.isAttrs config then
-                      lib.mapAttrs (name: value: applyOverrideRecursive value (optionPath ++ [ name ])) config
-                    else if pathNeedsOverride optionPath then
-                      lib.mkOverride profilePriority config
-                    else
-                      config;
+                      # Apply overrides recursively based on option types
+                      applyOverrideRecursive =
+                        config: optionPath:
+                        if lib.isAttrs config && config ? _type then
+                          config # Don't touch values with existing type metadata
+                        else if lib.isAttrs config then
+                          lib.mapAttrs (name: value: applyOverrideRecursive value (optionPath ++ [ name ])) config
+                        else if pathNeedsOverride optionPath then
+                          lib.mkOverride profilePriority config
+                        else
+                          config;
 
-                  # Apply priority overrides recursively to the deferredModule imports structure
-                  prioritizedConfig = (
-                    profileConfig.module
-                    // {
-                      imports = lib.map (
-                        importItem:
-                        importItem
+                      # Apply priority overrides recursively to the deferredModule imports structure
+                      prioritizedConfig = (
+                        profileConfig.module
                         // {
-                          imports = lib.map (nestedImport: applyModuleOverride nestedImport) (importItem.imports or [ ]);
+                          imports = lib.map
+                            (
+                              importItem:
+                              importItem
+                              // {
+                                imports = lib.map (nestedImport: applyModuleOverride nestedImport) (importItem.imports or [ ]);
+                              }
+                            )
+                            (profileConfig.module.imports or [ ]);
                         }
-                      ) (profileConfig.module.imports or [ ]);
-                    }
-                  );
-                in
-                prioritizedConfig
-              ) expandedProfiles;
+                      );
+                    in
+                    prioritizedConfig
+                )
+                expandedProfiles;
             in
             if allPrioritizedModules == [ ] then
               baseProject
@@ -383,12 +392,12 @@
               in
               lib.attrsets.mapAttrs (
                 _: v:
-                if v ? _type && isDocType v._type then
-                  v.text
-                else if v ? _type && v._type == "derivation" then
-                  v.name
-                else
-                  v
+                  if v ? _type && isDocType v._type then
+                    v.text
+                  else if v ? _type && v._type == "derivation" then
+                    v.name
+                  else
+                    v
               );
           };
 
@@ -396,34 +405,36 @@
           # This is used when not building a specific output by attrpath.
           build =
             options: config:
-            lib.concatMapAttrs (
-              name: option:
-              if lib.isOption option then
-                let
-                  typeName = option.type.name or "";
-                in
-                if
-                  builtins.elem typeName [
-                    "output"
-                    "outputOf"
-                  ]
-                then
-                  { ${name} = config.${name}; }
+            lib.concatMapAttrs
+              (
+                name: option:
+                if lib.isOption option then
+                  let
+                    typeName = option.type.name or "";
+                  in
+                  if
+                    builtins.elem typeName [
+                      "output"
+                      "outputOf"
+                    ]
+                  then
+                    { ${name} = config.${name}; }
+                  else
+                    { }
+                else if builtins.isAttrs option && !lib.isDerivation option then
+                  let
+                    v = build option config.${name};
+                  in
+                  if v != { } then
+                    {
+                      ${name} = v;
+                    }
+                  else
+                    { }
                 else
                   { }
-              else if builtins.isAttrs option && !lib.isDerivation option then
-                let
-                  v = build option config.${name};
-                in
-                if v != { } then
-                  {
-                    ${name} = v;
-                  }
-                else
-                  { }
-              else
-                { }
-            ) options;
+              )
+              options;
         in
         {
           inherit
