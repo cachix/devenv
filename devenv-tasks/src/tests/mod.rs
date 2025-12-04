@@ -2699,6 +2699,128 @@ async fn inspect_tasks(tasks: &Tasks) -> Vec<(String, TaskStatus)> {
     result
 }
 
+/// Test that changing the command path (simulating a Nix rebuild) invalidates the cache
+/// even when exec_if_modified files haven't changed.
+/// This tests the fix for https://github.com/cachix/devenv/issues/1924
+#[tokio::test]
+async fn test_exec_if_modified_command_change() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    // Create a watched file that won't change throughout the test
+    let watched_file = tempfile::NamedTempFile::new()?;
+    let watched_file_path = watched_file.path().to_str().unwrap().to_string();
+    fs::write(&watched_file_path, "unchanged content").await?;
+
+    let task_name = format!(
+        "exec_mod:cmd_change:{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
+
+    // Create first command script
+    let command_script1 = create_script(
+        r#"#!/bin/sh
+echo '{"version": 1}' > $DEVENV_TASK_OUTPUT_FILE
+echo "Command v1 executed"
+"#,
+    )?;
+    let command1 = command_script1.to_str().unwrap();
+
+    // First run - task should execute
+    let config1 = Config::try_from(json!({
+        "roots": [task_name],
+        "run_mode": "all",
+        "tasks": [{
+            "name": task_name,
+            "command": command1,
+            "exec_if_modified": [watched_file_path]
+        }]
+    }))
+    .unwrap();
+
+    let tasks1 = Tasks::builder(config1, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
+    tasks1.run().await;
+
+    match &tasks1.graph[tasks1.tasks_order[0]].read().await.status {
+        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+        other => panic!("Expected Success on first run, got: {other:?}"),
+    }
+
+    // Second run with same command - should be skipped (cached)
+    let config2 = Config::try_from(json!({
+        "roots": [task_name],
+        "run_mode": "all",
+        "tasks": [{
+            "name": task_name,
+            "command": command1,
+            "exec_if_modified": [watched_file_path]
+        }]
+    }))
+    .unwrap();
+
+    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
+    tasks2.run().await;
+
+    match &tasks2.graph[tasks2.tasks_order[0]].read().await.status {
+        TaskStatus::Completed(TaskCompleted::Skipped(_)) => {}
+        other => panic!("Expected Skipped on second run (same command), got: {other:?}"),
+    }
+
+    // Create a NEW command script (different path, simulating Nix rebuild)
+    let command_script2 = create_script(
+        r#"#!/bin/sh
+echo '{"version": 2}' > $DEVENV_TASK_OUTPUT_FILE
+echo "Command v2 executed"
+"#,
+    )?;
+    let command2 = command_script2.to_str().unwrap();
+
+    // Third run with different command path - should execute (command changed)
+    let config3 = Config::try_from(json!({
+        "roots": [task_name],
+        "run_mode": "all",
+        "tasks": [{
+            "name": task_name,
+            "command": command2,
+            "exec_if_modified": [watched_file_path]
+        }]
+    }))
+    .unwrap();
+
+    let tasks3 = Tasks::builder(config3, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
+    let outputs3 = tasks3.run().await;
+
+    match &tasks3.graph[tasks3.tasks_order[0]].read().await.status {
+        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+        other => panic!("Expected Success on third run (command changed), got: {other:?}"),
+    }
+
+    // Verify the new command's output was captured
+    assert_eq!(
+        outputs3
+            .0
+            .get(&task_name)
+            .and_then(|v| v.get("version"))
+            .and_then(|v| v.as_i64()),
+        Some(2),
+        "Should have output from the new command (version 2)"
+    );
+
+    Ok(())
+}
+
 fn create_script(script: &str) -> std::io::Result<tempfile::TempPath> {
     let mut temp_file = tempfile::Builder::new()
         .prefix("script")
