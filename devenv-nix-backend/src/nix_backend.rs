@@ -306,20 +306,14 @@ impl NixRustBackend {
             tokio::sync::Mutex<Option<crate::cachix_daemon::StreamingCachixDaemon>>,
         > = Arc::new(tokio::sync::Mutex::new(None));
 
+        // Create oneshot channel for cleanup completion signaling
+        let (cleanup_tx, cleanup_rx) = tokio::sync::oneshot::channel::<()>();
+        shutdown.set_cleanup_receiver(cleanup_rx);
+
         // Spawn cleanup task that waits for shutdown signal via cancellation token.
-        // The task registers with Shutdown so wait_for_shutdown_complete() waits for it.
-        // When shutdown is triggered (either by signal or by Drop), this task:
-        // 1. Sees the cancellation and runs cleanup
-        // 2. Unregisters from Shutdown (allowing wait_for_shutdown_complete to proceed)
-        // 3. Exits cleanly (no orphaned tasks)
         let daemon_for_cleanup = cachix_daemon.clone();
         let shutdown_for_task = shutdown.clone();
         tokio::spawn(async move {
-            // Register with shutdown - if already cancelled, exit immediately
-            if !shutdown_for_task.register_task() {
-                return;
-            }
-
             // Wait for shutdown signal
             shutdown_for_task.cancellation_token().cancelled().await;
 
@@ -341,8 +335,8 @@ impl NixRustBackend {
                 }
             }
 
-            // Unregister - this may trigger shutdown_complete notification
-            shutdown_for_task.unregister_task();
+            // Signal cleanup complete (ignore error if receiver dropped)
+            let _ = cleanup_tx.send(());
         });
 
         let backend = Self {
