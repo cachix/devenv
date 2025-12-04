@@ -48,4 +48,18 @@ in
       description = "Secrets loaded from secretspec.toml (read-only)";
     };
   };
+
+  config = {
+    assertions = [
+      {
+        assertion = !(config.secretspec.enable && config.devenv.flakesIntegration);
+        message = ''
+          SecretSpec integration is not supported when using devenv with Nix Flakes.
+
+          The devenv CLI is required to load secrets from secretspec.toml.
+          See https://devenv.sh/integrations/secretspec/ for more information.
+        '';
+      }
+    ];
+  };
 }
