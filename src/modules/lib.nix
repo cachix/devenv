@@ -41,7 +41,7 @@
                   ${if follows != [] then "inputs:\n      ${yaml_follows}" else ""}
           '';
       in
-        "To use '${attribute}', ${command}";
+      "To use '${attribute}', ${command}";
 
     getInput = args:
       inputs.${args.name} or (throw "${config.lib._mkInputError args}\n\n");

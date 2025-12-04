@@ -337,7 +337,7 @@ in
             appendLibraries
           ]
         else
-         appendLibraries drv;
+          appendLibraries drv;
     };
 
     manylinux.enable = lib.mkOption {

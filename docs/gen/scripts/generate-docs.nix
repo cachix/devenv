@@ -1,7 +1,7 @@
-{
-  lib,
-  languages,
-  services,
+{ lib
+, languages
+, services
+,
 }:
 
 ''

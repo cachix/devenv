@@ -1,10 +1,9 @@
-{
-  pkgs,
-  self,
-  lib,
-  config,
-  inputs,
-  ...
+{ pkgs
+, self
+, lib
+, config
+, inputs
+, ...
 }:
 
 let
@@ -48,18 +47,19 @@ let
 
   githooksSubmodule =
     if git-hooks != null then
-      lib.types.submoduleWith {
-        modules = [
-          (git-hooks + "/modules/all-modules.nix")
-          {
-            rootSrc = self;
-            package = lib.mkDefault pkgs.pre-commit;
-            tools = import (git-hooks + "/nix/call-tools.nix") pkgs;
-          }
-        ];
-        specialArgs = { inherit pkgs; };
-        shorthandOnlyDefinesConfig = true;
-      }
+      lib.types.submoduleWith
+        {
+          modules = [
+            (git-hooks + "/modules/all-modules.nix")
+            {
+              rootSrc = self;
+              package = lib.mkDefault pkgs.pre-commit;
+              tools = import (git-hooks + "/nix/call-tools.nix") pkgs;
+            }
+          ];
+          specialArgs = { inherit pkgs; };
+          shorthandOnlyDefinesConfig = true;
+        }
     else
       defaultModule;
 

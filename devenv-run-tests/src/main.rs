@@ -534,6 +534,8 @@ exec '{bin_dir}/devenv' \
     let mut env = vec![
         ("DEVENV_RUN_TESTS", "1".to_string()),
         ("DEVENV_NIX", env::var("DEVENV_NIX").unwrap_or_default()),
+        // Path to the devenv repo being tested, for tests that need to use it as an input
+        ("DEVENV_REPO", cwd.display().to_string()),
         (
             "PATH",
             format!(

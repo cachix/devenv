@@ -1,9 +1,8 @@
-{
-  pkgs,
-  lib,
-  inputs,
-  options,
-  ...
+{ pkgs
+, lib
+, inputs
+, options
+, ...
 }:
 
 let
@@ -70,9 +69,9 @@ let
     });
 
   mkDocOptions =
-    {
-      opts,
-      docOpts ? { },
+    { opts
+    , docOpts ? { }
+    ,
     }:
     let
       optionsDoc = pkgs.nixosOptionsDoc (
