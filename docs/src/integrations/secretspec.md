@@ -1,18 +1,19 @@
 # SecretSpec
 
-[SecretSpec](https://secretspec.dev) separates secret declaration from secret provisioning. You define what secrets your application needs in a `secretspec.toml` file, and each developer, CI system, and production environment can provide those secrets from their preferred secure provider.
+[SecretSpec] separates secret declaration from secret provisioning.
+You define the secrets that your application needs in a `secretspec.toml` file and each developer, CI system, and production environment can provide those secrets from their preferred secure provider.
 
 ## Quick Start
 
-Follow [SecretSpec Quick Start](https://secretspec.dev/quick-start/).
+Follow the [SecretSpec quickstart guide][SecretSpec Quick Start].
 
-## Best Practice: Runtime Loading
+## Runtime Loading (Best Practice)
 
-While you can enable SecretSpec in devenv to load secrets into `secretspec.secrets` option, we recommend:
+While you can enable SecretSpec in devenv to load secrets into the `secretspec.secrets` option, we recommend that you:
 
-a) [Use Rust SDK](https://secretspec.dev/sdk/rust/)
+a) [Use the Rust SDK][Rust SDK] to load secrets in your application code
 
-b) Your application load secrets at runtime instead:
+b) Load secrets at runtime and expose them only to the processes that need them
 
 ```bash
 $ devenv shell
@@ -20,6 +21,7 @@ $ secretspec run -- npm start
 ```
 
 This approach:
+
 - Keeps secrets out of your shell environment
 - Reduces exposure of sensitive data
 - Makes secret rotation easier
@@ -45,11 +47,16 @@ Then access in `devenv.nix`:
   env.DATABASE_URL = config.secretspec.secrets.DATABASE_URL or "";
 }
 ```
-https://secretspec.dev/sdk/rust/
 
 ## Learn More
 
-- [secretspec.dev](https://secretspec.dev)
-- [Providers](https://secretspec.dev/providers/keyring/) - Keyring, 1Password, dotenv, and more
-- [Profiles](https://secretspec.dev/concepts/profiles/) - Environment-specific configurations
-- [Rust SDK](https://secretspec.dev/sdk/rust/) - Type-safe 
+- [SecretSpec]
+- [Providers] - Keyring, 1Password, dotenv, and more
+- [Profiles] - Environment-specific configurations
+- [Rust SDK] - Type-safe
+
+[SecretSpec]: https://secretspec.dev
+[SecretSpec Quick Start]: https://secretspec.dev/quick-start/
+[Rust SDK]: https://secretspec.dev/sdk/rust/
+[Providers]: https://secretspec.dev/providers/keyring/
+[Profiles]: https://secretspec.dev/concepts/profiles/
