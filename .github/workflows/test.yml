@@ -67,6 +67,9 @@ jobs:
           fi
           echo "args=$override_args" >> $GITHUB_OUTPUT
 
+      - name: Run devenv test
+        run: devenv ${{ steps.override-args.outputs.args }} test
+
       - name: Run devenv-test-cli
         run: devenv ${{ steps.override-args.outputs.args }} shell devenv-test-cli
 
