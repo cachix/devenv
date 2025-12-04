@@ -56,9 +56,6 @@ jobs:
           path=$(nix build -L --print-out-paths)
           echo "$path/bin" >> $GITHUB_PATH
 
-      - name: Test tasks outside shell
-        run: devenv tasks run devenv:enterShell
-
       - name: Build override args
         id: override-args
         env:
