@@ -7,8 +7,7 @@ use tracing::error;
 #[derive(clap::ValueEnum, Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum LogFormat {
-    /// The default human-readable log format used in the CLI.
-    #[default]
+    /// The human-readable log format used in the CLI.
     Cli,
     /// A verbose structured log format used for debugging.
     TracingFull,
@@ -17,7 +16,8 @@ pub enum LogFormat {
     /// A JSON log format used for machine consumption.
     TracingJson,
     // TODO: no sure this should live in core
-    /// Interactive Terminal User Interface with real-time progress.
+    /// Interactive Terminal User Interface with real-time progress (default).
+    #[default]
     Tui,
 }
 
