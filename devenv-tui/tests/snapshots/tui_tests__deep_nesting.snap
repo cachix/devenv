@@ -4,7 +4,7 @@ expression: output
 ---
  ⠋ Evaluating devenv.nix                                             0.0s
    ⎿ Building wrapper-scripts buildPhase                             0.0s
-     ⎿ Downloading bash-5.2                                          0.0s
+     ⎿ Downloading bash-5.2 from cache.nixos.org                     0.0s
         ──────────────────────────────────────────────500kB / 1MB at 5MB/s
        ⎿ Downloading readline-8.2                                    0.0s
          ⎿ Downloading ncurses-6.4                                   0.0s

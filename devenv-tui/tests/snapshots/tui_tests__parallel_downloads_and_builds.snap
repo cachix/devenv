@@ -4,11 +4,11 @@ expression: output
 ---
  ⠋ Building hello-2.12 buildPhase                                    0.0s
  ⠋ Building curl-8.1.0 configurePhase                                0.0s
- ⠋ Downloading openssl-3.0.0                                         0.0s
+ ⠋ Downloading openssl-3.0.0 from cache.nixos.org                    0.0s
     ────────────────────────────────────────────────15MB / 30MB at 150MB/s
- ⠋ Downloading glibc-2.37                                            0.0s
+ ⠋ Downloading glibc-2.37 from cache.nixos.org                       0.0s
     ──────────────────────────────────────────────────8MB / 10MB at 80MB/s
- ⠋ Downloading python-3.11.5                                         0.0s
+ ⠋ Downloading python-3.11.5 from cache.nixos.org                    0.0s
     ──────────────────────────────────────────────────1MB / 50MB at 10MB/s
 
  0 of 2 builds  │  0 of 3 downloads                                ↑↓ nav
