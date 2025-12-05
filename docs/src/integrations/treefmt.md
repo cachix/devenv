@@ -2,6 +2,12 @@
 
 ## Set up
 
+Add `treefmt-nix` to your inputs:
+
+```shell-session
+$ devenv inputs add treefmt-nix github:numtide/treefmt-nix
+```
+
 Check the available integrations in [the list of all available integrations](/reference/options.md#treefmtenable).
 
 Add your desired integration to your `devenv.nix` file. For example, the following code would enable `treefmt` with the `nixpkgs-fmt` and `rustfmt` integrations:
