@@ -189,12 +189,15 @@ impl NixLogBridge {
             ActivityType::QueryPathInfo => {
                 if let Some(store_path) = fields.first().and_then(Self::extract_string_field) {
                     let package_name = extract_package_name(&store_path);
+                    let substituter = fields.get(1).and_then(Self::extract_string_field);
 
-                    let activity = Activity::fetch(FetchKind::Query, package_name)
+                    let mut builder = Activity::fetch(FetchKind::Query, package_name)
                         .id(activity_id)
-                        .url(store_path)
-                        .parent(parent_id)
-                        .start();
+                        .parent(parent_id);
+                    if let Some(url) = substituter {
+                        builder = builder.url(url);
+                    }
+                    let activity = builder.start();
 
                     self.insert_activity(activity_id, activity_type, activity);
                 }
@@ -202,12 +205,15 @@ impl NixLogBridge {
             ActivityType::CopyPath => {
                 if let Some(store_path) = fields.first().and_then(Self::extract_string_field) {
                     let package_name = extract_package_name(&store_path);
+                    let substituter = fields.get(1).and_then(Self::extract_string_field);
 
-                    let activity = Activity::fetch(FetchKind::Download, package_name)
+                    let mut builder = Activity::fetch(FetchKind::Download, package_name)
                         .id(activity_id)
-                        .url(store_path)
-                        .parent(parent_id)
-                        .start();
+                        .parent(parent_id);
+                    if let Some(url) = substituter {
+                        builder = builder.url(url);
+                    }
+                    let activity = builder.start();
 
                     self.insert_activity(activity_id, activity_type, activity);
                 }

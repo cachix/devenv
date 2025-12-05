@@ -290,13 +290,15 @@ impl Model {
                         .and_then(|parsed| parsed.host_str().map(|h| h.to_string()))
                 });
                 let variant = match kind {
-                    FetchKind::Query => ActivityVariant::Query(QueryActivity { substituter }),
+                    FetchKind::Query => ActivityVariant::Query(QueryActivity {
+                        substituter: substituter.clone(),
+                    }),
                     FetchKind::Tree => ActivityVariant::FetchTree,
                     FetchKind::Download => ActivityVariant::Download(DownloadActivity {
                         size_current: Some(0),
                         size_total: None,
                         speed: None,
-                        substituter: None,
+                        substituter,
                     }),
                 };
                 self.create_activity(id, name, parent, url, variant);
