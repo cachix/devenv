@@ -268,9 +268,11 @@ impl NixRustBackend {
         temp_files.push(nixpkgs_config_file);
 
         // Create eval state with flake support and NIXPKGS_CONFIG
+        // load_config() loads settings from nix.conf files including access-tokens
         let mut eval_state = EvalStateBuilder::new(store.clone())
             .to_miette()
             .wrap_err("Failed to create eval state builder")?
+            .load_config()
             .base_directory(
                 paths
                     .root
