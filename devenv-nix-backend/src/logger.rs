@@ -292,14 +292,7 @@ mod tests {
         // Create logger - this registers the activity callbacks
         let _logger = setup_nix_logger().expect("Failed to setup logger");
 
-        // Create a temporary directory for the Nix store to avoid permission issues
-        let temp_dir = std::env::temp_dir().join(format!("nix-store-test-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&temp_dir);
-
-        let store_uri = format!("local?root={}", temp_dir.display());
-
-        // Create store and eval state with temporary store location
-        let store = Store::open(Some(&store_uri), []).expect("Failed to open store");
+        let store = Store::open(None, []).expect("Failed to open store");
         let mut eval_state = EvalStateBuilder::new(store)
             .expect("Failed to create EvalStateBuilder")
             .build()
@@ -309,9 +302,6 @@ mod tests {
         let expr = "1 + 1";
         let result = eval_state.eval_from_string(expr, ".");
         assert!(result.is_ok(), "Simple evaluation should work");
-
-        // Cleanup temporary directory
-        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
