@@ -1,4 +1,4 @@
-use devenv_activity::{Activity, FetchKind};
+use devenv_activity::{Activity, ActivityLevel, FetchKind, message};
 use devenv_eval_cache::Op;
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 use std::collections::HashMap;
@@ -117,6 +117,15 @@ impl NixLogBridge {
 
                 // Handle regular log messages from Nix builds
                 if level <= Verbosity::Warn {
+                    // Send as activity message for TUI display
+                    let activity_level = match level {
+                        Verbosity::Error => ActivityLevel::Error,
+                        Verbosity::Warn => ActivityLevel::Warn,
+                        _ => ActivityLevel::Info,
+                    };
+                    message(activity_level, msg);
+
+                    // Also log to tracing for file export and non-TUI modes
                     match level {
                         Verbosity::Error => error!("{msg}"),
                         Verbosity::Warn => warn!("{msg}"),

@@ -723,6 +723,15 @@ impl Model {
         self.build_logs.get(&activity_id)
     }
 
+    /// Get standalone error messages (those without a parent activity).
+    /// Returns the most recent error messages for display.
+    pub fn get_error_messages(&self) -> Vec<&Message> {
+        self.message_log
+            .iter()
+            .filter(|msg| msg.parent.is_none() && msg.level == ActivityLevel::Error)
+            .collect()
+    }
+
     pub fn get_total_duration(&self) -> Option<std::time::Duration> {
         let earliest_start = self.activities.values().map(|a| a.start_time).min()?;
         Some(Instant::now().duration_since(earliest_start))

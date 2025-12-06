@@ -5,6 +5,7 @@ use crate::{
         TerminalSize,
     },
 };
+use devenv_activity::ActivityLevel;
 use human_repr::{HumanCount, HumanDuration};
 use iocraft::Context;
 use iocraft::components::ContextProvider;
@@ -32,6 +33,9 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
                 || matches!(a.variant, ActivityVariant::Evaluating(_))
         })
         .and_then(|a| model.get_build_logs(a.id));
+
+    // Get standalone error messages for display
+    let error_messages = model.get_error_messages();
 
     // Show all activities (including the selected activity with inline logs)
     let activities_to_show: Vec<_> = active_activities.iter().collect();
@@ -147,6 +151,41 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
         .into_any(),
     );
 
+    // Error messages panel (if there are any standalone errors)
+    let error_panel_height = if !error_messages.is_empty() {
+        // Create error message elements
+        let error_elements: Vec<AnyElement<'static>> = error_messages
+            .iter()
+            .take(10) // Limit to 10 most recent errors
+            .map(|msg| {
+                element! {
+                    View(height: 1, flex_direction: FlexDirection::Row, padding_left: 1, padding_right: 1) {
+                        View(margin_right: 1, flex_shrink: 0.0) {
+                            Text(content: "✗", color: COLOR_FAILED)
+                        }
+                        View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                            Text(content: msg.text.clone(), color: COLOR_FAILED)
+                        }
+                    }
+                }
+                .into_any()
+            })
+            .collect();
+
+        let error_count = error_elements.len();
+        children.push(
+            element! {
+                View(flex_direction: FlexDirection::Column, width: 100pct) {
+                    #(error_elements)
+                }
+            }
+            .into_any(),
+        );
+        error_count
+    } else {
+        0
+    };
+
     // Summary line at bottom
     children.push(
         element! {
@@ -161,9 +200,9 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
         .into_any(),
     );
 
-    // Total height: activities (with inline logs) + summary line + buffer
+    // Total height: activities (with inline logs) + error panel + summary line + buffer
     // Constrain to terminal height to prevent overflow when logs are expanded
-    let calculated_height = dynamic_height + 2; // +1 for summary, +1 buffer to prevent overflow
+    let calculated_height = dynamic_height + error_panel_height as u32 + 2; // +1 for summary, +1 buffer
     let total_height = calculated_height.min(terminal_size.height as u32);
 
     element! {
@@ -470,18 +509,29 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }
-        ActivityVariant::Message(_) => {
-            let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_completed(Some(true))
+        ActivityVariant::Message(msg_data) => {
+            // Determine icon and color based on message level
+            let (is_error, text_color) = match msg_data.level {
+                ActivityLevel::Error => (true, COLOR_FAILED),
+                ActivityLevel::Warn => (false, Color::AnsiValue(214)), // Orange/yellow for warnings
+                _ => (false, Color::Reset),
+            };
+
+            let prefix = HierarchyPrefixComponent::new(indent.clone(), *depth)
+                .with_completed(Some(!is_error)) // false = show ✗ in red for errors
                 .render();
 
-            return ActivityTextComponent::new(
-                "".to_string(),
-                activity.name.clone(),
-                "".to_string(),
-            )
-            .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            return element! {
+                View(height: 1, flex_direction: FlexDirection::Row, padding_left: 1, padding_right: 1) {
+                    View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                        #(prefix)
+                    }
+                    View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                        Text(content: activity.name.clone(), color: text_color)
+                    }
+                }
+            }
+            .into_any();
         }
         ActivityVariant::Unknown => {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)

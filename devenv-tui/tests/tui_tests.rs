@@ -4,7 +4,8 @@
 //! the TUI renders the expected output.
 
 use devenv_activity::{
-    ActivityEvent, ActivityOutcome, Build, Evaluate, Fetch, FetchKind, Operation, Task, Timestamp,
+    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Evaluate, Fetch, FetchKind, Message,
+    Operation, Task, Timestamp,
 };
 use devenv_tui::{Model, view::view};
 use iocraft::prelude::*;
@@ -766,3 +767,133 @@ fn test_mixed_completed_and_active() {
     insta::assert_snapshot!(output);
 }
 
+/// Test that standalone error messages (without parent) show in the TUI.
+#[test]
+fn test_standalone_error_message() {
+    let mut model = new_test_model();
+
+    // Add a standalone error message (no parent activity)
+    let error_event = ActivityEvent::Message(Message {
+        level: ActivityLevel::Error,
+        text: "error: attribute 'nonExistentPackage' not found".to_string(),
+        parent: None,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(error_event);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test that multiple error messages show in the TUI.
+#[test]
+fn test_multiple_error_messages() {
+    let mut model = new_test_model();
+
+    // Add multiple standalone error messages
+    let error1 = ActivityEvent::Message(Message {
+        level: ActivityLevel::Error,
+        text: "error: attribute 'foo' not found".to_string(),
+        parent: None,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(error1);
+
+    let error2 = ActivityEvent::Message(Message {
+        level: ActivityLevel::Error,
+        text: "error: while evaluating 'bar': infinite recursion".to_string(),
+        parent: None,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(error2);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test that error messages with parent activities show as child activities.
+#[test]
+fn test_error_message_with_parent() {
+    let mut model = new_test_model();
+
+    // Start an evaluation
+    let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
+        id: 1,
+        name: "devenv.nix".to_string(),
+        parent: None,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(eval_event);
+
+    // Add an error message attached to the evaluation
+    let error_event = ActivityEvent::Message(Message {
+        level: ActivityLevel::Error,
+        text: "error: undefined variable 'pkgs'".to_string(),
+        parent: Some(1),
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(error_event);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test that warning messages with parent activities show as child activities.
+#[test]
+fn test_warning_message_with_parent() {
+    let mut model = new_test_model();
+
+    // Start an evaluation
+    let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
+        id: 1,
+        name: "devenv.nix".to_string(),
+        parent: None,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(eval_event);
+
+    // Add a warning message attached to the evaluation
+    let warn_event = ActivityEvent::Message(Message {
+        level: ActivityLevel::Warn,
+        text: "warning: deprecated option 'services.foo' used".to_string(),
+        parent: Some(1),
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(warn_event);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test error messages alongside active builds.
+#[test]
+fn test_error_with_active_builds() {
+    let mut model = new_test_model();
+
+    // Start a build
+    let build_event = ActivityEvent::Build(Build::Start {
+        id: 1,
+        name: "hello-2.12".to_string(),
+        parent: None,
+        derivation_path: None,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(build_event);
+    model.apply_activity_event(ActivityEvent::Build(Build::Phase {
+        id: 1,
+        phase: "buildPhase".to_string(),
+        timestamp: Timestamp::now(),
+    }));
+
+    // Add an error message
+    let error_event = ActivityEvent::Message(Message {
+        level: ActivityLevel::Error,
+        text: "error: builder for '/nix/store/...-hello.drv' failed".to_string(),
+        parent: None,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(error_event);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
