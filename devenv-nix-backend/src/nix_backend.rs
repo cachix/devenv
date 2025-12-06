@@ -471,6 +471,11 @@ impl NixRustBackend {
             settings::set("pure-eval", "true")
                 .to_miette()
                 .wrap_err("Failed to set pure-eval mode")?;
+            // Allow local filesystem paths while maintaining other purity guarantees
+            // This enables evaluating local devenv.nix files without copying entire repo to store
+            settings::set("pure-eval-allow-local-paths", "true")
+                .to_miette()
+                .wrap_err("Failed to set pure-eval-allow-local-paths")?;
         }
 
         // nix_option: apply custom Nix configuration pairs
