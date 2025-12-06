@@ -206,11 +206,7 @@ async fn main() -> Result<()> {
             if let Err(e) = result {
                 warn!("Replay error: {e}");
             }
-            // Replay finished, wait for TUI or Ctrl+C
-            tokio::select! {
-                _ = &mut tui_task => {}
-                _ = ctrl_c() => {}
-            }
+            shutdown.shutdown();
         }
         _ = &mut tui_task => {
             info!("TUI exited");
