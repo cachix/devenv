@@ -511,20 +511,35 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
         ActivityVariant::Message(msg_data) => {
             // Determine icon and color based on message level
-            let (is_error, text_color) = match msg_data.level {
-                ActivityLevel::Error => (true, COLOR_FAILED),
-                ActivityLevel::Warn => (false, Color::AnsiValue(214)), // Orange/yellow for warnings
-                _ => (false, Color::Reset),
+            // Following CLI conventions: errors get ✗, others get • (dot)
+            let (icon, icon_color, text_color) = match msg_data.level {
+                ActivityLevel::Error => ("✗", COLOR_FAILED, COLOR_FAILED),
+                ActivityLevel::Warn => ("•", Color::AnsiValue(214), Color::AnsiValue(214)), // Yellow
+                ActivityLevel::Info => ("•", COLOR_ACTIVE, Color::Reset), // Blue dot
+                _ => ("•", COLOR_HIERARCHY, Color::Reset), // Gray dot for debug/trace
             };
 
-            let prefix = HierarchyPrefixComponent::new(indent.clone(), *depth)
-                .with_completed(Some(!is_error)) // false = show ✗ in red for errors
-                .render();
+            // Build prefix with indentation for child messages
+            let mut prefix_children: Vec<AnyElement<'static>> = vec![];
+            if *depth > 0 {
+                let spinner_offset = 2;
+                let nesting_indent = "  ".repeat(*depth - 1);
+                let total_indent = format!("{}{}", " ".repeat(spinner_offset), nesting_indent);
+                prefix_children.push(element!(Text(content: total_indent)).into_any());
+            }
+
+            // Add icon with appropriate color
+            prefix_children.push(
+                element!(View(margin_right: 1) {
+                    Text(content: icon, color: icon_color)
+                })
+                .into_any(),
+            );
 
             return element! {
                 View(height: 1, flex_direction: FlexDirection::Row, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                        #(prefix)
+                        #(prefix_children)
                     }
                     View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
                         Text(content: activity.name.clone(), color: text_color)
