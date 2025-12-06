@@ -776,6 +776,7 @@ fn test_standalone_error_message() {
     let error_event = ActivityEvent::Message(Message {
         level: ActivityLevel::Error,
         text: "error: attribute 'nonExistentPackage' not found".to_string(),
+        details: None,
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -794,6 +795,7 @@ fn test_multiple_error_messages() {
     let error1 = ActivityEvent::Message(Message {
         level: ActivityLevel::Error,
         text: "error: attribute 'foo' not found".to_string(),
+        details: None,
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -802,6 +804,7 @@ fn test_multiple_error_messages() {
     let error2 = ActivityEvent::Message(Message {
         level: ActivityLevel::Error,
         text: "error: while evaluating 'bar': infinite recursion".to_string(),
+        details: None,
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -829,6 +832,7 @@ fn test_error_message_with_parent() {
     let error_event = ActivityEvent::Message(Message {
         level: ActivityLevel::Error,
         text: "error: undefined variable 'pkgs'".to_string(),
+        details: None,
         parent: Some(1),
         timestamp: Timestamp::now(),
     });
@@ -856,6 +860,7 @@ fn test_warning_message_with_parent() {
     let warn_event = ActivityEvent::Message(Message {
         level: ActivityLevel::Warn,
         text: "warning: deprecated option 'services.foo' used".to_string(),
+        details: None,
         parent: Some(1),
         timestamp: Timestamp::now(),
     });
@@ -889,7 +894,64 @@ fn test_error_with_active_builds() {
     let error_event = ActivityEvent::Message(Message {
         level: ActivityLevel::Error,
         text: "error: builder for '/nix/store/...-hello.drv' failed".to_string(),
+        details: None,
         parent: None,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(error_event);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test that error messages with details show expansion indicator.
+#[test]
+fn test_error_message_with_details() {
+    let mut model = new_test_model();
+
+    // Start an evaluation
+    let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
+        id: 1,
+        name: "devenv.nix".to_string(),
+        parent: None,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(eval_event);
+
+    // Add an error message with details (stack trace)
+    let error_event = ActivityEvent::Message(Message {
+        level: ActivityLevel::Error,
+        text: "error: undefined variable 'pkgs'".to_string(),
+        details: Some("error:\n       … while evaluating\n         at devenv.nix:10:5\n\n       error: undefined variable 'pkgs'".to_string()),
+        parent: Some(1),
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(error_event);
+
+    let output = render_to_string(&model);
+    insta::assert_snapshot!(output);
+}
+
+/// Test that error messages without details don't show the [+] indicator.
+#[test]
+fn test_error_message_without_details() {
+    let mut model = new_test_model();
+
+    // Start an evaluation
+    let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
+        id: 1,
+        name: "devenv.nix".to_string(),
+        parent: None,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(eval_event);
+
+    // Add an error message without details
+    let error_event = ActivityEvent::Message(Message {
+        level: ActivityLevel::Error,
+        text: "error: simple error".to_string(),
+        details: None,
+        parent: Some(1),
         timestamp: Timestamp::now(),
     });
     model.apply_activity_event(error_event);

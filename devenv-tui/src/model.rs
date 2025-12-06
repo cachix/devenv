@@ -86,6 +86,7 @@ pub struct EvaluatingActivity {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MessageActivity {
     pub level: ActivityLevel,
+    pub details: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -541,13 +542,23 @@ impl Model {
             let id = self.next_message_id;
             self.next_message_id += 1;
 
-            let variant = ActivityVariant::Message(MessageActivity { level: msg.level });
+            let has_details = msg.details.is_some();
+            let variant = ActivityVariant::Message(MessageActivity {
+                level: msg.level,
+                details: msg.details.clone(),
+            });
             self.create_activity(id, msg.text, msg.parent, None, variant);
+
+            // Store details as lines in build_logs for expansion
+            if let Some(details) = msg.details {
+                let lines: VecDeque<String> = details.lines().map(String::from).collect();
+                self.build_logs.insert(id, lines);
+            }
 
             // Mark message activities as immediately completed (they're just informational)
             if let Some(activity) = self.activities.get_mut(&id) {
                 activity.state = NixActivityState::Completed {
-                    success: true,
+                    success: has_details, // Show as "expandable" if has details
                     duration: std::time::Duration::ZERO,
                 };
                 activity.completed_at = Some(Instant::now());

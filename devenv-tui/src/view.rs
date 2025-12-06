@@ -24,13 +24,14 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     let show_expanded_logs = model.ui.view_options.show_expanded_logs;
     let terminal_size = model.ui.terminal_size;
 
-    // Check if we have a selected activity with logs
+    // Check if we have a selected activity with logs/details
     let selected_activity = model.get_selected_activity();
     let selected_logs = selected_activity
         .as_ref()
         .filter(|a| {
             matches!(a.variant, ActivityVariant::Build(_))
                 || matches!(a.variant, ActivityVariant::Evaluating(_))
+                || matches!(a.variant, ActivityVariant::Message(_))
         })
         .and_then(|a| model.get_build_logs(a.id));
 
@@ -47,12 +48,17 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
         let activity = &display_activity.activity;
         let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
 
-        // Pass logs if this is the selected build or evaluating activity
+        // Pass logs for selected build/eval activities, or always for messages with details
         let activity_logs = if is_selected
             && (matches!(activity.variant, ActivityVariant::Build(_))
                 || matches!(activity.variant, ActivityVariant::Evaluating(_)))
         {
             selected_logs.cloned()
+        } else if let ActivityVariant::Message(ref msg_data) = activity.variant
+            && msg_data.details.is_some()
+        {
+            // Always pass details for messages (they're always shown)
+            model.get_build_logs(activity.id).cloned()
         } else {
             None
         };
@@ -117,7 +123,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
             }
         }
 
-        // Build and evaluation activities use early return with custom height - account for it
+        // Build and evaluation activities show logs when selected
         if is_selected
             && (matches!(display_activity.activity.variant, ActivityVariant::Build(_))
                 || matches!(
@@ -126,8 +132,22 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
                 ))
             && let Some(logs) = selected_logs.as_ref()
         {
-            let logs_component = BuildLogsComponent::new(Some(logs), show_expanded_logs);
+            let logs_component = ExpandedContentComponent::new(Some(logs), show_expanded_logs);
             total_height += logs_component.calculate_height();
+        }
+
+        // Message activities with details show limited lines (like build logs) + summary
+        if let ActivityVariant::Message(ref msg_data) = display_activity.activity.variant
+            && msg_data.details.is_some()
+        {
+            if let Some(logs) = model.get_build_logs(display_activity.activity.id) {
+                // Use same viewport limits as build logs, plus 1 for summary
+                let max_lines = if show_expanded_logs { 100 } else { 10 };
+                let visible_count = logs.len().min(max_lines);
+                // We already counted 1 for the base activity, so add visible_count for details
+                // (the summary replaces the base activity line in the rendering)
+                total_height += visible_count;
+            }
         }
 
     }
@@ -271,7 +291,8 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let mut build_elements = vec![main_line];
 
                 // Add build logs using the component
-                let logs_component = BuildLogsComponent::new(logs.as_ref(), *expanded_logs);
+                let logs_component = ExpandedContentComponent::new(logs.as_ref(), *expanded_logs)
+                    .with_empty_message("  → no build logs yet");
                 let log_elements = logs_component.render();
                 build_elements.extend(log_elements);
 
@@ -452,7 +473,8 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let mut elements = vec![main_line];
 
                 // Add file list using the logs component
-                let logs_component = BuildLogsComponent::new(logs.as_ref(), *expanded_logs);
+                let logs_component = ExpandedContentComponent::new(logs.as_ref(), *expanded_logs)
+                    .with_empty_message("  → no files evaluated yet");
                 let log_elements = logs_component.render();
                 elements.extend(log_elements);
 
@@ -519,30 +541,92 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 _ => ("•", COLOR_HIERARCHY, Color::Reset), // Gray dot for debug/trace
             };
 
-            // Build prefix with indentation for child messages
-            let mut prefix_children: Vec<AnyElement<'static>> = vec![];
-            if *depth > 0 {
+            // Build prefix string for indentation
+            let prefix_str = if *depth > 0 {
                 let spinner_offset = 2;
                 let nesting_indent = "  ".repeat(*depth - 1);
-                let total_indent = format!("{}{}", " ".repeat(spinner_offset), nesting_indent);
-                prefix_children.push(element!(Text(content: total_indent)).into_any());
+                format!("{}{}", " ".repeat(spinner_offset), nesting_indent)
+            } else {
+                String::new()
+            };
+
+            // For errors, always show full message including details
+            // Show trace first, then the error summary at the bottom
+            let has_details = msg_data.details.is_some();
+            if has_details && logs.is_some() {
+                let mut all_lines: Vec<AnyElement<'static>> = vec![];
+
+                // First add detail/trace lines (limited to viewport like build logs)
+                if let Some(detail_lines) = logs.as_ref() {
+                    // Use same viewport limits as build logs
+                    let max_lines = if *expanded_logs { 100 } else { 10 };
+                    let visible_lines: Vec<_> = detail_lines
+                        .iter()
+                        .rev()
+                        .take(max_lines)
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .rev()
+                        .collect();
+
+                    for line in visible_lines {
+                        all_lines.push(
+                            element! {
+                                View(height: 1, flex_direction: FlexDirection::Row, padding_left: 1, padding_right: 1) {
+                                    View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                                        Text(content: prefix_str.clone())
+                                        View(margin_right: 1) {
+                                            Text(content: " ")
+                                        }
+                                    }
+                                    View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                                        Text(content: line.clone(), color: COLOR_HIERARCHY)
+                                    }
+                                }
+                            }
+                            .into_any(),
+                        );
+                    }
+                }
+
+                // Last line: icon + error summary
+                all_lines.push(
+                    element! {
+                        View(height: 1, flex_direction: FlexDirection::Row, padding_left: 1, padding_right: 1) {
+                            View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                                Text(content: prefix_str.clone())
+                                View(margin_right: 1) {
+                                    Text(content: icon, color: icon_color)
+                                }
+                            }
+                            View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                                Text(content: activity.name.clone(), color: if *is_selected { COLOR_INTERACTIVE } else { text_color })
+                            }
+                        }
+                    }
+                    .into_any(),
+                );
+
+                let total_height = all_lines.len() as u32;
+                return element! {
+                    View(height: total_height, flex_direction: FlexDirection::Column) {
+                        #(all_lines)
+                    }
+                }
+                .into_any();
             }
 
-            // Add icon with appropriate color
-            prefix_children.push(
-                element!(View(margin_right: 1) {
-                    Text(content: icon, color: icon_color)
-                })
-                .into_any(),
-            );
-
+            // Simple single-line message (no details)
             return element! {
                 View(height: 1, flex_direction: FlexDirection::Row, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                        #(prefix_children)
+                        Text(content: prefix_str)
+                        View(margin_right: 1) {
+                            Text(content: icon, color: icon_color)
+                        }
                     }
                     View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
-                        Text(content: activity.name.clone(), color: text_color)
+                        Text(content: activity.name.clone(), color: if *is_selected { COLOR_INTERACTIVE } else { text_color })
                     }
                 }
             }

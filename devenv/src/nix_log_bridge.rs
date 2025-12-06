@@ -1,4 +1,4 @@
-use devenv_activity::{Activity, ActivityLevel, FetchKind, message};
+use devenv_activity::{Activity, ActivityLevel, FetchKind, message, message_with_details};
 use devenv_eval_cache::Op;
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 use std::collections::HashMap;
@@ -123,7 +123,14 @@ impl NixLogBridge {
                         Verbosity::Warn => ActivityLevel::Warn,
                         _ => ActivityLevel::Info,
                     };
-                    message(activity_level, msg);
+
+                    // Parse Nix errors to extract summary and details
+                    if activity_level == ActivityLevel::Error {
+                        let (summary, details) = parse_nix_error(msg);
+                        message_with_details(activity_level, summary, details);
+                    } else {
+                        message(activity_level, msg);
+                    }
 
                     // Also log to tracing for file export and non-TUI modes
                     match level {
@@ -374,6 +381,40 @@ fn extract_package_name(store_path: &str) -> String {
     extract_nix_name(store_path, false)
 }
 
+/// Parse a Nix error message to extract the summary and details.
+///
+/// Nix errors have the format:
+/// ```text
+/// error:
+///        … stack trace lines starting with ellipsis …
+///        error: <actual error message>
+/// ```
+///
+/// Returns (summary, details) where summary is the final error line
+/// and details is the full original message (including stack trace).
+fn parse_nix_error(msg: &str) -> (String, Option<String>) {
+    // ANSI codes don't appear within "error:" itself, so we can search directly
+    if let Some(last_error_pos) = msg.rfind("error:") {
+        let line_start = msg[..last_error_pos]
+            .rfind('\n')
+            .map(|p| p + 1)
+            .unwrap_or(0);
+
+        let summary = msg[line_start..].trim().to_string();
+
+        // Another "error:" before this one indicates a stack trace
+        let details = if msg[..line_start].contains("error:") {
+            Some(msg.to_string())
+        } else {
+            None
+        };
+
+        (summary, details)
+    } else {
+        (msg.to_string(), None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -402,5 +443,39 @@ mod tests {
             "xyz456-rust-1.70.0-dev"
         );
         assert_eq!(extract_package_name("simple-name"), "simple-name");
+    }
+
+    #[test]
+    fn test_parse_nix_error_simple() {
+        // Simple error without stack trace
+        let (summary, details) = parse_nix_error("error: attribute 'foo' not found");
+        assert_eq!(summary, "error: attribute 'foo' not found");
+        assert!(details.is_none());
+    }
+
+    #[test]
+    fn test_parse_nix_error_with_stack_trace() {
+        // Error with stack trace (like real Nix output)
+        let msg = "error:\n       … while evaluating\n         at file.nix:1:1\n\n       error: undefined variable 'pkgs'";
+        let (summary, details) = parse_nix_error(msg);
+        assert_eq!(summary, "error: undefined variable 'pkgs'");
+        assert!(details.is_some());
+        assert_eq!(details.unwrap(), msg); // Original message preserved
+    }
+
+    #[test]
+    fn test_parse_nix_error_with_ansi() {
+        let msg = "\x1b[31;1merror:\x1b[0m\n       … stack trace\n\n       \x1b[31;1merror:\x1b[0m actual error message";
+        let (summary, details) = parse_nix_error(msg);
+        assert_eq!(summary, "\x1b[31;1merror:\x1b[0m actual error message");
+        assert!(details.is_some());
+    }
+
+    #[test]
+    fn test_parse_nix_error_only_error_prefix() {
+        // Just "error:" followed by the actual message on same line
+        let (summary, details) = parse_nix_error("error: something went wrong");
+        assert_eq!(summary, "error: something went wrong");
+        assert!(details.is_none());
     }
 }
