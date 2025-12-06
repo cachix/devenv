@@ -1,4 +1,6 @@
-use devenv_activity::{Activity, ActivityLevel, FetchKind, message};
+use devenv_activity::{Activity, ActivityLevel, FetchKind, message, message_with_details};
+use regex::Regex;
+use std::sync::LazyLock;
 use devenv_eval_cache::Op;
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 use std::collections::HashMap;
@@ -123,7 +125,14 @@ impl NixLogBridge {
                         Verbosity::Warn => ActivityLevel::Warn,
                         _ => ActivityLevel::Info,
                     };
-                    message(activity_level, msg);
+
+                    // Parse Nix errors to extract summary and details
+                    if activity_level == ActivityLevel::Error {
+                        let (summary, details) = parse_nix_error(msg);
+                        message_with_details(activity_level, summary, details);
+                    } else {
+                        message(activity_level, msg);
+                    }
 
                     // Also log to tracing for file export and non-TUI modes
                     match level {
@@ -374,6 +383,48 @@ fn extract_package_name(store_path: &str) -> String {
     extract_nix_name(store_path, false)
 }
 
+/// Regex for stripping ANSI escape codes
+static ANSI_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\x1b\[[0-9;]*m").expect("valid regex"));
+
+/// Strip ANSI escape codes from a string
+fn strip_ansi_codes(s: &str) -> String {
+    ANSI_REGEX.replace_all(s, "").to_string()
+}
+
+/// Parse a Nix error message to extract the summary and details.
+///
+/// Nix errors have the format:
+/// ```text
+/// error:
+///        … stack trace lines starting with ellipsis …
+///        error: <actual error message>
+/// ```
+///
+/// Returns (summary, details) where summary is the final error line
+/// and details is the full original message (including stack trace).
+fn parse_nix_error(msg: &str) -> (String, Option<String>) {
+    // Strip ANSI codes for parsing
+    let stripped = strip_ansi_codes(msg);
+
+    // Find the last "error:" which contains the actual error
+    if let Some(last_error_pos) = stripped.rfind("error:") {
+        let summary = stripped[last_error_pos..].trim().to_string();
+
+        // If there's content before the last error, include the full message as details
+        let details_part = stripped[..last_error_pos].trim();
+        let details = if details_part.is_empty() || details_part == "error:" {
+            None
+        } else {
+            Some(msg.to_string()) // Keep original with ANSI codes for details
+        };
+
+        (summary, details)
+    } else {
+        (msg.to_string(), None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -402,5 +453,50 @@ mod tests {
             "xyz456-rust-1.70.0-dev"
         );
         assert_eq!(extract_package_name("simple-name"), "simple-name");
+    }
+
+    #[test]
+    fn test_strip_ansi_codes() {
+        assert_eq!(strip_ansi_codes("\x1b[31;1merror:\x1b[0m"), "error:");
+        assert_eq!(strip_ansi_codes("no codes here"), "no codes here");
+        assert_eq!(
+            strip_ansi_codes("\x1b[34;1mblue\x1b[0m and \x1b[32mgreen\x1b[0m"),
+            "blue and green"
+        );
+    }
+
+    #[test]
+    fn test_parse_nix_error_simple() {
+        // Simple error without stack trace
+        let (summary, details) = parse_nix_error("error: attribute 'foo' not found");
+        assert_eq!(summary, "error: attribute 'foo' not found");
+        assert!(details.is_none());
+    }
+
+    #[test]
+    fn test_parse_nix_error_with_stack_trace() {
+        // Error with stack trace (like real Nix output)
+        let msg = "error:\n       … while evaluating\n         at file.nix:1:1\n\n       error: undefined variable 'pkgs'";
+        let (summary, details) = parse_nix_error(msg);
+        assert_eq!(summary, "error: undefined variable 'pkgs'");
+        assert!(details.is_some());
+        assert_eq!(details.unwrap(), msg); // Original message preserved
+    }
+
+    #[test]
+    fn test_parse_nix_error_with_ansi() {
+        // Error with ANSI codes (like real Nix output)
+        let msg = "\x1b[31;1merror:\x1b[0m\n       … stack trace\n\n       \x1b[31;1merror:\x1b[0m actual error message";
+        let (summary, details) = parse_nix_error(msg);
+        assert_eq!(summary, "error: actual error message");
+        assert!(details.is_some());
+    }
+
+    #[test]
+    fn test_parse_nix_error_only_error_prefix() {
+        // Just "error:" followed by the actual message on same line
+        let (summary, details) = parse_nix_error("error: something went wrong");
+        assert_eq!(summary, "error: something went wrong");
+        assert!(details.is_none());
     }
 }

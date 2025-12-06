@@ -556,15 +556,25 @@ fn shorten_store_path_aggressive(path: &str) -> String {
     }
 }
 
-/// Component for rendering build logs inline below build activities
-pub struct BuildLogsComponent<'a> {
-    pub logs: Option<&'a VecDeque<String>>,
+/// Component for rendering expanded content (logs, details, traces) inline below activities
+pub struct ExpandedContentComponent<'a> {
+    pub lines: Option<&'a VecDeque<String>>,
     pub expanded: bool,
+    pub empty_message: &'a str,
 }
 
-impl<'a> BuildLogsComponent<'a> {
-    pub fn new(logs: Option<&'a VecDeque<String>>, expanded: bool) -> Self {
-        Self { logs, expanded }
+impl<'a> ExpandedContentComponent<'a> {
+    pub fn new(lines: Option<&'a VecDeque<String>>, expanded: bool) -> Self {
+        Self {
+            lines,
+            expanded,
+            empty_message: "  → no content",
+        }
+    }
+
+    pub fn with_empty_message(mut self, message: &'a str) -> Self {
+        self.empty_message = message;
+        self
     }
 
     pub fn render(&self) -> Vec<AnyElement<'static>> {
@@ -574,39 +584,39 @@ impl<'a> BuildLogsComponent<'a> {
             LOG_VIEWPORT_COLLAPSED
         };
 
-        if let Some(logs) = &self.logs
-            && !logs.is_empty()
+        if let Some(lines) = &self.lines
+            && !lines.is_empty()
         {
             // Take the last N lines that fit in viewport
-            let log_lines: Vec<_> = logs.iter().rev().take(max_viewport_height).rev().collect();
+            let visible_lines: Vec<_> = lines.iter().rev().take(max_viewport_height).rev().collect();
 
-            if !log_lines.is_empty() {
-                // Use actual number of log lines, not fixed viewport height
-                let actual_height = log_lines.len();
+            if !visible_lines.is_empty() {
+                // Use actual number of lines, not fixed viewport height
+                let actual_height = visible_lines.len();
 
-                // Create elements for all log lines
-                let mut log_elements = vec![];
-                for line in log_lines {
-                    log_elements.push(element! {
+                // Create elements for all lines
+                let mut line_elements = vec![];
+                for line in visible_lines {
+                    line_elements.push(element! {
                             View(height: 1, flex_direction: FlexDirection::Row, padding_left: 2, padding_right: 1) {
                                 Text(content: line.clone(), color: Color::AnsiValue(245))
                             }
                         }.into_any());
                 }
 
-                // Return a single container with actual height of log lines
+                // Return a single container with actual height of lines
                 return vec![element! {
                         View(height: actual_height as u32, flex_direction: FlexDirection::Column, overflow: Overflow::Hidden) {
-                            #(log_elements)
+                            #(line_elements)
                         }
                     }.into_any()];
             }
         }
 
-        // Fallback: show "no logs" message with minimal height
+        // Fallback: show empty message with minimal height
         vec![element! {
             View(height: 1, flex_direction: FlexDirection::Column, padding_left: 2, padding_right: 1) {
-                Text(content: "  → no build logs yet".to_string(), color: Color::AnsiValue(245))
+                Text(content: self.empty_message.to_string(), color: Color::AnsiValue(245))
             }
         }.into_any()]
     }
@@ -619,17 +629,20 @@ impl<'a> BuildLogsComponent<'a> {
             LOG_VIEWPORT_COLLAPSED
         };
 
-        if let Some(logs) = &self.logs
-            && !logs.is_empty()
+        if let Some(lines) = &self.lines
+            && !lines.is_empty()
         {
-            let log_lines: Vec<_> = logs.iter().rev().take(max_viewport_height).rev().collect();
-            if !log_lines.is_empty() {
-                return log_lines.len();
+            let visible_lines: Vec<_> = lines.iter().rev().take(max_viewport_height).rev().collect();
+            if !visible_lines.is_empty() {
+                return visible_lines.len();
             }
         }
 
-        // Fallback: minimal height for "no logs" message
+        // Fallback: minimal height for empty message
         1
     }
 }
+
+/// Backwards-compatible alias
+pub type BuildLogsComponent<'a> = ExpandedContentComponent<'a>;
 

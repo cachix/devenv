@@ -331,6 +331,8 @@ pub struct Message {
     pub level: ActivityLevel,
     pub text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub parent: Option<u64>,
     pub timestamp: Timestamp,
 }
@@ -1072,11 +1074,21 @@ fn get_current_activity_id() -> Option<u64> {
 
 /// Emit a standalone message, associated with the current activity if one exists
 pub fn message(level: ActivityLevel, text: impl Into<String>) {
+    message_with_details(level, text, None)
+}
+
+/// Emit a standalone message with optional details, associated with the current activity if one exists
+pub fn message_with_details(
+    level: ActivityLevel,
+    text: impl Into<String>,
+    details: Option<String>,
+) {
     let text_str = text.into();
     let parent = get_current_activity_id();
     send_activity_event(ActivityEvent::Message(Message {
         level,
         text: text_str,
+        details,
         parent,
         timestamp: Timestamp::now(),
     }));
@@ -1265,6 +1277,7 @@ mod tests {
         let event = ActivityEvent::Message(Message {
             level: ActivityLevel::Info,
             text: "Test message".to_string(),
+            details: None,
             parent: None,
             timestamp: Timestamp(SystemTime::UNIX_EPOCH),
         });
