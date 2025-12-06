@@ -2433,8 +2433,6 @@ null or string
 
 ## delta.enable
 
-
-
 Integrate delta into git: https://dandavison.github.io/delta/.
 
 
@@ -2547,6 +2545,8 @@ string
 
 
 ## devcontainer.settings.overrideCommand
+
+
 
 Override the default command.
 
@@ -5331,8 +5331,6 @@ boolean
 
 ## git-hooks.hooks.cmake-format
 
-
-
 cmake-format hook
 
 
@@ -5451,6 +5449,8 @@ boolean
 
 
 ## git-hooks.hooks.convco.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
@@ -7357,8 +7357,6 @@ submodule
 
 ## git-hooks.hooks.isort.enable
 
-
-
 Whether to enable this pre-commit hook.
 
 
@@ -7456,6 +7454,8 @@ submodule
 
 
 ## git-hooks.hooks.lacheck.enable
+
+
 
 Whether to enable this pre-commit hook.
 
