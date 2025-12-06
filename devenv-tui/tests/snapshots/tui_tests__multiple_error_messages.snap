@@ -1,0 +1,6 @@
+---
+source: devenv-tui/tests/tui_tests.rs
+expression: output
+---
+ ✗ error: attribute 'foo' not found
+ ✗ error: while evaluating 'bar': infinite

@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 devenv-cache-core.workspace = true
+devenv-tui.workspace = true
 
 clap.workspace = true
 console.workspace = true

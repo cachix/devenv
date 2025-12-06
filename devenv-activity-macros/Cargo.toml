@@ -1,0 +1,16 @@
+[package]
+name = "devenv-activity-macros"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Proc-macros for devenv activity instrumentation"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "parsing", "extra-traits"] }

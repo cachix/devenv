@@ -1,0 +1,13 @@
+2025-01-14T10:00:00.000Z @nix {"action":"start","id":1,"level":3,"type":105,"text":"building /nix/store/abc123-hello-2.12.drv","parent":0,"fields":["/nix/store/abc123-hello-2.12.drv"]}
+2025-01-14T10:00:00.100Z @nix {"action":"result","id":1,"type":104,"fields":["unpacking sources"]}
+2025-01-14T10:00:01.000Z @nix {"action":"result","id":1,"type":104,"fields":["configuring"]}
+2025-01-14T10:00:02.000Z @nix {"action":"result","id":1,"type":104,"fields":["building"]}
+2025-01-14T10:00:02.500Z @nix {"action":"start","id":2,"level":3,"type":100,"text":"copying path","parent":0,"fields":["/nix/store/xyz789-nodejs-18.19.0","https://cache.nixos.org"]}
+2025-01-14T10:00:02.600Z @nix {"action":"result","id":2,"type":105,"fields":[2621440,10485760]}
+2025-01-14T10:00:02.800Z @nix {"action":"result","id":2,"type":105,"fields":[7340032,10485760]}
+2025-01-14T10:00:03.000Z @nix {"action":"result","id":2,"type":105,"fields":[10485760,10485760]}
+2025-01-14T10:00:03.200Z @nix {"action":"stop","id":2}
+2025-01-14T10:00:03.500Z @nix {"action":"start","id":3,"level":3,"type":109,"text":"querying path info","parent":0,"fields":["/nix/store/def456-python3-3.11.7","https://cache.nixos.org"]}
+2025-01-14T10:00:04.000Z @nix {"action":"stop","id":3}
+2025-01-14T10:00:04.500Z @nix {"action":"result","id":1,"type":104,"fields":["installing"]}
+2025-01-14T10:00:06.000Z @nix {"action":"stop","id":1}

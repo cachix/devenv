@@ -1,5 +1,6 @@
 use crate::{devenv, nix_log_bridge::NixLogBridge, util};
 use async_trait::async_trait;
+use devenv_activity::{Activity, ActivityLevel, message};
 use devenv_core::{
     cachix::{
         CacheMetadata, CachixCacheInfo, CachixConfig, CachixManager, StorePing,
@@ -22,7 +23,7 @@ use std::process;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::OnceCell;
-use tracing::{Instrument, debug, debug_span, error, info, instrument, warn};
+use tracing::{Instrument, debug, error, info, instrument, warn};
 
 // Nix-specific flake template
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -461,34 +462,14 @@ impl Nix {
                 }
             });
 
-            // Set current operation for Nix log correlation
-            if self.global_options.verbose {
-                // In verbose mode: create bridge operation that will be child of the debug span
-                let cmd_string = display_command(&cmd);
-                // Use a simple hash of the command for the operation ID
-                use std::hash::{Hash, Hasher};
-                let mut cmd_hash = std::collections::hash_map::DefaultHasher::new();
-                cmd_string.hash(&mut cmd_hash);
-                let command_operation_id = format!("nix-cmd-{:x}", cmd_hash.finish());
-                nix_bridge.set_current_operation(command_operation_id);
-            }
-            // In non-verbose mode: don't set bridge operation, logs will attach via fallback
-
             let pretty_cmd = display_command(&cmd);
-            let span = debug_span!(
-                "Running command",
-                command = pretty_cmd.as_str(),
-                devenv.user_message = format!("Running command: {}", pretty_cmd)
-            );
+            let activity = Activity::command(&pretty_cmd).command(&pretty_cmd).start();
             let output = cached_cmd
                 .output(&mut cmd)
-                .instrument(span)
+                .instrument(activity.span())
                 .await
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
-
-            // Clear bridge operation
-            nix_bridge.clear_current_operation();
 
             // Record cache status if applicable
             if output.cache_hit {
@@ -501,12 +482,8 @@ impl Nix {
             output
         } else {
             let pretty_cmd = display_command(&cmd);
-            let span = debug_span!(
-                "Running command",
-                command = pretty_cmd.as_str(),
-                devenv.user_message = format!("Running command: {}", pretty_cmd)
-            );
-            let output = span.in_scope(|| {
+            let activity = Activity::command(&pretty_cmd).command(&pretty_cmd).start();
+            let output = activity.in_scope(|| {
                 cmd.output()
                     .into_diagnostic()
                     .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))
@@ -892,16 +869,15 @@ impl Nix {
                 "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
             };
 
-            info!(
-                devenv.is_user_message = true,
-                "Using Cachix caches: {}",
-                caches.caches.pull.join(", "),
+            message(
+                ActivityLevel::Info,
+                format!("Using Cachix caches: {}", caches.caches.pull.join(", "))
             );
             if !new_known_keys.is_empty() {
                 for (name, pubkey) in new_known_keys.iter() {
-                    info!(
-                        "Trusting {}.cachix.org on first use with the public key {}",
-                        name, pubkey
+                    message(
+                        ActivityLevel::Info,
+                        format!("Trusting {}.cachix.org on first use with the public key {}", name, pubkey)
                     );
                 }
             }

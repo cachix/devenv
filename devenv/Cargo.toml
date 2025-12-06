@@ -10,13 +10,17 @@ default-run = "devenv"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+devenv-activity.workspace = true
 devenv-core.workspace = true
 devenv-eval-cache.workspace = true
 devenv-tasks.workspace = true
+devenv-tui.workspace = true
 devenv-cache-core.workspace = true
 devenv-snix-backend = { workspace = true, optional = true }
+rand.workspace = true
 http-client-tls.workspace = true
 nix-conf-parser.workspace = true
+tokio-shutdown.workspace = true
 
 clap.workspace = true
 cli-table.workspace = true
@@ -44,9 +48,9 @@ sqlx.workspace = true
 tempfile.workspace = true
 termimad.workspace = true
 tokio.workspace = true
-tokio-shutdown.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+json-subscriber.workspace = true
 tracing-indicatif.workspace = true
 indicatif.workspace = true
 which.workspace = true
