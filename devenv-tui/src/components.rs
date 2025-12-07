@@ -9,11 +9,8 @@ use std::time::Instant;
 /// Spinner animation frames (matching current CLI)
 pub const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-/// Build logs viewport height when collapsed
-const LOG_VIEWPORT_COLLAPSED: usize = 10;
-
-/// Build logs viewport height when expanded
-const LOG_VIEWPORT_EXPANDED: usize = 100;
+/// Build logs viewport height for collapsed preview (press 'e' to expand to fullscreen)
+pub const LOG_VIEWPORT_COLLAPSED: usize = 10;
 
 /// Color constants for operations
 pub const COLOR_ACTIVE: Color = Color::Rgb {
@@ -556,18 +553,17 @@ fn shorten_store_path_aggressive(path: &str) -> String {
     }
 }
 
-/// Component for rendering expanded content (logs, details, traces) inline below activities
+/// Component for rendering collapsed content preview (logs, details, traces) inline below activities.
+/// Press 'e' to expand to fullscreen view with scrolling.
 pub struct ExpandedContentComponent<'a> {
     pub lines: Option<&'a VecDeque<String>>,
-    pub expanded: bool,
     pub empty_message: &'a str,
 }
 
 impl<'a> ExpandedContentComponent<'a> {
-    pub fn new(lines: Option<&'a VecDeque<String>>, expanded: bool) -> Self {
+    pub fn new(lines: Option<&'a VecDeque<String>>) -> Self {
         Self {
             lines,
-            expanded,
             empty_message: "  → no content",
         }
     }
@@ -578,38 +574,38 @@ impl<'a> ExpandedContentComponent<'a> {
     }
 
     pub fn render(&self) -> Vec<AnyElement<'static>> {
-        let max_viewport_height = if self.expanded {
-            LOG_VIEWPORT_EXPANDED
-        } else {
-            LOG_VIEWPORT_COLLAPSED
-        };
-
         if let Some(lines) = &self.lines
             && !lines.is_empty()
         {
-            // Take the last N lines that fit in viewport
-            let visible_lines: Vec<_> = lines.iter().rev().take(max_viewport_height).rev().collect();
+            // Take the last N lines that fit in collapsed viewport
+            let visible_lines: Vec<_> = lines
+                .iter()
+                .rev()
+                .take(LOG_VIEWPORT_COLLAPSED)
+                .rev()
+                .collect();
 
             if !visible_lines.is_empty() {
-                // Use actual number of lines, not fixed viewport height
                 let actual_height = visible_lines.len();
 
-                // Create elements for all lines
                 let mut line_elements = vec![];
                 for line in visible_lines {
-                    line_elements.push(element! {
+                    line_elements.push(
+                        element! {
                             View(height: 1, flex_direction: FlexDirection::Row, padding_left: 2, padding_right: 1) {
                                 Text(content: line.clone(), color: Color::AnsiValue(245))
                             }
-                        }.into_any());
+                        }
+                        .into_any(),
+                    );
                 }
 
-                // Return a single container with actual height of lines
                 return vec![element! {
-                        View(height: actual_height as u32, flex_direction: FlexDirection::Column, overflow: Overflow::Hidden) {
-                            #(line_elements)
-                        }
-                    }.into_any()];
+                    View(height: actual_height as u32, flex_direction: FlexDirection::Column, overflow: Overflow::Hidden) {
+                        #(line_elements)
+                    }
+                }
+                .into_any()];
             }
         }
 
@@ -618,28 +614,21 @@ impl<'a> ExpandedContentComponent<'a> {
             View(height: 1, flex_direction: FlexDirection::Column, padding_left: 2, padding_right: 1) {
                 Text(content: self.empty_message.to_string(), color: Color::AnsiValue(245))
             }
-        }.into_any()]
+        }
+        .into_any()]
     }
 
     /// Calculate the height this component will take
     pub fn calculate_height(&self) -> usize {
-        let max_viewport_height = if self.expanded {
-            LOG_VIEWPORT_EXPANDED
-        } else {
-            LOG_VIEWPORT_COLLAPSED
-        };
-
         if let Some(lines) = &self.lines
             && !lines.is_empty()
         {
-            let visible_lines: Vec<_> = lines.iter().rev().take(max_viewport_height).rev().collect();
-            if !visible_lines.is_empty() {
-                return visible_lines.len();
+            let visible_count = lines.len().min(LOG_VIEWPORT_COLLAPSED);
+            if visible_count > 0 {
+                return visible_count;
             }
         }
-
-        // Fallback: minimal height for empty message
-        1
+        1 // Minimal height for empty message
     }
 }
 

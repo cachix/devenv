@@ -111,14 +111,10 @@ fn deserialize_activity(event: TraceEvent) -> Result<ActivityEvent, ActivityPars
     Ok(serde_json::from_str(event_json)?)
 }
 
-async fn ctrl_c() {
-    signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
-}
-
-fn process_event(event: TraceEvent, tx: &mpsc::UnboundedSender<ActivityEvent>) {
+async fn process_event(tx: &mpsc::Sender<ActivityEvent>, event: TraceEvent) {
     match deserialize_activity(event) {
         Ok(activity) => {
-            let _ = tx.send(activity);
+            let _ = tx.send(activity).await;
         }
         Err(ActivityParseError::NotActivityEvent) => {}
         Err(e) => {
@@ -129,25 +125,22 @@ fn process_event(event: TraceEvent, tx: &mpsc::UnboundedSender<ActivityEvent>) {
 
 async fn replay_events(
     mut stream: TraceStream,
-    first_event: TraceEvent,
-    tx: &mpsc::UnboundedSender<ActivityEvent>,
+    tx: &mpsc::Sender<ActivityEvent>,
     speed: f64,
 ) -> Result<()> {
-    let first_timestamp = first_event.timestamp;
     let start_time = Instant::now();
     let mut event_count = 0;
 
-    process_event(first_event, tx);
-
     while let Some(event) = stream.next_event()? {
         event_count += 1;
-        if event_count % 100 == 0 {
-            info!("Processed {} events", event_count);
-        }
 
-        let time_offset = event.timestamp.signed_duration_since(first_timestamp);
-        let target_elapsed_ms = time_offset.num_milliseconds().max(0) as f64 / speed;
-        let target_elapsed = Duration::from_millis(target_elapsed_ms as u64);
+        let target_elapsed = if let Some(first_timestamp) = stream.first_timestamp {
+            let time_offset = event.timestamp.signed_duration_since(first_timestamp);
+            let target_elapsed_ms = time_offset.num_milliseconds().max(0) as f64 / speed;
+            Duration::from_millis(target_elapsed_ms as u64)
+        } else {
+            Duration::from_millis(0)
+        };
 
         let current_elapsed = start_time.elapsed();
         if target_elapsed > current_elapsed {
@@ -155,15 +148,16 @@ async fn replay_events(
             sleep(sleep_duration).await;
         }
 
-        process_event(event, tx);
+        process_event(tx, event).await
     }
 
-    info!(
-        "Replay finished. Processed {} total events.",
-        event_count + 1
-    );
+    info!("Replay finished. Processed {} total events.", event_count);
 
     Ok(())
+}
+
+async fn ctrl_c() {
+    signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
 }
 
 #[tokio::main]
@@ -180,8 +174,10 @@ async fn main() -> Result<()> {
     let file = File::open(&args.trace_file)
         .with_context(|| format!("Failed to open trace file: {}", args.trace_file.display()))?;
 
-    let (tx, rx) = mpsc::unbounded_channel();
+    let (tx, rx) = mpsc::channel(32);
     let shutdown = Shutdown::new();
+
+    info!("Spawning TUI");
 
     let mut tui_task = tokio::spawn({
         let shutdown = shutdown.clone();
@@ -193,16 +189,12 @@ async fn main() -> Result<()> {
         }
     });
 
-    let mut stream = TraceStream::new(file);
-    let first_event = stream
-        .next_event()?
-        .with_context(|| "No valid trace entries found")?;
-
     info!("Starting trace replay from: {}", args.trace_file.display());
 
-    // Race: replay events, TUI task, or Ctrl+C
+    let stream = TraceStream::new(file);
+
     tokio::select! {
-        result = replay_events(stream, first_event, &tx, args.speed) => {
+        result = replay_events(stream, &tx, args.speed) => {
             if let Err(e) = result {
                 warn!("Replay error: {e}");
             }
@@ -212,6 +204,7 @@ async fn main() -> Result<()> {
             info!("TUI exited");
         }
         _ = ctrl_c() => {
+            shutdown.shutdown();
             info!("Interrupted");
         }
     }

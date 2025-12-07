@@ -4,12 +4,13 @@ pub mod tracing_interface;
 // UI modules
 pub mod app;
 pub mod components;
+pub mod expanded_view;
 pub mod model;
 pub mod view;
 
 pub use model::{
     Activity, ActivityVariant, BuildActivity, ChildActivityLimit, DownloadActivity, Model,
-    ProgressActivity, QueryActivity, TaskActivity, TaskDisplayStatus, TerminalSize,
+    ProgressActivity, QueryActivity, TaskActivity, TaskDisplayStatus, TerminalSize, ViewMode,
 };
 pub use model_events::UiEvent;
 
@@ -17,24 +18,13 @@ use devenv_activity::ActivityEvent;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 
-/// Sender for UI events (keyboard, tick)
-#[derive(Clone)]
-pub struct UiSender(mpsc::UnboundedSender<UiEvent>);
-
-impl UiSender {
-    /// Send a UI event
-    pub fn send(&self, event: UiEvent) {
-        let _ = self.0.send(event);
-    }
-}
-
 /// Event processor task with two queues and priority handling
 ///
 /// UI events are always processed first for responsiveness.
 /// Activity events are batched (up to 32) for efficiency.
 pub(crate) async fn process_events(
-    mut activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
-    mut ui_rx: mpsc::UnboundedReceiver<UiEvent>,
+    mut activity_rx: mpsc::Receiver<ActivityEvent>,
+    mut ui_rx: mpsc::Receiver<UiEvent>,
     model: Arc<Mutex<Model>>,
 ) {
     let mut activity_batch = Vec::with_capacity(32);
@@ -73,10 +63,4 @@ pub(crate) async fn process_events(
             else => break,
         }
     }
-}
-
-/// Create UI channel and return sender/receiver pair
-pub(crate) fn create_ui_channel() -> (UiSender, mpsc::UnboundedReceiver<UiEvent>) {
-    let (tx, rx) = mpsc::unbounded_channel();
-    (UiSender(tx), rx)
 }

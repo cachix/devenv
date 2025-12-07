@@ -1,5 +1,5 @@
 use crate::{
-    components::*,
+    components::{*, LOG_VIEWPORT_COLLAPSED},
     model::{
         Activity, ActivitySummary, ActivityVariant, Model, NixActivityState, TaskDisplayStatus,
         TerminalSize,
@@ -21,7 +21,6 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     let has_selection = model.ui.selected_activity.is_some();
     let spinner_frame = model.ui.spinner_frame;
     let selected_id = model.ui.selected_activity;
-    let show_expanded_logs = model.ui.view_options.show_expanded_logs;
     let terminal_size = model.ui.terminal_size;
 
     // Check if we have a selected activity with logs/details
@@ -77,7 +76,6 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
                     is_selected,
                     spinner_frame,
                     logs: activity_logs,
-                    expanded_logs: show_expanded_logs,
                     completed,
                 })) {
                     ActivityItem
@@ -91,7 +89,6 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
         ContextProvider(value: Context::owned(SummaryViewContext {
             summary: summary.clone(),
             has_selection,
-            expanded_logs: model.ui.view_options.show_expanded_logs,
             showing_logs: selected_logs.is_some(),
         })) {
             SummaryView
@@ -123,7 +120,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
             }
         }
 
-        // Build and evaluation activities show logs when selected
+        // Build and evaluation activities show logs when selected (collapsed preview)
         if is_selected
             && (matches!(display_activity.activity.variant, ActivityVariant::Build(_))
                 || matches!(
@@ -132,20 +129,16 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
                 ))
             && let Some(logs) = selected_logs.as_ref()
         {
-            let logs_component = ExpandedContentComponent::new(Some(logs), show_expanded_logs);
+            let logs_component = ExpandedContentComponent::new(Some(logs));
             total_height += logs_component.calculate_height();
         }
 
-        // Message activities with details show limited lines (like build logs) + summary
+        // Message activities with details show limited lines (collapsed preview)
         if let ActivityVariant::Message(ref msg_data) = display_activity.activity.variant
             && msg_data.details.is_some()
         {
             if let Some(logs) = model.get_build_logs(display_activity.activity.id) {
-                // Use same viewport limits as build logs, plus 1 for summary
-                let max_lines = if show_expanded_logs { 100 } else { 10 };
-                let visible_count = logs.len().min(max_lines);
-                // We already counted 1 for the base activity, so add visible_count for details
-                // (the summary replaces the base activity line in the rendering)
+                let visible_count = logs.len().min(LOG_VIEWPORT_COLLAPSED);
                 total_height += visible_count;
             }
         }
@@ -242,7 +235,6 @@ struct ActivityRenderContext {
     is_selected: bool,
     spinner_frame: usize,
     logs: Option<VecDeque<String>>,
-    expanded_logs: bool,
     /// Completion state: None = active, Some(true) = success, Some(false) = failed
     completed: Option<bool>,
 }
@@ -258,7 +250,6 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         is_selected,
         spinner_frame,
         logs,
-        expanded_logs,
         completed,
     } = &*ctx;
     let indent = "  ".repeat(*depth);
@@ -290,9 +281,9 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 // Create multi-line element with build logs
                 let mut build_elements = vec![main_line];
 
-                // Add build logs using the component
-                let logs_component = ExpandedContentComponent::new(logs.as_ref(), *expanded_logs)
-                    .with_empty_message("  → no build logs yet");
+                // Add build logs using the component (collapsed preview, press 'e' to expand)
+                let logs_component = ExpandedContentComponent::new(logs.as_ref())
+                    .with_empty_message("  → no build logs yet (press 'e' to expand)");
                 let log_elements = logs_component.render();
                 build_elements.extend(log_elements);
 
@@ -472,9 +463,9 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 // Create multi-line element with file list
                 let mut elements = vec![main_line];
 
-                // Add file list using the logs component
-                let logs_component = ExpandedContentComponent::new(logs.as_ref(), *expanded_logs)
-                    .with_empty_message("  → no files evaluated yet");
+                // Add file list using the logs component (collapsed preview, press 'e' to expand)
+                let logs_component = ExpandedContentComponent::new(logs.as_ref())
+                    .with_empty_message("  → no files evaluated yet (press 'e' to expand)");
                 let log_elements = logs_component.render();
                 elements.extend(log_elements);
 
@@ -556,14 +547,12 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             if has_details && logs.is_some() {
                 let mut all_lines: Vec<AnyElement<'static>> = vec![];
 
-                // First add detail/trace lines (limited to viewport like build logs)
+                // First add detail/trace lines (collapsed preview, press 'e' to expand)
                 if let Some(detail_lines) = logs.as_ref() {
-                    // Use same viewport limits as build logs
-                    let max_lines = if *expanded_logs { 100 } else { 10 };
                     let visible_lines: Vec<_> = detail_lines
                         .iter()
                         .rev()
-                        .take(max_lines)
+                        .take(LOG_VIEWPORT_COLLAPSED)
                         .collect::<Vec<_>>()
                         .into_iter()
                         .rev()
@@ -654,7 +643,6 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 struct SummaryViewContext {
     summary: ActivitySummary,
     has_selection: bool,
-    expanded_logs: bool,
     showing_logs: bool,
 }
 
@@ -666,14 +654,12 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let SummaryViewContext {
         summary,
         has_selection,
-        expanded_logs,
         showing_logs,
     } = &*ctx;
 
     build_summary_view_impl(
         summary,
         *has_selection,
-        *expanded_logs,
         *showing_logs,
         terminal_width,
     )
@@ -683,7 +669,6 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 fn build_summary_view_impl(
     summary: &ActivitySummary,
     has_selection: bool,
-    expanded_logs: bool,
     showing_logs: bool,
     terminal_width: u16,
 ) -> AnyElement<'static> {
@@ -819,18 +804,8 @@ fn build_summary_view_impl(
                 help_children.push(element!(Text(content: " • ")).into_any());
             }
             help_children.push(element!(Text(content: "e", color: COLOR_INTERACTIVE)).into_any());
-            if expanded_logs {
-                if use_symbols {
-                    help_children.push(element!(Text(content: " ▲ • ")).into_any());
-                // collapse symbol
-                } else if use_short_text {
-                    help_children.push(element!(Text(content: " collapse • ")).into_any());
-                } else {
-                    help_children.push(element!(Text(content: " collapse logs • ")).into_any());
-                }
-            } else if use_symbols {
+            if use_symbols {
                 help_children.push(element!(Text(content: " ▼ • ")).into_any());
-            // expand symbol
             } else if use_short_text {
                 help_children.push(element!(Text(content: " expand • ")).into_any());
             } else {

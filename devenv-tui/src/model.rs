@@ -138,6 +138,7 @@ pub struct UiState {
     pub scroll: ScrollState,
     pub view_options: ViewOptions,
     pub terminal_size: TerminalSize,
+    pub view_mode: ViewMode,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -163,7 +164,6 @@ pub struct ScrollState {
 #[derive(Debug)]
 pub struct ViewOptions {
     pub show_details: bool,
-    pub show_expanded_logs: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -181,6 +181,24 @@ pub enum TaskDisplayStatus {
     Failed,
     Skipped,
     Cancelled,
+}
+
+/// Which view is currently active in the TUI
+#[derive(Debug, Clone, PartialEq)]
+pub enum ViewMode {
+    /// Main activity list view (non-fullscreen, preserves terminal scrollback)
+    Main,
+    /// Expanded log view for a specific activity (fullscreen, uses alternate screen)
+    ExpandedLogs {
+        activity_id: u64,
+        scroll_offset: usize,
+    },
+}
+
+impl Default for ViewMode {
+    fn default() -> Self {
+        ViewMode::Main
+    }
 }
 
 impl Model {
@@ -213,9 +231,9 @@ impl Model {
                 },
                 view_options: ViewOptions {
                     show_details: false,
-                    show_expanded_logs: false,
                 },
                 terminal_size: TerminalSize { width, height },
+                view_mode: ViewMode::Main,
             },
             app_state: AppState::Running,
             completed_messages: Vec::new(),
@@ -850,6 +868,66 @@ impl Model {
                     && !matches!(a.variant, ActivityVariant::UserOperation)
             })
             .count()
+    }
+
+    /// Calculate the height that the TUI will render.
+    /// This mirrors the height calculation in view.rs.
+    pub fn calculate_rendered_height(&self) -> u16 {
+        let activities = self.get_display_activities();
+        let selected_id = self.ui.selected_activity;
+
+        let mut total_height: usize = 0;
+
+        for display_activity in activities.iter() {
+            total_height += 1; // Base height for activity
+
+            let is_selected =
+                selected_id.is_some_and(|id| display_activity.activity.id == id && display_activity.activity.id != 0);
+
+            // Add extra line for downloads with progress
+            if let ActivityVariant::Download(ref download_data) = display_activity.activity.variant {
+                if download_data.size_current.is_some() && download_data.size_total.is_some() {
+                    total_height += 1;
+                } else if let Some(progress) = &display_activity.activity.progress {
+                    if progress.total.unwrap_or(0) > 0 {
+                        total_height += 1;
+                    }
+                }
+            }
+
+            // Build and evaluation activities show logs when selected
+            if is_selected
+                && (matches!(display_activity.activity.variant, ActivityVariant::Build(_))
+                    || matches!(display_activity.activity.variant, ActivityVariant::Evaluating(_)))
+            {
+                if let Some(logs) = self.get_build_logs(display_activity.activity.id) {
+                    let visible_count = logs.len().min(10); // LOG_VIEWPORT_COLLAPSED = 10
+                    total_height += visible_count.max(1);
+                }
+            }
+
+            // Message activities with details
+            if let ActivityVariant::Message(ref msg_data) = display_activity.activity.variant {
+                if msg_data.details.is_some() {
+                    if let Some(logs) = self.get_build_logs(display_activity.activity.id) {
+                        let visible_count = logs.len().min(10);
+                        total_height += visible_count;
+                    }
+                }
+            }
+        }
+
+        // Error messages panel
+        let error_count = self.get_error_messages().len().min(10);
+        total_height += error_count;
+
+        // Summary line + buffer
+        total_height += 2;
+
+        // Clamp to terminal height
+        let min_height = 3;
+        let calculated = total_height.max(min_height) as u16;
+        calculated.min(self.ui.terminal_size.height)
     }
 }
 
