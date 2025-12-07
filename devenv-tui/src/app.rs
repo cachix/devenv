@@ -1,4 +1,8 @@
-use crate::{UiSender, model::Model, view::view};
+use crate::expanded_view::ExpandedLogView;
+use crate::{
+    model::{Model, ViewMode},
+    view::view,
+};
 use crossterm::{cursor, execute, terminal};
 use devenv_activity::ActivityEvent;
 use iocraft::prelude::*;
@@ -26,10 +30,21 @@ pub fn restore_terminal() {
 /// Main TUI component
 #[component]
 fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
-    let ui_sender = hooks.use_context::<UiSender>();
+    let ui_tx = hooks.use_context::<mpsc::Sender<crate::UiEvent>>();
     let model = hooks.use_context::<Arc<Mutex<Model>>>();
     let shutdown = hooks.use_context::<Arc<Shutdown>>();
     let (terminal_width, terminal_height) = hooks.use_terminal_size();
+
+    if shutdown.is_cancelled() {
+        hooks.use_context_mut::<SystemContext>().exit();
+    }
+
+    // TODO: fix
+    let ui_tx_clone = ui_tx.clone();
+    let mut send = hooks.use_async_handler(move |event: crate::UiEvent| {
+        let ui_tx_clone = ui_tx_clone.clone();
+        async move { ui_tx_clone.send(event).await.unwrap() }
+    });
 
     // Track previous terminal size to detect changes
     let mut prev_size = hooks.use_state(crate::TerminalSize::default);
@@ -39,26 +54,28 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     };
     if current_size != prev_size.get() {
         prev_size.set(current_size);
-        ui_sender.send(crate::UiEvent::Resize(current_size));
+        send(crate::UiEvent::Resize(current_size))
     }
 
     // Trigger periodic re-renders to pick up model changes from background event processing
+    // TODO: FIX
     let mut tick = hooks.use_state(|| 0u64);
     hooks.use_future({
-        let ui_sender = ui_sender.clone();
+        let ui_tx = ui_tx.clone();
         async move {
             loop {
                 tokio::time::sleep(Duration::from_millis(50)).await;
                 tick.set(tick + 1);
-                ui_sender.send(crate::UiEvent::Tick);
+                ui_tx.send(crate::UiEvent::Tick).await.unwrap();
             }
         }
     });
 
     // Handle keyboard events
     hooks.use_terminal_events({
-        let ui_sender = ui_sender.clone();
+        let model = model.clone();
         let shutdown = shutdown.clone();
+
         move |event| {
             if let TerminalEvent::Key(key_event) = event
                 && key_event.kind != KeyEventKind::Release
@@ -67,18 +84,21 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                         shutdown.shutdown();
                     }
-                    code => {
-                        ui_sender.send(crate::UiEvent::KeyInput(code));
+                    KeyCode::Char('e') => {
+                        // Switch to expanded view if we have a selected activity with logs
+                        let mut m = model.lock().unwrap();
+                        if let Some(activity_id) = m.ui.selected_activity {
+                            m.ui.view_mode = ViewMode::ExpandedLogs {
+                                activity_id,
+                                scroll_offset: 0,
+                            };
+                        }
                     }
+                    code => send(crate::UiEvent::KeyInput(code)),
                 }
             }
         }
     });
-
-    // Check if shutdown was requested and exit cleanly
-    if shutdown.is_cancelled() {
-        hooks.use_context_mut::<SystemContext>().exit();
-    }
 
     // Render the view
     if let Ok(model_guard) = model.lock() {
@@ -95,30 +115,92 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 /// Create and run the TUI application
 ///
 /// Takes ownership of the activity event receiver and sets up all TUI internals.
+/// The application switches between main view (non-fullscreen) and expanded view
+/// (fullscreen with alternate screen buffer) based on user input.
 pub async fn run_app(
-    activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
+    activity_rx: mpsc::Receiver<ActivityEvent>,
     shutdown: Arc<Shutdown>,
 ) -> std::io::Result<()> {
     // Create model and UI channel
     let model = Arc::new(Mutex::new(Model::new()));
-    let (ui_sender, ui_rx) = crate::create_ui_channel();
+    let (ui_tx, ui_rx) = mpsc::channel(32);
 
-    // Spawn event processor task
+    // Spawn event processor task (runs throughout, independent of view changes)
     let model_clone = Arc::clone(&model);
     tokio::spawn(async move {
         crate::process_events(activity_rx, ui_rx, model_clone).await;
     });
 
-    // Run the iocraft render loop
-    let mut tui_element = element! {
-        ContextProvider(value: Context::owned(shutdown)) {
-            ContextProvider(value: Context::owned(ui_sender)) {
-                ContextProvider(value: Context::owned(Arc::clone(&model))) {
-                    TuiApp
-                }
-            }
-        }
-    };
+    // Track height to clear when returning from expanded view
+    let mut pre_expand_height: u16 = 0;
 
-    tui_element.render_loop().await
+    tokio::select! {
+        _ = shutdown.wait_for_shutdown() => {
+        },
+        _ = run_view(model.clone(), ui_tx, shutdown.clone(), &mut pre_expand_height) => {}
+    }
+
+    // // Clear the TUI content before exiting
+    // let height = model.lock().unwrap().calculate_rendered_height();
+    // if height > 0 {
+    //     let mut stdout = io::stdout();
+    //     let _ = execute!(
+    //         stdout,
+    //         cursor::MoveToPreviousLine(height),
+    //         terminal::Clear(terminal::ClearType::FromCursorDown)
+    //     );
+    // }
+
+    Ok(())
+}
+
+async fn run_view(
+    model: Arc<Mutex<Model>>,
+    ui_tx: mpsc::Sender<crate::UiEvent>,
+    shutdown: Arc<Shutdown>,
+    pre_expand_height: &mut u16,
+) -> std::io::Result<()> {
+    let view_mode = { model.lock().unwrap().ui.view_mode.clone() };
+
+    match view_mode {
+        ViewMode::Main => {
+            if *pre_expand_height > 0 {
+                // Clear the old TUI content before restarting
+                let mut stdout = io::stdout();
+                let _ = execute!(
+                    stdout,
+                    cursor::MoveToPreviousLine(*pre_expand_height),
+                    terminal::Clear(terminal::ClearType::FromCursorDown)
+                );
+                *pre_expand_height = 0;
+            }
+
+            let mut element = element! {
+                ContextProvider(value: Context::owned(shutdown.clone())) {
+                    ContextProvider(value: Context::owned(ui_tx.clone())) {
+                        ContextProvider(value: Context::owned(model.clone())) {
+                            TuiApp
+                        }
+                    }
+                }
+            };
+
+            element.render_loop().await
+        }
+        ViewMode::ExpandedLogs { .. } => {
+            // Store the rendered height before switching to expanded view
+            *pre_expand_height = model.lock().unwrap().calculate_rendered_height();
+            // Run expanded view (fullscreen, uses alternate screen buffer)
+            let mut element = element! {
+                ContextProvider(value: Context::owned(shutdown.clone())) {
+                    ContextProvider(value: Context::owned(ui_tx.clone())) {
+                        ContextProvider(value: Context::owned(model.clone())) {
+                            ExpandedLogView
+                        }
+                    }
+                }
+            };
+            element.fullscreen().await
+        }
+    }
 }

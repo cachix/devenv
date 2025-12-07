@@ -59,7 +59,7 @@ use tracing::{Level, Span, span};
 pub use tracing_subscriber::Registry;
 
 // Global sender for activity events (installed by ActivityHandle::install())
-static ACTIVITY_SENDER: OnceLock<mpsc::UnboundedSender<ActivityEvent>> = OnceLock::new();
+static ACTIVITY_SENDER: OnceLock<mpsc::Sender<ActivityEvent>> = OnceLock::new();
 
 /// Send an activity event to the registered channel and emit to tracing
 fn send_activity_event(event: ActivityEvent) {
@@ -68,9 +68,9 @@ fn send_activity_event(event: ActivityEvent) {
         tracing::trace!(target: "devenv::activity", event = json);
     }
 
-    // Send to channel for TUI
+    // Send to channel for TUI (non-blocking)
     if let Some(tx) = ACTIVITY_SENDER.get() {
-        let _ = tx.send(event);
+        let _ = tx.try_send(event);
     }
 }
 
@@ -1099,7 +1099,7 @@ pub fn message_with_details(
 
 /// Handle for registering the activity event channel
 pub struct ActivityHandle {
-    tx: mpsc::UnboundedSender<ActivityEvent>,
+    tx: mpsc::Sender<ActivityEvent>,
 }
 
 impl ActivityHandle {
@@ -1119,8 +1119,8 @@ impl ActivityHandle {
 /// handle.install();  // Activities now send to this channel
 /// // Pass rx to TUI
 /// ```
-pub fn init() -> (mpsc::UnboundedReceiver<ActivityEvent>, ActivityHandle) {
-    let (tx, rx) = mpsc::unbounded_channel();
+pub fn init() -> (mpsc::Receiver<ActivityEvent>, ActivityHandle) {
+    let (tx, rx) = mpsc::channel(32);
     (rx, ActivityHandle { tx })
 }
 

@@ -35,10 +35,7 @@ impl UiEvent {
                     Esc => {
                         model.ui.selected_activity = None;
                     }
-                    Char('e') => {
-                        model.ui.view_options.show_expanded_logs =
-                            !model.ui.view_options.show_expanded_logs;
-                    }
+                    // Note: 'e' for expand is handled directly in TuiApp to trigger view switch
                     _ => {}
                 }
             }
