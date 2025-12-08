@@ -4,7 +4,7 @@
 //! It provides scrollable access to all log lines for a selected activity.
 
 use crate::model::ViewMode;
-use crate::Model;
+use crate::{Model, TuiConfig};
 use iocraft::prelude::*;
 use iocraft::{FullscreenMouseEvent, MouseEventKind};
 use std::collections::VecDeque;
@@ -19,20 +19,19 @@ use tokio_shutdown::Shutdown;
 /// through log content.
 #[component]
 pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let config = hooks.use_context::<Arc<TuiConfig>>();
     let model = hooks.use_context::<Arc<RwLock<Model>>>();
     let notify = hooks.use_context::<Arc<Notify>>();
     let shutdown = hooks.use_context::<Arc<Shutdown>>();
     let (width, height) = hooks.use_terminal_size();
 
-    // Redraw when notified of model changes
-    let mut redraw = hooks.use_state(|| 0u64);
+    // Redraw when notified of model changes (throttled)
+    let redraw = hooks.use_state(|| 0u64);
     hooks.use_future({
         let notify = notify.clone();
+        let max_fps = config.max_fps;
         async move {
-            loop {
-                notify.notified().await;
-                redraw.set(redraw.get().wrapping_add(1));
-            }
+            crate::throttled_notify_loop(notify, redraw, max_fps).await;
         }
     });
 
