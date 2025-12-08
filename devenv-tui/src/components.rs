@@ -4,7 +4,7 @@ use crate::model::{Activity, ActivityVariant};
 use human_repr::{HumanCount, HumanThroughput};
 use iocraft::prelude::*;
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Spinner animation frames (braille dots pattern)
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -359,8 +359,14 @@ impl<'a> DownloadActivityComponent<'a> {
     }
 
     pub fn render(&self, terminal_width: u16) -> AnyElement<'static> {
+        use crate::model::NixActivityState;
+
         let indent = "  ".repeat(self.depth);
-        let elapsed = Instant::now().duration_since(self.activity.start_time);
+        // Use stored duration for completed activities
+        let elapsed = match &self.activity.state {
+            NixActivityState::Completed { duration, .. } => *duration,
+            NixActivityState::Active => self.activity.start_time.elapsed(),
+        };
         let elapsed_str = format!("{:.1}s", elapsed.as_secs_f64());
 
         let mut elements = vec![];
