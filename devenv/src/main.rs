@@ -83,7 +83,9 @@ fn run_with_tui(cli: Cli) -> Result<()> {
         .build()
         .into_diagnostic()?;
 
-    let _ = rt.block_on(devenv_tui::TuiApp::new(activity_rx, shutdown).run());
+    let error_messages = rt
+        .block_on(devenv_tui::TuiApp::new(activity_rx, shutdown).run())
+        .unwrap_or_default();
 
     // Restore terminal to normal state (disable raw mode, show cursor)
     devenv_tui::app::restore_terminal();
@@ -92,6 +94,14 @@ fn run_with_tui(cli: Cli) -> Result<()> {
     let result = devenv_thread
         .join()
         .map_err(|_| miette::miette!("Devenv thread panicked"))??;
+
+    // Print queued error messages at the very end
+    for msg in &error_messages {
+        eprintln!("{}", msg.text);
+        if let Some(details) = &msg.details {
+            eprintln!("{}", details);
+        }
+    }
 
     // Execute any pending command (e.g., shell exec) now that TUI is cleaned up
     result.exec()

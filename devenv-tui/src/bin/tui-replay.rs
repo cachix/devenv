@@ -181,12 +181,7 @@ async fn main() -> Result<()> {
 
     let mut tui_task = tokio::spawn({
         let shutdown = shutdown.clone();
-        async move {
-            match devenv_tui::TuiApp::new(rx, shutdown).run().await {
-                Ok(_) => info!("TUI exited normally"),
-                Err(e) => warn!("TUI error: {e}"),
-            }
-        }
+        async move { devenv_tui::TuiApp::new(rx, shutdown).run().await }
     });
 
     info!("Starting trace replay from: {}", args.trace_file.display());
@@ -209,8 +204,29 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Wait for TUI to finish and collect error messages
+    let error_messages = match tui_task.await {
+        Ok(Ok(messages)) => messages,
+        Ok(Err(e)) => {
+            warn!("TUI error: {e}");
+            vec![]
+        }
+        Err(e) => {
+            warn!("TUI task panicked: {e}");
+            vec![]
+        }
+    };
+
     // Restore terminal to normal state (disable raw mode, show cursor)
     devenv_tui::app::restore_terminal();
+
+    // Print queued error messages after TUI cleanup
+    for msg in &error_messages {
+        eprintln!("{}", msg.text);
+        if let Some(details) = &msg.details {
+            eprintln!("{}", details);
+        }
+    }
 
     Ok(())
 }

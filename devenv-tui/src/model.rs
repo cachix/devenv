@@ -767,11 +767,20 @@ impl ActivityModel {
     }
 
     /// Get standalone error messages (those without a parent activity).
-    /// Returns the most recent error messages for display.
+    /// Returns the most recent error messages for display in the TUI.
     pub fn get_error_messages(&self) -> Vec<&Message> {
         self.message_log
             .iter()
             .filter(|msg| msg.parent.is_none() && msg.level == ActivityLevel::Error)
+            .collect()
+    }
+
+    /// Get all error messages (regardless of parent).
+    /// Used for printing errors after TUI exit.
+    pub fn get_all_errors(&self) -> Vec<&Message> {
+        self.message_log
+            .iter()
+            .filter(|msg| msg.level == ActivityLevel::Error)
             .collect()
     }
 

@@ -81,7 +81,8 @@ impl TuiApp {
     }
 
     /// Run the TUI application.
-    pub async fn run(self) -> std::io::Result<()> {
+    /// Returns error messages that should be printed after TUI cleanup.
+    pub async fn run(self) -> std::io::Result<Vec<devenv_activity::Message>> {
         let config = Arc::new(self.config);
         let activity_model = Arc::new(RwLock::new(ActivityModel::with_config(config.clone())));
         let notify = Arc::new(Notify::new());
@@ -142,7 +143,13 @@ impl TuiApp {
             }
         }
 
-        Ok(())
+        // Collect all error messages to be printed after TUI cleanup
+        let error_messages = activity_model
+            .read()
+            .map(|model| model.get_all_errors().into_iter().cloned().collect())
+            .unwrap_or_default();
+
+        Ok(error_messages)
     }
 }
 
