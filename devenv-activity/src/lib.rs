@@ -48,6 +48,7 @@ pub use devenv_activity_macros::activity;
 
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+use std::future::Future;
 use std::ops::Deref;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -106,9 +107,11 @@ impl<'de> Deserialize<'de> for Timestamp {
     }
 }
 
-// Thread-local stack for tracking current Activity IDs (for parent detection)
-thread_local! {
-    static ACTIVITY_STACK: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
+// Task-local stack for tracking current Activity IDs (for parent detection).
+// Using task_local instead of thread_local to support async code where tasks
+// can migrate between threads via Tokio's work-stealing scheduler.
+tokio::task_local! {
+    static ACTIVITY_STACK: RefCell<Vec<u64>>;
 }
 
 /// All activity events - activity-first design
@@ -453,8 +456,6 @@ impl BuildBuilder {
             timestamp: Timestamp::now(),
         }));
 
-        ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
-
         Activity {
             span,
             id,
@@ -521,8 +522,6 @@ impl FetchBuilder {
             timestamp: Timestamp::now(),
         }));
 
-        ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
-
         Activity {
             span,
             id,
@@ -577,8 +576,6 @@ impl EvaluateBuilder {
             parent,
             timestamp: Timestamp::now(),
         }));
-
-        ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
 
         Activity {
             span,
@@ -643,8 +640,6 @@ impl TaskBuilder {
             timestamp: Timestamp::now(),
         }));
 
-        ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
-
         Activity {
             span,
             id,
@@ -708,8 +703,6 @@ impl CommandBuilder {
             timestamp: Timestamp::now(),
         }));
 
-        ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
-
         Activity {
             span,
             id,
@@ -772,8 +765,6 @@ impl OperationBuilder {
             detail: self.detail,
             timestamp: Timestamp::now(),
         }));
-
-        ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
 
         Activity {
             span,
@@ -848,6 +839,46 @@ impl Activity {
     /// Get a cloned span for this activity.
     pub fn span(&self) -> Span {
         self.span.clone()
+    }
+
+    /// Run a future with this activity's context propagated.
+    /// Nested activities created within the future will see this activity as their parent.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let activity = Activity::task("parent").start();
+    /// activity.scope(async {
+    ///     // This child will have `activity` as its parent
+    ///     let child = Activity::task("child").start();
+    /// }).await;
+    /// ```
+    pub async fn scope<F, T>(&self, f: F) -> T
+    where
+        F: Future<Output = T>,
+    {
+        let mut stack = get_current_stack();
+        stack.push(self.id);
+        ACTIVITY_STACK.scope(RefCell::new(stack), f).await
+    }
+
+    /// Run a closure with this activity's context propagated.
+    /// Nested activities created within the closure will see this activity as their parent.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let activity = Activity::task("parent").start();
+    /// activity.scope_sync(|| {
+    ///     // This child will have `activity` as its parent
+    ///     let child = Activity::task("child").start();
+    /// });
+    /// ```
+    pub fn scope_sync<F, T>(&self, f: F) -> T
+    where
+        F: FnOnce() -> T,
+    {
+        let mut stack = get_current_stack();
+        stack.push(self.id);
+        ACTIVITY_STACK.sync_scope(RefCell::new(stack), f)
     }
 
     /// Mark as failed
@@ -1056,20 +1087,24 @@ impl Drop for Activity {
             }),
         };
         send_activity_event(event);
-
-        // Pop from activity stack
-        ACTIVITY_STACK.with(|stack| {
-            let mut stack = stack.borrow_mut();
-            if stack.last() == Some(&self.id) {
-                stack.pop();
-            }
-        });
     }
 }
 
-/// Get the activity ID from the current activity stack
+/// Get the activity ID from the current activity stack.
+/// Returns None if not in an activity scope or if the stack is empty.
 fn get_current_activity_id() -> Option<u64> {
-    ACTIVITY_STACK.with(|stack| stack.borrow().last().copied())
+    ACTIVITY_STACK
+        .try_with(|stack| stack.borrow().last().copied())
+        .ok()
+        .flatten()
+}
+
+/// Get a clone of the current activity stack.
+/// Returns empty vec if not in an activity scope.
+fn get_current_stack() -> Vec<u64> {
+    ACTIVITY_STACK
+        .try_with(|stack| stack.borrow().clone())
+        .unwrap_or_default()
 }
 
 /// Emit a standalone message, associated with the current activity if one exists

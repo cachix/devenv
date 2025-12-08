@@ -281,21 +281,21 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
         .collect();
 
     let output = if is_async {
-        // For async functions, wrap the body in an async block and instrument it
+        // For async functions, wrap with scope() for parent tracking and instrument() for span
         quote! {
             #(#fn_attrs)*
             #fn_vis #fn_sig {
                 let __activity = #activity_create;
-                async move #fn_block.instrument(__activity.span()).await
+                __activity.scope(async move #fn_block.instrument(__activity.span())).await
             }
         }
     } else {
-        // For sync functions, use in_scope
+        // For sync functions, use scope_sync() for parent tracking and in_scope() for span
         quote! {
             #(#fn_attrs)*
             #fn_vis #fn_sig {
                 let __activity = #activity_create;
-                __activity.in_scope(|| #fn_block)
+                __activity.scope_sync(|| __activity.in_scope(|| #fn_block))
             }
         }
     };
