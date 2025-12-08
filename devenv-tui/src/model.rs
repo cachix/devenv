@@ -131,8 +131,6 @@ pub struct Activity {
 
 #[derive(Debug)]
 pub struct UiState {
-    pub spinner_frame: usize,
-    pub last_spinner_update: Instant,
     pub viewport: ViewportConfig,
     pub selected_activity: Option<u64>,
     pub scroll: ScrollState,
@@ -216,8 +214,6 @@ impl Model {
             root_activities: Vec::new(),
             build_logs: HashMap::new(),
             ui: UiState {
-                spinner_frame: 0,
-                last_spinner_update: Instant::now(),
                 viewport: ViewportConfig {
                     current: 10,
                     min: 10,
