@@ -19,7 +19,6 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
 
     let summary = model.calculate_summary();
     let has_selection = model.ui.selected_activity.is_some();
-    let spinner_frame = model.ui.spinner_frame;
     let selected_id = model.ui.selected_activity;
     let terminal_size = model.ui.terminal_size;
 
@@ -74,7 +73,6 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
                     activity: activity.clone(),
                     depth: display_activity.depth,
                     is_selected,
-                    spinner_frame,
                     logs: activity_logs,
                     completed,
                 })) {
@@ -233,7 +231,6 @@ struct ActivityRenderContext {
     activity: Activity,
     depth: usize,
     is_selected: bool,
-    spinner_frame: usize,
     logs: Option<VecDeque<String>>,
     /// Completion state: None = active, Some(true) = success, Some(false) = failed
     completed: Option<bool>,
@@ -248,7 +245,6 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         activity,
         depth,
         is_selected,
-        spinner_frame,
         logs,
         completed,
     } = &*ctx;
@@ -265,7 +261,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             if *is_selected {
                 let phase = build_data.phase.as_deref().unwrap_or("building");
                 let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                    .with_spinner(*spinner_frame)
+                    .with_spinner()
                     .with_completed(*completed)
                     .render();
 
@@ -301,7 +297,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             // Non-selected build activities use normal rendering
             let phase = build_data.phase.as_deref().unwrap_or("building");
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner(*spinner_frame)
+                .with_spinner()
                 .with_completed(*completed)
                 .render();
 
@@ -340,25 +336,15 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             if let (Some(_current), Some(_total)) =
                 (download_data.size_current, download_data.size_total)
             {
-                return DownloadActivityComponent::new(
-                    activity,
-                    *depth,
-                    *is_selected,
-                    *spinner_frame,
-                )
-                .with_completed(*completed)
-                .render(terminal_width);
+                return DownloadActivityComponent::new(activity, *depth, *is_selected)
+                    .with_completed(*completed)
+                    .render(terminal_width);
             } else if let Some(progress) = &activity.progress {
                 // Use generic progress if available
                 if progress.total.unwrap_or(0) > 0 {
-                    return DownloadActivityComponent::new(
-                        activity,
-                        *depth,
-                        *is_selected,
-                        *spinner_frame,
-                    )
-                    .with_completed(*completed)
-                    .render(terminal_width);
+                    return DownloadActivityComponent::new(activity, *depth, *is_selected)
+                        .with_completed(*completed)
+                        .render(terminal_width);
                 } else {
                     // Show generic progress without percentage
                     let from_suffix = download_data.substituter.as_ref().map(|s| {
@@ -369,7 +355,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         )
                     });
                     let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                        .with_spinner(*spinner_frame)
+                        .with_spinner()
                         .with_completed(*completed)
                         .render();
 
@@ -389,7 +375,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .as_ref()
                     .map(|s| format!("from {}", s));
                 let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                    .with_spinner(*spinner_frame)
+                    .with_spinner()
                     .with_completed(*completed)
                     .render();
 
@@ -409,7 +395,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .as_ref()
                 .map(|s| format!("from {}", s));
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner(*spinner_frame)
+                .with_spinner()
                 .with_completed(*completed)
                 .render();
 
@@ -424,7 +410,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
         ActivityVariant::FetchTree => {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner(*spinner_frame)
+                .with_spinner()
                 .with_completed(*completed)
                 .render();
 
@@ -447,7 +433,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             // For selected evaluation activities, show expandable file list
             if *is_selected && logs.is_some() {
                 let prefix = HierarchyPrefixComponent::new(indent.clone(), *depth)
-                    .with_spinner(*spinner_frame)
+                    .with_spinner()
                     .with_completed(*completed)
                     .render();
 
@@ -481,7 +467,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
 
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner(*spinner_frame)
+                .with_spinner()
                 .with_completed(*completed)
                 .render();
 
@@ -496,7 +482,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
         ActivityVariant::UserOperation => {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner(*spinner_frame)
+                .with_spinner()
                 .with_completed(*completed)
                 .render();
 
@@ -510,7 +496,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
         ActivityVariant::Devenv => {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner(*spinner_frame)
+                .with_spinner()
                 .with_completed(*completed)
                 .render();
 
@@ -623,7 +609,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
         ActivityVariant::Unknown => {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner(*spinner_frame)
+                .with_spinner()
                 .with_completed(*completed)
                 .render();
 

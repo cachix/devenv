@@ -8,8 +8,8 @@ use crate::Model;
 use iocraft::prelude::*;
 use iocraft::{FullscreenMouseEvent, MouseEventKind};
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, RwLock};
+use tokio::sync::Notify;
 use tokio_shutdown::Shutdown;
 
 /// Fullscreen component for viewing expanded logs.
@@ -19,22 +19,26 @@ use tokio_shutdown::Shutdown;
 /// through log content.
 #[component]
 pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
-    let model = hooks.use_context::<Arc<Mutex<Model>>>();
+    let model = hooks.use_context::<Arc<RwLock<Model>>>();
+    let notify = hooks.use_context::<Arc<Notify>>();
     let shutdown = hooks.use_context::<Arc<Shutdown>>();
     let (width, height) = hooks.use_terminal_size();
 
-    // Trigger periodic re-renders to pick up new logs
-    let mut tick = hooks.use_state(|| 0u64);
-    hooks.use_future(async move {
-        loop {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            tick.set(tick.get() + 1);
+    // Redraw when notified of model changes
+    let mut redraw = hooks.use_state(|| 0u64);
+    hooks.use_future({
+        let notify = notify.clone();
+        async move {
+            loop {
+                notify.notified().await;
+                redraw.set(redraw.get().wrapping_add(1));
+            }
         }
     });
 
     // Extract view state from model
     let view_state = {
-        let model_guard = model.lock().unwrap();
+        let model_guard = model.read().unwrap();
         extract_view_state(&model_guard)
     };
 
@@ -61,9 +65,9 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
     });
 
-    // Check exit conditions (only view mode - shutdown is handled by select! in run_expanded_view)
+    // Check exit conditions
     {
-        let model_guard = model.lock().unwrap();
+        let model_guard = model.read().unwrap();
         if !matches!(model_guard.ui.view_mode, ViewMode::ExpandedLogs { .. }) {
             hooks.use_context_mut::<SystemContext>().exit();
             return element!(View).into_any();
@@ -120,7 +124,7 @@ fn calculate_viewport_height(terminal_height: u16) -> usize {
 /// Handle terminal input (keyboard and mouse) for the expanded view
 fn handle_terminal_event(
     event: TerminalEvent,
-    model: &Arc<Mutex<Model>>,
+    model: &Arc<RwLock<Model>>,
     shutdown: &Arc<Shutdown>,
     total_lines: usize,
     viewport_height: usize,
@@ -142,12 +146,12 @@ fn handle_terminal_event(
 /// Handle keyboard input
 fn handle_key_event(
     key_event: KeyEvent,
-    model: &Arc<Mutex<Model>>,
+    model: &Arc<RwLock<Model>>,
     shutdown: &Arc<Shutdown>,
     total_lines: usize,
     viewport_height: usize,
 ) {
-    let mut model_guard = model.lock().unwrap();
+    let mut model_guard = model.write().unwrap();
 
     match key_event.code {
         // Exit expanded view
@@ -212,11 +216,11 @@ fn handle_key_event(
 /// Handle mouse input (scroll wheel)
 fn handle_mouse_event(
     mouse_event: FullscreenMouseEvent,
-    model: &Arc<Mutex<Model>>,
+    model: &Arc<RwLock<Model>>,
     total_lines: usize,
     viewport_height: usize,
 ) {
-    let mut model_guard = model.lock().unwrap();
+    let mut model_guard = model.write().unwrap();
     let scroll_lines = 3; // Lines to scroll per wheel tick
 
     match mouse_event.kind {

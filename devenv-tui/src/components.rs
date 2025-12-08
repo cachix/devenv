@@ -4,10 +4,35 @@ use crate::model::{Activity, ActivityVariant};
 use human_repr::{HumanCount, HumanThroughput};
 use iocraft::prelude::*;
 use std::collections::VecDeque;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-/// Spinner animation frames (matching current CLI)
-pub const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+/// Spinner animation frames (braille dots pattern)
+const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const SPINNER_INTERVAL_MS: u64 = 80;
+
+/// Self-animating spinner component.
+/// Manages its own animation state and only re-renders itself.
+#[derive(Default, Props)]
+pub struct SpinnerProps {
+    pub color: Option<Color>,
+}
+
+#[component]
+pub fn Spinner(mut hooks: Hooks, props: &SpinnerProps) -> impl Into<AnyElement<'static>> {
+    let mut frame = hooks.use_state(|| 0usize);
+    let color = props.color.unwrap_or(COLOR_ACTIVE);
+
+    hooks.use_future(async move {
+        loop {
+            tokio::time::sleep(Duration::from_millis(SPINNER_INTERVAL_MS)).await;
+            frame.set((frame.get() + 1) % SPINNER_FRAMES.len());
+        }
+    });
+
+    element! {
+        Text(content: SPINNER_FRAMES[frame.get()], color: color)
+    }
+}
 
 /// Build logs viewport height for collapsed preview (press 'e' to expand to fullscreen)
 pub const LOG_VIEWPORT_COLLAPSED: usize = 10;
@@ -35,7 +60,7 @@ pub const COLOR_HIERARCHY: Color = Color::AnsiValue(242); // Medium grey for hie
 pub struct HierarchyPrefixComponent {
     pub indent: String,
     pub depth: usize,
-    pub spinner: Option<String>,
+    pub show_spinner: bool,
     /// Completion state: None = active, Some(true) = success, Some(false) = failed
     pub completed: Option<bool>,
 }
@@ -45,13 +70,13 @@ impl HierarchyPrefixComponent {
         Self {
             indent,
             depth,
-            spinner: None,
+            show_spinner: false,
             completed: None,
         }
     }
 
-    pub fn with_spinner(mut self, spinner_frame: usize) -> Self {
-        self.spinner = Some(SPINNER_FRAMES[spinner_frame].to_string());
+    pub fn with_spinner(mut self) -> Self {
+        self.show_spinner = true;
         self
     }
 
@@ -86,10 +111,10 @@ impl HierarchyPrefixComponent {
                 }
                 None => {
                     // Active - show spinner
-                    if let Some(ref spinner_char) = self.spinner {
+                    if self.show_spinner {
                         prefix_children.push(
                             element!(View(margin_right: 1) {
-                                Text(content: spinner_char, color: COLOR_ACTIVE)
+                                Spinner(color: COLOR_ACTIVE)
                             })
                             .into_any(),
                         );
@@ -100,7 +125,7 @@ impl HierarchyPrefixComponent {
             // Indented items: align hierarchy line with parent's first char (after spinner if any)
             // Parent has: [spinner + space] + content, so we need 2 spaces for spinner width
             // Then (depth-1) * 2 for additional nesting levels
-            let spinner_offset = if self.spinner.is_some() || self.completed.is_some() {
+            let spinner_offset = if self.show_spinner || self.completed.is_some() {
                 2
             } else {
                 0
@@ -218,7 +243,7 @@ impl ActivityTextComponent {
                 View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
                     #(final_prefix)
                 }
-                // Flexible middle column - can overflow  
+                // Flexible middle column - can overflow
                 View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
                     Text(content: shortened_name, color: if self.is_selected { COLOR_INTERACTIVE } else { Color::Reset })
                     #(if show_suffix && self.suffix.is_some() {
@@ -314,23 +339,16 @@ pub struct DownloadActivityComponent<'a> {
     pub activity: &'a Activity,
     pub depth: usize,
     pub is_selected: bool,
-    pub spinner_frame: usize,
     /// Completion state: None = active, Some(true) = success, Some(false) = failed
     pub completed: Option<bool>,
 }
 
 impl<'a> DownloadActivityComponent<'a> {
-    pub fn new(
-        activity: &'a Activity,
-        depth: usize,
-        is_selected: bool,
-        spinner_frame: usize,
-    ) -> Self {
+    pub fn new(activity: &'a Activity, depth: usize, is_selected: bool) -> Self {
         Self {
             activity,
             depth,
             is_selected,
-            spinner_frame,
             completed: None,
         }
     }
@@ -349,7 +367,7 @@ impl<'a> DownloadActivityComponent<'a> {
 
         // First line: activity name
         let prefix = HierarchyPrefixComponent::new(indent.clone(), self.depth)
-            .with_spinner(self.spinner_frame)
+            .with_spinner()
             .with_completed(self.completed)
             .render();
 
@@ -634,4 +652,3 @@ impl<'a> ExpandedContentComponent<'a> {
 
 /// Backwards-compatible alias
 pub type BuildLogsComponent<'a> = ExpandedContentComponent<'a>;
-
