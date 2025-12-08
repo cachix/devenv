@@ -7,7 +7,7 @@ use tracing_subscriber::{EnvFilter, prelude::*};
 
 use crate::tracing::{
     DevenvFieldFormatter, DevenvFormat, DevenvIndicatifFilter, DevenvLayer, IndicatifLayer,
-    SpanAttributes, SpanAttributesLayer, SpanIdLayer, SpanIds,
+    SpanIdLayer, SpanIds,
 };
 
 pub(crate) use crate::tracing::HumanReadableDuration;
@@ -46,7 +46,6 @@ where
     layer.with_level("level");
     layer.with_target("target");
     layer.serialize_extension::<SpanIds>("span_ids");
-    layer.serialize_extension::<SpanAttributes>("span_attrs");
     layer.with_event("fields");
     layer
 }
@@ -58,7 +57,6 @@ pub fn init_tracing_default() {
 pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Option<&Path>) {
     let devenv_layer = DevenvLayer::new();
     let span_id_layer = SpanIdLayer;
-    let span_attrs_layer = SpanAttributesLayer;
 
     let filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::from(level).into())
@@ -82,7 +80,6 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                     let file_layer = create_json_export_layer(file);
                     tracing_subscriber::registry()
                         .with(span_id_layer)
-                        .with(span_attrs_layer)
                         .with(filter)
                         .with(devenv_layer)
                         .with(stderr_layer)
@@ -92,7 +89,6 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                 None => {
                     tracing_subscriber::registry()
                         .with(span_id_layer)
-                        .with(span_attrs_layer)
                         .with(filter)
                         .with(devenv_layer)
                         .with(stderr_layer)
@@ -111,7 +107,6 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                     let file_layer = create_json_export_layer(file);
                     tracing_subscriber::registry()
                         .with(span_id_layer)
-                        .with(span_attrs_layer)
                         .with(filter)
                         .with(devenv_layer)
                         .with(stderr_layer)
@@ -121,7 +116,6 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                 None => {
                     tracing_subscriber::registry()
                         .with(span_id_layer)
-                        .with(span_attrs_layer)
                         .with(filter)
                         .with(devenv_layer)
                         .with(stderr_layer)
@@ -155,7 +149,6 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                     let file_layer = create_json_export_layer(file);
                     tracing_subscriber::registry()
                         .with(span_id_layer)
-                        .with(span_attrs_layer)
                         .with(filter)
                         .with(devenv_layer)
                         .with(stderr_layer)
@@ -166,7 +159,6 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                 None => {
                     tracing_subscriber::registry()
                         .with(span_id_layer)
-                        .with(span_attrs_layer)
                         .with(filter)
                         .with(devenv_layer)
                         .with(stderr_layer)
@@ -185,7 +177,6 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                 layer.with_level("level");
                 layer.with_target("target");
                 layer.serialize_extension::<SpanIds>("span_ids");
-                layer.serialize_extension::<SpanAttributes>("span_attrs");
                 layer.with_event("fields");
                 layer
             }
@@ -196,7 +187,6 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                     let stderr_layer = create_stderr_layer();
                     tracing_subscriber::registry()
                         .with(span_id_layer)
-                        .with(span_attrs_layer)
                         .with(filter)
                         .with(stderr_layer)
                         .with(file_layer)
@@ -205,7 +195,6 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                 None => {
                     tracing_subscriber::registry()
                         .with(span_id_layer)
-                        .with(span_attrs_layer)
                         .with(filter)
                         .with(create_stderr_layer())
                         .init();
@@ -220,7 +209,6 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                     let file_layer = create_json_export_layer(file);
                     tracing_subscriber::registry()
                         .with(span_id_layer)
-                        .with(span_attrs_layer)
                         .with(filter)
                         .with(file_layer)
                         .init();
