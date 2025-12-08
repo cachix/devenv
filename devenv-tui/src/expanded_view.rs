@@ -6,6 +6,7 @@
 use crate::model::ViewMode;
 use crate::Model;
 use iocraft::prelude::*;
+use iocraft::{FullscreenMouseEvent, MouseEventKind};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -43,14 +44,14 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         return element!(View).into_any();
     };
 
-    // Handle keyboard events
+    // Handle keyboard and mouse events
     hooks.use_terminal_events({
         let model = model.clone();
         let shutdown = shutdown.clone();
         let total_lines = state.total_lines;
         let viewport_height = calculate_viewport_height(height);
         move |event| {
-            handle_keyboard_event(
+            handle_terminal_event(
                 event,
                 &model,
                 &shutdown,
@@ -116,22 +117,36 @@ fn calculate_viewport_height(terminal_height: u16) -> usize {
     (terminal_height as usize).saturating_sub(2) // header + footer
 }
 
-/// Handle keyboard input for the expanded view
-fn handle_keyboard_event(
+/// Handle terminal input (keyboard and mouse) for the expanded view
+fn handle_terminal_event(
     event: TerminalEvent,
     model: &Arc<Mutex<Model>>,
     shutdown: &Arc<Shutdown>,
     total_lines: usize,
     viewport_height: usize,
 ) {
-    let TerminalEvent::Key(key_event) = event else {
-        return;
-    };
-
-    if key_event.kind == KeyEventKind::Release {
-        return;
+    match event {
+        TerminalEvent::Key(key_event) => {
+            if key_event.kind == KeyEventKind::Release {
+                return;
+            }
+            handle_key_event(key_event, model, shutdown, total_lines, viewport_height);
+        }
+        TerminalEvent::FullscreenMouse(mouse_event) => {
+            handle_mouse_event(mouse_event, model, total_lines, viewport_height);
+        }
+        TerminalEvent::Resize(_, _) | _ => {}
     }
+}
 
+/// Handle keyboard input
+fn handle_key_event(
+    key_event: KeyEvent,
+    model: &Arc<Mutex<Model>>,
+    shutdown: &Arc<Shutdown>,
+    total_lines: usize,
+    viewport_height: usize,
+) {
     let mut model_guard = model.lock().unwrap();
 
     match key_event.code {
@@ -190,6 +205,32 @@ fn handle_keyboard_event(
             shutdown.shutdown();
         }
 
+        _ => {}
+    }
+}
+
+/// Handle mouse input (scroll wheel)
+fn handle_mouse_event(
+    mouse_event: FullscreenMouseEvent,
+    model: &Arc<Mutex<Model>>,
+    total_lines: usize,
+    viewport_height: usize,
+) {
+    let mut model_guard = model.lock().unwrap();
+    let scroll_lines = 3; // Lines to scroll per wheel tick
+
+    match mouse_event.kind {
+        MouseEventKind::ScrollDown => {
+            if let ViewMode::ExpandedLogs { scroll_offset, .. } = &mut model_guard.ui.view_mode {
+                let max_offset = total_lines.saturating_sub(viewport_height);
+                *scroll_offset = (*scroll_offset + scroll_lines).min(max_offset);
+            }
+        }
+        MouseEventKind::ScrollUp => {
+            if let ViewMode::ExpandedLogs { scroll_offset, .. } = &mut model_guard.ui.view_mode {
+                *scroll_offset = scroll_offset.saturating_sub(scroll_lines);
+            }
+        }
         _ => {}
     }
 }
