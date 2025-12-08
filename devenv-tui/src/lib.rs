@@ -8,6 +8,7 @@ pub mod expanded_view;
 pub mod model;
 pub mod view;
 
+pub use app::{TuiApp, TuiConfig};
 pub use model::{
     Activity, ActivityVariant, BuildActivity, ChildActivityLimit, DownloadActivity, Model,
     ProgressActivity, QueryActivity, TaskActivity, TaskDisplayStatus, TerminalSize, ViewMode,

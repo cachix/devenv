@@ -1,12 +1,11 @@
+use crate::app::TuiConfig;
 use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind,
     Message, Operation, Task,
 };
 use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-const MAX_LOG_MESSAGES: usize = 1000;
-const MAX_LOG_LINES_PER_BUILD: usize = 1000;
 
 /// Configuration for limiting displayed child activities
 #[derive(Debug, Clone)]
@@ -36,11 +35,12 @@ pub struct Model {
     pub app_state: AppState,
     pub completed_messages: Vec<String>,
     next_message_id: u64,
+    config: Arc<TuiConfig>,
 }
 
 impl Default for Model {
     fn default() -> Self {
-        Self::new()
+        Self::with_config(Arc::new(TuiConfig::default()))
     }
 }
 
@@ -202,12 +202,12 @@ impl Default for ViewMode {
 impl Model {
     /// Create a new Model, querying the terminal for its size.
     pub fn new() -> Self {
-        let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
-        Self::with_terminal_size(width, height)
+        Self::with_config(Arc::new(TuiConfig::default()))
     }
 
-    /// Create a new Model with a fixed terminal size (useful for tests).
-    pub fn with_terminal_size(width: u16, height: u16) -> Self {
+    /// Create a new Model with custom configuration.
+    pub fn with_config(config: Arc<TuiConfig>) -> Self {
+        let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
         Self {
             message_log: VecDeque::new(),
             activities: HashMap::new(),
@@ -234,7 +234,20 @@ impl Model {
             app_state: AppState::Running,
             completed_messages: Vec::new(),
             next_message_id: u64::MAX / 2,
+            config,
         }
+    }
+
+    /// Create a new Model with a fixed terminal size (useful for tests).
+    pub fn with_terminal_size(width: u16, height: u16) -> Self {
+        let mut model = Self::new();
+        model.ui.terminal_size = TerminalSize { width, height };
+        model
+    }
+
+    /// Get the TUI configuration.
+    pub fn config(&self) -> &TuiConfig {
+        &self.config
     }
 
     /// Update terminal size (call on resize events).
@@ -526,7 +539,7 @@ impl Model {
 
     fn handle_activity_log(&mut self, id: u64, line: String, is_error: bool) {
         let logs = self.build_logs.entry(id).or_default();
-        if logs.len() >= MAX_LOG_LINES_PER_BUILD {
+        if logs.len() >= self.config.max_log_lines_per_build {
             logs.pop_front();
         }
         logs.push_back(line.clone());
@@ -582,7 +595,7 @@ impl Model {
 
     pub fn add_log_message(&mut self, message: Message) {
         self.message_log.push_back(message);
-        if self.message_log.len() > MAX_LOG_MESSAGES {
+        if self.message_log.len() > self.config.max_log_messages {
             self.message_log.pop_front();
         }
     }
