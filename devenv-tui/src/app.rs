@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_shutdown::Shutdown;
+use tracing::debug;
 
 /// Restore terminal to normal state.
 /// Call this after the TUI has exited to ensure the terminal is usable.
@@ -32,19 +33,18 @@ pub fn restore_terminal() {
 fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let ui_tx = hooks.use_context::<mpsc::Sender<crate::UiEvent>>();
     let model = hooks.use_context::<Arc<Mutex<Model>>>();
-    let shutdown = hooks.use_context::<Arc<Shutdown>>();
     let (terminal_width, terminal_height) = hooks.use_terminal_size();
+    let mut should_exit = hooks.use_state(|| false);
+    let shutdown = hooks.use_context::<Arc<Shutdown>>();
+    let mut system = hooks.use_context_mut::<SystemContext>();
 
-    if shutdown.is_cancelled() {
-        hooks.use_context_mut::<SystemContext>().exit();
-    }
-
-    // TODO: fix
-    let ui_tx_clone = ui_tx.clone();
-    let mut send = hooks.use_async_handler(move |event: crate::UiEvent| {
-        let ui_tx_clone = ui_tx_clone.clone();
-        async move { ui_tx_clone.send(event).await.unwrap() }
-    });
+    let send = {
+        let ui_tx = ui_tx.clone();
+        hooks.use_async_handler(move |event: crate::UiEvent| {
+            let ui_tx = ui_tx.clone();
+            async move { ui_tx.send(event).await.unwrap() }
+        })
+    };
 
     // Track previous terminal size to detect changes
     let mut prev_size = hooks.use_state(crate::TerminalSize::default);
@@ -80,6 +80,7 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             if let TerminalEvent::Key(key_event) = event
                 && key_event.kind != KeyEventKind::Release
             {
+                debug!("Key event: {:?}", key_event);
                 match key_event.code {
                     KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                         shutdown.shutdown();
@@ -92,6 +93,7 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 activity_id,
                                 scroll_offset: 0,
                             };
+                            should_exit.set(true);
                         }
                     }
                     code => send(crate::UiEvent::KeyInput(code)),
@@ -99,6 +101,10 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
         }
     });
+
+    if should_exit.get() || shutdown.is_cancelled() {
+        system.exit();
+    }
 
     // Render the view
     if let Ok(model_guard) = model.lock() {
@@ -126,18 +132,31 @@ pub async fn run_app(
     let (ui_tx, ui_rx) = mpsc::channel(32);
 
     // Spawn event processor task (runs throughout, independent of view changes)
-    let model_clone = Arc::clone(&model);
-    tokio::spawn(async move {
-        crate::process_events(activity_rx, ui_rx, model_clone).await;
+    tokio::spawn({
+        let model = Arc::clone(&model);
+        async move {
+            crate::process_events(activity_rx, ui_rx, model).await;
+        }
     });
 
     // Track height to clear when returning from expanded view
     let mut pre_expand_height: u16 = 0;
 
-    tokio::select! {
-        _ = shutdown.wait_for_shutdown() => {
-        },
-        _ = run_view(model.clone(), ui_tx, shutdown.clone(), &mut pre_expand_height) => {}
+    loop {
+        let ui_tx = ui_tx.clone();
+        tokio::select! {
+            _ = shutdown.wait_for_shutdown() => {
+                break;
+            }
+
+            _ =
+                run_view(
+                    model.clone(),
+                    ui_tx,
+                    shutdown.clone(),
+                    &mut pre_expand_height,
+                ) => { }
+        }
     }
 
     // // Clear the TUI content before exiting
@@ -185,7 +204,7 @@ async fn run_view(
                 }
             };
 
-            element.render_loop().await
+            element.render_loop().ignore_ctrl_c().await
         }
         ViewMode::ExpandedLogs { .. } => {
             // Store the rendered height before switching to expanded view
@@ -200,7 +219,7 @@ async fn run_view(
                     }
                 }
             };
-            element.fullscreen().await
+            element.fullscreen().ignore_ctrl_c().await
         }
     }
 }

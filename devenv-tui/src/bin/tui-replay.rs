@@ -204,8 +204,8 @@ async fn main() -> Result<()> {
             info!("TUI exited");
         }
         _ = ctrl_c() => {
-            shutdown.shutdown();
             info!("Interrupted");
+            shutdown.shutdown();
         }
     }
 
