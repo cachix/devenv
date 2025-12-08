@@ -23,6 +23,8 @@ pub struct TuiConfig {
     pub max_log_lines_per_build: usize,
     /// Number of log lines to show in collapsed view
     pub log_viewport_collapsed: usize,
+    /// Maximum frames per second for rendering
+    pub max_fps: u64,
 }
 
 impl Default for TuiConfig {
@@ -32,6 +34,7 @@ impl Default for TuiConfig {
             max_log_messages: 1000,
             max_log_lines_per_build: 1000,
             log_viewport_collapsed: 10,
+            max_fps: 30,
         }
     }
 }
@@ -154,6 +157,7 @@ pub fn restore_terminal() {
 /// Main TUI component (inline mode)
 #[component]
 fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let config = hooks.use_context::<Arc<TuiConfig>>();
     let model = hooks.use_context::<Arc<RwLock<Model>>>();
     let notify = hooks.use_context::<Arc<Notify>>();
     let (terminal_width, terminal_height) = hooks.use_terminal_size();
@@ -161,15 +165,13 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let shutdown = hooks.use_context::<Arc<Shutdown>>();
     let mut system = hooks.use_context_mut::<SystemContext>();
 
-    // Redraw when notified of model changes
-    let mut redraw = hooks.use_state(|| 0u64);
+    // Redraw when notified of model changes (throttled)
+    let redraw = hooks.use_state(|| 0u64);
     hooks.use_future({
         let notify = notify.clone();
+        let max_fps = config.max_fps;
         async move {
-            loop {
-                notify.notified().await;
-                redraw.set(redraw.get().wrapping_add(1));
-            }
+            crate::throttled_notify_loop(notify, redraw, max_fps).await;
         }
     });
 
