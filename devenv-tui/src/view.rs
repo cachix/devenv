@@ -11,7 +11,7 @@ use iocraft::Context;
 use iocraft::components::ContextProvider;
 use iocraft::prelude::*;
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Main view function that creates the UI
 pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
@@ -250,8 +250,11 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
     } = &*ctx;
     let indent = "  ".repeat(*depth);
 
-    // Calculate elapsed time
-    let elapsed = Instant::now().duration_since(activity.start_time);
+    // Calculate elapsed time - use stored duration for completed activities
+    let elapsed = match &activity.state {
+        NixActivityState::Completed { duration, .. } => *duration,
+        NixActivityState::Active => activity.start_time.elapsed(),
+    };
     let elapsed_str = format!("{:.1}s", elapsed.as_secs_f64());
 
     // Build and return the activity element
