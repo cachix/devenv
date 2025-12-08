@@ -182,7 +182,7 @@ async fn main() -> Result<()> {
     let mut tui_task = tokio::spawn({
         let shutdown = shutdown.clone();
         async move {
-            match devenv_tui::app::run_app(rx, shutdown).await {
+            match devenv_tui::TuiApp::new(rx, shutdown).run().await {
                 Ok(_) => info!("TUI exited normally"),
                 Err(e) => warn!("TUI error: {e}"),
             }

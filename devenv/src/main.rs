@@ -83,7 +83,7 @@ fn run_with_tui(cli: Cli) -> Result<()> {
         .build()
         .into_diagnostic()?;
 
-    let _ = rt.block_on(devenv_tui::app::run_app(activity_rx, shutdown));
+    let _ = rt.block_on(devenv_tui::TuiApp::new(activity_rx, shutdown).run());
 
     // Restore terminal to normal state (disable raw mode, show cursor)
     devenv_tui::app::restore_terminal();

@@ -12,6 +12,130 @@ use tokio::sync::{mpsc, Notify};
 use tokio_shutdown::Shutdown;
 use tracing::debug;
 
+/// Configuration for the TUI application.
+#[derive(Debug, Clone)]
+pub struct TuiConfig {
+    /// Maximum events to batch before processing
+    pub event_batch_size: usize,
+    /// Maximum log messages to keep in memory
+    pub max_log_messages: usize,
+    /// Maximum log lines per build activity
+    pub max_log_lines_per_build: usize,
+    /// Number of log lines to show in collapsed view
+    pub log_viewport_collapsed: usize,
+}
+
+impl Default for TuiConfig {
+    fn default() -> Self {
+        Self {
+            event_batch_size: 64,
+            max_log_messages: 1000,
+            max_log_lines_per_build: 1000,
+            log_viewport_collapsed: 10,
+        }
+    }
+}
+
+/// Builder for creating and running the TUI application.
+pub struct TuiApp {
+    config: TuiConfig,
+    activity_rx: mpsc::Receiver<ActivityEvent>,
+    shutdown: Arc<Shutdown>,
+}
+
+impl TuiApp {
+    /// Create a new TUI application with required dependencies.
+    pub fn new(activity_rx: mpsc::Receiver<ActivityEvent>, shutdown: Arc<Shutdown>) -> Self {
+        Self {
+            config: TuiConfig::default(),
+            activity_rx,
+            shutdown,
+        }
+    }
+
+    /// Set the event batch size for processing activity events.
+    pub fn batch_size(mut self, size: usize) -> Self {
+        self.config.event_batch_size = size;
+        self
+    }
+
+    /// Set the maximum number of log messages to keep in memory.
+    pub fn max_messages(mut self, n: usize) -> Self {
+        self.config.max_log_messages = n;
+        self
+    }
+
+    /// Set the maximum log lines per build activity.
+    pub fn max_build_logs(mut self, n: usize) -> Self {
+        self.config.max_log_lines_per_build = n;
+        self
+    }
+
+    /// Set the number of log lines to show in collapsed view.
+    pub fn collapsed_lines(mut self, n: usize) -> Self {
+        self.config.log_viewport_collapsed = n;
+        self
+    }
+
+    /// Run the TUI application.
+    pub async fn run(self) -> std::io::Result<()> {
+        let config = Arc::new(self.config);
+        let model = Arc::new(RwLock::new(Model::with_config(config.clone())));
+        let notify = Arc::new(Notify::new());
+        let shutdown = self.shutdown;
+
+        // Spawn event processor with batching for performance
+        tokio::spawn({
+            let model = model.clone();
+            let notify = notify.clone();
+            let event_batch_size = config.event_batch_size;
+            let mut activity_rx = self.activity_rx;
+            async move {
+                let mut batch = Vec::with_capacity(event_batch_size);
+
+                while let Some(event) = activity_rx.recv().await {
+                    batch.push(event);
+                    while let Ok(event) = activity_rx.try_recv() {
+                        batch.push(event);
+                        if batch.len() >= event_batch_size {
+                            break;
+                        }
+                    }
+
+                    if let Ok(mut m) = model.write() {
+                        for event in batch.drain(..) {
+                            m.apply_activity_event(event);
+                        }
+                    }
+
+                    notify.notify_waiters();
+                }
+            }
+        });
+
+        // Track height to clear when returning from expanded view
+        let mut pre_expand_height: u16 = 0;
+
+        loop {
+            tokio::select! {
+                _ = shutdown.wait_for_shutdown() => {
+                    break;
+                }
+
+                _ = run_view(
+                    model.clone(),
+                    notify.clone(),
+                    shutdown.clone(),
+                    config.clone(),
+                    &mut pre_expand_height,
+                ) => { }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 /// Restore terminal to normal state.
 /// Call this after the TUI has exited to ensure the terminal is usable.
 pub fn restore_terminal() {
@@ -29,7 +153,7 @@ pub fn restore_terminal() {
 
 /// Main TUI component (inline mode)
 #[component]
-fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let model = hooks.use_context::<Arc<RwLock<Model>>>();
     let notify = hooks.use_context::<Arc<Notify>>();
     let (terminal_width, terminal_height) = hooks.use_terminal_size();
@@ -124,58 +248,11 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     }
 }
 
-/// Create and run the TUI application
-///
-/// Takes ownership of the activity event receiver and sets up all TUI internals.
-/// The application switches between main view (non-fullscreen) and expanded view
-/// (fullscreen with alternate screen buffer) based on user input.
-pub async fn run_app(
-    activity_rx: mpsc::Receiver<ActivityEvent>,
-    shutdown: Arc<Shutdown>,
-) -> std::io::Result<()> {
-    let model = Arc::new(RwLock::new(Model::new()));
-    let notify = Arc::new(Notify::new());
-
-    // Spawn event processor
-    tokio::spawn({
-        let model = model.clone();
-        let notify = notify.clone();
-        let mut activity_rx = activity_rx;
-        async move {
-            while let Some(event) = activity_rx.recv().await {
-                if let Ok(mut m) = model.write() {
-                    m.apply_activity_event(event);
-                }
-                notify.notify_waiters();
-            }
-        }
-    });
-
-    // Track height to clear when returning from expanded view
-    let mut pre_expand_height: u16 = 0;
-
-    loop {
-        tokio::select! {
-            _ = shutdown.wait_for_shutdown() => {
-                break;
-            }
-
-            _ = run_view(
-                model.clone(),
-                notify.clone(),
-                shutdown.clone(),
-                &mut pre_expand_height,
-            ) => { }
-        }
-    }
-
-    Ok(())
-}
-
 async fn run_view(
     model: Arc<RwLock<Model>>,
     notify: Arc<Notify>,
     shutdown: Arc<Shutdown>,
+    config: Arc<TuiConfig>,
     pre_expand_height: &mut u16,
 ) -> std::io::Result<()> {
     let view_mode = { model.read().unwrap().ui.view_mode.clone() };
@@ -193,10 +270,12 @@ async fn run_view(
             }
 
             let mut element = element! {
-                ContextProvider(value: Context::owned(shutdown.clone())) {
-                    ContextProvider(value: Context::owned(notify.clone())) {
-                        ContextProvider(value: Context::owned(model.clone())) {
-                            TuiApp
+                ContextProvider(value: Context::owned(config.clone())) {
+                    ContextProvider(value: Context::owned(shutdown.clone())) {
+                        ContextProvider(value: Context::owned(notify.clone())) {
+                            ContextProvider(value: Context::owned(model.clone())) {
+                                MainView
+                            }
                         }
                     }
                 }
@@ -208,10 +287,12 @@ async fn run_view(
             *pre_expand_height = model.read().unwrap().calculate_rendered_height();
 
             let mut element = element! {
-                ContextProvider(value: Context::owned(shutdown.clone())) {
-                    ContextProvider(value: Context::owned(notify.clone())) {
-                        ContextProvider(value: Context::owned(model.clone())) {
-                            ExpandedLogView
+                ContextProvider(value: Context::owned(config.clone())) {
+                    ContextProvider(value: Context::owned(shutdown.clone())) {
+                        ContextProvider(value: Context::owned(notify.clone())) {
+                            ContextProvider(value: Context::owned(model.clone())) {
+                                ExpandedLogView
+                            }
                         }
                     }
                 }
