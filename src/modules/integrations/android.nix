@@ -3,6 +3,11 @@
 let
   cfg = config.android;
 
+  # Read available package versions from nixpkgs
+  repoJson = builtins.fromJSON (builtins.readFile "${toString pkgs.path}/pkgs/development/mobile/androidenv/repo.json");
+  availableVersions = package: builtins.attrNames repoJson.packages.${package};
+  latestVersion = package: lib.last (builtins.sort builtins.lessThan (availableVersions package));
+
   androidEnvModule = pkgs.callPackage "${toString pkgs.path}/pkgs/development/mobile/androidenv";
   androidEnvArgs = {
     inherit pkgs;
@@ -105,10 +110,10 @@ in
 
     platformTools.version = lib.mkOption {
       type = lib.types.str;
-      default = if cfg.flutter.enable then "34.0.4" else "34.0.5";
+      default = latestVersion "platform-tools";
       description = ''
         The version of the Android platform tools to install.
-        By default, version 34.0.5 is installed or 34.0.5 if flutter is enabled.
+        Available versions: ${lib.concatStringsSep ", " (availableVersions "platform-tools")}.
       '';
     };
 
@@ -132,10 +137,10 @@ in
 
     emulator.version = lib.mkOption {
       type = lib.types.str;
-      default = "34.1.9";
+      default = latestVersion "emulator";
       description = ''
         The version of the Android Emulator to install.
-        By default, version 34.1.9 is installed.
+        Available versions: ${lib.concatStringsSep ", " (availableVersions "emulator")}.
       '';
     };
 
