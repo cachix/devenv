@@ -1,8 +1,8 @@
 use crate::{
     components::{*, LOG_VIEWPORT_COLLAPSED},
     model::{
-        Activity, ActivitySummary, ActivityVariant, Model, NixActivityState, TaskDisplayStatus,
-        TerminalSize,
+        Activity, ActivityModel, ActivitySummary, ActivityVariant, NixActivityState,
+        TaskDisplayStatus, TerminalSize, UiState,
     },
 };
 use devenv_activity::ActivityLevel;
@@ -11,19 +11,20 @@ use iocraft::Context;
 use iocraft::components::ContextProvider;
 use iocraft::prelude::*;
 use std::collections::VecDeque;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Main view function that creates the UI
-pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
+pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'static>> {
     let active_activities = model.get_display_activities();
 
     let summary = model.calculate_summary();
-    let has_selection = model.ui.selected_activity.is_some();
-    let selected_id = model.ui.selected_activity;
-    let terminal_size = model.ui.terminal_size;
+    let has_selection = ui_state.selected_activity.is_some();
+    let selected_id = ui_state.selected_activity;
+    let terminal_size = ui_state.terminal_size;
 
     // Check if we have a selected activity with logs/details
-    let selected_activity = model.get_selected_activity();
+    let selected_activity = selected_id.and_then(|id| model.get_activity(id));
     let selected_logs = selected_activity
         .as_ref()
         .filter(|a| {
@@ -125,7 +126,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
                     display_activity.activity.variant,
                     ActivityVariant::Evaluating(_)
                 ))
-            && let Some(logs) = selected_logs.as_ref()
+            && let Some(logs) = selected_logs
         {
             let logs_component = ExpandedContentComponent::new(Some(logs));
             total_height += logs_component.calculate_height();
@@ -134,12 +135,10 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
         // Message activities with details show limited lines (collapsed preview)
         if let ActivityVariant::Message(ref msg_data) = display_activity.activity.variant
             && msg_data.details.is_some()
-        {
-            if let Some(logs) = model.get_build_logs(display_activity.activity.id) {
+            && let Some(logs) = model.get_build_logs(display_activity.activity.id) {
                 let visible_count = logs.len().min(LOG_VIEWPORT_COLLAPSED);
                 total_height += visible_count;
             }
-        }
 
     }
     let min_height = 3; // Minimum height to show at least a few items
@@ -231,7 +230,7 @@ struct ActivityRenderContext {
     activity: Activity,
     depth: usize,
     is_selected: bool,
-    logs: Option<VecDeque<String>>,
+    logs: Option<Arc<VecDeque<String>>>,
     /// Completion state: None = active, Some(true) = success, Some(false) = failed
     completed: Option<bool>,
 }
@@ -281,7 +280,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let mut build_elements = vec![main_line];
 
                 // Add build logs using the component (collapsed preview, press 'e' to expand)
-                let logs_component = ExpandedContentComponent::new(logs.as_ref())
+                let logs_component = ExpandedContentComponent::new(logs.as_deref())
                     .with_empty_message("  → no build logs yet (press 'e' to expand)");
                 let log_elements = logs_component.render();
                 build_elements.extend(log_elements);
@@ -453,7 +452,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let mut elements = vec![main_line];
 
                 // Add file list using the logs component (collapsed preview, press 'e' to expand)
-                let logs_component = ExpandedContentComponent::new(logs.as_ref())
+                let logs_component = ExpandedContentComponent::new(logs.as_deref())
                     .with_empty_message("  → no files evaluated yet (press 'e' to expand)");
                 let log_elements = logs_component.render();
                 elements.extend(log_elements);
@@ -537,7 +536,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let mut all_lines: Vec<AnyElement<'static>> = vec![];
 
                 // First add detail/trace lines (collapsed preview, press 'e' to expand)
-                if let Some(detail_lines) = logs.as_ref() {
+                if let Some(detail_lines) = logs.as_deref() {
                     let visible_lines: Vec<_> = detail_lines
                         .iter()
                         .rev()

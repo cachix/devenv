@@ -25,20 +25,21 @@ impl Default for ChildActivityLimit {
     }
 }
 
+/// Activity data model - contains only activity state from the event processor.
+/// This is the only data that needs to be behind an RwLock.
 #[derive(Debug)]
-pub struct Model {
+pub struct ActivityModel {
     pub message_log: VecDeque<Message>,
     pub activities: HashMap<u64, Activity>,
     pub root_activities: Vec<u64>,
-    pub build_logs: HashMap<u64, VecDeque<String>>,
-    pub ui: UiState,
+    pub build_logs: HashMap<u64, Arc<VecDeque<String>>>,
     pub app_state: AppState,
     pub completed_messages: Vec<String>,
     next_message_id: u64,
     config: Arc<TuiConfig>,
 }
 
-impl Default for Model {
+impl Default for ActivityModel {
     fn default() -> Self {
         Self::with_config(Arc::new(TuiConfig::default()))
     }
@@ -129,6 +130,7 @@ pub struct Activity {
     pub details: Vec<ActivityDetail>,
 }
 
+/// UI state - lives outside the RwLock, managed by the UI thread.
 #[derive(Debug)]
 pub struct UiState {
     pub viewport: ViewportConfig,
@@ -137,6 +139,86 @@ pub struct UiState {
     pub view_options: ViewOptions,
     pub terminal_size: TerminalSize,
     pub view_mode: ViewMode,
+}
+
+impl UiState {
+    /// Create a new UiState, querying the terminal for its size.
+    pub fn new() -> Self {
+        let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
+        Self {
+            viewport: ViewportConfig {
+                current: 10,
+                min: 10,
+                max: 40,
+                activities_visible: 5,
+            },
+            selected_activity: None,
+            scroll: ScrollState {
+                log_offset: 0,
+                activity_position: 0,
+            },
+            view_options: ViewOptions {
+                show_details: false,
+            },
+            terminal_size: TerminalSize { width, height },
+            view_mode: ViewMode::Main,
+        }
+    }
+
+    /// Update terminal size (call on resize events).
+    pub fn set_terminal_size(&mut self, width: u16, height: u16) {
+        self.terminal_size = TerminalSize { width, height };
+    }
+
+    /// Select the next activity from the list of selectable IDs.
+    pub fn select_next_activity(&mut self, selectable: &[u64]) {
+        if selectable.is_empty() {
+            return;
+        }
+        match self.selected_activity {
+            None => {
+                self.selected_activity = selectable.first().copied();
+            }
+            Some(current_id) => {
+                if let Some(current_pos) = selectable.iter().position(|&id| id == current_id) {
+                    let next_pos = (current_pos + 1) % selectable.len();
+                    self.selected_activity = Some(selectable[next_pos]);
+                } else {
+                    self.selected_activity = selectable.first().copied();
+                }
+            }
+        }
+    }
+
+    /// Select the previous activity from the list of selectable IDs.
+    pub fn select_previous_activity(&mut self, selectable: &[u64]) {
+        if selectable.is_empty() {
+            return;
+        }
+        match self.selected_activity {
+            None => {
+                self.selected_activity = selectable.last().copied();
+            }
+            Some(current_id) => {
+                if let Some(current_pos) = selectable.iter().position(|&id| id == current_id) {
+                    let prev_pos = if current_pos == 0 {
+                        selectable.len() - 1
+                    } else {
+                        current_pos - 1
+                    };
+                    self.selected_activity = Some(selectable[prev_pos]);
+                } else {
+                    self.selected_activity = selectable.last().copied();
+                }
+            }
+        }
+    }
+}
+
+impl Default for UiState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -182,55 +264,30 @@ pub enum TaskDisplayStatus {
 }
 
 /// Which view is currently active in the TUI
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum ViewMode {
     /// Main activity list view (non-fullscreen, preserves terminal scrollback)
+    #[default]
     Main,
     /// Expanded log view for a specific activity (fullscreen, uses alternate screen)
-    ExpandedLogs {
-        activity_id: u64,
-        scroll_offset: usize,
-    },
+    /// Note: scroll_offset is managed as component-local state for immediate responsiveness
+    ExpandedLogs { activity_id: u64 },
 }
 
-impl Default for ViewMode {
-    fn default() -> Self {
-        ViewMode::Main
-    }
-}
 
-impl Model {
-    /// Create a new Model, querying the terminal for its size.
+impl ActivityModel {
+    /// Create a new ActivityModel.
     pub fn new() -> Self {
         Self::with_config(Arc::new(TuiConfig::default()))
     }
 
-    /// Create a new Model with custom configuration.
+    /// Create a new ActivityModel with custom configuration.
     pub fn with_config(config: Arc<TuiConfig>) -> Self {
-        let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
         Self {
             message_log: VecDeque::new(),
             activities: HashMap::new(),
             root_activities: Vec::new(),
             build_logs: HashMap::new(),
-            ui: UiState {
-                viewport: ViewportConfig {
-                    current: 10,
-                    min: 10,
-                    max: 40,
-                    activities_visible: 5,
-                },
-                selected_activity: None,
-                scroll: ScrollState {
-                    log_offset: 0,
-                    activity_position: 0,
-                },
-                view_options: ViewOptions {
-                    show_details: false,
-                },
-                terminal_size: TerminalSize { width, height },
-                view_mode: ViewMode::Main,
-            },
             app_state: AppState::Running,
             completed_messages: Vec::new(),
             next_message_id: u64::MAX / 2,
@@ -238,21 +295,9 @@ impl Model {
         }
     }
 
-    /// Create a new Model with a fixed terminal size (useful for tests).
-    pub fn with_terminal_size(width: u16, height: u16) -> Self {
-        let mut model = Self::new();
-        model.ui.terminal_size = TerminalSize { width, height };
-        model
-    }
-
     /// Get the TUI configuration.
     pub fn config(&self) -> &TuiConfig {
         &self.config
-    }
-
-    /// Update terminal size (call on resize events).
-    pub fn set_terminal_size(&mut self, width: u16, height: u16) {
-        self.ui.terminal_size = TerminalSize { width, height };
     }
 
     pub fn apply_activity_event(&mut self, event: ActivityEvent) {
@@ -538,11 +583,15 @@ impl Model {
     }
 
     fn handle_activity_log(&mut self, id: u64, line: String, is_error: bool) {
-        let logs = self.build_logs.entry(id).or_default();
-        if logs.len() >= self.config.max_log_lines_per_build {
-            logs.pop_front();
+        let logs = self
+            .build_logs
+            .entry(id)
+            .or_insert_with(|| Arc::new(VecDeque::new()));
+        let logs_mut = Arc::make_mut(logs);
+        if logs_mut.len() >= self.config.max_log_lines_per_build {
+            logs_mut.pop_front();
         }
-        logs.push_back(line.clone());
+        logs_mut.push_back(line.clone());
 
         if let Some(activity) = self.activities.get_mut(&id) {
             match &mut activity.variant {
@@ -579,7 +628,7 @@ impl Model {
             // Store details as lines in build_logs for expansion
             if let Some(details) = msg.details {
                 let lines: VecDeque<String> = details.lines().map(String::from).collect();
-                self.build_logs.insert(id, lines);
+                self.build_logs.insert(id, Arc::new(lines));
             }
 
             // Mark message activities as immediately completed (they're just informational)
@@ -619,48 +668,6 @@ impl Model {
             })
             .map(|(id, _)| *id)
             .collect()
-    }
-
-    pub fn select_next_activity(&mut self) {
-        let selectable = self.get_selectable_activity_ids();
-        if !selectable.is_empty() {
-            match self.ui.selected_activity {
-                None => {
-                    self.ui.selected_activity = selectable.first().copied();
-                }
-                Some(current_id) => {
-                    if let Some(current_pos) = selectable.iter().position(|&id| id == current_id) {
-                        let next_pos = (current_pos + 1) % selectable.len();
-                        self.ui.selected_activity = Some(selectable[next_pos]);
-                    } else {
-                        self.ui.selected_activity = selectable.first().copied();
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn select_previous_activity(&mut self) {
-        let selectable = self.get_selectable_activity_ids();
-        if !selectable.is_empty() {
-            match self.ui.selected_activity {
-                None => {
-                    self.ui.selected_activity = selectable.last().copied();
-                }
-                Some(current_id) => {
-                    if let Some(current_pos) = selectable.iter().position(|&id| id == current_id) {
-                        let prev_pos = if current_pos == 0 {
-                            selectable.len() - 1
-                        } else {
-                            current_pos - 1
-                        };
-                        self.ui.selected_activity = Some(selectable[prev_pos]);
-                    } else {
-                        self.ui.selected_activity = selectable.last().copied();
-                    }
-                }
-            }
-        }
     }
 
     pub fn get_display_activities(&self) -> Vec<DisplayActivity> {
@@ -751,13 +758,11 @@ impl Model {
         summary
     }
 
-    pub fn get_selected_activity(&self) -> Option<&Activity> {
-        self.ui
-            .selected_activity
-            .and_then(|id| self.activities.get(&id))
+    pub fn get_activity(&self, activity_id: u64) -> Option<&Activity> {
+        self.activities.get(&activity_id)
     }
 
-    pub fn get_build_logs(&self, activity_id: u64) -> Option<&VecDeque<String>> {
+    pub fn get_build_logs(&self, activity_id: u64) -> Option<&Arc<VecDeque<String>>> {
         self.build_logs.get(&activity_id)
     }
 
@@ -881,49 +886,47 @@ impl Model {
 
     /// Calculate the height that the TUI will render.
     /// This mirrors the height calculation in view.rs.
-    pub fn calculate_rendered_height(&self) -> u16 {
+    pub fn calculate_rendered_height(
+        &self,
+        selected_activity: Option<u64>,
+        terminal_height: u16,
+    ) -> u16 {
         let activities = self.get_display_activities();
-        let selected_id = self.ui.selected_activity;
 
         let mut total_height: usize = 0;
 
         for display_activity in activities.iter() {
             total_height += 1; // Base height for activity
 
-            let is_selected =
-                selected_id.is_some_and(|id| display_activity.activity.id == id && display_activity.activity.id != 0);
+            let is_selected = selected_activity
+                .is_some_and(|id| display_activity.activity.id == id && display_activity.activity.id != 0);
 
             // Add extra line for downloads with progress
             if let ActivityVariant::Download(ref download_data) = display_activity.activity.variant {
                 if download_data.size_current.is_some() && download_data.size_total.is_some() {
                     total_height += 1;
-                } else if let Some(progress) = &display_activity.activity.progress {
-                    if progress.total.unwrap_or(0) > 0 {
+                } else if let Some(progress) = &display_activity.activity.progress
+                    && progress.total.unwrap_or(0) > 0 {
                         total_height += 1;
                     }
-                }
             }
 
             // Build and evaluation activities show logs when selected
             if is_selected
                 && (matches!(display_activity.activity.variant, ActivityVariant::Build(_))
                     || matches!(display_activity.activity.variant, ActivityVariant::Evaluating(_)))
-            {
-                if let Some(logs) = self.get_build_logs(display_activity.activity.id) {
+                && let Some(logs) = self.get_build_logs(display_activity.activity.id) {
                     let visible_count = logs.len().min(10); // LOG_VIEWPORT_COLLAPSED = 10
                     total_height += visible_count.max(1);
                 }
-            }
 
             // Message activities with details
-            if let ActivityVariant::Message(ref msg_data) = display_activity.activity.variant {
-                if msg_data.details.is_some() {
-                    if let Some(logs) = self.get_build_logs(display_activity.activity.id) {
+            if let ActivityVariant::Message(ref msg_data) = display_activity.activity.variant
+                && msg_data.details.is_some()
+                    && let Some(logs) = self.get_build_logs(display_activity.activity.id) {
                         let visible_count = logs.len().min(10);
                         total_height += visible_count;
                     }
-                }
-            }
         }
 
         // Error messages panel
@@ -936,7 +939,7 @@ impl Model {
         // Clamp to terminal height
         let min_height = 3;
         let calculated = total_height.max(min_height) as u16;
-        calculated.min(self.ui.terminal_size.height)
+        calculated.min(terminal_height)
     }
 }
 
