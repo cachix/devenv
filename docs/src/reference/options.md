@@ -225,7 +225,7 @@ boolean
 
 
 The version of the Android Emulator to install.
-By default, version 34.1.9 is installed.
+Available versions: 32.1.15, 33.1.20, 34.1.19, 34.1.9, 34.2.11, 34.2.16, 35.1.19, 35.1.2, 35.1.3, 35.1.4, 35.2.5, 35.3.11, 35.3.12, 35.4.8, 35.4.9, 35.5.10, 35.5.2, 35.5.3, 35.5.8, 35.6.2, 35.6.9, 36.1.2, 36.1.8, 36.1.9, 36.2.10, 36.2.4, 36.3.3.
 
 
 
@@ -235,7 +235,7 @@ string
 
 
 *Default:*
-` "34.1.9" `
+` "36.3.3" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -443,7 +443,7 @@ list of string
 
 
 The version of the Android platform tools to install.
-By default, version 34.0.5 is installed or 34.0.5 if flutter is enabled.
+Available versions: 34.0.5, 35.0.1, 35.0.2, 36.0.0, 36.0.1.
 
 
 
@@ -453,7 +453,7 @@ string
 
 
 *Default:*
-` "34.0.5" `
+` "36.0.1" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)

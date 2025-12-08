@@ -10,7 +10,8 @@ Getting a full working Android development environment is as simple as:
 }
 ```
 
-For a more tailored development environment you can specify specific options:
+For a more tailored development environment you can specify specific options.
+Note that `platformTools.version` and `emulator.version` default to the latest available versions from nixpkgs:
 
 ```nix title="devenv.nix"
 { pkgs, ... }:
@@ -24,11 +25,11 @@ For a more tailored development environment you can specify specific options:
     cmake.version = [ "3.22.1" ];
     cmdLineTools.version = "11.0";
     tools.version = "26.1.1";
-    platformTools.version = "34.0.5";
+    # platformTools.version defaults to latest from nixpkgs
     buildTools.version = [ "30.0.3" ];
     emulator = {
       enable = true;
-      version = "34.1.9";
+      # version defaults to latest from nixpkgs
     };
     sources.enable = false;
     systemImages.enable = true;
