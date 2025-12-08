@@ -1,4 +1,4 @@
-use crate::TerminalSize;
+use crate::{ActivityModel, TerminalSize, UiState};
 use iocraft::KeyCode;
 
 /// Low-volume UI control events
@@ -15,22 +15,25 @@ pub enum UiEvent {
 }
 
 impl UiEvent {
-    /// Process this UI event by applying it to the model
+    /// Process this UI event by applying it to UI state
     ///
     /// UI events are processed immediately with priority for responsiveness.
-    pub fn apply(self, model: &mut crate::Model) {
+    /// Activity model is only read (for getting selectable activities).
+    pub fn apply(self, activity_model: &ActivityModel, ui_state: &mut UiState) {
         match self {
             UiEvent::KeyInput(key_code) => {
                 use KeyCode::*;
                 match key_code {
                     Down => {
-                        model.select_next_activity();
+                        let selectable = activity_model.get_selectable_activity_ids();
+                        ui_state.select_next_activity(&selectable);
                     }
                     Up => {
-                        model.select_previous_activity();
+                        let selectable = activity_model.get_selectable_activity_ids();
+                        ui_state.select_previous_activity(&selectable);
                     }
                     Esc => {
-                        model.ui.selected_activity = None;
+                        ui_state.selected_activity = None;
                     }
                     // Note: 'e' for expand is handled directly in TuiApp to trigger view switch
                     _ => {}
@@ -38,7 +41,7 @@ impl UiEvent {
             }
 
             UiEvent::Resize(size) => {
-                model.set_terminal_size(size.width, size.height);
+                ui_state.set_terminal_size(size.width, size.height);
             }
         }
     }

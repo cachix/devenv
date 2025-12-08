@@ -1,6 +1,6 @@
 use crate::{
     expanded_view::ExpandedLogView,
-    model::{Model, ViewMode},
+    model::{ActivityModel, UiState, ViewMode},
     view::view,
 };
 use crossterm::{cursor, execute, terminal};
@@ -83,13 +83,14 @@ impl TuiApp {
     /// Run the TUI application.
     pub async fn run(self) -> std::io::Result<()> {
         let config = Arc::new(self.config);
-        let model = Arc::new(RwLock::new(Model::with_config(config.clone())));
+        let activity_model = Arc::new(RwLock::new(ActivityModel::with_config(config.clone())));
         let notify = Arc::new(Notify::new());
         let shutdown = self.shutdown;
 
         // Spawn event processor with batching for performance
+        // This only writes to ActivityModel, never touches UiState
         tokio::spawn({
-            let model = model.clone();
+            let activity_model = activity_model.clone();
             let notify = notify.clone();
             let event_batch_size = config.event_batch_size;
             let mut activity_rx = self.activity_rx;
@@ -105,7 +106,7 @@ impl TuiApp {
                         }
                     }
 
-                    if let Ok(mut m) = model.write() {
+                    if let Ok(mut m) = activity_model.write() {
                         for event in batch.drain(..) {
                             m.apply_activity_event(event);
                         }
@@ -119,6 +120,11 @@ impl TuiApp {
         // Track height to clear when returning from expanded view
         let mut pre_expand_height: u16 = 0;
 
+        // UiState is separate from ActivityModel to avoid lock contention.
+        // The event processor only writes to ActivityModel, never UiState.
+        // UiState is only modified by the UI thread.
+        let ui_state = Arc::new(RwLock::new(UiState::new()));
+
         loop {
             tokio::select! {
                 _ = shutdown.wait_for_shutdown() => {
@@ -126,7 +132,8 @@ impl TuiApp {
                 }
 
                 _ = run_view(
-                    model.clone(),
+                    activity_model.clone(),
+                    ui_state.clone(),
                     notify.clone(),
                     shutdown.clone(),
                     config.clone(),
@@ -158,14 +165,15 @@ pub fn restore_terminal() {
 #[component]
 fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let config = hooks.use_context::<Arc<TuiConfig>>();
-    let model = hooks.use_context::<Arc<RwLock<Model>>>();
+    let activity_model = hooks.use_context::<Arc<RwLock<ActivityModel>>>();
+    let ui_state = hooks.use_context::<Arc<RwLock<UiState>>>();
     let notify = hooks.use_context::<Arc<Notify>>();
     let (terminal_width, terminal_height) = hooks.use_terminal_size();
     let mut should_exit = hooks.use_state(|| false);
     let shutdown = hooks.use_context::<Arc<Shutdown>>();
     let mut system = hooks.use_context_mut::<SystemContext>();
 
-    // Redraw when notified of model changes (throttled)
+    // Redraw when notified of activity model changes (throttled)
     let redraw = hooks.use_state(|| 0u64);
     hooks.use_future({
         let notify = notify.clone();
@@ -175,7 +183,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
     });
 
-    // Track terminal size changes
+    // Track terminal size changes (update UiState, no activity model lock needed)
     let mut prev_size = hooks.use_state(crate::TerminalSize::default);
     let current_size = crate::TerminalSize {
         width: terminal_width,
@@ -183,14 +191,15 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     };
     if current_size != prev_size.get() {
         prev_size.set(current_size);
-        if let Ok(mut m) = model.write() {
-            m.set_terminal_size(current_size.width, current_size.height);
+        if let Ok(mut ui) = ui_state.write() {
+            ui.set_terminal_size(current_size.width, current_size.height);
         }
     }
 
-    // Handle keyboard events
+    // Handle keyboard events - only UI state updates, no activity model writes
     hooks.use_terminal_events({
-        let model = model.clone();
+        let activity_model = activity_model.clone();
+        let ui_state = ui_state.clone();
         let shutdown = shutdown.clone();
 
         move |event| {
@@ -203,29 +212,34 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         shutdown.shutdown();
                     }
                     KeyCode::Char('e') => {
-                        if let Ok(mut m) = model.write() {
-                            if let Some(activity_id) = m.ui.selected_activity {
-                                m.ui.view_mode = ViewMode::ExpandedLogs {
-                                    activity_id,
-                                    scroll_offset: 0,
-                                };
-                                should_exit.set(true);
-                            }
+                        if let Ok(mut ui) = ui_state.write()
+                            && let Some(activity_id) = ui.selected_activity
+                        {
+                            ui.view_mode = ViewMode::ExpandedLogs { activity_id };
+                            should_exit.set(true);
                         }
                     }
                     KeyCode::Down => {
-                        if let Ok(mut m) = model.write() {
-                            m.select_next_activity();
+                        // Get selectable IDs from activity model (read-only)
+                        if let Ok(model) = activity_model.read() {
+                            let selectable = model.get_selectable_activity_ids();
+                            if let Ok(mut ui) = ui_state.write() {
+                                ui.select_next_activity(&selectable);
+                            }
                         }
                     }
                     KeyCode::Up => {
-                        if let Ok(mut m) = model.write() {
-                            m.select_previous_activity();
+                        // Get selectable IDs from activity model (read-only)
+                        if let Ok(model) = activity_model.read() {
+                            let selectable = model.get_selectable_activity_ids();
+                            if let Ok(mut ui) = ui_state.write() {
+                                ui.select_previous_activity(&selectable);
+                            }
                         }
                     }
                     KeyCode::Esc => {
-                        if let Ok(mut m) = model.write() {
-                            m.ui.selected_activity = None;
+                        if let Ok(mut ui) = ui_state.write() {
+                            ui.selected_activity = None;
                         }
                     }
                     _ => {}
@@ -238,11 +252,12 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         system.exit();
     }
 
-    // Render the view
-    if let Ok(model_guard) = model.read() {
+    // Render the view - read activity model briefly, UI state separately
+    let ui = ui_state.read().unwrap();
+    if let Ok(model_guard) = activity_model.read() {
         element! {
             View(width: terminal_width) {
-                #(vec![view(&model_guard).into()])
+                #(vec![view(&model_guard, &ui).into()])
             }
         }
     } else {
@@ -251,13 +266,18 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 }
 
 async fn run_view(
-    model: Arc<RwLock<Model>>,
+    activity_model: Arc<RwLock<ActivityModel>>,
+    ui_state: Arc<RwLock<UiState>>,
     notify: Arc<Notify>,
     shutdown: Arc<Shutdown>,
     config: Arc<TuiConfig>,
     pre_expand_height: &mut u16,
 ) -> std::io::Result<()> {
-    let view_mode = { model.read().unwrap().ui.view_mode.clone() };
+    // Copy view_mode in a block to ensure the guard is dropped before any await
+    let view_mode = {
+        let guard = ui_state.read().unwrap();
+        guard.view_mode
+    };
 
     match view_mode {
         ViewMode::Main => {
@@ -275,8 +295,10 @@ async fn run_view(
                 ContextProvider(value: Context::owned(config.clone())) {
                     ContextProvider(value: Context::owned(shutdown.clone())) {
                         ContextProvider(value: Context::owned(notify.clone())) {
-                            ContextProvider(value: Context::owned(model.clone())) {
-                                MainView
+                            ContextProvider(value: Context::owned(activity_model.clone())) {
+                                ContextProvider(value: Context::owned(ui_state.clone())) {
+                                    MainView
+                                }
                             }
                         }
                     }
@@ -285,15 +307,25 @@ async fn run_view(
 
             element.render_loop().ignore_ctrl_c().await
         }
-        ViewMode::ExpandedLogs { .. } => {
-            *pre_expand_height = model.read().unwrap().calculate_rendered_height();
+        ViewMode::ExpandedLogs { activity_id } => {
+            // Calculate height before switching to expanded view
+            // Use a block to ensure guards are dropped before await
+            *pre_expand_height = {
+                let ui = ui_state.read().unwrap();
+                let model = activity_model.read().unwrap();
+                model.calculate_rendered_height(ui.selected_activity, ui.terminal_size.height)
+            };
 
             let mut element = element! {
                 ContextProvider(value: Context::owned(config.clone())) {
                     ContextProvider(value: Context::owned(shutdown.clone())) {
                         ContextProvider(value: Context::owned(notify.clone())) {
-                            ContextProvider(value: Context::owned(model.clone())) {
-                                ExpandedLogView
+                            ContextProvider(value: Context::owned(activity_model.clone())) {
+                                ContextProvider(value: Context::owned(ui_state.clone())) {
+                                    ContextProvider(value: Context::owned(activity_id)) {
+                                        ExpandedLogView
+                                    }
+                                }
                             }
                         }
                     }
