@@ -1,7 +1,7 @@
 use super::{
-    CommandResult,
+    CommandResult, tasks,
     tracing::{HumanReadableDuration, TraceFormat},
-    tasks, util,
+    util,
 };
 use ::nix::sys::signal;
 use ::nix::unistd::Pid;

@@ -64,11 +64,11 @@ pub struct GlobalOptions {
     #[arg(
         long,
         global = true,
-        env = "DEVENV_TRACE_EXPORT_FILE",
+        env = "DEVENV_TRACE_OUTPUT",
         help = "Path to export traces.",
         hide = true
     )]
-    pub trace_export_file: Option<PathBuf>,
+    pub trace_output: Option<PathBuf>,
 
     #[arg(short = 'j', long,
         global = true,
@@ -203,7 +203,7 @@ impl Default for GlobalOptions {
             quiet: false,
             trace_format: TraceFormat::default(),
             log_format: None,
-            trace_export_file: None,
+            trace_output: None,
             max_jobs: defaults.max_jobs,
             cores: defaults.cores,
             system: default_system(),

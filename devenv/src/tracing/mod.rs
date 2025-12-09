@@ -58,7 +58,7 @@ pub fn init_tracing_default() {
     init_tracing(Level::default(), TraceFormat::default(), None);
 }
 
-pub fn init_tracing(level: Level, trace_format: TraceFormat, trace_export_file: Option<&Path>) {
+pub fn init_tracing(level: Level, trace_format: TraceFormat, trace_output: Option<&Path>) {
     let devenv_layer = DevenvLayer::new();
     let span_id_layer = SpanIdLayer;
 
@@ -71,7 +71,7 @@ pub fn init_tracing(level: Level, trace_format: TraceFormat, trace_export_file: 
     let stderr = io::stderr;
     let ansi = stderr().is_terminal();
 
-    let export_file = trace_export_file.and_then(|path| File::create(path).ok());
+    let export_file = trace_output.and_then(|path| File::create(path).ok());
 
     match trace_format {
         TraceFormat::TracingFull => {
