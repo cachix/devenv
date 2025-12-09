@@ -1,6 +1,6 @@
 use super::{
     CommandResult,
-    log::{HumanReadableDuration, TraceFormat},
+    tracing::{HumanReadableDuration, TraceFormat},
     tasks, util,
 };
 use ::nix::sys::signal;

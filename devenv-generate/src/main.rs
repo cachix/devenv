@@ -1,7 +1,7 @@
 use clap::{Parser, crate_version};
 use devenv::{
     default_system,
-    log::{self, TraceFormat},
+    tracing::{self as devenv_tracing, TraceFormat},
 };
 use miette::{IntoDiagnostic, Result, bail};
 use similar::{ChangeTag, TextDiff};
@@ -81,14 +81,14 @@ async fn main() -> Result<()> {
     }
 
     let level = if cli.verbose {
-        log::Level::Debug
+        devenv_tracing::Level::Debug
     } else if cli.quiet {
-        log::Level::Silent
+        devenv_tracing::Level::Silent
     } else {
-        log::Level::default()
+        devenv_tracing::Level::default()
     };
 
-    log::init_tracing(level, cli.trace_format, None);
+    devenv_tracing::init_tracing(level, cli.trace_format, None);
 
     let description = if !cli.description.is_empty() {
         Some(cli.description.join(" "))

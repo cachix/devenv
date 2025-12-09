@@ -1,11 +1,10 @@
 pub mod changelog;
 pub mod cli;
 mod devenv;
-pub mod log;
 pub mod mcp;
 pub(crate) mod nix;
 pub mod nix_log_bridge;
-mod tracing;
+pub mod tracing;
 mod util;
 
 #[cfg(feature = "snix")]

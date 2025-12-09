@@ -2,7 +2,7 @@ use clap::crate_version;
 use devenv::{
     CommandResult, Devenv,
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
-    log,
+    tracing as devenv_tracing,
 };
 use devenv_activity::{ActivityLevel, message};
 use devenv_core::config::{self, Config};
@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     }
 
     // Branch based on log format
-    if cli.global_options.trace_format == log::TraceFormat::Tui {
+    if cli.global_options.trace_format == devenv_tracing::TraceFormat::Tui {
         run_with_tui(cli)
     } else {
         run_without_tui(cli)
@@ -47,7 +47,7 @@ fn run_with_tui(cli: Cli) -> Result<()> {
 
     // Initialize tracing
     let level = get_log_level(&cli);
-    log::init_tracing(
+    devenv_tracing::init_tracing(
         level,
         cli.global_options.trace_format,
         cli.global_options.trace_export_file.as_deref(),
@@ -104,7 +104,7 @@ async fn run_without_tui(cli: Cli) -> Result<()> {
 
     // Initialize tracing
     let level = get_log_level(&cli);
-    log::init_tracing(
+    devenv_tracing::init_tracing(
         level,
         cli.global_options.trace_format,
         cli.global_options.trace_export_file.as_deref(),
@@ -119,13 +119,13 @@ async fn run_without_tui(cli: Cli) -> Result<()> {
     result.exec()
 }
 
-fn get_log_level(cli: &Cli) -> log::Level {
+fn get_log_level(cli: &Cli) -> devenv_tracing::Level {
     if cli.global_options.verbose {
-        log::Level::Debug
+        devenv_tracing::Level::Debug
     } else if cli.global_options.quiet {
-        log::Level::Silent
+        devenv_tracing::Level::Silent
     } else {
-        log::Level::default()
+        devenv_tracing::Level::default()
     }
 }
 

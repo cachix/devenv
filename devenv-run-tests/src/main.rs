@@ -1,5 +1,5 @@
 use clap::Parser;
-use devenv::{Config, Devenv, DevenvOptions, log};
+use devenv::{Config, Devenv, DevenvOptions, tracing as devenv_tracing};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -464,7 +464,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
 
 #[tokio::main]
 async fn main() -> Result<ExitCode> {
-    log::init_tracing_default();
+    devenv_tracing::init_tracing_default();
 
     // If DEVENV_RUN_TESTS is set, run the tests.
     if env::var("DEVENV_RUN_TESTS") == Ok("1".to_string()) {
