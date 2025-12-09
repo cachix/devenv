@@ -15,6 +15,8 @@ let
           ./Cargo.toml
           ./Cargo.lock
           ./devenv
+          ./devenv-activity
+          ./devenv-activity-macros
           ./devenv-generate
           ./devenv-eval-cache
           ./devenv-cache-core
@@ -22,6 +24,7 @@ let
           ./devenv-snix-backend
           ./devenv-run-tests
           ./devenv-tasks
+          ./devenv-tui
           ./http-client-tls
           ./nix-conf-parser
           ./tokio-shutdown

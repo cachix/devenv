@@ -1,78 +1,39 @@
+use devenv_activity::{Activity, ActivityLevel, FetchKind, message, message_with_details};
+use regex::Regex;
+use std::sync::LazyLock;
 use devenv_eval_cache::Op;
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
-use tracing::{Span, debug, debug_span, error, info, trace, warn};
-
-/// Simple operation ID type for correlating Nix activities
-pub type OperationId = String;
+use tracing::{error, info, trace, warn};
 
 /// Bridge that converts Nix internal logs to tracing events
 pub struct NixLogBridge {
     /// Current active operations and their associated Nix activities
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
-    /// Current parent operation ID for correlating Nix activities
-    current_operation_id: Arc<Mutex<Option<OperationId>>>,
     /// Evaluation tracking state
     evaluation_state: Arc<Mutex<EvaluationState>>,
 }
 
 /// State for tracking file evaluations
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct EvaluationState {
-    /// Total number of files evaluated
-    total_files_evaluated: u64,
-    /// Recently evaluated files (for batching)
-    pending_files: VecDeque<String>,
-    /// Last time we sent an evaluation progress event
-    last_progress_update: Option<Instant>,
-    /// The span tracking the entire evaluation operation
-    span: Option<Span>,
+    /// The activity tracking the entire evaluation operation
+    activity: Option<Activity>,
 }
 
 /// Information about an active Nix activity
-#[derive(Debug)]
 struct NixActivityInfo {
-    #[allow(dead_code)] // Kept for future activity correlation
-    operation_id: OperationId,
     activity_type: ActivityType,
-    span: Span,
+    activity: Activity,
 }
 
 impl NixLogBridge {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             active_activities: Arc::new(Mutex::new(HashMap::new())),
-            current_operation_id: Arc::new(Mutex::new(None)),
             evaluation_state: Arc::new(Mutex::new(EvaluationState::default())),
         })
-    }
-
-    /// Set the current operation ID for correlating Nix activities
-    pub fn set_current_operation(&self, operation_id: OperationId) {
-        if let Ok(mut current) = self.current_operation_id.lock() {
-            *current = Some(operation_id);
-        }
-    }
-
-    /// Clear the current operation ID
-    pub fn clear_current_operation(&self) {
-        // First flush any pending evaluation updates before clearing the operation
-        // This ensures the operation_id is still available for the flush
-        self.flush_evaluation_updates();
-
-        if let Ok(mut current) = self.current_operation_id.lock() {
-            *current = None;
-        }
-
-        // Also reset the evaluation state for the next operation
-        if let Ok(mut state) = self.evaluation_state.lock() {
-            state.total_files_evaluated = 0;
-            state.pending_files.clear();
-            state.last_progress_update = None;
-            state.span = None; // Drop the span to end evaluation timing
-        }
     }
 
     /// Returns a callback that can be used by any log source.
@@ -105,51 +66,12 @@ impl NixLogBridge {
         }
     }
 
-    /// Flush any pending evaluation updates
-    fn flush_evaluation_updates(&self) {
-        let Ok(mut state) = self.evaluation_state.lock() else {
-            warn!("Failed to lock evaluation state for flushing");
-            return;
-        };
-
-        if state.pending_files.is_empty() {
-            return;
-        }
-
-        let Ok(current) = self.current_operation_id.lock() else {
-            warn!("Failed to lock operation ID for flushing");
-            return;
-        };
-
-        if current.is_none() {
-            warn!(
-                "No operation ID available for flushing {} pending files",
-                state.pending_files.len()
-            );
-            return;
-        }
-
-        let files: Vec<String> = state.pending_files.drain(..).collect();
-        trace!("Flushing {} pending evaluation files", files.len());
-
-        // Emit tracing event for evaluation progress using stored span
-        if let Some(ref span) = state.span {
-            span.in_scope(|| {
-                trace!(
-                    devenv.user_message = format!("Evaluated {} files", files.len()),
-                    files = ?files,
-                    "Evaluated {} files", files.len()
-                );
-            });
-        }
-    }
-
     /// Process a Nix internal log line and emit appropriate tracing events
     pub fn process_log_line(&self, line: &str) {
         if let Some(parse_result) = InternalLog::parse(line) {
             match parse_result {
                 Ok(internal_log) => {
-                    self.handle_internal_log(internal_log);
+                    self.process_internal_log(internal_log);
                 }
                 Err(e) => {
                     warn!("Failed to parse Nix internal log: {} - line: {}", e, line);
@@ -158,239 +80,171 @@ impl NixLogBridge {
         }
     }
 
-    /// Process a parsed InternalLog directly
-    pub fn process_internal_log(&self, log: InternalLog) {
-        self.handle_internal_log(log);
-    }
+    /// Handle a parsed InternalLog entry
+    fn process_internal_log(&self, log: InternalLog) {
+        match log {
+            InternalLog::Start {
+                id,
+                typ,
+                text,
+                fields,
+                ..
+            } => {
+                self.handle_activity_start(id, typ, text, fields);
+            }
+            InternalLog::Stop { id } => {
+                self.handle_activity_stop(id, true);
+            }
+            InternalLog::Result { id, typ, fields } => {
+                self.handle_activity_result(id, typ, fields);
+            }
+            InternalLog::SetPhase { phase } => {
+                // Find the most recent build activity and update its phase
+                if let Ok(activities) = self.active_activities.lock()
+                    && let Some((_, activity_info)) = activities
+                        .iter()
+                        .find(|(_, info)| info.activity_type == ActivityType::Build)
+                {
+                    activity_info.activity.phase(&phase);
+                }
+            }
+            InternalLog::Msg { level, ref msg, .. } => {
+                // First check if this is a file evaluation message
+                if let Some(op) = Op::from_internal_log(&log)
+                    && let Op::EvaluatedFile { source } = op
+                {
+                    self.handle_file_evaluation(source);
+                    return;
+                }
 
-    /// Process stderr from a pipe, reading line by line and feeding to the bridge
-    pub fn process_stderr<R: std::io::Read>(
-        &self,
-        stderr: R,
-        logging: bool,
-    ) -> std::io::Result<()> {
-        use std::io::{BufRead, BufReader};
+                // Handle regular log messages from Nix builds
+                if level <= Verbosity::Warn {
+                    // Send as activity message for TUI display
+                    let activity_level = match level {
+                        Verbosity::Error => ActivityLevel::Error,
+                        Verbosity::Warn => ActivityLevel::Warn,
+                        _ => ActivityLevel::Info,
+                    };
 
-        let reader = BufReader::new(stderr);
-        for line in reader.lines() {
-            let line = line?;
+                    // Parse Nix errors to extract summary and details
+                    if activity_level == ActivityLevel::Error {
+                        let (summary, details) = parse_nix_error(msg);
+                        message_with_details(activity_level, summary, details);
+                    } else {
+                        message(activity_level, msg);
+                    }
 
-            // Feed line to bridge for structured log processing
-            self.process_log_line(&line);
-
-            // Also output to terminal if logging is enabled
-            if logging {
-                eprintln!("{}", line);
+                    // Also log to tracing for file export and non-TUI modes
+                    match level {
+                        Verbosity::Error => error!("{msg}"),
+                        Verbosity::Warn => warn!("{msg}"),
+                        _ => info!("{msg}"),
+                    }
+                }
             }
         }
-
-        Ok(())
     }
 
-    /// Handle a parsed InternalLog entry
-    fn handle_internal_log(&self, log: InternalLog) {
-        let current_op_id = self
-            .current_operation_id
+    /// Insert an activity into the active activities map
+    fn insert_activity(&self, activity_id: u64, activity_type: ActivityType, activity: Activity) {
+        if let Ok(mut activities) = self.active_activities.lock() {
+            activities.insert(
+                activity_id,
+                NixActivityInfo {
+                    activity_type,
+                    activity,
+                },
+            );
+        }
+    }
+
+    /// Extract a string value from a Field
+    fn extract_string_field(field: &Field) -> Option<String> {
+        match field {
+            Field::String(s) => Some(s.clone()),
+            _ => None,
+        }
+    }
+
+    /// Get the current evaluation activity ID if one exists
+    fn get_evaluation_activity_id(&self) -> Option<u64> {
+        self.evaluation_state
             .lock()
             .ok()
-            .and_then(|guard| guard.clone());
-
-        if let Some(operation_id) = current_op_id {
-            match log {
-                InternalLog::Start {
-                    id,
-                    typ,
-                    text,
-                    fields,
-                    ..
-                } => {
-                    self.handle_activity_start(operation_id, id, typ, text, fields);
-                }
-                InternalLog::Stop { id } => {
-                    self.handle_activity_stop(id, true);
-                }
-                InternalLog::Result { id, typ, fields } => {
-                    self.handle_activity_result(id, typ, fields);
-                }
-                InternalLog::SetPhase { phase } => {
-                    // Find the most recent build activity and update its phase
-                    if let Ok(activities) = self.active_activities.lock()
-                        && let Some((_, activity_info)) = activities
-                            .iter()
-                            .find(|(_, info)| info.activity_type == ActivityType::Build)
-                    {
-                        activity_info.span.in_scope(|| {
-                            info!(
-                                devenv.user_message = format!("Build phase: {}", phase),
-                                phase = %phase,
-                                "Build phase: {}", phase
-                            );
-                        });
-                    }
-                }
-                InternalLog::Msg { level, ref msg, .. } => {
-                    // First check if this is a file evaluation message
-                    if let Some(op) = Op::from_internal_log(&log)
-                        && let Op::EvaluatedFile { source } = op
-                    {
-                        self.handle_file_evaluation(operation_id.clone(), source);
-                        return;
-                    }
-
-                    // Handle regular log messages from Nix builds
-                    if level <= Verbosity::Warn {
-                        match level {
-                            Verbosity::Error => error!("{msg}"),
-                            Verbosity::Warn => warn!("{msg}"),
-                            _ => info!("{msg}"),
-                        }
-                    }
-                }
-            }
-        }
+            .and_then(|state| state.activity.as_ref().map(|a| a.id()))
     }
 
     /// Handle the start of a Nix activity
     fn handle_activity_start(
         &self,
-        operation_id: OperationId,
         activity_id: u64,
         activity_type: ActivityType,
         text: String,
         fields: Vec<Field>,
     ) {
+        // Get the evaluation activity ID to use as parent for all Nix activities.
+        // This ensures parallel queries/downloads are children of the evaluation,
+        // not children of each other.
+        let parent_id = self.get_evaluation_activity_id();
+
         match activity_type {
             ActivityType::Build => {
                 let derivation_path = fields
                     .first()
-                    .and_then(|f| match f {
-                        Field::String(s) => Some(s.clone()),
-                        _ => None,
-                    })
+                    .and_then(Self::extract_string_field)
                     .unwrap_or_else(|| text.clone());
-
-                let machine = fields.get(1).and_then(|f| match f {
-                    Field::String(s) => Some(s.clone()),
-                    _ => None,
-                });
 
                 let derivation_name = extract_derivation_name(&derivation_path);
 
-                let message = if let Some(ref m) = machine {
-                    format!("Building {} on {}", derivation_name, m)
-                } else {
-                    format!("Building {}", derivation_name)
-                };
+                let activity = Activity::build(derivation_name)
+                    .id(activity_id)
+                    .derivation_path(derivation_path)
+                    .parent(parent_id)
+                    .start();
 
-                let span = debug_span!(
-                    "nix_derivation",
-                    devenv.user_message = %message,
-                    activity_id = activity_id,
-                    derivation_path = %derivation_path,
-                    derivation_name = %derivation_name,
-                    machine = ?machine
-                );
-                span.in_scope(|| {
-                    info!("{}", message);
-                });
-
-                if let Ok(mut activities) = self.active_activities.lock() {
-                    activities.insert(
-                        activity_id,
-                        NixActivityInfo {
-                            operation_id,
-                            activity_type,
-                            span,
-                        },
-                    );
-                }
+                self.insert_activity(activity_id, activity_type, activity);
             }
             ActivityType::QueryPathInfo => {
-                if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
-                    (fields.first(), fields.get(1))
-                {
-                    let package_name = extract_package_name(store_path);
+                if let Some(store_path) = fields.first().and_then(Self::extract_string_field) {
+                    let package_name = extract_package_name(&store_path);
+                    let substituter = fields.get(1).and_then(Self::extract_string_field);
 
-                    let span = debug_span!(
-                        "nix_query",
-                        devenv.user_message = format!("Querying {}", package_name),
-                        activity_id = activity_id,
-                        store_path = %store_path,
-                        package_name = %package_name,
-                        substituter = %substituter
-                    );
-                    span.in_scope(|| {
-                        info!("Querying {}", package_name);
-                    });
-
-                    if let Ok(mut activities) = self.active_activities.lock() {
-                        activities.insert(
-                            activity_id,
-                            NixActivityInfo {
-                                operation_id,
-                                activity_type,
-                                span,
-                            },
-                        );
+                    let mut builder = Activity::fetch(FetchKind::Query, package_name)
+                        .id(activity_id)
+                        .parent(parent_id);
+                    if let Some(url) = substituter {
+                        builder = builder.url(url);
                     }
+                    let activity = builder.start();
+
+                    self.insert_activity(activity_id, activity_type, activity);
                 }
             }
             ActivityType::CopyPath => {
-                // CopyPath is the actual download activity that shows byte progress
-                if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
-                    (fields.first(), fields.get(1))
-                {
-                    let package_name = extract_package_name(store_path);
+                if let Some(store_path) = fields.first().and_then(Self::extract_string_field) {
+                    let package_name = extract_package_name(&store_path);
+                    let substituter = fields.get(1).and_then(Self::extract_string_field);
 
-                    let span = debug_span!(
-                        "nix_download",
-                        devenv.user_message = format!("Downloading {}", package_name),
-                        activity_id = activity_id,
-                        store_path = %store_path,
-                        package_name = %package_name,
-                        substituter = %substituter
-                    );
-                    span.in_scope(|| {
-                        info!("Downloading {}", package_name);
-                    });
-
-                    if let Ok(mut activities) = self.active_activities.lock() {
-                        activities.insert(
-                            activity_id,
-                            NixActivityInfo {
-                                operation_id,
-                                activity_type,
-                                span,
-                            },
-                        );
+                    let mut builder = Activity::fetch(FetchKind::Download, package_name)
+                        .id(activity_id)
+                        .parent(parent_id);
+                    if let Some(url) = substituter {
+                        builder = builder.url(url);
                     }
+                    let activity = builder.start();
+
+                    self.insert_activity(activity_id, activity_type, activity);
                 }
             }
             ActivityType::FetchTree => {
-                // FetchTree activities show when fetching Git repos, tarballs, etc.
-                let span = debug_span!(
-                    "fetch_tree",
-                    devenv.user_message = format!("Fetching {}", text),
-                    activity_id = activity_id,
-                    message = %text
-                );
-                span.in_scope(|| {
-                    info!("Fetching {}", text);
-                });
+                let activity = Activity::fetch(FetchKind::Tree, text)
+                    .id(activity_id)
+                    .parent(parent_id)
+                    .start();
 
-                if let Ok(mut activities) = self.active_activities.lock() {
-                    activities.insert(
-                        activity_id,
-                        NixActivityInfo {
-                            operation_id,
-                            activity_type,
-                            span,
-                        },
-                    );
-                }
+                self.insert_activity(activity_id, activity_type, activity);
             }
             _ => {
-                // For other activity types, we can add support as needed
                 trace!("Unhandled Nix activity type: {:?}", activity_type);
             }
         }
@@ -398,69 +252,17 @@ impl NixLogBridge {
 
     /// Handle the stop of a Nix activity
     fn handle_activity_stop(&self, activity_id: u64, success: bool) {
-        if let Ok(mut activities) = self.active_activities.lock()
-            && let Some(activity_info) = activities.remove(&activity_id)
-        {
-            // If this is the last activity, flush any pending evaluation updates
-            if activities.is_empty() {
-                self.flush_evaluation_updates();
-            }
+        let Ok(mut activities) = self.active_activities.lock() else {
+            return;
+        };
+        let Some(activity_info) = activities.remove(&activity_id) else {
+            return;
+        };
 
-            match activity_info.activity_type {
-                ActivityType::Build => {
-                    let message = if success {
-                        "Build completed"
-                    } else {
-                        "Build failed"
-                    };
-                    activity_info.span.in_scope(|| {
-                        if success {
-                            info!("{}", message);
-                        } else {
-                            warn!("{}", message);
-                        }
-                    });
-                }
-                ActivityType::CopyPath => {
-                    let message = if success {
-                        "Download completed"
-                    } else {
-                        "Download failed"
-                    };
-                    activity_info.span.in_scope(|| {
-                        if success {
-                            info!("{}", message);
-                        } else {
-                            warn!("{}", message);
-                        }
-                    });
-                }
-                ActivityType::QueryPathInfo => {
-                    activity_info.span.in_scope(|| {
-                        if success {
-                            debug!("Query completed");
-                        } else {
-                            warn!("Query failed");
-                        }
-                    });
-                }
-                ActivityType::FetchTree => {
-                    let message = if success {
-                        "Fetch completed"
-                    } else {
-                        "Fetch failed"
-                    };
-                    activity_info.span.in_scope(|| {
-                        if success {
-                            info!("{}", message);
-                        } else {
-                            warn!("{}", message);
-                        }
-                    });
-                }
-                _ => {}
-            }
+        if !success {
+            activity_info.activity.fail();
         }
+        // Activity completes on drop
     }
 
     /// Handle activity result messages (like progress updates)
@@ -474,30 +276,12 @@ impl NixLogBridge {
             ResultType::Progress => {
                 // Handle generic progress updates with format [done, expected, running, failed]
                 if fields.len() >= 4 {
-                    if let (
-                        Some(Field::Int(done)),
-                        Some(Field::Int(expected)),
-                        Some(Field::Int(running)),
-                        Some(Field::Int(failed)),
-                    ) = (fields.first(), fields.get(1), fields.get(2), fields.get(3))
+                    if let (Some(Field::Int(done)), Some(Field::Int(expected)), _, _) =
+                        (fields.first(), fields.get(1), fields.get(2), fields.get(3))
                         && let Ok(activities) = self.active_activities.lock()
                         && let Some(activity_info) = activities.get(&activity_id)
                     {
-                        activity_info.span.in_scope(|| {
-                            debug!(
-                                devenv.user_message =
-                                    format!("Progress: {}/{} done", done, expected),
-                                done = done,
-                                expected = expected,
-                                running = running,
-                                failed = failed,
-                                "Progress: {}/{} done, {} running, {} failed",
-                                done,
-                                expected,
-                                running,
-                                failed
-                            );
-                        });
+                        activity_info.activity.progress(*done, *expected);
                     }
                 } else if fields.len() >= 2 {
                     // Fallback to download progress format for backward compatibility
@@ -514,21 +298,11 @@ impl NixLogBridge {
                         {
                             // Only CopyPath activities have byte-based download progress
                             if activity_info.activity_type == ActivityType::CopyPath {
-                                let message = if let Some(total) = total_bytes {
-                                    let percent = (*downloaded as f64 / total as f64) * 100.0;
-                                    format!("Download progress: {:.1}%", percent)
+                                if let Some(total) = total_bytes {
+                                    activity_info.activity.progress_bytes(*downloaded, total);
                                 } else {
-                                    format!("Downloaded {} bytes", downloaded)
-                                };
-
-                                activity_info.span.in_scope(|| {
-                                    debug!(
-                                        devenv.user_message = %message,
-                                        bytes_downloaded = downloaded,
-                                        total_bytes = ?total_bytes,
-                                        "{}", message
-                                    );
-                                });
+                                    activity_info.activity.progress_indeterminate(*downloaded);
+                                }
                             }
                         }
                     }
@@ -541,13 +315,7 @@ impl NixLogBridge {
                     && let Some(activity_info) = activities.get(&activity_id)
                     && activity_info.activity_type == ActivityType::Build
                 {
-                    activity_info.span.in_scope(|| {
-                        info!(
-                            devenv.user_message = format!("Build phase: {}", phase),
-                            phase = %phase,
-                            "Build phase: {}", phase
-                        );
-                    });
+                    activity_info.activity.phase(phase);
                 }
             }
             ResultType::BuildLogLine => {
@@ -556,85 +324,43 @@ impl NixLogBridge {
                     && let Ok(activities) = self.active_activities.lock()
                     && let Some(activity_info) = activities.get(&activity_id)
                 {
-                    activity_info.span.in_scope(|| {
-                        info!(
-                            line = %log_line,
-                            "Build output: {}", log_line
-                        );
-                    });
+                    activity_info.activity.log(log_line);
                 }
             }
             _ => {
-                // Handle other result types as needed
                 trace!("Unhandled Nix result type: {:?}", result_type);
             }
         }
     }
 
     /// Handle file evaluation events
-    fn handle_file_evaluation(&self, _operation_id: OperationId, file_path: std::path::PathBuf) {
-        const BATCH_SIZE: usize = 5; // Reduced from 10 for more responsive updates
-        const BATCH_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100); // Reduced from 200ms
-
+    fn handle_file_evaluation(&self, file_path: std::path::PathBuf) {
         if let Ok(mut state) = self.evaluation_state.lock() {
-            let file_path_str = file_path.display().to_string();
-
-            // If this is the first file, create and store the evaluation span
-            if state.total_files_evaluated == 0 && state.pending_files.is_empty() {
-                let span = debug_span!(
-                    "nix_evaluation",
-                    devenv.user_message = "Evaluating Nix files",
-                    first_file = %file_path_str
-                );
-                span.in_scope(|| {
-                    info!("Starting Nix evaluation: {}", file_path_str);
-                });
-                state.span = Some(span);
+            // If this is the first file, create the evaluation activity
+            if state.activity.is_none() {
+                let activity = Activity::evaluate("").start();
+                state.activity = Some(activity);
             }
 
-            // Add to pending files
-            state.pending_files.push_back(file_path_str);
-            state.total_files_evaluated += 1;
-
-            // Check if we should send a batch update
-            let now = Instant::now();
-            let batch_full = state.pending_files.len() >= BATCH_SIZE;
-            let timeout_exceeded = state
-                .last_progress_update
-                .is_some_and(|last| now.duration_since(last) >= BATCH_TIMEOUT);
-            let should_send = batch_full || timeout_exceeded;
-
-            if should_send && !state.pending_files.is_empty() {
-                let files: Vec<String> = state.pending_files.drain(..).collect();
-
-                // Emit progress event within the stored evaluation span
-                if let Some(ref span) = state.span {
-                    span.in_scope(|| {
-                        info!(
-                            devenv.user_message = format!("Evaluating Nix files ({} total)", state.total_files_evaluated),
-                            files = ?files,
-                            total_files_evaluated = state.total_files_evaluated,
-                            "Evaluated {} files (total: {})",
-                            files.len(),
-                            state.total_files_evaluated
-                        );
-                    });
-                }
-                state.last_progress_update = Some(now);
-            } else if state.last_progress_update.is_none() {
-                // First file - set the timer
-                state.last_progress_update = Some(now);
+            // Log the file path to the evaluation activity
+            if let Some(ref activity) = state.activity {
+                activity.log(file_path.display().to_string());
             }
         }
     }
 }
 
-/// Extract a human-readable derivation name from a derivation path
-fn extract_derivation_name(derivation_path: &str) -> String {
-    // Remove .drv suffix if present
-    let path = derivation_path
-        .strip_suffix(".drv")
-        .unwrap_or(derivation_path);
+/// Extract a human-readable name from a Nix path
+///
+/// For derivations, strips .drv suffix if present.
+/// Extracts the name part after the hash (format: /nix/store/hash-name)
+fn extract_nix_name(path: &str, strip_drv: bool) -> String {
+    // Remove .drv suffix if requested
+    let path = if strip_drv {
+        path.strip_suffix(".drv").unwrap_or(path)
+    } else {
+        path
+    };
 
     // Extract the name part after the hash
     if let Some(dash_pos) = path.rfind('-')
@@ -647,21 +373,56 @@ fn extract_derivation_name(derivation_path: &str) -> String {
     path.split('/').next_back().unwrap_or(path).to_string()
 }
 
+/// Extract a human-readable derivation name from a derivation path
+fn extract_derivation_name(derivation_path: &str) -> String {
+    extract_nix_name(derivation_path, true)
+}
+
 /// Extract a human-readable package name from a store path
 fn extract_package_name(store_path: &str) -> String {
-    // Extract the name part after the hash (format: /nix/store/hash-name)
-    if let Some(dash_pos) = store_path.rfind('-')
-        && let Some(slash_pos) = store_path[..dash_pos].rfind('/')
-    {
-        return store_path[slash_pos + 1..].to_string();
-    }
+    extract_nix_name(store_path, false)
+}
 
-    // Fallback: just take the filename
-    store_path
-        .split('/')
-        .next_back()
-        .unwrap_or(store_path)
-        .to_string()
+/// Regex for stripping ANSI escape codes
+static ANSI_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\x1b\[[0-9;]*m").expect("valid regex"));
+
+/// Strip ANSI escape codes from a string
+fn strip_ansi_codes(s: &str) -> String {
+    ANSI_REGEX.replace_all(s, "").to_string()
+}
+
+/// Parse a Nix error message to extract the summary and details.
+///
+/// Nix errors have the format:
+/// ```text
+/// error:
+///        … stack trace lines starting with ellipsis …
+///        error: <actual error message>
+/// ```
+///
+/// Returns (summary, details) where summary is the final error line
+/// and details is the full original message (including stack trace).
+fn parse_nix_error(msg: &str) -> (String, Option<String>) {
+    // Strip ANSI codes for parsing
+    let stripped = strip_ansi_codes(msg);
+
+    // Find the last "error:" which contains the actual error
+    if let Some(last_error_pos) = stripped.rfind("error:") {
+        let summary = stripped[last_error_pos..].trim().to_string();
+
+        // If there's content before the last error, include the full message as details
+        let details_part = stripped[..last_error_pos].trim();
+        let details = if details_part.is_empty() || details_part == "error:" {
+            None
+        } else {
+            Some(msg.to_string()) // Keep original with ANSI codes for details
+        };
+
+        (summary, details)
+    } else {
+        (msg.to_string(), None)
+    }
 }
 
 #[cfg(test)]
@@ -692,5 +453,50 @@ mod tests {
             "xyz456-rust-1.70.0-dev"
         );
         assert_eq!(extract_package_name("simple-name"), "simple-name");
+    }
+
+    #[test]
+    fn test_strip_ansi_codes() {
+        assert_eq!(strip_ansi_codes("\x1b[31;1merror:\x1b[0m"), "error:");
+        assert_eq!(strip_ansi_codes("no codes here"), "no codes here");
+        assert_eq!(
+            strip_ansi_codes("\x1b[34;1mblue\x1b[0m and \x1b[32mgreen\x1b[0m"),
+            "blue and green"
+        );
+    }
+
+    #[test]
+    fn test_parse_nix_error_simple() {
+        // Simple error without stack trace
+        let (summary, details) = parse_nix_error("error: attribute 'foo' not found");
+        assert_eq!(summary, "error: attribute 'foo' not found");
+        assert!(details.is_none());
+    }
+
+    #[test]
+    fn test_parse_nix_error_with_stack_trace() {
+        // Error with stack trace (like real Nix output)
+        let msg = "error:\n       … while evaluating\n         at file.nix:1:1\n\n       error: undefined variable 'pkgs'";
+        let (summary, details) = parse_nix_error(msg);
+        assert_eq!(summary, "error: undefined variable 'pkgs'");
+        assert!(details.is_some());
+        assert_eq!(details.unwrap(), msg); // Original message preserved
+    }
+
+    #[test]
+    fn test_parse_nix_error_with_ansi() {
+        // Error with ANSI codes (like real Nix output)
+        let msg = "\x1b[31;1merror:\x1b[0m\n       … stack trace\n\n       \x1b[31;1merror:\x1b[0m actual error message";
+        let (summary, details) = parse_nix_error(msg);
+        assert_eq!(summary, "error: actual error message");
+        assert!(details.is_some());
+    }
+
+    #[test]
+    fn test_parse_nix_error_only_error_prefix() {
+        // Just "error:" followed by the actual message on same line
+        let (summary, details) = parse_nix_error("error: something went wrong");
+        assert_eq!(summary, "error: something went wrong");
+        assert!(details.is_none());
     }
 }

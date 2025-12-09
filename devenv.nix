@@ -72,8 +72,14 @@
     pkgs.cargo-outdated # Find outdated crates
     pkgs.cargo-machete # Find unused crates
     pkgs.cargo-edit # Adds the set-version command
+    pkgs.cargo-insta # Snapshot testing for Rust
     pkgs.protobuf # snix
     pkgs.dbus # secretspec
+    # Force compilation from source instead of binary cache
+    (pkgs.hello.overrideAttrs (old: {
+      preferLocalBuild = true;
+      allowSubstitutes = false;
+    }))
   ];
 
   languages = {

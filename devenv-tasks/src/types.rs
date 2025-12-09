@@ -5,37 +5,29 @@ use tokio::time::{Duration, Instant};
 /// Task type: oneshot (run once) or process (long-running)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum TaskType {
     /// Task runs once and completes (default)
+    #[default]
     Oneshot,
     /// Task is a long-running process
     Process,
 }
 
-impl Default for TaskType {
-    fn default() -> Self {
-        TaskType::Oneshot
-    }
-}
-
 /// Dependency kind: wait for ready state or completion
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum DependencyKind {
     /// Wait for task to be ready/healthy (default)
     /// - For oneshot tasks: wait for successful completion
     /// - For process tasks: wait for ProcessReady state
+    #[default]
     Ready,
     /// Wait for task to complete/shutdown
     /// - For oneshot tasks: same as Ready (wait for completion)
     /// - For process tasks: wait for process to shut down
     Complete,
-}
-
-impl Default for DependencyKind {
-    fn default() -> Self {
-        DependencyKind::Ready
-    }
 }
 
 /// Dependency specification with optional suffix

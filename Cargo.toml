@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
   "devenv",
+  "devenv-activity",
+  "devenv-activity-macros",
   "devenv-cache-core",
   "devenv-core",
   "devenv-eval-cache",
@@ -9,6 +11,7 @@ members = [
   "devenv-run-tests",
   "devenv-snix-backend",
   "devenv-tasks",
+  "devenv-tui",
   "http-client-tls",
   "nix-conf-parser",
   "tokio-shutdown",
@@ -24,11 +27,14 @@ repository = "https://github.com/cachix/devenv/"
 
 [workspace.dependencies]
 devenv = { path = "devenv" }
+devenv-activity = { path = "devenv-activity" }
+devenv-activity-macros = { path = "devenv-activity-macros" }
 devenv-core = { path = "devenv-core" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-run-tests = { path = "devenv-run-tests" }
 devenv-snix-backend = { path = "devenv-snix-backend" }
 devenv-tasks = { path = "devenv-tasks" }
+devenv-tui = { path = "devenv-tui" }
 devenv-cache-core = { path = "devenv-cache-core" }
 http-client-tls = { path = "http-client-tls" }
 nix-conf-parser = { path = "nix-conf-parser" }
@@ -36,11 +42,12 @@ tokio-shutdown = { path = "tokio-shutdown" }
 xtask = { path = "xtask" }
 
 ansiterm = "0.12.2"
+anyhow = "1.0"
 astral-tokio-tar = "0.5.6"
 async-trait = "0.1"
 binaryornot = "1.0.0"
 blake3 = "1.8.2"
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5.48", features = ["derive", "cargo", "env"] }
 cli-table = "0.5.0"
 console = "0.16.1"
@@ -50,6 +57,7 @@ fd-lock = "4"
 futures = "0.3.31"
 hex = "0.4.3"
 hostname = "0.4.1"
+humantime = "2"
 include_dir = "0.7.4"
 indexmap = "2.11.4"
 indoc = "2.0.6"
@@ -60,6 +68,7 @@ nix = { version = "0.30.1", features = ["signal", "process"] }
 once_cell = "1.21.3"
 petgraph = "0.8.2"
 pretty_assertions = { version = "1.4.1", features = ["unstable"] }
+rand = "0.8.5"
 regex = "1.11.3"
 schemars = "1.0.4"
 schematic = { version = "0.18.12", features = [
@@ -73,16 +82,20 @@ secretspec = "0.4.1"
 serde = { version = "1.0.226", features = ["derive"] }
 serde_json = "1.0.145"
 serde_repr = "0.1.20"
+serde_with = "3"
 serde_yaml = "0.9.34"
 ser_nix = { git = "https://github.com/cachix/ser_nix", branch = "support-paths" }
 similar = "2.7.0"
 sha2 = "0.10.9"
 sqlx = { version = "0.8.6", features = ["time", "sqlite", "runtime-tokio"] }
+strum = { version = "0.27", features = ["derive"] }
 tempfile = "3.23.0"
 termimad = "0.30.0"
 thiserror = "2.0.16"
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
+tracing = { version = "0.1.41", features = ["valuable"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json", "valuable"] }
+valuable = { version = "0.1", features = ["derive"] }
+json-subscriber = { version = "0.2.6" }
 tracing-indicatif = "=0.3.9"
 indicatif = "0.17.11"
 tokio = { version = "1.47.1", features = [
@@ -99,6 +112,7 @@ which = "8.0.0"
 whoami = "1.6.1"
 xdg = "3.0.0"
 walkdir = "2.5"
+url = "2"
 
 # The version of rustls must match the version used by reqwest to set up rustls-platform-verifier.
 # If you encounter an error, lock these versions down.

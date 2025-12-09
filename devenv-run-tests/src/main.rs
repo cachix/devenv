@@ -417,7 +417,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
                     .status()
                     .into_diagnostic()?;
                 if output.success() {
-                    Ok(())
+                    Ok(devenv::CommandResult::Done(()))
                 } else {
                     Err(miette::miette!(
                         "Test script failed. Status code: {}",
