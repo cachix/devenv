@@ -4,6 +4,7 @@ use ::nix::unistd::Pid;
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{WithTitle, print_stderr};
+use devenv_activity::ActivityInstrument;
 use devenv_activity::{Activity, activity};
 use devenv_core::{
     cachix::{CachixManager, CachixPaths},
@@ -34,7 +35,6 @@ use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process;
 use tokio::sync::{OnceCell, RwLock, Semaphore};
-use devenv_activity::ActivityInstrument;
 use tracing::{Instrument, debug, error, info, instrument, trace, warn};
 
 // templates
@@ -488,10 +488,7 @@ impl Devenv {
         };
 
         let activity = Activity::operation(&msg).start();
-        self.nix
-            .update(input_name)
-            .in_activity(&activity)
-            .await?;
+        self.nix.update(input_name).in_activity(&activity).await?;
 
         // Show new changelogs (if any)
         let changelog = crate::changelog::Changelog::new(&**self.nix, &self.paths());

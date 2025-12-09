@@ -1,5 +1,6 @@
 use crate::{devenv, nix_log_bridge::NixLogBridge, util};
 use async_trait::async_trait;
+use devenv_activity::ActivityInstrument;
 use devenv_activity::{Activity, ActivityLevel, current_activity_id, message};
 use devenv_core::{
     cachix::{
@@ -23,7 +24,6 @@ use std::process;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::OnceCell;
-use devenv_activity::ActivityInstrument;
 use tracing::{debug, error, info, instrument, warn};
 
 // Nix-specific flake template
