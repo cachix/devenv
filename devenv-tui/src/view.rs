@@ -766,57 +766,64 @@ fn build_summary_view_impl(
             })
             .into_any(),
         );
-        has_content = true;
     }
 
-    // Build help text if needed - adapt based on terminal width
+    // Build help text - always show, adapt based on terminal width
     let mut help_children = vec![];
     let use_short_text = terminal_width < 100; // Use shorter text for narrow terminals
 
-    if has_content {
-        if has_selection {
-            // Show full navigation when something is selected
-            help_children.push(element!(Text(content: "↑↓", color: COLOR_INTERACTIVE)).into_any());
-            if !use_symbols {
-                if use_short_text {
-                    help_children.push(element!(Text(content: " nav • ")).into_any());
-                } else {
-                    help_children.push(element!(Text(content: " navigate • ")).into_any());
-                }
+    if has_selection {
+        // Show full navigation when something is selected
+        help_children.push(element!(Text(content: "↑↓", color: COLOR_INTERACTIVE)).into_any());
+        if !use_symbols {
+            if use_short_text {
+                help_children.push(element!(Text(content: " nav • ")).into_any());
             } else {
-                help_children.push(element!(Text(content: " • ")).into_any());
+                help_children.push(element!(Text(content: " navigate • ")).into_any());
             }
-            help_children.push(element!(Text(content: "e", color: COLOR_INTERACTIVE)).into_any());
+        } else {
+            help_children.push(element!(Text(content: " • ")).into_any());
+        }
+        help_children.push(element!(Text(content: "e", color: COLOR_INTERACTIVE)).into_any());
+        if use_symbols {
+            help_children.push(element!(Text(content: " ▼ • ")).into_any());
+        } else if use_short_text {
+            help_children.push(element!(Text(content: " expand • ")).into_any());
+        } else {
+            help_children.push(element!(Text(content: " expand logs • ")).into_any());
+        }
+        help_children.push(element!(Text(content: "Esc", color: COLOR_INTERACTIVE)).into_any());
+        if showing_logs {
             if use_symbols {
-                help_children.push(element!(Text(content: " ▼ • ")).into_any());
+                help_children.push(element!(Text(content: " ✕")).into_any());
+            // close/hide symbol
             } else if use_short_text {
-                help_children.push(element!(Text(content: " expand • ")).into_any());
+                help_children.push(element!(Text(content: " hide")).into_any());
             } else {
-                help_children.push(element!(Text(content: " expand logs • ")).into_any());
+                help_children.push(element!(Text(content: " hide logs")).into_any());
             }
-            help_children.push(element!(Text(content: "Esc", color: COLOR_INTERACTIVE)).into_any());
-            if showing_logs {
-                if use_symbols {
-                    help_children.push(element!(Text(content: " ✕")).into_any());
-                // close/hide symbol
-                } else if use_short_text {
-                    help_children.push(element!(Text(content: " hide")).into_any());
-                } else {
-                    help_children.push(element!(Text(content: " hide logs")).into_any());
-                }
+        } else {
+            help_children.push(element!(Text(content: " clear")).into_any());
+        }
+    } else {
+        // Always show navigate hint (even when no selection)
+        help_children.push(element!(Text(content: "↑↓", color: COLOR_INTERACTIVE)).into_any());
+        if !use_symbols {
+            if use_short_text {
+                help_children.push(element!(Text(content: " nav • ")).into_any());
             } else {
-                help_children.push(element!(Text(content: " clear")).into_any());
+                help_children.push(element!(Text(content: " navigate • ")).into_any());
             }
-        } else if summary.active_builds > 0 {
-            // Show only navigate hint when builds are running
-            help_children.push(element!(Text(content: "↑↓", color: COLOR_INTERACTIVE)).into_any());
-            if !use_symbols {
-                if use_short_text {
-                    help_children.push(element!(Text(content: " nav")).into_any());
-                } else {
-                    help_children.push(element!(Text(content: " navigate")).into_any());
-                }
-            }
+        } else {
+            help_children.push(element!(Text(content: " • ")).into_any());
+        }
+        help_children.push(element!(Text(content: "e", color: COLOR_INTERACTIVE)).into_any());
+        if use_symbols {
+            help_children.push(element!(Text(content: " ▼")).into_any());
+        } else if use_short_text {
+            help_children.push(element!(Text(content: " expand")).into_any());
+        } else {
+            help_children.push(element!(Text(content: " expand")).into_any());
         }
     }
 
