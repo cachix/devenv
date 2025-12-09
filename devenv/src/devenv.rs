@@ -1,8 +1,4 @@
-use super::{
-    CommandResult, tasks,
-    tracing::{HumanReadableDuration, TraceFormat},
-    util,
-};
+use super::{CommandResult, tasks, tracing::HumanReadableDuration, util};
 use ::nix::sys::signal;
 use ::nix::unistd::Pid;
 use clap::crate_version;
@@ -839,13 +835,11 @@ impl Devenv {
 
         // In TUI mode, skip TasksUi to avoid corrupting the TUI display
         // TUI captures tracing events directly, so TasksUi output is redundant
-        let (status, outputs) = if self.global_options.trace_format == TraceFormat::Tui {
-            // TUI mode: run tasks directly without TasksUi wrapper
+        let (status, outputs) = if self.global_options.tui {
             let outputs = tasks.run().await;
             let status = tasks.get_completion_status().await;
             (status, outputs)
         } else {
-            // Non-TUI mode: use TasksUi for display
             TasksUi::new(tasks, verbosity).run().await?
         };
 

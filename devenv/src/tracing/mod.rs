@@ -8,6 +8,7 @@ use devenv_layer::{DevenvFieldFormatter, DevenvFormat, DevenvLayer};
 use indicatif_layer::{DevenvIndicatifFilter, IndicatifLayer};
 use span_ids::{SpanIdLayer, SpanIds};
 
+pub use devenv_core::cli::{TraceFormat, TraceOutput};
 pub use human_duration::HumanReadableDuration;
 
 use json_subscriber::JsonLayer;
@@ -15,7 +16,7 @@ use std::fs::File;
 use std::io::{self, IsTerminal, LineWriter, Write};
 use std::sync::Mutex;
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{EnvFilter, prelude::*};
+use tracing_subscriber::{EnvFilter, Registry, prelude::*};
 
 #[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Level {
@@ -38,8 +39,6 @@ impl From<Level> for LevelFilter {
         }
     }
 }
-
-pub use devenv_core::cli::{TraceFormat, TraceOutput};
 
 /// A writer for trace output.
 enum TraceWriter {
@@ -79,7 +78,9 @@ fn create_trace_writer(output: &TraceOutput) -> Option<Mutex<TraceWriter>> {
     }
 }
 
-fn create_json_export_layer<S>(writer: Mutex<TraceWriter>) -> JsonLayer<S, Mutex<TraceWriter>>
+fn create_json_layer<S, W: for<'a> tracing_subscriber::fmt::MakeWriter<'a> + 'static>(
+    writer: W,
+) -> JsonLayer<S, W>
 where
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
 {
@@ -92,173 +93,86 @@ where
     layer
 }
 
-pub fn init_tracing_default() {
-    init_tracing(Level::default(), TraceFormat::default(), None);
-}
-
-pub fn init_tracing(level: Level, trace_format: TraceFormat, trace_output: Option<&TraceOutput>) {
-    let devenv_layer = DevenvLayer::new();
-    let span_id_layer = SpanIdLayer;
-
-    let filter = EnvFilter::builder()
+fn create_filter(level: Level) -> EnvFilter {
+    EnvFilter::builder()
         .with_default_directive(LevelFilter::from(level).into())
         .from_env_lossy()
-        // Always include activity events for trace export
-        .add_directive("devenv::activity=trace".parse().unwrap());
+        .add_directive("devenv::activity=trace".parse().unwrap())
+}
 
-    let stderr = io::stderr;
-    let ansi = stderr().is_terminal();
+pub fn init_tracing_default() {
+    init_cli_tracing(Level::default(), None);
+}
 
+/// Initialize tracing for legacy CLI mode with spinners and progress indicators.
+/// Export format is always JSON.
+pub fn init_cli_tracing(level: Level, trace_output: Option<&TraceOutput>) {
+    let ansi = io::stderr().is_terminal();
     let export_writer = trace_output.and_then(create_trace_writer);
 
-    match trace_format {
-        TraceFormat::TracingFull => {
-            let stderr_layer = tracing_subscriber::fmt::layer()
-                .with_writer(stderr)
-                .with_ansi(ansi);
-
-            match export_writer {
-                Some(writer) => {
-                    let export_layer = create_json_export_layer(writer);
-                    tracing_subscriber::registry()
-                        .with(span_id_layer)
-                        .with(filter)
-                        .with(devenv_layer)
-                        .with(stderr_layer)
-                        .with(export_layer)
-                        .init();
-                }
-                None => {
-                    tracing_subscriber::registry()
-                        .with(span_id_layer)
-                        .with(filter)
-                        .with(devenv_layer)
-                        .with(stderr_layer)
-                        .init();
-                }
-            }
-        }
-        TraceFormat::TracingPretty => {
-            let stderr_layer = tracing_subscriber::fmt::layer()
-                .with_writer(stderr)
-                .with_ansi(ansi)
-                .pretty();
-
-            match export_writer {
-                Some(writer) => {
-                    let export_layer = create_json_export_layer(writer);
-                    tracing_subscriber::registry()
-                        .with(span_id_layer)
-                        .with(filter)
-                        .with(devenv_layer)
-                        .with(stderr_layer)
-                        .with(export_layer)
-                        .init();
-                }
-                None => {
-                    tracing_subscriber::registry()
-                        .with(span_id_layer)
-                        .with(filter)
-                        .with(devenv_layer)
-                        .with(stderr_layer)
-                        .init();
-                }
-            }
-        }
-        TraceFormat::LegacyCli => {
-            // For CLI mode, use IndicatifLayer to coordinate ALL output with progress bars
-            let style = tracing_indicatif::style::ProgressStyle::with_template(
-                "{spinner:.blue} {span_fields}",
-            )
+    let style =
+        tracing_indicatif::style::ProgressStyle::with_template("{spinner:.blue} {span_fields}")
             .unwrap()
             .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]);
-            let indicatif_layer = IndicatifLayer::new()
-                .with_progress_style(style)
-                .with_span_field_formatter(DevenvFieldFormatter);
+    let indicatif = IndicatifLayer::new()
+        .with_progress_style(style)
+        .with_span_field_formatter(DevenvFieldFormatter);
+    let writer = indicatif.get_stderr_writer();
 
-            // Get the managed writer before moving indicatif_layer into filter
-            let indicatif_writer = indicatif_layer.get_stderr_writer();
-            let filtered_layer = DevenvIndicatifFilter::new(indicatif_layer);
-
-            // Use indicatif's managed writer for the fmt layer so all output is coordinated
-            let stderr_layer = tracing_subscriber::fmt::layer()
+    Registry::default()
+        .with(create_filter(level))
+        .with(SpanIdLayer)
+        .with(DevenvLayer::new())
+        .with(
+            tracing_subscriber::fmt::layer()
                 .event_format(DevenvFormat::default())
-                .with_writer(indicatif_writer)
-                .with_ansi(ansi);
+                .with_writer(writer)
+                .with_ansi(ansi),
+        )
+        .with(DevenvIndicatifFilter::new(indicatif))
+        .with(export_writer.map(create_json_layer))
+        .init();
+}
 
-            match export_writer {
-                Some(writer) => {
-                    let export_layer = create_json_export_layer(writer);
-                    tracing_subscriber::registry()
-                        .with(span_id_layer)
-                        .with(filter)
-                        .with(devenv_layer)
-                        .with(stderr_layer)
-                        .with(filtered_layer)
-                        .with(export_layer)
-                        .init();
-                }
-                None => {
-                    tracing_subscriber::registry()
-                        .with(span_id_layer)
-                        .with(filter)
-                        .with(devenv_layer)
-                        .with(stderr_layer)
-                        .with(filtered_layer)
-                        .init();
-                }
-            }
-        }
-        TraceFormat::TracingJson => {
-            fn create_stderr_layer<S>() -> JsonLayer<S>
-            where
-                S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
-            {
-                let mut layer = JsonLayer::stdout();
-                layer.with_timer("timestamp", tracing_subscriber::fmt::time::SystemTime);
-                layer.with_level("level");
-                layer.with_target("target");
-                layer.serialize_extension::<SpanIds>("span_ids");
-                layer.with_event("fields");
-                layer
-            }
+/// Initialize tracing with the specified format and output destination.
+///
+/// If `trace_output` is None, no traces are output.
+/// If `trace_output` is Some, traces go to that destination (stdout, stderr, or file).
+pub fn init_tracing(level: Level, trace_format: TraceFormat, trace_output: Option<&TraceOutput>) {
+    let base = Registry::default()
+        .with(create_filter(level))
+        .with(SpanIdLayer)
+        .with(DevenvLayer::new());
 
-            match export_writer {
-                Some(writer) => {
-                    let export_layer = create_json_export_layer(writer);
-                    let stderr_layer = create_stderr_layer();
-                    tracing_subscriber::registry()
-                        .with(span_id_layer)
-                        .with(filter)
-                        .with(stderr_layer)
-                        .with(export_layer)
-                        .init();
-                }
-                None => {
-                    tracing_subscriber::registry()
-                        .with(span_id_layer)
-                        .with(filter)
-                        .with(create_stderr_layer())
-                        .init();
-                }
-            }
+    let ansi = match trace_output {
+        Some(TraceOutput::Stdout) => io::stdout().is_terminal(),
+        Some(TraceOutput::Stderr) => io::stderr().is_terminal(),
+        Some(TraceOutput::File(_)) | None => false,
+    };
+
+    let writer = trace_output.and_then(create_trace_writer);
+
+    match trace_format {
+        TraceFormat::Full => {
+            let layer = writer.map(|w| {
+                tracing_subscriber::fmt::layer()
+                    .with_ansi(ansi)
+                    .with_writer(w)
+            });
+            base.with(layer).init()
         }
-        TraceFormat::Tui => {
-            // TUI displays activities via channel, not tracing output.
-            // Only set up trace export if requested.
-            match export_writer {
-                Some(writer) => {
-                    let export_layer = create_json_export_layer(writer);
-                    tracing_subscriber::registry()
-                        .with(span_id_layer)
-                        .with(filter)
-                        .with(export_layer)
-                        .init();
-                }
-                None => {
-                    // No tracing output needed - TUI handles display
-                }
-            }
+        TraceFormat::Pretty => {
+            let layer = writer.map(|w| {
+                tracing_subscriber::fmt::layer()
+                    .with_ansi(ansi)
+                    .with_writer(w)
+                    .pretty()
+            });
+            base.with(layer).init()
+        }
+        TraceFormat::Json => {
+            let layer = writer.map(create_json_layer);
+            base.with(layer).init()
         }
     }
 }

@@ -8,17 +8,36 @@ use tracing::error;
 #[derive(clap::ValueEnum, Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TraceFormat {
-    /// Legacy CLI output with spinners and progress indicators.
-    LegacyCli,
-    /// A verbose structured log format used for debugging.
-    TracingFull,
-    /// A pretty human-readable log format used for debugging.
-    TracingPretty,
+    /// A verbose structured log format used for debugging (default).
+    Full,
     /// A JSON log format used for machine consumption.
-    TracingJson,
-    /// Interactive Terminal User Interface with real-time progress (default).
     #[default]
-    Tui,
+    Json,
+    /// A pretty human-readable log format used for debugging.
+    Pretty,
+}
+
+/// Deprecated: use TraceFormat instead.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LegacyLogFormat {
+    #[default]
+    Cli,
+    TracingFull,
+    TracingPretty,
+    TracingJson,
+}
+
+impl TryFrom<LegacyLogFormat> for TraceFormat {
+    type Error = ();
+
+    fn try_from(format: LegacyLogFormat) -> Result<Self, Self::Error> {
+        match format {
+            LegacyLogFormat::TracingFull => Ok(TraceFormat::Full),
+            LegacyLogFormat::TracingJson => Ok(TraceFormat::Json),
+            LegacyLogFormat::TracingPretty => Ok(TraceFormat::Pretty),
+            LegacyLogFormat::Cli => Err(()),
+        }
+    }
 }
 
 /// Specifies where trace output should be written.
@@ -27,12 +46,11 @@ pub enum TraceFormat {
 /// - `stdout` - write to standard output
 /// - `stderr` - write to standard error
 /// - `file:/path/to/file` - write to the specified file path
-/// - `/path/to/file` - write to the specified file path (shorthand)
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum TraceOutput {
-    Stdout,
     #[default]
     Stderr,
+    Stdout,
     File(PathBuf),
 }
 
@@ -41,8 +59,8 @@ impl FromStr for TraceOutput {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "stdout" => Ok(TraceOutput::Stdout),
             "stderr" => Ok(TraceOutput::Stderr),
+            "stdout" => Ok(TraceOutput::Stdout),
             s if s.starts_with("file:") => Ok(TraceOutput::File(PathBuf::from(&s[5..]))),
             _ => Err(ParseTraceOutputError::UnsupportedFormat(s.to_string())),
         }
@@ -81,11 +99,20 @@ pub struct GlobalOptions {
     #[arg(
         long,
         global = true,
-        help = "Configure the output format of traces.",
-        default_value_t,
-        value_enum
+        env = "DEVENV_TUI",
+        help = "Enable the interactive terminal interface.",
+        default_value_t = true,
+        overrides_with = "no_tui"
     )]
-    pub trace_format: TraceFormat,
+    pub tui: bool,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Disable the interactive terminal interface.",
+        overrides_with = "tui"
+    )]
+    pub no_tui: bool,
 
     #[arg(
         long,
@@ -94,7 +121,17 @@ pub struct GlobalOptions {
         value_enum,
         hide = true
     )]
-    pub log_format: Option<TraceFormat>,
+    pub log_format: Option<LegacyLogFormat>,
+
+    #[arg(
+        long,
+        global = true,
+        env = "DEVENV_TRACE_FORMAT",
+        help = "Configure the output format of traces.",
+        default_value_t,
+        value_enum
+    )]
+    pub trace_format: TraceFormat,
 
     #[arg(
         long,
@@ -236,8 +273,10 @@ impl Default for GlobalOptions {
             version: false,
             verbose: false,
             quiet: false,
-            trace_format: TraceFormat::default(),
+            tui: true,
+            no_tui: false,
             log_format: None,
+            trace_format: TraceFormat::default(),
             trace_output: None,
             max_jobs: defaults.max_jobs,
             cores: defaults.cores,
@@ -265,11 +304,37 @@ impl GlobalOptions {
             self.eval_cache = false;
         }
 
-        // Handle deprecated --log-format
+        if self.no_tui {
+            self.tui = false;
+        }
+
+        // Handle deprecated --log-format (except Cli which is handled separately)
         if let Some(format) = self.log_format {
             eprintln!("Warning: --log-format is deprecated, use --trace-format instead");
-            self.trace_format = format;
+            if let Ok(trace_format) = format.try_into() {
+                self.trace_format = trace_format;
+            }
         }
+    }
+
+    /// Returns true if tracing-only mode should be used.
+    ///
+    /// Tracing mode is used when trace_output is Stdout or Stderr,
+    /// as these would conflict with TUI or legacy CLI output.
+    pub fn use_tracing_mode(&self) -> bool {
+        matches!(
+            self.trace_output,
+            Some(TraceOutput::Stdout) | Some(TraceOutput::Stderr)
+        )
+    }
+
+    /// Returns true if legacy CLI mode should be used (instead of TUI).
+    ///
+    /// Legacy CLI mode is used when:
+    /// - `--no-tui` is passed
+    /// - `--log-format cli` is passed (deprecated)
+    pub fn use_legacy_cli(&self) -> bool {
+        self.no_tui || self.log_format == Some(LegacyLogFormat::Cli)
     }
 }
 

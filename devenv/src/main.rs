@@ -32,11 +32,16 @@ fn main() -> Result<()> {
         _ => {}
     }
 
-    // Branch based on log format
-    if cli.global_options.trace_format == devenv_tracing::TraceFormat::Tui {
-        run_with_tui(cli)
+    // Determine which mode to run in:
+    // - Tracing mode: when trace-output is stdout/stderr (conflicts with TUI/CLI output)
+    // - TUI mode: interactive terminal UI (default)
+    // - Legacy CLI mode: spinners and progress indicators (--no-tui or --log-format cli)
+    if cli.global_options.use_tracing_mode() {
+        run_with_tracing(cli)
+    } else if cli.global_options.use_legacy_cli() {
+        run_with_legacy_cli(cli)
     } else {
-        run_without_tui(cli)
+        run_with_tui(cli)
     }
 }
 
@@ -98,11 +103,26 @@ fn run_with_tui(cli: Cli) -> Result<()> {
 }
 
 #[tokio::main]
-async fn run_without_tui(cli: Cli) -> Result<()> {
+async fn run_with_legacy_cli(cli: Cli) -> Result<()> {
     let shutdown = Shutdown::new();
     shutdown.install_signals().await;
 
-    // Initialize tracing
+    let level = get_log_level(&cli);
+    devenv_tracing::init_cli_tracing(level, cli.global_options.trace_output.as_ref());
+
+    let result = tokio::select! {
+        result = run_devenv(cli, shutdown.clone()) => result,
+        _ = shutdown.wait_for_shutdown() => Ok(CommandResult::Done(())),
+    }?;
+
+    result.exec()
+}
+
+#[tokio::main]
+async fn run_with_tracing(cli: Cli) -> Result<()> {
+    let shutdown = Shutdown::new();
+    shutdown.install_signals().await;
+
     let level = get_log_level(&cli);
     devenv_tracing::init_tracing(
         level,
@@ -115,7 +135,6 @@ async fn run_without_tui(cli: Cli) -> Result<()> {
         _ = shutdown.wait_for_shutdown() => Ok(CommandResult::Done(())),
     }?;
 
-    // Execute any pending command immediately (no TUI to clean up)
     result.exec()
 }
 
