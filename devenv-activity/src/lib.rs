@@ -8,25 +8,17 @@
 //!
 //! ## Usage
 //!
-//! Activities automatically deref to `Span`, giving you access to all span methods:
+//! Use the `ActivityInstrument` trait to instrument async code with activities:
 //!
 //! ```ignore
-//! use tracing::Instrument;
-//! use devenv_activity::Activity;
+//! use devenv_activity::{Activity, ActivityInstrument};
 //!
-//! // Create an activity
-//! let activity = Activity::build("my-task");
-//!
-//! // Use span methods via Deref
-//! activity.in_scope(|| {
-//!     // Code runs with activity context
-//! });
-//!
-//! // Instrument async code
-//! async_fn().instrument(activity.span()).await;
-//!
-//! // Enter/exit manually
-//! let _guard = activity.enter();
+//! let activity = Activity::operation("Building").start();
+//! async {
+//!     // Nested activities will have `activity` as their parent
+//! }
+//! .in_activity(&activity)
+//! .await;
 //! ```
 //!
 //! ## Using the `#[activity]` macro
@@ -444,7 +436,7 @@ impl BuildBuilder {
 
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(get_current_activity_id);
+        let parent = self.parent.unwrap_or_else(current_activity_id);
 
         let span = create_span(id, self.level);
 
@@ -509,7 +501,7 @@ impl FetchBuilder {
 
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(get_current_activity_id);
+        let parent = self.parent.unwrap_or_else(current_activity_id);
 
         let span = create_span(id, self.level);
 
@@ -566,7 +558,7 @@ impl EvaluateBuilder {
 
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(get_current_activity_id);
+        let parent = self.parent.unwrap_or_else(current_activity_id);
 
         let span = create_span(id, self.level);
 
@@ -628,7 +620,7 @@ impl TaskBuilder {
 
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(get_current_activity_id);
+        let parent = self.parent.unwrap_or_else(current_activity_id);
 
         let span = create_span(id, self.level);
 
@@ -691,7 +683,7 @@ impl CommandBuilder {
 
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(get_current_activity_id);
+        let parent = self.parent.unwrap_or_else(current_activity_id);
 
         let span = create_span(id, self.level);
 
@@ -754,7 +746,7 @@ impl OperationBuilder {
 
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(get_current_activity_id);
+        let parent = self.parent.unwrap_or_else(current_activity_id);
 
         let span = create_span(id, self.level);
 
@@ -1092,7 +1084,10 @@ impl Drop for Activity {
 
 /// Get the activity ID from the current activity stack.
 /// Returns None if not in an activity scope or if the stack is empty.
-fn get_current_activity_id() -> Option<u64> {
+///
+/// Use this to capture the current activity ID before crossing thread/task boundaries,
+/// then pass it explicitly to activities created in other contexts.
+pub fn current_activity_id() -> Option<u64> {
     ACTIVITY_STACK
         .try_with(|stack| stack.borrow().last().copied())
         .ok()
@@ -1119,7 +1114,7 @@ pub fn message_with_details(
     details: Option<String>,
 ) {
     let text_str = text.into();
-    let parent = get_current_activity_id();
+    let parent = current_activity_id();
     send_activity_event(ActivityEvent::Message(Message {
         level,
         text: text_str,
@@ -1158,6 +1153,44 @@ pub fn init() -> (mpsc::Receiver<ActivityEvent>, ActivityHandle) {
     let (tx, rx) = mpsc::channel(32);
     (rx, ActivityHandle { tx })
 }
+
+// ---------------------------------------------------------------------------
+// Instrument trait
+// ---------------------------------------------------------------------------
+
+/// Extension trait for instrumenting futures with activity context.
+///
+/// This trait provides an `in_activity` method that propagates both:
+/// - The activity stack (so nested activities see the activity as their parent)
+/// - The tracing span (for tracing instrumentation)
+///
+/// # Example
+/// ```ignore
+/// use devenv_activity::{Activity, ActivityInstrument};
+///
+/// let activity = Activity::operation("Building").start();
+/// async {
+///     // Nested activities will have `activity` as their parent
+///     let child = Activity::task("child").start();
+/// }
+/// .in_activity(&activity)
+/// .await;
+/// ```
+pub trait ActivityInstrument: Future + Sized {
+    /// Instrument this future with the given activity's context.
+    fn in_activity(self, activity: &Activity) -> impl Future<Output = Self::Output> {
+        let mut stack = get_current_stack();
+        stack.push(activity.id);
+        let span = activity.span.clone();
+
+        ACTIVITY_STACK.scope(
+            RefCell::new(stack),
+            tracing::Instrument::instrument(self, span),
+        )
+    }
+}
+
+impl<F: Future> ActivityInstrument for F {}
 
 // ---------------------------------------------------------------------------
 // Tests

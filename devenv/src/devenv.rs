@@ -34,6 +34,7 @@ use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process;
 use tokio::sync::{OnceCell, RwLock, Semaphore};
+use devenv_activity::ActivityInstrument;
 use tracing::{Instrument, debug, error, info, instrument, trace, warn};
 
 // templates
@@ -474,7 +475,7 @@ impl Devenv {
             .spawn()
             .into_diagnostic()?;
         async move { proc.wait_with_output().await.into_diagnostic() }
-            .instrument(activity.span())
+            .in_activity(&activity)
             .await
     }
 
@@ -489,7 +490,7 @@ impl Devenv {
         let activity = Activity::operation(&msg).start();
         self.nix
             .update(input_name)
-            .instrument(activity.span())
+            .in_activity(&activity)
             .await?;
 
         // Show new changelogs (if any)
@@ -585,7 +586,7 @@ impl Devenv {
                 Ok(CommandResult::Done(()))
             }
         }
-        .instrument(activity.span())
+        .in_activity(&activity)
         .await
     }
 
@@ -648,7 +649,7 @@ impl Devenv {
             info!(
                 "If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
             );
-            self.nix.gc(to_gc).instrument(activity.span()).await?;
+            self.nix.gc(to_gc).in_activity(&activity).await?;
         }
 
         let (after_gc, _) = cleanup_symlinks(&self.devenv_home_gc);
@@ -766,7 +767,7 @@ impl Devenv {
             let gc_root = self.devenv_dot_gc.join("task-config");
             self.nix
                 .build(&["devenv.config.task.config"], None, Some(&gc_root))
-                .instrument(activity.span())
+                .in_activity(&activity)
                 .await?
         };
         // parse tasks config
@@ -959,7 +960,7 @@ impl Devenv {
             let test_script = self
                 .nix
                 .build(&["devenv.config.test"], None, Some(&gc_root))
-                .instrument(activity.span())
+                .in_activity(&activity)
                 .await?;
             test_script[0].to_string_lossy().to_string()
         };
@@ -992,7 +993,7 @@ impl Devenv {
                 .into_diagnostic()
                 .wrap_err("Failed to get output from test process")
         }
-        .instrument(activity.span())
+        .in_activity(&activity)
         .await?;
 
         if self.has_processes().await? {
@@ -1056,7 +1057,7 @@ impl Devenv {
                 .await?;
             Ok(CommandResult::Done(paths))
         }
-        .instrument(activity.span())
+        .in_activity(&activity)
         .await
     }
 
@@ -1081,7 +1082,7 @@ impl Devenv {
             let proc_script_string = paths[0].to_string_lossy().to_string();
             Ok::<String, miette::Report>(proc_script_string)
         }
-        .instrument(activity.span())
+        .in_activity(&activity)
         .await?;
 
         let activity = Activity::operation("Starting processes").start();
@@ -1194,7 +1195,7 @@ impl Devenv {
                 Ok(CommandResult::Exec(cmd.into_std()))
             }
         }
-        .instrument(activity.span())
+        .in_activity(&activity)
         .await
     }
 

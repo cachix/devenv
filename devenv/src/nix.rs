@@ -1,6 +1,6 @@
 use crate::{devenv, nix_log_bridge::NixLogBridge, util};
 use async_trait::async_trait;
-use devenv_activity::{Activity, ActivityLevel, message};
+use devenv_activity::{Activity, ActivityLevel, current_activity_id, message};
 use devenv_core::{
     cachix::{
         CacheMetadata, CachixCacheInfo, CachixConfig, CachixManager, StorePing,
@@ -23,7 +23,8 @@ use std::process;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::OnceCell;
-use tracing::{Instrument, debug, error, info, instrument, warn};
+use devenv_activity::ActivityInstrument;
+use tracing::{debug, error, info, instrument, warn};
 
 // Nix-specific flake template
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -422,8 +423,13 @@ impl Nix {
                 cached_cmd.enable_eval_cache(false);
             }
 
+            // Capture the current activity ID before spawning threads.
+            // The stderr callback runs in a separate thread and cannot access
+            // the task-local activity stack.
+            let parent_activity_id = current_activity_id();
+
             // Setup Nix log bridge for enhanced log processing
-            let nix_bridge = NixLogBridge::new();
+            let nix_bridge = NixLogBridge::new(parent_activity_id);
 
             // Get the log callback from the bridge
             let log_callback = nix_bridge.get_log_callback();
@@ -466,7 +472,7 @@ impl Nix {
             let activity = Activity::command(&pretty_cmd).command(&pretty_cmd).start();
             let output = cached_cmd
                 .output(&mut cmd)
-                .instrument(activity.span())
+                .in_activity(&activity)
                 .await
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;

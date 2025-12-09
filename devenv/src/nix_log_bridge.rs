@@ -7,19 +7,18 @@ use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
 use tracing::{error, info, trace, warn};
 
-/// Bridge that converts Nix internal logs to tracing events
+/// Bridge that converts Nix internal logs to tracing events.
+///
+/// The bridge must be created with a parent activity ID that is captured
+/// before crossing thread boundaries, since the stderr callback runs in
+/// a separate thread and cannot access the task-local activity stack.
 pub struct NixLogBridge {
     /// Current active operations and their associated Nix activities
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
-    /// Evaluation tracking state
-    evaluation_state: Arc<Mutex<EvaluationState>>,
-}
-
-/// State for tracking file evaluations
-#[derive(Default)]
-struct EvaluationState {
-    /// The activity tracking the entire evaluation operation
-    activity: Option<Activity>,
+    /// Parent activity ID for all activities created by this bridge
+    parent_activity_id: Option<u64>,
+    /// The evaluation activity for tracking file evaluations
+    evaluation_activity: Arc<Mutex<Option<Activity>>>,
 }
 
 /// Information about an active Nix activity
@@ -29,10 +28,15 @@ struct NixActivityInfo {
 }
 
 impl NixLogBridge {
-    pub fn new() -> Arc<Self> {
+    /// Create a new NixLogBridge with the given parent activity ID.
+    ///
+    /// The parent_activity_id should be captured using `current_activity_id()`
+    /// before spawning any threads, as the callback runs in a separate thread.
+    pub fn new(parent_activity_id: Option<u64>) -> Arc<Self> {
         Arc::new(Self {
             active_activities: Arc::new(Mutex::new(HashMap::new())),
-            evaluation_state: Arc::new(Mutex::new(EvaluationState::default())),
+            parent_activity_id,
+            evaluation_activity: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -44,7 +48,7 @@ impl NixLogBridge {
     /// use devenv::nix_log_bridge::NixLogBridge;
     /// use devenv_eval_cache::internal_log::{InternalLog, ActivityType, Verbosity};
     ///
-    /// let bridge = NixLogBridge::new();
+    /// let bridge = NixLogBridge::new(None);
     /// let callback = bridge.get_log_callback();
     ///
     /// // Feed logs from any source
@@ -166,12 +170,15 @@ impl NixLogBridge {
         }
     }
 
-    /// Get the current evaluation activity ID if one exists
-    fn get_evaluation_activity_id(&self) -> Option<u64> {
-        self.evaluation_state
+    /// Get the parent activity ID for Nix activities.
+    /// Uses the evaluation activity if one exists, otherwise falls back to the
+    /// parent_activity_id that was passed when creating the bridge.
+    fn get_parent_activity_id(&self) -> Option<u64> {
+        self.evaluation_activity
             .lock()
             .ok()
-            .and_then(|state| state.activity.as_ref().map(|a| a.id()))
+            .and_then(|eval| eval.as_ref().map(|a| a.id()))
+            .or(self.parent_activity_id)
     }
 
     /// Handle the start of a Nix activity
@@ -182,10 +189,7 @@ impl NixLogBridge {
         text: String,
         fields: Vec<Field>,
     ) {
-        // Get the evaluation activity ID to use as parent for all Nix activities.
-        // This ensures parallel queries/downloads are children of the evaluation,
-        // not children of each other.
-        let parent_id = self.get_evaluation_activity_id();
+        let parent_id = self.get_parent_activity_id();
 
         match activity_type {
             ActivityType::Build => {
@@ -335,15 +339,17 @@ impl NixLogBridge {
 
     /// Handle file evaluation events
     fn handle_file_evaluation(&self, file_path: std::path::PathBuf) {
-        if let Ok(mut state) = self.evaluation_state.lock() {
+        if let Ok(mut eval_activity) = self.evaluation_activity.lock() {
             // If this is the first file, create the evaluation activity
-            if state.activity.is_none() {
-                let activity = Activity::evaluate("").start();
-                state.activity = Some(activity);
+            if eval_activity.is_none() {
+                let activity = Activity::evaluate("")
+                    .parent(self.parent_activity_id)
+                    .start();
+                *eval_activity = Some(activity);
             }
 
             // Log the file path to the evaluation activity
-            if let Some(ref activity) = state.activity {
+            if let Some(ref activity) = *eval_activity {
                 activity.log(file_path.display().to_string());
             }
         }
