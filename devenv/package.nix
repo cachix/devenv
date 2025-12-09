@@ -23,6 +23,7 @@ rustPlatform.buildRustPackage {
   inherit src version cargoLock;
 
   cargoBuildFlags = [ "-p devenv -p devenv-run-tests" ];
+  buildType = cargoProfile;
 
   nativeBuildInputs = [
     installShellFiles
