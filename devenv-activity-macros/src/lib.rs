@@ -66,24 +66,27 @@ impl Parse for ActivityArgs {
                     match key.as_str() {
                         "kind" => {
                             if let Expr::Path(path) = &*assign.right
-                                && let Some(ident) = path.path.get_ident() {
-                                    kind = Some(ident.clone());
-                                }
+                                && let Some(ident) = path.path.get_ident()
+                            {
+                                kind = Some(ident.clone());
+                            }
                         }
                         "level" => {
                             if let Expr::Path(path) = &*assign.right
-                                && let Some(ident) = path.path.get_ident() {
-                                    level = Some(ident.clone());
-                                }
+                                && let Some(ident) = path.path.get_ident()
+                            {
+                                level = Some(ident.clone());
+                            }
                         }
                         "skip" => {
                             // Parse skip(arg1, arg2)
                             if let Expr::Call(call) = &*assign.right {
                                 for arg in &call.args {
                                     if let Expr::Path(path) = arg
-                                        && let Some(ident) = path.path.get_ident() {
-                                            skip.push(ident.clone());
-                                        }
+                                        && let Some(ident) = path.path.get_ident()
+                                    {
+                                        skip.push(ident.clone());
+                                    }
                                 }
                             }
                         }
@@ -98,14 +101,16 @@ impl Parse for ActivityArgs {
                 // Handle skip(arg1, arg2) without assignment
                 Expr::Call(call) => {
                     if let Expr::Path(path) = &*call.func
-                        && path.path.is_ident("skip") {
-                            for arg in &call.args {
-                                if let Expr::Path(path) = arg
-                                    && let Some(ident) = path.path.get_ident() {
-                                        skip.push(ident.clone());
-                                    }
+                        && path.path.is_ident("skip")
+                    {
+                        for arg in &call.args {
+                            if let Expr::Path(path) = arg
+                                && let Some(ident) = path.path.get_ident()
+                            {
+                                skip.push(ident.clone());
                             }
                         }
+                    }
                 }
                 _ => {
                     if name.is_none() {
@@ -270,12 +275,13 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
         .iter()
         .filter_map(|arg| {
             if let FnArg::Typed(pat_type) = arg
-                && let Pat::Ident(pat_ident) = &*pat_type.pat {
-                    let ident = &pat_ident.ident;
-                    if !skip.iter().any(|s| s == ident) {
-                        return Some(ident.clone());
-                    }
+                && let Pat::Ident(pat_ident) = &*pat_type.pat
+            {
+                let ident = &pat_ident.ident;
+                if !skip.iter().any(|s| s == ident) {
+                    return Some(ident.clone());
                 }
+            }
             None
         })
         .collect();

@@ -274,7 +274,6 @@ pub enum ViewMode {
     ExpandedLogs { activity_id: u64 },
 }
 
-
 impl ActivityModel {
     /// Create a new ActivityModel.
     pub fn new() -> Self {
@@ -828,9 +827,12 @@ impl ActivityModel {
         completed_with_time.sort_by(|a, b| b.1.cmp(&a.1)); // Most recent first
 
         // Separate lingering (within linger_duration) from older completed
-        let (lingering, older): (Vec<_>, Vec<_>) = completed_with_time
-            .into_iter()
-            .partition(|(_, completed_at)| now.duration_since(*completed_at) < limit.linger_duration);
+        let (lingering, older): (Vec<_>, Vec<_>) =
+            completed_with_time
+                .into_iter()
+                .partition(|(_, completed_at)| {
+                    now.duration_since(*completed_at) < limit.linger_duration
+                });
 
         // Build result: prioritize active, then lingering, then older
         let mut result: Vec<&Activity> = Vec::new();
@@ -898,35 +900,43 @@ impl ActivityModel {
         for display_activity in activities.iter() {
             total_height += 1; // Base height for activity
 
-            let is_selected = selected_activity
-                .is_some_and(|id| display_activity.activity.id == id && display_activity.activity.id != 0);
+            let is_selected = selected_activity.is_some_and(|id| {
+                display_activity.activity.id == id && display_activity.activity.id != 0
+            });
 
             // Add extra line for downloads with progress
-            if let ActivityVariant::Download(ref download_data) = display_activity.activity.variant {
+            if let ActivityVariant::Download(ref download_data) = display_activity.activity.variant
+            {
                 if download_data.size_current.is_some() && download_data.size_total.is_some() {
                     total_height += 1;
                 } else if let Some(progress) = &display_activity.activity.progress
-                    && progress.total.unwrap_or(0) > 0 {
-                        total_height += 1;
-                    }
+                    && progress.total.unwrap_or(0) > 0
+                {
+                    total_height += 1;
+                }
             }
 
             // Build and evaluation activities show logs when selected
             if is_selected
                 && (matches!(display_activity.activity.variant, ActivityVariant::Build(_))
-                    || matches!(display_activity.activity.variant, ActivityVariant::Evaluating(_)))
-                && let Some(logs) = self.get_build_logs(display_activity.activity.id) {
-                    let visible_count = logs.len().min(10); // LOG_VIEWPORT_COLLAPSED = 10
-                    total_height += visible_count.max(1);
-                }
+                    || matches!(
+                        display_activity.activity.variant,
+                        ActivityVariant::Evaluating(_)
+                    ))
+                && let Some(logs) = self.get_build_logs(display_activity.activity.id)
+            {
+                let visible_count = logs.len().min(10); // LOG_VIEWPORT_COLLAPSED = 10
+                total_height += visible_count.max(1);
+            }
 
             // Message activities with details
             if let ActivityVariant::Message(ref msg_data) = display_activity.activity.variant
                 && msg_data.details.is_some()
-                    && let Some(logs) = self.get_build_logs(display_activity.activity.id) {
-                        let visible_count = logs.len().min(10);
-                        total_height += visible_count;
-                    }
+                && let Some(logs) = self.get_build_logs(display_activity.activity.id)
+            {
+                let visible_count = logs.len().min(10);
+                total_height += visible_count;
+            }
         }
 
         // Error messages panel

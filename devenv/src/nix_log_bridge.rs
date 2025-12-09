@@ -1,9 +1,9 @@
 use devenv_activity::{Activity, ActivityLevel, FetchKind, message, message_with_details};
-use regex::Regex;
-use std::sync::LazyLock;
 use devenv_eval_cache::Op;
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
+use regex::Regex;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
 use tracing::{error, info, trace, warn};
 

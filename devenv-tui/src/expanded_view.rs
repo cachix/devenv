@@ -4,8 +4,8 @@
 //! It provides scrollable access to all log lines for a selected activity.
 //! Scroll offset is managed as component-local state for immediate responsiveness.
 
-use crate::model::{ActivityModel, UiState, ViewMode};
 use crate::TuiConfig;
+use crate::model::{ActivityModel, UiState, ViewMode};
 use iocraft::prelude::*;
 use iocraft::{FullscreenMouseEvent, MouseEventKind};
 use std::collections::VecDeque;
@@ -67,31 +67,29 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     hooks.use_terminal_events({
         let ui_state = ui_state.clone();
         let shutdown = shutdown.clone();
-        move |event| {
-            match event {
-                TerminalEvent::Key(key_event) => {
-                    if key_event.kind == KeyEventKind::Release {
-                        return;
-                    }
-                    handle_key_event(
-                        key_event,
-                        &ui_state,
-                        &shutdown,
-                        &mut scroll_offset,
-                        total_lines,
-                        viewport_height,
-                    );
+        move |event| match event {
+            TerminalEvent::Key(key_event) => {
+                if key_event.kind == KeyEventKind::Release {
+                    return;
                 }
-                TerminalEvent::FullscreenMouse(mouse_event) => {
-                    handle_mouse_event(
-                        mouse_event,
-                        &mut scroll_offset,
-                        total_lines,
-                        viewport_height,
-                    );
-                }
-                TerminalEvent::Resize(_, _) | _ => {}
+                handle_key_event(
+                    key_event,
+                    &ui_state,
+                    &shutdown,
+                    &mut scroll_offset,
+                    total_lines,
+                    viewport_height,
+                );
             }
+            TerminalEvent::FullscreenMouse(mouse_event) => {
+                handle_mouse_event(
+                    mouse_event,
+                    &mut scroll_offset,
+                    total_lines,
+                    viewport_height,
+                );
+            }
+            TerminalEvent::Resize(_, _) | _ => {}
         }
     });
 

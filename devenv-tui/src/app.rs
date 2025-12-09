@@ -8,7 +8,7 @@ use devenv_activity::ActivityEvent;
 use iocraft::prelude::*;
 use std::io::{self, Write};
 use std::sync::{Arc, RwLock};
-use tokio::sync::{mpsc, Notify};
+use tokio::sync::{Notify, mpsc};
 use tokio_shutdown::Shutdown;
 use tracing::debug;
 

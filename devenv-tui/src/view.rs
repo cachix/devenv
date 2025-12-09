@@ -1,5 +1,5 @@
 use crate::{
-    components::{*, LOG_VIEWPORT_COLLAPSED},
+    components::{LOG_VIEWPORT_COLLAPSED, *},
     model::{
         Activity, ActivityModel, ActivitySummary, ActivityVariant, NixActivityState,
         TaskDisplayStatus, TerminalSize, UiState,
@@ -135,11 +135,11 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         // Message activities with details show limited lines (collapsed preview)
         if let ActivityVariant::Message(ref msg_data) = display_activity.activity.variant
             && msg_data.details.is_some()
-            && let Some(logs) = model.get_build_logs(display_activity.activity.id) {
-                let visible_count = logs.len().min(LOG_VIEWPORT_COLLAPSED);
-                total_height += visible_count;
-            }
-
+            && let Some(logs) = model.get_build_logs(display_activity.activity.id)
+        {
+            let visible_count = logs.len().min(LOG_VIEWPORT_COLLAPSED);
+            total_height += visible_count;
+        }
     }
     let min_height = 3; // Minimum height to show at least a few items
     let dynamic_height = total_height.max(min_height) as u32;
@@ -645,12 +645,7 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         showing_logs,
     } = &*ctx;
 
-    build_summary_view_impl(
-        summary,
-        *has_selection,
-        *showing_logs,
-        terminal_width,
-    )
+    build_summary_view_impl(summary, *has_selection, *showing_logs, terminal_width)
 }
 
 /// Build the summary view with colored counts
@@ -823,7 +818,6 @@ fn build_summary_view_impl(
                 }
             }
         }
-
     }
 
     // Create layout with stats on left and help on right
