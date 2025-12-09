@@ -45,7 +45,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata (tags, labels) for Docker
@@ -112,7 +112,7 @@ jobs:
 
       - name: Log in to the Container registry
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | nix run nixpkgs#skopeo -- login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" | nix run nixpkgs#skopeo -- login ${{ env.REGISTRY }} -u ${{ github.repository_owner }} --password-stdin
 
       - name: Push image by digest
         id: push
@@ -158,7 +158,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
