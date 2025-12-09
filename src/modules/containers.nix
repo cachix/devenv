@@ -53,6 +53,18 @@ let
     else [ cfg.copyToRoot ]
   );
 
+  mkRoot = pkgs.buildEnv {
+    name = "devenv-container-root";
+    paths = [
+      pkgs.coreutils-full
+      pkgs.bashInteractive
+      pkgs.su
+      pkgs.sudo
+      pkgs.dockerTools.usrBinEnv
+    ];
+    pathsToLink = [ "/bin" "/usr/bin" ];
+  };
+
   mkTmp = (pkgs.runCommand "devenv-container-tmp" { } ''
     mkdir -p $out/tmp
   '');
@@ -100,17 +112,7 @@ let
     nixGid = lib.toInt gid;
 
     copyToRoot = [
-      (pkgs.buildEnv {
-        name = "devenv-container-root";
-        paths = [
-          pkgs.coreutils-full
-          pkgs.bashInteractive
-          pkgs.su
-          pkgs.sudo
-          pkgs.dockerTools.usrBinEnv
-        ];
-        pathsToLink = [ "/bin" "/usr/bin" ];
-      })
+      mkRoot
       mkEtc
       mkTmp
     ];
@@ -373,6 +375,13 @@ let
     };
 
     config.layers = [
+      {
+        # Include container infrastructure derivations as dependencies so they're
+        # available in the Nix store. This is needed to build containers from within
+        # a container (e.g., building a production container from a CI shell container).
+        # See: https://github.com/cachix/devenv/issues/2272
+        deps = [ mkRoot mkEtc mkTmp ];
+      }
       {
         perms = map mkPerm (mkMultiHome (homeRoots config));
         copyToRoot = mkMultiHome (homeRoots config);
