@@ -50,7 +50,7 @@ fn run_with_tui(cli: Cli) -> Result<()> {
     devenv_tracing::init_tracing(
         level,
         cli.global_options.trace_format,
-        cli.global_options.trace_output.as_deref(),
+        cli.global_options.trace_output.as_ref(),
     );
 
     // Shutdown coordination (TUI handles Ctrl+C, no install_signals needed)
@@ -107,7 +107,7 @@ async fn run_without_tui(cli: Cli) -> Result<()> {
     devenv_tracing::init_tracing(
         level,
         cli.global_options.trace_format,
-        cli.global_options.trace_output.as_deref(),
+        cli.global_options.trace_output.as_ref(),
     );
 
     let result = tokio::select! {

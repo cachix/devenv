@@ -2,6 +2,7 @@
 
 use clap::Parser;
 use std::path::PathBuf;
+use std::str::FromStr;
 use tracing::error;
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
@@ -18,6 +19,40 @@ pub enum TraceFormat {
     /// Interactive Terminal User Interface with real-time progress (default).
     #[default]
     Tui,
+}
+
+/// Specifies where trace output should be written.
+///
+/// Accepts the following formats:
+/// - `stdout` - write to standard output
+/// - `stderr` - write to standard error
+/// - `file:/path/to/file` - write to the specified file path
+/// - `/path/to/file` - write to the specified file path (shorthand)
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum TraceOutput {
+    Stdout,
+    #[default]
+    Stderr,
+    File(PathBuf),
+}
+
+impl FromStr for TraceOutput {
+    type Err = ParseTraceOutputError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "stdout" => Ok(TraceOutput::Stdout),
+            "stderr" => Ok(TraceOutput::Stderr),
+            s if s.starts_with("file:") => Ok(TraceOutput::File(PathBuf::from(&s[5..]))),
+            _ => Err(ParseTraceOutputError::UnsupportedFormat(s.to_string())),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ParseTraceOutputError {
+    #[error("unsupported trace output format '{0}', expected 'stdout', 'stderr', or 'file:<path>'")]
+    UnsupportedFormat(String),
 }
 
 #[derive(Clone, Debug, Parser)]
@@ -65,10 +100,10 @@ pub struct GlobalOptions {
         long,
         global = true,
         env = "DEVENV_TRACE_OUTPUT",
-        help = "Path to export traces.",
+        help = "Where to export traces (stdout, stderr, or file path).",
         hide = true
     )]
-    pub trace_output: Option<PathBuf>,
+    pub trace_output: Option<TraceOutput>,
 
     #[arg(short = 'j', long,
         global = true,
