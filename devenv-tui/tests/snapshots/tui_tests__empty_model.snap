@@ -1,5 +1,5 @@
 ---
-source: devenv-tui/tests/snapshot/tui_tests.rs
+source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-
+   ↑↓ nav • e expand

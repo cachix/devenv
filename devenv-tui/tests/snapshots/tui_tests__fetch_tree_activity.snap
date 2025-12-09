@@ -3,3 +3,7 @@ source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
  ⠋ Fetching Fetching github:NixOS/nixpkgs 0.0s
+
+
+
+                             ↑↓ nav • e expand

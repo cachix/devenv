@@ -4,3 +4,6 @@ expression: output
 ---
  ⠋ Evaluating devenv.nix                       0.0s
    • warning: deprecated option 'services.foo' used
+
+
+                                  ↑↓ nav • e expand
