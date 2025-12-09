@@ -1,7 +1,7 @@
 use clap::{Parser, crate_version};
 use devenv::{
     default_system,
-    log::{self, LogFormat},
+    log::{self, TraceFormat},
 };
 use miette::{IntoDiagnostic, Result, bail};
 use similar::{ChangeTag, TextDiff};
@@ -58,11 +58,11 @@ struct Cli {
     #[arg(
         long,
         global = true,
-        help = "Configure the output format of the logs.",
+        help = "Configure the output format of traces.",
         default_value_t,
         value_enum
     )]
-    pub log_format: LogFormat,
+    pub trace_format: TraceFormat,
 }
 
 #[derive(serde::Deserialize)]
@@ -88,7 +88,7 @@ async fn main() -> Result<()> {
         log::Level::default()
     };
 
-    log::init_tracing(level, cli.log_format, None);
+    log::init_tracing(level, cli.trace_format, None);
 
     let description = if !cli.description.is_empty() {
         Some(cli.description.join(" "))

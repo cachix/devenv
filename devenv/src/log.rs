@@ -34,8 +34,8 @@ impl From<Level> for LevelFilter {
     }
 }
 
-// Re-export LogFormat from devenv_core
-pub use devenv_core::cli::LogFormat;
+// Re-export TraceFormat from devenv_core
+pub use devenv_core::cli::TraceFormat;
 
 fn create_json_export_layer<S>(file: File) -> JsonLayer<S, File>
 where
@@ -51,10 +51,10 @@ where
 }
 
 pub fn init_tracing_default() {
-    init_tracing(Level::default(), LogFormat::default(), None);
+    init_tracing(Level::default(), TraceFormat::default(), None);
 }
 
-pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Option<&Path>) {
+pub fn init_tracing(level: Level, trace_format: TraceFormat, trace_export_file: Option<&Path>) {
     let devenv_layer = DevenvLayer::new();
     let span_id_layer = SpanIdLayer;
 
@@ -69,8 +69,8 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
 
     let export_file = trace_export_file.and_then(|path| File::create(path).ok());
 
-    match log_format {
-        LogFormat::TracingFull => {
+    match trace_format {
+        TraceFormat::TracingFull => {
             let stderr_layer = tracing_subscriber::fmt::layer()
                 .with_writer(stderr)
                 .with_ansi(ansi);
@@ -96,7 +96,7 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                 }
             }
         }
-        LogFormat::TracingPretty => {
+        TraceFormat::TracingPretty => {
             let stderr_layer = tracing_subscriber::fmt::layer()
                 .with_writer(stderr)
                 .with_ansi(ansi)
@@ -123,7 +123,7 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                 }
             }
         }
-        LogFormat::Cli => {
+        TraceFormat::LegacyCli => {
             // For CLI mode, use IndicatifLayer to coordinate ALL output with progress bars
             let style = tracing_indicatif::style::ProgressStyle::with_template(
                 "{spinner:.blue} {span_fields}",
@@ -167,7 +167,7 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                 }
             }
         }
-        LogFormat::TracingJson => {
+        TraceFormat::TracingJson => {
             fn create_stderr_layer<S>() -> JsonLayer<S>
             where
                 S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
@@ -201,7 +201,7 @@ pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Opti
                 }
             }
         }
-        LogFormat::Tui => {
+        TraceFormat::Tui => {
             // TUI displays activities via channel, not tracing output.
             // Only set up file export if requested.
             match export_file {

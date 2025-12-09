@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     }
 
     // Branch based on log format
-    if cli.global_options.log_format == log::LogFormat::Tui {
+    if cli.global_options.trace_format == log::TraceFormat::Tui {
         run_with_tui(cli)
     } else {
         run_without_tui(cli)
@@ -49,7 +49,7 @@ fn run_with_tui(cli: Cli) -> Result<()> {
     let level = get_log_level(&cli);
     log::init_tracing(
         level,
-        cli.global_options.log_format,
+        cli.global_options.trace_format,
         cli.global_options.trace_export_file.as_deref(),
     );
 
@@ -106,7 +106,7 @@ async fn run_without_tui(cli: Cli) -> Result<()> {
     let level = get_log_level(&cli);
     log::init_tracing(
         level,
-        cli.global_options.log_format,
+        cli.global_options.trace_format,
         cli.global_options.trace_export_file.as_deref(),
     );
 

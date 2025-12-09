@@ -1,6 +1,6 @@
 use super::{
     CommandResult,
-    log::{HumanReadableDuration, LogFormat},
+    log::{HumanReadableDuration, TraceFormat},
     tasks, util,
 };
 use ::nix::sys::signal;
@@ -839,7 +839,7 @@ impl Devenv {
 
         // In TUI mode, skip TasksUi to avoid corrupting the TUI display
         // TUI captures tracing events directly, so TasksUi output is redundant
-        let (status, outputs) = if self.global_options.log_format == LogFormat::Tui {
+        let (status, outputs) = if self.global_options.trace_format == TraceFormat::Tui {
             // TUI mode: run tasks directly without TasksUi wrapper
             let outputs = tasks.run().await;
             let status = tasks.get_completion_status().await;

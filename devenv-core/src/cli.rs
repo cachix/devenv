@@ -6,16 +6,15 @@ use tracing::error;
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum LogFormat {
-    /// The human-readable log format used in the CLI.
-    Cli,
+pub enum TraceFormat {
+    /// Legacy CLI output with spinners and progress indicators.
+    LegacyCli,
     /// A verbose structured log format used for debugging.
     TracingFull,
     /// A pretty human-readable log format used for debugging.
     TracingPretty,
     /// A JSON log format used for machine consumption.
     TracingJson,
-    // TODO: no sure this should live in core
     /// Interactive Terminal User Interface with real-time progress (default).
     #[default]
     Tui,
@@ -47,11 +46,20 @@ pub struct GlobalOptions {
     #[arg(
         long,
         global = true,
-        help = "Configure the output format of the logs.",
+        help = "Configure the output format of traces.",
         default_value_t,
         value_enum
     )]
-    pub log_format: LogFormat,
+    pub trace_format: TraceFormat,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Deprecated: use --trace-format instead.",
+        value_enum,
+        hide = true
+    )]
+    pub log_format: Option<TraceFormat>,
 
     #[arg(
         long,
@@ -193,7 +201,8 @@ impl Default for GlobalOptions {
             version: false,
             verbose: false,
             quiet: false,
-            log_format: LogFormat::default(),
+            trace_format: TraceFormat::default(),
+            log_format: None,
             trace_export_file: None,
             max_jobs: defaults.max_jobs,
             cores: defaults.cores,
@@ -219,6 +228,12 @@ impl GlobalOptions {
     pub fn resolve_overrides(&mut self) {
         if self.no_eval_cache {
             self.eval_cache = false;
+        }
+
+        // Handle deprecated --log-format
+        if let Some(format) = self.log_format {
+            eprintln!("Warning: --log-format is deprecated, use --trace-format instead");
+            self.trace_format = format;
         }
     }
 }
