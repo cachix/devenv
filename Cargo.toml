@@ -19,7 +19,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.11.3"
+version = "1.12.0"
 edition = "2024"
 license = "APACHE-2.0"
 homepage = "https://devenv.sh/"
@@ -93,7 +93,11 @@ tempfile = "3.23.0"
 termimad = "0.30.0"
 thiserror = "2.0.16"
 tracing = { version = "0.1.41", features = ["valuable"] }
-tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json", "valuable"] }
+tracing-subscriber = { version = "0.3.20", features = [
+  "env-filter",
+  "json",
+  "valuable",
+] }
 valuable = { version = "0.1", features = ["derive"] }
 json-subscriber = { version = "0.2.6" }
 tracing-indicatif = "=0.3.9"
