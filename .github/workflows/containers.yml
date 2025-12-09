@@ -121,7 +121,7 @@ jobs:
           IMAGE_NAME="${{ env.REGISTRY }}/${{ env.REPOSITORY }}/devenv"
 
           # Get the digest from the tarball
-          DIGEST=$(nix run nixpkgs#skopeo -- inspect "tarball:${IMAGE_PATH}" --format '{{.Digest}}')
+          DIGEST=$(nix run nixpkgs#skopeo -- inspect "docker-archive:${IMAGE_PATH}" --format '{{.Digest}}')
           echo "Image digest: $DIGEST"
 
           # Save digest for manifest creation
@@ -129,7 +129,7 @@ jobs:
           echo "$DIGEST" > "/tmp/digests/${{ matrix.arch }}.digest"
 
           # Push directly to digest reference without creating any tags
-          nix run nixpkgs#skopeo -- copy --preserve-digests "tarball:${IMAGE_PATH}" "docker://${IMAGE_NAME}@${DIGEST}"
+          nix run nixpkgs#skopeo -- copy --preserve-digests "docker-archive:${IMAGE_PATH}" "docker://${IMAGE_NAME}@${DIGEST}"
 
           echo "Pushed image to ${IMAGE_NAME}@${DIGEST}"
           echo "digest=$DIGEST" >> $GITHUB_OUTPUT
