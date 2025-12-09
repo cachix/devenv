@@ -142,6 +142,22 @@ impl TuiApp {
             }
         }
 
+        // Clear the TUI output before exiting
+        let lines_to_clear = {
+            let ui = ui_state.read().unwrap();
+            let model = activity_model.read().unwrap();
+            model.calculate_rendered_height(ui.selected_activity, ui.terminal_size.height)
+        };
+
+        if lines_to_clear > 0 {
+            let mut stdout = io::stdout();
+            let _ = execute!(
+                stdout,
+                cursor::MoveToPreviousLine(lines_to_clear),
+                terminal::Clear(terminal::ClearType::FromCursorDown)
+            );
+        }
+
         Ok(())
     }
 }

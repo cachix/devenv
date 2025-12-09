@@ -939,16 +939,17 @@ impl ActivityModel {
             }
         }
 
+        // Apply minimum height for activities (mirrors view.rs)
+        let min_height = 3;
+        let dynamic_height = total_height.max(min_height);
+
         // Error messages panel
         let error_count = self.get_error_messages().len().min(10);
-        total_height += error_count;
 
-        // Summary line + buffer
-        total_height += 2;
+        // Total: dynamic_height + error panel + summary line + buffer
+        let calculated = (dynamic_height + error_count + 2) as u16;
 
         // Clamp to terminal height
-        let min_height = 3;
-        let calculated = total_height.max(min_height) as u16;
         calculated.min(terminal_height)
     }
 }
