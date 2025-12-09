@@ -346,7 +346,7 @@ impl GlobalOptions {
     /// - `--no-tui` is passed
     /// - `--log-format cli` is passed (deprecated)
     pub fn use_legacy_cli(&self) -> bool {
-        self.no_tui || self.log_format == Some(LegacyLogFormat::Cli)
+        !self.tui || self.log_format == Some(LegacyLogFormat::Cli)
     }
 }
 
