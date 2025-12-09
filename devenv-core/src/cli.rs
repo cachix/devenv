@@ -1,6 +1,7 @@
 //! CLI-related types and utilities for devenv
 
 use clap::Parser;
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::error;
@@ -306,6 +307,17 @@ impl GlobalOptions {
 
         if self.no_tui {
             self.tui = false;
+        }
+
+        // Disable TUI in CI environments or when not running in a TTY
+        if self.tui {
+            let is_ci = std::env::var("CI")
+                .map(|s| s == "true" || s == "1")
+                .unwrap_or(false);
+            let is_tty = std::io::stdout().is_terminal() && std::io::stderr().is_terminal();
+            if is_ci || !is_tty {
+                self.tui = false;
+            }
         }
 
         // Handle deprecated --log-format (except Cli which is handled separately)
