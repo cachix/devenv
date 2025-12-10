@@ -1,6 +1,6 @@
 use clap::crate_version;
 use devenv::{
-    CommandResult, Devenv,
+    Devenv, RunMode,
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
     tracing as devenv_tracing,
 };
@@ -11,6 +11,39 @@ use std::{process::Command, sync::Arc};
 use tempfile::TempDir;
 use tokio_shutdown::Shutdown;
 use tracing::info;
+
+/// Result of a CLI command execution.
+/// This is a CLI concern - the library returns domain types.
+#[derive(Debug)]
+enum CommandResult {
+    /// Command completed normally
+    Done,
+    /// Print this string after UI cleanup
+    Print(String),
+    /// Exec into this command after cleanup (TUI shutdown, terminal restore)
+    Exec(Command),
+}
+
+impl CommandResult {
+    /// Execute the pending action.
+    /// - Done: returns Ok(())
+    /// - Print: prints to stdout and returns Ok(())
+    /// - Exec: replaces the current process (never returns on success)
+    fn exec(self) -> Result<()> {
+        match self {
+            CommandResult::Done => Ok(()),
+            CommandResult::Print(output) => {
+                print!("{output}");
+                Ok(())
+            }
+            CommandResult::Exec(mut cmd) => {
+                use std::os::unix::process::CommandExt;
+                let err = cmd.exec();
+                miette::bail!("Failed to exec: {}", err);
+            }
+        }
+    }
+}
 
 fn main() -> Result<()> {
     let cli = Cli::parse_and_resolve_options();
@@ -72,7 +105,7 @@ fn run_with_tui(cli: Cli) -> Result<()> {
         let result = rt.block_on(async {
             tokio::select! {
                 result = run_devenv(cli, shutdown_clone.clone()) => result,
-                _ = shutdown_clone.wait_for_shutdown() => Ok(CommandResult::Done(())),
+                _ = shutdown_clone.wait_for_shutdown() => Ok(CommandResult::Done),
             }
         });
 
@@ -112,7 +145,7 @@ async fn run_with_legacy_cli(cli: Cli) -> Result<()> {
 
     let result = tokio::select! {
         result = run_devenv(cli, shutdown.clone()) => result,
-        _ = shutdown.wait_for_shutdown() => Ok(CommandResult::Done(())),
+        _ = shutdown.wait_for_shutdown() => Ok(CommandResult::Done),
     }?;
 
     result.exec()
@@ -132,7 +165,7 @@ async fn run_with_tracing(cli: Cli) -> Result<()> {
 
     let result = tokio::select! {
         result = run_devenv(cli, shutdown.clone()) => result,
-        _ = shutdown.wait_for_shutdown() => Ok(CommandResult::Done(())),
+        _ = shutdown.wait_for_shutdown() => Ok(CommandResult::Done),
     }?;
 
     result.exec()
@@ -203,11 +236,17 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
     let mut devenv = Devenv::new(options).await;
 
     let result = match command {
-        Commands::Shell { cmd, ref args } => match cmd {
-            Some(cmd) => devenv.prepare_exec(Some(cmd), args).await?,
-            None => devenv.shell().await?,
-        },
-        Commands::Test { .. } => devenv.test().await?,
+        Commands::Shell { cmd, ref args } => {
+            let shell_config = match cmd {
+                Some(cmd) => devenv.prepare_exec(Some(cmd), args).await?,
+                None => devenv.shell().await?,
+            };
+            CommandResult::Exec(shell_config.command)
+        }
+        Commands::Test { .. } => {
+            devenv.test().await?;
+            CommandResult::Done
+        }
         Commands::Container {
             registry,
             copy,
@@ -254,23 +293,27 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
 
             match command {
                 ContainerCommand::Build { name } => {
-                    let path = devenv.container_build(&name).await?.unwrap();
-                    println!("{path}");
-                    CommandResult::done()
+                    let path = devenv.container_build(&name).await?;
+                    CommandResult::Print(format!("{path}\n"))
                 }
                 ContainerCommand::Copy { name } => {
                     devenv
                         .container_copy(&name, &copy_args, registry.as_deref())
-                        .await?
+                        .await?;
+                    CommandResult::Done
                 }
                 ContainerCommand::Run { name } => {
-                    devenv
+                    let shell_config = devenv
                         .container_run(&name, &copy_args, registry.as_deref())
-                        .await?
+                        .await?;
+                    CommandResult::Exec(shell_config.command)
                 }
             }
         }
-        Commands::Init { target } => devenv.init(&target)?,
+        Commands::Init { target } => {
+            devenv.init(&target)?;
+            CommandResult::Done
+        }
         Commands::Generate { .. } => match which::which("devenv-generate") {
             Ok(devenv_generate) => {
                 let mut cmd = Command::new(devenv_generate);
@@ -287,18 +330,35 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
                 "})
             }
         },
-        Commands::Search { name } => devenv.search(&name).await?,
-        Commands::Gc {} => devenv.gc().await?,
-        Commands::Info {} => devenv.info().await?,
-        Commands::Repl {} => devenv.repl().await?,
-        Commands::Build { attributes } => {
-            let paths = devenv.build(&attributes).await?.unwrap();
-            for path in paths {
-                println!("{}", path.display());
-            }
-            CommandResult::done()
+        Commands::Search { name } => {
+            devenv.search(&name).await?;
+            CommandResult::Done
         }
-        Commands::Update { name } => devenv.update(&name).await?,
+        Commands::Gc {} => {
+            devenv.gc().await?;
+            CommandResult::Done
+        }
+        Commands::Info {} => {
+            let output = devenv.info().await?;
+            CommandResult::Print(format!("{output}\n"))
+        }
+        Commands::Repl {} => {
+            devenv.repl().await?;
+            CommandResult::Done
+        }
+        Commands::Build { attributes } => {
+            let paths = devenv.build(&attributes).await?;
+            let output = paths
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join("\n");
+            CommandResult::Print(format!("{output}\n"))
+        }
+        Commands::Update { name } => {
+            devenv.update(&name).await?;
+            CommandResult::Done
+        }
         Commands::Up { processes, detach }
         | Commands::Processes {
             command: ProcessesCommand::Up { processes, detach },
@@ -308,39 +368,61 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
                 log_to_file: detach,
                 ..Default::default()
             };
-            devenv.up(processes, &options).await?
+            match devenv.up(processes, &options).await? {
+                RunMode::Detached => CommandResult::Done,
+                RunMode::Foreground(shell_command) => CommandResult::Exec(shell_command.command),
+            }
         }
         Commands::Processes {
             command: ProcessesCommand::Down {},
-        } => devenv.down().await?,
+        } => {
+            devenv.down().await?;
+            CommandResult::Done
+        }
         Commands::Tasks { command } => match command {
             TasksCommand::Run {
                 tasks,
                 mode,
                 show_output,
-            } => devenv.tasks_run(tasks, mode, show_output).await?,
-            TasksCommand::List {} => devenv.tasks_list().await?,
+            } => {
+                let output = devenv.tasks_run(tasks, mode, show_output).await?;
+                CommandResult::Print(format!("{output}\n"))
+            }
+            TasksCommand::List {} => {
+                devenv.tasks_list().await?;
+                CommandResult::Done
+            }
         },
         Commands::Inputs { command } => match command {
             InputsCommand::Add { name, url, follows } => {
-                devenv.inputs_add(&name, &url, &follows).await?
+                devenv.inputs_add(&name, &url, &follows).await?;
+                CommandResult::Done
             }
         },
-        Commands::Changelogs {} => devenv.changelogs().await?,
+        Commands::Changelogs {} => {
+            devenv.changelogs().await?;
+            CommandResult::Done
+        }
 
         // hidden
-        Commands::Assemble => devenv.assemble(false).await?,
-        Commands::PrintDevEnv { json } => devenv.print_dev_env(json).await?,
+        Commands::Assemble => {
+            devenv.assemble(false).await?;
+            CommandResult::Done
+        }
+        Commands::PrintDevEnv { json } => {
+            let output = devenv.print_dev_env(json).await?;
+            CommandResult::Print(output)
+        }
         Commands::GenerateJSONSchema => {
             config::write_json_schema()
                 .await
                 .wrap_err("Failed to generate JSON schema")?;
-            CommandResult::Done(())
+            CommandResult::Done
         }
         Commands::Mcp {} => {
             let config = devenv.config.read().await.clone();
             devenv::mcp::run_mcp_server(config).await?;
-            CommandResult::Done(())
+            CommandResult::Done
         }
         Commands::Direnvrc => unreachable!(),
         Commands::Version => unreachable!(),

@@ -406,7 +406,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             }
         }
 
-        let status = if test_config.use_shell {
+        let status: miette::Result<()> = if test_config.use_shell {
             devenv.test().await
         } else {
             // Run .test.sh directly - it must exist when run_test_sh is false
@@ -417,7 +417,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
                     .status()
                     .into_diagnostic()?;
                 if output.success() {
-                    Ok(devenv::CommandResult::Done(()))
+                    Ok(())
                 } else {
                     Err(miette::miette!(
                         "Test script failed. Status code: {}",
