@@ -328,7 +328,9 @@ in
           # Add extra libraries to the Python `buildEnv`.
           appendLibraries =
             drv:
-            (if isBuildEnv drv then drv else drv.buildEnv).override (args: { inherit makeWrapperArgs; });
+            (if isBuildEnv drv then drv else drv.buildEnv).override (args: {
+              inherit makeWrapperArgs;
+            });
         in
         if cfg.patches.buildEnv.enable then
           lib.pipe drv [
@@ -603,13 +605,11 @@ in
 
     env =
       (lib.optionalAttrs cfg.uv.enable {
-        # ummmmm how does this work? Can I even know the path to the devenv/state at this point?
         UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
         # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
         UV_PYTHON_DOWNLOADS = "never";
-        # Make uv choose the first python on PATH that is not uv provided.
-        # The one it finds is then consistently the one from nix (which is what we want).
-        UV_PYTHON_PREFERENCE = "only-system";
+        # Configure uv to use the python interpreter from the profile
+        UV_PYTHON = toString cfg.package.interpreter;
       })
       // (lib.optionalAttrs cfg.poetry.enable {
         # Make poetry use DEVENV_ROOT/.venv
