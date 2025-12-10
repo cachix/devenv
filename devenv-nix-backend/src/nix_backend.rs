@@ -231,6 +231,11 @@ impl NixRustBackend {
         let fetchers_settings = FetchersSettings::new()
             .to_miette()
             .wrap_err("Failed to create fetchers settings")?;
+        // Load settings from nix.conf (including access-tokens for GitHub API authentication)
+        fetchers_settings
+            .load_config()
+            .to_miette()
+            .wrap_err("Failed to load fetchers settings from nix.conf")?;
 
         // Generate merged nixpkgs config and write to temp file for NIXPKGS_CONFIG env var
         // Wrap in a let expression that adds allowUnfreePredicate (a Nix function)
