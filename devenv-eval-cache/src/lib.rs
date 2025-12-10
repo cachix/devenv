@@ -450,6 +450,64 @@ mod integration_tests {
     }
 
     #[sqlx::test]
+    async fn test_excluded_env_vars_are_not_tracked(
+        pool: sqlx::SqlitePool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // This test verifies that volatile environment variables (PWD, TMPDIR, etc.)
+        // are excluded from cache tracking and don't cause cache invalidation.
+        // This fixes bug #2107 where running tasks from inside a devenv shell
+        // would cause unnecessary rebuilds due to TMPDIR changes.
+
+        // Use an expression that reads volatile vars (which are already set by the system)
+        // We don't need to set them ourselves - they're part of the environment
+        let nix_expr = r#"{
+            tmpdir = builtins.getEnv "TMPDIR";
+            pwd = builtins.getEnv "PWD";
+            xdg = builtins.getEnv "XDG_RUNTIME_DIR";
+        }"#;
+
+        // Run nix eval with caching
+        let output = run_nix_eval_cached(&pool, nix_expr).await?;
+        assert!(output.status.success(), "Nix eval failed");
+
+        // Verify volatile vars were NOT tracked as dependencies
+        let tracked_env_vars: Vec<String> = output
+            .inputs
+            .iter()
+            .filter_map(|input| match input {
+                Input::Env(e) => Some(e.name.clone()),
+                _ => None,
+            })
+            .collect();
+
+        assert!(
+            !tracked_env_vars.contains(&"TMPDIR".to_string()),
+            "TMPDIR should be excluded from cache tracking, but found in: {:?}",
+            tracked_env_vars
+        );
+        assert!(
+            !tracked_env_vars.contains(&"PWD".to_string()),
+            "PWD should be excluded from cache tracking, but found in: {:?}",
+            tracked_env_vars
+        );
+        assert!(
+            !tracked_env_vars.contains(&"XDG_RUNTIME_DIR".to_string()),
+            "XDG_RUNTIME_DIR should be excluded from cache tracking, but found in: {:?}",
+            tracked_env_vars
+        );
+
+        // Second run should hit cache
+        let output2 = run_nix_eval_cached(&pool, nix_expr).await?;
+        assert!(output2.status.success(), "Second nix eval failed");
+        assert!(
+            output2.cache_hit,
+            "Second run should hit cache since only volatile vars were read"
+        );
+
+        Ok(())
+    }
+
+    #[sqlx::test]
     async fn test_cache_persistence_across_sessions(
         pool: sqlx::SqlitePool,
     ) -> Result<(), Box<dyn std::error::Error>> {
