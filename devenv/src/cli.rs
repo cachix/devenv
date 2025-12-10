@@ -102,23 +102,14 @@ pub enum Commands {
     },
 
     Container {
-        #[arg(short, long)]
-        registry: Option<String>,
-
-        #[arg(long, hide = true)]
-        copy: bool,
-
-        #[arg(long, hide = true)]
-        docker_run: bool,
+        #[command(subcommand)]
+        command: ContainerCommand,
 
         #[arg(long)]
         copy_args: Vec<String>,
 
-        #[arg(hide = true)]
-        name: Option<String>,
-
-        #[command(subcommand)]
-        command: Option<ContainerCommand>,
+        #[arg(short, long)]
+        registry: Option<String>,
     },
 
     Inputs {

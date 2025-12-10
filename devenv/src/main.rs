@@ -248,68 +248,27 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
             CommandResult::Done
         }
         Commands::Container {
-            registry,
-            copy,
-            docker_run,
-            copy_args,
-            name,
             command,
-        } => {
-            // Backwards compatibility for the legacy container flags:
-            //   `devenv container <name> --copy` is now `devenv container copy <name>`
-            //   `devenv container <name> --docker-run` is now `devenv container run <name>`
-            //   `devenv container <name>` is now `devenv container build <name>`
-            let command = if let Some(name) = name {
-                if copy {
-                    message(
-                        ActivityLevel::Warn,
-                        "The --copy flag is deprecated. Use `devenv container copy` instead.",
-                    );
-                    ContainerCommand::Copy { name }
-                } else if docker_run {
-                    message(
-                        ActivityLevel::Warn,
-                        "The --docker-run flag is deprecated. Use `devenv container run` instead.",
-                    );
-                    ContainerCommand::Run { name }
-                } else {
-                    message(
-                        ActivityLevel::Warn,
-                        "Calling `devenv container` without a subcommand is deprecated. Use `devenv container build {name}` instead.",
-                    );
-                    ContainerCommand::Build { name }
-                }
-            } else {
-                // Error out if we don't have a subcommand at this point.
-                if let Some(cmd) = command {
-                    cmd
-                } else {
-                    // Impossible. This handled by clap, but if we have no subcommand at this point, error out.
-                    bail!(
-                        "No container subcommand provided. Use `devenv container build` or specify a command."
-                    )
-                }
-            };
-
-            match command {
-                ContainerCommand::Build { name } => {
-                    let path = devenv.container_build(&name).await?;
-                    CommandResult::Print(format!("{path}\n"))
-                }
-                ContainerCommand::Copy { name } => {
-                    devenv
-                        .container_copy(&name, &copy_args, registry.as_deref())
-                        .await?;
-                    CommandResult::Done
-                }
-                ContainerCommand::Run { name } => {
-                    let shell_config = devenv
-                        .container_run(&name, &copy_args, registry.as_deref())
-                        .await?;
-                    CommandResult::Exec(shell_config.command)
-                }
+            copy_args,
+            registry,
+        } => match command {
+            ContainerCommand::Build { name } => {
+                let path = devenv.container_build(&name).await?;
+                CommandResult::Print(format!("{path}\n"))
             }
-        }
+            ContainerCommand::Copy { name } => {
+                devenv
+                    .container_copy(&name, &copy_args, registry.as_deref())
+                    .await?;
+                CommandResult::Done
+            }
+            ContainerCommand::Run { name } => {
+                let shell_config = devenv
+                    .container_run(&name, &copy_args, registry.as_deref())
+                    .await?;
+                CommandResult::Exec(shell_config.command)
+            }
+        },
         Commands::Init { target } => {
             devenv.init(&target)?;
             CommandResult::Done
