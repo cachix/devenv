@@ -1,5 +1,10 @@
 # yaml-language-server: $schema=https://devenv.sh/devenv.schema.json
 inputs:
+  go-overlay:
+    url: github:purpleclay/go-overlay
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
   git-hooks:
     url: github:cachix/git-hooks.nix
     inputs:
