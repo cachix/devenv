@@ -179,32 +179,47 @@ impl NixRustBackend {
         shutdown: Arc<Shutdown>,
         store: Option<std::path::PathBuf>,
     ) -> Result<Self> {
+        eprintln!("DEBUG: NixRustBackend::new() starting");
         // Initialize Nix libexpr FIRST - this initializes the Nix C++ library
+        eprintln!("DEBUG: About to call init()");
         nix_bindings_expr::eval_state::init()
             .to_miette()
             .wrap_err("Failed to initialize Nix expression library")?;
+        eprintln!("DEBUG: init() completed");
 
         // Register thread with garbage collector IMMEDIATELY after init()
         // This MUST happen before any other Nix FFI calls (including settings::set)
         // because the Boehm GC requires thread registration before allocations.
+        eprintln!("DEBUG: About to register GC thread");
         let gc_registration = gc_register_my_thread()
             .to_miette()
             .wrap_err("Failed to register thread with Nix garbage collector")?;
+        eprintln!("DEBUG: GC thread registered");
 
         // Set experimental features after init() to ensure they're properly configured
+        eprintln!("DEBUG: About to set experimental-features");
         settings::set("experimental-features", "flakes nix-command")
             .to_miette()
             .wrap_err("Failed to enable experimental features")?;
+        eprintln!("DEBUG: experimental-features set");
 
         // Apply other global settings
+        eprintln!("DEBUG: About to apply global options");
         Self::apply_global_options(&global_options)?;
+        eprintln!("DEBUG: Global options applied");
 
         // Apply cachix global settings BEFORE store creation (e.g., netrc-file path)
+        eprintln!("DEBUG: Getting cachix global settings");
         let cachix_global_settings = cachix_manager
             .get_global_settings()
             .wrap_err("Failed to get cachix global settings")?;
+        eprintln!(
+            "DEBUG: Got {} cachix settings",
+            cachix_global_settings.len()
+        );
 
         for (key, value) in &cachix_global_settings {
+            eprintln!("DEBUG: Setting cachix option: {}", key);
             settings::set(key, value).to_miette().wrap_err(format!(
                 "Failed to set cachix global setting: {} = {}",
                 key, value
@@ -213,29 +228,37 @@ impl NixRustBackend {
         }
 
         // Extract bootstrap directory to dotfile location
+        eprintln!("DEBUG: Extracting bootstrap files");
         let bootstrap_path = Self::extract_bootstrap_files(&paths.dotfile)?;
+        eprintln!("DEBUG: Bootstrap files extracted");
 
         // Open store connection (with netrc-file setting now in place)
+        eprintln!("DEBUG: Opening store");
         let store_uri = store
             .as_ref()
             .map(|p| format!("local?root={}", p.display()));
         let store = Store::open(store_uri.as_deref(), [])
             .to_miette()
             .wrap_err("Failed to open Nix store")?;
+        eprintln!("DEBUG: Store opened");
 
         // Create flake and fetchers settings - kept alive for the entire backend lifetime
         // These are needed for builtins.fetchTree, builtins.getFlake, and flake operations
+        eprintln!("DEBUG: Creating FlakeSettings");
         let flake_settings = FlakeSettings::new()
             .to_miette()
             .wrap_err("Failed to create flake settings")?;
+        eprintln!("DEBUG: Creating FetchersSettings");
         let fetchers_settings = FetchersSettings::new()
             .to_miette()
             .wrap_err("Failed to create fetchers settings")?;
         // Load settings from nix.conf (including access-tokens for GitHub API authentication)
+        eprintln!("DEBUG: Loading fetchers config from nix.conf");
         fetchers_settings
             .load_config()
             .to_miette()
             .wrap_err("Failed to load fetchers settings from nix.conf")?;
+        eprintln!("DEBUG: Fetchers config loaded");
 
         // Generate merged nixpkgs config and write to temp file for NIXPKGS_CONFIG env var
         // Wrap in a let expression that adds allowUnfreePredicate (a Nix function)
