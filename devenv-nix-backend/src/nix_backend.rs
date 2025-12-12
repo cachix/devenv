@@ -227,23 +227,10 @@ impl NixRustBackend {
             tracing::debug!("Applied cachix global setting: {} = {}", key, value);
         }
 
-        // Extract bootstrap directory to dotfile location
-        eprintln!("DEBUG: Extracting bootstrap files");
-        let bootstrap_path = Self::extract_bootstrap_files(&paths.dotfile)?;
-        eprintln!("DEBUG: Bootstrap files extracted");
-
-        // Open store connection (with netrc-file setting now in place)
-        eprintln!("DEBUG: Opening store");
-        let store_uri = store
-            .as_ref()
-            .map(|p| format!("local?root={}", p.display()));
-        let store = Store::open(store_uri.as_deref(), [])
-            .to_miette()
-            .wrap_err("Failed to open Nix store")?;
-        eprintln!("DEBUG: Store opened");
-
-        // Create flake and fetchers settings - kept alive for the entire backend lifetime
+        // Create flake and fetchers settings BEFORE opening store - kept alive for the entire backend lifetime
         // These are needed for builtins.fetchTree, builtins.getFlake, and flake operations
+        // NOTE: Creating these before store is important because load_config() calls loadConfFile()
+        // which accesses global settings that may not be safe to access after store initialization
         eprintln!("DEBUG: Creating FlakeSettings");
         let flake_settings = FlakeSettings::new()
             .to_miette()
@@ -259,6 +246,21 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to load fetchers settings from nix.conf")?;
         eprintln!("DEBUG: Fetchers config loaded");
+
+        // Extract bootstrap directory to dotfile location
+        eprintln!("DEBUG: Extracting bootstrap files");
+        let bootstrap_path = Self::extract_bootstrap_files(&paths.dotfile)?;
+        eprintln!("DEBUG: Bootstrap files extracted");
+
+        // Open store connection (with netrc-file setting now in place)
+        eprintln!("DEBUG: Opening store");
+        let store_uri = store
+            .as_ref()
+            .map(|p| format!("local?root={}", p.display()));
+        let store = Store::open(store_uri.as_deref(), [])
+            .to_miette()
+            .wrap_err("Failed to open Nix store")?;
+        eprintln!("DEBUG: Store opened");
 
         // Generate merged nixpkgs config and write to temp file for NIXPKGS_CONFIG env var
         // Wrap in a let expression that adds allowUnfreePredicate (a Nix function)
