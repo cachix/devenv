@@ -24,9 +24,23 @@ use crate::stack::{ACTIVITY_STACK, get_current_stack};
 /// .in_activity(&activity)
 /// .await;
 /// ```
+///
+/// Works across spawn boundaries too - the `&Activity` is only used to extract the ID
+/// and span at call time, not captured by the returned future:
+/// ```ignore
+/// let activity = Arc::new(Activity::operation("Building").start());
+/// let activity_clone = Arc::clone(&activity);
+/// tokio::spawn(move || {
+///     async move { /* ... */ }.in_activity(&activity_clone)  // returns 'static future
+/// });
+/// ```
 pub trait ActivityInstrument: Future + Sized {
     /// Instrument this future with the given activity's context.
-    fn in_activity(self, activity: &Activity) -> impl Future<Output = Self::Output> {
+    ///
+    /// The `&Activity` is only used to extract the ID and span at call time;
+    /// the returned future captures only `Self`, not the `&Activity` reference.
+    /// This means when `Self` is `'static`, the returned future is also `'static`.
+    fn in_activity(self, activity: &Activity) -> impl Future<Output = Self::Output> + use<Self> {
         let mut stack = get_current_stack();
         stack.push(activity.id());
         let span = activity.span();
