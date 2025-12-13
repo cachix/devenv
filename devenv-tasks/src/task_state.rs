@@ -4,6 +4,7 @@ use crate::task_cache::{TaskCache, expand_glob_patterns};
 use crate::types::{
     Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, TaskType, VerbosityLevel,
 };
+use devenv_activity::{Activity, ActivityLevel};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use nix::sys::signal::{self as nix_signal, Signal};
 use nix::unistd::Pid;
@@ -15,7 +16,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
-use tracing::{Level, error, event, instrument};
+use tracing::error;
 
 impl std::fmt::Debug for TaskState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -173,7 +174,6 @@ impl TaskState {
         Output(output)
     }
 
-    #[instrument(ret)]
     pub async fn run(
         &self,
         now: Instant,
@@ -181,11 +181,24 @@ impl TaskState {
         cache: &TaskCache,
         cancellation: CancellationToken,
     ) -> Result<TaskCompleted> {
-        // Create a long-lived span for this task execution that will be kept alive
-        // throughout the entire task run, allowing the TUI to track the task's lifecycle
-        let task_span = devenv_tui::tracing_interface::create_task_span(&self.task.name, "normal");
-        let _span_guard = task_span.enter();
+        // Create a Task activity for tracking this task's lifecycle.
+        // All child activities created within scope() will have this as their parent.
+        let task_activity = Activity::task(&self.task.name).start();
 
+        // Run the entire task within the activity's scope for proper parent-child nesting
+        task_activity
+            .scope(self.run_inner(now, outputs, cache, cancellation, &task_activity))
+            .await
+    }
+
+    async fn run_inner(
+        &self,
+        now: Instant,
+        outputs: &BTreeMap<String, serde_json::Value>,
+        cache: &TaskCache,
+        cancellation: CancellationToken,
+        task_activity: &Activity,
+    ) -> Result<TaskCompleted> {
         tracing::debug!(
             "Running task '{}' with exec_if_modified: {:?}, status: {}",
             self.task.name,
@@ -216,20 +229,17 @@ impl TaskState {
                 .prepare_command(cmd, outputs)
                 .wrap_err("Failed to prepare status command")?;
 
-            // Emit tracing event for status command start
-            crate::tracing_events::emit_command_start(&self.task.name, cmd);
+            // Create a Command activity for the status check (automatically parented to task_activity)
+            let status_activity = Activity::command(&self.task.name)
+                .command(cmd)
+                .level(ActivityLevel::Debug)
+                .start();
 
-            // Use spawn and wait with output to properly handle status script execution
             match command.output().await {
                 Ok(output) => {
-                    let exit_code = output.status.code();
-                    let success = output.status.success();
-                    crate::tracing_events::emit_command_end(
-                        &self.task.name,
-                        cmd,
-                        exit_code,
-                        success,
-                    );
+                    if !output.status.success() {
+                        status_activity.fail();
+                    }
 
                     if output.status.success() {
                         let output = Output(cached_output);
@@ -238,9 +248,7 @@ impl TaskState {
                     }
                 }
                 Err(e) => {
-                    crate::tracing_events::emit_command_end(&self.task.name, cmd, None, false);
-
-                    // TODO: stdout, stderr
+                    status_activity.fail();
                     return Ok(TaskCompleted::Failed(
                         now.elapsed(),
                         TaskFailure {
@@ -301,12 +309,16 @@ impl TaskState {
                 return Ok(TaskCompleted::Skipped(Skipped::Cached(Output(task_output))));
             }
         }
+
         let Some(cmd) = &self.task.command else {
             return Ok(TaskCompleted::Skipped(Skipped::NoCommand));
         };
 
-        // Emit tracing event for command start
-        crate::tracing_events::emit_command_start(&self.task.name, cmd);
+        // Create a Command activity for the main execution (automatically parented to task_activity)
+        let cmd_activity = Activity::command(&self.task.name)
+            .command(cmd)
+            .level(ActivityLevel::Debug)
+            .start();
 
         let (mut command, outputs_file) = self
             .prepare_command(cmd, outputs)
@@ -320,10 +332,8 @@ impl TaskState {
         let mut child = match result {
             Ok(c) => c,
             Err(err) => {
-                // Emit tracing event for command spawn failure
-                let cmd = self.task.command.as_ref().unwrap();
-                crate::tracing_events::emit_command_end(&self.task.name, cmd, None, false);
-
+                cmd_activity.fail();
+                task_activity.fail();
                 return Ok(TaskCompleted::Failed(
                     now.elapsed(),
                     TaskFailure {
@@ -338,6 +348,8 @@ impl TaskState {
         let stdout = match child.stdout.take() {
             Some(stdout) => stdout,
             None => {
+                cmd_activity.fail();
+                task_activity.fail();
                 return Ok(TaskCompleted::Failed(
                     now.elapsed(),
                     TaskFailure {
@@ -351,6 +363,8 @@ impl TaskState {
         let stderr = match child.stderr.take() {
             Some(stderr) => stderr,
             None => {
+                cmd_activity.fail();
+                task_activity.fail();
                 return Ok(TaskCompleted::Failed(
                     now.elapsed(),
                     TaskFailure {
@@ -385,15 +399,8 @@ impl TaskState {
                 result = stdout_reader.next_line(), if !stdout_closed => {
                     match result {
                         Ok(Some(line)) => {
-                            // Emit structured tracing event for stdout streaming to TUI
-                            // Uses short-lived event with explicit target and parent span
-                            event!(
-                                target: "stdout",
-                                parent: &task_span,
-                                Level::INFO,
-                                nix_stream = "stdout",
-                                message = %line,
-                            );
+                            // Log to the task activity
+                            task_activity.log(&line);
 
                             if self.verbosity == VerbosityLevel::Verbose || self.task.show_output {
                                 println!("[{}] {}", self.task.name, line);
@@ -415,15 +422,8 @@ impl TaskState {
                 result = stderr_reader.next_line(), if !stderr_closed => {
                     match result {
                         Ok(Some(line)) => {
-                            // Emit structured tracing event for stderr streaming to TUI
-                            // Uses short-lived event with explicit target and parent span
-                            event!(
-                                target: "stderr",
-                                parent: &task_span,
-                                Level::WARN,
-                                nix_stream = "stderr",
-                                message = %line,
-                            );
+                            // Log error to the task activity
+                            task_activity.error(&line);
 
                             if self.verbosity == VerbosityLevel::Verbose || self.task.show_output {
                                 eprintln!("[{}] {}", self.task.name, line);
@@ -445,11 +445,9 @@ impl TaskState {
                 result = child.wait(), if exit_status.is_none() => {
                     match result {
                         Ok(status) => {
-                            // Emit tracing event for command completion
-                            let cmd = self.task.command.as_ref().unwrap();
-                            let exit_code = status.code();
-                            let success = status.success();
-                            crate::tracing_events::emit_command_end(&self.task.name, cmd, exit_code, success);
+                            if !status.success() {
+                                cmd_activity.fail();
+                            }
 
                             // Update the file states to capture any changes the task made,
                             // regardless of whether the task succeeded or failed
@@ -458,11 +456,12 @@ impl TaskState {
                                 cache.update_file_state(&self.task.name, &path).await?;
                             }
 
-                            // Store exit status and continue draining pipes
                             exit_status = Some(status);
                         },
                         Err(e) => {
                             error!("{}> Error waiting for command: {}", self.task.name, e);
+                            cmd_activity.fail();
+                            task_activity.fail();
                             return Ok(TaskCompleted::Failed(
                                 now.elapsed(),
                                 TaskFailure {
@@ -480,8 +479,6 @@ impl TaskState {
                     // Kill the child process and its process group
                     if let Some(pid) = child.id() {
                         // Send SIGTERM to the process group first for graceful shutdown
-                        // TODO: whether to signal the process or the progress group could be configurable
-                        // See process compose
                         let _ = nix_signal::killpg(Pid::from_raw(pid as i32), Signal::SIGTERM);
 
                         tokio::select! {
@@ -496,16 +493,13 @@ impl TaskState {
                         }
                     }
 
-                    // Emit tracing event for cancelled task
-                    let cmd = self.task.command.as_ref().unwrap();
-                    crate::tracing_events::emit_command_end(&self.task.name, cmd, None, false);
-
+                    cmd_activity.cancel();
+                    task_activity.cancel();
                     return Ok(TaskCompleted::Cancelled(Some(now.elapsed())));
                 }
             }
         }
 
-        // Return based on the stored exit status
         let status = exit_status.expect("Loop exited without exit status");
         if status.success() {
             Ok(TaskCompleted::Success(
@@ -513,6 +507,7 @@ impl TaskState {
                 Self::get_outputs(&outputs_file).await,
             ))
         } else {
+            task_activity.fail();
             Ok(TaskCompleted::Failed(
                 now.elapsed(),
                 TaskFailure {
