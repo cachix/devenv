@@ -66,10 +66,10 @@
         ]
       },
       "locked": {
-        "lastModified": 1763759067,
+        "lastModified": 1765495779,
         "owner": "hercules-ci",
         "repo": "flake-parts",
-        "rev": "2cccadc7357c0ba201788ae99c4dfa90728ef5e0",
+        "rev": "5635c32d666a59ec9a55cab87e898889869f7b71",
         "type": "github"
       },
       "original": {
@@ -113,10 +113,10 @@
         ]
       },
       "locked": {
-        "lastModified": 1765404074,
+        "lastModified": 1765464257,
         "owner": "cachix",
         "repo": "git-hooks.nix",
-        "rev": "2d6f58930fbcd82f6f9fd59fb6d13e37684ca529",
+        "rev": "09e45f2598e1a8499c3594fe11ec2943f34fe509",
         "type": "github"
       },
       "original": {
@@ -155,10 +155,10 @@
         "nixpkgs-regression": "nixpkgs-regression"
       },
       "locked": {
-        "lastModified": 1765400515,
+        "lastModified": 1765614058,
         "owner": "cachix",
         "repo": "nix",
-        "rev": "37b0c22f06581cd1bb9fdf562061c40809ecccfe",
+        "rev": "b8f0495c6ad7bf67a570046d109e0630101d452e",
         "type": "github"
       },
       "original": {
