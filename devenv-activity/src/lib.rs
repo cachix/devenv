@@ -62,7 +62,7 @@ pub use builders::{
 };
 
 // Functions
-pub use handle::{ActivityHandle, init};
+pub use handle::{ActivityHandle, init, signal_done};
 pub use stack::{current_activity_id, message, message_with_details};
 
 // Trait
