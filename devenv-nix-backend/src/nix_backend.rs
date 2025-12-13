@@ -255,12 +255,6 @@ impl NixRustBackend {
             .wrap_err("Failed to open Nix store")?;
         eprintln!("DEBUG: Store opened");
 
-        // Load fetchers settings from nix.conf (must be after store is opened)
-        fetchers_settings
-            .load_config()
-            .to_miette()
-            .wrap_err("Failed to load fetchers settings from nix.conf")?;
-
         // Generate merged nixpkgs config and write to temp file for NIXPKGS_CONFIG env var
         // Wrap in a let expression that adds allowUnfreePredicate (a Nix function)
         // Note: NIXPKGS_CONFIG expects a file path, not inline Nix content
