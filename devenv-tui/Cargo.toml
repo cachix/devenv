@@ -72,4 +72,4 @@ name = "tui-replay"
 path = "src/bin/tui-replay.rs"
 
 [dev-dependencies]
-insta = { version = "1.40", features = ["json"] }
+insta = { version = "1.40", features = ["filters", "json"] }
