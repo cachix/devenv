@@ -254,6 +254,7 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to open Nix store")?;
         eprintln!("DEBUG: Store opened");
+        eprintln!("DEBUG: Generating nixpkgs config");
 
         // Generate merged nixpkgs config and write to temp file for NIXPKGS_CONFIG env var
         // Wrap in a let expression that adds allowUnfreePredicate (a Nix function)
@@ -289,6 +290,7 @@ impl NixRustBackend {
             .ok_or_else(|| miette::miette!("Nixpkgs config path contains invalid UTF-8"))?
             .to_string();
         temp_files.push(nixpkgs_config_file);
+        eprintln!("DEBUG: Creating EvalStateBuilder");
 
         // Create eval state with flake support and NIXPKGS_CONFIG
         // load_config() loads settings from nix.conf files including access-tokens
@@ -309,13 +311,17 @@ impl NixRustBackend {
             .wrap_err("Failed to set NIXPKGS_CONFIG environment override")?
             .flakes(&flake_settings)
             .to_miette()
-            .wrap_err("Failed to configure flakes in eval state")?
+            .wrap_err("Failed to configure flakes in eval state")?;
+        eprintln!("DEBUG: Building eval state (this calls loadConfFile)");
+        let mut eval_state = eval_state
             .build()
             .to_miette()
             .wrap_err("Failed to build eval state")?;
+        eprintln!("DEBUG: Eval state built");
 
         // Load fetchers settings from nix.conf (including access-tokens for GitHub API authentication)
         // Must be called after EvalStateBuilder.build() to ensure global Nix state is initialized
+        eprintln!("DEBUG: Loading fetchers settings");
         fetchers_settings
             .load_config()
             .to_miette()
