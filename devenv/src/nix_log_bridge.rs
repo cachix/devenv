@@ -122,25 +122,26 @@ impl NixLogBridge {
                 }
 
                 // Handle regular log messages from Nix builds
-                if level <= Verbosity::Warn {
-                    // Send as activity message for TUI display
+                // Note: Nix daemon incorrectly labels many routine build messages as
+                // Verbosity::Error (e.g., "setting up chroot environment", "executing builder").
+                // Only treat Error-level messages as actual errors if they pass is_nix_error()
+                // or is_builtin_trace() checks.
+                if level == Verbosity::Error {
+                    if log.is_nix_error() || log.is_builtin_trace() {
+                        let (summary, details) = parse_nix_error(msg);
+                        message_with_details(ActivityLevel::Error, summary, details);
+                        error!("{msg}");
+                    }
+                    // Skip falsely-labeled error messages from nix daemon
+                } else if level <= Verbosity::Warn {
                     let activity_level = match level {
-                        Verbosity::Error => ActivityLevel::Error,
                         Verbosity::Warn => ActivityLevel::Warn,
                         _ => ActivityLevel::Info,
                     };
-
-                    // Parse Nix errors to extract summary and details
-                    if activity_level == ActivityLevel::Error {
-                        let (summary, details) = parse_nix_error(msg);
-                        message_with_details(activity_level, summary, details);
-                    } else {
-                        message(activity_level, msg);
-                    }
+                    message(activity_level, msg);
 
                     // Also log to tracing for file export and non-TUI modes
                     match level {
-                        Verbosity::Error => error!("{msg}"),
                         Verbosity::Warn => warn!("{msg}"),
                         _ => info!("{msg}"),
                     }
