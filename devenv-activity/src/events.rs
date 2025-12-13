@@ -15,6 +15,8 @@ pub enum ActivityEvent {
     Command(Command),
     Operation(Operation),
     Message(Message),
+    /// Signals that all work is complete. TUI should render final state and exit.
+    Done,
 }
 
 /// Build activity events - has Phase, Progress, Log

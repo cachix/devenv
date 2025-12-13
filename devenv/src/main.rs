@@ -109,8 +109,8 @@ fn run_with_tui(cli: Cli) -> Result<()> {
             }
         });
 
-        // Signal TUI to shut down now that devenv is done
-        shutdown_clone.shutdown();
+        // Signal that all work is complete - TUI will render final state and exit
+        devenv_activity::signal_done();
 
         result
     });

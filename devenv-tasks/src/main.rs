@@ -109,16 +109,23 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
     let args = Args::parse();
 
     // Determine verbosity level from DEVENV_CMDLINE
+    // TUI is on by default, so we default to Quiet to avoid corrupting the TUI display.
+    // Only show output if --no-tui is passed or --verbose is explicitly requested.
     let mut verbosity = if let Ok(cmdline) = env::var("DEVENV_CMDLINE") {
         let cmdline = cmdline.to_lowercase();
         if cmdline.contains("--quiet") || cmdline.contains(" -q ") {
             VerbosityLevel::Quiet
         } else if cmdline.contains("--verbose") || cmdline.contains(" -v ") {
             VerbosityLevel::Verbose
-        } else {
+        } else if cmdline.contains("--no-tui") {
+            // TUI is disabled, show normal output
             VerbosityLevel::Normal
+        } else {
+            // TUI is on by default, suppress output
+            VerbosityLevel::Quiet
         }
     } else {
+        // No DEVENV_CMDLINE means we're likely running standalone, show output
         VerbosityLevel::Normal
     };
 

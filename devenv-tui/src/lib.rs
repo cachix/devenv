@@ -26,11 +26,18 @@ pub use model_events::UiEvent;
 /// - Renders immediately on first notification (leading edge)
 /// - Sleeps to enforce FPS cap
 /// - Subsequent notifications during sleep are coalesced (model accumulates changes)
+/// - Also redraws periodically (every 100ms) to catch final state after events stop
 pub async fn throttled_notify_loop(notify: Arc<Notify>, mut redraw: State<u64>, max_fps: u64) {
     let throttle_duration = Duration::from_millis(1000 / max_fps);
+    // Maximum time to wait between redraws, ensures we catch final state
+    let max_wait = Duration::from_millis(100);
 
     loop {
-        notify.notified().await;
+        // Wait for notification OR timeout (whichever comes first)
+        tokio::select! {
+            _ = notify.notified() => {}
+            _ = tokio::time::sleep(max_wait) => {}
+        }
         redraw.set(redraw.get().wrapping_add(1));
         tokio::time::sleep(throttle_duration).await;
     }
