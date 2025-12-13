@@ -314,6 +314,13 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to build eval state")?;
 
+        // Load fetchers settings from nix.conf (including access-tokens for GitHub API authentication)
+        // Must be called after EvalStateBuilder.build() to ensure global Nix state is initialized
+        fetchers_settings
+            .load_config()
+            .to_miette()
+            .wrap_err("Failed to load fetchers settings from nix.conf")?;
+
         // Enable Nix debugger if requested
         if global_options.nix_debugger {
             eval_state
