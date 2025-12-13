@@ -770,11 +770,9 @@ impl Devenv {
 
     async fn load_tasks(&self) -> Result<Vec<tasks::TaskConfig>> {
         let tasks_json_file = {
-            let activity = Activity::operation("Evaluating tasks").start();
             let gc_root = self.devenv_dot_gc.join("task-config");
             self.nix
                 .build(&["devenv.config.task.config"], None, Some(&gc_root))
-                .in_activity(&activity)
                 .await?
         };
         // parse tasks config
