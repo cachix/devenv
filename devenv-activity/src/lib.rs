@@ -63,7 +63,7 @@ pub use builders::{
 
 // Functions
 pub use handle::{ActivityHandle, init, signal_done};
-pub use stack::{current_activity_id, message, message_with_details};
+pub use stack::{current_activity_id, message, message_with_details, with_parent};
 
 // Trait
 pub use instrument::ActivityInstrument;
