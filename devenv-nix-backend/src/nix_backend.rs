@@ -240,6 +240,16 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to create fetchers settings")?;
 
+        // Load fetchers settings from nix.conf IMMEDIATELY after creation, BEFORE store initialization
+        // This is critical because loadConfFile() accesses global settings that may not be safe
+        // to access after store/EvalState initialization due to potential heap/GC state changes
+        eprintln!("DEBUG: Loading fetchers settings from nix.conf");
+        fetchers_settings
+            .load_config()
+            .to_miette()
+            .wrap_err("Failed to load fetchers settings from nix.conf")?;
+        eprintln!("DEBUG: Fetchers settings loaded");
+
         // Extract bootstrap directory to dotfile location
         eprintln!("DEBUG: Extracting bootstrap files");
         let bootstrap_path = Self::extract_bootstrap_files(&paths.dotfile)?;
@@ -318,14 +328,6 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to build eval state")?;
         eprintln!("DEBUG: Eval state built");
-
-        // Load fetchers settings from nix.conf (including access-tokens for GitHub API authentication)
-        // Must be called after EvalStateBuilder.build() to ensure global Nix state is initialized
-        eprintln!("DEBUG: Loading fetchers settings");
-        fetchers_settings
-            .load_config()
-            .to_miette()
-            .wrap_err("Failed to load fetchers settings from nix.conf")?;
 
         // Enable Nix debugger if requested
         if global_options.nix_debugger {
