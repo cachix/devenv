@@ -3,6 +3,15 @@
 let
   cfg = config.languages.go;
 
+  go-overlay = config.lib.getInput {
+    name = "go-overlay";
+    url = "github:purpleclay/go-overlay";
+    attribute = "languages.go.version";
+    follows = [ "nixpkgs" ];
+  };
+
+  go-bin = go-overlay.lib.mkGoBin pkgs;
+
   # Override the buildGoModule function to use the specified Go package.
   buildGoModule = pkgs.buildGoModule.override { go = cfg.package; };
   # A helper function to rebuild a package with the specific Go version.
@@ -35,6 +44,16 @@ in
       description = "The Go package to use.";
     };
 
+    version = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        The Go version to use.
+        This automatically sets the `languages.go.package` using [go-overlay](https://github.com/purpleclay/go-overlay).
+      '';
+      example = "1.22.0";
+    };
+
     enableHardeningWorkaround = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -43,6 +62,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    languages.go.package = lib.mkIf (cfg.version != null) (
+      go-bin.versions.${cfg.version}
+        or (throw "Unsupported Go version '${cfg.version}', see https://github.com/purpleclay/go-overlay for supported versions")
+    );
+
     packages = [
       cfg.package
 

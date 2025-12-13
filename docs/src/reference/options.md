@@ -14066,6 +14066,33 @@ package
 
 
 
+## languages.go.version
+
+
+
+The Go version to use.
+This automatically sets the ` languages.go.package ` using [go-overlay](https://github.com/purpleclay/go-overlay).
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "1.22.0" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
+
+
+
 ## languages.haskell.enable
 
 
