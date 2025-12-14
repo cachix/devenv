@@ -77,6 +77,8 @@ let
         else {
           type = "http";
           url = server.url;
+        } // lib.optionalAttrs (server.headers != { }) {
+          headers = server.headers;
         }
       else throw "Invalid MCP server type: ${server.type}"
     )
@@ -245,7 +247,7 @@ in
         Custom Claude Code sub-agents to create in the project.
         Sub-agents are specialized AI assistants that handle specific tasks
         with their own context window and can be invoked automatically or explicitly.
-        
+
         For more details, see: https://docs.anthropic.com/en/docs/claude-code/sub-agents
       '';
       example = lib.literalExpression ''
@@ -261,11 +263,11 @@ in
               - Security vulnerabilities
               - Performance issues
               - Adherence to project conventions
-              
+
               Provide constructive feedback with specific suggestions for improvement.
             ''';
           };
-          
+
           test-writer = {
             description = "Specialized in writing comprehensive test suites";
             proactive = false;
@@ -397,6 +399,11 @@ in
               default = null;
               description = "URL for HTTP MCP servers.";
             };
+            headers = lib.mkOption {
+              type = lib.types.attrsOf lib.types.str;
+              default = { };
+              description = "HTTP headers for HTTP MCP servers (e.g., for authentication).";
+            };
           };
         }
       );
@@ -412,6 +419,13 @@ in
             command = lib.getExe pkgs.awslabs-iam-mcp-server;
             args = [ ];
             env = { };
+          };
+          github = {
+            type = "http";
+            url = "https://api.githubcopilot.com/mcp/";
+            headers = {
+              Authorization = "Bearer GITHUB_PAT";
+            };
           };
           linear = {
             type = "http";
