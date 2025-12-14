@@ -22,6 +22,11 @@ enum CommandResult {
     Print(String),
     /// Exec into this command after cleanup (TUI shutdown, terminal restore)
     Exec(Command),
+    /// Prompt for missing secrets after TUI cleanup
+    PromptSecrets {
+        provider: Option<String>,
+        profile: Option<String>,
+    },
 }
 
 impl CommandResult {
@@ -29,6 +34,7 @@ impl CommandResult {
     /// - Done: returns Ok(())
     /// - Print: prints to stdout and returns Ok(())
     /// - Exec: replaces the current process (never returns on success)
+    /// - PromptSecrets: prompts for missing secrets interactively
     fn exec(self) -> Result<()> {
         match self {
             CommandResult::Done => Ok(()),
@@ -40,6 +46,25 @@ impl CommandResult {
                 use std::os::unix::process::CommandExt;
                 let err = cmd.exec();
                 miette::bail!("Failed to exec: {}", err);
+            }
+            CommandResult::PromptSecrets { provider, profile } => {
+                // Load secretspec and prompt for missing secrets
+                let mut secrets = secretspec::Secrets::load()
+                    .map_err(|e| miette::miette!("Failed to load secretspec: {}", e))?;
+
+                if let Some(ref p) = provider {
+                    secrets.set_provider(p);
+                }
+                if let Some(ref p) = profile {
+                    secrets.set_profile(p);
+                }
+
+                secrets
+                    .ensure_secrets(provider, profile, true)
+                    .map_err(|e| miette::miette!("Failed to set secrets: {}", e))?;
+
+                eprintln!("\nSecrets have been set. Please re-run your command.");
+                Ok(())
             }
         }
     }
@@ -138,9 +163,25 @@ fn run_with_tui(cli: Cli) -> Result<()> {
     devenv_tui::app::restore_terminal();
 
     // Wait for devenv thread to finish and get the result
-    let result = devenv_thread
+    let thread_result = devenv_thread
         .join()
-        .map_err(|_| miette::miette!("Devenv thread panicked"))??;
+        .map_err(|_| miette::miette!("Devenv thread panicked"))?;
+
+    // Check if secrets need prompting (special case: TUI stopped for password entry)
+    let result = match thread_result {
+        Ok(cmd_result) => cmd_result,
+        Err(err) => {
+            // Check if error is SecretsNeedPrompting
+            if let Some(secrets_err) = err.downcast_ref::<devenv::SecretsNeedPrompting>() {
+                CommandResult::PromptSecrets {
+                    provider: secrets_err.provider.clone(),
+                    profile: secrets_err.profile.clone(),
+                }
+            } else {
+                return Err(err);
+            }
+        }
+    };
 
     // Execute any pending command (e.g., shell exec) now that TUI is cleaned up
     result.exec()
