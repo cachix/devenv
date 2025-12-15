@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ⠋ Downloading large-file.tar.gz 0.0s
+ ⠋ Downloading large-file.tar.gz 0ms
 
 
 
- 0 of 1 download    ↑↓ nav • e expand
+ 0 of 1 downloa    ↑↓ nav • e expand

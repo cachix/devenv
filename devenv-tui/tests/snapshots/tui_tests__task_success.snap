@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ✓ ✅ Build completed 0.0s
+ ✓ ✅ Build completed 0ms
 
 
 
-         ↑↓ nav • e expand
+        ↑↓ nav • e expand

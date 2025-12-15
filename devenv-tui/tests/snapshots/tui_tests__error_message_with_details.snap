@@ -2,7 +2,7 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ⠋ Evaluating devenv.nix                0.0s
+ ⠋ Evaluating devenv.nix                 0ms
      error:
             … while evaluating
               at devenv.nix:10:5

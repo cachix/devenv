@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ⚡ Running tests 0.0s
+ ⚡ Running tests 0ms
 
 
 
-     ↑↓ nav • e expand
+    ↑↓ nav • e expand
