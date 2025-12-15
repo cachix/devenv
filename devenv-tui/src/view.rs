@@ -254,7 +254,11 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         NixActivityState::Completed { duration, .. } => *duration,
         NixActivityState::Active => activity.start_time.elapsed(),
     };
-    let elapsed_str = format!("{:.1}s", elapsed.as_secs_f64());
+    let elapsed_str = if elapsed.as_secs_f64() < 1.0 {
+        format!("{}ms", elapsed.as_millis())
+    } else {
+        format!("{:.1}s", elapsed.as_secs_f64())
+    };
 
     // Build and return the activity element
     match &activity.variant {
