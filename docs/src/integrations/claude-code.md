@@ -219,11 +219,11 @@ Agents are specialized AI assistants that handle specific tasks with their own c
         - Security vulnerabilities
         - Performance issues
         - Adherence to project conventions
-        
+
         Provide constructive feedback with specific suggestions for improvement.
       '';
     };
-    
+
     test-writer = {
       description = "Specialized in writing comprehensive test suites";
       proactive = false;  # Only invoked explicitly
@@ -236,7 +236,7 @@ Agents are specialized AI assistants that handle specific tasks with their own c
         - Have clear test names that describe what is being tested
       '';
     };
-    
+
     docs-updater = {
       description = "Updates project documentation based on code changes";
       proactive = true;
@@ -316,6 +316,15 @@ MCP (Model Context Protocol) servers provide additional capabilities and context
       type = "http";
       url = "https://mcp.linear.app/mcp";
     };
+
+    # HTTP-based MCP server with authentication
+    github = {
+      type = "http";
+      url = "https://api.githubcopilot.com/mcp/";
+      headers = {
+        Authorization = "Bearer GITHUB_PAT";
+      };
+    };
   };
 }
 ```
@@ -329,6 +338,7 @@ MCP (Model Context Protocol) servers provide additional capabilities and context
 
 - **http**: Connects to an HTTP-based MCP server
   - `url`: The server URL
+  - `headers`: HTTP headers for authentication or custom configuration (optional)
 
 When MCP servers are configured, devenv generates a `.mcp.json` file that Claude Code uses to connect to these servers.
 
