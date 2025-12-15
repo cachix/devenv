@@ -111,9 +111,11 @@ in
     platformTools.version = lib.mkOption {
       type = lib.types.str;
       default = latestVersion "platform-tools";
+      defaultText = lib.literalMD "Latest version in nixpkgs";
       description = ''
         The version of the Android platform tools to install.
-        Available versions: ${lib.concatStringsSep ", " (availableVersions "platform-tools")}.
+        Available versions depend on the nixpkgs version.
+        To see available versions, try building with an invalid version; the error message will list all available options.
       '';
     };
 
@@ -138,9 +140,11 @@ in
     emulator.version = lib.mkOption {
       type = lib.types.str;
       default = latestVersion "emulator";
+      defaultText = lib.literalMD "Latest version in nixpkgs";
       description = ''
         The version of the Android Emulator to install.
-        Available versions: ${lib.concatStringsSep ", " (availableVersions "emulator")}.
+        Available versions depend on the nixpkgs version.
+        To see available versions, try building with an invalid version; the error message will list all available options.
       '';
     };
 
