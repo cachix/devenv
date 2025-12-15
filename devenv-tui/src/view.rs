@@ -318,22 +318,24 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
         ActivityVariant::Task(task_data) => {
             let status_text = match task_data.status {
-                TaskDisplayStatus::Pending => "⏳",
-                TaskDisplayStatus::Running => "⚡",
-                TaskDisplayStatus::Success => "✅",
-                TaskDisplayStatus::Failed => "❌",
-                TaskDisplayStatus::Skipped => "⏭️",
-                TaskDisplayStatus::Cancelled => "🚫",
+                TaskDisplayStatus::Pending => Some("pending"),
+                TaskDisplayStatus::Running => None, // Don't show "running", the spinner indicates it
+                TaskDisplayStatus::Success => Some("success"),
+                TaskDisplayStatus::Failed => Some("failed"),
+                TaskDisplayStatus::Skipped => Some("skipped"),
+                TaskDisplayStatus::Cancelled => Some("cancelled"),
             };
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
+                .with_spinner()
                 .with_completed(*completed)
-                .render(); // No spinner for tasks, use status icon
+                .render();
 
             return ActivityTextComponent::new(
                 "".to_string(), // No action prefix for tasks
-                format!("{} {}", status_text, activity.name),
+                activity.name.clone(),
                 elapsed_str,
             )
+            .with_suffix(status_text.map(String::from))
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }
@@ -767,6 +769,42 @@ fn build_summary_view_impl(
         children.push(
             element!(View(flex_shrink: 0.0) {
                 Text(content: "queries")
+            })
+            .into_any(),
+        );
+        has_content = true;
+    }
+
+    // Tasks - show if there are any tasks
+    if summary.running_tasks > 0 || summary.completed_tasks > 0 || summary.failed_tasks > 0 {
+        if has_content {
+            children.push(element!(View(margin_left: if use_symbols { 1 } else { 2 }, margin_right: if use_symbols { 1 } else { 2 }, flex_shrink: 0.0) {
+                Text(content: "│", color: COLOR_HIERARCHY)
+            }).into_any());
+        }
+        let total_tasks = summary.running_tasks + summary.completed_tasks + summary.failed_tasks;
+
+        // Format: "3 of 5 tasks" or "3/5 tasks"
+        if use_symbols {
+            children.push(element!(View(margin_right: 1, flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                Text(content: format!("{}", summary.completed_tasks), color: COLOR_COMPLETED, weight: Weight::Bold)
+                Text(content: format!("/{}", total_tasks))
+            }).into_any());
+        } else {
+            children.push(element!(View(margin_right: 1, flex_shrink: 0.0) {
+                Text(content: format!("{}", summary.completed_tasks), color: COLOR_COMPLETED, weight: Weight::Bold)
+            }).into_any());
+            children.push(
+                element!(View(margin_right: 1, flex_shrink: 0.0) {
+                    Text(content: format!("of {}", total_tasks))
+                })
+                .into_any(),
+            );
+        }
+
+        children.push(
+            element!(View(flex_shrink: 0.0) {
+                Text(content: "tasks")
             })
             .into_any(),
         );

@@ -37,6 +37,8 @@ pub struct ActivityModel {
     pub completed_messages: Vec<String>,
     next_message_id: u64,
     config: Arc<TuiConfig>,
+    /// Set to true when Done event is received, signaling graceful shutdown
+    done: bool,
 }
 
 impl Default for ActivityModel {
@@ -291,7 +293,13 @@ impl ActivityModel {
             completed_messages: Vec::new(),
             next_message_id: u64::MAX / 2,
             config,
+            done: false,
         }
+    }
+
+    /// Returns true if a Done event has been received, signaling work is complete.
+    pub fn is_done(&self) -> bool {
+        self.done
     }
 
     /// Get the TUI configuration.
@@ -308,6 +316,7 @@ impl ActivityModel {
             ActivityEvent::Command(cmd_event) => self.handle_command_event(cmd_event),
             ActivityEvent::Operation(op_event) => self.handle_operation_event(op_event),
             ActivityEvent::Message(msg) => self.handle_message(msg),
+            ActivityEvent::Done => self.done = true,
         }
     }
 
@@ -748,6 +757,17 @@ impl ActivityModel {
                 (ActivityVariant::Query(_), NixActivityState::Completed { success: true, .. }) => {
                     summary.completed_queries += 1;
                 }
+                (ActivityVariant::Task(task), _) => match task.status {
+                    TaskDisplayStatus::Running | TaskDisplayStatus::Pending => {
+                        summary.running_tasks += 1
+                    }
+                    TaskDisplayStatus::Success | TaskDisplayStatus::Skipped => {
+                        summary.completed_tasks += 1
+                    }
+                    TaskDisplayStatus::Failed | TaskDisplayStatus::Cancelled => {
+                        summary.failed_tasks += 1
+                    }
+                },
                 _ => {}
             }
         }
@@ -789,12 +809,21 @@ impl ActivityModel {
     /// Get children of an activity, limited by the provided config.
     /// Prioritizes active activities, then lingering completed ones, then older completed ones.
     /// Returns a tuple of (visible_children, total_children_count, hidden_count).
+    ///
+    /// Task activities always show all their children without linger/limit restrictions,
+    /// so completed tasks remain visible after execution.
     pub fn get_visible_children(
         &self,
         parent_id: u64,
         limit: &ChildActivityLimit,
     ) -> (Vec<&Activity>, usize, usize) {
         let now = Instant::now();
+
+        // Check if parent is a Task activity - tasks always show all children
+        let parent_is_task = self
+            .activities
+            .get(&parent_id)
+            .is_some_and(|a| matches!(a.variant, ActivityVariant::Task(_)));
 
         // Get all children of this parent, excluding UserOperation
         let mut all_children: Vec<_> = self
@@ -810,6 +839,11 @@ impl ActivityModel {
 
         // Sort by id for consistent ordering
         all_children.sort_by_key(|a| a.id);
+
+        // For Task parents, always show all children without limits
+        if parent_is_task {
+            return (all_children, total_count, 0);
+        }
 
         // Partition into active and completed
         let (active, completed): (Vec<_>, Vec<_>) = all_children
@@ -980,4 +1014,7 @@ pub struct ActivitySummary {
     pub completed_downloads: usize,
     pub active_queries: usize,
     pub completed_queries: usize,
+    pub running_tasks: usize,
+    pub completed_tasks: usize,
+    pub failed_tasks: usize,
 }

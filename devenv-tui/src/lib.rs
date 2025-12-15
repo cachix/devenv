@@ -23,15 +23,27 @@ pub use model_events::UiEvent;
 
 /// Runs a loop that waits for notifications and triggers redraws at a throttled rate.
 ///
-/// - Renders immediately on first notification (leading edge)
-/// - Sleeps to enforce FPS cap
-/// - Subsequent notifications during sleep are coalesced (model accumulates changes)
+/// Uses leading-edge throttling:
+/// - Waits for notification OR timeout (whichever comes first)
+/// - On wake: triggers redraw, then sleeps to enforce FPS cap
+/// - Subsequent notifications during throttle sleep are coalesced (model accumulates)
+///
+/// The timeout on the notification wait serves as a safety net: `Notify::notify_waiters()`
+/// only wakes tasks that are actively waiting on `notified()`. If a notification arrives
+/// while we're in the throttle sleep, it's lost. The timeout ensures we periodically
+/// check for state changes (like the final Done event) even if we missed a notification.
 pub async fn throttled_notify_loop(notify: Arc<Notify>, mut redraw: State<u64>, max_fps: u64) {
     let throttle_duration = Duration::from_millis(1000 / max_fps);
 
     loop {
-        notify.notified().await;
+        // Wait for notification OR timeout. The timeout ensures we don't miss the final
+        // state if a notification arrived during the previous throttle sleep.
+        tokio::select! {
+            _ = notify.notified() => {}
+            _ = tokio::time::sleep(throttle_duration) => {}
+        }
         redraw.set(redraw.get().wrapping_add(1));
+        // Throttle: minimum time between renders to cap FPS
         tokio::time::sleep(throttle_duration).await;
     }
 }

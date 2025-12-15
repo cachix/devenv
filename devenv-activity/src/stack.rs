@@ -1,4 +1,33 @@
 //! Task-local activity stack for parent tracking and event dispatch.
+//!
+//! This module provides a task-local stack that tracks the current activity hierarchy.
+//! Activities use this stack to automatically determine their parent when starting,
+//! enabling proper parent-child relationships in the activity tree.
+//!
+//! # Task-Local vs Thread-Local
+//!
+//! The stack uses Tokio's `task_local!` instead of `thread_local!` to properly support
+//! async code where tasks can migrate between threads via Tokio's work-stealing scheduler.
+//!
+//! # Cross-Spawn Propagation
+//!
+//! When spawning new tasks, activity context is not automatically propagated. Use
+//! [`ActivityInstrument::in_activity`](crate::ActivityInstrument::in_activity) to propagate
+//! activity context across spawn boundaries:
+//!
+//! ```rust,ignore
+//! use devenv_activity::{Activity, ActivityInstrument};
+//!
+//! let activity = Arc::new(Activity::task("parent").start());
+//! let activity_clone = Arc::clone(&activity);
+//!
+//! tokio::spawn(move || {
+//!     async move {
+//!         // Activities created here will have `activity` as their parent
+//!         let child = Activity::task("child").start();
+//!     }.in_activity(&activity_clone)
+//! });
+//! ```
 
 use std::cell::RefCell;
 use std::sync::OnceLock;

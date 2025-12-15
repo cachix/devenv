@@ -142,20 +142,23 @@ impl TuiApp {
             }
         }
 
-        // Clear the TUI output before exiting
-        let lines_to_clear = {
-            let ui = ui_state.read().unwrap();
-            let model = activity_model.read().unwrap();
-            model.calculate_rendered_height(ui.selected_activity, ui.terminal_size.height)
-        };
+        // Only clear the TUI output on user interrupt (Ctrl+C), not on normal completion.
+        // This allows users to see task results after completion.
+        if shutdown.last_signal().is_some() {
+            let lines_to_clear = {
+                let ui = ui_state.read().unwrap();
+                let model = activity_model.read().unwrap();
+                model.calculate_rendered_height(ui.selected_activity, ui.terminal_size.height)
+            };
 
-        if lines_to_clear > 0 {
-            let mut stdout = io::stdout();
-            let _ = execute!(
-                stdout,
-                cursor::MoveToPreviousLine(lines_to_clear),
-                terminal::Clear(terminal::ClearType::FromCursorDown)
-            );
+            if lines_to_clear > 0 {
+                let mut stdout = io::stdout();
+                let _ = execute!(
+                    stdout,
+                    cursor::MoveToPreviousLine(lines_to_clear),
+                    terminal::Clear(terminal::ClearType::FromCursorDown)
+                );
+            }
         }
 
         Ok(())
@@ -264,21 +267,34 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
     });
 
+    // Exit immediately for explicit exit requests (user pressed 'e' to expand, or Ctrl+C)
     if should_exit.get() || shutdown.is_cancelled() {
         system.exit();
     }
 
     // Render the view - read activity model briefly, UI state separately
     let ui = ui_state.read().unwrap();
-    if let Ok(model_guard) = activity_model.read() {
-        element! {
-            View(width: terminal_width) {
-                #(vec![view(&model_guard, &ui).into()])
-            }
-        }
+    let (rendered, is_done) = if let Ok(model_guard) = activity_model.read() {
+        let done = model_guard.is_done();
+        (
+            element! {
+                View(width: terminal_width) {
+                    #(vec![view(&model_guard, &ui).into()])
+                }
+            },
+            done,
+        )
     } else {
-        element!(View(width: terminal_width))
+        (element!(View(width: terminal_width)), false)
+    };
+
+    // For normal completion (is_done), trigger shutdown AFTER rendering this frame.
+    // This ensures the final state is displayed before exit.
+    if is_done {
+        shutdown.shutdown();
     }
+
+    rendered
 }
 
 async fn run_view(

@@ -238,17 +238,6 @@ impl TaskCompleted {
             TaskCompleted::Failed(_, _) | TaskCompleted::DependencyFailed
         )
     }
-
-    // TODO: use this everywhere instead of ad-hoc strings
-    pub fn to_tracing_status(&self) -> &'static str {
-        match self {
-            TaskCompleted::Success(_, _) => "success",
-            TaskCompleted::Skipped(_) => "skipped",
-            TaskCompleted::Failed(_, _) => "failed",
-            TaskCompleted::DependencyFailed => "dependency_failed",
-            TaskCompleted::Cancelled(_) => "cancelled",
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

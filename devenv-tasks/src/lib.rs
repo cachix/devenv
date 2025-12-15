@@ -4,7 +4,6 @@ mod privileges;
 mod task_cache;
 mod task_state;
 mod tasks;
-mod tracing_events;
 mod types;
 pub mod ui;
 
