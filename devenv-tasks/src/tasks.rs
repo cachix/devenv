@@ -311,11 +311,39 @@ impl Tasks {
                 }
             }
             RunMode::All => {
-                // Include the complete connected subgraph (all dependencies in both directions)
+                // Include prerequisites (incoming) and dependents (outgoing) separately.
+                // This avoids "direction bouncing" through intermediate nodes that would
+                // incorrectly include unrelated tasks sharing a common prerequisite.
+                // See: https://github.com/cachix/devenv/issues/2337
+
+                // First: traverse incoming edges (prerequisites) from roots
                 while let Some(node) = to_visit.pop() {
                     if visited.insert(node) {
-                        // Add all connected neighbors in both directions
-                        for neighbor in self.graph.neighbors_undirected(node) {
+                        for neighbor in self
+                            .graph
+                            .neighbors_directed(node, petgraph::Direction::Incoming)
+                        {
+                            to_visit.push(neighbor);
+                        }
+                    }
+                }
+
+                // Second: traverse outgoing edges (dependents) from roots
+                // Start by adding outgoing neighbors of roots (roots are already visited)
+                for &root_index in &self.roots {
+                    for neighbor in self
+                        .graph
+                        .neighbors_directed(root_index, petgraph::Direction::Outgoing)
+                    {
+                        to_visit.push(neighbor);
+                    }
+                }
+                while let Some(node) = to_visit.pop() {
+                    if visited.insert(node) {
+                        for neighbor in self
+                            .graph
+                            .neighbors_directed(node, petgraph::Direction::Outgoing)
+                        {
                             to_visit.push(neighbor);
                         }
                     }
