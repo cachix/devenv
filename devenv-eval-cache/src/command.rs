@@ -24,25 +24,45 @@ pub enum CommandError {
     Sqlx(#[from] sqlx::Error),
 }
 
+/// Callback type for processing Nix stderr logs.
 type OnStderr = Box<dyn Fn(&InternalLog) + Send>;
 
-pub struct NixCommand<'a> {
-    pool: &'a sqlx::SqlitePool,
-    enable_caching: bool,
+/// Marker type for NixCommand with caching disabled.
+pub struct NoCache;
+
+/// Cache state for NixCommand with caching enabled.
+pub struct WithCache<'a> {
+    pool: &'a SqlitePool,
     force_refresh: bool,
     extra_paths: Vec<PathBuf>,
     excluded_paths: Vec<PathBuf>,
+}
+
+pub struct NixCommand<Cache> {
+    cache: Cache,
     on_stderr: Option<OnStderr>,
 }
 
-impl<'a> NixCommand<'a> {
-    pub fn new(pool: &'a SqlitePool) -> Self {
+impl NixCommand<NoCache> {
+    /// Create a NixCommand with caching disabled.
+    pub fn without_caching() -> Self {
         Self {
-            pool,
-            enable_caching: true,
-            force_refresh: false,
-            extra_paths: Vec::new(),
-            excluded_paths: Vec::new(),
+            cache: NoCache,
+            on_stderr: None,
+        }
+    }
+}
+
+impl<'a> NixCommand<WithCache<'a>> {
+    /// Create a NixCommand with caching enabled.
+    pub fn with_caching(pool: &'a SqlitePool) -> Self {
+        Self {
+            cache: WithCache {
+                pool,
+                force_refresh: false,
+                extra_paths: Vec::new(),
+                excluded_paths: Vec::new(),
+            },
             on_stderr: None,
         }
     }
@@ -53,28 +73,25 @@ impl<'a> NixCommand<'a> {
     /// External tools like direnv are triggered solely by the modification date and don't compare file contents.
     /// Use [util::write_file_with_lock] to safely write such files.
     pub fn watch_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
-        self.extra_paths.push(path.as_ref().to_path_buf());
+        self.cache.extra_paths.push(path.as_ref().to_path_buf());
         self
     }
 
     /// Remove a path from being watched for changes.
     pub fn unwatch_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
-        self.excluded_paths.push(path.as_ref().to_path_buf());
+        self.cache.excluded_paths.push(path.as_ref().to_path_buf());
         self
     }
 
     /// Force re-evaluation of the command.
     pub fn force_refresh(&mut self) -> &mut Self {
-        self.force_refresh = true;
+        self.cache.force_refresh = true;
         self
     }
+}
 
-    /// Enable or disable eval caching.
-    pub fn enable_eval_cache(&mut self, enable: bool) -> &mut Self {
-        self.enable_caching = enable;
-        self
-    }
-
+impl<C> NixCommand<C> {
+    /// A callback to execute on every Nix stderro log line.
     pub fn on_stderr<F>(&mut self, f: F) -> &mut Self
     where
         F: Fn(&InternalLog) + Send + 'static,
@@ -82,91 +99,53 @@ impl<'a> NixCommand<'a> {
         self.on_stderr = Some(Box::new(f));
         self
     }
+}
 
-    /// Run a (Nix) command with caching enabled.
+impl NixCommand<NoCache> {
+    /// Run a Nix command without caching.
+    /// Logs are still processed through the on_stderr callback.
+    pub async fn output(mut self, cmd: &mut Command) -> Result<Output, CommandError> {
+        run_nix_command(cmd, self.on_stderr.take()).await
+    }
+}
+
+impl<'a> NixCommand<WithCache<'a>> {
+    /// Run a Nix command with caching enabled.
     ///
     /// If the command has been run before and the files it depends on have not been modified,
     /// the cached output will be returned.
-    pub async fn output(mut self, cmd: &'a mut Command) -> Result<Output, CommandError> {
+    pub async fn output(mut self, cmd: &mut Command) -> Result<Output, CommandError> {
         let raw_cmd = format!("{cmd:?}");
         let cmd_hash = compute_string_hash(&raw_cmd);
 
         // Check whether the command has been previously run and the files it depends on have not been changed.
-        if self.enable_caching
-            && !self.force_refresh
+        if !self.cache.force_refresh
             && let Ok(Some(output)) =
-                query_cached_output(self.pool, &cmd_hash, &self.extra_paths).await
+                query_cached_output(self.cache.pool, &cmd_hash, &self.cache.extra_paths).await
         {
             return Ok(output);
         }
 
-        cmd.arg("-vv")
-            .arg("--log-format")
-            .arg("internal-json")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        // Wrap user's on_stderr to also extract ops for caching
+        let (op_tx, op_rx) = std::sync::mpsc::channel();
+        let user_on_stderr = self.on_stderr.take();
 
-        let mut child = cmd.spawn().map_err(CommandError::Io)?;
-
-        let stdout = child.stdout.take().unwrap();
-        let stderr = child.stderr.take().unwrap();
-
-        let stdout_reader = BufReader::new(stdout);
-        let stderr_reader = BufReader::new(stderr);
-
-        let stdout_thread = std::thread::spawn(move || {
-            let mut output = Vec::new();
-            let mut lines = stdout_reader.lines();
-            while let Some(Ok(line)) = lines.next() {
-                output.extend_from_slice(line.as_bytes());
-                output.push(b'\n');
+        let on_stderr = move |log: &InternalLog| {
+            if let Some(f) = &user_on_stderr {
+                f(log);
             }
-            output
-        });
-
-        let on_stderr = self.on_stderr.take();
-
-        let stderr_thread = std::thread::spawn(move || {
-            let mut raw_lines: Vec<u8> = Vec::new();
-            let mut ops = Vec::new();
-
-            let mut lines = stderr_reader.lines();
-            while let Some(Ok(line)) = lines.next() {
-                if let Some(log) = InternalLog::parse(&line).and_then(Result::ok) {
-                    if let Some(f) = &on_stderr {
-                        f(&log);
-                    }
-
-                    if let Some(op) = extract_op_from_log_line(&log) {
-                        ops.push(op);
-                    }
-
-                    // FIX: verbosity
-                    if let Some(msg) = log
-                        .filter_by_level(Verbosity::Info)
-                        .and_then(InternalLog::get_msg)
-                    {
-                        raw_lines.extend_from_slice(msg.as_bytes());
-                        raw_lines.push(b'\n');
-                    }
-                }
+            if let Some(op) = extract_op_from_log_line(log) {
+                let _ = op_tx.send(op);
             }
+        };
 
-            (ops, raw_lines)
-        });
+        let output = run_nix_command(cmd, Some(Box::new(on_stderr))).await?;
 
-        let status = child.wait().map_err(CommandError::Io)?;
-        let stdout = stdout_thread.join().unwrap();
-        let (ops, stderr) = stderr_thread.join().unwrap();
-
-        if !status.success() {
-            return Ok(Output {
-                status,
-                stdout,
-                stderr,
-                ..Default::default()
-            });
+        if !output.status.success() {
+            return Ok(output);
         }
+
+        let ops: Vec<Op> = op_rx.iter().collect();
 
         let mut env_inputs = Vec::new();
         let mut sources = Vec::new();
@@ -183,6 +162,7 @@ impl<'a> NixCommand<'a> {
                     if source.starts_with("/")
                         && !source.starts_with("/nix/store")
                         && !self
+                            .cache
                             .excluded_paths
                             .iter()
                             .any(|path| source.starts_with(path)) =>
@@ -201,7 +181,7 @@ impl<'a> NixCommand<'a> {
         }
 
         // Watch additional paths
-        sources.extend_from_slice(&self.extra_paths);
+        sources.extend_from_slice(&self.cache.extra_paths);
 
         let file_inputs = query_file_inputs(&sources).await;
 
@@ -216,28 +196,88 @@ impl<'a> NixCommand<'a> {
 
         let input_hash = Input::compute_input_hash(&inputs);
 
-        // Only store results in cache if caching is enabled
-        if self.enable_caching {
-            let _ = db::insert_command_with_inputs(
-                self.pool,
-                &raw_cmd,
-                &cmd_hash,
-                &input_hash,
-                &stdout,
-                &inputs,
-            )
-            .await
-            .map_err(CommandError::Sqlx)?;
-        }
+        let _ = db::insert_command_with_inputs(
+            self.cache.pool,
+            &raw_cmd,
+            &cmd_hash,
+            &input_hash,
+            &output.stdout,
+            &inputs,
+        )
+        .await
+        .map_err(CommandError::Sqlx)?;
 
         Ok(Output {
-            status,
-            stdout,
-            stderr,
             inputs,
-            ..Default::default()
+            ..output
         })
     }
+}
+
+/// Run a Nix command with internal-json logging.
+/// Logs are parsed and passed to the on_stderr callback.
+async fn run_nix_command(
+    cmd: &mut Command,
+    on_stderr: Option<OnStderr>,
+) -> Result<Output, CommandError> {
+    cmd.arg("-vv")
+        .arg("--log-format")
+        .arg("internal-json")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(CommandError::Io)?;
+
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+
+    let stdout_reader = BufReader::new(stdout);
+    let stderr_reader = BufReader::new(stderr);
+
+    let stdout_thread = std::thread::spawn(move || {
+        let mut output = Vec::new();
+        let mut lines = stdout_reader.lines();
+        while let Some(Ok(line)) = lines.next() {
+            output.extend_from_slice(line.as_bytes());
+            output.push(b'\n');
+        }
+        output
+    });
+
+    let stderr_thread = std::thread::spawn(move || {
+        let mut raw_lines: Vec<u8> = Vec::new();
+
+        let mut lines = stderr_reader.lines();
+        while let Some(Ok(line)) = lines.next() {
+            if let Some(log) = InternalLog::parse(&line).and_then(Result::ok) {
+                if let Some(f) = &on_stderr {
+                    f(&log);
+                }
+
+                if let Some(msg) = log
+                    .filter_by_level(Verbosity::Info)
+                    .and_then(InternalLog::get_msg)
+                {
+                    raw_lines.extend_from_slice(msg.as_bytes());
+                    raw_lines.push(b'\n');
+                }
+            }
+        }
+
+        raw_lines
+    });
+
+    let status = child.wait().map_err(CommandError::Io)?;
+    let stdout = stdout_thread.join().unwrap();
+    let stderr = stderr_thread.join().unwrap();
+
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+        inputs: vec![],
+        cache_hit: false,
+    })
 }
 
 /// Check whether the command supports the flags required for caching.

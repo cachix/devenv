@@ -394,99 +394,16 @@ impl Nix {
             bail!("Failed to replace shell")
         }
 
-        if options.logging {
-            cmd.stdin(process::Stdio::inherit())
-                .stderr(process::Stdio::inherit());
-            if options.logging_stdout {
-                cmd.stdout(std::process::Stdio::inherit());
-            }
-        }
-
-        let result = if supports_eval_caching(&cmd) && self.pool.get().is_some() {
-            let pool = self.pool.get().unwrap();
-            let mut cached_cmd = NixCommand::new(pool);
-
-            if self.global_options.eval_cache && options.cache_output {
-                cached_cmd.watch_path(self.paths.root.join(devenv::DEVENV_FLAKE));
-                cached_cmd.watch_path(self.paths.root.join("devenv.yaml"));
-                cached_cmd.watch_path(self.paths.root.join("devenv.lock"));
-                cached_cmd.watch_path(self.paths.dotfile.join("flake.json"));
-                cached_cmd.watch_path(self.paths.dotfile.join("cli-options.nix"));
-
-                // Ignore anything in .devenv except for the specifically watched files above.
-                cached_cmd.unwatch_path(&self.paths.dotfile);
-
-                if self.global_options.refresh_eval_cache || options.refresh_cached_output {
-                    cached_cmd.force_refresh();
+        // For non-Nix commands, run directly without NixCommand wrapper
+        let result = if !supports_eval_caching(&cmd) {
+            if options.logging {
+                cmd.stdin(process::Stdio::inherit())
+                    .stderr(process::Stdio::inherit());
+                if options.logging_stdout {
+                    cmd.stdout(std::process::Stdio::inherit());
                 }
-            } else {
-                cached_cmd.enable_eval_cache(false);
             }
 
-            // Capture the current activity ID before spawning threads.
-            // The stderr callback runs in a separate thread and cannot access
-            // the task-local activity stack.
-            let parent_activity_id = current_activity_id();
-
-            // Setup Nix log bridge for enhanced log processing
-            let nix_bridge = NixLogBridge::new(parent_activity_id);
-
-            // Get the log callback from the bridge
-            let log_callback = nix_bridge.get_log_callback();
-            let logging = options.logging;
-            let quiet = self.global_options.quiet;
-            let verbose = self.global_options.verbose;
-
-            cached_cmd.on_stderr(move |log| {
-                // Send to Nix log bridge for detailed progress tracking
-                // The bridge will emit appropriate tracing events
-                log_callback(log.clone());
-
-                // Only output to tracing logs if logging is enabled
-                // This provides fallback logging when detailed processing is not needed
-                if logging && !quiet {
-                    let target_log_level = if verbose {
-                        Verbosity::Talkative
-                    } else {
-                        Verbosity::Warn
-                    };
-
-                    if let Some(log) = log.filter_by_level(target_log_level)
-                        && let Some(msg) = log.get_msg()
-                    {
-                        use devenv_eval_cache::internal_log::InternalLog;
-                        match log {
-                            InternalLog::Msg { level, .. } => match *level {
-                                Verbosity::Error => error!("{msg}"),
-                                Verbosity::Warn => warn!("{msg}"),
-                                Verbosity::Talkative => debug!("{msg}"),
-                                _ => info!("{msg}"),
-                            },
-                            _ => info!("{msg}"),
-                        }
-                    }
-                }
-            });
-
-            let pretty_cmd = display_command(&cmd);
-            let activity = Activity::command(&pretty_cmd).command(&pretty_cmd).start();
-            let output = cached_cmd
-                .output(&mut cmd)
-                .in_activity(&activity)
-                .await
-                .into_diagnostic()
-                .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
-
-            // Record cache status if applicable
-            if output.cache_hit {
-                tracing::Span::current().record(
-                    "cache_status",
-                    if output.cache_hit { "hit" } else { "miss" },
-                );
-            }
-
-            output
-        } else {
             let pretty_cmd = display_command(&cmd);
             let activity = Activity::command(&pretty_cmd).command(&pretty_cmd).start();
             let output = activity.in_scope(|| {
@@ -502,6 +419,88 @@ impl Nix {
                 inputs: vec![],
                 cache_hit: false,
             }
+        } else {
+            // For Nix commands, always use NixCommand for proper log processing.
+            // Capture the current activity ID before spawning threads.
+            let parent_activity_id = current_activity_id();
+            let nix_bridge = NixLogBridge::new(parent_activity_id);
+            let log_callback = nix_bridge.get_log_callback();
+            let logging = options.logging;
+            let quiet = self.global_options.quiet;
+            let verbose = self.global_options.verbose;
+
+            // Factory for stderr handler (needed because closure is consumed by on_stderr)
+            let make_on_stderr = || {
+                let log_callback = log_callback.clone();
+                move |log: &devenv_eval_cache::internal_log::InternalLog| {
+                    log_callback(log.clone());
+
+                    if logging && !quiet {
+                        let target_log_level = if verbose {
+                            Verbosity::Talkative
+                        } else {
+                            Verbosity::Warn
+                        };
+
+                        if let Some(log) = log.filter_by_level(target_log_level)
+                            && let Some(msg) = log.get_msg()
+                        {
+                            use devenv_eval_cache::internal_log::InternalLog;
+                            match log {
+                                InternalLog::Msg { level, .. } => match *level {
+                                    Verbosity::Error => error!("{msg}"),
+                                    Verbosity::Warn => warn!("{msg}"),
+                                    Verbosity::Talkative => debug!("{msg}"),
+                                    _ => info!("{msg}"),
+                                },
+                                _ => info!("{msg}"),
+                            }
+                        }
+                    }
+                }
+            };
+
+            let pretty_cmd = display_command(&cmd);
+            let activity = Activity::command(&pretty_cmd).command(&pretty_cmd).start();
+
+            // Use caching if enabled and pool is available
+            let use_caching =
+                self.global_options.eval_cache && options.cache_output && self.pool.get().is_some();
+
+            let output = if use_caching {
+                let pool = self.pool.get().unwrap();
+                let mut nix_cmd = NixCommand::with_caching(pool);
+
+                nix_cmd.watch_path(self.paths.root.join(devenv::DEVENV_FLAKE));
+                nix_cmd.watch_path(self.paths.root.join("devenv.yaml"));
+                nix_cmd.watch_path(self.paths.root.join("devenv.lock"));
+                nix_cmd.watch_path(self.paths.dotfile.join("flake.json"));
+                nix_cmd.watch_path(self.paths.dotfile.join("cli-options.nix"));
+                nix_cmd.unwatch_path(&self.paths.dotfile);
+
+                if self.global_options.refresh_eval_cache || options.refresh_cached_output {
+                    nix_cmd.force_refresh();
+                }
+
+                nix_cmd.on_stderr(make_on_stderr());
+                nix_cmd.output(&mut cmd).in_activity(&activity).await
+            } else {
+                let mut nix_cmd = NixCommand::without_caching();
+                nix_cmd.on_stderr(make_on_stderr());
+                nix_cmd.output(&mut cmd).in_activity(&activity).await
+            }
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
+
+            // Record cache status if applicable
+            if output.cache_hit {
+                tracing::Span::current().record(
+                    "cache_status",
+                    if output.cache_hit { "hit" } else { "miss" },
+                );
+            }
+
+            output
         };
 
         tracing::Span::current().record("output", format!("{result:?}"));
