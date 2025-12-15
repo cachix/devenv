@@ -1,26 +1,29 @@
-{ src
-, version
-, cargoLock
-, cargoProfile ? "release"
+{
+  src,
+  version,
+  cargoLock,
+  cargoProfile ? "release",
 
-, lib
-, stdenv
-, makeBinaryWrapper
-, installShellFiles
-, rustPlatform
-, devenv-nix
-, cachix
-, gitMinimal
-, openssl
-, dbus
-, protobuf
-, pkg-config
-, glibcLocalesUtf8
+  lib,
+  stdenv,
+  makeBinaryWrapper,
+  installShellFiles,
+  rustPlatform,
+  devenv-nix,
+  cachix,
+  gitMinimal,
+  openssl,
+  dbus,
+  protobuf,
+  pkg-config,
+  glibcLocalesUtf8,
 }:
 
 rustPlatform.buildRustPackage {
   pname = "devenv";
   inherit src version cargoLock;
+
+  RUSTFLAGS = "--cfg tracing_unstable";
 
   cargoBuildFlags = [ "-p devenv -p devenv-run-tests" ];
   buildType = cargoProfile;
@@ -36,7 +39,7 @@ rustPlatform.buildRustPackage {
     openssl
   ]
   # secretspec
-  ++ lib.optional (stdenv.isLinux) dbus;
+  ++ lib.optional stdenv.isLinux dbus;
 
   postConfigure = ''
     # Create proto directory structure that snix expects
