@@ -1184,11 +1184,11 @@ attribute set of (submodule)
       - Security vulnerabilities
       - Performance issues
       - Adherence to project conventions
-      
+
       Provide constructive feedback with specific suggestions for improvement.
     '';
   };
-  
+
   test-writer = {
     description = "Specialized in writing comprehensive test suites";
     proactive = false;
@@ -1622,6 +1622,13 @@ attribute set of (submodule)
     args = [ ];
     env = { };
   };
+  github = {
+    type = "http";
+    url = "https://api.githubcopilot.com/mcp/";
+    headers = {
+      Authorization = "Bearer GITHUB_PAT";
+    };
+  };
   linear = {
     type = "http";
     url = "https://mcp.linear.app/mcp";
@@ -1690,6 +1697,27 @@ null or string
 
 
 Environment variables for stdio MCP servers.
+
+
+
+*Type:*
+attribute set of string
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.headers
+
+
+
+HTTP headers for HTTP MCP servers (e.g., for authentication).
 
 
 
@@ -2412,8 +2440,6 @@ null or string or package
 
 ## containers.\<name>.version
 
-
-
 Version/tag of the container.
 
 
@@ -2432,6 +2458,8 @@ null or string
 
 
 ## delta.enable
+
+
 
 Integrate delta into git: https://dandavison.github.io/delta/.
 
@@ -5310,8 +5338,6 @@ string
 
 ## git-hooks.hooks.clippy.settings.offline
 
-
-
 Run clippy offline
 
 
@@ -5330,6 +5356,8 @@ boolean
 
 
 ## git-hooks.hooks.cmake-format
+
+
 
 cmake-format hook
 
@@ -7357,6 +7385,8 @@ submodule
 
 ## git-hooks.hooks.isort.enable
 
+
+
 Whether to enable this pre-commit hook.
 
 
@@ -7375,8 +7405,6 @@ boolean
 
 
 ## git-hooks.hooks.isort.description
-
-
 
 Description of the hook. Used for metadata purposes only.
 
