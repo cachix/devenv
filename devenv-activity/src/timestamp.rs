@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
+use valuable::Valuable;
 
 /// RFC 3339 timestamp wrapper for SystemTime with proper serde serialization
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,5 +33,29 @@ impl<'de> Deserialize<'de> for Timestamp {
         humantime::parse_rfc3339(&s)
             .map(Timestamp)
             .map_err(D::Error::custom)
+    }
+}
+
+// NOTE: SystemTime doesn't implement Valuable.
+// We also can't output a string because Value::String requires a &'a str tied to self's lifetime.
+// Using Structable with visit_named_fields lets us create a temporary string that the visitor consumes immediately.
+impl Valuable for Timestamp {
+    fn as_value(&self) -> valuable::Value<'_> {
+        valuable::Value::Structable(self)
+    }
+
+    fn visit(&self, visit: &mut dyn valuable::Visit) {
+        let formatted = humantime::format_rfc3339_nanos(self.0).to_string();
+        visit.visit_named_fields(&valuable::NamedValues::new(
+            &[valuable::NamedField::new("timestamp")],
+            &[valuable::Value::String(&formatted)],
+        ));
+    }
+}
+
+impl valuable::Structable for Timestamp {
+    fn definition(&self) -> valuable::StructDef<'_> {
+        static FIELDS: &[valuable::NamedField<'static>] = &[valuable::NamedField::new("timestamp")];
+        valuable::StructDef::new_static("Timestamp", valuable::Fields::Named(FIELDS))
     }
 }

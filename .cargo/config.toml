@@ -1,5 +1,9 @@
 [alias]
 xtask = "run --package xtask --"
 
+[build]
+# Allow using tracing's experimental support for Valuable
+rustflags = ["--cfg", "tracing_unstable"]
+
 [env]
 SNIX_BUILD_SANDBOX_SHELL = "/path/to/sandbox/shell"

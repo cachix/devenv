@@ -1,11 +1,12 @@
 //! Activity event types for the devenv activity tracking system.
 
 use serde::{Deserialize, Serialize};
+use valuable::Valuable;
 
 use crate::Timestamp;
 
 /// All activity events - activity-first design
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 #[serde(tag = "activity_kind", rename_all = "lowercase")]
 pub enum ActivityEvent {
     Build(Build),
@@ -20,7 +21,7 @@ pub enum ActivityEvent {
 }
 
 /// Build activity events - has Phase, Progress, Log
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Build {
     Start {
@@ -63,7 +64,7 @@ pub enum Build {
 }
 
 /// Fetch activity events - has FetchKind, byte Progress
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Fetch {
     Start {
@@ -94,7 +95,7 @@ pub enum Fetch {
 }
 
 /// Type of fetch operation
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Valuable)]
 #[serde(rename_all = "lowercase")]
 pub enum FetchKind {
     /// Downloading store paths from substituter
@@ -106,7 +107,7 @@ pub enum FetchKind {
 }
 
 /// Evaluate activity events - has Log only
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Evaluate {
     Start {
@@ -132,7 +133,7 @@ pub enum Evaluate {
 }
 
 /// Task activity events - has Progress, Log
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Task {
     Start {
@@ -169,7 +170,7 @@ pub enum Task {
 }
 
 /// Command activity events - has Log only
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Command {
     Start {
@@ -199,7 +200,7 @@ pub enum Command {
 }
 
 /// Operation activity events - minimal (generic devenv operations)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Operation {
     Start {
@@ -221,7 +222,7 @@ pub enum Operation {
 }
 
 /// Message - standalone (not an activity)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 pub struct Message {
     pub level: ActivityLevel,
     pub text: String,
@@ -233,7 +234,7 @@ pub struct Message {
 }
 
 /// Outcome of an activity
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq, Valuable)]
 #[serde(rename_all = "lowercase")]
 pub enum ActivityOutcome {
     #[default]
@@ -256,6 +257,7 @@ pub enum ActivityOutcome {
     strum::Display,
     serde_with::DeserializeFromStr,
     serde_with::SerializeDisplay,
+    Valuable,
 )]
 #[strum(serialize_all = "snake_case")]
 pub enum ActivityLevel {
