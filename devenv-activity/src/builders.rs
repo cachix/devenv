@@ -359,7 +359,42 @@ impl OperationBuilder {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
 
-        let span = create_span(id, self.level);
+        // NOTE: Include devenv.user_message for the legacy devenv CLI
+        //
+        // span! requires compile-time constant levels, so we match on each variant
+        let name = self.name.as_str();
+        let span = match self.level {
+            ActivityLevel::Error => span!(
+                Level::ERROR,
+                "activity",
+                activity_id = id,
+                devenv.user_message = name
+            ),
+            ActivityLevel::Warn => span!(
+                Level::WARN,
+                "activity",
+                activity_id = id,
+                devenv.user_message = name
+            ),
+            ActivityLevel::Info => span!(
+                Level::INFO,
+                "activity",
+                activity_id = id,
+                devenv.user_message = name
+            ),
+            ActivityLevel::Debug => span!(
+                Level::DEBUG,
+                "activity",
+                activity_id = id,
+                devenv.user_message = name
+            ),
+            ActivityLevel::Trace => span!(
+                Level::TRACE,
+                "activity",
+                activity_id = id,
+                devenv.user_message = name
+            ),
+        };
 
         send_activity_event(ActivityEvent::Operation(Operation::Start {
             id,
