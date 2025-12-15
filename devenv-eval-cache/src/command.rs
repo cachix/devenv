@@ -26,12 +26,30 @@ pub enum CommandError {
 
 type OnStderr = Box<dyn Fn(&InternalLog) + Send>;
 
+/// Environment variables that are volatile across execution contexts.
+/// These variables are excluded from eval cache tracking by default because they:
+/// - Change between shell contexts (e.g., TMPDIR is modified by enterShell)
+/// - Represent execution environment rather than project configuration
+/// - Would cause unnecessary cache invalidation when running commands from different contexts
+///
+/// See: https://github.com/cachix/devenv/issues/2107
+const VOLATILE_ENV_VARS: &[&str] = &[
+    "PWD",             // Current working directory
+    "OLDPWD",          // Previous working directory
+    "TMPDIR",          // Temporary directory (modified by enterShell)
+    "TMP",             // Alternative temp directory variable
+    "TEMP",            // Alternative temp directory variable
+    "TEMPDIR",         // Alternative temp directory variable
+    "XDG_RUNTIME_DIR", // User runtime directory
+];
+
 pub struct NixCommand<'a> {
     pool: &'a sqlx::SqlitePool,
     enable_caching: bool,
     force_refresh: bool,
     extra_paths: Vec<PathBuf>,
     excluded_paths: Vec<PathBuf>,
+    excluded_env_vars: Vec<String>,
     on_stderr: Option<OnStderr>,
 }
 
@@ -43,6 +61,7 @@ impl<'a> NixCommand<'a> {
             force_refresh: false,
             extra_paths: Vec::new(),
             excluded_paths: Vec::new(),
+            excluded_env_vars: VOLATILE_ENV_VARS.iter().map(|s| s.to_string()).collect(),
             on_stderr: None,
         }
     }
@@ -60,6 +79,17 @@ impl<'a> NixCommand<'a> {
     /// Remove a path from being watched for changes.
     pub fn unwatch_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
         self.excluded_paths.push(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// Watch an environment variable for changes.
+    ///
+    /// By default, volatile environment variables (PWD, TMPDIR, etc.) are excluded from cache
+    /// tracking because they represent execution context rather than configuration.
+    /// Use this method to opt-in to tracking specific environment variables that affect
+    /// your evaluation results.
+    pub fn watch_env_var(&mut self, name: &str) -> &mut Self {
+        self.excluded_env_vars.retain(|var| var != name);
         self
     }
 
@@ -191,7 +221,10 @@ impl<'a> NixCommand<'a> {
                 }
 
                 Op::GetEnv { name } => {
-                    if let Ok(env_input) = EnvInputDesc::new(name) {
+                    // Skip volatile environment variables that shouldn't affect cache
+                    if !self.excluded_env_vars.iter().any(|var| var == &name)
+                        && let Ok(env_input) = EnvInputDesc::new(name)
+                    {
                         env_inputs.push(env_input);
                     }
                 }
