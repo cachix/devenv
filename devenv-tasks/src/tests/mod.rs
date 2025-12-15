@@ -2821,6 +2821,103 @@ echo "Command v2 executed"
     Ok(())
 }
 
+/// Test that RunMode::All doesn't include unrelated tasks connected through shared prerequisites.
+///
+/// This reproduces GitHub issue #2337 where tasks with `before = ["enterShell", "enterTest"]`
+/// would cause enterTest's prerequisites (like git-hooks:run) to run when entering shell.
+///
+/// Graph structure:
+/// ```
+///   myapp:setup ──before──> devenv:enterShell  (root)
+///       │
+///       └──────before──> devenv:enterTest
+///                              ^
+///                              │
+///   devenv:git-hooks:run ──before──┘
+/// ```
+///
+/// When running devenv:enterShell with --mode all:
+/// - myapp:setup SHOULD run (it's a prerequisite of enterShell)
+/// - devenv:enterShell SHOULD run (it's the root)
+/// - devenv:enterTest should NOT run (only connected via shared prerequisite)
+/// - devenv:git-hooks:run should NOT run (only a prerequisite of enterTest)
+#[tokio::test]
+async fn test_run_mode_all_excludes_unrelated_entry_points() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let script_setup = create_script("#!/bin/sh\necho 'setup running'")?;
+    let script_enter_shell = create_script("#!/bin/sh\necho 'enterShell running'")?;
+    let script_enter_test = create_script("#!/bin/sh\necho 'enterTest running'")?;
+    let script_git_hooks = create_script("#!/bin/sh\necho 'git-hooks running'")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["devenv:enterShell"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "devenv:enterShell",
+                    "command": script_enter_shell.to_str().unwrap()
+                },
+                {
+                    "name": "devenv:enterTest",
+                    "command": script_enter_test.to_str().unwrap()
+                },
+                {
+                    "name": "myapp:setup",
+                    "command": script_setup.to_str().unwrap(),
+                    "before": ["devenv:enterShell", "devenv:enterTest"]
+                },
+                {
+                    "name": "devenv:git-hooks:run",
+                    "command": script_git_hooks.to_str().unwrap(),
+                    "before": ["devenv:enterTest"]
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    // Collect task names that will be executed
+    let scheduled_task_names: Vec<String> = {
+        let mut names = Vec::new();
+        for index in &tasks.tasks_order {
+            let task_state = tasks.graph[*index].read().await;
+            names.push(task_state.task.name.clone());
+        }
+        names
+    };
+
+    // myapp:setup and devenv:enterShell should be scheduled
+    assert!(
+        scheduled_task_names.contains(&"myapp:setup".to_string()),
+        "myapp:setup should be scheduled as a prerequisite of enterShell"
+    );
+    assert!(
+        scheduled_task_names.contains(&"devenv:enterShell".to_string()),
+        "devenv:enterShell should be scheduled as the root"
+    );
+
+    // devenv:enterTest and devenv:git-hooks:run should NOT be scheduled
+    // They are only connected through the shared prerequisite myapp:setup
+    assert!(
+        !scheduled_task_names.contains(&"devenv:enterTest".to_string()),
+        "devenv:enterTest should NOT be scheduled - it's not in enterShell's dependency chain"
+    );
+    assert!(
+        !scheduled_task_names.contains(&"devenv:git-hooks:run".to_string()),
+        "devenv:git-hooks:run should NOT be scheduled - it's only a prerequisite of enterTest"
+    );
+
+    Ok(())
+}
+
 fn create_script(script: &str) -> std::io::Result<tempfile::TempPath> {
     let mut temp_file = tempfile::Builder::new()
         .prefix("script")
