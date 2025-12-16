@@ -32,9 +32,13 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    languages.terraform.package = lib.mkMerge [
-      (lib.mkIf (cfg.version != null) (nixpkgs-terraform.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "Unsupported Terraform version, update the nixpkgs-terraform input or go to https://github.com/stackbuilders/nixpkgs-terraform/blob/main/versions.json for the full list of supported versions.")))
-    ];
+    languages.terraform.package = lib.mkIf (cfg.version != null) (
+      let
+        terraform-pkgs = nixpkgs-terraform.packages.${pkgs.stdenv.system};
+      in
+      terraform-pkgs."terraform-${cfg.version}" or terraform-pkgs.${cfg.version}
+        or (throw "Unsupported Terraform version, update the nixpkgs-terraform input or go to https://github.com/stackbuilders/nixpkgs-terraform/blob/main/versions.json for the full list of supported versions.")
+    );
 
     packages = with pkgs; [
       cfg.package
