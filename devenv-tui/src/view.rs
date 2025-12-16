@@ -288,6 +288,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     elapsed_str,
                 )
                 .with_suffix(Some(phase.to_string()))
+                .with_completed(completed.is_some())
                 .with_selection(*is_selected)
                 .render(terminal_width, *depth, prefix);
 
@@ -325,6 +326,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 elapsed_str,
             )
             .with_suffix(Some(phase.to_string()))
+            .with_completed(completed.is_some())
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }
@@ -349,6 +351,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 elapsed_str,
             )
             .with_suffix(status_text.map(String::from))
+            .with_completed(completed.is_some())
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }
@@ -387,6 +390,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         elapsed_str,
                     )
                     .with_suffix(from_suffix)
+                    .with_completed(completed.is_some())
                     .with_selection(*is_selected)
                     .render(terminal_width, *depth, prefix);
                 }
@@ -408,6 +412,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     elapsed_str,
                 )
                 .with_suffix(from_suffix)
+                .with_completed(completed.is_some())
                 .with_selection(*is_selected)
                 .render(terminal_width, *depth, prefix);
             }
@@ -429,6 +434,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 elapsed_str,
             )
             .with_suffix(suffix)
+            .with_completed(completed.is_some())
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }
@@ -444,6 +450,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.name.clone(),
                 elapsed_str,
             )
+            .with_completed(completed.is_some())
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }
@@ -469,6 +476,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     elapsed_str,
                 )
                 .with_suffix(suffix)
+                .with_completed(completed.is_some())
                 .with_selection(*is_selected)
                 .render(terminal_width, *depth, prefix);
 
@@ -504,6 +512,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 elapsed_str,
             )
             .with_suffix(suffix)
+            .with_completed(completed.is_some())
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }
@@ -519,6 +528,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.name.clone(),
                 elapsed_str,
             )
+            .with_completed(completed.is_some())
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }
@@ -534,6 +544,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.name.clone(),
                 elapsed_str,
             )
+            .with_completed(completed.is_some())
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }
@@ -691,6 +702,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.name.clone(),
                 elapsed_str,
             )
+            .with_completed(completed.is_some())
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }

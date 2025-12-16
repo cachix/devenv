@@ -201,6 +201,7 @@ pub struct ActivityTextComponent {
     pub suffix: Option<String>,
     pub is_selected: bool,
     pub elapsed: String,
+    pub is_completed: bool,
 }
 
 impl ActivityTextComponent {
@@ -211,6 +212,7 @@ impl ActivityTextComponent {
             suffix: None,
             is_selected: false,
             elapsed,
+            is_completed: false,
         }
     }
 
@@ -221,6 +223,11 @@ impl ActivityTextComponent {
 
     pub fn with_selection(mut self, is_selected: bool) -> Self {
         self.is_selected = is_selected;
+        self
+    }
+
+    pub fn with_completed(mut self, completed: bool) -> Self {
+        self.is_completed = completed;
         self
     }
 
@@ -239,19 +246,25 @@ impl ActivityTextComponent {
             depth,
         );
 
-        // Colors for selected vs unselected rows - invert all text when selected
-        let (action_color, name_color, suffix_color, elapsed_color, bg_color) = if self.is_selected {
+        // Colors: blue when active, dark gray when completed
+        // Selected rows get inverted colors
+        let (name_color, suffix_color, elapsed_color, bg_color) = if self.is_selected {
             (
-                COLOR_ACTIVE, // Keep same blue for action
                 Color::AnsiValue(232), // Near-black text
                 Color::AnsiValue(238), // Dark gray for suffix
                 Color::AnsiValue(238), // Dark gray for elapsed
                 Some(Color::AnsiValue(250)), // Light gray background
             )
+        } else if self.is_completed {
+            (
+                COLOR_HIERARCHY, // Dark gray when completed
+                COLOR_HIERARCHY,
+                Color::AnsiValue(242),
+                None,
+            )
         } else {
             (
-                COLOR_ACTIVE,
-                Color::Reset,
+                COLOR_ACTIVE, // Blue when active
                 COLOR_HIERARCHY,
                 Color::AnsiValue(242),
                 None,
@@ -276,7 +289,7 @@ impl ActivityTextComponent {
             final_prefix.push(
                 element!(View(width: (action_text.len() + 1) as u32, flex_shrink: 0.0) {
                     View(margin_right: 1) {
-                        Text(content: action_text, color: action_color, weight: Weight::Bold)
+                        Text(content: action_text, color: name_color, weight: Weight::Bold)
                     }
                 })
                 .into_any(),
@@ -292,7 +305,7 @@ impl ActivityTextComponent {
                     }
                     // Flexible middle column - can overflow
                     View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
-                        Text(content: shortened_name, color: name_color)
+                        Text(content: shortened_name, color: name_color, weight: Weight::Bold)
                         #(if show_suffix && self.suffix.is_some() {
                             vec![element!(View(margin_left: 1) {
                                 Text(content: self.suffix.as_ref().expect("suffix should be Some when show_suffix is true"), color: suffix_color)
@@ -317,7 +330,7 @@ impl ActivityTextComponent {
                     }
                     // Flexible middle column - can overflow
                     View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
-                        Text(content: shortened_name, color: name_color)
+                        Text(content: shortened_name, color: name_color, weight: Weight::Bold)
                         #(if show_suffix && self.suffix.is_some() {
                             vec![element!(View(margin_left: 1) {
                                 Text(content: self.suffix.as_ref().expect("suffix should be Some when show_suffix is true"), color: suffix_color)
