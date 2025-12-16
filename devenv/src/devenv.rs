@@ -1072,18 +1072,20 @@ impl Devenv {
             bail!("No processes defined");
         }
 
-        let activity = Activity::operation("Building processes").start();
-        let proc_script_string = async {
-            let gc_root = self.devenv_dot_gc.join("procfilescript");
-            let paths = self
-                .nix
-                .build(&["procfileScript"], None, Some(&gc_root))
-                .await?;
-            let proc_script_string = paths[0].to_string_lossy().to_string();
-            Ok::<String, miette::Report>(proc_script_string)
-        }
-        .in_activity(&activity)
-        .await?;
+        let proc_script_string = {
+            let activity = Activity::operation("Building processes").start();
+            async {
+                let gc_root = self.devenv_dot_gc.join("procfilescript");
+                let paths = self
+                    .nix
+                    .build(&["procfileScript"], None, Some(&gc_root))
+                    .await?;
+                let proc_script_string = paths[0].to_string_lossy().to_string();
+                Ok::<String, miette::Report>(proc_script_string)
+            }
+            .in_activity(&activity)
+            .await?
+        };
 
         let activity = Activity::operation("Starting processes").start();
         async {
