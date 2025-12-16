@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-if [ "$(uname -s)" == "Linux" ]; then
-    devenv container shell
-    devenv container processes
-fi
+
+devenv container build shell
+devenv container build processes

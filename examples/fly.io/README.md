@@ -19,7 +19,7 @@ flyctl ips allocate-v4
 Copy the container to fly.io registry:
 
 ```
-devenv container processes --copy 
+devenv container copy processes
 ```
 
 Create a volume for `devenv` state:
