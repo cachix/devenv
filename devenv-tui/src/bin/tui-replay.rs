@@ -96,19 +96,18 @@ impl TraceStream {
 }
 
 /// Deserializes a trace event into an ActivityEvent.
-fn deserialize_activity(event: TraceEvent) -> Result<ActivityEvent, ActivityParseError> {
+fn deserialize_activity(mut event: TraceEvent) -> Result<ActivityEvent, ActivityParseError> {
     if event.target != "devenv::activity" {
         return Err(ActivityParseError::NotActivityEvent);
     }
 
-    // The event field contains the JSON-serialized ActivityEvent as a string
-    let event_json = event
+    let event_value = event
         .fields
-        .get("event")
-        .and_then(|v| v.as_str())
+        .get_mut("event")
+        .map(serde_json::Value::take)
         .ok_or(ActivityParseError::NotActivityEvent)?;
 
-    Ok(serde_json::from_str(event_json)?)
+    Ok(serde_json::from_value(event_value)?)
 }
 
 async fn process_event(tx: &mpsc::Sender<ActivityEvent>, event: TraceEvent) {
