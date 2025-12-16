@@ -63,6 +63,8 @@ pub struct HierarchyPrefixComponent {
     pub show_spinner: bool,
     /// Completion state: None = active, Some(true) = success, Some(false) = failed
     pub completed: Option<bool>,
+    /// Whether this activity is currently selected
+    pub is_selected: bool,
 }
 
 impl HierarchyPrefixComponent {
@@ -72,6 +74,7 @@ impl HierarchyPrefixComponent {
             depth,
             show_spinner: false,
             completed: None,
+            is_selected: false,
         }
     }
 
@@ -85,10 +88,15 @@ impl HierarchyPrefixComponent {
         self
     }
 
+    pub fn with_selected(mut self, is_selected: bool) -> Self {
+        self.is_selected = is_selected;
+        self
+    }
+
     pub fn render(&self) -> Vec<AnyElement<'static>> {
         let mut prefix_children = vec![];
 
-        // Show spinner for top-level items (depth == 0), or completion indicator if completed
+        // Show spinner for top-level items (depth == 0), or failure indicator if failed
         if self.depth == 0 {
             match self.completed {
                 Some(true) => {
@@ -134,16 +142,8 @@ impl HierarchyPrefixComponent {
             let total_indent = format!("{}{}", " ".repeat(spinner_offset), nesting_indent);
             prefix_children.push(element!(Text(content: total_indent)).into_any());
 
-            // For child items, show completion indicator before hierarchy line
+            // For child items, show failure indicator or hierarchy line
             match self.completed {
-                Some(true) => {
-                    prefix_children.push(
-                        element!(View(margin_right: 1) {
-                            Text(content: "✓", color: COLOR_COMPLETED)
-                        })
-                        .into_any(),
-                    );
-                }
                 Some(false) => {
                     prefix_children.push(
                         element!(View(margin_right: 1) {
@@ -152,7 +152,8 @@ impl HierarchyPrefixComponent {
                         .into_any(),
                     );
                 }
-                None => {
+                _ => {
+                    // Active or completed - show hierarchy line
                     prefix_children.push(
                         element!(View(margin_right: 1) {
                             Text(content: "⎿", color: COLOR_HIERARCHY)
@@ -212,6 +213,25 @@ impl ActivityTextComponent {
             depth,
         );
 
+        // Colors for selected vs unselected rows - invert all text when selected
+        let (action_color, name_color, suffix_color, elapsed_color, bg_color) = if self.is_selected {
+            (
+                COLOR_ACTIVE, // Keep same blue for action
+                Color::AnsiValue(232), // Near-black text
+                Color::AnsiValue(238), // Dark gray for suffix
+                Color::AnsiValue(238), // Dark gray for elapsed
+                Some(Color::AnsiValue(250)), // Light gray background
+            )
+        } else {
+            (
+                COLOR_ACTIVE,
+                Color::Reset,
+                COLOR_HIERARCHY,
+                Color::AnsiValue(242),
+                None,
+            )
+        };
+
         let mut final_prefix = prefix_children;
 
         // Only add action text if action is not empty
@@ -230,37 +250,64 @@ impl ActivityTextComponent {
             final_prefix.push(
                 element!(View(width: (action_text.len() + 1) as u32, flex_shrink: 0.0) {
                     View(margin_right: 1) {
-                        Text(content: action_text, color: COLOR_ACTIVE, weight: Weight::Bold)
+                        Text(content: action_text, color: action_color, weight: Weight::Bold)
                     }
                 })
                 .into_any(),
             );
         }
 
-        element! {
-            View(height: 1, flex_direction: FlexDirection::Row, padding_left: 1, padding_right: 1) {
-                // Fixed left column - never truncates
-                View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                    #(final_prefix)
-                }
-                // Flexible middle column - can overflow
-                View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
-                    Text(content: shortened_name, color: if self.is_selected { COLOR_INTERACTIVE } else { Color::Reset })
-                    #(if show_suffix && self.suffix.is_some() {
-                        vec![element!(View(margin_left: 1) {
-                            Text(content: self.suffix.as_ref().expect("suffix should be Some when show_suffix is true"), color: COLOR_HIERARCHY)
-                        }).into_any()]
-                    } else {
-                        vec![]
-                    })
-                }
-                // Fixed right column - never truncates
-                View(flex_shrink: 0.0) {
-                    Text(content: self.elapsed.clone(), color: Color::AnsiValue(242))
+        if let Some(bg) = bg_color {
+            element! {
+                View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1, background_color: bg) {
+                    // Fixed left column - never truncates
+                    View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                        #(final_prefix)
+                    }
+                    // Flexible middle column - can overflow
+                    View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
+                        Text(content: shortened_name, color: name_color)
+                        #(if show_suffix && self.suffix.is_some() {
+                            vec![element!(View(margin_left: 1) {
+                                Text(content: self.suffix.as_ref().expect("suffix should be Some when show_suffix is true"), color: suffix_color)
+                            }).into_any()]
+                        } else {
+                            vec![]
+                        })
+                    }
+                    // Fixed right column - never truncates
+                    View(flex_shrink: 0.0) {
+                        Text(content: self.elapsed.clone(), color: elapsed_color)
+                    }
                 }
             }
+            .into()
+        } else {
+            element! {
+                View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
+                    // Fixed left column - never truncates
+                    View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                        #(final_prefix)
+                    }
+                    // Flexible middle column - can overflow
+                    View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
+                        Text(content: shortened_name, color: name_color)
+                        #(if show_suffix && self.suffix.is_some() {
+                            vec![element!(View(margin_left: 1) {
+                                Text(content: self.suffix.as_ref().expect("suffix should be Some when show_suffix is true"), color: suffix_color)
+                            }).into_any()]
+                        } else {
+                            vec![]
+                        })
+                    }
+                    // Fixed right column - never truncates
+                    View(flex_shrink: 0.0) {
+                        Text(content: self.elapsed.clone(), color: elapsed_color)
+                    }
+                }
+            }
+            .into()
         }
-        .into()
     }
 }
 
@@ -375,6 +422,7 @@ impl<'a> DownloadActivityComponent<'a> {
         let prefix = HierarchyPrefixComponent::new(indent.clone(), self.depth)
             .with_spinner()
             .with_completed(self.completed)
+            .with_selected(self.is_selected)
             .render();
 
         // Get substituter from download variant
@@ -394,13 +442,32 @@ impl<'a> DownloadActivityComponent<'a> {
             self.depth,
         );
 
+        // Colors for selected vs unselected rows - invert all text when selected
+        let (action_color, name_color, substituter_color, elapsed_color, bg_color) = if self.is_selected {
+            (
+                COLOR_ACTIVE, // Keep same blue for action
+                Color::AnsiValue(232), // Near-black text
+                Color::AnsiValue(238), // Dark gray for substituter
+                Color::AnsiValue(238), // Dark gray for elapsed
+                Some(Color::AnsiValue(250)), // Light gray background
+            )
+        } else {
+            (
+                COLOR_ACTIVE,
+                Color::Reset,
+                COLOR_HIERARCHY,
+                Color::AnsiValue(242),
+                None,
+            )
+        };
+
         let mut line1_children = prefix;
         line1_children.extend(vec![
             element!(View(margin_right: 1) {
-                Text(content: "Downloading", color: COLOR_ACTIVE, weight: Weight::Bold)
+                Text(content: "Downloading", color: action_color, weight: Weight::Bold)
             }).into_any(),
             element!(View(margin_right: 1) {
-                Text(content: shortened_name, color: if self.is_selected { COLOR_INTERACTIVE } else { Color::Reset })
+                Text(content: shortened_name, color: name_color)
             }).into_any(),
         ]);
 
@@ -408,25 +475,41 @@ impl<'a> DownloadActivityComponent<'a> {
             // Only show "from" text on wider terminals
             if terminal_width >= 80 {
                 line1_children.push(
-                    element!(Text(content: format!("from {}", substituter), color: COLOR_HIERARCHY))
+                    element!(Text(content: format!("from {}", substituter), color: substituter_color))
                         .into_any(),
                 );
             }
         }
 
-        elements.push(
-            element! {
-                View(height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct, padding_left: 1, padding_right: 1, overflow: Overflow::Hidden) {
-                    View(flex_direction: FlexDirection::Row, width: 100pct, overflow: Overflow::Hidden) {
-                        #(line1_children)
-                    }
-                    View {
-                        Text(content: elapsed_str, color: Color::AnsiValue(242))
+        if let Some(bg) = bg_color {
+            elements.push(
+                element! {
+                    View(height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct, padding_right: 1, overflow: Overflow::Hidden, background_color: bg) {
+                        View(flex_direction: FlexDirection::Row, width: 100pct, overflow: Overflow::Hidden) {
+                            #(line1_children)
+                        }
+                        View {
+                            Text(content: elapsed_str, color: elapsed_color)
+                        }
                     }
                 }
-            }
-            .into_any()
-        );
+                .into_any()
+            );
+        } else {
+            elements.push(
+                element! {
+                    View(height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct, padding_right: 1, overflow: Overflow::Hidden) {
+                        View(flex_direction: FlexDirection::Row, width: 100pct, overflow: Overflow::Hidden) {
+                            #(line1_children)
+                        }
+                        View {
+                            Text(content: elapsed_str, color: elapsed_color)
+                        }
+                    }
+                }
+                .into_any()
+            );
+        }
 
         // Second line: progress bar if we have progress data
         if let ActivityVariant::Download(ref download_data) = self.activity.variant {

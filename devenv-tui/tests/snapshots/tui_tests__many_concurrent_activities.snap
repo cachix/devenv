@@ -2,15 +2,15 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ⠋ Building package-0 buildPhase                                      0ms
- ⠋ Downloading dependency-1 from cache.nixos.org                     0.0s
+⠋ Building package-0 buildPhase                                       0ms
+⠋ Downloading dependency-1 from cache.nixos.org                      0.0s
     ──────────────────────────────────────────────────2MB / 10MB at 20MB/s
- ⠋ task-2                                                             0ms
- ⠋ Evaluating module-3                                                0ms
- ⠋ Building package-4 buildPhase                                      0ms
- ⠋ Downloading dependency-5 from cache.nixos.org                     0.0s
+⠋ task-2                                                              0ms
+⠋ Evaluating module-3                                                 0ms
+⠋ Building package-4 buildPhase                                       0ms
+⠋ Downloading dependency-5 from cache.nixos.org                      0.0s
     ──────────────────────────────────────────────────6MB / 10MB at 60MB/s
- ⠋ task-6                                                             0ms
- ⠋ Evaluating module-7                                                0ms
+⠋ task-6                                                              0ms
+⠋ Evaluating module-7                                                 0ms
 
  0 of 2 builds  │  0 of 2 downloads  │  0 of 2 tasks    ↑↓ nav • e expand

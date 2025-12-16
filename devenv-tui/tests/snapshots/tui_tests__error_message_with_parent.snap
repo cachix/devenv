@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ⠋ Evaluating devenv.nix          0ms
-   ✗ error: undefined variable 'pkgs'
+⠋ Evaluating devenv.nix          0ms
+  ✗ error: undefined variable 'pkgs'
 
 
-                    ↑↓ nav • e expand
+                   ↑↓ nav • e expand

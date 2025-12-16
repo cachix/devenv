@@ -2,7 +2,7 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ⠋ Downloading Downloading package from cache.nixos.org              0.0s
+⠋ Downloading Downloading package from cache.nixos.org               0.0s
     ───────────────────────────────────────────────────1kB / 2kB at 10kB/s
 
 

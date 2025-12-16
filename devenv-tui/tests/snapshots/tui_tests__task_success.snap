@@ -2,7 +2,7 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ✓ Build completed success   0ms
+✓ Build completed success    0ms
 
 
 

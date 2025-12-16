@@ -269,6 +269,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let prefix = HierarchyPrefixComponent::new(indent, *depth)
                     .with_spinner()
                     .with_completed(*completed)
+                    .with_selected(*is_selected)
                     .render();
 
                 let main_line = ActivityTextComponent::new(
@@ -305,6 +306,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner()
                 .with_completed(*completed)
+                .with_selected(*is_selected)
                 .render();
 
             return ActivityTextComponent::new(
@@ -328,6 +330,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner()
                 .with_completed(*completed)
+                .with_selected(*is_selected)
                 .render();
 
             return ActivityTextComponent::new(
@@ -365,6 +368,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     let prefix = HierarchyPrefixComponent::new(indent, *depth)
                         .with_spinner()
                         .with_completed(*completed)
+                        .with_selected(*is_selected)
                         .render();
 
                     return ActivityTextComponent::new(
@@ -385,6 +389,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let prefix = HierarchyPrefixComponent::new(indent, *depth)
                     .with_spinner()
                     .with_completed(*completed)
+                    .with_selected(*is_selected)
                     .render();
 
                 return ActivityTextComponent::new(
@@ -405,6 +410,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner()
                 .with_completed(*completed)
+                .with_selected(*is_selected)
                 .render();
 
             return ActivityTextComponent::new(
@@ -420,6 +426,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner()
                 .with_completed(*completed)
+                .with_selected(*is_selected)
                 .render();
 
             return ActivityTextComponent::new(
@@ -443,6 +450,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let prefix = HierarchyPrefixComponent::new(indent.clone(), *depth)
                     .with_spinner()
                     .with_completed(*completed)
+                    .with_selected(*is_selected)
                     .render();
 
                 let main_line = ActivityTextComponent::new(
@@ -477,6 +485,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner()
                 .with_completed(*completed)
+                .with_selected(*is_selected)
                 .render();
 
             return ActivityTextComponent::new(
@@ -492,6 +501,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner()
                 .with_completed(*completed)
+                .with_selected(*is_selected)
                 .render();
 
             return ActivityTextComponent::new(
@@ -506,6 +516,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner()
                 .with_completed(*completed)
+                .with_selected(*is_selected)
                 .render();
 
             return ActivityTextComponent::new(
@@ -524,6 +535,13 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 ActivityLevel::Warn => ("•", Color::AnsiValue(214), Color::AnsiValue(214)), // Yellow
                 ActivityLevel::Info => ("•", COLOR_ACTIVE, Color::Reset), // Blue dot
                 _ => ("•", COLOR_HIERARCHY, Color::Reset), // Gray dot for debug/trace
+            };
+
+            // Colors for selected vs unselected rows
+            let (selected_text_color, bg_color) = if *is_selected {
+                (Color::AnsiValue(232), Some(Color::AnsiValue(250))) // Near-black on light gray
+            } else {
+                (text_color, None)
             };
 
             // Build prefix string for indentation
@@ -555,7 +573,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     for line in visible_lines {
                         all_lines.push(
                             element! {
-                                View(height: 1, flex_direction: FlexDirection::Row, padding_left: 1, padding_right: 1) {
+                                View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
                                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
                                         Text(content: prefix_str.clone())
                                         View(margin_right: 1) {
@@ -572,23 +590,42 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     }
                 }
 
-                // Last line: icon + error summary
-                all_lines.push(
-                    element! {
-                        View(height: 1, flex_direction: FlexDirection::Row, padding_left: 1, padding_right: 1) {
-                            View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                                Text(content: prefix_str.clone())
-                                View(margin_right: 1) {
-                                    Text(content: icon, color: icon_color)
+                // Last line: icon + error summary (with inverse highlight if selected)
+                if let Some(bg) = bg_color {
+                    all_lines.push(
+                        element! {
+                            View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1, background_color: bg) {
+                                View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                                    Text(content: prefix_str.clone())
+                                    View(margin_right: 1) {
+                                        Text(content: icon, color: icon_color)
+                                    }
+                                }
+                                View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                                    Text(content: activity.name.clone(), color: selected_text_color)
                                 }
                             }
-                            View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
-                                Text(content: activity.name.clone(), color: if *is_selected { COLOR_INTERACTIVE } else { text_color })
+                        }
+                        .into_any(),
+                    );
+                } else {
+                    all_lines.push(
+                        element! {
+                            View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
+                                View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                                    Text(content: prefix_str.clone())
+                                    View(margin_right: 1) {
+                                        Text(content: icon, color: icon_color)
+                                    }
+                                }
+                                View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                                    Text(content: activity.name.clone(), color: selected_text_color)
+                                }
                             }
                         }
-                    }
-                    .into_any(),
-                );
+                        .into_any(),
+                    );
+                }
 
                 let total_height = all_lines.len() as u32;
                 return element! {
@@ -600,25 +637,43 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
 
             // Simple single-line message (no details)
-            return element! {
-                View(height: 1, flex_direction: FlexDirection::Row, padding_left: 1, padding_right: 1) {
-                    View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                        Text(content: prefix_str)
-                        View(margin_right: 1) {
-                            Text(content: icon, color: icon_color)
+            if let Some(bg) = bg_color {
+                return element! {
+                    View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1, background_color: bg) {
+                        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                            Text(content: prefix_str)
+                            View(margin_right: 1) {
+                                Text(content: icon, color: icon_color)
+                            }
+                        }
+                        View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                            Text(content: activity.name.clone(), color: selected_text_color)
                         }
                     }
-                    View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
-                        Text(content: activity.name.clone(), color: if *is_selected { COLOR_INTERACTIVE } else { text_color })
+                }
+                .into_any();
+            } else {
+                return element! {
+                    View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
+                        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                            Text(content: prefix_str)
+                            View(margin_right: 1) {
+                                Text(content: icon, color: icon_color)
+                            }
+                        }
+                        View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                            Text(content: activity.name.clone(), color: selected_text_color)
+                        }
                     }
                 }
+                .into_any();
             }
-            .into_any();
         }
         ActivityVariant::Unknown => {
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner()
                 .with_completed(*completed)
+                .with_selected(*is_selected)
                 .render();
 
             return ActivityTextComponent::new(

@@ -2,7 +2,7 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ⠋ Building hello-2.12 buildPhase                   0ms
+⠋ Building hello-2.12 buildPhase                    0ms
 
 
 

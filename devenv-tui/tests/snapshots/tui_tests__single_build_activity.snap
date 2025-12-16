@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ⠋ Building Building hello-world buildPhase 0ms
+⠋ Building Building hello-world buildPhase 0ms
 
 
 
- 0 of 1 builds                ↑↓ nav • e expand
+ 0 of 1 builds               ↑↓ nav • e expand

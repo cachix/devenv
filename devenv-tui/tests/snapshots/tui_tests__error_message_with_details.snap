@@ -2,12 +2,12 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ⠋ Evaluating devenv.nix                 0ms
-     error:
-            … while evaluating
-              at devenv.nix:10:5
+⠋ Evaluating devenv.nix                 0ms
+    error:
+           … while evaluating
+             at devenv.nix:10:5
 
-            error: undefined variable 'pkgs'
-   ✗ error: undefined variable 'pkgs'
+           error: undefined variable 'pkgs'
+  ✗ error: undefined variable 'pkgs'
 
-                           ↑↓ nav • e expand
+                          ↑↓ nav • e expand

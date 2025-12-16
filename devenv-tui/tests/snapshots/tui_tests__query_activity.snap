@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ⠋ Querying …0mgfissin0h5ggzb0b2i5drbz-cargo-vendor-dir from some-cache.org 0ms
+⠋ Querying …0mgfissin0h5ggzb0b2i5drbz-cargo-vendor-dir from some-cache.org 0ms
 
 
 
- 0 of 1 queries                                               ↑↓ nav • e expand
+ 0 of 1 queries                                              ↑↓ nav • e expand

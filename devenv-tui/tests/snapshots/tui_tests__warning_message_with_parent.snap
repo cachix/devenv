@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ⠋ Evaluating devenv.nix                        0ms
-   • warning: deprecated option 'services.foo' used
+⠋ Evaluating devenv.nix                        0ms
+  • warning: deprecated option 'services.foo' used
 
 
-                                  ↑↓ nav • e expand
+                                 ↑↓ nav • e expand

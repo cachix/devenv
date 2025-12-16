@@ -2,10 +2,10 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
- ✓ Building dependency-a preparing                                    0ms
- ✗ Building dependency-b preparing                                    0ms
- ⠋ Building main-package buildPhase                                   0ms
- ⠋ Downloading runtime-dep from cache.nixos.org                      0.0s
+✓ Building dependency-a preparing                                     0ms
+✗ Building dependency-b preparing                                     0ms
+⠋ Building main-package buildPhase                                    0ms
+⠋ Downloading runtime-dep from cache.nixos.org                       0.0s
     ───────────────────────────────────────────────────3MB / 5MB at 30MB/s
 
  1 of 3 builds  │  0 of 1 downloads                     ↑↓ nav • e expand
