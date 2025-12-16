@@ -127,7 +127,10 @@ mod tests {
     #[test]
     fn test_enum_lowercase() {
         let serde_value = SerdeValue::from_serialize(&TestEnum::VariantOne).unwrap();
-        assert_eq!(serde_value.0, serde_json::Value::String("variantone".to_string()));
+        assert_eq!(
+            serde_value.0,
+            serde_json::Value::String("variantone".to_string())
+        );
     }
 
     #[test]

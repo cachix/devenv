@@ -250,9 +250,9 @@ impl ActivityTextComponent {
         // Selected rows get inverted colors
         let (name_color, suffix_color, elapsed_color, bg_color) = if self.is_selected {
             (
-                Color::AnsiValue(232), // Near-black text
-                Color::AnsiValue(238), // Dark gray for suffix
-                Color::AnsiValue(238), // Dark gray for elapsed
+                Color::AnsiValue(232),       // Near-black text
+                Color::AnsiValue(238),       // Dark gray for suffix
+                Color::AnsiValue(238),       // Dark gray for elapsed
                 Some(Color::AnsiValue(250)), // Light gray background
             )
         } else if self.is_completed {
@@ -480,32 +480,35 @@ impl<'a> DownloadActivityComponent<'a> {
         );
 
         // Colors for selected vs unselected rows - invert all text when selected
-        let (action_color, name_color, substituter_color, elapsed_color, bg_color) = if self.is_selected {
-            (
-                COLOR_ACTIVE, // Keep same blue for action
-                Color::AnsiValue(232), // Near-black text
-                Color::AnsiValue(238), // Dark gray for substituter
-                Color::AnsiValue(238), // Dark gray for elapsed
-                Some(Color::AnsiValue(250)), // Light gray background
-            )
-        } else {
-            (
-                COLOR_ACTIVE,
-                Color::Reset,
-                COLOR_HIERARCHY,
-                Color::AnsiValue(242),
-                None,
-            )
-        };
+        let (action_color, name_color, substituter_color, elapsed_color, bg_color) =
+            if self.is_selected {
+                (
+                    COLOR_ACTIVE,                // Keep same blue for action
+                    Color::AnsiValue(232),       // Near-black text
+                    Color::AnsiValue(238),       // Dark gray for substituter
+                    Color::AnsiValue(238),       // Dark gray for elapsed
+                    Some(Color::AnsiValue(250)), // Light gray background
+                )
+            } else {
+                (
+                    COLOR_ACTIVE,
+                    Color::Reset,
+                    COLOR_HIERARCHY,
+                    Color::AnsiValue(242),
+                    None,
+                )
+            };
 
         let mut line1_children = prefix;
         line1_children.extend(vec![
             element!(View(margin_right: 1) {
                 Text(content: "Downloading", color: action_color, weight: Weight::Bold)
-            }).into_any(),
+            })
+            .into_any(),
             element!(View(margin_right: 1) {
                 Text(content: shortened_name, color: name_color)
-            }).into_any(),
+            })
+            .into_any(),
         ]);
 
         if let Some(substituter) = &substituter {

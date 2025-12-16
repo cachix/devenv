@@ -207,10 +207,7 @@ impl<'a> NixCommand<WithCache<'a>> {
         .await
         .map_err(CommandError::Sqlx)?;
 
-        Ok(Output {
-            inputs,
-            ..output
-        })
+        Ok(Output { inputs, ..output })
     }
 }
 

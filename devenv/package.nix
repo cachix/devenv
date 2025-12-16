@@ -1,22 +1,21 @@
-{
-  src,
-  version,
-  cargoLock,
-  cargoProfile ? "release",
-
-  lib,
-  stdenv,
-  makeBinaryWrapper,
-  installShellFiles,
-  rustPlatform,
-  devenv-nix,
-  cachix,
-  gitMinimal,
-  openssl,
-  dbus,
-  protobuf,
-  pkg-config,
-  glibcLocalesUtf8,
+{ src
+, version
+, cargoLock
+, cargoProfile ? "release"
+, lib
+, stdenv
+, makeBinaryWrapper
+, installShellFiles
+, rustPlatform
+, devenv-nix
+, cachix
+, gitMinimal
+, openssl
+, dbus
+, protobuf
+, pkg-config
+, glibcLocalesUtf8
+,
 }:
 
 rustPlatform.buildRustPackage {

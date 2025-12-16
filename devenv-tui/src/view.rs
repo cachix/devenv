@@ -1,5 +1,5 @@
 use crate::{
-    components::{format_elapsed_time, LOG_VIEWPORT_COLLAPSED, *},
+    components::{LOG_VIEWPORT_COLLAPSED, format_elapsed_time, *},
     model::{
         Activity, ActivityModel, ActivitySummary, ActivityVariant, NixActivityState,
         TaskDisplayStatus, TerminalSize, UiState,
@@ -732,7 +732,14 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         can_go_down,
     } = &*ctx;
 
-    build_summary_view_impl(summary, *has_selection, *showing_logs, *can_go_up, *can_go_down, terminal_width)
+    build_summary_view_impl(
+        summary,
+        *has_selection,
+        *showing_logs,
+        *can_go_up,
+        *can_go_down,
+        terminal_width,
+    )
 }
 
 /// Build the summary view with colored counts
@@ -897,8 +904,16 @@ fn build_summary_view_impl(
     let mut help_children = vec![];
     let use_short_text = terminal_width < 100; // Use shorter text for narrow terminals
 
-    let up_arrow_color = if can_go_up { COLOR_INTERACTIVE } else { COLOR_HIERARCHY };
-    let down_arrow_color = if can_go_down { COLOR_INTERACTIVE } else { COLOR_HIERARCHY };
+    let up_arrow_color = if can_go_up {
+        COLOR_INTERACTIVE
+    } else {
+        COLOR_HIERARCHY
+    };
+    let down_arrow_color = if can_go_down {
+        COLOR_INTERACTIVE
+    } else {
+        COLOR_HIERARCHY
+    };
 
     if has_selection {
         // Show full navigation when something is selected
