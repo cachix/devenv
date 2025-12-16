@@ -36,8 +36,8 @@ in
       let
         terraform-pkgs = nixpkgs-terraform.packages.${pkgs.stdenv.system};
       in
-      terraform-pkgs."terraform-${cfg.version}" or terraform-pkgs.${cfg.version}
-        or (throw "Unsupported Terraform version, update the nixpkgs-terraform input or go to https://github.com/stackbuilders/nixpkgs-terraform/blob/main/versions.json for the full list of supported versions.")
+        terraform-pkgs."terraform-${cfg.version}" or terraform-pkgs.${cfg.version}
+          or (throw "Unsupported Terraform version, update the nixpkgs-terraform input or go to https://github.com/stackbuilders/nixpkgs-terraform/blob/main/versions.json for the full list of supported versions.")
     );
 
     packages = with pkgs; [
