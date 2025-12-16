@@ -104,12 +104,6 @@ pub enum Commands {
     Container {
         #[command(subcommand)]
         command: ContainerCommand,
-
-        #[arg(long)]
-        copy_args: Vec<String>,
-
-        #[arg(short, long)]
-        registry: Option<String>,
     },
 
     Inputs {
@@ -211,10 +205,23 @@ pub enum ContainerCommand {
     Build { name: String },
 
     #[command(about = "Copy a container to registry.")]
-    Copy { name: String },
+    Copy {
+        name: String,
+
+        #[arg(long)]
+        copy_args: Vec<String>,
+
+        #[arg(short, long)]
+        registry: Option<String>,
+    },
 
     #[command(about = "Run a container.")]
-    Run { name: String },
+    Run {
+        name: String,
+
+        #[arg(long)]
+        copy_args: Vec<String>,
+    },
 }
 
 #[derive(Subcommand, Clone)]

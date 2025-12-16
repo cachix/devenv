@@ -599,11 +599,7 @@ impl Devenv {
         &mut self,
         name: &str,
         copy_args: &[String],
-        registry: Option<&str>,
     ) -> Result<ShellCommand> {
-        if registry.is_some() {
-            warn!("Ignoring --registry flag when running container");
-        };
         self.container_copy(name, copy_args, Some("docker-daemon:"))
             .await?;
 

@@ -247,25 +247,23 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
             devenv.test().await?;
             CommandResult::Done
         }
-        Commands::Container {
-            command,
-            copy_args,
-            registry,
-        } => match command {
+        Commands::Container { command } => match command {
             ContainerCommand::Build { name } => {
                 let path = devenv.container_build(&name).await?;
                 CommandResult::Print(format!("{path}\n"))
             }
-            ContainerCommand::Copy { name } => {
+            ContainerCommand::Copy {
+                name,
+                copy_args,
+                registry,
+            } => {
                 devenv
                     .container_copy(&name, &copy_args, registry.as_deref())
                     .await?;
                 CommandResult::Done
             }
-            ContainerCommand::Run { name } => {
-                let shell_config = devenv
-                    .container_run(&name, &copy_args, registry.as_deref())
-                    .await?;
+            ContainerCommand::Run { name, copy_args } => {
+                let shell_config = devenv.container_run(&name, &copy_args).await?;
                 CommandResult::Exec(shell_config.command)
             }
         },
