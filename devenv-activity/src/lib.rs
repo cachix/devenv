@@ -39,6 +39,7 @@ mod builders;
 mod events;
 mod handle;
 mod instrument;
+mod serde_valuable;
 mod stack;
 mod timestamp;
 

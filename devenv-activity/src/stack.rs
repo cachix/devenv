@@ -36,6 +36,7 @@ use valuable::Valuable;
 
 use crate::Timestamp;
 use crate::events::{ActivityEvent, ActivityLevel, Message};
+use crate::serde_valuable::SerdeValue;
 
 /// Global sender for activity events (installed by ActivityHandle::install())
 pub(crate) static ACTIVITY_SENDER: OnceLock<mpsc::Sender<ActivityEvent>> = OnceLock::new();
@@ -49,10 +50,10 @@ tokio::task_local! {
 
 /// Send an activity event to the registered channel and emit to tracing
 pub(crate) fn send_activity_event(event: ActivityEvent) {
-    // Emit to tracing for file export - serialize as JSON string
-    // if let Ok(json) = serde_json::to_string(&event) {
-    tracing::trace!(target: "devenv::activity", event = event.as_value());
-    // }
+    // Emit to tracing for file export - serialize via serde to respect rename attributes
+    if let Ok(serde_value) = SerdeValue::from_serialize(&event) {
+        tracing::trace!(target: "devenv::activity", event = serde_value.as_value());
+    }
 
     // Send to channel for TUI (non-blocking)
     if let Some(tx) = ACTIVITY_SENDER.get() {
