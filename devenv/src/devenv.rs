@@ -5,7 +5,7 @@ use clap::crate_version;
 use cli_table::Table;
 use cli_table::{WithTitle, print_stderr};
 use devenv_activity::ActivityInstrument;
-use devenv_activity::{Activity, activity};
+use devenv_activity::{Activity, ActivityLevel, activity, message};
 use devenv_core::{
     cachix::{CachixManager, CachixPaths},
     cli::GlobalOptions,
@@ -35,7 +35,7 @@ use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process;
 use tokio::sync::{OnceCell, RwLock, Semaphore};
-use tracing::{Instrument, debug, error, info, instrument, trace, warn};
+use tracing::{Instrument, debug, info, instrument, trace, warn};
 
 // templates
 const REQUIRED_FILES: [&str; 4] = ["devenv.nix", "devenv.yaml", ".envrc", ".gitignore"];
@@ -999,7 +999,7 @@ impl Devenv {
         }
 
         if !result.status.success() {
-            error!("Tests failed :(");
+            message(ActivityLevel::Error, "Tests failed :(");
             bail!("Tests failed");
         } else {
             info!("Tests passed :)");
@@ -1064,7 +1064,10 @@ impl Devenv {
     ) -> Result<RunMode> {
         self.assemble(false).await?;
         if !self.has_processes().await? {
-            error!("No 'processes' option defined: https://devenv.sh/processes/");
+            message(
+                ActivityLevel::Error,
+                "No 'processes' option defined: https://devenv.sh/processes/",
+            );
             bail!("No processes defined");
         }
 
@@ -1236,10 +1239,13 @@ impl Devenv {
                     // Process still exists
                     let elapsed = start_time.elapsed();
                     if elapsed >= max_wait {
-                        warn!(
-                            "Process {} did not shut down gracefully within {} seconds, sending SIGKILL to process group",
-                            pid,
-                            max_wait.as_secs()
+                        message(
+                            ActivityLevel::Warn,
+                            format!(
+                                "Process {} did not shut down gracefully within {} seconds, sending SIGKILL to process group",
+                                pid,
+                                max_wait.as_secs()
+                            ),
                         );
 
                         // Send SIGKILL to the entire process group
@@ -1526,17 +1532,23 @@ impl Devenv {
             }
             .await
             {
-                warn!(
-                    "Failed to create timestamped GC root symlink: {}. \
-                     This may affect GC protection but won't prevent the shell from working.",
-                    e
+                message(
+                    ActivityLevel::Warn,
+                    format!(
+                        "Failed to create timestamped GC root symlink: {}. \
+                         This may affect GC protection but won't prevent the shell from working.",
+                        e
+                    ),
                 );
             }
         } else {
-            warn!(
-                "Failed to resolve the GC root path to the Nix store: {}. \
-                 Try running devenv again with --refresh-eval-cache.",
-                gc_root.display()
+            message(
+                ActivityLevel::Warn,
+                format!(
+                    "Failed to resolve the GC root path to the Nix store: {}. \
+                     Try running devenv again with --refresh-eval-cache.",
+                    gc_root.display()
+                ),
             );
         }
 

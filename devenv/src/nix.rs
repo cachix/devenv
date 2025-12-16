@@ -1,7 +1,7 @@
 use crate::{devenv, nix_log_bridge::NixLogBridge, util};
 use async_trait::async_trait;
 use devenv_activity::ActivityInstrument;
-use devenv_activity::{Activity, ActivityLevel, current_activity_id, message};
+use devenv_activity::{Activity, ActivityLevel, current_activity_id, message, message_with_details};
 use devenv_core::{
     cachix::{
         CacheMetadata, CachixCacheInfo, CachixConfig, CachixManager, StorePing,
@@ -612,9 +612,12 @@ impl Nix {
                 new_cmd.current_dir(cmd.get_current_dir().unwrap_or_else(|| Path::new(".")));
                 return Ok(new_cmd);
             } else {
-                warn!(
-                    "CACHIX_AUTH_TOKEN is not set, but required to push to {}.",
-                    push_cache
+                message(
+                    ActivityLevel::Warn,
+                    format!(
+                        "CACHIX_AUTH_TOKEN is not set, but required to push to {}.",
+                        push_cache
+                    ),
                 );
             }
         }
@@ -660,10 +663,11 @@ impl Nix {
         let mut cmd = match env::var("DEVENV_NIX") {
             Ok(devenv_nix) => std::process::Command::new(format!("{devenv_nix}/bin/{command}")),
             Err(_) => {
-                error!(
-                    "$DEVENV_NIX is not set, but required as devenv doesn't work without a few Nix patches."
+                message_with_details(
+                    ActivityLevel::Error,
+                    "$DEVENV_NIX is not set, but required as devenv doesn't work without a few Nix patches.",
+                    Some("Please follow https://devenv.sh/getting-started/ to install devenv.".to_string()),
                 );
-                error!("Please follow https://devenv.sh/getting-started/ to install devenv.");
                 bail!("$DEVENV_NIX is not set")
             }
         };
@@ -805,11 +809,14 @@ impl Nix {
                             format!("Failed to fetch information for cache '{name}'")
                         })?;
                         if resp.status().is_client_error() {
-                            error!(
-                                "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
-                                name
+                            message_with_details(
+                                ActivityLevel::Error,
+                                format!(
+                                    "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
+                                    name
+                                ),
+                                Some("To create a cache, go to https://app.cachix.org/.".to_string()),
                             );
-                            error!("To create a cache, go to https://app.cachix.org/.");
                             bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
                         } else {
                             let resp_json: CacheMetadata =
@@ -899,83 +906,79 @@ impl Nix {
 
                 if !missing_caches.is_empty() || !missing_public_keys.is_empty() {
                     if !Path::new("/etc/NIXOS").exists() {
-                        error!("{}", indoc::formatdoc!(
-                        "Failed to set up binary caches:
+                        message_with_details(
+                            ActivityLevel::Error,
+                            format!("Failed to set up binary caches: {}", missing_caches.join(" ")),
+                            Some(indoc::formatdoc!(
+                                "devenv is configured to automatically manage binary caches with `cachix.enable = true`, but cannot do so because you are not a trusted user of the Nix store.
 
-                           {}
+                                You have several options:
 
-                        devenv is configured to automatically manage binary caches with `cachix.enable = true`, but cannot do so because you are not a trusted user of the Nix store.
+                                a) To let devenv set up the caches for you, add yourself to the trusted-users list in /etc/nix/nix.conf:
 
-                        You have several options:
+                                     trusted-users = root {}
 
-                        a) To let devenv set up the caches for you, add yourself to the trusted-users list in /etc/nix/nix.conf:
+                                   Then restart the nix-daemon:
 
-                             trusted-users = root {}
+                                     $ {restart_command}
 
-                           Then restart the nix-daemon:
+                                b) Add the missing binary caches to /etc/nix/nix.conf yourself:
 
-                             $ {restart_command}
+                                     extra-substituters = {}
+                                     extra-trusted-public-keys = {}
 
-                        b) Add the missing binary caches to /etc/nix/nix.conf yourself:
+                                c) Disable automatic cache management in your devenv configuration:
 
-                             extra-substituters = {}
-                             extra-trusted-public-keys = {}
-
-                        c) Disable automatic cache management in your devenv configuration:
-
-                             {{
-                               cachix.enable = false;
-                             }}
-                    "
-                    , missing_caches.join(" ")
-                    , whoami::username()
-                    , missing_caches.join(" ")
-                    , missing_public_keys.join(" ")
-                    ));
+                                     {{
+                                       cachix.enable = false;
+                                     }}"
+                                , whoami::username()
+                                , missing_caches.join(" ")
+                                , missing_public_keys.join(" ")
+                            )),
+                        );
                     } else {
-                        error!("{}", indoc::formatdoc!(
-                        "Failed to set up binary caches:
+                        message_with_details(
+                            ActivityLevel::Error,
+                            format!("Failed to set up binary caches: {}", missing_caches.join(" ")),
+                            Some(indoc::formatdoc!(
+                                "devenv is configured to automatically manage binary caches with `cachix.enable = true`, but cannot do so because you are not a trusted user of the Nix store.
 
-                           {}
+                                You have several options:
 
-                        devenv is configured to automatically manage binary caches with `cachix.enable = true`, but cannot do so because you are not a trusted user of the Nix store.
+                                a) To let devenv set up the caches for you, add yourself to the trusted-users list in /etc/nix/nix.conf by editing configuration.nix.
 
-                        You have several options:
+                                     {{
+                                       nix.settings.trusted-users = [ \"root\" \"{}\" ];
+                                     }}
 
-                        a) To let devenv set up the caches for you, add yourself to the trusted-users list in /etc/nix/nix.conf by editing configuration.nix.
+                                   Rebuild your system:
 
-                             {{
-                               nix.settings.trusted-users = [ \"root\" \"{}\" ];
-                             }}
+                                     $ sudo nixos-rebuild switch
 
-                           Rebuild your system:
+                                b) Add the missing binary caches to /etc/nix/nix.conf yourself by editing configuration.nix:
 
-                             $ sudo nixos-rebuild switch
+                                     {{
+                                       nix.extraOptions = ''
+                                         extra-substituters = {}
+                                         extra-trusted-public-keys = {}
+                                       '';
+                                     }}
 
-                        b) Add the missing binary caches to /etc/nix/nix.conf yourself by editing configuration.nix:
+                                   Rebuild your system:
 
-                             {{
-                               nix.extraOptions = ''
-                                 extra-substituters = {}
-                                 extra-trusted-public-keys = {}
-                               '';
-                             }}
+                                     $ sudo nixos-rebuild switch
 
-                           Rebuild your system:
+                                c) Disable automatic cache management in your devenv configuration:
 
-                             $ sudo nixos-rebuild switch
-
-                        c) Disable automatic cache management in your devenv configuration:
-
-                             {{
-                               cachix.enable = false;
-                             }}
-                    "
-                    , missing_caches.join(" ")
-                    , whoami::username()
-                    , missing_caches.join(" ")
-                    , missing_public_keys.join(" ")
-                    ));
+                                     {{
+                                       cachix.enable = false;
+                                     }}"
+                                , whoami::username()
+                                , missing_caches.join(" ")
+                                , missing_public_keys.join(" ")
+                            )),
+                        );
                     }
 
                     bail!("You're not a trusted user of the Nix store.")
