@@ -853,20 +853,16 @@ impl Devenv {
         Ok(serde_json::to_string(&outputs).expect("parsing of outputs failed"))
     }
 
-    pub async fn tasks_list(&self) -> Result<()> {
+    pub async fn tasks_list(&self) -> Result<String> {
         self.assemble(false).await?;
 
         let tasks = self.load_tasks().await?;
 
         if tasks.is_empty() {
-            println!("No tasks defined.");
-            return Ok(());
+            return Ok("No tasks defined.".to_string());
         }
 
-        // Print the task tree
-        print_tasks_tree(&tasks);
-
-        Ok(())
+        Ok(format_tasks_tree(&tasks))
     }
 
     async fn capture_shell_environment(&self) -> Result<HashMap<String, String>> {
@@ -1688,7 +1684,9 @@ fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     (to_gc, removed_symlinks)
 }
 
-fn print_tasks_tree(tasks: &Vec<tasks::TaskConfig>) {
+fn format_tasks_tree(tasks: &Vec<tasks::TaskConfig>) -> String {
+    let mut output = String::new();
+
     // Build dependency information
     let mut task_deps: HashMap<String, Vec<String>> = HashMap::new();
     let mut task_dependents: HashMap<String, Vec<String>> = HashMap::new();
@@ -1738,11 +1736,12 @@ fn print_tasks_tree(tasks: &Vec<tasks::TaskConfig>) {
 
     roots.sort();
 
-    // Print all tasks as top-level with their full names
+    // Format all tasks as top-level with their full names
     for (i, root) in roots.iter().enumerate() {
         if !visited.contains(*root) {
             let is_last = i == roots.len() - 1;
-            print_task_tree(
+            format_task_tree(
+                &mut output,
                 root,
                 &task_dependents,
                 &task_configs,
@@ -1752,9 +1751,14 @@ fn print_tasks_tree(tasks: &Vec<tasks::TaskConfig>) {
             );
         }
     }
+
+    // Remove trailing newline for consistency with other commands
+    output.truncate(output.trim_end().len());
+    output
 }
 
-fn print_task_tree(
+fn format_task_tree(
+    output: &mut String,
     task_name: &str,
     task_dependents: &HashMap<String, Vec<String>>,
     task_configs: &HashMap<String, &tasks::TaskConfig>,
@@ -1762,14 +1766,16 @@ fn print_task_tree(
     prefix: &str,
     is_last: bool,
 ) {
+    use std::fmt::Write;
+
     if visited.contains(task_name) {
         return;
     }
     visited.insert(task_name.to_string());
 
-    // Print the current task with tree formatting
+    // Format the current task with tree formatting
     let connector = if is_last { "└── " } else { "├── " };
-    print!("{prefix}{connector}{task_name}");
+    let _ = write!(output, "{prefix}{connector}{task_name}");
 
     // Add additional info if available
     if let Some(task) = task_configs.get(task_name) {
@@ -1785,11 +1791,11 @@ fn print_task_tree(
         }
 
         if !extra_info.is_empty() {
-            print!(" ({})", extra_info.join(", "));
+            let _ = write!(output, " ({})", extra_info.join(", "));
         }
     }
 
-    println!();
+    let _ = writeln!(output);
 
     // Get children (tasks that depend on this task)
     let children = task_dependents.get(task_name).cloned().unwrap_or_default();
@@ -1802,10 +1808,11 @@ fn print_task_tree(
     // Determine the new prefix for children
     let new_prefix = format!("{}{}", prefix, if is_last { "    " } else { "│   " });
 
-    // Print children
+    // Format children
     for (i, child) in children.iter().enumerate() {
         let is_last_child = i == children.len() - 1;
-        print_task_tree(
+        format_task_tree(
+            output,
             child,
             task_dependents,
             task_configs,
