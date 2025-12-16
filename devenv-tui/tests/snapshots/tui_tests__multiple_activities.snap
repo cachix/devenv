@@ -2,9 +2,9 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Building Building package-a buildPhase                              0ms
-⠋ Downloading Downloading package-b                                  0.0s
+⠋ Building Building package-a buildPhase
+⠋ Downloading Downloading package-b
     ─────────────────────────────────────────────────2.5kB / 5kB at 25kB/s
-⠋ Running setup                                                       0ms
+⠋ Running setup
 
  0 of 1 builds  │  0 of 1 downloads  │  0 of 1 tasks    ↑↓ nav • e expand

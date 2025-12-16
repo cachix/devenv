@@ -2,11 +2,11 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Evaluating devenv.nix                                               0ms
-  ⎿ Building wrapper-scripts buildPhase                               0ms
-    ⎿ Downloading bash-5.2 from cache.nixos.org                      0.0s
+⠋ Evaluating devenv.nix
+  ⎿ Building wrapper-scripts buildPhase
+    ⎿ Downloading bash-5.2 from cache.nixos.org
         ──────────────────────────────────────────────500kB / 1MB at 5MB/s
-      ⎿ Downloading readline-8.2                                      0ms
-        ⎿ Downloading ncurses-6.4                                     0ms
+      ⎿ Downloading readline-8.2
+        ⎿ Downloading ncurses-6.4
 
  0 of 1 builds  │  0 of 3 downloads                     ↑↓ nav • e expand

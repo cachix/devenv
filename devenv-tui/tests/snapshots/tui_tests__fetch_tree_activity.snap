@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Fetching Fetching github:NixOS/nixpkgs 0ms
+⠋ Fetching Fetching github:NixOS/nixpkgs
 
 
 
-                           ↑↓ nav • e expand
+                        ↑↓ nav • e expand

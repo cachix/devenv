@@ -2,9 +2,9 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Building hello-2.12 buildPhase        0ms
-⠋ Building openssl-3.0.0 configurePhase 0ms
-⠋ Building python-3.11.5 installPhase   0ms
-⠋ Building gcc-12.3.0 unpackPhase       0ms
+⠋ Building hello-2.12 buildPhase
+⠋ Building openssl-3.0.0 configurePhase
+⠋ Building python-3.11.5 installPhase
+⠋ Building gcc-12.3.0 unpackPhase
 
- 0 of 4 builds            ↑↓ nav • e expand
+ 0 of 4 builds         ↑↓ nav • e expand
