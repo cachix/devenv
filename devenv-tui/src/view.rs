@@ -1,5 +1,5 @@
 use crate::{
-    components::{LOG_VIEWPORT_COLLAPSED, *},
+    components::{format_elapsed_time, LOG_VIEWPORT_COLLAPSED, *},
     model::{
         Activity, ActivityModel, ActivitySummary, ActivityVariant, NixActivityState,
         TaskDisplayStatus, TerminalSize, UiState,
@@ -264,15 +264,11 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let indent = "  ".repeat(*depth);
 
     // Calculate elapsed time - use stored duration for completed activities
-    let elapsed = match &activity.state {
-        NixActivityState::Completed { duration, .. } => *duration,
-        NixActivityState::Active => activity.start_time.elapsed(),
+    let (elapsed, is_completed) = match &activity.state {
+        NixActivityState::Completed { duration, .. } => (*duration, true),
+        NixActivityState::Active => (activity.start_time.elapsed(), false),
     };
-    let elapsed_str = if elapsed.as_secs_f64() < 1.0 {
-        format!("{}ms", elapsed.as_millis())
-    } else {
-        format!("{:.1}s", elapsed.as_secs_f64())
-    };
+    let elapsed_str = format_elapsed_time(elapsed, is_completed);
 
     // Build and return the activity element
     match &activity.variant {

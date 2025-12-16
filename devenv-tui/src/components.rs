@@ -1,6 +1,6 @@
 //! Reusable UI components for the TUI
 
-use crate::model::{Activity, ActivityVariant};
+use crate::model::{Activity, ActivityVariant, NixActivityState};
 use human_repr::{HumanCount, HumanThroughput};
 use iocraft::prelude::*;
 use std::collections::VecDeque;
@@ -55,6 +55,30 @@ pub const COLOR_INTERACTIVE: Color = Color::Rgb {
     b: 0,
 }; // #FFD700 - Gold for selected items and UI hints
 pub const COLOR_HIERARCHY: Color = Color::AnsiValue(242); // Medium grey for hierarchy indicators
+
+/// Format elapsed time for display: ms -> s -> m s -> h m
+/// When `high_resolution` is true, shows ms for sub-second durations.
+/// When `high_resolution` is false, shows minimum x.xs resolution.
+pub fn format_elapsed_time(elapsed: Duration, high_resolution: bool) -> String {
+    let total_secs = elapsed.as_secs();
+    if total_secs < 1 {
+        if high_resolution {
+            format!("{}ms", elapsed.as_millis())
+        } else {
+            format!("{:.1}s", elapsed.as_secs_f64())
+        }
+    } else if total_secs < 60 {
+        format!("{:.1}s", elapsed.as_secs_f64())
+    } else if total_secs < 3600 {
+        let mins = total_secs / 60;
+        let secs = total_secs % 60;
+        format!("{}m {}s", mins, secs)
+    } else {
+        let hours = total_secs / 3600;
+        let mins = (total_secs % 3600) / 60;
+        format!("{}h {}m", hours, mins)
+    }
+}
 
 /// Component for building consistent hierarchy prefix for activities
 pub struct HierarchyPrefixComponent {
@@ -406,15 +430,13 @@ impl<'a> DownloadActivityComponent<'a> {
     }
 
     pub fn render(&self, terminal_width: u16) -> AnyElement<'static> {
-        use crate::model::NixActivityState;
-
         let indent = "  ".repeat(self.depth);
         // Use stored duration for completed activities
-        let elapsed = match &self.activity.state {
-            NixActivityState::Completed { duration, .. } => *duration,
-            NixActivityState::Active => self.activity.start_time.elapsed(),
+        let (elapsed, is_completed) = match &self.activity.state {
+            NixActivityState::Completed { duration, .. } => (*duration, true),
+            NixActivityState::Active => (self.activity.start_time.elapsed(), false),
         };
-        let elapsed_str = format!("{:.1}s", elapsed.as_secs_f64());
+        let elapsed_str = format_elapsed_time(elapsed, is_completed);
 
         let mut elements = vec![];
 
@@ -489,7 +511,7 @@ impl<'a> DownloadActivityComponent<'a> {
                             #(line1_children)
                         }
                         View {
-                            Text(content: elapsed_str, color: elapsed_color)
+                            Text(content: elapsed_str.clone(), color: elapsed_color)
                         }
                     }
                 }
@@ -503,7 +525,7 @@ impl<'a> DownloadActivityComponent<'a> {
                             #(line1_children)
                         }
                         View {
-                            Text(content: elapsed_str, color: elapsed_color)
+                            Text(content: elapsed_str.clone(), color: elapsed_color)
                         }
                     }
                 }
