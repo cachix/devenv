@@ -668,11 +668,10 @@ impl ActivityModel {
         self.activities
             .iter()
             .filter(|(_, activity)| {
-                matches!(activity.state, NixActivityState::Active)
-                    && matches!(
-                        activity.variant,
-                        ActivityVariant::Build(_) | ActivityVariant::Evaluating(_)
-                    )
+                matches!(
+                    activity.variant,
+                    ActivityVariant::Build(_) | ActivityVariant::Evaluating(_)
+                )
             })
             .map(|(id, _)| *id)
             .collect()
