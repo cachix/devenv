@@ -5,6 +5,11 @@ let
   inherit (lib) types optionalAttrs mkOption attrNames filter length mapAttrsToList concatStringsSep head assertMsg;
   inherit (types) attrsOf submodule;
 
+  # Cleanup of dangling symlinks, approach from home-manager
+  filesStateDir = "${config.devenv.state}/files";
+  filesManifestFile = "${filesStateDir}/manifest.json";
+  currentFilesList = attrNames config.files;
+
   formats = {
     ini = pkgs.formats.ini { };
     json = pkgs.formats.json { };
@@ -94,6 +99,41 @@ let
       ln -s ${fileOption.file} "${filename}"
     fi
   '';
+
+  currentFilesJson = builtins.toJSON currentFilesList;
+
+  cleanupScript = ''
+    if [ -f '${filesManifestFile}' ]; then
+      prevFiles=$(${lib.getExe pkgs.jq} -r '.[]' '${filesManifestFile}' 2>/dev/null || echo "")
+      currentFiles='${concatStringsSep "\n" currentFilesList}'
+      for prevFile in $prevFiles; do
+        if ! echo "$currentFiles" | grep -qxF "$prevFile"; then
+          if [ -L "$prevFile" ]; then
+            target=$(readlink "$prevFile" 2>/dev/null || echo "")
+            if $(nix-store --quiet --verify-path "$target" > /dev/null 2>&1); then
+              echo "Removing orphaned file $prevFile"
+              rm "$prevFile"
+              parentDir=$(dirname "$prevFile")
+              while [ "$parentDir" != "." ] && [ "$parentDir" != "/" ] && [ -d "$parentDir" ]; do
+                if [ -z "$(ls -A "$parentDir" 2>/dev/null)" ]; then
+                  echo "Removing empty directory $parentDir"
+                  rmdir "$parentDir" 2>/dev/null || break
+                  parentDir=$(dirname "$parentDir")
+                else
+                  break
+                fi
+              done
+            fi
+          fi
+        fi
+      done
+    fi
+  '';
+
+  saveManifestScript = ''
+    mkdir -p '${filesStateDir}'
+    echo '${currentFilesJson}' > '${filesManifestFile}'
+  '';
 in
 {
   options.files = mkOption {
@@ -103,9 +143,26 @@ in
   };
 
   config = {
+    tasks."devenv:files:cleanup" = {
+      description = "Clean up orphaned file symlinks";
+      exec = cleanupScript;
+      before = [ "devenv:files" "devenv:enterShell" ];
+    };
+
     tasks."devenv:files" = optionalAttrs (config.files != { }) {
       description = "Create files";
-      exec = concatStringsSep "\n\n" (mapAttrsToList createFileScript config.files);
+      exec = ''
+        ${concatStringsSep "\n\n" (mapAttrsToList createFileScript config.files)}
+        ${saveManifestScript}
+      '';
+      before = [ "devenv:enterShell" ];
+    };
+
+    # Also save empty manifest when all files removed (to prevent re-cleanup on next run)
+    tasks."devenv:files:manifest" = optionalAttrs (config.files == { }) {
+      description = "Update files manifest";
+      exec = saveManifestScript;
+      after = [ "devenv:files:cleanup" ];
       before = [ "devenv:enterShell" ];
     };
 
