@@ -84,11 +84,25 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         );
     }
 
+    // Determine if navigation is possible
+    let selectable_ids = model.get_selectable_activity_ids();
+    let (can_go_up, can_go_down) = if let Some(current_id) = selected_id {
+        if let Some(pos) = selectable_ids.iter().position(|&id| id == current_id) {
+            (pos > 0, pos + 1 < selectable_ids.len())
+        } else {
+            (false, !selectable_ids.is_empty())
+        }
+    } else {
+        (false, !selectable_ids.is_empty())
+    };
+
     let summary_view = element! {
         ContextProvider(value: Context::owned(SummaryViewContext {
             summary: summary.clone(),
             has_selection,
             showing_logs: selected_logs.is_some(),
+            can_go_up,
+            can_go_down,
         })) {
             SummaryView
         }
@@ -693,6 +707,8 @@ struct SummaryViewContext {
     summary: ActivitySummary,
     has_selection: bool,
     showing_logs: bool,
+    can_go_up: bool,
+    can_go_down: bool,
 }
 
 /// Summary view component that adapts to terminal width
@@ -704,9 +720,11 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         summary,
         has_selection,
         showing_logs,
+        can_go_up,
+        can_go_down,
     } = &*ctx;
 
-    build_summary_view_impl(summary, *has_selection, *showing_logs, terminal_width)
+    build_summary_view_impl(summary, *has_selection, *showing_logs, *can_go_up, *can_go_down, terminal_width)
 }
 
 /// Build the summary view with colored counts
@@ -714,6 +732,8 @@ fn build_summary_view_impl(
     summary: &ActivitySummary,
     has_selection: bool,
     showing_logs: bool,
+    can_go_up: bool,
+    can_go_down: bool,
     terminal_width: u16,
 ) -> AnyElement<'static> {
     let mut children = vec![];
@@ -869,9 +889,13 @@ fn build_summary_view_impl(
     let mut help_children = vec![];
     let use_short_text = terminal_width < 100; // Use shorter text for narrow terminals
 
+    let up_arrow_color = if can_go_up { COLOR_INTERACTIVE } else { COLOR_HIERARCHY };
+    let down_arrow_color = if can_go_down { COLOR_INTERACTIVE } else { COLOR_HIERARCHY };
+
     if has_selection {
         // Show full navigation when something is selected
-        help_children.push(element!(Text(content: "↑↓", color: COLOR_INTERACTIVE)).into_any());
+        help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
+        help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
         if !use_symbols {
             if use_short_text {
                 help_children.push(element!(Text(content: " nav • ")).into_any());
@@ -904,7 +928,8 @@ fn build_summary_view_impl(
         }
     } else {
         // Always show navigate hint (even when no selection)
-        help_children.push(element!(Text(content: "↑↓", color: COLOR_INTERACTIVE)).into_any());
+        help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
+        help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
         if !use_symbols {
             if use_short_text {
                 help_children.push(element!(Text(content: " nav • ")).into_any());
