@@ -58,14 +58,16 @@ pub const COLOR_HIERARCHY: Color = Color::AnsiValue(242); // Medium grey for hie
 
 /// Format elapsed time for display: ms -> s -> m s -> h m
 /// When `high_resolution` is true, shows ms for sub-second durations.
-/// When `high_resolution` is false, shows minimum x.xs resolution.
+/// When `high_resolution` is false, hides if < 300ms, otherwise shows x.xs resolution.
 pub fn format_elapsed_time(elapsed: Duration, high_resolution: bool) -> String {
     let total_secs = elapsed.as_secs();
     if total_secs < 1 {
         if high_resolution {
             format!("{}ms", elapsed.as_millis())
-        } else {
+        } else if elapsed.as_millis() >= 300 {
             format!("{:.1}s", elapsed.as_secs_f64())
+        } else {
+            String::new()
         }
     } else if total_secs < 60 {
         format!("{:.1}s", elapsed.as_secs_f64())
