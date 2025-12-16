@@ -183,8 +183,9 @@ impl UiState {
             }
             Some(current_id) => {
                 if let Some(current_pos) = selectable.iter().position(|&id| id == current_id) {
-                    let next_pos = (current_pos + 1) % selectable.len();
-                    self.selected_activity = Some(selectable[next_pos]);
+                    if current_pos + 1 < selectable.len() {
+                        self.selected_activity = Some(selectable[current_pos + 1]);
+                    }
                 } else {
                     self.selected_activity = selectable.first().copied();
                 }
@@ -199,18 +200,15 @@ impl UiState {
         }
         match self.selected_activity {
             None => {
-                self.selected_activity = selectable.last().copied();
+                self.selected_activity = selectable.first().copied();
             }
             Some(current_id) => {
                 if let Some(current_pos) = selectable.iter().position(|&id| id == current_id) {
-                    let prev_pos = if current_pos == 0 {
-                        selectable.len() - 1
-                    } else {
-                        current_pos - 1
-                    };
-                    self.selected_activity = Some(selectable[prev_pos]);
+                    if current_pos > 0 {
+                        self.selected_activity = Some(selectable[current_pos - 1]);
+                    }
                 } else {
-                    self.selected_activity = selectable.last().copied();
+                    self.selected_activity = selectable.first().copied();
                 }
             }
         }
@@ -665,15 +663,15 @@ impl ActivityModel {
     }
 
     pub fn get_selectable_activity_ids(&self) -> Vec<u64> {
-        self.activities
-            .iter()
-            .filter(|(_, activity)| {
+        self.get_display_activities()
+            .into_iter()
+            .filter(|da| {
                 matches!(
-                    activity.variant,
+                    da.activity.variant,
                     ActivityVariant::Build(_) | ActivityVariant::Evaluating(_)
                 )
             })
-            .map(|(id, _)| *id)
+            .map(|da| da.activity.id)
             .collect()
     }
 
