@@ -225,7 +225,8 @@ boolean
 
 
 The version of the Android Emulator to install.
-Available versions: 32.1.15, 33.1.20, 34.1.19, 34.1.9, 34.2.11, 34.2.16, 35.1.19, 35.1.2, 35.1.3, 35.1.4, 35.2.5, 35.3.11, 35.3.12, 35.4.8, 35.4.9, 35.5.10, 35.5.2, 35.5.3, 35.5.8, 35.6.2, 35.6.9, 36.1.2, 36.1.8, 36.1.9, 36.2.10, 36.2.4, 36.3.3.
+Available versions depend on the nixpkgs version.
+To see available versions, try building with an invalid version; the error message will list all available options.
 
 
 
@@ -235,7 +236,7 @@ string
 
 
 *Default:*
-` "36.3.3" `
+Latest version in nixpkgs
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -443,7 +444,8 @@ list of string
 
 
 The version of the Android platform tools to install.
-Available versions: 34.0.5, 35.0.1, 35.0.2, 36.0.0, 36.0.1.
+Available versions depend on the nixpkgs version.
+To see available versions, try building with an invalid version; the error message will list all available options.
 
 
 
@@ -453,7 +455,7 @@ string
 
 
 *Default:*
-` "36.0.1" `
+Latest version in nixpkgs
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
