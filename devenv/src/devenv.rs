@@ -905,9 +905,11 @@ impl Devenv {
             })?;
 
         // Run script and capture its environment exports
+        // Set DEVENV_SKIP_TASKS to prevent enterShell tasks from running during env capture
         let exit_status = self
             .prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
             .await?
+            .env("DEVENV_SKIP_TASKS", "1")
             .stderr(Stdio::inherit())
             .stdout(Stdio::inherit())
             .spawn()
