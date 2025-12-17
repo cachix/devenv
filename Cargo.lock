@@ -1364,6 +1364,7 @@ dependencies = [
  "tracing",
  "tracing-indicatif",
  "tracing-subscriber",
+ "valuable",
  "which",
  "whoami",
  "xdg",

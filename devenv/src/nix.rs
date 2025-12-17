@@ -22,7 +22,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::OnceCell;
@@ -192,10 +191,7 @@ impl Nix {
         // Delete any old generations of this Nix profile.
         // This is Nix-specific: nix print-dev-env --profile creates a Nix profile
         // with generation tracking, so we clean up old generations here.
-        let options = Options {
-            logging: false,
-            ..self.options
-        };
+        let options = Options { ..self.options };
         let args: Vec<&str> = vec!["-p", gc_root_str, "--delete-generations", "old"];
         self.run_nix("nix-env", &args, &options).await?;
 
@@ -397,15 +393,8 @@ impl Nix {
         }
 
         // For non-Nix commands, run directly without NixCommand wrapper
+        // Always capture output - never write directly to terminal
         let result = if !supports_eval_caching(&cmd) {
-            if options.logging {
-                cmd.stdin(process::Stdio::inherit())
-                    .stderr(process::Stdio::inherit());
-                if options.logging_stdout {
-                    cmd.stdout(std::process::Stdio::inherit());
-                }
-            }
-
             let pretty_cmd = display_command(&cmd);
             let activity = Activity::command(&pretty_cmd).command(&pretty_cmd).start();
             let output = activity.in_scope(|| {
@@ -427,7 +416,6 @@ impl Nix {
             let parent_activity_id = current_activity_id();
             let nix_bridge = NixLogBridge::new(parent_activity_id);
             let log_callback = nix_bridge.get_log_callback();
-            let logging = options.logging;
             let quiet = self.global_options.quiet;
             let verbose = self.global_options.verbose;
 
@@ -437,7 +425,7 @@ impl Nix {
                 move |log: &devenv_eval_cache::internal_log::InternalLog| {
                     log_callback(log.clone());
 
-                    if logging && !quiet {
+                    if !quiet {
                         let target_log_level = if verbose {
                             Verbosity::Talkative
                         } else {
@@ -513,7 +501,7 @@ impl Nix {
                 None => "without an exit code".to_string(),
             };
 
-            if !options.logging && options.bail_on_error {
+            if options.bail_on_error {
                 error!(
                     "Command produced the following output:\n{}\n{}",
                     String::from_utf8_lossy(&result.stdout),
@@ -714,20 +702,14 @@ impl Nix {
     }
 
     async fn get_nix_config(&self) -> Result<NixConf> {
-        let options = Options {
-            logging: false,
-            ..self.options
-        };
+        let options = Options { ..self.options };
         let raw_conf = self.run_nix("nix", &["config", "show"], &options).await?;
         let nix_conf = NixConf::parse_stdout(&raw_conf.stdout)?;
         Ok(nix_conf)
     }
 
     async fn is_trusted_user_impl(&self) -> Result<bool> {
-        let options = Options {
-            logging: false,
-            ..self.options
-        };
+        let options = Options { ..self.options };
         let store_output = self
             .run_nix("nix", &["store", "ping", "--json"], &options)
             .await?;
@@ -740,10 +722,6 @@ impl Nix {
     async fn get_cachix_caches(&self, trusted_keys_path: &Path) -> Result<CachixCacheInfo> {
         self.cachix_caches
             .get_or_try_init(|| async {
-        let _no_logging = Options {
-            logging: false,
-            ..self.options
-        };
 
         // Run Nix evaluation and file I/O concurrently
         let cachix_eval_future = self.eval(&["devenv.config.cachix"]);

@@ -474,15 +474,8 @@ impl Devenv {
     pub async fn run_in_shell(&self, cmd: String, args: &[String]) -> Result<Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
         let activity = Activity::operation("Running in shell").start();
-        // Note that tokio's `output()` always configures stdout/stderr as pipes.
-        // Use `spawn` + `wait_with_output` instead.
-        let proc = shell_cmd
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .into_diagnostic()?;
-        async move { proc.wait_with_output().await.into_diagnostic() }
+        // Capture all output - never write directly to terminal
+        async move { shell_cmd.output().await.into_diagnostic() }
             .in_activity(&activity)
             .await
     }
@@ -577,16 +570,15 @@ impl Devenv {
 
             debug!("Running {copy_script_string} {}", command_args.join(" "));
 
-            let status = process::Command::new(copy_script)
+            let output = process::Command::new(copy_script)
                 .args(command_args)
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .status()
+                .output()
                 .await
                 .expect("Failed to run copy script");
 
-            if !status.success() {
-                bail!("Failed to copy container")
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                bail!("Failed to copy container: {}", stderr)
             } else {
                 Ok(())
             }
@@ -694,7 +686,6 @@ impl Devenv {
 
     async fn search_options(&self, name: &str) -> Result<Vec<DevenvOptionResult>> {
         let build_options = Options {
-            logging: false,
             cache_output: true,
             ..Default::default()
         };
@@ -730,7 +721,6 @@ impl Devenv {
 
     async fn search_packages(&self, name: &str) -> Result<Vec<DevenvPackageResult>> {
         let search_options = Options {
-            logging: false,
             cache_output: true,
             ..Default::default()
         };
@@ -827,10 +817,11 @@ impl Devenv {
             run_mode,
             sudo_context: None,
         };
-        debug!(
-            "Tasks config: {}",
-            serde_json::to_string_pretty(&config).unwrap()
-        );
+
+        if let Ok(config_value) = devenv_activity::SerdeValue::from_serialize(&config) {
+            use valuable::Valuable;
+            debug!(event = config_value.as_value(), "Loaded task config");
+        }
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
             .build()
@@ -906,22 +897,18 @@ impl Devenv {
 
         // Run script and capture its environment exports
         // Set DEVENV_SKIP_TASKS to prevent enterShell tasks from running during env capture
-        let exit_status = self
+        let output = self
             .prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
             .await?
             .env("DEVENV_SKIP_TASKS", "1")
-            .stderr(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .spawn()
-            .into_diagnostic()
-            .wrap_err("Failed to execute environment capture script")?
-            .wait()
+            .output()
             .await
             .into_diagnostic()
-            .wrap_err("Failed to wait for environment capture script to complete")?;
+            .wrap_err("Failed to execute environment capture script")?;
 
-        if !exit_status.success() {
-            miette::bail!("Shell environment capture failed");
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            miette::bail!("Shell environment capture failed: {}", stderr);
         }
 
         // Parse the environment variables
@@ -1181,8 +1168,9 @@ impl Devenv {
                 }
 
                 let process = if !options.log_to_file {
-                    cmd.stdout(Stdio::inherit())
-                        .stderr(Stdio::inherit())
+                    // Detached daemon: redirect to null to avoid corrupting TUI
+                    cmd.stdout(Stdio::null())
+                        .stderr(Stdio::null())
                         .spawn()
                         .expect("Failed to spawn process")
                 } else {

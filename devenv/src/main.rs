@@ -4,9 +4,8 @@ use devenv::{
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
     tracing as devenv_tracing,
 };
-use devenv_activity::{ActivityLevel, message};
 use devenv_core::config::{self, Config};
-use miette::{IntoDiagnostic, Result, WrapErr, bail};
+use miette::{IntoDiagnostic, Result, WrapErr};
 use std::{process::Command, sync::Arc};
 use tempfile::TempDir;
 use tokio_shutdown::Shutdown;

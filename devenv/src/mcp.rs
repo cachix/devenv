@@ -141,7 +141,6 @@ impl DevenvMcpServer {
 
         // Build the optionsJSON attribute like in devenv.rs search function
         let build_options = Options {
-            logging: false,
             cache_output: true,
             ..Default::default()
         };

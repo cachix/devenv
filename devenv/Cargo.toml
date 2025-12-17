@@ -67,6 +67,7 @@ blake3.workspace = true
 chrono.workspace = true
 secretspec.workspace = true
 secrecy.workspace = true
+valuable.workspace = true
 
 # Optional snix dependencies
 snix-eval = { workspace = true, optional = true }
