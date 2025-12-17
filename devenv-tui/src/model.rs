@@ -514,16 +514,24 @@ impl ActivityModel {
 
     fn handle_activity_complete(&mut self, id: u64, outcome: ActivityOutcome) {
         if let Some(activity) = self.activities.get_mut(&id) {
-            let success = matches!(outcome, ActivityOutcome::Success);
+            let success = matches!(
+                outcome,
+                ActivityOutcome::Success | ActivityOutcome::Cached | ActivityOutcome::Skipped
+            );
             let duration = activity.start_time.elapsed();
             activity.state = NixActivityState::Completed { success, duration };
             activity.completed_at = Some(Instant::now());
 
             if let ActivityVariant::Task(ref mut task) = activity.variant {
-                task.status = if success {
-                    TaskDisplayStatus::Success
-                } else {
-                    TaskDisplayStatus::Failed
+                task.status = match outcome {
+                    ActivityOutcome::Success => TaskDisplayStatus::Success,
+                    ActivityOutcome::Cached | ActivityOutcome::Skipped => {
+                        TaskDisplayStatus::Skipped
+                    }
+                    ActivityOutcome::Failed | ActivityOutcome::DependencyFailed => {
+                        TaskDisplayStatus::Failed
+                    }
+                    ActivityOutcome::Cancelled => TaskDisplayStatus::Cancelled,
                 };
                 task.duration = Some(duration);
             }

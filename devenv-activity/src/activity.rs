@@ -141,6 +141,27 @@ impl Activity {
         }
     }
 
+    /// Mark as cached (task output was already cached)
+    pub fn cached(&self) {
+        if let Ok(mut outcome) = self.outcome.lock() {
+            *outcome = ActivityOutcome::Cached;
+        }
+    }
+
+    /// Mark as skipped (task had no command to run)
+    pub fn skipped(&self) {
+        if let Ok(mut outcome) = self.outcome.lock() {
+            *outcome = ActivityOutcome::Skipped;
+        }
+    }
+
+    /// Mark as dependency failed
+    pub fn dependency_failed(&self) {
+        if let Ok(mut outcome) = self.outcome.lock() {
+            *outcome = ActivityOutcome::DependencyFailed;
+        }
+    }
+
     /// Update progress (for Build and Task activities)
     pub fn progress(&self, done: u64, expected: u64) {
         let _guard = self.span.enter();

@@ -1,9 +1,7 @@
 use crate::SudoContext;
 use crate::config::TaskConfig;
 use crate::task_cache::{TaskCache, expand_glob_patterns};
-use crate::types::{
-    Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, TaskType, VerbosityLevel,
-};
+use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
 use devenv_activity::{Activity, ActivityLevel};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use nix::sys::signal::{self as nix_signal, Signal};
@@ -244,6 +242,7 @@ impl TaskState {
                     if output.status.success() {
                         let output = Output(cached_output);
                         tracing::debug!("Task {} skipped with output: {:?}", task_name, output);
+                        task_activity.cached();
                         return Ok(TaskCompleted::Skipped(Skipped::Cached(output)));
                     }
                 }
@@ -306,11 +305,13 @@ impl TaskState {
                     self.task.name,
                     task_output
                 );
+                task_activity.cached();
                 return Ok(TaskCompleted::Skipped(Skipped::Cached(Output(task_output))));
             }
         }
 
         let Some(cmd) = &self.task.command else {
+            task_activity.skipped();
             return Ok(TaskCompleted::Skipped(Skipped::NoCommand));
         };
 
@@ -379,8 +380,6 @@ impl TaskState {
         let mut stderr_reader = BufReader::new(stderr).lines();
         let mut stdout_reader = BufReader::new(stdout).lines();
 
-        let is_process = self.task.r#type == TaskType::Process;
-
         let mut stdout_lines = Vec::new();
         let mut stderr_lines = Vec::new();
 
@@ -399,14 +398,7 @@ impl TaskState {
                 result = stdout_reader.next_line(), if !stdout_closed => {
                     match result {
                         Ok(Some(line)) => {
-                            // Log to the task activity
                             task_activity.log(&line);
-
-                            if self.verbosity == VerbosityLevel::Verbose || self.task.show_output {
-                                println!("[{}] {}", self.task.name, line);
-                            } else if is_process {
-                                println!("{}", line);
-                            }
                             stdout_lines.push((std::time::Instant::now(), line));
                         },
                         Ok(None) => {
@@ -422,14 +414,7 @@ impl TaskState {
                 result = stderr_reader.next_line(), if !stderr_closed => {
                     match result {
                         Ok(Some(line)) => {
-                            // Log error to the task activity
                             task_activity.error(&line);
-
-                            if self.verbosity == VerbosityLevel::Verbose || self.task.show_output {
-                                eprintln!("[{}] {}", self.task.name, line);
-                            } else if is_process {
-                                eprintln!("{}", line);
-                            }
                             stderr_lines.push((std::time::Instant::now(), line));
                         },
                         Ok(None) => {

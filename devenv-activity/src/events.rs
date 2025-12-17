@@ -241,6 +241,12 @@ pub enum ActivityOutcome {
     Success,
     Failed,
     Cancelled,
+    /// Task output was already cached
+    Cached,
+    /// Task had no command to run
+    Skipped,
+    /// Task's dependency failed
+    DependencyFailed,
 }
 
 /// Activity level (maps to tracing::Level)

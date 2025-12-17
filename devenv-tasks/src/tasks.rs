@@ -475,7 +475,7 @@ impl Tasks {
                 if cancelled {
                     skip_activity.cancel();
                 } else {
-                    skip_activity.fail();
+                    skip_activity.dependency_failed();
                 }
 
                 {

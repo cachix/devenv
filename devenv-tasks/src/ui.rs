@@ -1,283 +1,280 @@
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
-use crate::types::{Skipped, TaskCompleted, TaskStatus, TasksStatus};
+use devenv_activity::{ActivityEvent, ActivityOutcome, Task as TaskEvent};
+use tokio::sync::mpsc;
+
+use crate::types::{TaskCompleted, TaskStatus, TasksStatus};
 use crate::{Error, Outputs, Tasks, VerbosityLevel};
 
-/// UI manager for tasks - simple status logging mode
+/// UI manager for tasks - consumes activity events and displays status
 pub struct TasksUi {
     tasks: Arc<Tasks>,
+    activity_rx: mpsc::Receiver<ActivityEvent>,
     verbosity: VerbosityLevel,
+    /// Track task states by activity ID
+    task_states: HashMap<u64, TaskUiState>,
+}
+
+/// Internal state for tracking a task in the UI
+struct TaskUiState {
+    name: String,
+    status: TaskDisplayStatus,
+    start_time: Instant,
+}
+
+/// Display status for a task
+#[derive(Clone, PartialEq)]
+enum TaskDisplayStatus {
+    Running,
+    Succeeded,
+    Failed,
+    Cancelled,
+    Cached,
+    Skipped,
+    DependencyFailed,
 }
 
 impl TasksUi {
-    pub fn new(tasks: Tasks, verbosity: VerbosityLevel) -> TasksUi {
-        TasksUi {
-            tasks: Arc::new(tasks),
+    pub fn new(
+        tasks: Arc<Tasks>,
+        activity_rx: mpsc::Receiver<ActivityEvent>,
+        verbosity: VerbosityLevel,
+    ) -> Self {
+        Self {
+            tasks,
+            activity_rx,
             verbosity,
+            task_states: HashMap::new(),
         }
     }
 
-    /// Count task statuses - simplified for non-TTY mode
-    async fn get_tasks_status(&self) -> TasksStatus {
-        let mut tasks_status = TasksStatus::new();
+    /// Run the UI, processing activity events until Done signal
+    pub async fn run(
+        mut self,
+        run_handle: tokio::task::JoinHandle<Outputs>,
+    ) -> Result<(TasksStatus, Outputs), Error> {
+        // Print header (unless quiet mode)
+        if self.verbosity != VerbosityLevel::Quiet {
+            let names = console::style(self.tasks.root_names.join(", ")).bold();
+            self.console_write_line(&format!("{:17} {}\n", "Running tasks", names))?;
+        }
 
-        for index in &self.tasks.tasks_order {
-            let task_state = self.tasks.graph[*index].read().await;
-            match task_state.status {
-                TaskStatus::Pending => tasks_status.pending += 1,
-                TaskStatus::ProcessReady => tasks_status.running += 1,
-                TaskStatus::Running(_) => tasks_status.running += 1,
-                TaskStatus::Completed(TaskCompleted::Skipped(_)) => tasks_status.skipped += 1,
-                TaskStatus::Completed(TaskCompleted::Success(..)) => tasks_status.succeeded += 1,
-                TaskStatus::Completed(TaskCompleted::Failed(..)) => tasks_status.failed += 1,
-                TaskStatus::Completed(TaskCompleted::DependencyFailed) => {
-                    tasks_status.dependency_failed += 1
-                }
-                TaskStatus::Completed(TaskCompleted::Cancelled(_)) => tasks_status.cancelled += 1,
+        // Process events until Done signal
+        while let Some(event) = self.activity_rx.recv().await {
+            match event {
+                ActivityEvent::Task(task_event) => self.handle_task_event(task_event)?,
+                ActivityEvent::Done => break,
+                // Ignore other activity types (Build, Fetch, etc.)
+                _ => {}
             }
         }
 
-        tasks_status
+        // Wait for task runner to complete and get outputs
+        let outputs = run_handle.await.map_err(|e| {
+            Error::IoError(std::io::Error::other(format!("Task runner panicked: {e}")))
+        })?;
+
+        // Print summary
+        self.print_summary().await?;
+
+        // Get final status
+        let status = self.tasks.get_completion_status().await;
+        Ok((status, outputs))
     }
 
-    /// Run all tasks
-    pub async fn run(&mut self) -> Result<(TasksStatus, Outputs), Error> {
-        let tasks_clone = Arc::clone(&self.tasks);
-        let handle = tokio::spawn(async move { tasks_clone.run().await });
+    fn handle_task_event(&mut self, event: TaskEvent) -> Result<(), Error> {
+        match event {
+            TaskEvent::Start { id, name, .. } => {
+                self.task_states.insert(
+                    id,
+                    TaskUiState {
+                        name: name.clone(),
+                        status: TaskDisplayStatus::Running,
+                        start_time: Instant::now(),
+                    },
+                );
 
-        // If in quiet mode, just wait for tasks to complete
-        if self.verbosity == VerbosityLevel::Quiet {
-            loop {
-                let tasks_status = self.get_tasks_status().await;
-                if tasks_status.pending == 0 && tasks_status.running == 0 {
-                    break;
+                if self.verbosity != VerbosityLevel::Quiet {
+                    self.console_write_line(&format!(
+                        "{:17} {}",
+                        console::style("Running").blue().bold(),
+                        console::style(&name).bold()
+                    ))?;
                 }
-                self.tasks.notify_ui.notified().await;
             }
+            TaskEvent::Complete { id, outcome, .. } => {
+                // Extract data from state first, then print (to avoid borrow checker issues)
+                let print_info = if let Some(state) = self.task_states.get_mut(&id) {
+                    let duration = state.start_time.elapsed();
+                    let name = state.name.clone();
 
-            // Print errors even in quiet mode
-            let errors = self.format_task_errors().await;
-            if !errors.is_empty() {
-                let styled_errors = console::Style::new().apply_to(errors);
-                self.console_write_line(&styled_errors.to_string())?;
-            }
-
-            let tasks_status = self.get_tasks_status().await;
-            return Ok((tasks_status, handle.await.unwrap()));
-        }
-
-        let names = console::style(self.tasks.root_names.join(", ")).bold();
-
-        // Always show which tasks are being run
-        self.console_write_line(&format!("{:17} {}\n", "Running tasks", names))?;
-
-        // start processing tasks
-        let _started = std::time::Instant::now();
-
-        // Simple status logging mode (no cursor manipulation)
-        let mut last_statuses = std::collections::HashMap::new();
-
-        loop {
-            let tasks_status = self.get_tasks_status().await;
-
-            // Non-interactive mode - print only status changes
-            for task_state in self.tasks.graph.node_weights() {
-                let task_state = task_state.read().await;
-                let task_name = &task_state.task.name;
-                let current_status = match &task_state.status {
-                    TaskStatus::Pending => "Pending".to_string(),
-                    TaskStatus::ProcessReady => {
-                        if let Some(previous) = last_statuses.get(task_name) {
-                            if previous != "Ready" {
-                                self.console_write_line(&format!(
-                                    "{:17} {}",
-                                    console::style("Ready").green().bold(),
-                                    console::style(task_name).bold()
-                                ))?;
-                            }
-                        } else {
-                            self.console_write_line(&format!(
-                                "{:17} {}",
-                                console::style("Ready").green().bold(),
-                                console::style(task_name).bold()
-                            ))?;
+                    let (new_status, status_label, duration_str) = match outcome {
+                        ActivityOutcome::Success => (
+                            TaskDisplayStatus::Succeeded,
+                            "Succeeded",
+                            format!(" ({duration:.2?})"),
+                        ),
+                        ActivityOutcome::Failed => (
+                            TaskDisplayStatus::Failed,
+                            "Failed",
+                            format!(" ({duration:.2?})"),
+                        ),
+                        ActivityOutcome::Cancelled => {
+                            (TaskDisplayStatus::Cancelled, "Cancelled", String::new())
                         }
-                        "Ready".to_string()
-                    }
-                    TaskStatus::Running(_) => {
-                        if let Some(previous) = last_statuses.get(task_name) {
-                            if previous != "Running" {
-                                self.console_write_line(&format!(
-                                    "{:17} {}",
-                                    console::style("Running").blue().bold(),
-                                    console::style(task_name).bold()
-                                ))?;
-                            }
-                        } else {
-                            self.console_write_line(&format!(
-                                "{:17} {}",
-                                console::style("Running").blue().bold(),
-                                console::style(task_name).bold()
-                            ))?;
+                        ActivityOutcome::Cached => {
+                            (TaskDisplayStatus::Cached, "Cached", String::new())
                         }
-                        "Running".to_string()
-                    }
-                    TaskStatus::Completed(completed) => {
-                        let (status, style, duration_str) = match completed {
-                            TaskCompleted::Success(duration, _) => (
-                                format!("Succeeded ({duration:.2?})"),
-                                console::style("Succeeded").green().bold(),
-                                format!(" ({duration:.2?})"),
-                            ),
-                            TaskCompleted::Skipped(Skipped::Cached(_)) => (
-                                "Cached".to_string(),
-                                console::style("Cached").blue().bold(),
-                                "".to_string(),
-                            ),
-                            TaskCompleted::Skipped(Skipped::NoCommand) => (
-                                "No command".to_string(),
-                                console::style("No command").blue().bold(),
-                                "".to_string(),
-                            ),
-                            TaskCompleted::Failed(duration, _) => (
-                                format!("Failed ({duration:.2?})"),
-                                console::style("Failed").red().bold(),
-                                format!(" ({duration:.2?})"),
-                            ),
-                            TaskCompleted::DependencyFailed => (
-                                "Dependency failed".to_string(),
-                                console::style("Dependency failed").red().bold(),
-                                "".to_string(),
-                            ),
-                            TaskCompleted::Cancelled(duration) => {
-                                let duration_str =
-                                    duration.map(|d| format!(" ({d:.2?})")).unwrap_or_default();
-                                (
-                                    format!("Cancelled{duration_str}"),
-                                    console::style("Cancelled").yellow().bold(),
-                                    duration_str,
-                                )
-                            }
-                        };
+                        ActivityOutcome::Skipped => {
+                            (TaskDisplayStatus::Skipped, "No command", String::new())
+                        }
+                        ActivityOutcome::DependencyFailed => (
+                            TaskDisplayStatus::DependencyFailed,
+                            "Dependency failed",
+                            String::new(),
+                        ),
+                    };
 
-                        if let Some(previous) = last_statuses.get(task_name) {
-                            if previous != &status {
-                                self.console_write_line(&format!(
-                                    "{:17} {}{}",
-                                    style,
-                                    console::style(task_name).bold(),
-                                    duration_str
-                                ))?;
-                            }
-                        } else {
-                            self.console_write_line(&format!(
-                                "{:17} {}{}",
-                                style,
-                                console::style(task_name).bold(),
-                                duration_str
-                            ))?;
-                        }
-                        status
-                    }
+                    state.status = new_status;
+                    Some((name, status_label, duration_str, outcome))
+                } else {
+                    None
                 };
 
-                last_statuses.insert(task_name.clone(), current_status);
+                if let Some((name, status_label, duration_str, outcome)) = print_info {
+                    if self.verbosity != VerbosityLevel::Quiet {
+                        let style = match outcome {
+                            ActivityOutcome::Success => console::style(status_label).green().bold(),
+                            ActivityOutcome::Failed | ActivityOutcome::DependencyFailed => {
+                                console::style(status_label).red().bold()
+                            }
+                            ActivityOutcome::Cancelled => {
+                                console::style(status_label).yellow().bold()
+                            }
+                            ActivityOutcome::Cached | ActivityOutcome::Skipped => {
+                                console::style(status_label).blue().bold()
+                            }
+                        };
+                        self.console_write_line(&format!(
+                            "{:17} {}{}",
+                            style,
+                            console::style(&name).bold(),
+                            duration_str
+                        ))?;
+                    }
+                }
             }
-
-            // Break early if there are no more tasks left
-            if tasks_status.pending == 0 && tasks_status.running == 0 {
-                break;
+            TaskEvent::Log {
+                id, line, is_error, ..
+            } => {
+                // Show log output based on verbosity
+                // In normal mode, we show logs for tasks with showOutput=true (the event is emitted)
+                // In verbose mode, all logs are shown
+                // In quiet mode, no logs are shown
+                if self.verbosity != VerbosityLevel::Quiet {
+                    if let Some(state) = self.task_states.get(&id) {
+                        let prefix = if is_error { "!" } else { " " };
+                        self.console_write_line(&format!("[{}]{} {}", state.name, prefix, line))?;
+                    }
+                }
             }
+            TaskEvent::Progress { .. } => {
+                // Could show progress bar in future
+            }
+        }
+        Ok(())
+    }
 
-            // Wait for task updates before looping
-            self.tasks.notify_ui.notified().await;
+    async fn print_summary(&self) -> Result<(), Error> {
+        let final_status = self.tasks.get_completion_status().await;
+
+        if self.verbosity != VerbosityLevel::Quiet {
+            let status_summary = [
+                if final_status.pending > 0 {
+                    format!(
+                        "{} {}",
+                        final_status.pending,
+                        console::style("Pending").blue().bold()
+                    )
+                } else {
+                    String::new()
+                },
+                if final_status.running > 0 {
+                    format!(
+                        "{} {}",
+                        final_status.running,
+                        console::style("Running").blue().bold()
+                    )
+                } else {
+                    String::new()
+                },
+                if final_status.skipped > 0 {
+                    format!(
+                        "{} {}",
+                        final_status.skipped,
+                        console::style("Skipped").blue().bold()
+                    )
+                } else {
+                    String::new()
+                },
+                if final_status.succeeded > 0 {
+                    format!(
+                        "{} {}",
+                        final_status.succeeded,
+                        console::style("Succeeded").green().bold()
+                    )
+                } else {
+                    String::new()
+                },
+                if final_status.failed > 0 {
+                    format!(
+                        "{} {}",
+                        final_status.failed,
+                        console::style("Failed").red().bold()
+                    )
+                } else {
+                    String::new()
+                },
+                if final_status.dependency_failed > 0 {
+                    format!(
+                        "{} {}",
+                        final_status.dependency_failed,
+                        console::style("Dependency Failed").red().bold()
+                    )
+                } else {
+                    String::new()
+                },
+                if final_status.cancelled > 0 {
+                    format!(
+                        "{} {}",
+                        final_status.cancelled,
+                        console::style("Cancelled").yellow().bold()
+                    )
+                } else {
+                    String::new()
+                },
+            ]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+            self.console_write_line(&status_summary)?;
         }
 
-        // Calculate and print final summary after all tasks complete
-        let final_status = self.get_tasks_status().await;
-        let status_summary = [
-            if final_status.pending > 0 {
-                format!(
-                    "{} {}",
-                    final_status.pending,
-                    console::style("Pending").blue().bold()
-                )
-            } else {
-                String::new()
-            },
-            if final_status.running > 0 {
-                format!(
-                    "{} {}",
-                    final_status.running,
-                    console::style("Running").blue().bold()
-                )
-            } else {
-                String::new()
-            },
-            if final_status.skipped > 0 {
-                format!(
-                    "{} {}",
-                    final_status.skipped,
-                    console::style("Skipped").blue().bold()
-                )
-            } else {
-                String::new()
-            },
-            if final_status.succeeded > 0 {
-                format!(
-                    "{} {}",
-                    final_status.succeeded,
-                    console::style("Succeeded").green().bold()
-                )
-            } else {
-                String::new()
-            },
-            if final_status.failed > 0 {
-                format!(
-                    "{} {}",
-                    final_status.failed,
-                    console::style("Failed").red().bold()
-                )
-            } else {
-                String::new()
-            },
-            if final_status.dependency_failed > 0 {
-                format!(
-                    "{} {}",
-                    final_status.dependency_failed,
-                    console::style("Dependency Failed").red().bold()
-                )
-            } else {
-                String::new()
-            },
-            if final_status.cancelled > 0 {
-                format!(
-                    "{} {}",
-                    final_status.cancelled,
-                    console::style("Cancelled").yellow().bold()
-                )
-            } else {
-                String::new()
-            },
-        ]
-        .into_iter()
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join(", ");
-
-        self.console_write_line(&status_summary)?;
-
+        // Print errors even in quiet mode
         let errors = self.format_task_errors().await;
         if !errors.is_empty() {
             let styled_errors = console::Style::new().apply_to(errors);
             self.console_write_line(&styled_errors.to_string())?;
         }
 
-        let tasks_status = self.tasks.get_completion_status().await;
-        Ok((tasks_status, handle.await.unwrap()))
+        Ok(())
     }
 
-    fn console_write_line(&self, message: &str) -> std::io::Result<()> {
+    fn console_write_line(&self, message: &str) -> Result<(), Error> {
         eprintln!("{}", message);
         Ok(())
     }

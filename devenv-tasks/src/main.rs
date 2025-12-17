@@ -165,7 +165,23 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
                 .build()
                 .await?;
 
-            let (status, _) = TasksUi::new(tasks, verbosity).run().await?;
+            // Initialize activity channel for TasksUi
+            let (activity_rx, activity_handle) = devenv_activity::init();
+            activity_handle.install();
+
+            let tasks = Arc::new(tasks);
+            let tasks_clone = Arc::clone(&tasks);
+
+            // Spawn task runner - it will signal_done() when complete
+            let run_handle = tokio::spawn(async move {
+                let result = tasks_clone.run().await;
+                devenv_activity::signal_done();
+                result
+            });
+
+            // Run UI - processes events and waits for run_handle
+            let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
+            let (status, _) = ui.run(run_handle).await?;
 
             if shutdown.last_signal().is_some() {
                 shutdown.exit_process();
