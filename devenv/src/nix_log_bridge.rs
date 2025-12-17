@@ -343,7 +343,7 @@ impl NixLogBridge {
         if let Ok(mut eval_activity) = self.evaluation_activity.lock() {
             // If this is the first file, create the evaluation activity
             if eval_activity.is_none() {
-                let activity = Activity::evaluate("")
+                let activity = Activity::evaluate()
                     .parent(self.parent_activity_id)
                     .start();
                 *eval_activity = Some(activity);

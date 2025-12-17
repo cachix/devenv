@@ -113,7 +113,6 @@ pub enum Evaluate {
     Start {
         #[serde(alias = "activity_id")]
         id: u64,
-        name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         parent: Option<u64>,
         timestamp: Timestamp,

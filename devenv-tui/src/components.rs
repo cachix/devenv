@@ -91,6 +91,8 @@ pub struct HierarchyPrefixComponent {
     pub completed: Option<bool>,
     /// Whether this activity is currently selected
     pub is_selected: bool,
+    /// Whether this activity's result was cached
+    pub cached: bool,
 }
 
 impl HierarchyPrefixComponent {
@@ -101,6 +103,7 @@ impl HierarchyPrefixComponent {
             show_spinner: false,
             completed: None,
             is_selected: false,
+            cached: false,
         }
     }
 
@@ -119,6 +122,11 @@ impl HierarchyPrefixComponent {
         self
     }
 
+    pub fn with_cached(mut self, cached: bool) -> Self {
+        self.cached = cached;
+        self
+    }
+
     pub fn render(&self) -> Vec<AnyElement<'static>> {
         let mut prefix_children = vec![];
 
@@ -126,10 +134,15 @@ impl HierarchyPrefixComponent {
         if self.depth == 0 {
             match self.completed {
                 Some(true) => {
-                    // Success - show checkmark
+                    // Success - show checkmark (gray if cached, green if fresh)
+                    let color = if self.cached {
+                        COLOR_HIERARCHY
+                    } else {
+                        COLOR_COMPLETED
+                    };
                     prefix_children.push(
                         element!(View(margin_right: 1) {
-                            Text(content: "✓", color: COLOR_COMPLETED)
+                            Text(content: "✓", color: color)
                         })
                         .into_any(),
                     );
@@ -427,6 +440,8 @@ pub struct DownloadActivityComponent<'a> {
     pub is_selected: bool,
     /// Completion state: None = active, Some(true) = success, Some(false) = failed
     pub completed: Option<bool>,
+    /// Whether this activity's result was cached
+    pub cached: bool,
 }
 
 impl<'a> DownloadActivityComponent<'a> {
@@ -436,11 +451,17 @@ impl<'a> DownloadActivityComponent<'a> {
             depth,
             is_selected,
             completed: None,
+            cached: false,
         }
     }
 
     pub fn with_completed(mut self, completed: Option<bool>) -> Self {
         self.completed = completed;
+        self
+    }
+
+    pub fn with_cached(mut self, cached: bool) -> Self {
+        self.cached = cached;
         self
     }
 
@@ -460,6 +481,7 @@ impl<'a> DownloadActivityComponent<'a> {
             .with_spinner()
             .with_completed(self.completed)
             .with_selected(self.is_selected)
+            .with_cached(self.cached)
             .render();
 
         // Get substituter from download variant

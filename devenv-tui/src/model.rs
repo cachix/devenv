@@ -395,11 +395,9 @@ impl ActivityModel {
 
     fn handle_evaluate_event(&mut self, event: Evaluate) {
         match event {
-            Evaluate::Start {
-                id, name, parent, ..
-            } => {
+            Evaluate::Start { id, parent, .. } => {
                 let variant = ActivityVariant::Evaluating(EvaluatingActivity::default());
-                self.create_activity(id, name, parent, None, variant);
+                self.create_activity(id, String::new(), parent, None, variant);
             }
             Evaluate::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -518,8 +516,13 @@ impl ActivityModel {
                 outcome,
                 ActivityOutcome::Success | ActivityOutcome::Cached | ActivityOutcome::Skipped
             );
+            let cached = matches!(outcome, ActivityOutcome::Cached);
             let duration = activity.start_time.elapsed();
-            activity.state = NixActivityState::Completed { success, duration };
+            activity.state = NixActivityState::Completed {
+                success,
+                cached,
+                duration,
+            };
             activity.completed_at = Some(Instant::now());
 
             if let ActivityVariant::Task(ref mut task) = activity.variant {
@@ -649,6 +652,7 @@ impl ActivityModel {
             if let Some(activity) = self.activities.get_mut(&id) {
                 activity.state = NixActivityState::Completed {
                     success: has_details, // Show as "expandable" if has details
+                    cached: false,
                     duration: std::time::Duration::ZERO,
                 };
                 activity.completed_at = Some(Instant::now());
@@ -999,6 +1003,7 @@ pub enum NixActivityState {
     Active,
     Completed {
         success: bool,
+        cached: bool,
         duration: std::time::Duration,
     },
 }

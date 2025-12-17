@@ -237,7 +237,6 @@ fn test_evaluating_activity() {
 
     let event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 1,
-        name: "Evaluating flake".to_string(),
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -325,7 +324,6 @@ fn test_nested_evaluation_with_children() {
     // Parent: Nix evaluation
     let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 100,
-        name: "devenv.nix".to_string(),
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -592,7 +590,6 @@ fn test_deep_nesting() {
     // Level 0: Root evaluation
     let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 1,
-        name: "devenv.nix".to_string(),
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -706,7 +703,6 @@ fn test_many_concurrent_activities() {
             _ => {
                 model.apply_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
                     id: i as u64 + 1,
-                    name: format!("module-{}", i),
                     parent: None,
                     timestamp: Timestamp::now(),
                 }));
@@ -840,7 +836,6 @@ fn test_error_message_with_parent() {
     // Start an evaluation
     let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 1,
-        name: "devenv.nix".to_string(),
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -868,7 +863,6 @@ fn test_warning_message_with_parent() {
     // Start an evaluation
     let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 1,
-        name: "devenv.nix".to_string(),
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -930,7 +924,6 @@ fn test_error_message_with_details() {
     // Start an evaluation
     let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 1,
-        name: "devenv.nix".to_string(),
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -958,7 +951,6 @@ fn test_error_message_without_details() {
     // Start an evaluation
     let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 1,
-        name: "devenv.nix".to_string(),
         parent: None,
         timestamp: Timestamp::now(),
     });

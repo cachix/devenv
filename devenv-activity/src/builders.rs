@@ -151,16 +151,14 @@ impl FetchBuilder {
 
 /// Builder for Evaluate activities
 pub struct EvaluateBuilder {
-    name: String,
     id: Option<u64>,
     parent: Option<Option<u64>>,
     level: ActivityLevel,
 }
 
 impl EvaluateBuilder {
-    pub(crate) fn new(name: impl Into<String>) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            name: name.into(),
             id: None,
             parent: None,
             level: ActivityLevel::default(),
@@ -190,7 +188,6 @@ impl EvaluateBuilder {
 
         send_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
             id,
-            name: self.name.clone(),
             parent,
             timestamp: Timestamp::now(),
         }));

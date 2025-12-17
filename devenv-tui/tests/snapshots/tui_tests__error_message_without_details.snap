@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Evaluating devenv.nix
+⠋ Evaluating
   ✗ error: simple error
 
 
-      ↑↓ nav • ^e expand
+     ↑↓ nav • ^e expand

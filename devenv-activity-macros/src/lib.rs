@@ -232,7 +232,7 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
                         .start()
                 },
                 "evaluate" => quote! {
-                    devenv_activity::Activity::evaluate(#name)
+                    devenv_activity::Activity::evaluate()
                         .level(#level_enum)
                         .start()
                 },

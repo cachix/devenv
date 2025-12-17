@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Evaluating Evaluating flake
+⠋ Evaluating
 
 
 
-            ↑↓ nav • ^e expand
+   ↑↓ nav • ^e expand

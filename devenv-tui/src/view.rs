@@ -63,9 +63,9 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         };
 
         // Determine completion state
-        let completed = match &activity.state {
-            NixActivityState::Active => None,
-            NixActivityState::Completed { success, .. } => Some(*success),
+        let (completed, cached) = match &activity.state {
+            NixActivityState::Active => (None, false),
+            NixActivityState::Completed { success, cached, .. } => (Some(*success), *cached),
         };
 
         activity_elements.push(
@@ -76,6 +76,7 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
                     is_selected,
                     logs: activity_logs,
                     completed,
+                    cached,
                 })) {
                     ActivityItem
                 }
@@ -247,6 +248,8 @@ struct ActivityRenderContext {
     logs: Option<Arc<VecDeque<String>>>,
     /// Completion state: None = active, Some(true) = success, Some(false) = failed
     completed: Option<bool>,
+    /// Whether this activity's result was cached
+    cached: bool,
 }
 
 /// Render a single activity (owned version)
@@ -260,6 +263,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         is_selected,
         logs,
         completed,
+        cached,
     } = &*ctx;
     let indent = "  ".repeat(*depth);
 
@@ -280,6 +284,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .with_spinner()
                     .with_completed(*completed)
                     .with_selected(*is_selected)
+                    .with_cached(*cached)
                     .render();
 
                 let main_line = ActivityTextComponent::new(
@@ -318,6 +323,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .with_spinner()
                 .with_completed(*completed)
                 .with_selected(*is_selected)
+                .with_cached(*cached)
                 .render();
 
             return ActivityTextComponent::new(
@@ -343,6 +349,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .with_spinner()
                 .with_completed(*completed)
                 .with_selected(*is_selected)
+                .with_cached(*cached)
                 .render();
 
             return ActivityTextComponent::new(
@@ -362,12 +369,14 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             {
                 return DownloadActivityComponent::new(activity, *depth, *is_selected)
                     .with_completed(*completed)
+                    .with_cached(*cached)
                     .render(terminal_width);
             } else if let Some(progress) = &activity.progress {
                 // Use generic progress if available
                 if progress.total.unwrap_or(0) > 0 {
                     return DownloadActivityComponent::new(activity, *depth, *is_selected)
                         .with_completed(*completed)
+                        .with_cached(*cached)
                         .render(terminal_width);
                 } else {
                     // Show generic progress without percentage
@@ -382,6 +391,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         .with_spinner()
                         .with_completed(*completed)
                         .with_selected(*is_selected)
+                        .with_cached(*cached)
                         .render();
 
                     return ActivityTextComponent::new(
@@ -404,6 +414,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .with_spinner()
                     .with_completed(*completed)
                     .with_selected(*is_selected)
+                    .with_cached(*cached)
                     .render();
 
                 return ActivityTextComponent::new(
@@ -426,6 +437,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .with_spinner()
                 .with_completed(*completed)
                 .with_selected(*is_selected)
+                .with_cached(*cached)
                 .render();
 
             return ActivityTextComponent::new(
@@ -443,6 +455,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .with_spinner()
                 .with_completed(*completed)
                 .with_selected(*is_selected)
+                .with_cached(*cached)
                 .render();
 
             return ActivityTextComponent::new(
@@ -455,8 +468,10 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Evaluating(eval_data) => {
-            // Show file count as suffix
-            let suffix = if eval_data.files_evaluated > 0 {
+            // Show cached status or file count as suffix
+            let suffix = if *cached {
+                Some("cached".to_string())
+            } else if eval_data.files_evaluated > 0 {
                 Some(format!("{} files", eval_data.files_evaluated))
             } else {
                 activity.detail.clone()
@@ -468,6 +483,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .with_spinner()
                     .with_completed(*completed)
                     .with_selected(*is_selected)
+                    .with_cached(*cached)
                     .render();
 
                 let main_line = ActivityTextComponent::new(
@@ -504,6 +520,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .with_spinner()
                 .with_completed(*completed)
                 .with_selected(*is_selected)
+                .with_cached(*cached)
                 .render();
 
             return ActivityTextComponent::new(
@@ -521,6 +538,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .with_spinner()
                 .with_completed(*completed)
                 .with_selected(*is_selected)
+                .with_cached(*cached)
                 .render();
 
             return ActivityTextComponent::new(
@@ -537,6 +555,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .with_spinner()
                 .with_completed(*completed)
                 .with_selected(*is_selected)
+                .with_cached(*cached)
                 .render();
 
             return ActivityTextComponent::new(
@@ -695,6 +714,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .with_spinner()
                 .with_completed(*completed)
                 .with_selected(*is_selected)
+                .with_cached(*cached)
                 .render();
 
             return ActivityTextComponent::new(
