@@ -40,11 +40,13 @@ pub fn setup_nix_logger_with_parent(
     let on_start = create_start_callback(Arc::clone(&bridge));
     let on_stop = create_stop_callback(Arc::clone(&bridge));
     let on_result = create_result_callback(Arc::clone(&bridge));
+    let on_log = create_log_callback(Arc::clone(&bridge));
 
     let logger = ActivityLoggerBuilder::new()
         .on_start(on_start)
         .on_stop(on_stop)
         .on_result(on_result)
+        .on_log(on_log)
         .register(&mut context)
         .map_err(|e| miette::miette!("Failed to register Nix logger: {}", e))?;
 
@@ -130,6 +132,33 @@ fn create_result_callback(
 
         let fields = convert_fields(field_types, int_values, string_values);
         let log = InternalLog::Result { id, typ, fields };
+        bridge.process_internal_log(log);
+    }
+}
+
+/// Create a callback that handles log messages from FFI
+fn create_log_callback(
+    bridge: Arc<NixLogBridge>,
+) -> impl Fn(i32, &str) + Clone + Send + Sync + 'static {
+    move |level: i32, msg: &str| {
+        // Convert level to Verbosity
+        let verbosity = match level {
+            0 => Verbosity::Error,
+            1 => Verbosity::Warn,
+            2 => Verbosity::Notice,
+            3 => Verbosity::Info,
+            4 => Verbosity::Talkative,
+            5 => Verbosity::Chatty,
+            6 => Verbosity::Debug,
+            7 => Verbosity::Vomit,
+            _ => Verbosity::Info,
+        };
+
+        let log = InternalLog::Msg {
+            msg: msg.to_string(),
+            raw_msg: None,
+            level: verbosity,
+        };
         bridge.process_internal_log(log);
     }
 }
