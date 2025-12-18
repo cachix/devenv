@@ -1,7 +1,9 @@
 use crate::{devenv, nix_log_bridge::NixLogBridge, util};
 use async_trait::async_trait;
 use devenv_activity::ActivityInstrument;
-use devenv_activity::{Activity, ActivityLevel, current_activity_id, message, message_with_details};
+use devenv_activity::{
+    Activity, ActivityLevel, current_activity_id, message, message_with_details,
+};
 use devenv_core::{
     cachix::{
         CacheMetadata, CachixCacheInfo, CachixConfig, CachixManager, StorePing,
@@ -666,7 +668,10 @@ impl Nix {
                 message_with_details(
                     ActivityLevel::Error,
                     "$DEVENV_NIX is not set, but required as devenv doesn't work without a few Nix patches.",
-                    Some("Please follow https://devenv.sh/getting-started/ to install devenv.".to_string()),
+                    Some(
+                        "Please follow https://devenv.sh/getting-started/ to install devenv."
+                            .to_string(),
+                    ),
                 );
                 bail!("$DEVENV_NIX is not set")
             }

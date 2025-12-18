@@ -1,7 +1,7 @@
 use fd_lock::RwLock;
 use miette::{IntoDiagnostic, Result, miette};
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 /// Safely write a file with locking, avoiding writing if the content hasn't changed.
@@ -37,11 +37,23 @@ pub fn write_file_with_lock<P: AsRef<Path>, S: AsRef<str>>(path: P, content: S) 
         .into_diagnostic()
         .map_err(|e| miette!("Failed to lock file {}: {}", path.display(), e))?;
 
-    // Read existing content
-    let existing_content = fs::read_to_string(path).unwrap_or_default();
+    // Read existing content from the locked file handle.
+    // IMPORTANT: We must read via file_handle (not fs::read_to_string) to avoid a race condition
+    // where concurrent processes could read stale content through a separate file handle.
+    let mut existing_content = String::new();
+    file_handle
+        .read_to_string(&mut existing_content)
+        .into_diagnostic()
+        .map_err(|e| miette!("Failed to read file {}: {}", path.display(), e))?;
 
     // Compare and write only if different
     if content != existing_content {
+        // Seek to beginning before truncating and writing
+        file_handle
+            .seek(SeekFrom::Start(0))
+            .into_diagnostic()
+            .map_err(|e| miette!("Failed to seek in file {}: {}", path.display(), e))?;
+
         file_handle
             .set_len(0)
             .into_diagnostic()
