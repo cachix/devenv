@@ -2,7 +2,7 @@ use crate::{devenv, nix_log_bridge::NixLogBridge, util};
 use async_trait::async_trait;
 use devenv_activity::ActivityInstrument;
 use devenv_activity::{
-    Activity, ActivityLevel, current_activity_id, message, message_with_details,
+    Activity, ActivityLevel, activity, current_activity_id, message, message_with_details,
 };
 use devenv_core::{
     cachix::{
@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::OnceCell;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{Instrument, debug, error, info, instrument, warn};
 
 // Nix-specific flake template
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -721,6 +721,7 @@ impl Nix {
         Ok(nix_conf)
     }
 
+    #[activity("Checking Nix store", level = debug)]
     async fn is_trusted_user_impl(&self) -> Result<bool> {
         let options = Options { ..self.options };
         let store_output = self
@@ -732,6 +733,7 @@ impl Nix {
         Ok(store_ping.is_trusted)
     }
 
+    #[activity("Fetching Cachix config", level = debug)]
     async fn get_cachix_caches(&self, trusted_keys_path: &Path) -> Result<CachixCacheInfo> {
         self.cachix_caches
             .get_or_try_init(|| async {
@@ -995,6 +997,7 @@ impl Nix {
     ///
     /// This builds `nixpkgs#legacyPackages.{system}.bashInteractive.out` and returns
     /// the path to the bash executable. The result is cached unless refresh_cached_output is true.
+    #[activity("Building bash", level = debug)]
     async fn get_bash(&self, refresh_cached_output: bool) -> Result<String> {
         let options = Options {
             cache_output: true,

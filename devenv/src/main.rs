@@ -4,6 +4,7 @@ use devenv::{
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
     tracing as devenv_tracing,
 };
+use devenv_activity::ActivityLevel;
 use devenv_core::config::{self, Config};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::{process::Command, sync::Arc};
@@ -90,6 +91,13 @@ fn run_with_tui(cli: Cli) -> Result<()> {
         cli.global_options.trace_output.as_ref(),
     );
 
+    // Determine TUI filter level based on verbose flag
+    let filter_level = if cli.global_options.verbose {
+        ActivityLevel::Debug
+    } else {
+        ActivityLevel::Info
+    };
+
     // Shutdown coordination (TUI handles Ctrl+C, no install_signals needed)
     let shutdown = Shutdown::new();
 
@@ -120,7 +128,11 @@ fn run_with_tui(cli: Cli) -> Result<()> {
         .build()
         .into_diagnostic()?;
 
-    let _ = rt.block_on(devenv_tui::TuiApp::new(activity_rx, shutdown).run());
+    let _ = rt.block_on(
+        devenv_tui::TuiApp::new(activity_rx, shutdown)
+            .filter_level(filter_level)
+            .run(),
+    );
 
     // Restore terminal to normal state (disable raw mode, show cursor)
     devenv_tui::app::restore_terminal();

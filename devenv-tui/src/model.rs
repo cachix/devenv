@@ -130,6 +130,8 @@ pub struct Activity {
     pub progress: Option<ProgressActivity>,
     /// Additional details/metadata (shown when expanded)
     pub details: Vec<ActivityDetail>,
+    /// Activity level for filtering (defaults to Info)
+    pub level: ActivityLevel,
 }
 
 /// UI state - lives outside the RwLock, managed by the UI thread.
@@ -332,7 +334,7 @@ impl ActivityModel {
                     log_stdout_lines: Vec::new(),
                     log_stderr_lines: Vec::new(),
                 });
-                self.create_activity(id, name, parent, derivation_path, variant);
+                self.create_activity(id, name, parent, derivation_path, variant, ActivityLevel::Info);
             }
             Build::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -380,7 +382,7 @@ impl ActivityModel {
                         substituter,
                     }),
                 };
-                self.create_activity(id, name, parent, url, variant);
+                self.create_activity(id, name, parent, url, variant, ActivityLevel::Info);
             }
             Fetch::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -397,7 +399,7 @@ impl ActivityModel {
         match event {
             Evaluate::Start { id, parent, .. } => {
                 let variant = ActivityVariant::Evaluating(EvaluatingActivity::default());
-                self.create_activity(id, String::new(), parent, None, variant);
+                self.create_activity(id, String::new(), parent, None, variant, ActivityLevel::Info);
             }
             Evaluate::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -422,7 +424,7 @@ impl ActivityModel {
                     status: TaskDisplayStatus::Running,
                     duration: None,
                 });
-                self.create_activity(id, name, parent, detail, variant);
+                self.create_activity(id, name, parent, detail, variant, ActivityLevel::Info);
             }
             Task::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -450,7 +452,7 @@ impl ActivityModel {
                 ..
             } => {
                 let variant = ActivityVariant::UserOperation;
-                self.create_activity(id, name, parent, command, variant);
+                self.create_activity(id, name, parent, command, variant, ActivityLevel::Debug);
             }
             Command::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -470,10 +472,11 @@ impl ActivityModel {
                 name,
                 parent,
                 detail,
+                level,
                 ..
             } => {
                 let variant = ActivityVariant::Devenv;
-                self.create_activity(id, name, parent, detail, variant);
+                self.create_activity(id, name, parent, detail, variant, level);
             }
             Operation::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -488,6 +491,7 @@ impl ActivityModel {
         parent: Option<u64>,
         detail: Option<String>,
         variant: ActivityVariant,
+        level: ActivityLevel,
     ) {
         let activity = Activity {
             id,
@@ -501,6 +505,7 @@ impl ActivityModel {
             variant,
             progress: None,
             details: Vec::new(),
+            level,
         };
 
         if parent.is_none() {
@@ -511,13 +516,23 @@ impl ActivityModel {
     }
 
     fn handle_activity_complete(&mut self, id: u64, outcome: ActivityOutcome) {
+        // First, get the activity info we need
+        let (variant, success, cached, duration) = {
+            if let Some(activity) = self.activities.get(&id) {
+                let success = matches!(
+                    outcome,
+                    ActivityOutcome::Success | ActivityOutcome::Cached | ActivityOutcome::Skipped
+                );
+                let cached = matches!(outcome, ActivityOutcome::Cached);
+                let duration = activity.start_time.elapsed();
+                (activity.variant.clone(), success, cached, duration)
+            } else {
+                return;
+            }
+        };
+
+        // Update the activity state
         if let Some(activity) = self.activities.get_mut(&id) {
-            let success = matches!(
-                outcome,
-                ActivityOutcome::Success | ActivityOutcome::Cached | ActivityOutcome::Skipped
-            );
-            let cached = matches!(outcome, ActivityOutcome::Cached);
-            let duration = activity.start_time.elapsed();
             activity.state = NixActivityState::Completed {
                 success,
                 cached,
@@ -537,6 +552,33 @@ impl ActivityModel {
                     ActivityOutcome::Cancelled => TaskDisplayStatus::Cancelled,
                 };
                 task.duration = Some(duration);
+            }
+        }
+
+        // For Devenv (Operation) activities, check if any child Evaluate was cached
+        // and propagate that cache status to the parent
+        if matches!(variant, ActivityVariant::Devenv) {
+            let has_cached_child = self.activities.values().any(|child| {
+                child.parent_id == Some(id)
+                    && matches!(child.variant, ActivityVariant::Evaluating(_))
+                    && matches!(
+                        child.state,
+                        NixActivityState::Completed { cached: true, .. }
+                    )
+            });
+
+            if has_cached_child {
+                if let Some(activity) = self.activities.get_mut(&id)
+                    && let NixActivityState::Completed {
+                        success, duration, ..
+                    } = activity.state
+                {
+                    activity.state = NixActivityState::Completed {
+                        success,
+                        cached: true,
+                        duration,
+                    };
+                }
             }
         }
     }
@@ -635,12 +677,13 @@ impl ActivityModel {
             let id = self.next_message_id;
             self.next_message_id += 1;
 
+            let level = msg.level;
             let has_details = msg.details.is_some();
             let variant = ActivityVariant::Message(MessageActivity {
-                level: msg.level,
+                level,
                 details: msg.details.clone(),
             });
-            self.create_activity(id, msg.text, msg.parent, None, variant);
+            self.create_activity(id, msg.text, msg.parent, None, variant, level);
 
             // Store details as lines in build_logs for expansion
             if let Some(details) = msg.details {
@@ -720,6 +763,13 @@ impl ActivityModel {
         if let Some(activity) = self.activities.get(&activity_id) {
             // Skip command activities (UserOperation) - they are internal details
             if matches!(activity.variant, ActivityVariant::UserOperation) {
+                return;
+            }
+
+            // Filter by activity level: skip activities below the filter level
+            // ActivityLevel ordering: Error < Warn < Info < Debug < Trace
+            // We show activities at or below (more severe than or equal to) filter_level
+            if activity.level > self.config.filter_level {
                 return;
             }
 
@@ -834,13 +884,15 @@ impl ActivityModel {
             .get(&parent_id)
             .is_some_and(|a| matches!(a.variant, ActivityVariant::Task(_)));
 
-        // Get all children of this parent, excluding UserOperation
+        // Get all children of this parent, excluding UserOperation and filtered by level
+        let filter_level = self.config.filter_level;
         let mut all_children: Vec<_> = self
             .activities
             .values()
             .filter(|a| {
                 a.parent_id == Some(parent_id)
                     && !matches!(a.variant, ActivityVariant::UserOperation)
+                    && a.level <= filter_level
             })
             .collect();
 
@@ -918,13 +970,15 @@ impl ActivityModel {
             .any(|a| a.parent_id == Some(activity_id))
     }
 
-    /// Get count of children for an activity
+    /// Get count of children for an activity (respecting filter level)
     pub fn get_children_count(&self, activity_id: u64) -> usize {
+        let filter_level = self.config.filter_level;
         self.activities
             .values()
             .filter(|a| {
                 a.parent_id == Some(activity_id)
                     && !matches!(a.variant, ActivityVariant::UserOperation)
+                    && a.level <= filter_level
             })
             .count()
     }

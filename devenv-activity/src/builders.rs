@@ -398,6 +398,7 @@ impl OperationBuilder {
             name: self.name.clone(),
             parent,
             detail: self.detail,
+            level: self.level,
             timestamp: Timestamp::now(),
         }));
 

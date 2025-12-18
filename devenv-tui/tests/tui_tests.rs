@@ -394,6 +394,7 @@ fn test_activity_with_details() {
         name: "Building shell".to_string(),
         parent: None,
         detail: Some("nix eval --json .#devenv.config".to_string()),
+        level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     });
     model.apply_activity_event(parent_event);

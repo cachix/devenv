@@ -4,7 +4,7 @@ use crate::{
     view::view,
 };
 use crossterm::{cursor, execute, terminal};
-use devenv_activity::ActivityEvent;
+use devenv_activity::{ActivityEvent, ActivityLevel};
 use iocraft::prelude::*;
 use std::io::{self, Write};
 use std::sync::{Arc, RwLock};
@@ -25,6 +25,8 @@ pub struct TuiConfig {
     pub log_viewport_collapsed: usize,
     /// Maximum frames per second for rendering
     pub max_fps: u64,
+    /// Minimum activity level to display (activities below this level are filtered out)
+    pub filter_level: ActivityLevel,
 }
 
 impl Default for TuiConfig {
@@ -35,6 +37,7 @@ impl Default for TuiConfig {
             max_log_lines_per_build: 1000,
             log_viewport_collapsed: 10,
             max_fps: 30,
+            filter_level: ActivityLevel::Info,
         }
     }
 }
@@ -77,6 +80,13 @@ impl TuiApp {
     /// Set the number of log lines to show in collapsed view.
     pub fn collapsed_lines(mut self, n: usize) -> Self {
         self.config.log_viewport_collapsed = n;
+        self
+    }
+
+    /// Set the minimum activity level to display.
+    /// Activities below this level will be filtered out.
+    pub fn filter_level(mut self, level: ActivityLevel) -> Self {
+        self.config.filter_level = level;
         self
     }
 

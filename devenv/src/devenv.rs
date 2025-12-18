@@ -754,6 +754,7 @@ impl Devenv {
         Ok(*value)
     }
 
+    #[activity("Loading tasks")]
     async fn load_tasks(&self) -> Result<Vec<tasks::TaskConfig>> {
         let tasks_json_file = {
             let gc_root = self.devenv_dot_gc.join("task-config");
