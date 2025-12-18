@@ -259,33 +259,13 @@ impl ActivityTextComponent {
                 Some(Color::AnsiValue(250)), // Light gray background
             )
         } else if self.is_completed && depth == 0 {
-            (
-                Color::Reset,
-                COLOR_SECONDARY,
-                COLOR_HIERARCHY,
-                None,
-            )
+            (Color::Reset, COLOR_SECONDARY, COLOR_HIERARCHY, None)
         } else if self.is_completed {
-            (
-                COLOR_ACTIVE_NESTED,
-                COLOR_SECONDARY,
-                COLOR_HIERARCHY,
-                None,
-            )
+            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
         } else if depth == 0 {
-            (
-                COLOR_ACTIVE,
-                COLOR_SECONDARY,
-                COLOR_HIERARCHY,
-                None,
-            )
+            (COLOR_ACTIVE, COLOR_SECONDARY, COLOR_HIERARCHY, None)
         } else {
-            (
-                COLOR_ACTIVE_NESTED,
-                COLOR_SECONDARY,
-                COLOR_HIERARCHY,
-                None,
-            )
+            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
         };
 
         let mut final_prefix = prefix_children;
@@ -492,7 +472,9 @@ impl<'a> DownloadActivityComponent<'a> {
         // Use stored duration for completed activities, skip for queued
         let elapsed_str = match &self.activity.state {
             NixActivityState::Completed { duration, .. } => format_elapsed_time(*duration, true),
-            NixActivityState::Active => format_elapsed_time(self.activity.start_time.elapsed(), false),
+            NixActivityState::Active => {
+                format_elapsed_time(self.activity.start_time.elapsed(), false)
+            }
             NixActivityState::Queued => String::new(),
         };
 

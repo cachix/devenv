@@ -65,7 +65,9 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         // Determine completion state
         let (completed, cached) = match &activity.state {
             NixActivityState::Queued | NixActivityState::Active => (None, false),
-            NixActivityState::Completed { success, cached, .. } => (Some(*success), *cached),
+            NixActivityState::Completed {
+                success, cached, ..
+            } => (Some(*success), *cached),
         };
 
         activity_elements.push(
@@ -582,7 +584,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 ActivityLevel::Error => ("✗", COLOR_FAILED, COLOR_FAILED),
                 ActivityLevel::Warn => ("•", Color::AnsiValue(214), Color::AnsiValue(214)), // Yellow
                 ActivityLevel::Info => ("•", COLOR_INFO, Color::Reset), // Blue dot
-                _ => ("•", COLOR_HIERARCHY, Color::Reset), // Gray dot for debug/trace
+                _ => ("•", COLOR_HIERARCHY, Color::Reset),              // Gray dot for debug/trace
             };
 
             // Colors for selected vs unselected rows

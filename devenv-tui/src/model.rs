@@ -334,7 +334,7 @@ impl ActivityModel {
                     log_stdout_lines: Vec::new(),
                     log_stderr_lines: Vec::new(),
                 });
-                self.create_activity_with_state(
+                self.create_activity_with_options(
                     id,
                     name,
                     parent,
@@ -356,7 +356,14 @@ impl ActivityModel {
                     log_stdout_lines: Vec::new(),
                     log_stderr_lines: Vec::new(),
                 });
-                self.create_activity(id, name, parent, derivation_path, variant, ActivityLevel::Info);
+                self.create_activity(
+                    id,
+                    name,
+                    parent,
+                    derivation_path,
+                    variant,
+                    ActivityLevel::Info,
+                );
             }
             Build::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -421,7 +428,14 @@ impl ActivityModel {
         match event {
             Evaluate::Start { id, parent, .. } => {
                 let variant = ActivityVariant::Evaluating(EvaluatingActivity::default());
-                self.create_activity(id, String::new(), parent, None, variant, ActivityLevel::Info);
+                self.create_activity(
+                    id,
+                    String::new(),
+                    parent,
+                    None,
+                    variant,
+                    ActivityLevel::Info,
+                );
             }
             Evaluate::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -515,10 +529,18 @@ impl ActivityModel {
         variant: ActivityVariant,
         level: ActivityLevel,
     ) {
-        self.create_activity_with_state(id, name, parent, detail, variant, level, NixActivityState::Active);
+        self.create_activity_with_options(
+            id,
+            name,
+            parent,
+            detail,
+            variant,
+            level,
+            NixActivityState::Active,
+        );
     }
 
-    fn create_activity_with_state(
+    fn create_activity_with_options(
         &mut self,
         id: u64,
         name: String,
@@ -528,6 +550,40 @@ impl ActivityModel {
         level: ActivityLevel,
         state: NixActivityState,
     ) {
+        // Nix stream activities (Build, Fetch, Evaluate) don't have explicit levels
+        // in their events - they come from Nix's JSON output. We inherit level from
+        // parent so that activities under a Debug-level operation are also Debug.
+        // Our own activities (Operation, Task, Command, Message) already have correct
+        // levels set explicitly, so no inheritance needed.
+        let is_nix_activity = matches!(
+            variant,
+            ActivityVariant::Build(_)
+                | ActivityVariant::Download(_)
+                | ActivityVariant::Evaluating(_)
+                | ActivityVariant::Query(_)
+                | ActivityVariant::FetchTree
+        );
+
+        let effective_level = if is_nix_activity {
+            // Inherit level from parent if parent has a higher (less visible) level
+            if let Some(parent_id) = parent {
+                if let Some(parent_activity) = self.activities.get(&parent_id) {
+                    if parent_activity.level > level {
+                        parent_activity.level
+                    } else {
+                        level
+                    }
+                } else {
+                    level
+                }
+            } else {
+                level
+            }
+        } else {
+            // Non-Nix activities have their own explicit levels
+            level
+        };
+
         let activity = Activity {
             id,
             name: name.clone(),
@@ -540,7 +596,7 @@ impl ActivityModel {
             variant,
             progress: None,
             details: Vec::new(),
-            level,
+            level: effective_level,
         };
 
         if parent.is_none() {
@@ -723,7 +779,15 @@ impl ActivityModel {
                 level,
                 details: msg.details.clone(),
             });
-            self.create_activity(id, msg.text, msg.parent, None, variant, level);
+            self.create_activity_with_options(
+                id,
+                msg.text,
+                msg.parent,
+                None,
+                variant,
+                level,
+                NixActivityState::Active,
+            );
 
             // Store details as lines in build_logs for expansion
             if let Some(details) = msg.details {
@@ -814,22 +878,25 @@ impl ActivityModel {
             // Filter by activity level: skip activities below the filter level
             // ActivityLevel ordering: Error < Warn < Info < Debug < Trace
             // We show activities at or below (more severe than or equal to) filter_level
-            if activity.level > self.config.filter_level {
-                return;
+            let activity_visible = activity.level <= self.config.filter_level;
+
+            // Get all children (not filtered by level) so we can traverse through
+            // filtered parents to find visible children
+            let (all_children, _total, _hidden_count) = self.get_children(activity_id, limit);
+
+            if activity_visible {
+                activities.push(DisplayActivity {
+                    activity: activity.clone(),
+                    depth,
+                });
             }
 
-            // Get visible children with limiting (only applies if this activity has children)
-            let (visible_children, _total, _hidden_count) =
-                self.get_visible_children(activity_id, limit);
-
-            activities.push(DisplayActivity {
-                activity: activity.clone(),
-                depth,
-            });
-
-            // Recursively add visible children
-            for child in visible_children {
-                self.add_display_activity(activities, child.id, depth + 1, processed, limit);
+            // Recursively process children.
+            // Even if this activity is filtered, still traverse to children
+            // so we can find visible descendants (e.g., Info messages under Debug parents).
+            let child_depth = if activity_visible { depth + 1 } else { depth };
+            for child in all_children {
+                self.add_display_activity(activities, child.id, child_depth, processed, limit);
             }
         }
     }
@@ -839,9 +906,10 @@ impl ActivityModel {
 
         for activity in self.activities.values() {
             match (&activity.variant, &activity.state) {
-                (ActivityVariant::Build(_), NixActivityState::Queued | NixActivityState::Active) => {
-                    summary.active_builds += 1
-                }
+                (
+                    ActivityVariant::Build(_),
+                    NixActivityState::Queued | NixActivityState::Active,
+                ) => summary.active_builds += 1,
                 (ActivityVariant::Build(_), NixActivityState::Completed { success: true, .. }) => {
                     summary.completed_builds += 1;
                 }
@@ -919,13 +987,14 @@ impl ActivityModel {
             .collect()
     }
 
-    /// Get children of an activity, limited by the provided config.
+    /// Get children of an activity without level filtering.
+    /// Used for traversing through filtered parents to find visible descendants.
     /// Prioritizes active activities, then lingering completed ones, then older completed ones.
     /// Returns a tuple of (visible_children, total_children_count, hidden_count).
     ///
     /// Task activities always show all their children without linger/limit restrictions,
     /// so completed tasks remain visible after execution.
-    pub fn get_visible_children(
+    fn get_children(
         &self,
         parent_id: u64,
         limit: &ChildActivityLimit,
@@ -938,15 +1007,13 @@ impl ActivityModel {
             .get(&parent_id)
             .is_some_and(|a| matches!(a.variant, ActivityVariant::Task(_)));
 
-        // Get all children of this parent, excluding UserOperation and filtered by level
-        let filter_level = self.config.filter_level;
+        // Get all children of this parent, excluding UserOperation
         let mut all_children: Vec<_> = self
             .activities
             .values()
             .filter(|a| {
                 a.parent_id == Some(parent_id)
                     && !matches!(a.variant, ActivityVariant::UserOperation)
-                    && a.level <= filter_level
             })
             .collect();
 
@@ -961,12 +1028,9 @@ impl ActivityModel {
         }
 
         // Partition into active (including queued) and completed
-        let (active, completed): (Vec<_>, Vec<_>) = all_children.into_iter().partition(|a| {
-            matches!(
-                a.state,
-                NixActivityState::Queued | NixActivityState::Active
-            )
-        });
+        let (active, completed): (Vec<_>, Vec<_>) = all_children
+            .into_iter()
+            .partition(|a| matches!(a.state, NixActivityState::Queued | NixActivityState::Active));
 
         // Sort completed by completion time (most recent first)
         let mut completed_with_time: Vec<_> = completed

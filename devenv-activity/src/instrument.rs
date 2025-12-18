@@ -37,12 +37,12 @@ use crate::stack::{ACTIVITY_STACK, get_current_stack};
 pub trait ActivityInstrument: Future + Sized {
     /// Instrument this future with the given activity's context.
     ///
-    /// The `&Activity` is only used to extract the ID and span at call time;
+    /// The `&Activity` is only used to extract the ID, level and span at call time;
     /// the returned future captures only `Self`, not the `&Activity` reference.
     /// This means when `Self` is `'static`, the returned future is also `'static`.
     fn in_activity(self, activity: &Activity) -> impl Future<Output = Self::Output> + use<Self> {
         let mut stack = get_current_stack();
-        stack.push(activity.id());
+        stack.push((activity.id(), activity.level()));
         let span = activity.span();
 
         ACTIVITY_STACK.scope(

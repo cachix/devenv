@@ -9,7 +9,7 @@ use crate::activity::{Activity, ActivityType};
 use crate::events::{
     ActivityEvent, ActivityLevel, Build, Command, Evaluate, Fetch, FetchKind, Operation, Task,
 };
-use crate::stack::{current_activity_id, send_activity_event};
+use crate::stack::{current_activity_id, current_activity_level, send_activity_event};
 
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -36,7 +36,7 @@ pub struct BuildBuilder {
     derivation_path: Option<String>,
     id: Option<u64>,
     parent: Option<Option<u64>>,
-    level: ActivityLevel,
+    level: Option<ActivityLevel>,
 }
 
 impl BuildBuilder {
@@ -46,7 +46,7 @@ impl BuildBuilder {
             derivation_path: None,
             id: None,
             parent: None,
-            level: ActivityLevel::default(),
+            level: None,
         }
     }
 
@@ -66,15 +66,20 @@ impl BuildBuilder {
     }
 
     pub fn level(mut self, level: ActivityLevel) -> Self {
-        self.level = level;
+        self.level = Some(level);
         self
     }
 
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
+        // Inherit level from parent if not explicitly set
+        let level = self
+            .level
+            .or_else(current_activity_level)
+            .unwrap_or_default();
 
-        let span = create_span(id, self.level);
+        let span = create_span(id, level);
 
         send_activity_event(ActivityEvent::Build(Build::Start {
             id,
@@ -84,7 +89,7 @@ impl BuildBuilder {
             timestamp: Timestamp::now(),
         }));
 
-        Activity::new(span, id, ActivityType::Build)
+        Activity::new(span, id, ActivityType::Build, level)
     }
 
     /// Queue a build (waiting for a build slot).
@@ -92,8 +97,13 @@ impl BuildBuilder {
     pub fn queue(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
+        // Inherit level from parent if not explicitly set
+        let level = self
+            .level
+            .or_else(current_activity_level)
+            .unwrap_or_default();
 
-        let span = create_span(id, self.level);
+        let span = create_span(id, level);
 
         send_activity_event(ActivityEvent::Build(Build::Queued {
             id,
@@ -103,7 +113,7 @@ impl BuildBuilder {
             timestamp: Timestamp::now(),
         }));
 
-        Activity::new(span, id, ActivityType::Build)
+        Activity::new(span, id, ActivityType::Build, level)
     }
 }
 
@@ -114,7 +124,7 @@ pub struct FetchBuilder {
     url: Option<String>,
     id: Option<u64>,
     parent: Option<Option<u64>>,
-    level: ActivityLevel,
+    level: Option<ActivityLevel>,
 }
 
 impl FetchBuilder {
@@ -125,7 +135,7 @@ impl FetchBuilder {
             url: None,
             id: None,
             parent: None,
-            level: ActivityLevel::default(),
+            level: None,
         }
     }
 
@@ -145,15 +155,20 @@ impl FetchBuilder {
     }
 
     pub fn level(mut self, level: ActivityLevel) -> Self {
-        self.level = level;
+        self.level = Some(level);
         self
     }
 
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
+        // Inherit level from parent if not explicitly set
+        let level = self
+            .level
+            .or_else(current_activity_level)
+            .unwrap_or_default();
 
-        let span = create_span(id, self.level);
+        let span = create_span(id, level);
 
         send_activity_event(ActivityEvent::Fetch(Fetch::Start {
             id,
@@ -164,7 +179,7 @@ impl FetchBuilder {
             timestamp: Timestamp::now(),
         }));
 
-        Activity::new(span, id, ActivityType::Fetch(self.kind))
+        Activity::new(span, id, ActivityType::Fetch(self.kind), level)
     }
 }
 
@@ -172,7 +187,7 @@ impl FetchBuilder {
 pub struct EvaluateBuilder {
     id: Option<u64>,
     parent: Option<Option<u64>>,
-    level: ActivityLevel,
+    level: Option<ActivityLevel>,
 }
 
 impl EvaluateBuilder {
@@ -180,7 +195,7 @@ impl EvaluateBuilder {
         Self {
             id: None,
             parent: None,
-            level: ActivityLevel::default(),
+            level: None,
         }
     }
 
@@ -195,15 +210,20 @@ impl EvaluateBuilder {
     }
 
     pub fn level(mut self, level: ActivityLevel) -> Self {
-        self.level = level;
+        self.level = Some(level);
         self
     }
 
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
+        // Inherit level from parent if not explicitly set
+        let level = self
+            .level
+            .or_else(current_activity_level)
+            .unwrap_or_default();
 
-        let span = create_span(id, self.level);
+        let span = create_span(id, level);
 
         send_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
             id,
@@ -211,7 +231,7 @@ impl EvaluateBuilder {
             timestamp: Timestamp::now(),
         }));
 
-        Activity::new(span, id, ActivityType::Evaluate)
+        Activity::new(span, id, ActivityType::Evaluate, level)
     }
 }
 
@@ -221,7 +241,7 @@ pub struct TaskBuilder {
     detail: Option<String>,
     id: Option<u64>,
     parent: Option<Option<u64>>,
-    level: ActivityLevel,
+    level: Option<ActivityLevel>,
 }
 
 impl TaskBuilder {
@@ -231,7 +251,7 @@ impl TaskBuilder {
             detail: None,
             id: None,
             parent: None,
-            level: ActivityLevel::default(),
+            level: None,
         }
     }
 
@@ -251,15 +271,20 @@ impl TaskBuilder {
     }
 
     pub fn level(mut self, level: ActivityLevel) -> Self {
-        self.level = level;
+        self.level = Some(level);
         self
     }
 
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
+        // Inherit level from parent if not explicitly set
+        let level = self
+            .level
+            .or_else(current_activity_level)
+            .unwrap_or_default();
 
-        let span = create_span(id, self.level);
+        let span = create_span(id, level);
 
         send_activity_event(ActivityEvent::Task(Task::Start {
             id,
@@ -269,7 +294,7 @@ impl TaskBuilder {
             timestamp: Timestamp::now(),
         }));
 
-        Activity::new(span, id, ActivityType::Task)
+        Activity::new(span, id, ActivityType::Task, level)
     }
 }
 
@@ -279,7 +304,7 @@ pub struct CommandBuilder {
     command: Option<String>,
     id: Option<u64>,
     parent: Option<Option<u64>>,
-    level: ActivityLevel,
+    level: Option<ActivityLevel>,
 }
 
 impl CommandBuilder {
@@ -289,7 +314,7 @@ impl CommandBuilder {
             command: None,
             id: None,
             parent: None,
-            level: ActivityLevel::Debug, // Commands default to DEBUG level
+            level: None,
         }
     }
 
@@ -309,15 +334,20 @@ impl CommandBuilder {
     }
 
     pub fn level(mut self, level: ActivityLevel) -> Self {
-        self.level = level;
+        self.level = Some(level);
         self
     }
 
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
+        // Inherit level from parent if not explicitly set, default to Debug for commands
+        let level = self
+            .level
+            .or_else(current_activity_level)
+            .unwrap_or(ActivityLevel::Debug);
 
-        let span = create_span(id, self.level);
+        let span = create_span(id, level);
 
         send_activity_event(ActivityEvent::Command(Command::Start {
             id,
@@ -327,7 +357,7 @@ impl CommandBuilder {
             timestamp: Timestamp::now(),
         }));
 
-        Activity::new(span, id, ActivityType::Command)
+        Activity::new(span, id, ActivityType::Command, level)
     }
 }
 
@@ -337,7 +367,7 @@ pub struct OperationBuilder {
     detail: Option<String>,
     id: Option<u64>,
     parent: Option<Option<u64>>,
-    level: ActivityLevel,
+    level: Option<ActivityLevel>,
 }
 
 impl OperationBuilder {
@@ -347,7 +377,7 @@ impl OperationBuilder {
             detail: None,
             id: None,
             parent: None,
-            level: ActivityLevel::default(),
+            level: None,
         }
     }
 
@@ -367,19 +397,24 @@ impl OperationBuilder {
     }
 
     pub fn level(mut self, level: ActivityLevel) -> Self {
-        self.level = level;
+        self.level = Some(level);
         self
     }
 
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
+        // Inherit level from parent if not explicitly set
+        let level = self
+            .level
+            .or_else(current_activity_level)
+            .unwrap_or_default();
 
         // NOTE: Include devenv.user_message for the legacy devenv CLI
         //
         // span! requires compile-time constant levels, so we match on each variant
         let name = self.name.as_str();
-        let span = match self.level {
+        let span = match level {
             ActivityLevel::Error => span!(
                 Level::ERROR,
                 "activity",
@@ -417,10 +452,10 @@ impl OperationBuilder {
             name: self.name.clone(),
             parent,
             detail: self.detail,
-            level: self.level,
+            level,
             timestamp: Timestamp::now(),
         }));
 
-        Activity::new(span, id, ActivityType::Operation)
+        Activity::new(span, id, ActivityType::Operation, level)
     }
 }

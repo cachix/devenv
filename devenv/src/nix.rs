@@ -452,8 +452,7 @@ impl Nix {
                 };
 
                 let pretty_cmd = display_command(&cmd);
-                let command_activity =
-                    Activity::command(&pretty_cmd).command(&pretty_cmd).start();
+                let command_activity = Activity::command(&pretty_cmd).command(&pretty_cmd).start();
 
                 // Use caching if enabled and pool is available
                 let use_caching = self.global_options.eval_cache
@@ -476,11 +475,17 @@ impl Nix {
                     }
 
                     nix_cmd.on_stderr(make_on_stderr());
-                    nix_cmd.output(&mut cmd).in_activity(&command_activity).await
+                    nix_cmd
+                        .output(&mut cmd)
+                        .in_activity(&command_activity)
+                        .await
                 } else {
                     let mut nix_cmd = NixCommand::without_caching();
                     nix_cmd.on_stderr(make_on_stderr());
-                    nix_cmd.output(&mut cmd).in_activity(&command_activity).await
+                    nix_cmd
+                        .output(&mut cmd)
+                        .in_activity(&command_activity)
+                        .await
                 }
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;

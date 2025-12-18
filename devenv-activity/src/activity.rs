@@ -11,7 +11,8 @@ use crate::builders::{
     BuildBuilder, CommandBuilder, EvaluateBuilder, FetchBuilder, OperationBuilder, TaskBuilder,
 };
 use crate::events::{
-    ActivityEvent, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind, Operation, Task,
+    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind,
+    Operation, Task,
 };
 use crate::stack::{ACTIVITY_STACK, get_current_stack, send_activity_event};
 
@@ -33,16 +34,23 @@ pub struct Activity {
     span: Span,
     id: u64,
     activity_type: ActivityType,
+    level: ActivityLevel,
     outcome: std::sync::Mutex<ActivityOutcome>,
 }
 
 impl Activity {
     /// Create a new Activity (called by builders)
-    pub(crate) fn new(span: Span, id: u64, activity_type: ActivityType) -> Self {
+    pub(crate) fn new(
+        span: Span,
+        id: u64,
+        activity_type: ActivityType,
+        level: ActivityLevel,
+    ) -> Self {
         Self {
             span,
             id,
             activity_type,
+            level,
             outcome: std::sync::Mutex::new(ActivityOutcome::Success),
         }
     }
@@ -82,19 +90,25 @@ impl Activity {
         self.id
     }
 
+    /// Get the activity level
+    pub fn level(&self) -> ActivityLevel {
+        self.level
+    }
+
     /// Get a cloned span for this activity.
     pub fn span(&self) -> Span {
         self.span.clone()
     }
 
     /// Run a future with this activity's context propagated.
-    /// Nested activities created within the future will see this activity as their parent.
+    /// Nested activities created within the future will see this activity as their parent
+    /// and inherit this activity's level by default.
     ///
     /// # Example
     /// ```ignore
     /// let activity = Activity::task("parent").start();
     /// activity.scope(async {
-    ///     // This child will have `activity` as its parent
+    ///     // This child will have `activity` as its parent and inherit its level
     ///     let child = Activity::task("child").start();
     /// }).await;
     /// ```
@@ -103,18 +117,19 @@ impl Activity {
         F: Future<Output = T>,
     {
         let mut stack = get_current_stack();
-        stack.push(self.id);
+        stack.push((self.id, self.level));
         ACTIVITY_STACK.scope(RefCell::new(stack), f).await
     }
 
     /// Run a closure with this activity's context propagated.
-    /// Nested activities created within the closure will see this activity as their parent.
+    /// Nested activities created within the closure will see this activity as their parent
+    /// and inherit this activity's level by default.
     ///
     /// # Example
     /// ```ignore
     /// let activity = Activity::task("parent").start();
     /// activity.scope_sync(|| {
-    ///     // This child will have `activity` as its parent
+    ///     // This child will have `activity` as its parent and inherit its level
     ///     let child = Activity::task("child").start();
     /// });
     /// ```
@@ -123,7 +138,7 @@ impl Activity {
         F: FnOnce() -> T,
     {
         let mut stack = get_current_stack();
-        stack.push(self.id);
+        stack.push((self.id, self.level));
         ACTIVITY_STACK.sync_scope(RefCell::new(stack), f)
     }
 
@@ -307,6 +322,7 @@ impl Clone for Activity {
             span: self.span.clone(),
             id: self.id,
             activity_type: self.activity_type,
+            level: self.level,
             outcome: std::sync::Mutex::new(outcome),
         }
     }
