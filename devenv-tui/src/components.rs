@@ -304,10 +304,8 @@ impl ActivityTextComponent {
                 &self.action[1..]
             );
             final_prefix.push(
-                element!(View(width: (action_text.len() + 1) as u32, flex_shrink: 0.0) {
-                    View(margin_right: 1) {
-                        Text(content: action_text, color: name_color, weight: Weight::Bold)
-                    }
+                element!(View(width: action_text.len() as u32, flex_shrink: 0.0) {
+                    Text(content: action_text, color: name_color, weight: Weight::Bold)
                 })
                 .into_any(),
             );
@@ -321,9 +319,19 @@ impl ActivityTextComponent {
                         #(final_prefix)
                     }
                     // Flexible middle column - can overflow
+                    // Each item uses leading margin (margin_left) to separate from predecessor
                     View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
-                        Text(content: shortened_name, color: name_color, weight: Weight::Bold)
+                        #(if !shortened_name.is_empty() {
+                            let has_predecessor = !self.action.is_empty();
+                            let margin = if has_predecessor { 1 } else { 0 };
+                            vec![element!(View(margin_left: margin) {
+                                Text(content: shortened_name, color: name_color, weight: Weight::Bold)
+                            }).into_any()]
+                        } else {
+                            vec![]
+                        })
                         #(if show_suffix && self.suffix.is_some() {
+                            // Suffix always has a predecessor (action or name)
                             vec![element!(View(margin_left: 1) {
                                 Text(content: self.suffix.as_ref().expect("suffix should be Some when show_suffix is true"), color: suffix_color)
                             }).into_any()]
@@ -346,9 +354,19 @@ impl ActivityTextComponent {
                         #(final_prefix)
                     }
                     // Flexible middle column - can overflow
+                    // Each item uses leading margin (margin_left) to separate from predecessor
                     View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
-                        Text(content: shortened_name, color: name_color, weight: Weight::Bold)
+                        #(if !shortened_name.is_empty() {
+                            let has_predecessor = !self.action.is_empty();
+                            let margin = if has_predecessor { 1 } else { 0 };
+                            vec![element!(View(margin_left: margin) {
+                                Text(content: shortened_name, color: name_color, weight: Weight::Bold)
+                            }).into_any()]
+                        } else {
+                            vec![]
+                        })
                         #(if show_suffix && self.suffix.is_some() {
+                            // Suffix always has a predecessor (action or name)
                             vec![element!(View(margin_left: 1) {
                                 Text(content: self.suffix.as_ref().expect("suffix should be Some when show_suffix is true"), color: suffix_color)
                             }).into_any()]
