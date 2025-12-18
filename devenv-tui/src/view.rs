@@ -64,7 +64,7 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
 
         // Determine completion state
         let (completed, cached) = match &activity.state {
-            NixActivityState::Active => (None, false),
+            NixActivityState::Queued | NixActivityState::Active => (None, false),
             NixActivityState::Completed { success, cached, .. } => (Some(*success), *cached),
         };
 
@@ -267,19 +267,28 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
     } = &*ctx;
     let indent = "  ".repeat(*depth);
 
-    // Calculate elapsed time - use stored duration for completed activities
-    let (elapsed, is_completed) = match &activity.state {
-        NixActivityState::Completed { duration, .. } => (*duration, true),
-        NixActivityState::Active => (activity.start_time.elapsed(), false),
+    // Calculate elapsed time - use stored duration for completed activities, skip for queued
+    let elapsed_str = match &activity.state {
+        NixActivityState::Completed { duration, .. } => format_elapsed_time(*duration, true),
+        NixActivityState::Active => format_elapsed_time(activity.start_time.elapsed(), false),
+        NixActivityState::Queued => String::new(), // No timer for queued activities
     };
-    let elapsed_str = format_elapsed_time(elapsed, is_completed);
 
     // Build and return the activity element
     match &activity.variant {
         ActivityVariant::Build(build_data) => {
+            let is_completed = completed.is_some();
+
+            // Completed builds: no suffix, just show the build name and duration
+            // Active/queued builds: show phase as suffix
+            let phase_suffix = if is_completed {
+                None
+            } else {
+                build_data.phase.clone()
+            };
+
             // For selected build activities, use custom multi-line rendering
             if *is_selected {
-                let phase = build_data.phase.as_deref().unwrap_or("building");
                 let prefix = HierarchyPrefixComponent::new(indent, *depth)
                     .with_spinner()
                     .with_completed(*completed)
@@ -292,8 +301,8 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     activity.short_name.clone(),
                     elapsed_str,
                 )
-                .with_suffix(Some(phase.to_string()))
-                .with_completed(completed.is_some())
+                .with_suffix(phase_suffix.clone())
+                .with_completed(is_completed)
                 .with_selection(*is_selected)
                 .render(terminal_width, *depth, prefix);
 
@@ -318,7 +327,6 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
 
             // Non-selected build activities use normal rendering
-            let phase = build_data.phase.as_deref().unwrap_or("building");
             let prefix = HierarchyPrefixComponent::new(indent, *depth)
                 .with_spinner()
                 .with_completed(*completed)
@@ -331,8 +339,8 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.short_name.clone(),
                 elapsed_str,
             )
-            .with_suffix(Some(phase.to_string()))
-            .with_completed(completed.is_some())
+            .with_suffix(phase_suffix)
+            .with_completed(is_completed)
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
         }

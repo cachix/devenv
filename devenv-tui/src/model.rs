@@ -322,6 +322,28 @@ impl ActivityModel {
 
     fn handle_build_event(&mut self, event: Build) {
         match event {
+            Build::Queued {
+                id,
+                name,
+                parent,
+                derivation_path,
+                ..
+            } => {
+                let variant = ActivityVariant::Build(BuildActivity {
+                    phase: Some("queued".to_string()),
+                    log_stdout_lines: Vec::new(),
+                    log_stderr_lines: Vec::new(),
+                });
+                self.create_activity_with_state(
+                    id,
+                    name,
+                    parent,
+                    derivation_path,
+                    variant,
+                    ActivityLevel::Info,
+                    NixActivityState::Queued,
+                );
+            }
             Build::Start {
                 id,
                 name,
@@ -330,7 +352,7 @@ impl ActivityModel {
                 ..
             } => {
                 let variant = ActivityVariant::Build(BuildActivity {
-                    phase: Some("preparing".to_string()),
+                    phase: Some("running".to_string()),
                     log_stdout_lines: Vec::new(),
                     log_stderr_lines: Vec::new(),
                 });
@@ -493,13 +515,26 @@ impl ActivityModel {
         variant: ActivityVariant,
         level: ActivityLevel,
     ) {
+        self.create_activity_with_state(id, name, parent, detail, variant, level, NixActivityState::Active);
+    }
+
+    fn create_activity_with_state(
+        &mut self,
+        id: u64,
+        name: String,
+        parent: Option<u64>,
+        detail: Option<String>,
+        variant: ActivityVariant,
+        level: ActivityLevel,
+        state: NixActivityState,
+    ) {
         let activity = Activity {
             id,
             name: name.clone(),
             short_name: name,
             parent_id: parent,
             start_time: Instant::now(),
-            state: NixActivityState::Active,
+            state,
             completed_at: None,
             detail,
             variant,
@@ -718,7 +753,12 @@ impl ActivityModel {
     pub fn get_active_activities(&self) -> Vec<&Activity> {
         self.activities
             .values()
-            .filter(|activity| matches!(activity.state, NixActivityState::Active))
+            .filter(|activity| {
+                matches!(
+                    activity.state,
+                    NixActivityState::Queued | NixActivityState::Active
+                )
+            })
             .collect()
     }
 
@@ -799,25 +839,29 @@ impl ActivityModel {
 
         for activity in self.activities.values() {
             match (&activity.variant, &activity.state) {
-                (ActivityVariant::Build(_), NixActivityState::Active) => summary.active_builds += 1,
+                (ActivityVariant::Build(_), NixActivityState::Queued | NixActivityState::Active) => {
+                    summary.active_builds += 1
+                }
                 (ActivityVariant::Build(_), NixActivityState::Completed { success: true, .. }) => {
                     summary.completed_builds += 1;
                 }
                 (ActivityVariant::Build(_), NixActivityState::Completed { success: false, .. }) => {
                     summary.failed_builds += 1;
                 }
-                (ActivityVariant::Download(_), NixActivityState::Active) => {
-                    summary.active_downloads += 1
-                }
+                (
+                    ActivityVariant::Download(_),
+                    NixActivityState::Queued | NixActivityState::Active,
+                ) => summary.active_downloads += 1,
                 (
                     ActivityVariant::Download(_),
                     NixActivityState::Completed { success: true, .. },
                 ) => {
                     summary.completed_downloads += 1;
                 }
-                (ActivityVariant::Query(_), NixActivityState::Active) => {
-                    summary.active_queries += 1
-                }
+                (
+                    ActivityVariant::Query(_),
+                    NixActivityState::Queued | NixActivityState::Active,
+                ) => summary.active_queries += 1,
                 (ActivityVariant::Query(_), NixActivityState::Completed { success: true, .. }) => {
                     summary.completed_queries += 1;
                 }
@@ -866,7 +910,12 @@ impl ActivityModel {
     pub fn get_active_display_activities(&self) -> Vec<DisplayActivity> {
         self.get_display_activities()
             .into_iter()
-            .filter(|da| matches!(da.activity.state, NixActivityState::Active))
+            .filter(|da| {
+                matches!(
+                    da.activity.state,
+                    NixActivityState::Queued | NixActivityState::Active
+                )
+            })
             .collect()
     }
 
@@ -911,10 +960,13 @@ impl ActivityModel {
             return (all_children, total_count, 0);
         }
 
-        // Partition into active and completed
-        let (active, completed): (Vec<_>, Vec<_>) = all_children
-            .into_iter()
-            .partition(|a| matches!(a.state, NixActivityState::Active));
+        // Partition into active (including queued) and completed
+        let (active, completed): (Vec<_>, Vec<_>) = all_children.into_iter().partition(|a| {
+            matches!(
+                a.state,
+                NixActivityState::Queued | NixActivityState::Active
+            )
+        });
 
         // Sort completed by completion time (most recent first)
         let mut completed_with_time: Vec<_> = completed
@@ -1059,6 +1111,9 @@ impl ActivityModel {
 /// State of a Nix activity
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NixActivityState {
+    /// Activity is queued, waiting to start (no timer shown)
+    Queued,
+    /// Activity is actively running (timer shown)
     Active,
     Completed {
         success: bool,

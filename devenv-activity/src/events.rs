@@ -24,6 +24,18 @@ pub enum ActivityEvent {
 #[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Build {
+    /// Build is queued, waiting for a build slot
+    Queued {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        parent: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        derivation_path: Option<String>,
+        timestamp: Timestamp,
+    },
+    /// Build has started running
     Start {
         #[serde(alias = "activity_id")]
         id: u64,

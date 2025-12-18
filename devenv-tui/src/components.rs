@@ -467,12 +467,12 @@ impl<'a> DownloadActivityComponent<'a> {
 
     pub fn render(&self, terminal_width: u16) -> AnyElement<'static> {
         let indent = "  ".repeat(self.depth);
-        // Use stored duration for completed activities
-        let (elapsed, is_completed) = match &self.activity.state {
-            NixActivityState::Completed { duration, .. } => (*duration, true),
-            NixActivityState::Active => (self.activity.start_time.elapsed(), false),
+        // Use stored duration for completed activities, skip for queued
+        let elapsed_str = match &self.activity.state {
+            NixActivityState::Completed { duration, .. } => format_elapsed_time(*duration, true),
+            NixActivityState::Active => format_elapsed_time(self.activity.start_time.elapsed(), false),
+            NixActivityState::Queued => String::new(),
         };
-        let elapsed_str = format_elapsed_time(elapsed, is_completed);
 
         let mut elements = vec![];
 

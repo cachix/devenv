@@ -86,6 +86,25 @@ impl BuildBuilder {
 
         Activity::new(span, id, ActivityType::Build)
     }
+
+    /// Queue a build (waiting for a build slot).
+    /// Use this for builds that are waiting to start, not actively running.
+    pub fn queue(self) -> Activity {
+        let id = self.id.unwrap_or_else(next_id);
+        let parent = self.parent.unwrap_or_else(current_activity_id);
+
+        let span = create_span(id, self.level);
+
+        send_activity_event(ActivityEvent::Build(Build::Queued {
+            id,
+            name: self.name.clone(),
+            parent,
+            derivation_path: self.derivation_path,
+            timestamp: Timestamp::now(),
+        }));
+
+        Activity::new(span, id, ActivityType::Build)
+    }
 }
 
 /// Builder for Fetch activities

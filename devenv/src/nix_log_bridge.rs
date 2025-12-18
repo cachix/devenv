@@ -181,6 +181,23 @@ impl NixLogBridge {
 
                 self.insert_activity(activity_id, activity_type, activity);
             }
+            ActivityType::BuildWaiting => {
+                // Build is queued, waiting for a build slot
+                let derivation_path = fields
+                    .first()
+                    .and_then(Self::extract_string_field)
+                    .unwrap_or_else(|| text.clone());
+
+                let derivation_name = extract_derivation_name(&derivation_path);
+
+                let activity = Activity::build(derivation_name)
+                    .id(activity_id)
+                    .derivation_path(derivation_path)
+                    .parent(parent_id)
+                    .queue();
+
+                self.insert_activity(activity_id, activity_type, activity);
+            }
             ActivityType::QueryPathInfo => {
                 if let Some(store_path) = fields.first().and_then(Self::extract_string_field) {
                     let package_name = extract_package_name(&store_path);
