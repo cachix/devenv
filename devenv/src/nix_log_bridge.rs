@@ -9,16 +9,14 @@ use tracing::{error, info, trace, warn};
 
 /// Bridge that converts Nix internal logs to tracing events.
 ///
-/// The bridge must be created with a parent activity ID that is captured
+/// The bridge must be created with an evaluation activity that is captured
 /// before crossing thread boundaries, since the stderr callback runs in
 /// a separate thread and cannot access the task-local activity stack.
 pub struct NixLogBridge {
     /// Current active operations and their associated Nix activities
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
-    /// Parent activity ID for all activities created by this bridge
-    parent_activity_id: Option<u64>,
-    /// The evaluation activity for tracking file evaluations
-    evaluation_activity: Arc<Mutex<Option<Activity>>>,
+    /// The evaluation activity for tracking file evaluations and as parent for Nix activities
+    eval_activity: Activity,
 }
 
 /// Information about an active Nix activity
@@ -28,39 +26,19 @@ struct NixActivityInfo {
 }
 
 impl NixLogBridge {
-    /// Create a new NixLogBridge with the given parent activity ID.
+    /// Create a new NixLogBridge with the given evaluation activity.
     ///
-    /// The parent_activity_id should be captured using `current_activity_id()`
-    /// before spawning any threads, as the callback runs in a separate thread.
-    pub fn new(parent_activity_id: Option<u64>) -> Arc<Self> {
+    /// The activity is used both as the parent for Nix activities (Build, Fetch, etc.)
+    /// and for logging file evaluations directly.
+    pub fn new(eval_activity: Activity) -> Arc<Self> {
         Arc::new(Self {
             active_activities: Arc::new(Mutex::new(HashMap::new())),
-            parent_activity_id,
-            evaluation_activity: Arc::new(Mutex::new(None)),
+            eval_activity,
         })
     }
 
     /// Returns a callback that can be used by any log source.
     /// Both CLI and FFI backends can use this to feed logs to the bridge.
-    ///
-    /// # Example
-    /// ```
-    /// use devenv::nix_log_bridge::NixLogBridge;
-    /// use devenv_eval_cache::internal_log::{InternalLog, ActivityType, Verbosity};
-    ///
-    /// let bridge = NixLogBridge::new(None);
-    /// let callback = bridge.get_log_callback();
-    ///
-    /// // Feed logs from any source
-    /// callback(InternalLog::Start {
-    ///     id: 1,
-    ///     typ: ActivityType::Unknown,
-    ///     text: "example".to_string(),
-    ///     fields: vec![],
-    ///     level: Verbosity::Error,
-    ///     parent: 0,
-    /// });
-    /// ```
     pub fn get_log_callback(
         self: &Arc<Self>,
     ) -> impl Fn(InternalLog) + Clone + Send + Sync + 'static {
@@ -172,14 +150,8 @@ impl NixLogBridge {
     }
 
     /// Get the parent activity ID for Nix activities.
-    /// Uses the evaluation activity if one exists, otherwise falls back to the
-    /// parent_activity_id that was passed when creating the bridge.
     fn get_parent_activity_id(&self) -> Option<u64> {
-        self.evaluation_activity
-            .lock()
-            .ok()
-            .and_then(|eval| eval.as_ref().map(|a| a.id()))
-            .or(self.parent_activity_id)
+        Some(self.eval_activity.id())
     }
 
     /// Handle the start of a Nix activity
@@ -340,20 +312,7 @@ impl NixLogBridge {
 
     /// Handle file evaluation events
     fn handle_file_evaluation(&self, file_path: std::path::PathBuf) {
-        if let Ok(mut eval_activity) = self.evaluation_activity.lock() {
-            // If this is the first file, create the evaluation activity
-            if eval_activity.is_none() {
-                let activity = Activity::evaluate()
-                    .parent(self.parent_activity_id)
-                    .start();
-                *eval_activity = Some(activity);
-            }
-
-            // Log the file path to the evaluation activity
-            if let Some(ref activity) = *eval_activity {
-                activity.log(file_path.display().to_string());
-            }
-        }
+        self.eval_activity.log(file_path.display().to_string());
     }
 }
 

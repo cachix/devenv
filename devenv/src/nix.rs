@@ -1,9 +1,7 @@
 use crate::{devenv, nix_log_bridge::NixLogBridge, util};
 use async_trait::async_trait;
 use devenv_activity::ActivityInstrument;
-use devenv_activity::{
-    Activity, ActivityLevel, activity, current_activity_id, message, message_with_details,
-};
+use devenv_activity::{Activity, ActivityLevel, activity, message, message_with_details};
 use devenv_core::{
     cachix::{
         CacheMetadata, CachixCacheInfo, CachixConfig, CachixManager, StorePing,
@@ -415,11 +413,10 @@ impl Nix {
             // Wrap in an Evaluate activity to track cache hits at the eval level.
             let eval_activity = Activity::evaluate().start();
 
+            let nix_bridge = NixLogBridge::new(eval_activity.clone());
+            let log_callback = nix_bridge.get_log_callback();
+
             let output = async {
-                // Capture the current activity ID before spawning threads.
-                let parent_activity_id = current_activity_id();
-                let nix_bridge = NixLogBridge::new(parent_activity_id);
-                let log_callback = nix_bridge.get_log_callback();
                 let quiet = self.global_options.quiet;
                 let verbose = self.global_options.verbose;
 
@@ -721,7 +718,7 @@ impl Nix {
         Ok(nix_conf)
     }
 
-    #[activity("Checking Nix store", level = debug)]
+    #[activity("Querying Nix store", level = debug)]
     async fn is_trusted_user_impl(&self) -> Result<bool> {
         let options = Options { ..self.options };
         let store_output = self
