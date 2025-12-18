@@ -37,24 +37,19 @@ pub fn Spinner(mut hooks: Hooks, props: &SpinnerProps) -> impl Into<AnyElement<'
 /// Build logs viewport height for collapsed preview (press 'e' to expand to fullscreen)
 pub const LOG_VIEWPORT_COLLAPSED: usize = 10;
 
-/// Color constants for operations
-pub const COLOR_ACTIVE: Color = Color::Rgb {
-    r: 0,
-    g: 128,
-    b: 157,
-}; // #00809D - Nice blue for active/in-progress
+/// Color constants for operations using ANSI grayscale (232-255)
+pub const COLOR_ACTIVE: Color = Color::AnsiValue(255); // Bright white for top-level active
+pub const COLOR_ACTIVE_NESTED: Color = Color::AnsiValue(246); // Dimmer for nested active
+pub const COLOR_SECONDARY: Color = Color::AnsiValue(242); // Gray for secondary text (cached, phases)
+pub const COLOR_HIERARCHY: Color = Color::AnsiValue(242); // Gray for tree lines/elapsed
 pub const COLOR_COMPLETED: Color = Color::Rgb {
     r: 112,
     g: 138,
     b: 88,
-}; // #708A58 - Sage green for completed/done
-pub const COLOR_FAILED: Color = Color::AnsiValue(160); // Nice bright red for failed
-pub const COLOR_INTERACTIVE: Color = Color::Rgb {
-    r: 255,
-    g: 215,
-    b: 0,
-}; // #FFD700 - Gold for selected items and UI hints
-pub const COLOR_HIERARCHY: Color = Color::AnsiValue(242); // Medium grey for hierarchy indicators
+}; // #708A58 - Sage green for success checkmark
+pub const COLOR_FAILED: Color = Color::AnsiValue(160); // Red for failed
+pub const COLOR_INFO: Color = Color::AnsiValue(39); // Blue for info indicators
+pub const COLOR_INTERACTIVE: Color = Color::AnsiValue(220); // Gold for selected items
 
 /// Format elapsed time for display: ms -> s -> m s -> h m
 /// When `high_resolution` is true, shows ms for sub-second durations.
@@ -134,15 +129,10 @@ impl HierarchyPrefixComponent {
         if self.depth == 0 {
             match self.completed {
                 Some(true) => {
-                    // Success - show checkmark (gray if cached, green if fresh)
-                    let color = if self.cached {
-                        COLOR_HIERARCHY
-                    } else {
-                        COLOR_COMPLETED
-                    };
+                    // Success - show green checkmark
                     prefix_children.push(
                         element!(View(margin_right: 1) {
-                            Text(content: "✓", color: color)
+                            Text(content: "✓", color: COLOR_COMPLETED)
                         })
                         .into_any(),
                     );
@@ -259,7 +249,7 @@ impl ActivityTextComponent {
             depth,
         );
 
-        // Colors: blue when active, dark gray when completed
+        // Colors: blue when active, green when completed
         // Selected rows get inverted colors
         let (name_color, suffix_color, elapsed_color, bg_color) = if self.is_selected {
             (
@@ -268,18 +258,32 @@ impl ActivityTextComponent {
                 Color::AnsiValue(238),       // Dark gray for elapsed
                 Some(Color::AnsiValue(250)), // Light gray background
             )
+        } else if self.is_completed && depth == 0 {
+            (
+                Color::Reset,
+                COLOR_SECONDARY,
+                COLOR_HIERARCHY,
+                None,
+            )
         } else if self.is_completed {
             (
-                COLOR_HIERARCHY, // Dark gray when completed
+                COLOR_ACTIVE_NESTED,
+                COLOR_SECONDARY,
                 COLOR_HIERARCHY,
-                Color::AnsiValue(242),
+                None,
+            )
+        } else if depth == 0 {
+            (
+                COLOR_ACTIVE,
+                COLOR_SECONDARY,
+                COLOR_HIERARCHY,
                 None,
             )
         } else {
             (
-                COLOR_ACTIVE, // Blue when active
+                COLOR_ACTIVE_NESTED,
+                COLOR_SECONDARY,
                 COLOR_HIERARCHY,
-                Color::AnsiValue(242),
                 None,
             )
         };
@@ -426,7 +430,7 @@ impl ProgressBarComponent {
                     Text(content: filled_bar, color: COLOR_ACTIVE)
                     Text(content: empty_bar, color: Color::AnsiValue(238))
                 }
-                Text(content: size_info, color: Color::AnsiValue(242))
+                Text(content: size_info, color: COLOR_HIERARCHY)
             }
         }
         .into_any()
@@ -505,7 +509,7 @@ impl<'a> DownloadActivityComponent<'a> {
         let (action_color, name_color, substituter_color, elapsed_color, bg_color) =
             if self.is_selected {
                 (
-                    COLOR_ACTIVE,                // Keep same blue for action
+                    COLOR_ACTIVE,
                     Color::AnsiValue(232),       // Near-black text
                     Color::AnsiValue(238),       // Dark gray for substituter
                     Color::AnsiValue(238),       // Dark gray for elapsed
@@ -513,10 +517,10 @@ impl<'a> DownloadActivityComponent<'a> {
                 )
             } else {
                 (
-                    COLOR_ACTIVE,
+                    COLOR_ACTIVE_NESTED,
                     Color::Reset,
+                    COLOR_SECONDARY,
                     COLOR_HIERARCHY,
-                    Color::AnsiValue(242),
                     None,
                 )
             };

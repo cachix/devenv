@@ -581,7 +581,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let (icon, icon_color, text_color) = match msg_data.level {
                 ActivityLevel::Error => ("✗", COLOR_FAILED, COLOR_FAILED),
                 ActivityLevel::Warn => ("•", Color::AnsiValue(214), Color::AnsiValue(214)), // Yellow
-                ActivityLevel::Info => ("•", COLOR_ACTIVE, Color::Reset), // Blue dot
+                ActivityLevel::Info => ("•", COLOR_INFO, Color::Reset), // Blue dot
                 _ => ("•", COLOR_HIERARCHY, Color::Reset), // Gray dot for debug/trace
             };
 
