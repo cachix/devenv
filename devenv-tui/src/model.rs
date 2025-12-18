@@ -540,6 +540,11 @@ impl ActivityModel {
             };
             activity.completed_at = Some(Instant::now());
 
+            // Clear the phase when build completes so it's not displayed
+            if let ActivityVariant::Build(ref mut build) = activity.variant {
+                build.phase = None;
+            }
+
             if let ActivityVariant::Task(ref mut task) = activity.variant {
                 task.status = match outcome {
                     ActivityOutcome::Success => TaskDisplayStatus::Success,
