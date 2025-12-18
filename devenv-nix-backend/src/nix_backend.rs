@@ -277,7 +277,7 @@ impl NixRustBackend {
 
         // Create eval state with flake support and NIXPKGS_CONFIG
         // load_config() loads settings from nix.conf files including access-tokens
-        let mut eval_state = EvalStateBuilder::new(store.clone())
+        let eval_state = EvalStateBuilder::new(store.clone())
             .to_miette()
             .wrap_err("Failed to create eval state builder")?
             .load_config()
@@ -312,6 +312,7 @@ impl NixRustBackend {
 
         // Set up activity logger integration with tracing
         // MUST be initialized after EvalState is created to ensure Nix is initialized
+        // Note: parent activity ID is captured lazily by NixLogBridge when first activity is processed
         let activity_logger =
             crate::logger::setup_nix_logger().wrap_err("Failed to set up activity logger")?;
 
