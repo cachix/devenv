@@ -1,242 +1,27 @@
 //! Integration of Nix activity logger with the devenv Activity system
 //!
 //! This module provides a bridge between the Nix C++ activity logger callbacks
-//! and the devenv Activity system, allowing Nix operations to be properly displayed
-//! in the TUI and logged through tracing.
+//! and the devenv Activity system via NixLogBridge.
 //!
-//! The logger uses the same Activity types as the CLI backend (Build, Fetch, etc.)
-//! to provide consistent progress reporting across both FFI and CLI backends.
+//! FFI callbacks receive raw field data which is converted to `InternalLog`
+//! and processed by the shared `NixLogBridge` for consistent behavior with
+//! the CLI backend.
 
-use devenv_activity::{Activity, FetchKind, current_activity_id};
+use devenv_activity::{Activity, current_activity_id};
+use devenv_core::nix_log_bridge::{NixLogBridge, activity_type_from_str, result_type_from_str};
+use devenv_eval_cache::internal_log::{Field, InternalLog, Verbosity};
 use miette::Result;
 use nix_bindings_expr::logger::ActivityLoggerBuilder;
 use nix_bindings_util::context::Context;
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex;
-
-/// Activity metadata to track ongoing Nix operations
-#[derive(Debug)]
-struct ActivityMetadata {
-    activity_type: String,
-    activity: Activity,
-}
-
-/// Bridge for Nix activity logging with Activity system integration
-///
-/// This struct bridges Nix C++ activity callbacks to the devenv Activity system,
-/// providing proper progress tracking for the TUI.
-#[derive(Clone)]
-pub struct NixActivityLogger {
-    activity_tracker: Arc<Mutex<HashMap<u64, ActivityMetadata>>>,
-    /// Parent activity ID captured at creation time
-    /// This is needed because FFI callbacks run on different threads
-    parent_activity_id: Option<u64>,
-}
-
-impl NixActivityLogger {
-    /// Create a new Nix activity logger with the current activity as parent
-    pub fn new() -> Self {
-        NixActivityLogger {
-            activity_tracker: Arc::new(Mutex::new(HashMap::new())),
-            parent_activity_id: current_activity_id(),
-        }
-    }
-
-    /// Create a new Nix activity logger with an explicit parent activity ID
-    pub fn with_parent(parent_activity_id: Option<u64>) -> Self {
-        NixActivityLogger {
-            activity_tracker: Arc::new(Mutex::new(HashMap::new())),
-            parent_activity_id,
-        }
-    }
-
-    /// Get a closure that handles activity start events.
-    fn get_start_callback(&self) -> impl Fn(u64, &str, &str) + Clone + Send + Sync + 'static {
-        let tracker = Arc::clone(&self.activity_tracker);
-        let parent_id = self.parent_activity_id;
-
-        move |id: u64, description: &str, activity_type: &str| {
-            let activity = match activity_type {
-                "build" => {
-                    // Extract derivation name from description (usually the .drv path)
-                    let name = extract_nix_name(description, true);
-                    Activity::build(&name)
-                        .id(id)
-                        .derivation_path(description)
-                        .parent(parent_id)
-                        .start()
-                }
-                "copyPath" | "copyPaths" => {
-                    // Downloading from binary cache
-                    let name = extract_nix_name(description, false);
-                    Activity::fetch(FetchKind::Download, &name)
-                        .id(id)
-                        .parent(parent_id)
-                        .start()
-                }
-                "queryPathInfo" => {
-                    // Querying binary cache for path info
-                    let name = extract_nix_name(description, false);
-                    Activity::fetch(FetchKind::Query, &name)
-                        .id(id)
-                        .parent(parent_id)
-                        .start()
-                }
-                "fetchTree" | "download" => {
-                    // Fetching a flake input or downloading a file
-                    Activity::fetch(FetchKind::Tree, description)
-                        .id(id)
-                        .parent(parent_id)
-                        .start()
-                }
-                "substitute" => {
-                    // Substituting a store path from cache
-                    let name = extract_nix_name(description, false);
-                    Activity::fetch(FetchKind::Download, &name)
-                        .id(id)
-                        .parent(parent_id)
-                        .start()
-                }
-                _ => {
-                    // Generic operation for unknown types
-                    Activity::operation(description)
-                        .id(id)
-                        .parent(parent_id)
-                        .start()
-                }
-            };
-
-            let metadata = ActivityMetadata {
-                activity_type: activity_type.to_string(),
-                activity,
-            };
-
-            if let Ok(mut map) = tracker.lock() {
-                map.insert(id, metadata);
-            }
-        }
-    }
-
-    /// Get a closure that handles activity stop events.
-    fn get_stop_callback(&self) -> impl Fn(u64) + Clone + Send + Sync + 'static {
-        let tracker = Arc::clone(&self.activity_tracker);
-        move |id: u64| {
-            // Remove the activity - it completes on drop
-            if let Ok(mut map) = tracker.lock() {
-                map.remove(&id);
-            }
-        }
-    }
-
-    /// Get a closure that handles activity result/progress events.
-    fn get_result_callback(
-        &self,
-    ) -> impl Fn(u64, &str, &[i32], &[i64], &[Option<&str>]) + Clone + Send + Sync + 'static {
-        let tracker = Arc::clone(&self.activity_tracker);
-        move |id: u64,
-              result_type: &str,
-              _field_types: &[i32],
-              int_values: &[i64],
-              string_values: &[Option<&str>]| {
-            let Ok(activities) = tracker.lock() else {
-                return;
-            };
-            let Some(metadata) = activities.get(&id) else {
-                return;
-            };
-
-            match result_type {
-                "progress" => {
-                    // Progress format: [done, expected, running, failed] or [downloaded, total]
-                    if int_values.len() >= 2 {
-                        let done = int_values[0];
-                        let expected = int_values[1];
-
-                        // For copy/download activities, treat as bytes
-                        if metadata.activity_type == "copyPath"
-                            || metadata.activity_type == "download"
-                            || metadata.activity_type == "substitute"
-                        {
-                            metadata.activity.progress_bytes(done, expected);
-                        } else {
-                            metadata.activity.progress(done, expected);
-                        }
-                    }
-                }
-                "setPhase" => {
-                    // Build phase change
-                    if let Some(Some(phase)) = string_values.first() {
-                        metadata.activity.phase(phase);
-                    }
-                }
-                "buildLogLine" => {
-                    // Build log output
-                    if let Some(Some(log_line)) = string_values.first() {
-                        metadata.activity.log(*log_line);
-                    }
-                }
-                _ => {
-                    // Unknown result type - ignore
-                }
-            }
-        }
-    }
-}
-
-impl Default for NixActivityLogger {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Extract a human-readable name from a Nix path
-///
-/// For derivations, strips .drv suffix if requested.
-/// Extracts the name part after the hash (format: /nix/store/hash-name)
-fn extract_nix_name(path: &str, strip_drv: bool) -> String {
-    // Remove .drv suffix if requested
-    let path = if strip_drv {
-        path.strip_suffix(".drv").unwrap_or(path)
-    } else {
-        path
-    };
-
-    // Extract the name part after the hash
-    if let Some(dash_pos) = path.rfind('-')
-        && let Some(slash_pos) = path[..dash_pos].rfind('/')
-    {
-        return path[slash_pos + 1..].to_string();
-    }
-
-    // Fallback: just take the filename
-    path.split('/').next_back().unwrap_or(path).to_string()
-}
 
 /// Initialize the Nix activity logger with Activity system integration
 ///
-/// Sets up callbacks that forward Nix activity events to the devenv Activity system.
-/// The returned ActivityLogger must be kept alive for the duration of Nix operations.
+/// Sets up callbacks that forward Nix activity events to the devenv Activity system
+/// via NixLogBridge. The returned ActivityLogger must be kept alive for the duration
+/// of Nix operations.
 pub fn setup_nix_logger() -> Result<nix_bindings_expr::logger::ActivityLogger> {
-    // Create the activity logging bridge with current activity as parent
-    let logger_bridge = NixActivityLogger::new();
-
-    // Create a context for logger registration
-    let mut context = Context::new();
-
-    // Get reusable callbacks from the bridge
-    let on_start = logger_bridge.get_start_callback();
-    let on_stop = logger_bridge.get_stop_callback();
-    let on_result = logger_bridge.get_result_callback();
-
-    let logger = ActivityLoggerBuilder::new()
-        .on_start(on_start)
-        .on_stop(on_stop)
-        .on_result(on_result)
-        .register(&mut context)
-        .map_err(|e| miette::miette!("Failed to register Nix logger: {}", e))?;
-
-    Ok(logger)
+    setup_nix_logger_with_parent(current_activity_id())
 }
 
 /// Initialize the Nix activity logger with a specific parent activity ID
@@ -246,13 +31,15 @@ pub fn setup_nix_logger() -> Result<nix_bindings_expr::logger::ActivityLogger> {
 pub fn setup_nix_logger_with_parent(
     parent_activity_id: Option<u64>,
 ) -> Result<nix_bindings_expr::logger::ActivityLogger> {
-    let logger_bridge = NixActivityLogger::with_parent(parent_activity_id);
+    // Create an evaluation activity with the given parent
+    let eval_activity = Activity::evaluate("").parent(parent_activity_id).start();
+    let bridge = NixLogBridge::new(eval_activity);
 
     let mut context = Context::new();
 
-    let on_start = logger_bridge.get_start_callback();
-    let on_stop = logger_bridge.get_stop_callback();
-    let on_result = logger_bridge.get_result_callback();
+    let on_start = create_start_callback(Arc::clone(&bridge));
+    let on_stop = create_stop_callback(Arc::clone(&bridge));
+    let on_result = create_result_callback(Arc::clone(&bridge));
 
     let logger = ActivityLoggerBuilder::new()
         .on_start(on_start)
@@ -262,6 +49,89 @@ pub fn setup_nix_logger_with_parent(
         .map_err(|e| miette::miette!("Failed to register Nix logger: {}", e))?;
 
     Ok(logger)
+}
+
+/// Convert raw FFI field arrays to Vec<Field>
+fn convert_fields(
+    field_types: &[i32],
+    int_values: &[i64],
+    string_values: &[Option<&str>],
+) -> Vec<Field> {
+    let mut fields = Vec::with_capacity(field_types.len());
+
+    for (i, &field_type) in field_types.iter().enumerate() {
+        match field_type {
+            0 => {
+                // Int field
+                let value = int_values.get(i).copied().unwrap_or(0);
+                fields.push(Field::Int(value.max(0) as u64));
+            }
+            1 => {
+                // String field
+                if let Some(Some(s)) = string_values.get(i) {
+                    fields.push(Field::String(s.to_string()));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fields
+}
+
+/// Create a callback that handles activity start events from FFI
+fn create_start_callback(
+    bridge: Arc<NixLogBridge>,
+) -> impl Fn(u64, &str, &str, &[i32], &[i64], &[Option<&str>], u64) + Clone + Send + Sync + 'static
+{
+    move |id: u64,
+          description: &str,
+          activity_type: &str,
+          field_types: &[i32],
+          int_values: &[i64],
+          string_values: &[Option<&str>],
+          parent: u64| {
+        let typ = activity_type_from_str(activity_type);
+        let fields = convert_fields(field_types, int_values, string_values);
+
+        let log = InternalLog::Start {
+            id,
+            typ,
+            text: description.to_string(),
+            fields,
+            level: Verbosity::Info,
+            parent,
+        };
+
+        bridge.process_internal_log(log);
+    }
+}
+
+/// Create a callback that handles activity stop events from FFI
+fn create_stop_callback(bridge: Arc<NixLogBridge>) -> impl Fn(u64) + Clone + Send + Sync + 'static {
+    move |id: u64| {
+        let log = InternalLog::Stop { id };
+        bridge.process_internal_log(log);
+    }
+}
+
+/// Create a callback that handles activity result/progress events from FFI
+fn create_result_callback(
+    bridge: Arc<NixLogBridge>,
+) -> impl Fn(u64, &str, &[i32], &[i64], &[Option<&str>]) + Clone + Send + Sync + 'static {
+    move |id: u64,
+          result_type: &str,
+          field_types: &[i32],
+          int_values: &[i64],
+          string_values: &[Option<&str>]| {
+        let Some(typ) = result_type_from_str(result_type) else {
+            return;
+        };
+
+        let fields = convert_fields(field_types, int_values, string_values);
+        let log = InternalLog::Result { id, typ, fields };
+        bridge.process_internal_log(log);
+    }
 }
 
 #[cfg(test)]
@@ -305,29 +175,17 @@ mod tests {
     }
 
     #[test]
-    fn test_nix_activity_logger_creation() {
-        // Test that NixActivityLogger can be created and cloned
-        let logger = NixActivityLogger::new();
-        let cloned = logger.clone();
+    fn test_convert_fields() {
+        // Test with mixed int and string fields
+        let field_types = [0, 1, 0];
+        let int_values = [42, 0, 100];
+        let string_values = [None, Some("/nix/store/abc-foo"), None];
 
-        // Get callbacks - they should all be obtainable without panic
-        let _start = logger.get_start_callback();
-        let _stop = cloned.get_stop_callback();
-        let _result = logger.get_result_callback();
+        let fields = convert_fields(&field_types, &int_values, &string_values);
 
-        assert!(true, "All callbacks should be creatable");
-    }
-
-    #[test]
-    fn test_extract_nix_name() {
-        assert_eq!(
-            extract_nix_name("/nix/store/abc123-hello-world-1.0.drv", true),
-            "abc123-hello-world-1.0"
-        );
-        assert_eq!(
-            extract_nix_name("/nix/store/xyz456-rust-1.70.0", false),
-            "xyz456-rust-1.70.0"
-        );
-        assert_eq!(extract_nix_name("simple-name.drv", true), "simple-name");
+        assert_eq!(fields.len(), 3);
+        assert!(matches!(fields[0], Field::Int(42)));
+        assert!(matches!(&fields[1], Field::String(s) if s == "/nix/store/abc-foo"));
+        assert!(matches!(fields[2], Field::Int(100)));
     }
 }

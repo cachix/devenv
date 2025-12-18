@@ -9,8 +9,10 @@ snix = []
 
 [dependencies]
 devenv-eval-cache.workspace = true
+devenv-activity.workspace = true
 nix-conf-parser.workspace = true
 pathdiff.workspace = true
+regex.workspace = true
 
 async-trait.workspace = true
 clap.workspace = true
