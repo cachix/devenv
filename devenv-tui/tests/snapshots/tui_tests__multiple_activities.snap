@@ -7,4 +7,4 @@ expression: output
     ─────────────────────────────────────────────────2.5kB / 5kB at 25kB/s
 ⠋ Running setup
 
- 0 of 1 builds  │  0 of 1 downloads  │  0 of 1 tasks    ↑↓ nav • e expand
+ 0 of 1 builds  │  0 of 1 downloads  │  0 of 1 task    ↑↓ nav • ^e expand

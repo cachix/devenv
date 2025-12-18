@@ -297,7 +297,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
                 // Add build logs using the component (collapsed preview, press 'e' to expand)
                 let logs_component = ExpandedContentComponent::new(logs.as_deref())
-                    .with_empty_message("  → no build logs yet (press 'e' to expand)");
+                    .with_empty_message("  → no build logs yet (press '^e' to expand)");
                 let log_elements = logs_component.render();
                 build_elements.extend(log_elements);
 
@@ -485,7 +485,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
                 // Add file list using the logs component (collapsed preview, press 'e' to expand)
                 let logs_component = ExpandedContentComponent::new(logs.as_deref())
-                    .with_empty_message("  → no files evaluated yet (press 'e' to expand)");
+                    .with_empty_message("  → no files evaluated yet (press '^e' to expand)");
                 let log_elements = logs_component.render();
                 elements.extend(log_elements);
 
@@ -928,7 +928,7 @@ fn build_summary_view_impl(
         } else {
             help_children.push(element!(Text(content: " • ")).into_any());
         }
-        help_children.push(element!(Text(content: "e", color: COLOR_INTERACTIVE)).into_any());
+        help_children.push(element!(Text(content: "^e", color: COLOR_INTERACTIVE)).into_any());
         if use_symbols {
             help_children.push(element!(Text(content: " ▼ • ")).into_any());
         } else if use_short_text {
@@ -962,7 +962,7 @@ fn build_summary_view_impl(
         } else {
             help_children.push(element!(Text(content: " • ")).into_any());
         }
-        help_children.push(element!(Text(content: "e", color: COLOR_INTERACTIVE)).into_any());
+        help_children.push(element!(Text(content: "^e", color: COLOR_INTERACTIVE)).into_any());
         if use_symbols {
             help_children.push(element!(Text(content: " ▼")).into_any());
         } else if use_short_text {

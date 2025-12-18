@@ -230,7 +230,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                         shutdown.shutdown();
                     }
-                    KeyCode::Char('e') => {
+                    KeyCode::Char('e') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                         if let Ok(mut ui) = ui_state.write()
                             && let Some(activity_id) = ui.selected_activity
                         {

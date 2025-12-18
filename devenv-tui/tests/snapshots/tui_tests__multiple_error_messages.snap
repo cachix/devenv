@@ -4,4 +4,4 @@ expression: output
 ---
  ✗ error: attribute 'foo' not found
  ✗ error: while evaluating 'bar': infinite
-                                   ↑↓ nav • e expand
+                                  ↑↓ nav • ^e expand

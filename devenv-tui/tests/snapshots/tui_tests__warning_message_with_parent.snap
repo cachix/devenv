@@ -6,4 +6,4 @@ expression: output
   • warning: deprecated option 'services.foo' used
 
 
-                                 ↑↓ nav • e expand
+                                ↑↓ nav • ^e expand

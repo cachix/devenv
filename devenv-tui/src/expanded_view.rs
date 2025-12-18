@@ -159,7 +159,12 @@ fn handle_key_event(
 
     match key_event.code {
         // Exit expanded view
-        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('e') => {
+        KeyCode::Esc | KeyCode::Char('q') => {
+            if let Ok(mut ui) = ui_state.write() {
+                ui.view_mode = ViewMode::Main;
+            }
+        }
+        KeyCode::Char('e') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
             if let Ok(mut ui) = ui_state.write() {
                 ui.view_mode = ViewMode::Main;
             }

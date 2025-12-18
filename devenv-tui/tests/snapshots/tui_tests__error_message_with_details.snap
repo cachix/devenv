@@ -10,4 +10,4 @@ expression: output
            error: undefined variable 'pkgs'
   ✗ error: undefined variable 'pkgs'
 
-                          ↑↓ nav • e expand
+                         ↑↓ nav • ^e expand
