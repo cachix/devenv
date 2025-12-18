@@ -448,7 +448,10 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
             devenv::mcp::run_mcp_server(config).await?;
             CommandResult::Done
         }
-        Commands::Lsp { print_config } => devenv::lsp::run(&devenv, print_config).await,
+        Commands::Lsp { print_config } => {
+            devenv::lsp::run(&devenv, print_config).await?;
+            CommandResult::Done
+        }
         Commands::Direnvrc => unreachable!(),
         Commands::Version => unreachable!(),
     };

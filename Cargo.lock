@@ -221,9 +221,9 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.15.1"
+version = "1.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b5ce75405893cd713f9ab8e297d8e438f624dde7d706108285f7e17a25a180f"
+checksum = "6a88aab2464f1f25453baa7a07c84c5b7684e274054ba06817f382357f77a288"
 dependencies = [
  "aws-lc-sys",
  "zeroize",
@@ -231,9 +231,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.34.0"
+version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "179c3777a8b5e70e90ea426114ffc565b2c1a9f82f6c4a0c5a34aa6ef5e781b6"
+checksum = "b45afffdee1e7c9126814751f88dddc747f41d91da16c9551a0f1e8a11e788a1"
 dependencies = [
  "cc",
  "cmake",
@@ -493,9 +493,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.19.0"
+version = "3.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46c5e41b57b8bba42a04676d81cb89e9ee8e859a1a66f80a5a72e1cb76b34d43"
+checksum = "5dd9dc738b7a8311c7ade152424974d8115f2cdad61e8dab8dac9f2362298510"
 
 [[package]]
 name = "byteorder"
@@ -798,9 +798,9 @@ dependencies = [
 
 [[package]]
 name = "console"
-version = "0.16.1"
+version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b430743a6eb14e9764d4260d4c0d8123087d504eeb9c48f2b2a5e810dd369df4"
+checksum = "03e45a4a8926227e4197636ba97a9fc9b00477e9f4bd711395687c5f0734bec4"
 dependencies = [
  "encode_unicode",
  "libc",
@@ -1026,7 +1026,7 @@ dependencies = [
  "bitflags 2.10.0",
  "crossterm_winapi",
  "futures-core",
- "mio 1.1.0",
+ "mio 1.1.1",
  "parking_lot",
  "rustix 0.38.44",
  "signal-hook",
@@ -1328,7 +1328,7 @@ dependencies = [
  "chrono",
  "clap",
  "cli-table",
- "console 0.16.1",
+ "console 0.16.2",
  "devenv-activity",
  "devenv-cache-core",
  "devenv-core",
@@ -1436,11 +1436,13 @@ version = "2.0.0"
 dependencies = [
  "async-trait",
  "clap",
+ "devenv-activity",
  "devenv-eval-cache",
  "miette",
  "nix-conf-parser",
  "once_cell",
  "pathdiff",
+ "regex",
  "schemars 1.1.0",
  "schematic",
  "ser_nix",
@@ -1564,7 +1566,7 @@ version = "2.0.0"
 dependencies = [
  "blake3",
  "clap",
- "console 0.16.1",
+ "console 0.16.2",
  "devenv-activity",
  "devenv-cache-core",
  "glob",
@@ -1595,7 +1597,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "clap",
- "console 0.16.1",
+ "console 0.16.2",
  "crossterm 0.28.1",
  "devenv-activity",
  "devenv-cache-core",
@@ -1624,7 +1626,7 @@ version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25f104b501bf2364e78d0d3974cbc774f738f5865306ed128e1e0d7499c0ad96"
 dependencies = [
- "console 0.16.1",
+ "console 0.16.2",
  "shell-words",
  "tempfile",
  "zeroize",
@@ -2830,16 +2832,15 @@ dependencies = [
 
 [[package]]
 name = "insta"
-version = "1.45.0"
+version = "1.44.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b76866be74d68b1595eb8060cb9191dca9c021db2316558e52ddc5d55d41b66c"
+checksum = "b5c943d4415edd8153251b6f197de5eb1640e56d84e8d9159bea190421c73698"
 dependencies = [
  "console 0.15.11",
  "once_cell",
  "regex",
  "serde",
  "similar",
- "tempfile",
 ]
 
 [[package]]
@@ -3183,13 +3184,13 @@ dependencies = [
 
 [[package]]
 name = "libredox"
-version = "0.1.10"
+version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "416f7e718bdb06000964960ffa43b4335ad4012ae8b99060261aa4a8088d5ccb"
+checksum = "df15f6eac291ed1cf25865b1ee60399f57e7c227e7f51bdbd4c5270396a9ed50"
 dependencies = [
  "bitflags 2.10.0",
  "libc",
- "redox_syscall",
+ "redox_syscall 0.6.0",
 ]
 
 [[package]]
@@ -3532,7 +3533,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-bindgen-raw"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#059d9a3d7208252e71408d22a71e385f81e7f37e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#27d7afab12f2b0f2cc72f8adc4367e3491767a87"
 dependencies = [
  "bindgen",
  "pkg-config",
@@ -3541,7 +3542,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-expr"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#059d9a3d7208252e71408d22a71e385f81e7f37e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#27d7afab12f2b0f2cc72f8adc4367e3491767a87"
 dependencies = [
  "anyhow",
  "cstr",
@@ -3557,7 +3558,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-fetchers"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#059d9a3d7208252e71408d22a71e385f81e7f37e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#27d7afab12f2b0f2cc72f8adc4367e3491767a87"
 dependencies = [
  "anyhow",
  "cstr",
@@ -3571,7 +3572,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-flake"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#059d9a3d7208252e71408d22a71e385f81e7f37e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#27d7afab12f2b0f2cc72f8adc4367e3491767a87"
 dependencies = [
  "anyhow",
  "cstr",
@@ -3588,7 +3589,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-store"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#059d9a3d7208252e71408d22a71e385f81e7f37e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#27d7afab12f2b0f2cc72f8adc4367e3491767a87"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -3600,7 +3601,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-util"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#059d9a3d7208252e71408d22a71e385f81e7f37e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#27d7afab12f2b0f2cc72f8adc4367e3491767a87"
 dependencies = [
  "anyhow",
  "ctor",
@@ -3610,7 +3611,7 @@ dependencies = [
 [[package]]
 name = "nix-cmd"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#059d9a3d7208252e71408d22a71e385f81e7f37e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#27d7afab12f2b0f2cc72f8adc4367e3491767a87"
 dependencies = [
  "anyhow",
  "nix-bindings-bindgen-raw",
@@ -4036,7 +4037,7 @@ checksum = "2621685985a2ebf1c516881c026032ac7deafcda1a2c9b7850dc81e3dfcb64c1"
 dependencies = [
  "cfg-if",
  "libc",
- "redox_syscall",
+ "redox_syscall 0.5.18",
  "smallvec",
  "windows-link",
 ]
@@ -4221,7 +4222,7 @@ version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "219cb19e96be00ab2e37d6e299658a0cfa83e52429179969b0f0121b4ac46983"
 dependencies = [
- "toml_edit 0.23.9",
+ "toml_edit 0.23.10+spec-1.0.0",
 ]
 
 [[package]]
@@ -4588,6 +4589,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "redox_syscall"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec96166dafa0886eb81fe1c0a388bece180fbef2135f97c1e2cf8302e74b43b5"
+dependencies = [
+ "bitflags 2.10.0",
+]
+
+[[package]]
 name = "redox_users"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4660,9 +4670,9 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 
 [[package]]
 name = "reqwest"
-version = "0.12.25"
+version = "0.12.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6eff9328d40131d43bd911d42d79eb6a47312002a4daefc9e37f17e74a7701a"
+checksum = "3b4c14b2d9afca6a60277086b0cc6a6ae0b568f6f7916c943a8cdc79f8be240f"
 dependencies = [
  "base64",
  "bytes",
@@ -4949,9 +4959,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "1.13.1"
+version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "708c0f9d5f54ba0272468c1d306a52c495b31fa155e91bc25371e6df7996908c"
+checksum = "21e6f2ab2928ca4291b86736a8bd920a277a399bba1589409d72154ff87c1282"
 dependencies = [
  "web-time",
  "zeroize",
@@ -6162,9 +6172,9 @@ dependencies = [
 
 [[package]]
 name = "supports-hyperlinks"
-version = "3.1.0"
+version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "804f44ed3c63152de6a9f90acbea1a110441de43006ea51bcce8f436196a288b"
+checksum = "e396b6523b11ccb83120b115a0b7366de372751aa6edf19844dfb13a6af97e91"
 
 [[package]]
 name = "supports-unicode"
@@ -6607,9 +6617,9 @@ dependencies = [
 
 [[package]]
 name = "toml_datetime"
-version = "0.7.3"
+version = "0.7.4+spec-1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2cdb639ebbc97961c51720f858597f7f24c4fc295327923af55b74c3c724533"
+checksum = "fe3cea6b2aa3b910092f6abd4053ea464fab5f9c170ba5e9a6aead16ec4af2b6"
 dependencies = [
  "serde_core",
 ]
@@ -6643,21 +6653,21 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.23.9"
+version = "0.23.10+spec-1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d7cbc3b4b49633d57a0509303158ca50de80ae32c265093b24c414705807832"
+checksum = "84c8b9f757e028cee9fa244aea147aab2a9ec09d5325a9b01e0a49730c2b5269"
 dependencies = [
  "indexmap 2.12.1",
- "toml_datetime 0.7.3",
+ "toml_datetime 0.7.4+spec-1.0.0",
  "toml_parser",
  "winnow",
 ]
 
 [[package]]
 name = "toml_parser"
-version = "1.0.4"
+version = "1.0.5+spec-1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0cbe268d35bdb4bb5a56a2de88d0ad0eb70af5384a99d648cd4b3d04039800e"
+checksum = "4c03bee5ce3696f31250db0bbaff18bc43301ce0e8db2ed1f07cbb2acf89984c"
 dependencies = [
  "winnow",
 ]
