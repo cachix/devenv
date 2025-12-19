@@ -29,6 +29,7 @@ nix-bindings-expr.workspace = true
 nix-bindings-store.workspace = true
 nix-bindings-util.workspace = true
 nix-bindings-fetchers.workspace = true
+nix-bindings-bindgen-raw.workspace = true
 nix-cmd.workspace = true
 tempfile.workspace = true
 
