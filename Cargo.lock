@@ -1507,6 +1507,7 @@ dependencies = [
  "devenv-eval-cache",
  "include_dir",
  "miette",
+ "nix-bindings-bindgen-raw",
  "nix-bindings-expr",
  "nix-bindings-fetchers",
  "nix-bindings-flake",

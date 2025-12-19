@@ -1109,7 +1109,7 @@ impl Devenv {
                 let gc_root = self.devenv_dot_gc.join("procfilescript");
                 let paths = self
                     .nix
-                    .build(&["procfileScript"], None, Some(&gc_root))
+                    .build(&["devenv.config.procfileScript"], None, Some(&gc_root))
                     .await?;
                 let proc_script_string = paths[0].to_string_lossy().to_string();
                 Ok::<String, miette::Report>(proc_script_string)
