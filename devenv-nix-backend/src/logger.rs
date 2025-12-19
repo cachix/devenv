@@ -37,6 +37,16 @@ pub fn setup_nix_logger_with_parent(
 
     let mut context = Context::new();
 
+    // Set verbosity to Talkative so we receive "evaluating file" messages
+    // These messages are emitted at lvlTalkative (4) and are needed to show
+    // the "Evaluating" activity in the UI
+    unsafe {
+        nix_bindings_bindgen_raw::set_verbosity(
+            context.ptr(),
+            nix_bindings_bindgen_raw::verbosity_NIX_LVL_TALKATIVE,
+        );
+    }
+
     let on_start = create_start_callback(Arc::clone(&bridge));
     let on_stop = create_stop_callback(Arc::clone(&bridge));
     let on_result = create_result_callback(Arc::clone(&bridge));
