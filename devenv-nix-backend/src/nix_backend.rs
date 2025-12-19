@@ -889,7 +889,7 @@ impl NixBackend for NixRustBackend {
             .to_miette()
             .wrap_err("Failed to force evaluation of shell derivation")?;
 
-        // Get the .drvPath to find the derivation file
+        // Get the .drvPath to find the derivation file (for BuildEnvironment::get_dev_environment)
         let drv_path_value = eval_state
             .require_attrs_select(&shell_drv, "drvPath")
             .to_miette()
@@ -900,9 +900,17 @@ impl NixBackend for NixRustBackend {
             .to_miette()
             .wrap_err("Failed to extract drvPath as string")?;
 
+        // Get outPath for building - it has string context unlike drvPath
+        let out_path_value = eval_state
+            .require_attrs_select(&shell_drv, "outPath")
+            .to_miette()
+            .wrap_err("Failed to get outPath from shell derivation")?;
+
         // Build the derivation to ensure it's realized and get the output path
+        // We use outPath instead of drvPath because outPath has string context
+        // which realise_string needs to identify and build the derivation
         let realized = eval_state
-            .realise_string(&drv_path_value, false)
+            .realise_string(&out_path_value, false)
             .to_miette()
             .wrap_err("Failed to realize shell derivation")?;
 
