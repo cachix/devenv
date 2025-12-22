@@ -15,6 +15,7 @@ let
     name = "devenv-profile";
     paths = lib.flatten (builtins.map drvOrPackageToPaths config.packages);
     ignoreCollisions = true;
+    ignoreSingleFileOutputs = true;
   };
 
   failedAssertions = builtins.map (x: x.message) (builtins.filter (x: !x.assertion) config.assertions);
