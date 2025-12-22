@@ -11,7 +11,7 @@ use crate::{Error, Outputs, Tasks, VerbosityLevel};
 /// UI manager for tasks - consumes activity events and displays status
 pub struct TasksUi {
     tasks: Arc<Tasks>,
-    activity_rx: mpsc::Receiver<ActivityEvent>,
+    activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
     verbosity: VerbosityLevel,
     /// Track task states by activity ID
     task_states: HashMap<u64, TaskUiState>,
@@ -39,7 +39,7 @@ enum TaskDisplayStatus {
 impl TasksUi {
     pub fn new(
         tasks: Arc<Tasks>,
-        activity_rx: mpsc::Receiver<ActivityEvent>,
+        activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
         verbosity: VerbosityLevel,
     ) -> Self {
         Self {

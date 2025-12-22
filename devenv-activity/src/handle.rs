@@ -1,7 +1,7 @@
 //! Activity system initialization and global event channel handle.
 //!
 //! This module provides the core initialization mechanism for the activity tracking system.
-//! It creates a bounded channel for activity events and provides a handle for installing
+//! It creates an unbounded channel for activity events and provides a handle for installing
 //! the sender globally.
 //!
 //! # Usage
@@ -32,7 +32,7 @@ use crate::stack::ACTIVITY_SENDER;
 /// Call [`install()`](Self::install) to register the sender globally,
 /// enabling all [`Activity`](crate::Activity) instances to send events.
 pub struct ActivityHandle {
-    tx: mpsc::Sender<ActivityEvent>,
+    tx: mpsc::UnboundedSender<ActivityEvent>,
 }
 
 impl ActivityHandle {
@@ -47,8 +47,7 @@ impl ActivityHandle {
 /// Sends a Done event to the TUI, which should trigger a final render and graceful shutdown.
 pub fn signal_done() {
     if let Some(sender) = ACTIVITY_SENDER.get() {
-        // Use try_send to avoid blocking; if channel is full, the TUI will catch up
-        let _ = sender.try_send(ActivityEvent::Done);
+        let _ = sender.send(ActivityEvent::Done);
     }
 }
 
@@ -61,7 +60,7 @@ pub fn signal_done() {
 /// handle.install();  // Activities now send to this channel
 /// // Pass rx to TUI
 /// ```
-pub fn init() -> (mpsc::Receiver<ActivityEvent>, ActivityHandle) {
-    let (tx, rx) = mpsc::channel(32);
+pub fn init() -> (mpsc::UnboundedReceiver<ActivityEvent>, ActivityHandle) {
+    let (tx, rx) = mpsc::unbounded_channel();
     (rx, ActivityHandle { tx })
 }

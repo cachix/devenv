@@ -110,10 +110,10 @@ fn deserialize_activity(mut event: TraceEvent) -> Result<ActivityEvent, Activity
     Ok(serde_json::from_value(event_value)?)
 }
 
-async fn process_event(tx: &mpsc::Sender<ActivityEvent>, event: TraceEvent) {
+fn process_event(tx: &mpsc::UnboundedSender<ActivityEvent>, event: TraceEvent) {
     match deserialize_activity(event) {
         Ok(activity) => {
-            let _ = tx.send(activity).await;
+            let _ = tx.send(activity);
         }
         Err(ActivityParseError::NotActivityEvent) => {}
         Err(e) => {
@@ -124,7 +124,7 @@ async fn process_event(tx: &mpsc::Sender<ActivityEvent>, event: TraceEvent) {
 
 async fn replay_events(
     mut stream: TraceStream,
-    tx: &mpsc::Sender<ActivityEvent>,
+    tx: &mpsc::UnboundedSender<ActivityEvent>,
     speed: f64,
 ) -> Result<()> {
     let start_time = Instant::now();
@@ -147,7 +147,7 @@ async fn replay_events(
             sleep(sleep_duration).await;
         }
 
-        process_event(tx, event).await
+        process_event(tx, event);
     }
 
     info!("Replay finished. Processed {} total events.", event_count);
@@ -173,7 +173,7 @@ async fn main() -> Result<()> {
     let file = File::open(&args.trace_file)
         .with_context(|| format!("Failed to open trace file: {}", args.trace_file.display()))?;
 
-    let (tx, rx) = mpsc::channel(32);
+    let (tx, rx) = mpsc::unbounded_channel();
     let shutdown = Shutdown::new();
 
     info!("Spawning TUI");

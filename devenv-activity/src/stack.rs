@@ -39,7 +39,7 @@ use crate::events::{ActivityEvent, ActivityLevel, Message};
 use crate::serde_valuable::SerdeValue;
 
 /// Global sender for activity events (installed by ActivityHandle::install())
-pub(crate) static ACTIVITY_SENDER: OnceLock<mpsc::Sender<ActivityEvent>> = OnceLock::new();
+pub(crate) static ACTIVITY_SENDER: OnceLock<mpsc::UnboundedSender<ActivityEvent>> = OnceLock::new();
 
 // Task-local stack for tracking current Activity IDs and levels (for parent detection and level inheritance).
 // Using task_local instead of thread_local to support async code where tasks
@@ -55,9 +55,9 @@ pub(crate) fn send_activity_event(event: ActivityEvent) {
         tracing::trace!(target: "devenv::activity", event = serde_value.as_value());
     }
 
-    // Send to channel for TUI (non-blocking)
+    // Send to channel for TUI
     if let Some(tx) = ACTIVITY_SENDER.get() {
-        let _ = tx.try_send(event);
+        let _ = tx.send(event);
     }
 }
 

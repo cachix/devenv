@@ -45,13 +45,13 @@ impl Default for TuiConfig {
 /// Builder for creating and running the TUI application.
 pub struct TuiApp {
     config: TuiConfig,
-    activity_rx: mpsc::Receiver<ActivityEvent>,
+    activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
     shutdown: Arc<Shutdown>,
 }
 
 impl TuiApp {
     /// Create a new TUI application with required dependencies.
-    pub fn new(activity_rx: mpsc::Receiver<ActivityEvent>, shutdown: Arc<Shutdown>) -> Self {
+    pub fn new(activity_rx: mpsc::UnboundedReceiver<ActivityEvent>, shutdown: Arc<Shutdown>) -> Self {
         Self {
             config: TuiConfig::default(),
             activity_rx,
