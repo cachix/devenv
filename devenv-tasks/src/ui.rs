@@ -22,6 +22,7 @@ struct TaskUiState {
     name: String,
     status: TaskDisplayStatus,
     start_time: Instant,
+    show_output: bool,
 }
 
 /// Display status for a task
@@ -86,13 +87,19 @@ impl TasksUi {
 
     fn handle_task_event(&mut self, event: TaskEvent) -> Result<(), Error> {
         match event {
-            TaskEvent::Start { id, name, .. } => {
+            TaskEvent::Start {
+                id,
+                name,
+                show_output,
+                ..
+            } => {
                 self.task_states.insert(
                     id,
                     TaskUiState {
                         name: name.clone(),
                         status: TaskDisplayStatus::Running,
                         start_time: Instant::now(),
+                        show_output,
                     },
                 );
 
@@ -169,12 +176,17 @@ impl TasksUi {
             TaskEvent::Log {
                 id, line, is_error, ..
             } => {
-                // Show log output based on verbosity
-                // In normal mode, we show logs for tasks with showOutput=true (the event is emitted)
-                // In verbose mode, all logs are shown
-                // In quiet mode, no logs are shown
-                if self.verbosity != VerbosityLevel::Quiet {
-                    if let Some(state) = self.task_states.get(&id) {
+                // Show log output based on verbosity and task's show_output setting
+                // In quiet mode: no logs are shown
+                // In verbose mode: all logs are shown
+                // In normal mode: only show logs for tasks with show_output=true
+                if let Some(state) = self.task_states.get(&id) {
+                    let should_show = match self.verbosity {
+                        VerbosityLevel::Quiet => false,
+                        VerbosityLevel::Verbose => true,
+                        VerbosityLevel::Normal => state.show_output,
+                    };
+                    if should_show {
                         let prefix = if is_error { "!" } else { " " };
                         self.console_write_line(&format!("[{}]{} {}", state.name, prefix, line))?;
                     }

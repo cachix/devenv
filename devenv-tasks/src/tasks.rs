@@ -455,10 +455,10 @@ impl Tasks {
                 }
             }
 
-            let task_name = {
+            let (task_name, show_output) = {
                 let task_state = task_state.read().await;
                 // TODO: remove clone
-                task_state.task.name.clone()
+                (task_state.task.name.clone(), task_state.task.show_output)
             };
 
             if cancelled || dependency_failed {
@@ -470,6 +470,7 @@ impl Tasks {
 
                 // Create a task activity for the skipped/cancelled task, parented to orchestration
                 let skip_activity = Activity::task(&task_name)
+                    .show_output(show_output)
                     .parent(Some(orchestration_activity.id()))
                     .start();
                 if cancelled {

@@ -79,6 +79,7 @@ pub struct QueryActivity {
 pub struct TaskActivity {
     pub status: TaskDisplayStatus,
     pub duration: Option<std::time::Duration>,
+    pub show_output: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
@@ -454,11 +455,13 @@ impl ActivityModel {
                 name,
                 parent,
                 detail,
+                show_output,
                 ..
             } => {
                 let variant = ActivityVariant::Task(TaskActivity {
                     status: TaskDisplayStatus::Running,
                     duration: None,
+                    show_output,
                 });
                 self.create_activity(id, name, parent, detail, variant, ActivityLevel::Info);
             }
@@ -738,6 +741,14 @@ impl ActivityModel {
     }
 
     fn handle_activity_log(&mut self, id: u64, line: String, is_error: bool) {
+        // Skip logs for tasks with show_output=false
+        if let Some(activity) = self.activities.get(&id)
+            && let ActivityVariant::Task(task) = &activity.variant
+            && !task.show_output
+        {
+            return;
+        }
+
         let logs = self
             .build_logs
             .entry(id)

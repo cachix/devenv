@@ -239,6 +239,7 @@ impl EvaluateBuilder {
 pub struct TaskBuilder {
     name: String,
     detail: Option<String>,
+    show_output: bool,
     id: Option<u64>,
     parent: Option<Option<u64>>,
     level: Option<ActivityLevel>,
@@ -249,6 +250,7 @@ impl TaskBuilder {
         Self {
             name: name.into(),
             detail: None,
+            show_output: false,
             id: None,
             parent: None,
             level: None,
@@ -257,6 +259,11 @@ impl TaskBuilder {
 
     pub fn detail(mut self, detail: impl Into<String>) -> Self {
         self.detail = Some(detail.into());
+        self
+    }
+
+    pub fn show_output(mut self, show_output: bool) -> Self {
+        self.show_output = show_output;
         self
     }
 
@@ -291,6 +298,7 @@ impl TaskBuilder {
             name: self.name.clone(),
             parent,
             detail: self.detail,
+            show_output: self.show_output,
             timestamp: Timestamp::now(),
         }));
 

@@ -114,6 +114,7 @@ fn test_task_running() {
         name: "Running tests".to_string(),
         parent: None,
         detail: None,
+        show_output: false,
         timestamp: Timestamp::now(),
     });
 
@@ -163,6 +164,7 @@ fn test_multiple_activities() {
         name: "Running setup".to_string(),
         parent: None,
         detail: None,
+        show_output: false,
         timestamp: Timestamp::now(),
     });
 
@@ -186,6 +188,7 @@ fn test_task_success() {
         name: "Build completed".to_string(),
         parent: None,
         detail: None,
+        show_output: false,
         timestamp: Timestamp::now(),
     });
 
@@ -213,6 +216,7 @@ fn test_task_failed() {
         name: "Tests failed".to_string(),
         parent: None,
         detail: None,
+        show_output: false,
         timestamp: Timestamp::now(),
     });
 
@@ -225,6 +229,72 @@ fn test_task_failed() {
     });
 
     model.apply_activity_event(complete_event);
+
+    let output = render_to_string(&model, &ui_state);
+    assert_tui_snapshot!(output);
+}
+
+/// Test that task with show_output=true displays logs in the TUI.
+#[test]
+fn test_task_show_output_true() {
+    let (mut model, ui_state) = new_test_model();
+
+    let start_event = ActivityEvent::Task(Task::Start {
+        id: 1,
+        name: "test:with-output".to_string(),
+        parent: None,
+        detail: None,
+        show_output: true,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(start_event);
+
+    // Send log events
+    model.apply_activity_event(ActivityEvent::Task(Task::Log {
+        id: 1,
+        line: "VISIBLE_OUTPUT_LINE_1".to_string(),
+        is_error: false,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Task(Task::Log {
+        id: 1,
+        line: "VISIBLE_OUTPUT_LINE_2".to_string(),
+        is_error: false,
+        timestamp: Timestamp::now(),
+    }));
+
+    let output = render_to_string(&model, &ui_state);
+    assert_tui_snapshot!(output);
+}
+
+/// Test that task with show_output=false hides logs in the TUI.
+#[test]
+fn test_task_show_output_false() {
+    let (mut model, ui_state) = new_test_model();
+
+    let start_event = ActivityEvent::Task(Task::Start {
+        id: 1,
+        name: "test:without-output".to_string(),
+        parent: None,
+        detail: None,
+        show_output: false,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(start_event);
+
+    // Send log events - these should be filtered out
+    model.apply_activity_event(ActivityEvent::Task(Task::Log {
+        id: 1,
+        line: "HIDDEN_OUTPUT_LINE_1".to_string(),
+        is_error: false,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Task(Task::Log {
+        id: 1,
+        line: "HIDDEN_OUTPUT_LINE_2".to_string(),
+        is_error: false,
+        timestamp: Timestamp::now(),
+    }));
 
     let output = render_to_string(&model, &ui_state);
     assert_tui_snapshot!(output);
@@ -698,6 +768,7 @@ fn test_many_concurrent_activities() {
                     name: format!("task-{}", i),
                     parent: None,
                     detail: None,
+                    show_output: false,
                     timestamp: Timestamp::now(),
                 }));
             }

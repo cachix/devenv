@@ -47,17 +47,23 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         let activity = &display_activity.activity;
         let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
 
-        // Pass logs for selected build/eval activities, or always for messages with details
-        let activity_logs = if is_selected
+        // Pass logs for activities that should display them:
+        // - Tasks with show_output=true: always show logs inline
+        // - Messages with details: always show details inline
+        // - Selected build/eval activities: show logs when selected
+        let activity_logs = if let ActivityVariant::Task(ref task_data) = activity.variant
+            && task_data.show_output
+        {
+            model.get_build_logs(activity.id).cloned()
+        } else if let ActivityVariant::Message(ref msg_data) = activity.variant
+            && msg_data.details.is_some()
+        {
+            model.get_build_logs(activity.id).cloned()
+        } else if is_selected
             && (matches!(activity.variant, ActivityVariant::Build(_))
                 || matches!(activity.variant, ActivityVariant::Evaluating(_)))
         {
             selected_logs.cloned()
-        } else if let ActivityVariant::Message(ref msg_data) = activity.variant
-            && msg_data.details.is_some()
-        {
-            // Always pass details for messages (they're always shown)
-            model.get_build_logs(activity.id).cloned()
         } else {
             None
         };
@@ -308,24 +314,9 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .with_selection(*is_selected)
                 .render(terminal_width, *depth, prefix);
 
-                // Create multi-line element with build logs
-                let mut build_elements = vec![main_line];
-
-                // Add build logs using the component (collapsed preview, press 'e' to expand)
-                let logs_component = ExpandedContentComponent::new(logs.as_deref())
-                    .with_empty_message("  → no build logs yet (press '^e' to expand)");
-                let log_elements = logs_component.render();
-                build_elements.extend(log_elements);
-
-                // Calculate total height: 1 (main line) + actual log viewport height
-                let log_viewport_height = logs_component.calculate_height();
-                let total_height = (1 + log_viewport_height).min(50) as u32; // Cap total height to prevent overflow
-                return element! {
-                    View(height: total_height, flex_direction: FlexDirection::Column) {
-                        #(build_elements)
-                    }
-                }
-                .into_any();
+                return ExpandedContentComponent::new(logs.as_deref())
+                    .with_empty_message("  → no build logs yet (press '^e' to expand)")
+                    .render_with_main_line(main_line);
             }
 
             // Non-selected build activities use normal rendering
@@ -362,7 +353,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .with_cached(*cached)
                 .render();
 
-            return ActivityTextComponent::new(
+            let main_line = ActivityTextComponent::new(
                 "".to_string(), // No action prefix for tasks
                 activity.name.clone(),
                 elapsed_str,
@@ -371,6 +362,20 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .with_completed(completed.is_some())
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
+
+            // Show logs inline for tasks with show_output=true
+            if task_data.show_output && logs.is_some() {
+                let empty_message = if completed.is_some() {
+                    "  → no output"
+                } else {
+                    "  → waiting for output..."
+                };
+                return ExpandedContentComponent::new(logs.as_deref())
+                    .with_empty_message(empty_message)
+                    .render_with_main_line(main_line);
+            }
+
+            return main_line;
         }
         ActivityVariant::Download(download_data) => {
             // Check if we have download progress data
@@ -506,24 +511,9 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .with_selection(*is_selected)
                 .render(terminal_width, *depth, prefix);
 
-                // Create multi-line element with file list
-                let mut elements = vec![main_line];
-
-                // Add file list using the logs component (collapsed preview, press 'e' to expand)
-                let logs_component = ExpandedContentComponent::new(logs.as_deref())
-                    .with_empty_message("  → no files evaluated yet (press '^e' to expand)");
-                let log_elements = logs_component.render();
-                elements.extend(log_elements);
-
-                // Calculate total height
-                let log_viewport_height = logs_component.calculate_height();
-                let total_height = (1 + log_viewport_height).min(50) as u32;
-                return element! {
-                    View(height: total_height, flex_direction: FlexDirection::Column) {
-                        #(elements)
-                    }
-                }
-                .into_any();
+                return ExpandedContentComponent::new(logs.as_deref())
+                    .with_empty_message("  → no files evaluated yet (press '^e' to expand)")
+                    .render_with_main_line(main_line);
             }
 
             let prefix = HierarchyPrefixComponent::new(indent, *depth)

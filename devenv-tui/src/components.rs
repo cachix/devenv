@@ -803,6 +803,22 @@ impl<'a> ExpandedContentComponent<'a> {
         }
         1 // Minimal height for empty message
     }
+
+    /// Render the component with a main activity line, returning a single element
+    /// with proper height calculation for the combined content.
+    pub fn render_with_main_line(&self, main_line: AnyElement<'static>) -> AnyElement<'static> {
+        let mut elements = vec![main_line];
+        elements.extend(self.render());
+
+        let total_height = (1 + self.calculate_height()) as u32;
+
+        element! {
+            View(height: total_height, flex_direction: FlexDirection::Column) {
+                #(elements)
+            }
+        }
+        .into_any()
+    }
 }
 
 /// Backwards-compatible alias

@@ -181,7 +181,9 @@ impl TaskState {
     ) -> Result<TaskCompleted> {
         // Create a Task activity for tracking this task's lifecycle.
         // All child activities created within scope() will have this as their parent.
-        let task_activity = Activity::task(&self.task.name).start();
+        let task_activity = Activity::task(&self.task.name)
+            .show_output(self.task.show_output)
+            .start();
 
         // Run the entire task within the activity's scope for proper parent-child nesting
         task_activity
