@@ -3534,7 +3534,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-bindgen-raw"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#69b4ea5b7b9aa0002458811eb60c5b12fbe6fd2e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#6ca14cc19ada040f23a4c9ab4ccd09b1d2b0dcb3"
 dependencies = [
  "bindgen",
  "pkg-config",
@@ -3543,7 +3543,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-expr"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#69b4ea5b7b9aa0002458811eb60c5b12fbe6fd2e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#6ca14cc19ada040f23a4c9ab4ccd09b1d2b0dcb3"
 dependencies = [
  "anyhow",
  "cstr",
@@ -3559,7 +3559,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-fetchers"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#69b4ea5b7b9aa0002458811eb60c5b12fbe6fd2e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#6ca14cc19ada040f23a4c9ab4ccd09b1d2b0dcb3"
 dependencies = [
  "anyhow",
  "cstr",
@@ -3573,7 +3573,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-flake"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#69b4ea5b7b9aa0002458811eb60c5b12fbe6fd2e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#6ca14cc19ada040f23a4c9ab4ccd09b1d2b0dcb3"
 dependencies = [
  "anyhow",
  "cstr",
@@ -3590,7 +3590,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-store"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#69b4ea5b7b9aa0002458811eb60c5b12fbe6fd2e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#6ca14cc19ada040f23a4c9ab4ccd09b1d2b0dcb3"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -3602,7 +3602,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-util"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#69b4ea5b7b9aa0002458811eb60c5b12fbe6fd2e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#6ca14cc19ada040f23a4c9ab4ccd09b1d2b0dcb3"
 dependencies = [
  "anyhow",
  "ctor",
@@ -3612,7 +3612,7 @@ dependencies = [
 [[package]]
 name = "nix-cmd"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#69b4ea5b7b9aa0002458811eb60c5b12fbe6fd2e"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#6ca14cc19ada040f23a4c9ab4ccd09b1d2b0dcb3"
 dependencies = [
  "anyhow",
  "nix-bindings-bindgen-raw",

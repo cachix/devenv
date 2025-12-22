@@ -212,32 +212,27 @@ impl NixRustBackend {
             tracing::debug!("Applied cachix global setting: {} = {}", key, value);
         }
 
-        // Create flake and fetchers settings - kept alive for the entire backend lifetime
-        // These are needed for builtins.fetchTree, builtins.getFlake, and flake operations
-        let flake_settings = FlakeSettings::new()
-            .to_miette()
-            .wrap_err("Failed to create flake settings")?;
-        let fetchers_settings = FetchersSettings::new()
-            .to_miette()
-            .wrap_err("Failed to create fetchers settings")?;
-
-        // Load fetchers settings from nix.conf (access-tokens for GitHub, etc.)
-        // Note: load_config() internally calls initLibStore() to ensure global settings are initialized
-        fetchers_settings
-            .load_config()
-            .to_miette()
-            .wrap_err("Failed to load fetchers settings from nix.conf")?;
-
         // Extract bootstrap directory to dotfile location
         let bootstrap_path = Self::extract_bootstrap_files(&paths.dotfile)?;
 
-        // Open store connection (with netrc-file setting now in place)
+        // Open store connection
         let store_uri = store
             .as_ref()
             .map(|p| format!("local?root={}", p.display()));
         let store = Store::open(store_uri.as_deref(), [])
             .to_miette()
             .wrap_err("Failed to open Nix store")?;
+
+        // Create flake and fetchers settings - kept alive for the entire backend lifetime
+        // These are needed for builtins.fetchTree, builtins.getFlake, and flake operations
+        // Note: Must be created after Store::open()
+        let flake_settings = FlakeSettings::new()
+            .to_miette()
+            .wrap_err("Failed to create flake settings")?;
+        // Note: Must be created after Store::open()
+        let fetchers_settings = FetchersSettings::new()
+            .to_miette()
+            .wrap_err("Failed to create fetchers settings")?;
 
         // Generate merged nixpkgs config and write to temp file for NIXPKGS_CONFIG env var
         // Wrap in a let expression that adds allowUnfreePredicate (a Nix function)
@@ -280,7 +275,6 @@ impl NixRustBackend {
         let eval_state = EvalStateBuilder::new(store.clone())
             .to_miette()
             .wrap_err("Failed to create eval state builder")?
-            .load_config()
             .base_directory(
                 paths
                     .root
