@@ -928,19 +928,12 @@ impl NixBackend for NixRustBackend {
 
                 gc_root_paths.push(PathBuf::from(&path_str));
 
-                // Create a profile with generation tracking using FFI
-                // This creates profile-N-link symlinks like nix-env does
+                // Create permanent GC root using FFI
                 store
-                    .create_generation(gc_root, store_path)
+                    .add_perm_root(store_path, gc_root)
                     .to_miette()
-                    .wrap_err("Failed to create profile generation")?;
+                    .wrap_err("Failed to create GC root")?;
             }
-
-            // Delete old generations of this profile using FFI
-            store
-                .delete_old_generations(gc_root, false)
-                .to_miette()
-                .wrap_err("Failed to delete old generations")?;
 
             // Queue realized paths immediately for real-time pushing
             self.queue_realized_paths(&gc_root_paths).await?;

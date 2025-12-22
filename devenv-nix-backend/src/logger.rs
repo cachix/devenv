@@ -32,7 +32,7 @@ pub fn setup_nix_logger_with_parent(
     parent_activity_id: Option<u64>,
 ) -> Result<nix_bindings_expr::logger::ActivityLogger> {
     // Create an evaluation activity with the given parent
-    let eval_activity = Activity::evaluate("").parent(parent_activity_id).start();
+    let eval_activity = Activity::evaluate().parent(parent_activity_id).start();
     let bridge = NixLogBridge::new(eval_activity);
 
     let mut context = Context::new();
