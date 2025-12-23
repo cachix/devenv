@@ -53,8 +53,8 @@ jobs:
         run: |
           nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv-tasks-fast-build
 
+      # Use -j 1 because Nix C++ FFI has global state (Activity/logging system)
+      # that is not thread-safe when multiple EvalStates are used concurrently
       - name: Run integration tests
         run: |
-          # Use -j 1 because Nix C++ FFI has global state (Activity/logging system)
-          # that is not thread-safe when multiple EvalStates are used concurrently
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo nextest run --all-features -j 1
