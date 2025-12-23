@@ -64,9 +64,8 @@ mod integration_tests {
         pool: &sqlx::SqlitePool,
         expr: &str,
     ) -> Result<Output, Box<dyn std::error::Error>> {
-        let nix_binary = get_nix_binary()?;
         let cached_cmd = NixCommand::with_caching(pool);
-        let mut cmd = Command::new(nix_binary);
+        let mut cmd = Command::new("nix");
         cmd.args(["eval", "--impure", "--expr", expr]);
 
         Ok(cached_cmd.output(&mut cmd).await?)
