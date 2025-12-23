@@ -960,10 +960,15 @@ impl NixBackend for NixRustBackend {
                 .to_miette()
                 .wrap_err("Failed to serialize environment to JSON")?
         } else {
-            build_env
+            // The FFI's to_bash() only outputs variables and functions.
+            // We need to append eval "${shellHook:-}" to match what `nix develop` does.
+            // See nix/src/nix/develop.cc which adds this after calling toBash().
+            let mut bash_output = build_env
                 .to_bash()
                 .to_miette()
-                .wrap_err("Failed to serialize environment to bash")?
+                .wrap_err("Failed to serialize environment to bash")?;
+            bash_output.push_str("\neval \"${shellHook:-}\"\n");
+            bash_output
         };
 
         // Return as Output
