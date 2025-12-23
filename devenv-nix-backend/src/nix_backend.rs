@@ -910,28 +910,31 @@ impl NixBackend for NixRustBackend {
 
         // Create GC root profile with generation tracking
         // This matches the behavior of nix print-dev-env --profile
-        if !realized.paths.is_empty() {
-            let mut gc_root_paths = Vec::new();
-            let mut store = (*self.store).clone();
+        let store_path = realized
+            .paths
+            .first()
+            .ok_or_else(|| miette!("Shell derivation produced no output paths"))?;
 
-            for store_path in &realized.paths {
-                let path_str = store
-                    .real_path(store_path)
-                    .to_miette()
-                    .wrap_err("Failed to get store path")?;
+        let mut store = (*self.store).clone();
+        let path_str = store
+            .real_path(store_path)
+            .to_miette()
+            .wrap_err("Failed to get store path")?;
 
-                gc_root_paths.push(PathBuf::from(&path_str));
-
-                // Create permanent GC root using FFI
-                store
-                    .add_perm_root(store_path, gc_root)
-                    .to_miette()
-                    .wrap_err("Failed to create GC root")?;
-            }
-
-            // Queue realized paths immediately for real-time pushing
-            self.queue_realized_paths(&gc_root_paths).await?;
+        // Remove existing symlink right before creating new one to minimize race window
+        // Use symlink_metadata to detect broken symlinks (exists() returns false for those)
+        if gc_root.symlink_metadata().is_ok() {
+            std::fs::remove_file(gc_root)
+                .map_err(|e| miette!("Failed to remove existing GC root: {}", e))?;
         }
+        store
+            .add_perm_root(store_path, gc_root)
+            .to_miette()
+            .wrap_err("Failed to create GC root")?;
+
+        // Queue realized path for real-time pushing
+        self.queue_realized_paths(&[PathBuf::from(&path_str)])
+            .await?;
 
         // Release eval_state lock before using FFI
         drop(eval_state);
@@ -1112,49 +1115,49 @@ impl NixBackend for NixRustBackend {
                 .to_miette()
                 .wrap_err(format!("Failed to build attribute: {attr_path}"))?;
 
-            // The realized.paths contains the built store paths
-            let mut batch_paths = Vec::new();
-            for store_path in realized.paths {
-                // Get the full store path (not just the name)
-                // We need a mutable reference to Store for real_path()
-                let mut store = (*self.store).clone();
-                let path_str = store
-                    .real_path(&store_path)
-                    .to_miette()
-                    .wrap_err("Failed to get store path")?;
+            // The realized.paths contains the built store paths (expect exactly one per attribute)
+            let store_path = realized
+                .paths
+                .first()
+                .ok_or_else(|| miette!("Attribute '{attr_path}' produced no output paths"))?;
 
-                let path = PathBuf::from(&path_str);
+            let mut store = (*self.store).clone();
+            let path_str = store
+                .real_path(store_path)
+                .to_miette()
+                .wrap_err("Failed to get store path")?;
 
-                // Add GC root if requested
-                if let Some(gc_root) = gc_root {
-                    // Parse the store path for the FFI call
-                    let store_path = store
-                        .parse_store_path(&path_str)
-                        .to_miette()
-                        .wrap_err("Failed to parse store path for GC root")?;
+            let path = PathBuf::from(&path_str);
 
-                    // Use FFI to register GC root properly with Nix
-                    store
-                        .add_perm_root(&store_path, gc_root)
-                        .to_miette()
-                        .wrap_err("Failed to add GC root")?;
+            // Add GC root if requested, named after the attribute
+            if let Some(gc_root_base) = gc_root {
+                // Sanitize attribute path for use as filename (replace dots with dashes)
+                let sanitized_attr = attr_path.replace('.', "-");
+                let attr_gc_root = gc_root_base.with_file_name(format!(
+                    "{}-{}",
+                    gc_root_base
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                    sanitized_attr
+                ));
+
+                // Remove existing symlink right before creating new one
+                if attr_gc_root.symlink_metadata().is_ok() {
+                    std::fs::remove_file(&attr_gc_root)
+                        .map_err(|e| miette!("Failed to remove existing GC root: {}", e))?;
                 }
 
-                batch_paths.push(path.clone());
-                output_paths.push(path);
+                store
+                    .add_perm_root(store_path, &attr_gc_root)
+                    .to_miette()
+                    .wrap_err("Failed to add GC root")?;
             }
 
-            // Queue realized paths immediately for real-time pushing
-            if !batch_paths.is_empty() {
-                self.queue_realized_paths(&batch_paths).await?;
-            }
+            output_paths.push(path.clone());
 
-            // If no paths were returned, try using the realized string directly
-            if output_paths.is_empty() && !realized.s.is_empty() {
-                let path = PathBuf::from(realized.s);
-                self.queue_realized_paths(&[path.clone()]).await?;
-                output_paths.push(path);
-            }
+            // Queue realized path for real-time pushing
+            self.queue_realized_paths(&[path]).await?;
         }
 
         Ok(output_paths)

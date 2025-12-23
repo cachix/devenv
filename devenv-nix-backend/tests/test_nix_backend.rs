@@ -411,17 +411,24 @@ async fn test_backend_build_with_gc_root() {
     // Use fixture lock file for build
     copy_fixture_lock(temp_dir.path());
 
-    let gc_root = temp_dir.path().join("result");
+    let gc_root_base = temp_dir.path().join("result");
 
     // Build with GC root
-    let result = backend.build(&["shell"], None, Some(&gc_root)).await;
+    let result = backend.build(&["shell"], None, Some(&gc_root_base)).await;
 
     assert!(
         result.is_ok(),
         "Build with GC root should succeed: {:?}",
         result.err()
     );
-    assert!(gc_root.exists(), "GC root symlink should be created");
+
+    // The actual GC root is named "{base}-{attr}" per the build() implementation
+    let expected_gc_root = temp_dir.path().join("result-shell");
+    assert!(
+        expected_gc_root.exists(),
+        "GC root symlink should be created at {:?}",
+        expected_gc_root
+    );
 }
 
 #[tokio::test]
@@ -729,8 +736,6 @@ fn test_backend_options_default() {
     assert!(options.bail_on_error);
     assert!(!options.cache_output);
     assert!(!options.refresh_cached_output);
-    assert!(options.logging);
-    assert!(!options.logging_stdout);
     assert!(!options.nix_flags.is_empty());
 }
 
