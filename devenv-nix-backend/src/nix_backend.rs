@@ -122,8 +122,12 @@ pub struct NixRustBackend {
     #[allow(dead_code)]
     _temp_files: Vec<tempfile::NamedTempFile>,
 
+    // GC collection guard - drops BEFORE gc_registration to ensure GC runs while thread is still registered
+    _gc_guard: GcCollectionGuard,
+
     // GC thread registration guard - must live as long as the backend
     // The Boehm GC requires threads to be registered before using GC-allocated memory.
+    // This MUST be the last FFI-related field to drop, after GC collection
     #[allow(dead_code)]
     _gc_registration: nix_bindings_expr::eval_state::ThreadRegistrationGuard,
 
@@ -268,7 +272,6 @@ impl NixRustBackend {
             .ok_or_else(|| miette::miette!("Nixpkgs config path contains invalid UTF-8"))?
             .to_string();
         temp_files.push(nixpkgs_config_file);
-        eprintln!("DEBUG: Creating EvalStateBuilder");
 
         // Create eval state with flake support and NIXPKGS_CONFIG
         // load_config() loads settings from nix.conf files including access-tokens
@@ -289,12 +292,10 @@ impl NixRustBackend {
             .flakes(&flake_settings)
             .to_miette()
             .wrap_err("Failed to configure flakes in eval state")?;
-        eprintln!("DEBUG: Building eval state (this calls loadConfFile)");
         let mut eval_state = eval_state
             .build()
             .to_miette()
             .wrap_err("Failed to build eval state")?;
-        eprintln!("DEBUG: Eval state built");
 
         // Enable Nix debugger if requested
         if global_options.nix_debugger {
@@ -362,6 +363,7 @@ impl NixRustBackend {
             cachix_daemon: cachix_daemon.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
             _temp_files: temp_files,
+            _gc_guard: GcCollectionGuard,
             _gc_registration: gc_registration,
             shutdown: shutdown.clone(),
         };
@@ -1574,14 +1576,17 @@ impl NixBackend for NixRustBackend {
         //
         // Evaluates and builds the bash attribute from default.nix,
         // which comes from locked nixpkgs and respects the system architecture.
-        // Caches the result with a GC root at .devenv/bash to avoid repeated builds.
+        // Caches the result with a GC root at .devenv/bash-bash to avoid repeated builds.
 
-        let gc_root = self.paths.dotfile.join("bash");
+        // The build() function appends the attribute name to the gc_root base path,
+        // so we use "bash" as the base and the actual symlink becomes "bash-bash"
+        let gc_root_base = self.paths.dotfile.join("bash");
+        let gc_root_actual = self.paths.dotfile.join("bash-bash");
 
         // Try cache first
         if !refresh_cached_output
-            && gc_root.exists()
-            && let Ok(cached_path) = std::fs::read_link(&gc_root)
+            && gc_root_actual.exists()
+            && let Ok(cached_path) = std::fs::read_link(&gc_root_actual)
         {
             // Verify the path still exists in the store
             if cached_path.exists() {
@@ -1592,7 +1597,7 @@ impl NixBackend for NixRustBackend {
 
         // Cache miss or refresh requested - use build() which handles everything
         let paths = self
-            .build(&["bash"], None, Some(&gc_root))
+            .build(&["bash"], None, Some(&gc_root_base))
             .await
             .wrap_err("Failed to build bash attribute from default.nix")?;
 
@@ -1698,6 +1703,21 @@ impl NixRustBackend {
         }
 
         ref_str.to_string()
+    }
+}
+
+/// Guard that forces GC collection when dropped.
+/// Place this as the LAST field in a struct to ensure GC runs after all other fields are dropped.
+struct GcCollectionGuard;
+
+impl Drop for GcCollectionGuard {
+    fn drop(&mut self) {
+        // Force Boehm GC collection after all FFI resources have been dropped.
+        // This helps ensure GC-managed memory is cleaned up before the next
+        // backend is created, reducing heap fragmentation and potential corruption.
+        unsafe {
+            nix_bindings_bindgen_raw::GC_gcollect();
+        }
     }
 }
 
