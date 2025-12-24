@@ -78,7 +78,8 @@ fn main() -> Result<()> {
     }
 }
 
-fn run_with_tui(cli: Cli) -> Result<()> {
+#[tokio::main(flavor = "current_thread")]
+async fn run_with_tui(cli: Cli) -> Result<()> {
     // Initialize activity channel and register it
     let (activity_rx, activity_handle) = devenv_activity::init();
     activity_handle.install();
@@ -104,35 +105,25 @@ fn run_with_tui(cli: Cli) -> Result<()> {
     // Devenv on background thread (own runtime)
     let shutdown_clone = shutdown.clone();
     let devenv_thread = std::thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_multi_thread()
+        tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
-            .expect("Failed to create devenv runtime");
-
-        let result = rt.block_on(async {
-            tokio::select! {
-                result = run_devenv(cli, shutdown_clone.clone()) => result,
-                _ = shutdown_clone.wait_for_shutdown() => Ok(CommandResult::Done),
-            }
-        });
-
-        // Signal that all work is complete - TUI will render final state and exit
-        devenv_activity::signal_done();
-
-        result
+            .expect("Failed to create devenv runtime")
+            .block_on(async {
+                let result = tokio::select! {
+                    result = run_devenv(cli, shutdown_clone.clone()) => result,
+                    _ = shutdown_clone.wait_for_shutdown() => Ok(CommandResult::Done),
+                };
+                devenv_activity::signal_done();
+                result
+            })
     });
 
     // TUI on main thread (owns terminal)
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .into_diagnostic()?;
-
-    let _ = rt.block_on(
-        devenv_tui::TuiApp::new(activity_rx, shutdown)
-            .filter_level(filter_level)
-            .run(),
-    );
+    let _ = devenv_tui::TuiApp::new(activity_rx, shutdown)
+        .filter_level(filter_level)
+        .run()
+        .await;
 
     // Restore terminal to normal state (disable raw mode, show cursor)
     devenv_tui::app::restore_terminal();
