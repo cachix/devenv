@@ -119,43 +119,6 @@ impl TasksStatus {
     }
 }
 
-/// Configuration for a single task
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct TaskConfig {
-    pub name: String,
-    pub after: Vec<String>,
-    pub before: Vec<String>,
-    pub command: Option<String>,
-    pub status: Option<String>,
-    pub exec_if_modified: Vec<String>,
-    pub inputs: Option<serde_json::Value>,
-    #[serde(default)]
-    pub show_output: bool,
-}
-
-/// Execution mode determining which tasks to run
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, clap::ValueEnum,
-)]
-pub enum RunMode {
-    /// Run only the specified task without dependencies
-    Single,
-    /// Run the specified task and all tasks that depend on it (downstream tasks)
-    After,
-    /// Run all dependency tasks first, then the specified task (upstream tasks)
-    Before,
-    /// Run the complete dependency graph (upstream and downstream tasks)
-    All,
-}
-
-/// Configuration for a complete task execution run
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Config {
-    pub tasks: Vec<TaskConfig>,
-    pub roots: Vec<String>,
-    pub run_mode: RunMode,
-}
-
 /// Output data from tasks
 pub type TaskOutputs = serde_json::Value;
 
