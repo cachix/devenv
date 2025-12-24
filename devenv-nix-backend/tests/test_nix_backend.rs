@@ -1537,19 +1537,24 @@ async fn test_build_gc_root_already_exists() {
     // Use fixture lock file for build
     copy_fixture_lock(temp_dir.path());
 
-    let gc_root = temp_dir.path().join("result");
+    let gc_root_base = temp_dir.path().join("result");
+    // The build function appends the attribute name to the gc_root base path
+    let gc_root_actual = temp_dir.path().join("result-shell");
 
     // First build to create the gc_root
-    let result1 = backend.build(&["shell"], None, Some(&gc_root)).await;
+    let result1 = backend.build(&["shell"], None, Some(&gc_root_base)).await;
     assert!(
         result1.is_ok(),
         "First build should succeed: {:?}",
         result1.err()
     );
-    assert!(gc_root.exists(), "GC root should exist after first build");
+    assert!(
+        gc_root_actual.exists(),
+        "GC root should exist after first build"
+    );
 
     // Build again with same gc_root - Nix's add_perm_root should handle the existing symlink
-    let result2 = backend.build(&["shell"], None, Some(&gc_root)).await;
+    let result2 = backend.build(&["shell"], None, Some(&gc_root_base)).await;
 
     assert!(
         result2.is_ok(),
@@ -1558,7 +1563,10 @@ async fn test_build_gc_root_already_exists() {
     );
 
     // Verify gc_root still exists
-    assert!(gc_root.exists(), "GC root should exist after second build");
+    assert!(
+        gc_root_actual.exists(),
+        "GC root should exist after second build"
+    );
 
     let paths = result2.unwrap();
     assert!(!paths.is_empty(), "Build should return paths");
@@ -1805,10 +1813,11 @@ async fn test_get_bash_caching_with_gc_root() {
     let path1 = result1.unwrap();
 
     // Check that GC root symlink was created
-    let gc_root = temp_dir.path().join(".devenv/bash");
+    // The build function appends the attribute name, so bash becomes bash-bash
+    let gc_root = temp_dir.path().join(".devenv/bash-bash");
     assert!(
         gc_root.exists(),
-        "GC root symlink should be created at .devenv/bash"
+        "GC root symlink should be created at .devenv/bash-bash"
     );
 
     // Second call without refresh - should use cached result
@@ -2220,8 +2229,10 @@ async fn test_gc_with_protected_gc_roots() {
     copy_fixture_lock(temp_dir.path());
 
     // Build with gc_root to protect the path
-    let gc_root = temp_dir.path().join("protected-result");
-    let build_result = backend.build(&["shell"], None, Some(&gc_root)).await;
+    let gc_root_base = temp_dir.path().join("protected-result");
+    // The build function appends the attribute name to the gc_root base path
+    let gc_root_actual = temp_dir.path().join("protected-result-shell");
+    let build_result = backend.build(&["shell"], None, Some(&gc_root_base)).await;
     assert!(
         build_result.is_ok(),
         "Build with gc_root should succeed: {:?}",
@@ -2232,7 +2243,7 @@ async fn test_gc_with_protected_gc_roots() {
     assert!(!built_paths.is_empty(), "Build should return paths");
 
     // Verify the gc_root symlink was created
-    assert!(gc_root.exists(), "GC root symlink should be created");
+    assert!(gc_root_actual.exists(), "GC root symlink should be created");
 
     // Try to GC the protected path
     let store_path_str = built_paths[0].to_str().unwrap().to_string();
@@ -2245,7 +2256,7 @@ async fn test_gc_with_protected_gc_roots() {
         Ok(_) => {
             // gc() succeeded - but gc_root should still exist (path is protected)
             assert!(
-                gc_root.exists(),
+                gc_root_actual.exists(),
                 "GC root should still exist after gc() (path is protected)"
             );
         }
@@ -2259,7 +2270,7 @@ async fn test_gc_with_protected_gc_roots() {
             );
             // gc_root should definitely still exist
             assert!(
-                gc_root.exists(),
+                gc_root_actual.exists(),
                 "GC root should still exist (path is protected)"
             );
         }
@@ -2546,11 +2557,14 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
     // Use fixture lock file for builds
     copy_fixture_lock(temp_dir.path());
 
-    let gc_root1 = temp_dir.path().join("result1");
-    let gc_root2 = temp_dir.path().join("result2");
+    let gc_root1_base = temp_dir.path().join("result1");
+    let gc_root2_base = temp_dir.path().join("result2");
+    // The build function appends the attribute name to the gc_root base path
+    let gc_root1_actual = temp_dir.path().join("result1-shell");
+    let gc_root2_actual = temp_dir.path().join("result2-shell");
 
     // Build first attribute with first gc_root
-    let result1 = backend.build(&["shell"], None, Some(&gc_root1)).await;
+    let result1 = backend.build(&["shell"], None, Some(&gc_root1_base)).await;
     assert!(
         result1.is_ok(),
         "First build should succeed: {:?}",
@@ -2558,7 +2572,7 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
     );
 
     // Build second attribute with second gc_root (same attribute, different gc_root)
-    let result2 = backend.build(&["shell"], None, Some(&gc_root2)).await;
+    let result2 = backend.build(&["shell"], None, Some(&gc_root2_base)).await;
     assert!(
         result2.is_ok(),
         "Second build should succeed: {:?}",
@@ -2566,8 +2580,8 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
     );
 
     // Verify both gc_roots exist
-    assert!(gc_root1.exists(), "First GC root should exist");
-    assert!(gc_root2.exists(), "Second GC root should exist");
+    assert!(gc_root1_actual.exists(), "First GC root should exist");
+    assert!(gc_root2_actual.exists(), "Second GC root should exist");
 
     // Verify both returned valid paths
     let paths1 = result1.unwrap();
