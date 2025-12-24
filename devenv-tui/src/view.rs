@@ -48,11 +48,15 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
 
         // Pass logs for activities that should display them:
-        // - Tasks with show_output=true: always show logs inline
+        // - Tasks with show_output=true or failed: show logs inline
         // - Messages with details: always show details inline
         // - Selected build/eval activities: show logs when selected
+        let task_failed = matches!(
+            (&activity.variant, &activity.state),
+            (ActivityVariant::Task(_), NixActivityState::Completed { success: false, .. })
+        );
         let activity_logs = if let ActivityVariant::Task(ref task_data) = activity.variant
-            && task_data.show_output
+            && (task_data.show_output || task_failed)
         {
             model.get_build_logs(activity.id).cloned()
         } else if let ActivityVariant::Message(ref msg_data) = activity.variant
@@ -363,8 +367,9 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
 
-            // Show logs inline for tasks with show_output=true
-            if task_data.show_output && logs.is_some() {
+            // Show logs inline for tasks with show_output=true or failed tasks
+            let task_failed = *completed == Some(false);
+            if (task_data.show_output || task_failed) && logs.is_some() {
                 let empty_message = if completed.is_some() {
                     "  → no output"
                 } else {

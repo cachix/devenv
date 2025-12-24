@@ -234,6 +234,52 @@ fn test_task_failed() {
     assert_tui_snapshot!(output);
 }
 
+/// Test that failed tasks show logs even when show_output=false.
+#[test]
+fn test_task_failed_shows_logs() {
+    let (mut model, ui_state) = new_test_model();
+
+    let start_event = ActivityEvent::Task(Task::Start {
+        id: 1,
+        name: "test:failing-task".to_string(),
+        parent: None,
+        detail: None,
+        show_output: false,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(start_event);
+
+    // Send log events - these should be visible because the task fails
+    model.apply_activity_event(ActivityEvent::Task(Task::Log {
+        id: 1,
+        line: "Running test suite...".to_string(),
+        is_error: false,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Task(Task::Log {
+        id: 1,
+        line: "FAILED: assertion error in test_foo".to_string(),
+        is_error: true,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Task(Task::Log {
+        id: 1,
+        line: "Expected: 42, Got: 0".to_string(),
+        is_error: true,
+        timestamp: Timestamp::now(),
+    }));
+
+    let complete_event = ActivityEvent::Task(Task::Complete {
+        id: 1,
+        outcome: ActivityOutcome::Failed,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(complete_event);
+
+    let output = render_to_string(&model, &ui_state);
+    assert_tui_snapshot!(output);
+}
+
 /// Test that task with show_output=true displays logs in the TUI.
 #[test]
 fn test_task_show_output_true() {

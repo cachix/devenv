@@ -741,14 +741,6 @@ impl ActivityModel {
     }
 
     fn handle_activity_log(&mut self, id: u64, line: String, is_error: bool) {
-        // Skip logs for tasks with show_output=false
-        if let Some(activity) = self.activities.get(&id)
-            && let ActivityVariant::Task(task) = &activity.variant
-            && !task.show_output
-        {
-            return;
-        }
-
         let logs = self
             .build_logs
             .entry(id)
