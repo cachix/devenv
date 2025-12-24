@@ -183,6 +183,7 @@ impl TaskState {
         // All child activities created within scope() will have this as their parent.
         let task_activity = Activity::task(&self.task.name)
             .show_output(self.task.show_output)
+            .is_process(self.task.r#type == crate::types::TaskType::Process)
             .start();
 
         // Run the entire task within the activity's scope for proper parent-child nesting

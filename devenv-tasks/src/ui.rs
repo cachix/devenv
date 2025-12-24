@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::{LineWriter, Write};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -8,6 +9,29 @@ use tokio::sync::mpsc;
 use crate::types::{TaskCompleted, TaskStatus, TasksStatus};
 use crate::{Error, Outputs, Tasks, VerbosityLevel};
 
+/// Line-buffered console output
+struct Console {
+    stdout: LineWriter<std::io::Stdout>,
+    stderr: LineWriter<std::io::Stderr>,
+}
+
+impl Console {
+    fn new() -> Self {
+        Self {
+            stdout: LineWriter::new(std::io::stdout()),
+            stderr: LineWriter::new(std::io::stderr()),
+        }
+    }
+
+    fn write_stdout(&mut self, message: &str) {
+        let _ = writeln!(self.stdout, "{}", message);
+    }
+
+    fn write_stderr(&mut self, message: &str) {
+        let _ = writeln!(self.stderr, "{}", message);
+    }
+}
+
 /// UI manager for tasks - consumes activity events and displays status
 pub struct TasksUi {
     tasks: Arc<Tasks>,
@@ -15,6 +39,7 @@ pub struct TasksUi {
     verbosity: VerbosityLevel,
     /// Track task states by activity ID
     task_states: HashMap<u64, TaskUiState>,
+    console: Console,
 }
 
 /// Internal state for tracking a task in the UI
@@ -23,6 +48,7 @@ struct TaskUiState {
     status: TaskDisplayStatus,
     start_time: Instant,
     show_output: bool,
+    is_process: bool,
 }
 
 /// Display status for a task
@@ -48,6 +74,7 @@ impl TasksUi {
             activity_rx,
             verbosity,
             task_states: HashMap::new(),
+            console: Console::new(),
         }
     }
 
@@ -59,7 +86,7 @@ impl TasksUi {
         // Print header (unless quiet mode)
         if self.verbosity != VerbosityLevel::Quiet {
             let names = console::style(self.tasks.root_names.join(", ")).bold();
-            self.console_write_line(&format!("{:17} {}\n", "Running tasks", names))?;
+            self.console_write_stderr(&format!("{:17} {}\n", "Running tasks", names));
         }
 
         // Process events until Done signal
@@ -91,6 +118,7 @@ impl TasksUi {
                 id,
                 name,
                 show_output,
+                is_process,
                 ..
             } => {
                 self.task_states.insert(
@@ -100,15 +128,16 @@ impl TasksUi {
                         status: TaskDisplayStatus::Running,
                         start_time: Instant::now(),
                         show_output,
+                        is_process,
                     },
                 );
 
                 if self.verbosity != VerbosityLevel::Quiet {
-                    self.console_write_line(&format!(
+                    self.console_write_stderr(&format!(
                         "{:17} {}",
                         console::style("Running").blue().bold(),
                         console::style(&name).bold()
-                    ))?;
+                    ));
                 }
             }
             TaskEvent::Complete { id, outcome, .. } => {
@@ -150,45 +179,52 @@ impl TasksUi {
                     None
                 };
 
-                if let Some((name, status_label, duration_str, outcome)) = print_info {
-                    if self.verbosity != VerbosityLevel::Quiet {
-                        let style = match outcome {
-                            ActivityOutcome::Success => console::style(status_label).green().bold(),
-                            ActivityOutcome::Failed | ActivityOutcome::DependencyFailed => {
-                                console::style(status_label).red().bold()
-                            }
-                            ActivityOutcome::Cancelled => {
-                                console::style(status_label).yellow().bold()
-                            }
-                            ActivityOutcome::Cached | ActivityOutcome::Skipped => {
-                                console::style(status_label).blue().bold()
-                            }
-                        };
-                        self.console_write_line(&format!(
-                            "{:17} {}{}",
-                            style,
-                            console::style(&name).bold(),
-                            duration_str
-                        ))?;
-                    }
+                if let Some((name, status_label, duration_str, outcome)) = print_info
+                    && self.verbosity != VerbosityLevel::Quiet
+                {
+                    let style = match outcome {
+                        ActivityOutcome::Success => console::style(status_label).green().bold(),
+                        ActivityOutcome::Failed | ActivityOutcome::DependencyFailed => {
+                            console::style(status_label).red().bold()
+                        }
+                        ActivityOutcome::Cancelled => console::style(status_label).yellow().bold(),
+                        ActivityOutcome::Cached | ActivityOutcome::Skipped => {
+                            console::style(status_label).blue().bold()
+                        }
+                    };
+                    self.console_write_stderr(&format!(
+                        "{:17} {}{}",
+                        style,
+                        console::style(&name).bold(),
+                        duration_str
+                    ));
                 }
             }
             TaskEvent::Log {
                 id, line, is_error, ..
             } => {
-                // Show log output based on verbosity and task's show_output setting
-                // In quiet mode: no logs are shown
-                // In verbose mode: all logs are shown
-                // In normal mode: only show logs for tasks with show_output=true
                 if let Some(state) = self.task_states.get(&id) {
-                    let should_show = match self.verbosity {
-                        VerbosityLevel::Quiet => false,
-                        VerbosityLevel::Verbose => true,
-                        VerbosityLevel::Normal => state.show_output,
-                    };
+                    let should_show = state.is_process
+                        || match self.verbosity {
+                            VerbosityLevel::Quiet => false,
+                            VerbosityLevel::Verbose => true,
+                            VerbosityLevel::Normal => state.show_output,
+                        };
+
                     if should_show {
-                        let prefix = if is_error { "!" } else { " " };
-                        self.console_write_line(&format!("[{}]{} {}", state.name, prefix, line))?;
+                        if state.is_process {
+                            if is_error {
+                                self.console_write_stderr(&line);
+                            } else {
+                                self.console_write_stdout(&line);
+                            }
+                        } else {
+                            let prefix = if is_error { "!" } else { " " };
+                            self.console_write_stderr(&format!(
+                                "[{}]{} {}",
+                                state.name, prefix, line
+                            ));
+                        }
                     }
                 }
             }
@@ -199,7 +235,7 @@ impl TasksUi {
         Ok(())
     }
 
-    async fn print_summary(&self) -> Result<(), Error> {
+    async fn print_summary(&mut self) -> Result<(), Error> {
         let final_status = self.tasks.get_completion_status().await;
 
         if self.verbosity != VerbosityLevel::Quiet {
@@ -273,22 +309,25 @@ impl TasksUi {
             .collect::<Vec<_>>()
             .join(", ");
 
-            self.console_write_line(&status_summary)?;
+            self.console_write_stderr(&status_summary);
         }
 
         // Print errors even in quiet mode
         let errors = self.format_task_errors().await;
         if !errors.is_empty() {
             let styled_errors = console::Style::new().apply_to(errors);
-            self.console_write_line(&styled_errors.to_string())?;
+            self.console_write_stderr(&styled_errors.to_string());
         }
 
         Ok(())
     }
 
-    fn console_write_line(&self, message: &str) -> Result<(), Error> {
-        eprintln!("{}", message);
-        Ok(())
+    fn console_write_stdout(&mut self, message: &str) {
+        self.console.write_stdout(message);
+    }
+
+    fn console_write_stderr(&mut self, message: &str) {
+        self.console.write_stderr(message);
     }
 
     /// Format error messages from failed tasks

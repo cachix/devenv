@@ -157,6 +157,9 @@ pub enum Task {
         detail: Option<String>,
         #[serde(default)]
         show_output: bool,
+        /// Whether this is a long-running process task (always shows output)
+        #[serde(default)]
+        is_process: bool,
         timestamp: Timestamp,
     },
     Complete {

@@ -240,6 +240,7 @@ pub struct TaskBuilder {
     name: String,
     detail: Option<String>,
     show_output: bool,
+    is_process: bool,
     id: Option<u64>,
     parent: Option<Option<u64>>,
     level: Option<ActivityLevel>,
@@ -251,6 +252,7 @@ impl TaskBuilder {
             name: name.into(),
             detail: None,
             show_output: false,
+            is_process: false,
             id: None,
             parent: None,
             level: None,
@@ -264,6 +266,11 @@ impl TaskBuilder {
 
     pub fn show_output(mut self, show_output: bool) -> Self {
         self.show_output = show_output;
+        self
+    }
+
+    pub fn is_process(mut self, is_process: bool) -> Self {
+        self.is_process = is_process;
         self
     }
 
@@ -299,6 +306,7 @@ impl TaskBuilder {
             parent,
             detail: self.detail,
             show_output: self.show_output,
+            is_process: self.is_process,
             timestamp: Timestamp::now(),
         }));
 
