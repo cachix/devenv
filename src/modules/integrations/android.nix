@@ -56,10 +56,10 @@ in
 
     platforms.version = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "32" "34" ];
+      default = [ "32" "34" "36" ];
       description = ''
         The Android platform versions to install.
-        By default, versions 32 and 34 are installed.
+        By default, versions 32, 34 and 36 are installed.
       '';
     };
 
@@ -121,10 +121,10 @@ in
 
     buildTools.version = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = if cfg.flutter.enable then [ "33.0.2" "30.0.3" ] else [ "34.0.0" ];
+      default = if cfg.flutter.enable then [ "35.0.0" "33.0.2" "30.0.3" ] else [ "34.0.0" ];
       description = ''
         The version of the Android build tools to install.
-        By default, version 30.0.3 is installed or [ "33.0.2" "30.0.3" ] if flutter is enabled.
+        By default, version 30.0.3 is installed or [ "35.0.0" "33.0.2" "30.0.3" ] if flutter is enabled.
       '';
     };
 
@@ -168,7 +168,7 @@ in
 
     ndk.enable = lib.mkOption {
       type = lib.types.bool;
-      default = !cfg.flutter.enable;
+      default = true;
       description = ''
         Whether to include the Android NDK (Native Development Kit).
         By default, the NDK is included.
@@ -177,10 +177,10 @@ in
 
     ndk.version = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "26.1.10909125" ];
+      default = if cfg.flutter.enable then [ "28.2.13676358" ] else [ "26.1.10909125" ];
       description = ''
         The version of the Android NDK (Native Development Kit) to install.
-        By default, version 26.1.10909125 is installed.
+        By default, version 26.1.10909125 is installed or for flutter version 28.2.13676358.
       '';
     };
 
@@ -292,6 +292,55 @@ in
         java.jdk.package = lib.mkDefault pkgs.jdk17;
       })
     ];
+
+    tasks = lib.mkIf cfg.flutter.enable {
+      "devenv:android:flutter:sync-properties" = {
+        description = "Sync Flutter SDK paths in property files";
+        exec = ''
+          # Helper function to update a property in a file
+          update_property() {
+            local file="$1"
+            local key="$2"
+            local value="$3"
+
+            if grep -q "^$key=" "$file"; then
+              # Property exists, update it
+              sed -i "s|^$key=.*|$key=$value|" "$file"
+            else
+              # Property missing, add it
+              echo "$key=$value" >> "$file"
+            fi
+          }
+
+          # Update android/local.properties files
+          for props in android/local.properties */android/local.properties; do
+            if [ -f "$props" ]; then
+              echo "Updating Flutter SDK paths in: $props"
+              update_property "$props" "sdk.dir" "$ANDROID_HOME"
+              update_property "$props" "ndk.dir" "$ANDROID_NDK_ROOT"
+              update_property "$props" "flutter.sdk" "$FLUTTER_ROOT"
+            fi
+          done
+
+          # Update ios/Flutter/Generated.xcconfig files
+          for xcconfig in ios/Flutter/Generated.xcconfig */ios/Flutter/Generated.xcconfig; do
+            if [ -f "$xcconfig" ]; then
+              echo "Updating Flutter SDK path in: $xcconfig"
+              sed -i "s|^FLUTTER_ROOT=.*|FLUTTER_ROOT=$FLUTTER_ROOT|" "$xcconfig"
+            fi
+          done
+
+          # Update ios/flutter_export_environment.sh files
+          for export_sh in ios/flutter_export_environment.sh */ios/flutter_export_environment.sh; do
+            if [ -f "$export_sh" ]; then
+              echo "Updating Flutter SDK path in: $export_sh"
+              sed -i "s|^export \"FLUTTER_ROOT=.*|export \"FLUTTER_ROOT=$FLUTTER_ROOT\"|" "$export_sh"
+            fi
+          done
+        '';
+        before = [ "devenv:enterShell" ];
+      };
+    };
 
     env.ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
     env.ANDROID_NDK_ROOT = "${config.env.ANDROID_HOME}/ndk-bundle";

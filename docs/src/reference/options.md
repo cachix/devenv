@@ -127,7 +127,7 @@ package
 
 
 The version of the Android build tools to install.
-By default, version 30.0.3 is installed or \[ “33.0.2” “30.0.3” ] if flutter is enabled.
+By default, version 30.0.3 is installed or \[ “35.0.0” “33.0.2” “30.0.3” ] if flutter is enabled.
 
 
 
@@ -417,7 +417,7 @@ boolean
 
 
 The version of the Android NDK (Native Development Kit) to install.
-By default, version 26.1.10909125 is installed.
+By default, version 26.1.10909125 is installed or for flutter version 28.2.13676358.
 
 
 
@@ -467,7 +467,7 @@ Latest version in nixpkgs
 
 
 The Android platform versions to install.
-By default, versions 32 and 34 are installed.
+By default, versions 32, 34 and 36 are installed.
 
 
 
@@ -482,6 +482,7 @@ list of string
 [
   "32"
   "34"
+  "36"
 ]
 ```
 
