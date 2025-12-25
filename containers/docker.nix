@@ -30,6 +30,11 @@
 , cacert ? pkgs.cacert
 , iana-etc ? pkgs.iana-etc
 , gitMinimal ? pkgs.gitMinimal
+, # Devcontainer support
+  enableSudo ? false        # Enable passwordless sudo for non-root user
+, enableLocale ? false      # Enable locale configuration
+, locale ? "en_US.UTF-8"    # Locale to configure
+, extraEnv ? [ ]            # Additional environment variables
 , # Other dependencies
   shadow ? pkgs.shadow
 ,
@@ -43,6 +48,8 @@ let
     iana-etc
     gitMinimal
   ]
+  ++ lib.optionals enableSudo [ pkgs.sudo ]
+  ++ lib.optionals enableLocale [ pkgs.glibcLocales ]
   ++ extraPkgs;
 
   users = {
@@ -72,7 +79,7 @@ let
       shell = lib.getExe bashInteractive;
       home = "/home/${uname}";
       inherit gid;
-      groups = [ "${gname}" ];
+      groups = [ "${gname}" ] ++ lib.optionals enableSudo [ "sudo" ];
       description = "Nix user";
     };
   }
@@ -97,6 +104,9 @@ let
   }
   // lib.optionalAttrs (gid != 0) {
     "${gname}".gid = gid;
+  }
+  // lib.optionalAttrs enableSudo {
+    sudo.gid = 27;
   };
 
   userToPasswd =
@@ -168,8 +178,18 @@ let
 
   nixConfContents = toConf (
     {
-      sandbox = false;
       build-users-group = "nixbld";
+      experimental-features = [
+        "nix-command"
+        "flakes"
+      ];
+      # `filter-syscalls` controls a security feature that prevents builders from creating setuid binaries.
+      # On multi-user systems, this would allow for root privilege escalation.
+      # For our container use-case it's not much of a concern.
+      # The feature is disabled by default because not all container hosts support seccomp emulation.
+      filter-syscalls = false;
+      max-jobs = "auto";
+      sandbox = false;
       trusted-public-keys = [ "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" ];
     }
     // nixConf
@@ -313,6 +333,11 @@ let
           ln -s ${lib.getExe bashInteractive} $out/bin/sh
 
         ''
+        + lib.optionalString enableSudo ''
+          # Configure passwordless sudo for the user
+          mkdir -p $out/etc/sudoers.d
+          echo "${uname} ALL=(ALL) NOPASSWD:ALL" > $out/etc/sudoers.d/${uname}
+        ''
         + (lib.optionalString (flake-registry-path != null) ''
           nixCacheDir="${userHome}/.cache/nix"
           mkdir -p $out$nixCacheDir
@@ -348,6 +373,9 @@ dockerTools.buildLayeredImageWithNixDb {
     chmod 1777 var/tmp
     chown -R ${toString uid}:${toString gid} .${userHome}
     chown -R ${toString uid}:${toString gid} nix
+  ''
+  + lib.optionalString enableSudo ''
+    chmod 440 etc/sudoers.d/${uname}
   '';
 
   config = {
@@ -372,7 +400,13 @@ dockerTools.buildLayeredImageWithNixDb {
       "GIT_SSL_CAINFO=/nix/var/nix/profiles/default/etc/ssl/certs/ca-bundle.crt"
       "NIX_SSL_CERT_FILE=/nix/var/nix/profiles/default/etc/ssl/certs/ca-bundle.crt"
       "NIX_PATH=/nix/var/nix/profiles/per-user/${uname}/channels:${userHome}/.nix-defexpr/channels"
-    ];
+    ]
+    ++ lib.optionals enableLocale [
+      "LANG=${locale}"
+      "LC_ALL=${locale}"
+      "LOCALE_ARCHIVE=/nix/var/nix/profiles/default/lib/locale/locale-archive"
+    ]
+    ++ extraEnv;
   };
 
 }

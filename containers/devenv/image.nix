@@ -1,8 +1,5 @@
 # A non-root container image with devenv and Nix pre-installed.
-{ pkgs
-, devenv
-,
-}:
+{ pkgs, devenv }:
 
 let
   # Borrowed from https://github.com/nix-community/docker-nixpkgs/
@@ -17,7 +14,7 @@ let
         doInstallCheck = false;
       });
 in
-import ./docker.nix {
+import ../docker.nix {
   inherit pkgs;
 
   name = "devenv";
@@ -37,15 +34,6 @@ import ./docker.nix {
   gname = "users";
 
   nixConf = {
-    experimental-features = [
-      "nix-command"
-      "flakes"
-    ];
-    # Fixes unable to load seccomp BPF
-    # https://github.com/NixOS/nix/issues/5258
-    # Probably redundant now that we don't run the Nix installer
-    filter-syscalls = false;
-    max-jobs = "auto";
     substituters = [
       "https://cache.nixos.org/"
       "https://devenv.cachix.org/"
@@ -59,7 +47,7 @@ import ./docker.nix {
   # Add devenv
   extraPkgs = [ devenv ];
 
-  # Don't bundle Nix to reduce the image size
+  # Don't bundle nixpkgs to reduce the image size
   bundleNixpkgs = false;
 
   # Remove unneeded tools or reduce their closure size

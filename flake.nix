@@ -85,6 +85,10 @@
             inherit pkgs;
             inherit (self.packages.${system}) devenv;
           };
+          devcontainer-image = import ./containers/devcontainer/image.nix {
+            inherit pkgs;
+            inherit (self.packages.${system}) devenv;
+          };
         }
       );
 
