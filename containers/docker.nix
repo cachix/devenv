@@ -35,6 +35,12 @@
 , enableLocale ? false      # Enable locale configuration
 , locale ? "en_US.UTF-8"    # Locale to configure
 , extraEnv ? [ ]            # Additional environment variables
+, enableZsh ? false         # Enable zsh with Oh My Zsh
+, zshTheme ? "devcontainers" # Oh My Zsh theme name
+, # Shell configuration scripts (paths to files)
+  rcSnippet ? null          # Path to rc_snippet.sh
+, bashThemeSnippet ? null   # Path to bash_theme_snippet.sh
+, zshThemeFile ? null       # Path to custom zsh theme file
 , # Other dependencies
   shadow ? pkgs.shadow
 ,
@@ -50,6 +56,7 @@ let
   ]
   ++ lib.optionals enableSudo [ pkgs.sudo ]
   ++ lib.optionals enableLocale [ pkgs.glibcLocales ]
+  ++ lib.optionals enableZsh [ pkgs.zsh pkgs.oh-my-zsh ]
   ++ extraPkgs;
 
   users = {
@@ -76,7 +83,7 @@ let
   // lib.optionalAttrs (uid != 0) {
     "${uname}" = {
       inherit uid;
-      shell = lib.getExe bashInteractive;
+      shell = if enableZsh then lib.getExe pkgs.zsh else lib.getExe bashInteractive;
       home = "/home/${uname}";
       inherit gid;
       groups = [ "${gname}" ] ++ lib.optionals enableSudo [ "sudo" ];
@@ -338,6 +345,43 @@ let
           mkdir -p $out/etc/sudoers.d
           echo "${uname} ALL=(ALL) NOPASSWD:ALL" > $out/etc/sudoers.d/${uname}
         ''
+        + lib.optionalString (rcSnippet != null || bashThemeSnippet != null) ''
+          # Generate .bashrc
+          cat > $out${userHome}/.bashrc <<'BASHRC'
+          # ~/.bashrc: executed by bash for non-login shells.
+          [ -z "$PS1" ] && return
+
+          # Source global definitions
+          if [ -f /etc/bashrc ]; then
+              . /etc/bashrc
+          fi
+
+          BASHRC
+          ${lib.optionalString (rcSnippet != null) ''
+          cat ${rcSnippet} >> $out${userHome}/.bashrc
+          ''}
+          ${lib.optionalString (bashThemeSnippet != null) ''
+          cat ${bashThemeSnippet} >> $out${userHome}/.bashrc
+          ''}
+        ''
+        + lib.optionalString enableZsh ''
+          # Generate .zshrc with Oh My Zsh configuration
+          cat > $out${userHome}/.zshrc <<'ZSHRC'
+          export ZSH="/nix/var/nix/profiles/default/share/oh-my-zsh"
+          ZSH_THEME="${zshTheme}"
+          plugins=(git)
+          source $ZSH/oh-my-zsh.sh
+          zstyle ':omz:update' mode disabled
+          ZSHRC
+          ${lib.optionalString (rcSnippet != null) ''
+          cat ${rcSnippet} >> $out${userHome}/.zshrc
+          ''}
+          ${lib.optionalString (zshThemeFile != null) ''
+          # Install custom zsh theme
+          mkdir -p $out/nix/var/nix/profiles/default/share/oh-my-zsh/custom/themes
+          cp ${zshThemeFile} $out/nix/var/nix/profiles/default/share/oh-my-zsh/custom/themes/${zshTheme}.zsh-theme
+          ''}
+        ''
         + (lib.optionalString (flake-registry-path != null) ''
           nixCacheDir="${userHome}/.cache/nix"
           mkdir -p $out$nixCacheDir
@@ -405,6 +449,9 @@ dockerTools.buildLayeredImageWithNixDb {
       "LANG=${locale}"
       "LC_ALL=${locale}"
       "LOCALE_ARCHIVE=/nix/var/nix/profiles/default/lib/locale/locale-archive"
+    ]
+    ++ lib.optionals enableZsh [
+      "SHELL=${lib.getExe pkgs.zsh}"
     ]
     ++ extraEnv;
   };

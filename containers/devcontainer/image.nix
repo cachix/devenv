@@ -4,6 +4,16 @@
 ,
 }:
 
+let
+  devcontainer-utils = pkgs.callPackage ./devcontainer-utils.nix {
+    containerMetadata = {
+      VERSION = devenv.version;
+      DEFINITION_ID = "devenv-devcontainer";
+      GIT_REPOSITORY = "https://github.com/cachix/devenv";
+      CONTENTS_URL = "https://github.com/cachix/devenv/tree/main/containers/devcontainer";
+    };
+  };
+in
 import ../docker.nix {
   inherit pkgs;
 
@@ -27,6 +37,13 @@ import ../docker.nix {
   enableSudo = true;
   enableLocale = true;
   locale = "en_US.UTF-8";
+  enableZsh = true;
+  zshTheme = "devcontainers";
+
+  # Shell configuration scripts (from devcontainers/features common-utils)
+  rcSnippet = ./scripts/rc_snippet.sh;
+  bashThemeSnippet = ./scripts/bash_theme_snippet.sh;
+  zshThemeFile = ./scripts/devcontainers.zsh-theme;
 
   nixConf = {
     substituters = [
@@ -41,10 +58,11 @@ import ../docker.nix {
 
   extraPkgs = [
     devenv
-    pkgs.procps      # ps command for process management
-    pkgs.openssh     # SSH client for git operations
-    pkgs.gnupg       # Commit signing
-    pkgs.direnv      # For devenv integration
+    devcontainer-utils  # code, devcontainer-info, systemctl wrappers
+    pkgs.procps         # ps command for process management
+    pkgs.openssh        # SSH client for git operations
+    pkgs.gnupg          # Commit signing
+    pkgs.direnv         # For devenv integration
   ];
 
   # Keep container running for VS Code to attach
