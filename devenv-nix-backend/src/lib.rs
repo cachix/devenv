@@ -32,7 +32,9 @@ pub fn create_flake_inputs(
 ) -> Result<FlakeInputs> {
     let mut flake_inputs = FlakeInputs::new()?;
 
-    let parse_flags = FlakeReferenceParseFlags::new(flake_settings)?;
+    let mut parse_flags = FlakeReferenceParseFlags::new(flake_settings)?;
+    // Preserve relative paths so they can be resolved during locking via source_path context
+    parse_flags.set_preserve_relative_paths(true)?;
 
     // Convert each devenv input to a FlakeInput
     for (name, input) in config.inputs.iter() {
