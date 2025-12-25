@@ -115,6 +115,7 @@ fn test_task_running() {
         parent: None,
         detail: None,
         show_output: false,
+        is_process: false,
         timestamp: Timestamp::now(),
     });
 
@@ -165,6 +166,7 @@ fn test_multiple_activities() {
         parent: None,
         detail: None,
         show_output: false,
+        is_process: false,
         timestamp: Timestamp::now(),
     });
 
@@ -189,6 +191,7 @@ fn test_task_success() {
         parent: None,
         detail: None,
         show_output: false,
+        is_process: false,
         timestamp: Timestamp::now(),
     });
 
@@ -217,6 +220,7 @@ fn test_task_failed() {
         parent: None,
         detail: None,
         show_output: false,
+        is_process: false,
         timestamp: Timestamp::now(),
     });
 
@@ -245,6 +249,7 @@ fn test_task_failed_shows_logs() {
         parent: None,
         detail: None,
         show_output: false,
+        is_process: false,
         timestamp: Timestamp::now(),
     });
     model.apply_activity_event(start_event);
@@ -291,6 +296,7 @@ fn test_task_show_output_true() {
         parent: None,
         detail: None,
         show_output: true,
+        is_process: false,
         timestamp: Timestamp::now(),
     });
     model.apply_activity_event(start_event);
@@ -324,6 +330,7 @@ fn test_task_show_output_false() {
         parent: None,
         detail: None,
         show_output: false,
+        is_process: false,
         timestamp: Timestamp::now(),
     });
     model.apply_activity_event(start_event);
@@ -815,6 +822,7 @@ fn test_many_concurrent_activities() {
                     parent: None,
                     detail: None,
                     show_output: false,
+                    is_process: false,
                     timestamp: Timestamp::now(),
                 }));
             }
