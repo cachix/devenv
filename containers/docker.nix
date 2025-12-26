@@ -49,6 +49,21 @@
 ,
 }:
 let
+  # Custom zsh theme derivation
+  customZshTheme = runCommand "zsh-theme-${zshTheme}" {} ''
+    mkdir -p $out/share/oh-my-zsh/custom/themes
+    cp ${zshThemeFile} $out/share/oh-my-zsh/custom/themes/${zshTheme}.zsh-theme
+  '';
+
+  # Combine oh-my-zsh with custom theme if provided
+  ohMyZsh =
+    if zshThemeFile != null
+    then pkgs.symlinkJoin {
+      name = "oh-my-zsh-with-theme";
+      paths = [ pkgs.oh-my-zsh customZshTheme ];
+    }
+    else pkgs.oh-my-zsh;
+
   defaultPkgs = [
     nix
     bashInteractive
@@ -59,7 +74,7 @@ let
   ]
   ++ lib.optionals enableSudo [ pkgs.sudo ]
   ++ lib.optionals enableLocale [ pkgs.glibcLocales ]
-  ++ lib.optionals enableZsh [ pkgs.zsh pkgs.oh-my-zsh ]
+  ++ lib.optionals enableZsh [ pkgs.zsh ohMyZsh ]
   ++ lib.optionals enableDirenv [ pkgs.direnv ]
   ++ extraPkgs;
 
@@ -379,11 +394,6 @@ let
           ZSHRC
           ${lib.optionalString (rcSnippet != null) ''
           cat ${rcSnippet} >> $out${userHome}/.zshrc
-          ''}
-          ${lib.optionalString (zshThemeFile != null) ''
-          # Install custom zsh theme
-          mkdir -p $out/nix/var/nix/profiles/default/share/oh-my-zsh/custom/themes
-          cp ${zshThemeFile} $out/nix/var/nix/profiles/default/share/oh-my-zsh/custom/themes/${zshTheme}.zsh-theme
           ''}
         ''
         + lib.optionalString enableDirenv ''
