@@ -45,6 +45,10 @@ import ../docker.nix {
   bashThemeSnippet = ./scripts/bash_theme_snippet.sh;
   zshThemeFile = ./scripts/devcontainers.zsh-theme;
 
+  # Enable direnv with whitelist for workspaces
+  enableDirenv = true;
+  direnvWhitelist = [ "/workspaces" ];
+
   nixConf = {
     substituters = [
       "https://cache.nixos.org/"
@@ -62,7 +66,6 @@ import ../docker.nix {
     pkgs.procps         # ps command for process management
     pkgs.openssh        # SSH client for git operations
     pkgs.gnupg          # Commit signing
-    pkgs.direnv         # For devenv integration
   ];
 
   # Keep container running for VS Code to attach

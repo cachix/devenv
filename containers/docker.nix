@@ -41,6 +41,9 @@
   rcSnippet ? null          # Path to rc_snippet.sh
 , bashThemeSnippet ? null   # Path to bash_theme_snippet.sh
 , zshThemeFile ? null       # Path to custom zsh theme file
+, # Direnv configuration
+  enableDirenv ? false      # Enable direnv with shell hooks
+, direnvWhitelist ? [ ]     # Paths to whitelist in direnv config
 , # Other dependencies
   shadow ? pkgs.shadow
 ,
@@ -57,6 +60,7 @@ let
   ++ lib.optionals enableSudo [ pkgs.sudo ]
   ++ lib.optionals enableLocale [ pkgs.glibcLocales ]
   ++ lib.optionals enableZsh [ pkgs.zsh pkgs.oh-my-zsh ]
+  ++ lib.optionals enableDirenv [ pkgs.direnv ]
   ++ extraPkgs;
 
   users = {
@@ -380,6 +384,24 @@ let
           # Install custom zsh theme
           mkdir -p $out/nix/var/nix/profiles/default/share/oh-my-zsh/custom/themes
           cp ${zshThemeFile} $out/nix/var/nix/profiles/default/share/oh-my-zsh/custom/themes/${zshTheme}.zsh-theme
+          ''}
+        ''
+        + lib.optionalString enableDirenv ''
+          # Configure direnv
+          mkdir -p $out${userHome}/.config/direnv
+          cat > $out${userHome}/.config/direnv/config.toml <<'DIRENV_CONFIG'
+          ${lib.optionalString (direnvWhitelist != []) ''
+          [whitelist]
+          prefix = [ ${lib.concatMapStringsSep ", " (p: "\"${p}\"") direnvWhitelist} ]
+          ''}
+          DIRENV_CONFIG
+
+          # Add direnv hook to .bashrc
+          echo 'eval "$(direnv hook bash)"' >> $out${userHome}/.bashrc
+
+          ${lib.optionalString enableZsh ''
+          # Add direnv hook to .zshrc
+          echo 'eval "$(direnv hook zsh)"' >> $out${userHome}/.zshrc
           ''}
         ''
         + (lib.optionalString (flake-registry-path != null) ''
