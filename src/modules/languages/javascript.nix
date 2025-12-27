@@ -169,7 +169,7 @@ let
         then
           echo "$ACTUAL_BUN_CHECKSUM" > "$BUN_CHECKSUM_FILE"
 
-          if -f "${cfg.directory}/yarn.lock"
+          if [ -f "${cfg.directory}/yarn.lock" ]
           then
             echo "yarn.lock is no longer needed when using bun."
             echo "Starting with Bun 1.2, bun uses its own lockfile (bun.lock)."
