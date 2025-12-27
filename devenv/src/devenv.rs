@@ -995,11 +995,9 @@ impl Devenv {
             test_script[0].to_string_lossy().to_string()
         };
 
-        let envs = self.capture_shell_environment().await?;
-
         if self.has_processes().await? {
             let options = ProcessOptions {
-                envs: Some(&envs),
+                envs: None,
                 detach: true,
                 log_to_file: false,
             };
@@ -1007,24 +1005,8 @@ impl Devenv {
             self.up(vec![], &options).await?;
         }
 
-        // Disable the spinner for tests.
-        // Tests can arbitrarily write to stdout/stderr at the moment.
-        // Until that is changed, the spinner must be disabled.
-        let activity = Activity::operation("Running tests").start();
-        let result = async {
-            process::Command::new(&test_script)
-                .env_clear()
-                .envs(envs)
-                .spawn()
-                .into_diagnostic()
-                .wrap_err_with(|| format!("Failed to spawn test process using {test_script}"))?
-                .wait_with_output()
-                .await
-                .into_diagnostic()
-                .wrap_err("Failed to get output from test process")
-        }
-        .in_activity(&activity)
-        .await?;
+        // Run the test script through the shell, which runs enterShell tasks first
+        let result = self.run_in_shell(test_script, &[]).await?;
 
         if self.has_processes().await? {
             self.down().await?;
