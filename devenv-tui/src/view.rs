@@ -53,7 +53,10 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         // - Selected build/eval activities: show logs when selected
         let task_failed = matches!(
             (&activity.variant, &activity.state),
-            (ActivityVariant::Task(_), NixActivityState::Completed { success: false, .. })
+            (
+                ActivityVariant::Task(_),
+                NixActivityState::Completed { success: false, .. }
+            )
         );
         let activity_logs = if let ActivityVariant::Task(ref task_data) = activity.variant
             && (task_data.show_output || task_failed)

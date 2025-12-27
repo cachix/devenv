@@ -51,7 +51,10 @@ pub struct TuiApp {
 
 impl TuiApp {
     /// Create a new TUI application with required dependencies.
-    pub fn new(activity_rx: mpsc::UnboundedReceiver<ActivityEvent>, shutdown: Arc<Shutdown>) -> Self {
+    pub fn new(
+        activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
+        shutdown: Arc<Shutdown>,
+    ) -> Self {
         Self {
             config: TuiConfig::default(),
             activity_rx,
