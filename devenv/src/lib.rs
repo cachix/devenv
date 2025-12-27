@@ -11,7 +11,8 @@ mod util;
 pub use devenv_snix_backend;
 
 pub use devenv::{
-    DIRENVRC, DIRENVRC_VERSION, Devenv, DevenvOptions, ProcessOptions, RunMode, ShellCommand,
+    DIRENVRC, DIRENVRC_VERSION, Devenv, DevenvOptions, ProcessOptions, RunMode,
+    SecretsNeedPrompting, ShellCommand,
 };
 pub use devenv_tasks as tasks;
 

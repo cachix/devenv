@@ -314,7 +314,9 @@ impl GlobalOptions {
             let is_ci = std::env::var("CI")
                 .map(|s| s == "true" || s == "1")
                 .unwrap_or(false);
-            let is_tty = std::io::stdout().is_terminal() && std::io::stderr().is_terminal();
+            let is_tty = std::io::stdin().is_terminal()
+                && std::io::stdout().is_terminal()
+                && std::io::stderr().is_terminal();
             if is_ci || !is_tty {
                 self.tui = false;
             }
