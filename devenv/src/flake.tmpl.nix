@@ -183,12 +183,15 @@
               currentUsername = vars.username;
               hostnameProfiles = lib.optional
                 (
-                  currentHostname != ""
+                  currentHostname != null
+                  && currentHostname != ""
                   && builtins.hasAttr currentHostname (baseProject.config.profiles.hostname or { })
                 ) "hostname.${currentHostname}";
               userProfiles = lib.optional
                 (
-                  currentUsername != "" && builtins.hasAttr currentUsername (baseProject.config.profiles.user or { })
+                  currentUsername != null
+                  && currentUsername != ""
+                  && builtins.hasAttr currentUsername (baseProject.config.profiles.user or { })
                 ) "user.${currentUsername}";
 
               # Ordered list of profiles to activate
