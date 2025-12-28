@@ -46,10 +46,10 @@
     "flake-compat_2": {
       "flake": false,
       "locked": {
-        "lastModified": 1765121682,
+        "lastModified": 1766661267,
         "owner": "edolstra",
         "repo": "flake-compat",
-        "rev": "65f23138d8d09a92e30f1e5c87611b23ef451bf3",
+        "rev": "f275e157c50c3a9a682b4c9b4aa4db7a4cd3b5f2",
         "type": "github"
       },
       "original": {
@@ -155,10 +155,10 @@
         "nixpkgs-regression": "nixpkgs-regression"
       },
       "locked": {
-        "lastModified": 1766655991,
+        "lastModified": 1766922625,
         "owner": "cachix",
         "repo": "nix",
-        "rev": "5fc692e4962f1bf20d490e2dc647c1909a6ee8e4",
+        "rev": "c62c4bdb6673871ae5cdc51c498df6292d5169aa",
         "type": "github"
       },
       "original": {
@@ -170,10 +170,10 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1766399428,
+        "lastModified": 1766687554,
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "a6c3a6141ec1b367c58ead3f7f846c772a25f4e5",
+        "rev": "fd0ca39c92fdb4012ed8d60e1683c26fddadd136",
         "type": "github"
       },
       "original": {
