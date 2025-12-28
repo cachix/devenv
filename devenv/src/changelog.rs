@@ -108,7 +108,11 @@ impl<'a> Changelog<'a> {
                 .await?
         };
 
-        let changelog_json = tokio::fs::read_to_string(&changelog_json_file[0])
+        let changelog_path = changelog_json_file
+            .first()
+            .ok_or_else(|| miette::miette!("No changelog output produced by build"))?;
+
+        let changelog_json = tokio::fs::read_to_string(changelog_path)
             .await
             .into_diagnostic()?;
 
