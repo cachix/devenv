@@ -122,6 +122,24 @@ pub enum RunMode {
     Foreground(ShellCommand),
 }
 
+/// Error indicating that secrets need to be prompted for interactively.
+/// This is used to signal the CLI to stop the TUI and prompt for secrets.
+#[derive(Debug, miette::Diagnostic)]
+#[diagnostic(code(devenv::secrets_need_prompting))]
+pub struct SecretsNeedPrompting {
+    pub provider: Option<String>,
+    pub profile: Option<String>,
+    pub missing: Vec<String>,
+}
+
+impl std::fmt::Display for SecretsNeedPrompting {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Missing required secrets: {}", self.missing.join(", "))
+    }
+}
+
+impl std::error::Error for SecretsNeedPrompting {}
+
 pub struct Devenv {
     pub config: Arc<RwLock<Config>>,
     pub global_options: GlobalOptions,
@@ -1402,7 +1420,29 @@ impl Devenv {
                 }
 
                 // Validate secrets
-                let validated_secrets = secrets.check()?;
+                // In TUI mode, validate first and signal if prompting is needed (TUI will be stopped)
+                // In non-TUI mode, just validate silently
+                let validated_secrets = if self.global_options.tui {
+                    match secrets.validate()? {
+                        Ok(validated) => validated,
+                        Err(e) => {
+                            // Signal that we need to prompt for secrets after TUI stops
+                            return Err(SecretsNeedPrompting {
+                                provider: provider.clone(),
+                                profile: profile.clone(),
+                                missing: e.missing_required,
+                            }
+                            .into());
+                        }
+                    }
+                } else {
+                    secrets.validate()?.map_err(|e| {
+                        miette!(
+                            "Missing required secrets: {}\n\nRun `devenv shell` to enter the secrets interactively.",
+                            e.missing_required.join(", ")
+                        )
+                    })?
+                };
 
                 // Store resolved secrets in OnceCell for Nix to use
                 let resolved = secretspec::Resolved {
