@@ -16,7 +16,12 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
+    git-hooks.hooks = {
+      terraform-format.package = lib.mkDefault cfg.package;
+      terraform-validate.package = lib.mkDefault cfg.package;
+    };
+
+    packages = [
       cfg.package
     ];
   };
