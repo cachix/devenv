@@ -6,7 +6,9 @@
       ]
     }
   },
-  "image": "ghcr.io/cachix/devenv/devcontainer:latest",
+  "image": "devenv-devcontainer",
+  "containerUser": "vscode",
+  "remoteUser": "vscode",
   "overrideCommand": false,
   "updateContentCommand": "devenv test"
 }
