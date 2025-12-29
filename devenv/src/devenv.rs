@@ -511,8 +511,6 @@ impl Devenv {
     }
 
     pub async fn update(&self, input_name: &Option<String>) -> Result<()> {
-        // No need to assemble() for update - we only need to update the lock file
-
         let msg = match input_name {
             Some(input_name) => format!("Updating devenv.lock with input {input_name}"),
             None => "Updating devenv.lock".to_string(),
@@ -520,6 +518,9 @@ impl Devenv {
 
         let activity = Activity::operation(&msg).start();
         self.nix.update(input_name).in_activity(&activity).await?;
+
+        // Assemble is required for changelog.show_new() which builds changelog.json
+        self.assemble(false).await?;
 
         // Show new changelogs (if any)
         let changelog = crate::changelog::Changelog::new(&**self.nix, &self.paths());
