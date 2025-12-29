@@ -1,6 +1,6 @@
 # Assert that the pre-commit package does not leak its dependencies into the environment.
 {
-  git-hooks.hooks.nixfmt-rfc-style.enable = true;
+  git-hooks.hooks.nixfmt.enable = true;
 
   enterTest = ''
     if [ -n "''${PYTHONPATH:-}" ]; then
