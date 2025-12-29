@@ -4,7 +4,7 @@ use schemars::{JsonSchema, schema_for};
 use schematic::ConfigLoader;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fmt,
     path::{Path, PathBuf},
 };
@@ -301,13 +301,36 @@ impl Config {
             0,
         )?;
 
-        // Load all configs and collect their directories for later normalization
+        // Load all configs and track which inputs come from which config file
+        // This is needed to correctly normalize relative URLs
         let mut loader = ConfigLoader::<Config>::new();
-        let mut config_dirs: Vec<PathBuf> = Vec::new();
+        let mut input_source_dirs: HashMap<String, PathBuf> = HashMap::new();
 
         for yaml_file in &yaml_files {
-            let config_dir = yaml_file.parent().unwrap_or(Path::new("."));
-            config_dirs.push(config_dir.to_path_buf());
+            let config_dir = yaml_file.parent().unwrap_or(Path::new(".")).to_path_buf();
+
+            // Load this config file to see what inputs it defines
+            let mut single_loader = ConfigLoader::<Config>::new();
+            single_loader
+                .file_optional(yaml_file)
+                .into_diagnostic()
+                .wrap_err_with(|| {
+                    format!("Failed to load configuration file: {}", yaml_file.display())
+                })?;
+            let single_result = single_loader.load().into_diagnostic().wrap_err_with(|| {
+                format!(
+                    "Failed to parse configuration from: {}",
+                    yaml_file.display()
+                )
+            })?;
+
+            // Record the source directory for each input defined in this config
+            // Earlier configs take precedence (first definition wins)
+            for input_name in single_result.config.inputs.keys() {
+                input_source_dirs
+                    .entry(input_name.clone())
+                    .or_insert_with(|| config_dir.clone());
+            }
 
             loader
                 .file_optional(yaml_file)
@@ -319,6 +342,26 @@ impl Config {
 
         // Load devenv.local.yaml last (if it exists) to allow local overrides
         let local_yaml = base_path.join(YAML_LOCAL_CONFIG);
+        if local_yaml.exists() {
+            // Track inputs from local yaml too
+            let mut local_loader = ConfigLoader::<Config>::new();
+            local_loader
+                .file_optional(&local_yaml)
+                .into_diagnostic()
+                .wrap_err_with(|| {
+                    format!(
+                        "Failed to load local configuration file: {}",
+                        local_yaml.display()
+                    )
+                })?;
+            if let Ok(local_result) = local_loader.load().into_diagnostic() {
+                for input_name in local_result.config.inputs.keys() {
+                    input_source_dirs
+                        .entry(input_name.clone())
+                        .or_insert_with(|| base_path.to_path_buf());
+                }
+            }
+        }
         loader
             .file_optional(&local_yaml)
             .into_diagnostic()
@@ -336,11 +379,8 @@ impl Config {
 
         let mut config = result.config;
 
-        // Normalize relative URLs in inputs AFTER merging
-        // We need to track which config each input came from to normalize correctly
-        // For simplicity, we'll normalize all relative URLs to be relative to base_path
-        // using the last config dir where each input was defined (from yaml_files order)
-        for (_name, input) in config.inputs.iter_mut() {
+        // Normalize relative URLs in inputs using the tracked source directories
+        for (name, input) in config.inputs.iter_mut() {
             if let Some(url) = &input.url {
                 let (had_prefix, full_path_str) = if let Some(stripped) = url.strip_prefix("path:")
                 {
@@ -356,18 +396,14 @@ impl Config {
                     .split_once('?')
                     .map_or((full_path_str, ""), |(p, q)| (p, q));
 
-                // Try to resolve from each config directory and use the first valid one
-                // Start from the end (most recent config) for better accuracy
-                let mut normalized = None;
-                for config_dir in config_dirs.iter().rev() {
-                    let resolved = config_dir.join(path_str);
-                    if let Some(norm) = Self::normalize_path(&resolved, base_path) {
-                        normalized = Some(norm);
-                        break;
-                    }
-                }
+                // Use the tracked source directory for this input, or fall back to base_path
+                let source_dir = input_source_dirs
+                    .get(name)
+                    .map(|p| p.as_path())
+                    .unwrap_or(base_path);
+                let resolved = source_dir.join(path_str);
 
-                if let Some(rel_to_base) = normalized {
+                if let Some(rel_to_base) = Self::normalize_path(&resolved, base_path) {
                     let query_suffix = if query_params.is_empty() {
                         String::new()
                     } else {
@@ -985,5 +1021,60 @@ mod tests {
         // The second value should override the first
         let merged_profile = config2.profile.or(config1.profile);
         assert_eq!(merged_profile, Some("override".to_string()));
+    }
+
+    #[test]
+    fn relative_path_url_resolved_from_correct_config_directory() {
+        // Test that when a base config and imported config both define inputs
+        // with relative path URLs like "path:.", each is resolved relative
+        // to its own config directory, not confused with other directories.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let base_path = temp_dir.path();
+
+        // Create subdirectory for import
+        let subdir = base_path.join("subproject");
+        std::fs::create_dir(&subdir).expect("Failed to create subdir");
+
+        // Base config defines an input with path:.
+        let base_config = r#"
+inputs:
+  base-local:
+    url: path:.?dir=some-dir
+imports:
+  - ./subproject
+"#;
+        std::fs::write(base_path.join("devenv.yaml"), base_config)
+            .expect("Failed to write base config");
+
+        // Subproject config defines a different input with path:.
+        // This should resolve to ./subproject, not confuse with base path
+        let sub_config = r#"
+inputs:
+  sub-local:
+    url: path:.
+"#;
+        std::fs::write(subdir.join("devenv.yaml"), sub_config).expect("Failed to write sub config");
+
+        // Load the merged config
+        let config = Config::load_from(base_path).expect("Failed to load config");
+
+        // Verify the base-local input is resolved to "." (relative to base_path)
+        let base_input = config
+            .inputs
+            .get("base-local")
+            .expect("base-local not found");
+        assert_eq!(
+            base_input.url,
+            Some("path:.?dir=some-dir".to_string()),
+            "base-local should be normalized to path:. relative to base path"
+        );
+
+        // Verify sub-local is resolved to "./subproject" (relative to base_path)
+        let sub_input = config.inputs.get("sub-local").expect("sub-local not found");
+        assert_eq!(
+            sub_input.url,
+            Some("path:subproject".to_string()),
+            "sub-local should be normalized to path:subproject relative to base path"
+        );
     }
 }

@@ -27,3 +27,6 @@ serde_yaml.workspace = true
 ser_nix.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
