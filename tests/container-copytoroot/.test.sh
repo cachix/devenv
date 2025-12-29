@@ -1,17 +1,11 @@
 set -xe
 
-# Skip container tests on macOS
-if [[ "$(uname)" == "Darwin" ]]; then
-  echo "Skipping container tests on macOS"
-  exit 0
-fi
-
 # Add required inputs for container support
-devenv inputs add mk-shell-bin github:rrbutani/nix-mk-shell-bin --follows nixpkgs
+devenv inputs add mk-shell-bin github:rrbutani/nix-mk-shell-bin
 devenv inputs add nix2container github:nlewo/nix2container --follows nixpkgs
 
 # Generate the test files
-devenv shell
+devenv shell true
 
 # Test 1: Build and verify container with directory copyToRoot
 echo "Testing directory copyToRoot..."
