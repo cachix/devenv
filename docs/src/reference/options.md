@@ -20604,7 +20604,7 @@ unspecified value
 
 
 *Default:*
-` pkgs.cockroachdb-bin `
+` pkgs.cockroachdb `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
