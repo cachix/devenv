@@ -62,10 +62,19 @@ import ../docker.nix {
 
   extraPkgs = [
     devenv
-    devcontainer-utils  # code, devcontainer-info, systemctl wrappers
-    pkgs.procps         # ps command for process management
-    pkgs.openssh        # SSH client for git operations
-    pkgs.gnupg          # Commit signing
+    devcontainer-utils # code, devcontainer-info, systemctl wrappers
+    pkgs.procps # ps command for process management
+    pkgs.openssh # SSH client for git operations
+    pkgs.gnupg # Commit signing
+    pkgs.gnutar # Install vscode-server
+    pkgs.gzip
+    pkgs.xz
+    pkgs.getent
+    pkgs.gnugrep
+    pkgs.gnused
+    pkgs.glibc
+    pkgs.iconv
+    pkgs.which
   ];
 
   # Keep container running for VS Code to attach

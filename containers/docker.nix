@@ -31,38 +31,54 @@
 , iana-etc ? pkgs.iana-etc
 , gitMinimal ? pkgs.gitMinimal
 , # Devcontainer support
-  enableSudo ? false        # Enable passwordless sudo for non-root user
-, enableLocale ? false      # Enable locale configuration
-, locale ? "en_US.UTF-8"    # Locale to configure
-, extraEnv ? [ ]            # Additional environment variables
-, enableZsh ? false         # Enable zsh with Oh My Zsh
-, zshTheme ? "devcontainers" # Oh My Zsh theme name
-, # Shell configuration scripts (paths to files)
-  rcSnippet ? null          # Path to rc_snippet.sh
-, bashThemeSnippet ? null   # Path to bash_theme_snippet.sh
-, zshThemeFile ? null       # Path to custom zsh theme file
-, # Direnv configuration
-  enableDirenv ? false      # Enable direnv with shell hooks
-, direnvWhitelist ? [ ]     # Paths to whitelist in direnv config
-, # Other dependencies
+  enableSudo ? false
+, # Enable passwordless sudo for non-root user
+  enableLocale ? false
+, # Enable locale configuration
+  locale ? "en_US.UTF-8"
+, # Locale to configure
+  extraEnv ? [ ]
+, # Additional environment variables
+  enableZsh ? false
+, # Enable zsh with Oh My Zsh
+  zshTheme ? "devcontainers"
+, # Oh My Zsh theme name
+  # Shell configuration scripts (paths to files)
+  rcSnippet ? null
+, # Path to rc_snippet.sh
+  bashThemeSnippet ? null
+, # Path to bash_theme_snippet.sh
+  zshThemeFile ? null
+, # Path to custom zsh theme file
+  # Direnv configuration
+  enableDirenv ? false
+, # Enable direnv with shell hooks
+  direnvWhitelist ? [ ]
+, # Paths to whitelist in direnv config
+  # Other dependencies
   shadow ? pkgs.shadow
 ,
 }:
 let
   # Custom zsh theme derivation
-  customZshTheme = runCommand "zsh-theme-${zshTheme}" {} ''
+  customZshTheme = runCommand "zsh-theme-${zshTheme}" { } ''
     mkdir -p $out/share/oh-my-zsh/custom/themes
     cp ${zshThemeFile} $out/share/oh-my-zsh/custom/themes/${zshTheme}.zsh-theme
   '';
 
   # Combine oh-my-zsh with custom theme if provided
   ohMyZsh =
-    if zshThemeFile != null
-    then pkgs.symlinkJoin {
-      name = "oh-my-zsh-with-theme";
-      paths = [ pkgs.oh-my-zsh customZshTheme ];
-    }
-    else pkgs.oh-my-zsh;
+    if zshThemeFile != null then
+      pkgs.symlinkJoin
+        {
+          name = "oh-my-zsh-with-theme";
+          paths = [
+            pkgs.oh-my-zsh
+            customZshTheme
+          ];
+        }
+    else
+      pkgs.oh-my-zsh;
 
   defaultPkgs = [
     nix
@@ -74,7 +90,10 @@ let
   ]
   ++ lib.optionals enableSudo [ pkgs.sudo ]
   ++ lib.optionals enableLocale [ pkgs.glibcLocales ]
-  ++ lib.optionals enableZsh [ pkgs.zsh ohMyZsh ]
+  ++ lib.optionals enableZsh [
+    pkgs.zsh
+    ohMyZsh
+  ]
   ++ lib.optionals enableDirenv [ pkgs.direnv ]
   ++ extraPkgs;
 
@@ -377,10 +396,10 @@ let
 
           BASHRC
           ${lib.optionalString (rcSnippet != null) ''
-          cat ${rcSnippet} >> $out${userHome}/.bashrc
+            cat ${rcSnippet} >> $out${userHome}/.bashrc
           ''}
           ${lib.optionalString (bashThemeSnippet != null) ''
-          cat ${bashThemeSnippet} >> $out${userHome}/.bashrc
+            cat ${bashThemeSnippet} >> $out${userHome}/.bashrc
           ''}
         ''
         + lib.optionalString enableZsh ''
@@ -393,16 +412,16 @@ let
           zstyle ':omz:update' mode disabled
           ZSHRC
           ${lib.optionalString (rcSnippet != null) ''
-          cat ${rcSnippet} >> $out${userHome}/.zshrc
+            cat ${rcSnippet} >> $out${userHome}/.zshrc
           ''}
         ''
         + lib.optionalString enableDirenv ''
           # Configure direnv
           mkdir -p $out${userHome}/.config/direnv
           cat > $out${userHome}/.config/direnv/config.toml <<'DIRENV_CONFIG'
-          ${lib.optionalString (direnvWhitelist != []) ''
-          [whitelist]
-          prefix = [ ${lib.concatMapStringsSep ", " (p: "\"${p}\"") direnvWhitelist} ]
+          ${lib.optionalString (direnvWhitelist != [ ]) ''
+            [whitelist]
+            prefix = [ ${lib.concatMapStringsSep ", " (p: "\"${p}\"") direnvWhitelist} ]
           ''}
           DIRENV_CONFIG
 
@@ -410,8 +429,8 @@ let
           echo 'eval "$(direnv hook bash)"' >> $out${userHome}/.bashrc
 
           ${lib.optionalString enableZsh ''
-          # Add direnv hook to .zshrc
-          echo 'eval "$(direnv hook zsh)"' >> $out${userHome}/.zshrc
+            # Add direnv hook to .zshrc
+            echo 'eval "$(direnv hook zsh)"' >> $out${userHome}/.zshrc
           ''}
         ''
         + (lib.optionalString (flake-registry-path != null) ''
@@ -476,6 +495,9 @@ dockerTools.buildLayeredImageWithNixDb {
       "GIT_SSL_CAINFO=/nix/var/nix/profiles/default/etc/ssl/certs/ca-bundle.crt"
       "NIX_SSL_CERT_FILE=/nix/var/nix/profiles/default/etc/ssl/certs/ca-bundle.crt"
       "NIX_PATH=/nix/var/nix/profiles/per-user/${uname}/channels:${userHome}/.nix-defexpr/channels"
+      "VSCODE_SERVER_CUSTOM_GLIBC_LINKER=${pkgs.stdenv.cc.bintools.dynamicLinker}"
+      "VSCODE_SERVER_CUSTOM_GLIBC_PATH=${pkgs.glibc}/lib"
+      "VSCODE_SERVER_PATCHELF_PATH=${lib.getExe pkgs.patchelf}"
     ]
     ++ lib.optionals enableLocale [
       "LANG=${locale}"
