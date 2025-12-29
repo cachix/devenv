@@ -27,8 +27,8 @@ in
     };
 
     package = lib.mkOption {
-      default = pkgs.cockroachdb-bin;
-      defaultText = lib.literalExpression "pkgs.cockroachdb-bin";
+      default = pkgs.cockroachdb;
+      defaultText = lib.literalExpression "pkgs.cockroachdb";
       description = "The CockroachDB package to use.";
     };
   };
