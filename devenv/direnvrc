@@ -113,7 +113,9 @@ use_devenv() {
   fi
 
   devenv_dir=.
-  env_deps_path="$devenv_dir/.devenv/input-paths.txt"
+  # Get computed paths from devenv (handles profile-aware state isolation)
+  eval "$("${devenv_cmd[@]}" print-paths)"
+  env_deps_path="$DEVENV_DOTFILE/input-paths.txt"
 
   local default_watches
   default_watches=(".envrc" "$HOME/.direnvrc" "$HOME/.config/direnv/direnvrc")
