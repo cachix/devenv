@@ -154,6 +154,7 @@ in
         };
         "devenv:git-hooks:run" = {
           exec = "${packageBin.meta.mainProgram} run -a";
+          after = [ "devenv:git-hooks:install" ];
           before = [ "devenv:enterTest" ];
         };
       };
