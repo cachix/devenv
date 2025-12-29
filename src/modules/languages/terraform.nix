@@ -32,6 +32,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    git-hooks.hooks = {
+      terraform-format.package = lib.mkDefault cfg.package;
+      terraform-validate.package = lib.mkDefault cfg.package;
+    };
+
     languages.terraform.package = lib.mkIf (cfg.version != null) (
       let
         terraform-pkgs = nixpkgs-terraform.packages.${pkgs.stdenv.system};
