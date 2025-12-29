@@ -1,19 +1,21 @@
-{ pkgs, ... }:
+{ config, ... }:
 
+let
+  outputPath = "${config.devenv.state}/output.txt";
+in
 {
   # Define a process that writes to a file
   processes.test-process = {
     exec = ''
-      echo "process executed" >> output.txt
-      # Keep the process running so we can test it
-      sleep 1
+      echo "process executed" >> ${outputPath}
+      sleep 10
     '';
   };
 
   # Define a task that should run before the process
   tasks."myapp:test-before-task" = {
     exec = ''
-      echo "task executed" >> output.txt
+      echo "task executed" >> ${outputPath}
     '';
     # This task should run before the process
     before = [ "devenv:processes:test-process" ];
@@ -21,17 +23,13 @@
 
   # Test script to verify the order
   enterTest = ''
-    # Clean up any existing output file
-    rm -f output.txt
-
-    # Wait a bit for processes to start and tasks to run
-    sleep 2
+    wait_for_processes
 
     # Check the output file for correct order
-    if [ -f output.txt ]; then
-      content=$(cat output.txt)
+    if [ -f ${outputPath} ]; then
+      content=$(cat ${outputPath})
       expected=$'task executed\nprocess executed'
-      
+
       if [ "$content" = "$expected" ]; then
         echo "✓ Tasks ran in correct order"
       else
