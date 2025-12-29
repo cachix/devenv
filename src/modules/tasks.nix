@@ -216,6 +216,7 @@ in
       };
       "devenv:enterTest" = {
         description = "Runs when entering the test environment";
+        after = [ "devenv:enterShell" ];
       };
     };
     enterShell = ''
@@ -226,8 +227,11 @@ in
         fi
       fi
     '';
-    enterTest = ''
+    enterTest = lib.mkBefore ''
       ${config.task.package}/bin/devenv-tasks run devenv:enterTest --mode all || exit $?
+      if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
+        source "$DEVENV_DOTFILE/load-exports"
+      fi
     '';
   };
 }
