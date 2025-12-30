@@ -1382,14 +1382,12 @@ impl NixBackend for NixRustBackend {
                 .to_miette()
                 .wrap_err("Failed to force evaluation of info attribute")?;
 
-            // Convert to JSON (handles any Nix value type, not just strings)
+            // config.info is always a string
             match value_to_json(&mut eval_state, &info_val)
                 .to_miette()
                 .wrap_err("Failed to convert info attribute to JSON")
             {
-                Ok(json_value) => serde_json::to_string(&json_value)
-                    .into_diagnostic()
-                    .wrap_err("Failed to serialize info to JSON")?,
+                Ok(json_value) => json_value.as_str().unwrap_or_default().to_string(),
                 Err(_) => String::new(),
             }
         } else {
