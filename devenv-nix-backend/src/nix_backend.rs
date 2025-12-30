@@ -1493,83 +1493,63 @@ impl NixBackend for NixRustBackend {
         })
     }
 
-    async fn gc(&self, paths: Vec<PathBuf>) -> Result<()> {
-        // Delete store paths using FFI with closure computation
-        // Strategy:
-        // 1. Parse filesystem paths to StorePath objects
-        // 2. Compute full closure for each path (includes all dependencies)
-        // 3. Use collect_garbage with DeleteSpecific to delete the closure
+    async fn gc(&self, paths: Vec<PathBuf>) -> Result<(u64, u64)> {
+        use devenv_activity::Activity;
+
+        // Delete store paths using FFI
+        // Strategy: Try to delete each path individually, skipping paths that
+        // are still alive (referenced by other GC roots).
+        //
+        // We don't compute the full closure because shared dependencies would
+        // fail to delete with "still alive" errors. Instead, we just try to
+        // delete the top-level paths - Nix will only delete them if they're
+        // truly unreferenced.
 
         if paths.is_empty() {
-            return Ok(());
+            return Ok((0, 0));
         }
 
         let mut store = (*self.store).clone();
+        let mut total_deleted = 0u64;
+        let mut total_bytes_freed = 0u64;
+        let total_paths = paths.len() as u64;
 
-        // Convert filesystem paths to StorePath objects
-        let mut store_paths = Vec::new();
-        for path in &paths {
-            let path_str = path
-                .to_str()
-                .ok_or_else(|| miette!("Path contains invalid UTF-8: {}", path.display()))?;
+        let activity = Activity::operation("Deleting store paths").start();
 
-            match store.parse_store_path(path_str).to_miette() {
-                Ok(store_path) => store_paths.push(store_path),
+        for (i, path) in paths.iter().enumerate() {
+            activity.progress(i as u64, total_paths);
+
+            let path_str = match path.to_str() {
+                Some(s) => s,
+                None => continue,
+            };
+
+            let store_path = match store.parse_store_path(path_str).to_miette() {
+                Ok(sp) => sp,
                 Err(_) => {
                     // Not a valid store path, try to remove as regular file/directory
                     let _ = std::fs::remove_file(path).or_else(|_| std::fs::remove_dir_all(path));
+                    continue;
+                }
+            };
+
+            // Try to delete this specific path - if it's still alive, this will
+            // fail gracefully and we skip it
+            match store.collect_garbage(GcAction::DeleteSpecific, Some(&[&store_path]), false, 0) {
+                Ok((deleted, bytes_freed)) => {
+                    total_deleted += deleted.len() as u64;
+                    total_bytes_freed += bytes_freed;
+                }
+                Err(_) => {
+                    // Path is still alive (referenced by other roots), skip it
+                    continue;
                 }
             }
         }
 
-        if store_paths.is_empty() {
-            return Ok(());
-        }
+        activity.progress(total_paths, total_paths);
 
-        // Compute full closure for all paths (includes dependencies)
-        // flip_direction=false: get dependencies of these paths
-        // include_outputs=true: include outputs
-        // include_derivers=false: don't include the derivations that created these
-        let mut closure = Vec::new();
-        for store_path in &store_paths {
-            let path_closure = store
-                .get_fs_closure(store_path, false, true, false)
-                .to_miette()
-                .wrap_err("Failed to compute closure for path")?;
-            closure.extend(path_closure);
-        }
-
-        if closure.is_empty() {
-            return Ok(());
-        }
-
-        // Delete the entire closure using collect_garbage
-        let closure_refs: Vec<&StorePath> = closure.iter().collect();
-        let (deleted_paths, bytes_freed) = store
-            .collect_garbage(GcAction::DeleteSpecific, Some(&closure_refs), false, 0)
-            .to_miette()
-            .wrap_err("Failed to collect garbage for closure")?;
-
-        if !deleted_paths.is_empty() {
-            let paths_str = deleted_paths
-                .iter()
-                .filter_map(|p| store.real_path(p).to_miette().ok())
-                .collect::<Vec<_>>()
-                .join(", ");
-            eprintln!(
-                "Deleted {num_paths} paths: {paths_str}",
-                num_paths = deleted_paths.len()
-            );
-        }
-
-        if bytes_freed > 0 {
-            let mb = bytes_freed / (1024 * 1024);
-            if mb > 0 {
-                eprintln!("Freed {mb} MB");
-            }
-        }
-
-        Ok(())
+        Ok((total_deleted, total_bytes_freed))
     }
 
     fn name(&self) -> &'static str {

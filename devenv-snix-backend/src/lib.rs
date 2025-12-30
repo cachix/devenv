@@ -179,10 +179,10 @@ impl NixBackend for SnixBackend {
         bail!("Package search is not yet implemented for Snix backend")
     }
 
-    async fn gc(&self, _paths: Vec<PathBuf>) -> Result<()> {
+    async fn gc(&self, _paths: Vec<PathBuf>) -> Result<(u64, u64)> {
         // TODO: Implement garbage collection
         warn!("Garbage collection not yet implemented for Snix backend");
-        Ok(())
+        Ok((0, 0))
     }
 
     fn name(&self) -> &'static str {

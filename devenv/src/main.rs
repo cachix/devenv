@@ -359,8 +359,12 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
             CommandResult::Done
         }
         Commands::Gc {} => {
-            devenv.gc().await?;
-            CommandResult::Done
+            let (paths_deleted, bytes_freed) = devenv.gc().await?;
+            let mb_freed = bytes_freed / (1024 * 1024);
+            CommandResult::Print(format!(
+                "Done. Deleted {} store paths, freed {} MB.\n",
+                paths_deleted, mb_freed
+            ))
         }
         Commands::Info {} => {
             let output = devenv.info().await?;

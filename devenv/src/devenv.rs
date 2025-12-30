@@ -650,44 +650,26 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn gc(&self) -> Result<()> {
-        let start = std::time::Instant::now();
-
-        let (to_gc, removed_symlinks) = {
-            // TODO: No newline
+    /// Garbage collect devenv environments and store paths.
+    /// Returns (paths_deleted, bytes_freed).
+    pub async fn gc(&self) -> Result<(u64, u64)> {
+        let (to_gc, _removed_symlinks) = {
             let activity = Activity::operation(format!(
                 "Removing non-existing symlinks in {}",
                 &self.devenv_home_gc.display()
             ))
             .start();
-            activity.in_scope(|| cleanup_symlinks(&self.devenv_home_gc))
+            cleanup_symlinks(&self.devenv_home_gc)
+                .in_activity(&activity)
+                .await
         };
-        let to_gc_len = to_gc.len();
 
-        info!("Found {} active environments.", to_gc_len);
-        info!(
-            "Deleted {} dangling environments (most likely due to previous GC).",
-            removed_symlinks.len()
-        );
-
-        {
+        let (paths_deleted, bytes_freed) = {
             let activity = Activity::operation("Running garbage collection").start();
-            info!(
-                "If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
-            );
-            self.nix.gc(to_gc).in_activity(&activity).await?;
-        }
+            self.nix.gc(to_gc).in_activity(&activity).await?
+        };
 
-        let (after_gc, _) = cleanup_symlinks(&self.devenv_home_gc);
-        let end = std::time::Instant::now();
-
-        // TODO: newline before or after
-        info!(
-            "\nDone. Successfully removed {} symlinks in {}s.",
-            to_gc_len - after_gc.len(),
-            (end - start).as_secs_f32()
-        );
-        Ok(())
+        Ok((paths_deleted, bytes_freed))
     }
 
     #[activity("Searching options and packages")]
@@ -1721,24 +1703,49 @@ fn sanitize_container_name(name: &str) -> String {
         .collect::<String>()
 }
 
-fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
-    let mut to_gc = Vec::new();
-    let mut removed_symlinks = Vec::new();
+async fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    use futures::StreamExt;
+    use tokio_stream::wrappers::ReadDirStream;
 
     if !root.exists() {
-        std::fs::create_dir_all(root).expect("Failed to create gc directory");
+        fs::create_dir_all(root)
+            .await
+            .expect("Failed to create gc directory");
     }
 
-    for entry in std::fs::read_dir(root).expect("Failed to read directory") {
-        let entry = entry.expect("Failed to read entry");
-        let path = entry.path();
-        if path.is_symlink() {
+    let read_dir = fs::read_dir(root).await.expect("Failed to read directory");
+
+    let results: Vec<_> = ReadDirStream::new(read_dir)
+        .filter_map(|e| async { e.ok() })
+        .map(|e| e.path())
+        .filter(|p| std::future::ready(p.is_symlink()))
+        .map(|path| async move {
             if !path.exists() {
-                removed_symlinks.push(path.clone());
+                // Dangling symlink - delete it
+                if fs::remove_file(&path).await.is_ok() {
+                    (None, Some(path))
+                } else {
+                    (None, None)
+                }
             } else {
-                let target = std::fs::canonicalize(&path).expect("Failed to read link");
-                to_gc.push(target);
+                match fs::canonicalize(&path).await {
+                    Ok(target) => (Some(target), None),
+                    Err(_) => (None, None),
+                }
             }
+        })
+        .buffer_unordered(100)
+        .collect()
+        .await;
+
+    let mut to_gc = Vec::new();
+    let mut removed_symlinks = Vec::new();
+    for (target, removed) in results {
+        if let Some(t) = target {
+            to_gc.push(t);
+        }
+        if let Some(r) = removed {
+            removed_symlinks.push(r);
         }
     }
 
