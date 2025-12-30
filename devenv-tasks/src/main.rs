@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
-use devenv_tasks::{Config, RunMode, SudoContext, TaskConfig, Tasks, TasksUi, VerbosityLevel};
+use devenv_tasks::{
+    Config, RunMode, SudoContext, TaskConfig, Tasks, TasksUi, VerbosityLevel, is_tty,
+};
 use std::{env, fmt::Display, fs, path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tokio_shutdown::Shutdown;
@@ -109,19 +111,21 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
     let args = Args::parse();
 
     // Determine verbosity level from DEVENV_CMDLINE
-    // TUI is on by default, so we default to Quiet to avoid corrupting the TUI display.
-    // Only show output if --no-tui is passed or --verbose is explicitly requested.
+    // TUI is on by default when there's a TTY, so we default to Quiet to avoid corrupting the TUI display.
+    // When there's no TTY (e.g., running under process-compose), we should show normal output since
+    // there's no TUI to corrupt and process-compose needs to capture our stdout/stderr for its logs.
+    let has_tty = is_tty();
     let mut verbosity = if let Ok(cmdline) = env::var("DEVENV_CMDLINE") {
         let cmdline = cmdline.to_lowercase();
         if cmdline.contains("--quiet") || cmdline.contains(" -q ") {
             VerbosityLevel::Quiet
         } else if cmdline.contains("--verbose") || cmdline.contains(" -v ") {
             VerbosityLevel::Verbose
-        } else if cmdline.contains("--no-tui") {
-            // TUI is disabled, show normal output
+        } else if cmdline.contains("--no-tui") || !has_tty {
+            // TUI is disabled or there's no TTY, show normal output
             VerbosityLevel::Normal
         } else {
-            // TUI is on by default, suppress output
+            // TUI is on by default when there's a TTY, suppress output
             VerbosityLevel::Quiet
         }
     } else {
