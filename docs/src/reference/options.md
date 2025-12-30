@@ -2426,10 +2426,14 @@ null or string
 
 Command to run in the container.
 
+Can be a string, a package, or a list of strings for individual arguments.
+Use a list when your entrypoint expects separate arguments, e.g.:
+` startupCommand = [ "-f" "/var/lib/haproxy/haproxy.cfg" ]; `
+
 
 
 *Type:*
-null or string or package
+null or string or package or list of string
 
 
 
@@ -2454,6 +2458,27 @@ null or string
 
 *Default:*
 ` "latest" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.workingDir
+
+
+
+Working directory of the container.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "/env" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -5320,8 +5345,6 @@ boolean
 
 ## git-hooks.hooks.clippy.settings.extraArgs
 
-
-
 Additional arguments to pass to clippy
 
 
@@ -5340,6 +5363,8 @@ string
 
 
 ## git-hooks.hooks.clippy.settings.offline
+
+
 
 Run clippy offline
 
@@ -7372,8 +7397,6 @@ boolean
 
 ## git-hooks.hooks.isort
 
-
-
 isort hook
 
 
@@ -7408,6 +7431,8 @@ boolean
 
 
 ## git-hooks.hooks.isort.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
