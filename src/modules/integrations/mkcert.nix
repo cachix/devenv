@@ -8,10 +8,6 @@
 let
   domainList = lib.concatStringsSep " " config.certificates;
   hash = builtins.hashString "sha256" domainList;
-  flags = lib.cli.toCommandLine (optionName: {
-    option = "-${optionName}";
-    sep = " ";
-  }) config.certificateOptions;
 in
 {
   options = {
@@ -24,25 +20,17 @@ in
         "*.example.com"
       ];
     };
-    certificateOptions = lib.mkOption {
-      type = lib.types.submodule {
-        options = {
-          cert-file = lib.mikOption {
-            type = lib.types.nullOr lib.types.str;
-            default = null;
-            description = "Custom certificate file name, uses mkcert default if unset";
-            example = "mycert.pem";
-          };
-          key-file = lib.mkOption {
-            type = lib.types.nullOr lib.types.str;
-            default = null;
-            description = "Custom key file name, uses mkcert default if unset";
-            example = "mykey.pem";
-          };
-        };
-        description = "Additional configuration options for mkcert";
-        default = { };
-      };
+    certFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Custom certificate file name, uses mkcert default if unset";
+      example = "mycert.pem";
+    };
+    keyFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Custom key file name, uses mkcert default if unset";
+      example = "mykey.pem";
     };
   };
 
@@ -59,7 +47,10 @@ in
 
         pushd ${config.env.DEVENV_STATE}/mkcert > /dev/null
 
-        PATH="${pkgs.nssTools}/bin:$PATH" ${pkgs.mkcert}/bin/mkcert ${flags} ${domainList} 2> /dev/null
+        PATH="${pkgs.nssTools}/bin:$PATH" ${pkgs.mkcert}/bin/mkcert \
+          ${lib.optionalString (config.keyFile != null) "-key-file ${config.keyFile}"} \
+          ${lib.optionalString (config.certFile != null) "-cert-file ${config.certFile}"} \
+          ${domainList} 2> /dev/null
 
         popd > /dev/null
       fi
