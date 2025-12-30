@@ -992,6 +992,32 @@ null or string
 
 
 
+## certFile
+
+
+
+Custom certificate file name, uses mkcert default if unset
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "mycert.pem" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix)
+
+
+
 ## certificates
 
 
@@ -2422,8 +2448,6 @@ null or string
 
 ## containers.\<name>.startupCommand
 
-
-
 Command to run in the container.
 
 
@@ -2442,6 +2466,8 @@ null or string or package
 
 
 ## containers.\<name>.version
+
+
 
 Version/tag of the container.
 
@@ -5320,8 +5346,6 @@ boolean
 
 ## git-hooks.hooks.clippy.settings.extraArgs
 
-
-
 Additional arguments to pass to clippy
 
 
@@ -5340,6 +5364,8 @@ string
 
 
 ## git-hooks.hooks.clippy.settings.offline
+
+
 
 Run clippy offline
 
@@ -7372,8 +7398,6 @@ boolean
 
 ## git-hooks.hooks.isort
 
-
-
 isort hook
 
 
@@ -7408,6 +7432,8 @@ boolean
 
 
 ## git-hooks.hooks.isort.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
@@ -13362,6 +13388,32 @@ list of package
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
+## keyFile
+
+
+
+Custom key file name, uses mkcert default if unset
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "mykey.pem" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix)
 
 
 
