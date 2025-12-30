@@ -253,7 +253,13 @@ impl NixLogBridge {
                 self.insert_activity(activity_id, activity_type, activity);
             }
             _ => {
-                trace!("Unhandled Nix activity type: {:?}", activity_type);
+                trace!(
+                    activity_type = ?activity_type,
+                    activity_id = activity_id,
+                    text = text,
+                    fields = ?fields,
+                    "Unhandled Nix activity type",
+                );
             }
         }
     }
@@ -336,7 +342,12 @@ impl NixLogBridge {
                 }
             }
             _ => {
-                trace!("Unhandled Nix result type: {:?}", result_type);
+                trace!(
+                    result_type = ?result_type,
+                    activity_id = activity_id,
+                    fields = ?fields,
+                    "Unhandled Nix result type",
+                );
             }
         }
     }
