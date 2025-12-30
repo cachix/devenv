@@ -146,7 +146,7 @@ let
     config = {
       Entrypoint = cfg.entrypoint;
       User = "${user}";
-      WorkingDir = "${homeDir}";
+      WorkingDir = cfg.workingDir;
       Env = lib.mapAttrsToList
         (name: value:
           "${name}=${toString value}"
@@ -226,6 +226,12 @@ let
         description = "Entrypoint of the container.";
         default = [ (mkEntrypoint config) ];
         defaultText = lib.literalExpression "[ entrypoint ]";
+      };
+
+      workingDir = lib.mkOption {
+        type = types.str;
+        description = "Working directory of the container.";
+        default = homeDir;
       };
 
       defaultCopyArgs = lib.mkOption {
