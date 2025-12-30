@@ -1,8 +1,17 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   domainList = lib.concatStringsSep " " config.certificates;
   hash = builtins.hashString "sha256" domainList;
+  flags = lib.cli.toCommandLine (optionName: {
+    option = "-${optionName}";
+    sep = " ";
+  }) config.certificateOptions;
 in
 {
   options = {
@@ -14,6 +23,26 @@ in
         "example.com"
         "*.example.com"
       ];
+    };
+    certificateOptions = lib.mkOption {
+      type = lib.types.submodule {
+        options = {
+          cert-file = lib.mikOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Custom certificate file name, uses mkcert default if unset";
+            example = "mycert.pem";
+          };
+          key-file = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Custom key file name, uses mkcert default if unset";
+            example = "mykey.pem";
+          };
+        };
+        description = "Additional configuration options for mkcert";
+        default = { };
+      };
     };
   };
 
@@ -30,7 +59,7 @@ in
 
         pushd ${config.env.DEVENV_STATE}/mkcert > /dev/null
 
-        PATH="${pkgs.nssTools}/bin:$PATH" ${pkgs.mkcert}/bin/mkcert ${domainList} 2> /dev/null
+        PATH="${pkgs.nssTools}/bin:$PATH" ${pkgs.mkcert}/bin/mkcert ${flags} ${domainList} 2> /dev/null
 
         popd > /dev/null
       fi
