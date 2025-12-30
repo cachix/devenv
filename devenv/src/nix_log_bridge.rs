@@ -238,6 +238,20 @@ impl NixLogBridge {
 
                 self.insert_activity(activity_id, activity_type, activity);
             }
+            ActivityType::FileTransfer => {
+                let url = fields.first().and_then(Self::extract_string_field);
+                let name = url.as_deref().unwrap_or(&text);
+
+                let mut builder = Activity::fetch(FetchKind::Download, name)
+                    .id(activity_id)
+                    .parent(parent_id);
+                if let Some(url) = url {
+                    builder = builder.url(url);
+                }
+                let activity = builder.start();
+
+                self.insert_activity(activity_id, activity_type, activity);
+            }
             _ => {
                 trace!("Unhandled Nix activity type: {:?}", activity_type);
             }
