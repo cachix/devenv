@@ -152,7 +152,10 @@ let
           "${name}=${toString value}"
         )
         config.env ++ [ "HOME=${homeDir}" "USER=${user}" ];
-      Cmd = [ cfg.startupCommand ];
+      Cmd =
+        if builtins.isList cfg.startupCommand
+        then cfg.startupCommand
+        else [ cfg.startupCommand ];
     };
   };
 
@@ -207,8 +210,14 @@ let
       };
 
       startupCommand = lib.mkOption {
-        type = types.nullOr (types.either types.str types.package);
-        description = "Command to run in the container.";
+        type = types.nullOr (types.oneOf [ types.str types.package (types.listOf types.str) ]);
+        description = ''
+          Command to run in the container.
+
+          Can be a string, a package, or a list of strings for individual arguments.
+          Use a list when your entrypoint expects separate arguments, e.g.:
+          `startupCommand = [ "-f" "/var/lib/haproxy/haproxy.cfg" ];`
+        '';
         default = null;
       };
 
