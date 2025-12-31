@@ -1465,6 +1465,7 @@ dependencies = [
  "futures",
  "lazy_static",
  "miette",
+ "num_enum",
  "regex",
  "serde",
  "serde_json",

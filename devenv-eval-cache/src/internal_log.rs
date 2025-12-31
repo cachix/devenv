@@ -1,3 +1,4 @@
+use num_enum::TryFromPrimitive;
 use serde::Deserialize;
 use serde_repr::Deserialize_repr;
 use std::borrow::Cow;
@@ -197,7 +198,9 @@ impl InternalLog {
 }
 
 /// See https://github.com/NixOS/nix/blob/322d2c767f2a3f8ef2ac3d1ba46c19caf9a1ffce/src/libutil/error.hh#L33-L42
-#[derive(Copy, Clone, Debug, Default, Deserialize_repr, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Copy, Clone, Debug, Default, Deserialize_repr, TryFromPrimitive, PartialEq, Eq, PartialOrd, Ord,
+)]
 #[repr(u8)]
 pub enum Verbosity {
     Error = 0,
@@ -211,8 +214,25 @@ pub enum Verbosity {
     Vomit = 7,
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("invalid verbosity level: {0}")]
+pub struct InvalidVerbosity(pub i32);
+
+impl TryFrom<i32> for Verbosity {
+    type Error = InvalidVerbosity;
+
+    fn try_from(value: i32) -> Result<Self, <Verbosity as TryFrom<i32>>::Error> {
+        u8::try_from(value)
+            .ok()
+            .and_then(|b| Verbosity::try_from(b).ok())
+            .ok_or(InvalidVerbosity(value))
+    }
+}
+
 /// See https://github.com/NixOS/nix/blob/a5959aa12170fc75cafc9e2416fae9aa67f91e6b/src/libutil/logging.hh#L11-L26
-#[derive(Copy, Clone, Debug, Deserialize_repr, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Copy, Clone, Debug, Deserialize_repr, TryFromPrimitive, PartialEq, Eq, PartialOrd, Ord,
+)]
 #[repr(u8)]
 pub enum ActivityType {
     Unknown = 0,
@@ -231,8 +251,25 @@ pub enum ActivityType {
     FetchTree = 112,
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("invalid activity type: {0}")]
+pub struct InvalidActivityType(pub i32);
+
+impl TryFrom<i32> for ActivityType {
+    type Error = InvalidActivityType;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        u8::try_from(value)
+            .ok()
+            .and_then(|b| ActivityType::try_from(b).ok())
+            .ok_or(InvalidActivityType(value))
+    }
+}
+
 /// See https://github.com/NixOS/nix/blob/a5959aa12170fc75cafc9e2416fae9aa67f91e6b/src/libutil/logging.hh#L28-L38
-#[derive(Copy, Clone, Debug, Deserialize_repr, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Copy, Clone, Debug, Deserialize_repr, TryFromPrimitive, PartialEq, Eq, PartialOrd, Ord,
+)]
 #[repr(u8)]
 pub enum ResultType {
     FileLinked = 100,
@@ -244,6 +281,21 @@ pub enum ResultType {
     SetExpected = 106,
     PostBuildLogLine = 107,
     FetchStatus = 108,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("invalid result type: {0}")]
+pub struct InvalidResultType(pub i32);
+
+impl TryFrom<i32> for ResultType {
+    type Error = InvalidResultType;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        u8::try_from(value)
+            .ok()
+            .and_then(|b| ResultType::try_from(b).ok())
+            .ok_or(InvalidResultType(value))
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

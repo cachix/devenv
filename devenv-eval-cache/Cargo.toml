@@ -9,6 +9,7 @@ blake3.workspace = true
 futures.workspace = true
 lazy_static.workspace = true
 miette.workspace = true
+num_enum.workspace = true
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
