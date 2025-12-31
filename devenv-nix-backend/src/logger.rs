@@ -152,17 +152,7 @@ fn create_log_callback(
 ) -> impl Fn(i32, &str) + Clone + Send + Sync + 'static {
     move |level: i32, msg: &str| {
         // Convert level to Verbosity
-        let verbosity = match level {
-            0 => Verbosity::Error,
-            1 => Verbosity::Warn,
-            2 => Verbosity::Notice,
-            3 => Verbosity::Info,
-            4 => Verbosity::Talkative,
-            5 => Verbosity::Chatty,
-            6 => Verbosity::Debug,
-            7 => Verbosity::Vomit,
-            _ => Verbosity::Info,
-        };
+        let verbosity = level.try_into().unwrap_or(Verbosity::Info);
 
         let log = InternalLog::Msg {
             msg: msg.to_string(),
