@@ -80,7 +80,7 @@ in
     };
 
     processes.redis = {
-      exec = "${startScript}/bin/start-redis";
+      exec = "exec ${startScript}/bin/start-redis";
 
       process-compose = {
         readiness_probe = {

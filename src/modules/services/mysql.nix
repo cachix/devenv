@@ -318,7 +318,7 @@ in
       ${mysqldumpWrapped}/bin/mysqldump "$@"
     '';
 
-    processes.mysql.exec = "${startScript}/bin/start-mysql";
-    processes.mysql-configure.exec = "${configureScript}/bin/configure-mysql";
+    processes.mysql.exec = "exec ${startScript}/bin/start-mysql";
+    processes.mysql-configure.exec = "exec ${configureScript}/bin/configure-mysql";
   };
 }
