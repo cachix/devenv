@@ -7,3 +7,5 @@ rustflags = ["--cfg", "tracing_unstable"]
 
 [env]
 SNIX_BUILD_SANDBOX_SHELL = "/path/to/sandbox/shell"
+# Run tests single-threaded to avoid Boehm GC race conditions in nix-bindings FFI
+RUST_TEST_THREADS = "1"
