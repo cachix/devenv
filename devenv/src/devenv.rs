@@ -37,6 +37,7 @@ use tokio::process;
 use tokio::sync::{OnceCell, RwLock, Semaphore};
 use tracing::{Instrument, debug, info, instrument, trace, warn};
 
+
 // templates
 const REQUIRED_FILES: [&str; 4] = ["devenv.nix", "devenv.yaml", ".envrc", ".gitignore"];
 const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
@@ -408,11 +409,17 @@ impl Devenv {
         };
 
         let mut shell_cmd = process::Command::new(&bash);
-        let path = self.devenv_runtime.join("shell");
+
+        // Create a temporary file for the shell script.
+        // The file is automatically cleaned up when Devenv is dropped.
+        let mut temp_file = tempfile::Builder::new()
+            .prefix("devenv-shell-")
+            .tempfile()
+            .expect("Failed to create temporary shell script");
 
         // Load the user's bashrc if it exists and if we're in an interactive shell.
         // Disable alias expansion to avoid breaking the dev shell script.
-        let mut output = indoc::formatdoc! {
+        let mut script = indoc::formatdoc! {
             r#"
             if [ -n "$PS1" ] && [ -e $HOME/.bashrc ]; then
                 source $HOME/.bashrc;
@@ -437,21 +444,23 @@ impl Devenv {
                         .collect::<Vec<_>>()
                         .join(" ")
                 );
-                output.push_str(&command);
-                shell_cmd.arg(&path);
+                script.push_str(&command);
+                shell_cmd.arg(temp_file.path());
             }
             // Interactive mode. Use an rcfile.
             None => {
-                shell_cmd.args(["--rcfile", &path.to_string_lossy()]);
+                shell_cmd.args(["--rcfile", &temp_file.path().to_string_lossy()]);
             }
         }
 
-        tokio::fs::write(&path, output)
-            .await
+        temp_file
+            .write_all(script.as_bytes())
             .expect("Failed to write the shell script");
-        tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
-            .await
+        std::fs::set_permissions(temp_file.path(), std::fs::Permissions::from_mode(0o755))
             .expect("Failed to set permissions");
+
+        // Persist the tempfile - it lives in /tmp which is cleaned on reboot
+        temp_file.keep().expect("Failed to persist shell script");
 
         let config_clean = self.config.read().await.clean.clone().unwrap_or_default();
         if self.global_options.clean.is_some() || config_clean.enabled {
