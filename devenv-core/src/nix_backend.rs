@@ -4,10 +4,10 @@
 //! such as the traditional C++ Nix binary or alternative implementations like Snix.
 
 use async_trait::async_trait;
-use devenv_eval_cache::Output;
 use miette::Result;
 use std::path::{Path, PathBuf};
 
+use crate::command_output::Output;
 use crate::nix_args::NixArgs;
 
 /// Common paths used by devenv backends

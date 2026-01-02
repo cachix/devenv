@@ -23,6 +23,7 @@ devenv-core.workspace = true
 devenv-cache-core.workspace = true
 devenv-eval-cache.workspace = true
 devenv-activity.workspace = true
+sqlx.workspace = true
 
 # Dependencies to nix-bindings-rust crates
 nix-bindings-flake.workspace = true

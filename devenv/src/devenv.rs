@@ -252,6 +252,7 @@ impl Devenv {
                     global_options.clone(),
                     cachix_manager.clone(),
                     options.shutdown.clone(),
+                    Some(eval_cache_pool.clone()),
                     None,
                 )
                 .expect("Failed to initialize Nix backend"),
@@ -1637,7 +1638,7 @@ impl Devenv {
             );
         }
 
-        use devenv_eval_cache::command::{FileInputDesc, Input};
+        use devenv_eval_cache::{FileInputDesc, Input};
         util::write_file_with_lock(
             self.devenv_dotfile.join("input-paths.txt"),
             env.inputs

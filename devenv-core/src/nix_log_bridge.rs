@@ -33,13 +33,14 @@
 //! operations like `dev_env()` without creating duplicate activities.
 
 use devenv_activity::{Activity, ActivityLevel, FetchKind, message, message_with_details};
-use devenv_eval_cache::Op;
-use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
 use tracing::{error, info, trace, warn};
+
+use crate::eval_op::{EvalOp, OpObserver};
+use crate::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 
 /// State for tracking the current evaluation activity.
 ///
@@ -66,6 +67,8 @@ pub struct NixLogBridge {
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
     /// State for the current evaluation activity (lazy creation + re-entrancy)
     eval_state: Mutex<EvalActivityState>,
+    /// Observers for file/env operations during eval (used by caching systems)
+    observers: Mutex<Vec<Arc<dyn OpObserver>>>,
 }
 
 /// Information about an active Nix activity
@@ -87,7 +90,40 @@ impl NixLogBridge {
                 pending_parent: None,
                 current_eval: None,
             }),
+            observers: Mutex::new(Vec::new()),
         })
+    }
+
+    /// Add an observer to receive operation notifications during evaluation.
+    ///
+    /// Observers are notified of file/env operations (EvalOp) as they are parsed
+    /// from Nix log messages. This is used by caching systems to track dependencies.
+    pub fn add_observer(&self, observer: Arc<dyn OpObserver>) {
+        if let Ok(mut guard) = self.observers.lock() {
+            guard.push(observer);
+        }
+    }
+
+    /// Clear all observers after evaluation completes.
+    ///
+    /// This should be called after evaluation to stop notifying observers
+    /// and allow them to be garbage collected.
+    pub fn clear_observers(&self) {
+        if let Ok(mut guard) = self.observers.lock() {
+            guard.clear();
+        }
+    }
+
+    /// Mark the evaluation activity as cached.
+    ///
+    /// Call this when the entire evaluation was served from cache
+    /// and no actual Nix evaluation was performed.
+    pub fn mark_cached(&self) {
+        let state = self.eval_state.lock().expect("eval_state mutex poisoned");
+
+        if let Some(ref eval) = state.current_eval {
+            eval.cached();
+        }
     }
 
     /// Begin a new evaluation scope.
@@ -102,10 +138,7 @@ impl NixLogBridge {
     /// This method supports re-entrancy: nested calls increment a depth counter,
     /// and only the outermost call's `parent_id` is used.
     pub fn begin_eval(&self, parent_id: Option<u64>) {
-        let mut state = self
-            .eval_state
-            .lock()
-            .expect("eval_state mutex poisoned");
+        let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
         if state.depth == 0 {
             // Outermost session - store the parent ID for lazy activity creation
@@ -124,10 +157,7 @@ impl NixLogBridge {
     /// This decrements the nesting depth, and when the outermost scope ends,
     /// completes the eval activity (if one was created).
     pub fn end_eval(&self) {
-        let mut state = self
-            .eval_state
-            .lock()
-            .expect("eval_state mutex poisoned");
+        let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
         if state.depth == 0 {
             // Unbalanced end_eval call - shouldn't happen but don't panic
@@ -149,10 +179,7 @@ impl NixLogBridge {
     /// Creates the eval activity lazily on first call within an eval scope.
     /// Returns `None` if not in an eval scope (depth == 0).
     fn ensure_eval_activity(&self) -> Option<u64> {
-        let mut state = self
-            .eval_state
-            .lock()
-            .expect("eval_state mutex poisoned");
+        let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
         if state.depth == 0 {
             // Not in an eval scope - no activity to create
@@ -161,9 +188,7 @@ impl NixLogBridge {
 
         if state.current_eval.is_none() {
             // First callback in this eval scope - create the activity lazily
-            let eval = Activity::evaluate()
-                .parent(state.pending_parent)
-                .start();
+            let eval = Activity::evaluate().parent(state.pending_parent).start();
             state.current_eval = Some(eval);
         }
 
@@ -224,12 +249,22 @@ impl NixLogBridge {
                 }
             }
             InternalLog::Msg { level, ref msg, .. } => {
-                // First check if this is a file evaluation message
-                if let Some(op) = Op::from_internal_log(&log)
-                    && let Op::EvaluatedFile { source } = op
-                {
-                    self.handle_file_evaluation(source);
-                    return;
+                // Extract any input operation from the log for caching
+                if let Some(op) = EvalOp::from_internal_log(&log) {
+                    // Notify all active observers
+                    if let Ok(guard) = self.observers.lock() {
+                        for observer in guard.iter() {
+                            if observer.is_active() {
+                                observer.on_op(op.clone());
+                            }
+                        }
+                    }
+
+                    // Handle file evaluation messages for UI
+                    if let EvalOp::EvaluatedFile { source } = op {
+                        self.handle_file_evaluation(source);
+                        return;
+                    }
                 }
 
                 // Filter out noise - fast local operations that aren't meaningful to users
@@ -522,10 +557,7 @@ impl NixLogBridge {
         // Ensure eval activity exists (lazy creation) and log to it
         self.ensure_eval_activity();
 
-        let state = self
-            .eval_state
-            .lock()
-            .expect("eval_state mutex poisoned");
+        let state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
         if let Some(ref eval) = state.current_eval {
             eval.log(file_path.display().to_string());
