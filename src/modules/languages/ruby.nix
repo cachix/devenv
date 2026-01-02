@@ -1,4 +1,8 @@
-{ pkgs, config, lib, ... }:
+{ pkgs
+, config
+, lib
+, ...
+}:
 
 let
   cfg = config.languages.ruby;
@@ -57,6 +61,10 @@ in
         description = "The bundler package to use.";
       };
     };
+
+    documentation = {
+      enable = lib.mkEnableOption "documentation support for Ruby packages";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -78,13 +86,18 @@ in
     languages.ruby.package =
       let
         packageFromVersion = lib.mkIf (cfg.version != null) (
-          nixpkgs-ruby.packages.${pkgs.stdenv.system}."ruby-${cfg.version}"
+          nixpkgs-ruby.packages.${pkgs.stdenv.system}."ruby-${cfg.version}".override {
+            docSupport = cfg.documentation.enable;
+          }
         );
         packageFromVersionFile = lib.mkIf (cfg.versionFile != null) (
-          nixpkgs-ruby.lib.packageFromRubyVersionFile {
+          (nixpkgs-ruby.lib.packageFromRubyVersionFile {
             file = cfg.versionFile;
             system = pkgs.stdenv.system;
-          }
+          }).override
+            {
+              docSupport = cfg.documentation.enable;
+            }
         );
       in
       lib.mkMerge [
@@ -101,7 +114,8 @@ in
     env.GEM_HOME = "${config.env.BUNDLE_PATH}/${cfg.package.rubyEngine}/${cfg.package.version.libDir}";
 
     enterShell =
-      let libdir = cfg.package.version.libDir;
+      let
+        libdir = cfg.package.version.libDir;
       in
       ''
         export RUBYLIB="$DEVENV_PROFILE/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}/${pkgs.stdenv.system}:''${RUBYLIB:-}"
