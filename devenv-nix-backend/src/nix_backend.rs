@@ -969,13 +969,37 @@ impl NixBackend for NixRustBackend {
                 .to_miette()
                 .wrap_err("Failed to serialize environment to JSON")?
         } else {
-            // The FFI's to_bash() only outputs variables and functions.
-            // We need to append eval "${shellHook:-}" to match what `nix develop` does.
-            // See nix/src/nix/develop.cc which adds this after calling toBash().
-            let mut bash_output = build_env
-                .to_bash()
-                .to_miette()
-                .wrap_err("Failed to serialize environment to bash")?;
+            // Match `nix develop` behavior from nix/src/nix/develop.cc:
+            // 1. Save certain env vars before toBash() overwrites them
+            // 2. Call toBash() to get the build environment
+            // 3. Restore saved vars by appending to the new values
+            // 4. Evaluate shellHook
+            const SAVED_VARS: &[&str] = &["PATH", "XDG_DATA_DIRS"];
+
+            let mut bash_output = String::new();
+
+            // Before toBash(): save current values of vars that should be preserved
+            for var in SAVED_VARS {
+                bash_output.push_str(&format!("{var}=${{{var}:-}}\n"));
+                bash_output.push_str(&format!("nix_saved_{var}=\"${var}\"\n"));
+            }
+
+            // The FFI's to_bash() outputs variables and functions
+            bash_output.push_str(
+                &build_env
+                    .to_bash()
+                    .to_miette()
+                    .wrap_err("Failed to serialize environment to bash")?,
+            );
+
+            // After toBash(): append saved values to preserve system paths
+            for var in SAVED_VARS {
+                bash_output.push_str(&format!(
+                    "{var}=\"${var}${{nix_saved_{var}:+:$nix_saved_{var}}}\"\n"
+                ));
+            }
+
+            // Evaluate shellHook to match what `nix develop` does
             bash_output.push_str("\neval \"${shellHook:-}\"\n");
             bash_output
         };
