@@ -47,40 +47,63 @@ jobs:
           devenv_path=$(nix build -L --print-out-paths .#devenv)
           echo "path=$devenv_path" >> $GITHUB_OUTPUT
 
-      # The crashing test is test_fetch_packages_live (SIGSEGV)
-      - name: Test baseline (expect crash)
-        id: baseline
-        continue-on-error: true
+      # Enable core dumps
+      - name: Setup core dumps
         run: |
-          echo "=== Baseline: test_fetch_packages_live ==="
+          ulimit -c unlimited
+          sudo mkdir -p /tmp/cores
+          sudo chmod 777 /tmp/cores
+          echo '/tmp/cores/core.%e.%p' | sudo tee /proc/sys/kernel/core_pattern
+
+      # Get backtrace with GDB on crash
+      - name: Test with GDB backtrace
+        continue-on-error: true
+        env:
+          RUST_BACKTRACE: 1
+        run: |
+          echo "=== Running with GDB to get backtrace ==="
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- bash -c '
+            # Build test binary
+            cargo test -p devenv --features integration-tests test_fetch_packages_live --no-run 2>&1 | tail -5
+
+            # Find test binary
+            TEST_BIN=$(find target/debug/deps -name "devenv-*" -type f -executable ! -name "*.d" | head -1)
+            echo "Test binary: $TEST_BIN"
+
+            # Run under GDB
+            gdb -batch \
+              -ex "set confirm off" \
+              -ex "run test_fetch_packages_live --nocapture" \
+              -ex "bt full" \
+              -ex "info registers" \
+              -ex "info threads" \
+              -ex "thread apply all bt" \
+              "$TEST_BIN" 2>&1 || true
+          '
+
+      # Try with different GC_NPROCS values
+      - name: Test with GC_NPROCS=1
+        id: nprocs1
+        continue-on-error: true
+        env:
+          GC_NPROCS: 1
+        run: |
+          echo "=== With GC_NPROCS=1 ==="
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
             cargo test -p devenv --features integration-tests test_fetch_packages_live -- --nocapture 2>&1 || echo "EXIT CODE: $?"
 
-      - name: Test with GC_DONT_GC=1
-        id: no-gc
+      - name: Test with GC_MARKERS=2
+        id: markers2
         continue-on-error: true
         env:
-          GC_DONT_GC: 1
+          GC_MARKERS: 2
         run: |
-          echo "=== With GC_DONT_GC=1 ==="
-          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
-            cargo test -p devenv --features integration-tests test_fetch_packages_live -- --nocapture 2>&1 || echo "EXIT CODE: $?"
-
-      - name: Test with GC_MARKERS=1
-        id: single-marker
-        continue-on-error: true
-        env:
-          GC_MARKERS: 1
-        run: |
-          echo "=== With GC_MARKERS=1 ==="
+          echo "=== With GC_MARKERS=2 ==="
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
             cargo test -p devenv --features integration-tests test_fetch_packages_live -- --nocapture 2>&1 || echo "EXIT CODE: $?"
 
       - name: Summary
         run: |
           echo "=== Results ==="
-          echo "Baseline: ${{ steps.baseline.outcome }}"
-          echo "GC_DONT_GC=1: ${{ steps.no-gc.outcome }}"
-          echo "GC_MARKERS=1: ${{ steps.single-marker.outcome }}"
-          echo ""
-          echo "If baseline fails but GC_DONT_GC=1 passes, the issue is GC-related."
+          echo "GC_NPROCS=1: ${{ steps.nprocs1.outcome }}"
+          echo "GC_MARKERS=2: ${{ steps.markers2.outcome }}"
