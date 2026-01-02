@@ -215,6 +215,7 @@ rec {
       baseProject = lib.evalModules {
         specialArgs = inputs // {
           inherit inputs secretspec;
+          self = throw "use config.devenv.source instead of self";
         };
         modules = [
           (
@@ -580,6 +581,7 @@ rec {
           specialArgs = allInputs // {
             inputs = allInputs;
             secretspec = null;
+            self = throw "use config.devenv.source instead of self";
           };
           modules = [
             ({ config, ... }: {

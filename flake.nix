@@ -13,7 +13,12 @@
     inputs = {
       nixpkgs.follows = "nixpkgs";
       flake-compat.follows = "flake-compat";
+      gitignore.follows = "gitignore";
     };
+  };
+  inputs.gitignore = {
+    url = "github:hercules-ci/gitignore.nix";
+    inputs.nixpkgs.follows = "nixpkgs";
   };
   inputs.flake-compat = {
     url = "github:edolstra/flake-compat";
@@ -57,6 +62,7 @@
     { self
     , nixpkgs
     , git-hooks
+    , gitignore
     , nix
     , ...
     }@inputs:
@@ -169,7 +175,7 @@
           }:
           let
             # TODO: deprecate default git-hooks input
-            defaultInputs = { inherit git-hooks; };
+            defaultInputs = { inherit git-hooks gitignore; };
             finalInputs = defaultInputs // inputs;
 
             specialArgs = finalInputs // {
