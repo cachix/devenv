@@ -47,10 +47,40 @@ jobs:
           devenv_path=$(nix build -L --print-out-paths .#devenv)
           echo "path=$devenv_path" >> $GITHUB_OUTPUT
 
-      # Run full test suite exactly like CI does
-      - name: Full test suite (exactly like CI)
+      # The crashing test is test_fetch_packages_live (SIGSEGV)
+      - name: Test baseline (expect crash)
+        id: baseline
         continue-on-error: true
         run: |
-          echo "=== Running: cargo nextest run --all-features -j 1 ==="
+          echo "=== Baseline: test_fetch_packages_live ==="
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
-            cargo nextest run --all-features -j 1 2>&1 || echo "EXIT CODE: $?"
+            cargo test -p devenv --features integration-tests test_fetch_packages_live -- --nocapture 2>&1 || echo "EXIT CODE: $?"
+
+      - name: Test with GC_DONT_GC=1
+        id: no-gc
+        continue-on-error: true
+        env:
+          GC_DONT_GC: 1
+        run: |
+          echo "=== With GC_DONT_GC=1 ==="
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+            cargo test -p devenv --features integration-tests test_fetch_packages_live -- --nocapture 2>&1 || echo "EXIT CODE: $?"
+
+      - name: Test with GC_MARKERS=1
+        id: single-marker
+        continue-on-error: true
+        env:
+          GC_MARKERS: 1
+        run: |
+          echo "=== With GC_MARKERS=1 ==="
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+            cargo test -p devenv --features integration-tests test_fetch_packages_live -- --nocapture 2>&1 || echo "EXIT CODE: $?"
+
+      - name: Summary
+        run: |
+          echo "=== Results ==="
+          echo "Baseline: ${{ steps.baseline.outcome }}"
+          echo "GC_DONT_GC=1: ${{ steps.no-gc.outcome }}"
+          echo "GC_MARKERS=1: ${{ steps.single-marker.outcome }}"
+          echo ""
+          echo "If baseline fails but GC_DONT_GC=1 passes, the issue is GC-related."
