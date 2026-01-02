@@ -104,23 +104,9 @@ impl DevenvMcpServer {
         // Search for common/popular packages
         // Note: Using ".*" would match all packages but causes resource exhaustion
         // with the FFI backend due to GC pressure. Use a reasonable search term instead.
-        let search_output = devenv.nix.search("cachix", None).await?;
+        let search_results = devenv.nix.search("cachix", None).await?;
 
-        // Parse the search results from JSON
-        #[derive(Deserialize)]
-        struct PackageResults(BTreeMap<String, PackageResult>);
-
-        #[derive(Deserialize)]
-        struct PackageResult {
-            version: String,
-            description: String,
-        }
-
-        let search_json: PackageResults = serde_json::from_slice(&search_output.stdout)
-            .map_err(|e| miette::miette!("Failed to parse search results: {}", e))?;
-
-        let packages: Vec<PackageInfo> = search_json
-            .0
+        let packages: Vec<PackageInfo> = search_results
             .into_iter()
             .map(|(key, value)| {
                 // Format package name like in devenv.rs search function

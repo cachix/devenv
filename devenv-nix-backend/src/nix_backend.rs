@@ -19,9 +19,13 @@ use devenv_core::GlobalOptions;
 use devenv_core::cachix::{Cachix, CachixCacheInfo, CachixManager};
 use devenv_core::config::Config;
 use devenv_core::nix_args::NixArgs;
-use devenv_core::nix_backend::{DevenvPaths, NixBackend, Options};
+use devenv_core::nix_backend::{
+    DevEnvOutput, DevenvPaths, NixBackend, Options, PackageSearchResult, SearchResults,
+};
 use devenv_core::nix_log_bridge::NixLogBridge;
-use devenv_eval_cache::Output;
+use devenv_eval_cache::{
+    CacheError, CachedEval, CachingConfig, CachingEvalService, CachingEvalState,
+};
 use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use nix_bindings_expr::eval_state::{EvalState, EvalStateBuilder, gc_register_my_thread};
 use nix_bindings_expr::to_json::value_to_json;
@@ -37,15 +41,18 @@ use nix_bindings_util::settings;
 use nix_cmd::ReplExitStatus;
 use once_cell::sync::OnceCell;
 use ser_nix;
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::process::ExitStatus;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// Embedded bootstrap directory containing default.nix and resolve-lock.nix
 static BOOTSTRAP_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/bootstrap");
+
+/// Convert CacheError to miette::Error for Result compatibility
+fn cache_error_to_miette(e: CacheError) -> miette::Error {
+    miette!("{}", e)
+}
 
 /// Specifies where the project root is located
 ///
@@ -68,14 +75,6 @@ impl Default for ProjectRoot {
     fn default() -> Self {
         ProjectRoot::Path(PathBuf::from("."))
     }
-}
-
-/// Package information extracted from nixpkgs attribute set
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct PackageInfo {
-    pname: String,
-    version: String,
-    description: String,
 }
 
 /// FFI-based Nix backend implementation using direct Rust bindings
@@ -106,9 +105,18 @@ pub struct NixRustBackend {
     #[allow(dead_code)]
     _activity_logger: nix_bindings_expr::logger::ActivityLogger,
 
-    // Bridge for tracking eval activities dynamically
+    // Bridge for tracking eval activities dynamically and input collection
     // Used by eval_session() to create/complete eval activities
+    // Also used for caching via observers
     nix_log_bridge: Arc<NixLogBridge>,
+
+    // Optional eval cache pool from framework layer (shared with other backends)
+    // Note: Uses tokio::sync::OnceCell to match the framework layer type
+    eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
+
+    // Unified caching wrapper combining EvalState + CachedEval (initialized in assemble())
+    // Provides cache_key() for key generation and uncached() for explicit bypass
+    caching_eval_state: OnceCell<CachingEvalState<Arc<Mutex<EvalState>>>>,
 
     // Cachix manager for handling binary cache configuration
     cachix_manager: Arc<CachixManager>,
@@ -218,6 +226,7 @@ impl NixRustBackend {
     /// * `global_options` - Global Nix options (offline mode, max jobs, etc.)
     /// * `cachix_manager` - CachixManager for handling binary cache configuration
     /// * `shutdown` - Shutdown coordinator for graceful cleanup of cachix daemon
+    /// * `eval_cache_pool` - Optional eval cache database pool from framework layer
     /// * `store` - Optional custom Nix store path (for testing with restricted permissions)
     pub fn new(
         paths: DevenvPaths,
@@ -225,6 +234,7 @@ impl NixRustBackend {
         global_options: GlobalOptions,
         cachix_manager: Arc<CachixManager>,
         shutdown: Arc<Shutdown>,
+        eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
         store: Option<std::path::PathBuf>,
     ) -> Result<Self> {
         // Initialize Nix libexpr - uses Once internally so safe to call multiple times.
@@ -359,6 +369,8 @@ impl NixRustBackend {
         // automatically by eval_session() via RAII
         let logger_setup =
             crate::logger::setup_nix_logger().wrap_err("Failed to set up activity logger")?;
+        let activity_logger = logger_setup.logger;
+        let log_bridge = logger_setup.bridge;
 
         let cachix_daemon: Arc<
             tokio::sync::Mutex<Option<crate::cachix_daemon::StreamingCachixDaemon>>,
@@ -413,8 +425,10 @@ impl NixRustBackend {
             flake_settings,
             fetchers_settings,
             bootstrap_path,
-            _activity_logger: logger_setup.logger,
-            nix_log_bridge: logger_setup.bridge,
+            _activity_logger: activity_logger,
+            nix_log_bridge: log_bridge,
+            eval_cache_pool,
+            caching_eval_state: OnceCell::new(),
             cachix_manager,
             cachix_caches: Arc::new(Mutex::new(None)),
             cachix_daemon: cachix_daemon.clone(),
@@ -982,21 +996,43 @@ impl NixRustBackend {
 #[async_trait(?Send)]
 impl NixBackend for NixRustBackend {
     async fn assemble(&self, args: &NixArgs<'_>) -> Result<()> {
-        // Cache the import expression if not already set
-        if self.cached_import_expr.get().is_none() {
+        // Initialize caching eval state if not already set
+        if self.caching_eval_state.get().is_none() {
             let default_nix_path = self.bootstrap_file("default.nix");
 
-            let mut args_nix = ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string());
+            let args_nix = ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string());
 
             // Unquote special Nix expressions that should be evaluated
-            args_nix = args_nix.replace("\"builtins.currentSystem\"", "builtins.currentSystem");
+            let args_nix_eval =
+                args_nix.replace("\"builtins.currentSystem\"", "builtins.currentSystem");
 
             let import_expr = format!(
-                "(import {import_path} {args_nix})",
+                "(import {import_path} {args_nix_eval})",
                 import_path = default_nix_path.display(),
             );
 
             self.cached_import_expr.set(import_expr).ok();
+
+            // Create CachedEval wrapper
+            let cached_eval = if let Some(ref pool_cell) = self.eval_cache_pool {
+                if let Some(pool) = pool_cell.get() {
+                    let service = CachingEvalService::new(pool.clone());
+                    let config = CachingConfig::default();
+                    tracing::debug!("Eval caching enabled from framework pool");
+                    CachedEval::with_cache(service, self.nix_log_bridge.clone(), config)
+                } else {
+                    tracing::debug!("Eval caching disabled (pool not ready)");
+                    CachedEval::without_cache(self.nix_log_bridge.clone())
+                }
+            } else {
+                tracing::debug!("Eval caching disabled (no pool configured)");
+                CachedEval::without_cache(self.nix_log_bridge.clone())
+            };
+
+            // Create unified CachingEvalState wrapper
+            let caching_eval_state =
+                CachingEvalState::new(self.eval_state.clone(), cached_eval, args_nix);
+            self.caching_eval_state.set(caching_eval_state).ok();
         }
 
         // Validate lock file once during assembly
@@ -1014,93 +1050,119 @@ impl NixBackend for NixRustBackend {
         Ok(())
     }
 
-    async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<Output> {
+    async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<DevEnvOutput> {
         // Evaluate the devenv shell environment from default.nix
         // This replaces: nix print-dev-env --profile gc_root [--json]
 
         // Note: Lock file validation is done in assemble(), which must be called first
-        let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
 
-        // Import default.nix with parameters and evaluate to get the devenv structure
         let import_expr = self
             .cached_import_expr
             .get()
             .expect("assemble() must be called first")
             .to_string();
 
-        let devenv = eval_state
-            .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let caching_state = self
+            .caching_eval_state
+            .get()
+            .expect("assemble() must be called first");
 
-        // Get the shell derivation from devenv.shell
-        let shell_drv = eval_state
-            .require_attrs_select(&devenv, "shell")
-            .to_miette()
-            .wrap_err("Failed to get shell attribute from devenv")?;
+        // Create cache key for shell paths
+        let cache_key = caching_state.cache_key("shell");
 
-        // Force evaluation to ensure the derivation is fully evaluated
-        eval_state
-            .force(&shell_drv)
-            .to_miette()
-            .wrap_err("Failed to force evaluation of shell derivation")?;
+        // Try to get cached paths and verify they still exist
+        // Note: dev_env requires explicit path validation because store paths can be GC'd
+        let cached_paths: Option<CachedShellPaths> =
+            if let Some(service) = caching_state.cached_eval().service() {
+                match service.get_cached(&cache_key).await {
+                    Ok(Some(cached)) => {
+                        match serde_json::from_str::<CachedShellPaths>(&cached.json_output) {
+                            Ok(paths) => {
+                                // Verify both paths still exist (may have been garbage collected)
+                                let drv_exists = std::path::Path::new(&paths.drv_path).exists();
+                                let out_exists = std::path::Path::new(&paths.out_path).exists();
+                                if drv_exists && out_exists {
+                                    tracing::debug!(
+                                        drv_path = %paths.drv_path,
+                                        out_path = %paths.out_path,
+                                        "Eval cache hit for shell"
+                                    );
+                                    Some(paths)
+                                } else {
+                                    tracing::debug!(
+                                        drv_path = %paths.drv_path,
+                                        out_path = %paths.out_path,
+                                        drv_exists = drv_exists,
+                                        out_exists = out_exists,
+                                        "Cached paths no longer exist (garbage collected?)"
+                                    );
+                                    None
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "Failed to parse cached shell paths");
+                                None
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        tracing::trace!("Eval cache miss for shell");
+                        None
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Error checking eval cache for shell");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
 
-        // Get the .drvPath to find the derivation file (for BuildEnvironment::get_dev_environment)
-        let drv_path_value = eval_state
-            .require_attrs_select(&shell_drv, "drvPath")
-            .to_miette()
-            .wrap_err("Failed to get drvPath from shell derivation")?;
+        let (drv_path_str, out_path_str, cache_hit) = if let Some(paths) = cached_paths {
+            // Cache hit with valid paths - skip evaluation entirely
+            caching_state
+                .cached_eval()
+                .log_bridge()
+                .mark_eval_cached("Building shell", ActivityLevel::Info);
+            (paths.drv_path, paths.out_path, true)
+        } else {
+            // Cache miss or invalid paths - do full evaluation with input collection
+            let (paths, _) = caching_state
+                .cached_eval()
+                .eval_typed::<CachedShellPaths, _, _>(&cache_key, || {
+                    let import_expr = import_expr.clone();
+                    async move { self.build_shell_uncached(&import_expr) }
+                })
+                .await
+                .map_err(cache_error_to_miette)?;
 
-        let drv_path_str = eval_state
-            .require_string(&drv_path_value)
-            .to_miette()
-            .wrap_err("Failed to extract drvPath as string")?;
+            (paths.drv_path, paths.out_path, false)
+        };
 
-        // Get outPath for building - it has string context unlike drvPath
-        let out_path_value = eval_state
-            .require_attrs_select(&shell_drv, "outPath")
-            .to_miette()
-            .wrap_err("Failed to get outPath from shell derivation")?;
-
-        // Build the derivation to ensure it's realized and get the output path
-        // We use outPath instead of drvPath because outPath has string context
-        // which realise_string needs to identify and build the derivation
-        let realized = eval_state
-            .realise_string(&out_path_value, false)
-            .to_miette()
-            .wrap_err("Failed to realize shell derivation")?;
-
-        // Create GC root profile with generation tracking
-        // This matches the behavior of nix print-dev-env --profile
-        let store_path = realized
-            .paths
-            .first()
-            .ok_or_else(|| miette!("Shell derivation produced no output paths"))?;
-
+        // Parse store path and create GC root
         let mut store = (*self.store).clone();
-        let path_str = store
-            .real_path(store_path)
+        let store_path = store
+            .parse_store_path(&out_path_str)
             .to_miette()
-            .wrap_err("Failed to get store path")?;
+            .wrap_err("Failed to parse output store path")?;
 
         // Remove existing symlink right before creating new one to minimize race window
-        // Use symlink_metadata to detect broken symlinks (exists() returns false for those)
         if gc_root.symlink_metadata().is_ok() {
             std::fs::remove_file(gc_root)
                 .map_err(|e| miette!("Failed to remove existing GC root: {}", e))?;
         }
         store
-            .add_perm_root(store_path, gc_root)
+            .add_perm_root(&store_path, gc_root)
             .to_miette()
             .wrap_err("Failed to create GC root")?;
 
-        // Queue realized path for real-time pushing
-        self.queue_realized_paths(&[PathBuf::from(&path_str)])
-            .await?;
+        // Queue realized path for real-time pushing (only on fresh build)
+        if !cache_hit {
+            self.queue_realized_paths(&[PathBuf::from(&out_path_str)])
+                .await?;
+        }
 
         // Extract build environment from the derivation store path using FFI
-        // Parse the derivation path to get a StorePath
-        let mut store = (*self.store).clone();
         let drv_store_path = store
             .parse_store_path(&drv_path_str)
             .to_miette()
@@ -1111,10 +1173,6 @@ impl NixBackend for NixRustBackend {
         let mut build_env = BuildEnvironment::get_dev_environment(&self.store, &drv_store_path)
             .to_miette()
             .wrap_err("Failed to get dev environment from derivation")?;
-
-        // Release eval_state lock after FFI operations complete
-        // This keeps activities nested under the eval scope
-        drop(eval_state);
 
         // Serialize to the requested format
         let output_str = if json {
@@ -1158,16 +1216,19 @@ impl NixBackend for NixRustBackend {
             bash_output
         };
 
-        // Return as Output
-        use std::os::unix::process::ExitStatusExt;
-        let status = ExitStatus::from_raw(0);
+        // Get file inputs from cache for direnv to watch
+        let inputs = if let Some(service) = caching_state.cached_eval().service() {
+            service
+                .get_file_inputs(&cache_key)
+                .await
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
 
-        Ok(Output {
-            status,
-            stdout: output_str.as_bytes().to_vec(),
-            stderr: Vec::new(),
-            inputs: Vec::new(),
-            cache_hit: false,
+        Ok(DevEnvOutput {
+            bash_env: output_str.as_bytes().to_vec(),
+            inputs,
         })
     }
 
@@ -1236,89 +1297,108 @@ impl NixBackend for NixRustBackend {
         _options: Option<Options>,
         gc_root: Option<&Path>,
     ) -> Result<Vec<PathBuf>> {
-        // Build derivations and return output paths
-        // Strategy: Evaluate, then build (using the same eval_state for caching)
-        //
-        // TODO: Use eval() underneath to evaluate first, then build
-        // Currently we can't do this because eval() returns JSON string but we need
-        // the actual Value to pass to realise_string(). Would need to change the API
-        // to either return both Value and JSON, or add an internal eval method that
-        // returns Values.
-
-        // Validate lock file before building
-        self.validate_lock_file().await?;
+        // Build derivations and return output paths with transparent caching
+        // Caches output store paths per attribute to skip redundant builds
 
         if attributes.is_empty() {
             return Ok(Vec::new());
         }
 
-        // Lock eval_state for the entire operation
-        let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
+        // Note: Lock file validation is done in assemble(), which must be called first
 
-        // Import default.nix to get the attribute set
         let import_expr = self
             .cached_import_expr
             .get()
             .expect("assemble() must be called first")
             .to_string();
 
-        let root_attrs = eval_state
-            .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let caching_state = self
+            .caching_eval_state
+            .get()
+            .expect("assemble() must be called first");
 
         let mut output_paths = Vec::new();
 
         for attr_path in attributes {
-            // PHASE 1: Evaluate - Navigate to the attribute and force evaluation
-            let value = eval_state
-                .require_attrs_select(&root_attrs, attr_path)
-                .to_miette()
-                .wrap_err(format!(
-                    "Failed to get attribute '{attr_path}' from default.nix",
-                ))?;
+            // Cache key includes ":build" suffix to distinguish from eval cache
+            let cache_key = caching_state.cache_key(&format!("{}:build", attr_path));
 
-            // Force full evaluation before building
-            eval_state
-                .force(&value)
-                .to_miette()
-                .wrap_err(format!("Failed to evaluate attribute: {attr_path}"))?;
-
-            // If it's a derivation (attrs with .outPath), get the outPath
-            // Otherwise use the value as-is (might be a string already)
-            let build_value = match eval_state.require_attrs_select_opt(&value, "outPath") {
-                Ok(Some(out_path)) => out_path,
-                Ok(None) => value.clone(),
-                Err(e) => {
-                    return Err(e)
-                        .to_miette()
-                        .wrap_err(format!("Failed to evaluate attribute: {attr_path}"));
+            // Check cache for existing build output path
+            let cached_path: Option<String> = if let Some(service) =
+                caching_state.cached_eval().service()
+            {
+                match service.get_cached(&cache_key).await {
+                    Ok(Some(cached)) => {
+                        match serde_json::from_str::<String>(&cached.json_output) {
+                            Ok(path_str) => {
+                                // Verify path still exists (may have been garbage collected)
+                                if std::path::Path::new(&path_str).exists() {
+                                    tracing::debug!(
+                                        attr_path = attr_path,
+                                        path = %path_str,
+                                        "Build cache hit"
+                                    );
+                                    Some(path_str)
+                                } else {
+                                    tracing::debug!(
+                                        attr_path = attr_path,
+                                        path = %path_str,
+                                        "Cached build path no longer exists (garbage collected?)"
+                                    );
+                                    None
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "Failed to parse cached build path");
+                                None
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        tracing::trace!(attr_path = attr_path, "Build cache miss");
+                        None
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Error checking build cache");
+                        None
+                    }
                 }
+            } else {
+                None
             };
 
-            // PHASE 2: Build - Realize the value, which triggers the actual build
-            // realise_string uses the cached evaluation from above
-            let realized = eval_state
-                .realise_string(&build_value, false)
-                .to_miette()
-                .wrap_err(format!("Failed to build attribute: {attr_path}"))?;
+            let (path_str, cache_hit) = if let Some(path) = cached_path {
+                // Cache hit with valid path
+                caching_state
+                    .cached_eval()
+                    .log_bridge()
+                    .mark_eval_cached(&format!("Building {}", attr_path), ActivityLevel::Info);
+                (path, true)
+            } else {
+                // Cache miss or invalid path - do full build with input collection
+                let (path, _) = caching_state
+                    .cached_eval()
+                    .eval_typed::<String, _, _>(&cache_key, || {
+                        let import_expr = import_expr.clone();
+                        let attr_path = attr_path.to_string();
+                        async move { self.build_attr_uncached(&import_expr, &attr_path) }
+                    })
+                    .await
+                    .map_err(cache_error_to_miette)?;
 
-            // The realized.paths contains the built store paths (expect exactly one per attribute)
-            let store_path = realized
-                .paths
-                .first()
-                .ok_or_else(|| miette!("Attribute '{attr_path}' produced no output paths"))?;
-
-            let mut store = (*self.store).clone();
-            let path_str = store
-                .real_path(store_path)
-                .to_miette()
-                .wrap_err("Failed to get store path")?;
+                (path, false)
+            };
 
             let path = PathBuf::from(&path_str);
 
             // Add GC root if requested, named after the attribute
             if let Some(gc_root_base) = gc_root {
+                let mut store = (*self.store).clone();
+                let store_path = store
+                    .parse_store_path(&path_str)
+                    .to_miette()
+                    .wrap_err("Failed to parse store path")?;
+
                 // Sanitize attribute path for use as filename (replace dots with dashes)
                 let sanitized_attr = attr_path.replace('.', "-");
                 let attr_gc_root = gc_root_base.with_file_name(format!(
@@ -1337,15 +1417,17 @@ impl NixBackend for NixRustBackend {
                 }
 
                 store
-                    .add_perm_root(store_path, &attr_gc_root)
+                    .add_perm_root(&store_path, &attr_gc_root)
                     .to_miette()
                     .wrap_err("Failed to add GC root")?;
             }
 
             output_paths.push(path.clone());
 
-            // Queue realized path for real-time pushing
-            self.queue_realized_paths(&[path]).await?;
+            // Queue realized path for real-time pushing (only on fresh build)
+            if !cache_hit {
+                self.queue_realized_paths(&[path]).await?;
+            }
         }
 
         Ok(output_paths)
@@ -1353,23 +1435,19 @@ impl NixBackend for NixRustBackend {
 
     async fn eval(&self, attributes: &[&str]) -> Result<String> {
         // Evaluate Nix expressions and return JSON
-        // Evaluates attributes from default.nix
-        // Lock file validation is done once in assemble(), not here
+        // Evaluates attributes from default.nix with transparent caching
+        // Note: Lock file validation is done in assemble(), which must be called first
 
-        // Lock the eval_state for the duration of evaluation
-        let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
-
-        // Import default.nix once to get the attribute set
         let import_expr = self
             .cached_import_expr
             .get()
             .expect("assemble() must be called first")
             .to_string();
 
-        let root_attrs = eval_state
-            .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let caching_state = self
+            .caching_eval_state
+            .get()
+            .expect("assemble() must be called first");
 
         let mut results = Vec::new();
 
@@ -1377,27 +1455,24 @@ impl NixBackend for NixRustBackend {
             // Parse attribute path - remove leading ".#" if present
             let clean_path = attr_path.trim_start_matches(".#");
 
-            // Navigate to the attribute using the Nix API
-            let value = eval_state
-                .require_attrs_select(&root_attrs, clean_path)
-                .to_miette()
-                .wrap_err(format!(
-                    "Failed to get attribute '{attr_path}' from default.nix",
-                ))?;
+            // Create cache key for this attribute
+            let cache_key = caching_state.cache_key(clean_path);
 
-            // Force evaluation
-            eval_state
-                .force(&value)
-                .to_miette()
-                .wrap_err("Failed to force evaluation")?;
+            // Use transparent caching - handles cache check, input collection, and storage
+            let (json_str, _cache_hit) = caching_state
+                .cached_eval()
+                .eval(&cache_key, || {
+                    // Capture values for the async block
+                    let import_expr = import_expr.clone();
+                    let attr_path_owned = attr_path.to_string();
+                    let clean_path_owned = clean_path.to_string();
 
-            // Convert to JSON string
-            let json_value = value_to_json(&mut eval_state, &value)
-                .to_miette()
-                .wrap_err(format!("Failed to convert {attr_path} to JSON"))?;
-            let json_str = serde_json::to_string(&json_value)
-                .into_diagnostic()
-                .wrap_err(format!("Failed to serialize {attr_path} to JSON"))?;
+                    async move {
+                        self.eval_attr_uncached(&import_expr, &attr_path_owned, &clean_path_owned)
+                    }
+                })
+                .await
+                .map_err(cache_error_to_miette)?;
 
             results.push(json_str);
         }
@@ -1514,9 +1589,7 @@ impl NixBackend for NixRustBackend {
         // Validate lock file before reading metadata
         self.validate_lock_file().await?;
 
-        let mut eval_state = self.eval_session("Reading metadata", ActivityLevel::Debug)?;
-
-        // PART 1: Format inputs from lock file using new FFI iterator
+        // PART 1: Format inputs from lock file using FFI iterator
         let lock_file_path = self.paths.root.join("devenv.lock");
         let inputs_section = if lock_file_path.exists() {
             let lock = load_lock_file(&self.fetchers_settings, &lock_file_path)
@@ -1532,49 +1605,29 @@ impl NixBackend for NixRustBackend {
             "Inputs:\n  (no lock file)".to_string()
         };
 
-        // PART 2: Evaluate config.info from default.nix
-        let import_expr = self
-            .cached_import_expr
-            .get()
-            .expect("assemble() must be called first")
-            .to_string();
-
-        let root_attrs = eval_state
-            .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
-
-        let info_json = if let Ok(Some(info_val)) = eval_state
-            .require_attrs_select_opt(&root_attrs, "config.info")
-            .to_miette()
-        {
-            // Force evaluation
-            eval_state
-                .force(&info_val)
-                .to_miette()
-                .wrap_err("Failed to force evaluation of info attribute")?;
-
-            // config.info is always a string
-            match value_to_json(&mut eval_state, &info_val)
-                .to_miette()
-                .wrap_err("Failed to convert info attribute to JSON")
-            {
-                Ok(json_value) => json_value.as_str().unwrap_or_default().to_string(),
-                Err(_) => String::new(),
+        // PART 2: Evaluate config.info from default.nix (with transparent caching)
+        // Use self.eval() which handles caching automatically
+        let info_str = match self.eval(&["config.info"]).await {
+            Ok(json_str) => {
+                // config.info is a string, so the JSON is a quoted string
+                // Parse it to extract the actual string value
+                serde_json::from_str::<String>(&json_str).unwrap_or_default()
             }
-        } else {
-            String::new()
+            Err(_) => {
+                // config.info doesn't exist or failed to evaluate - that's OK
+                String::new()
+            }
         };
 
         // Combine outputs to match original devenv format
-        if info_json.is_empty() {
+        if info_str.is_empty() {
             Ok(inputs_section)
         } else {
-            Ok(format!("{inputs_section}\n\n{info_json}"))
+            Ok(format!("{inputs_section}\n\n{info_str}"))
         }
     }
 
-    async fn search(&self, name: &str, _options: Option<Options>) -> Result<Output> {
+    async fn search(&self, name: &str, _options: Option<Options>) -> Result<SearchResults> {
         // Search through pkgs from bootstrap/default.nix for packages matching the query
         // Uses the nix search C API which handles recurseForDerivations logic
         // Respects overlays, locked versions, and devenv configuration
@@ -1623,7 +1676,7 @@ impl NixBackend for NixRustBackend {
             .wrap_err("Failed to add search regex")?;
 
         // Collect results using the search API
-        let mut results: BTreeMap<String, PackageInfo> = BTreeMap::new();
+        let mut results: SearchResults = BTreeMap::new();
         let max_results = 100;
 
         search(&cursor, Some(&params), |result: SearchResult| {
@@ -1633,7 +1686,7 @@ impl NixBackend for NixRustBackend {
 
             results.insert(
                 result.attr_path,
-                PackageInfo {
+                PackageSearchResult {
                     pname: result.name,
                     version: result.version,
                     description: result.description,
@@ -1644,22 +1697,7 @@ impl NixBackend for NixRustBackend {
         .to_miette()
         .wrap_err("Search failed")?;
 
-        // Convert results to JSON
-        let json_output = serde_json::to_string(&results)
-            .into_diagnostic()
-            .wrap_err("Failed to serialize search results")?;
-
-        // Return as Output struct
-        use std::os::unix::process::ExitStatusExt;
-        let status = ExitStatus::from_raw(0);
-
-        Ok(Output {
-            status,
-            stdout: json_output.as_bytes().to_vec(),
-            stderr: Vec::new(),
-            inputs: Vec::new(),
-            cache_hit: false,
-        })
+        Ok(results)
     }
 
     async fn gc(&self, paths: Vec<PathBuf>) -> Result<(u64, u64)> {
@@ -1858,6 +1896,177 @@ impl NixRustBackend {
 
         ref_str.to_string()
     }
+
+    /// Evaluate a single attribute without caching.
+    ///
+    /// This is the pure evaluation logic extracted for use with transparent caching.
+    /// It uses eval_session() to properly track eval activities.
+    fn eval_attr_uncached(
+        &self,
+        import_expr: &str,
+        attr_path: &str,
+        clean_path: &str,
+    ) -> Result<String> {
+        // Use eval_session() to properly set up activity tracking
+        let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
+
+        // Import default.nix to get the attribute set
+        let root_attrs = eval_state
+            .eval_from_string(import_expr, self.paths.root.to_str().unwrap())
+            .to_miette()
+            .wrap_err("Failed to import default.nix")?;
+
+        // Navigate to the attribute using the Nix API
+        let value = eval_state
+            .require_attrs_select(&root_attrs, clean_path)
+            .to_miette()
+            .wrap_err(format!(
+                "Failed to get attribute '{}' from default.nix",
+                attr_path
+            ))?;
+
+        // Force evaluation
+        eval_state
+            .force(&value)
+            .to_miette()
+            .wrap_err("Failed to force evaluation")?;
+
+        // Convert to JSON string
+        let json_value = value_to_json(&mut eval_state, &value)
+            .to_miette()
+            .wrap_err(format!("Failed to convert {} to JSON", attr_path))?;
+
+        serde_json::to_string(&json_value)
+            .into_diagnostic()
+            .wrap_err(format!("Failed to serialize {} to JSON", attr_path))
+    }
+
+    /// Build shell derivation without caching.
+    ///
+    /// This is the pure build logic extracted for use with transparent caching.
+    /// It uses eval_session() to properly track eval activities.
+    fn build_shell_uncached(&self, import_expr: &str) -> Result<CachedShellPaths> {
+        // Use eval_session() to properly set up activity tracking
+        let mut eval_state = self.eval_session("Building shell", ActivityLevel::Info)?;
+
+        let devenv = eval_state
+            .eval_from_string(import_expr, self.paths.root.to_str().unwrap())
+            .to_miette()
+            .wrap_err("Failed to import default.nix")?;
+
+        // Get the shell derivation from devenv.shell
+        let shell_drv = eval_state
+            .require_attrs_select(&devenv, "shell")
+            .to_miette()
+            .wrap_err("Failed to get shell attribute from devenv")?;
+
+        // Force evaluation to ensure the derivation is fully evaluated
+        eval_state
+            .force(&shell_drv)
+            .to_miette()
+            .wrap_err("Failed to force evaluation of shell derivation")?;
+
+        // Get drvPath
+        let drv_path_value = eval_state
+            .require_attrs_select(&shell_drv, "drvPath")
+            .to_miette()
+            .wrap_err("Failed to get drvPath from shell derivation")?;
+
+        let drv_path = eval_state
+            .require_string(&drv_path_value)
+            .to_miette()
+            .wrap_err("Failed to extract drvPath as string")?;
+
+        // Get outPath for building - it has string context
+        let out_path_value = eval_state
+            .require_attrs_select(&shell_drv, "outPath")
+            .to_miette()
+            .wrap_err("Failed to get outPath from shell derivation")?;
+
+        // Build the derivation to get the output path
+        let realized = eval_state
+            .realise_string(&out_path_value, false)
+            .to_miette()
+            .wrap_err("Failed to realize shell derivation")?;
+
+        let store_path = realized
+            .paths
+            .first()
+            .ok_or_else(|| miette!("Shell derivation produced no output paths"))?;
+
+        let mut store = (*self.store).clone();
+        let out_path = store
+            .real_path(store_path)
+            .to_miette()
+            .wrap_err("Failed to get store path")?;
+
+        Ok(CachedShellPaths { drv_path, out_path })
+    }
+
+    /// Build a single attribute without caching.
+    ///
+    /// This is the pure build logic extracted for use with transparent caching.
+    /// It uses eval_session() to properly track eval activities.
+    fn build_attr_uncached(&self, import_expr: &str, attr_path: &str) -> Result<String> {
+        // Use eval_session() to properly set up activity tracking
+        let mut eval_state = self.eval_session("Building derivation", ActivityLevel::Info)?;
+
+        let root_attrs = eval_state
+            .eval_from_string(import_expr, self.paths.root.to_str().unwrap())
+            .to_miette()
+            .wrap_err("Failed to import default.nix")?;
+
+        // Navigate to the attribute and force evaluation
+        let value = eval_state
+            .require_attrs_select(&root_attrs, attr_path)
+            .to_miette()
+            .wrap_err(format!(
+                "Failed to get attribute '{}' from default.nix",
+                attr_path
+            ))?;
+
+        eval_state
+            .force(&value)
+            .to_miette()
+            .wrap_err(format!("Failed to evaluate attribute: {}", attr_path))?;
+
+        // If it's a derivation (attrs with .outPath), get the outPath
+        // Otherwise use the value as-is (might be a string already)
+        let build_value = eval_state
+            .require_attrs_select_opt(&value, "outPath")
+            .to_miette()
+            .wrap_err(format!(
+                "Failed to check for outPath in attribute: {}",
+                attr_path
+            ))?
+            .unwrap_or_else(|| value.clone());
+
+        // Realize the value, which triggers the actual build
+        let realized = eval_state
+            .realise_string(&build_value, false)
+            .to_miette()
+            .wrap_err(format!("Failed to build attribute: {}", attr_path))?;
+
+        let store_path = realized
+            .paths
+            .first()
+            .ok_or_else(|| miette!("Attribute '{}' produced no output paths", attr_path))?;
+
+        let mut store = (*self.store).clone();
+        let path_str = store
+            .real_path(store_path)
+            .to_miette()
+            .wrap_err("Failed to get store path")?;
+
+        Ok(path_str)
+    }
+}
+
+/// Cached shell paths for dev_env caching.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CachedShellPaths {
+    drv_path: String,
+    out_path: String,
 }
 
 /// Guard that forces GC collection when dropped.

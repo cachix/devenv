@@ -137,6 +137,7 @@ async fn test_create_flake_inputs() {
         cachix_manager,
         Shutdown::new(),
         None,
+        None,
     )
     .expect("Failed to create backend");
 
@@ -208,6 +209,7 @@ async fn test_selective_input_update() {
         GlobalOptions::default(),
         cachix_manager,
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -282,6 +284,7 @@ async fn test_full_workflow() {
         GlobalOptions::default(),
         cachix_manager,
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -386,6 +389,7 @@ async fn test_relative_path_with_parent_dir_in_path() {
         GlobalOptions::default(),
         cachix_manager,
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
