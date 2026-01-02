@@ -543,7 +543,7 @@ impl Devenv {
         Ok(())
     }
 
-    #[activity(format!("Building {name} container"), kind = build)]
+    #[activity(format!("{name} container"), kind = build)]
     pub async fn container_build(&mut self, name: &str) -> Result<String> {
         // This container name is passed to the flake as an argument and tells the module system
         // that we're 1. building a container 2. which container we're building.

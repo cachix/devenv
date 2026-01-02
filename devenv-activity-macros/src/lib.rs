@@ -142,8 +142,8 @@ impl Parse for ActivityArgs {
 /// #[activity("Building shell")]
 /// async fn build_shell() -> Result<()> { ... }
 ///
-/// // With specific kind
-/// #[activity("Building container", kind = build)]
+/// // With specific kind (view adds "Building" prefix for build kind)
+/// #[activity("container", kind = build)]
 /// async fn build_container() -> Result<()> { ... }
 ///
 /// // With specific level (trace, debug, info, warn, error)
@@ -154,8 +154,8 @@ impl Parse for ActivityArgs {
 /// #[activity("Running tests", skip(self))]
 /// async fn run_tests(&self) -> Result<()> { ... }
 ///
-/// // Dynamic name using format!
-/// #[activity(format!("Building {} container", name))]
+/// // Dynamic name using format! (for build kind, omit verb - view adds it)
+/// #[activity(format!("{} container", name), kind = build)]
 /// async fn build_named(&self, name: &str) -> Result<()> { ... }
 /// ```
 ///
