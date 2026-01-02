@@ -20,6 +20,7 @@ tokio-shutdown.workspace = true
 uuid.workspace = true
 
 devenv-core.workspace = true
+devenv-cache-core.workspace = true
 devenv-eval-cache.workspace = true
 devenv-activity.workspace = true
 

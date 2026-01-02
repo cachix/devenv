@@ -1509,6 +1509,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "devenv-activity",
+ "devenv-cache-core",
  "devenv-core",
  "devenv-eval-cache",
  "include_dir",

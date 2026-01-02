@@ -6,6 +6,7 @@ use cli_table::Table;
 use cli_table::{WithTitle, print_stderr};
 use devenv_activity::ActivityInstrument;
 use devenv_activity::{Activity, ActivityLevel, activity, message};
+use devenv_cache_core::compute_string_hash;
 use devenv_core::{
     cachix::{CachixManager, CachixPaths},
     cli::GlobalOptions,
@@ -409,13 +410,6 @@ impl Devenv {
 
         let mut shell_cmd = process::Command::new(&bash);
 
-        // Create a temporary file for the shell script.
-        // The file is automatically cleaned up when Devenv is dropped.
-        let mut temp_file = tempfile::Builder::new()
-            .prefix("devenv-shell-")
-            .tempfile()
-            .expect("Failed to create temporary shell script");
-
         // Load the user's bashrc if it exists and if we're in an interactive shell.
         // Disable alias expansion to avoid breaking the dev shell script.
         let mut script = indoc::formatdoc! {
@@ -431,35 +425,38 @@ impl Devenv {
             String::from_utf8_lossy(&output)
         };
 
-        match cmd {
-            // Non-interactive mode.
-            // exec the command at the end of the rcscript.
-            Some(cmd) => {
-                let command = format!(
-                    "\nexec {} {}",
-                    cmd,
-                    args.iter()
-                        .map(|arg| shell_escape::escape(std::borrow::Cow::Borrowed(arg)))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                );
-                script.push_str(&command);
-                shell_cmd.arg(temp_file.path());
-            }
-            // Interactive mode. Use an rcfile.
-            None => {
-                shell_cmd.args(["--rcfile", &temp_file.path().to_string_lossy()]);
-            }
+        // Add command for non-interactive mode
+        if let Some(cmd) = &cmd {
+            let command = format!(
+                "\nexec {} {}",
+                cmd,
+                args.iter()
+                    .map(|arg| shell_escape::escape(std::borrow::Cow::Borrowed(arg)))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            script.push_str(&command);
         }
 
-        temp_file
-            .write_all(script.as_bytes())
-            .expect("Failed to write the shell script");
-        std::fs::set_permissions(temp_file.path(), std::fs::Permissions::from_mode(0o755))
+        // Write shell script to a content-addressed file
+        // Using content hash in filename allows eval cache to track it properly while
+        // avoiding race conditions between parallel sessions (same content = same file)
+        let script_hash = &compute_string_hash(&script)[..16];
+        let script_path = self
+            .devenv_dotfile
+            .join(format!("shell-{}.sh", script_hash));
+        std::fs::write(&script_path, &script).expect("Failed to write shell script");
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
             .expect("Failed to set permissions");
 
-        // Persist the tempfile - it lives in /tmp which is cleaned on reboot
-        temp_file.keep().expect("Failed to persist shell script");
+        match cmd {
+            Some(_) => {
+                shell_cmd.arg(&script_path);
+            }
+            None => {
+                shell_cmd.args(["--rcfile", &script_path.to_string_lossy()]);
+            }
+        }
 
         let config_clean = self.config.read().await.clean.clone().unwrap_or_default();
         if self.global_options.clean.is_some() || config_clean.enabled {

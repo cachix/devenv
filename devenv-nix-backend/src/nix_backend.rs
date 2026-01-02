@@ -13,6 +13,7 @@ use async_trait::async_trait;
 use include_dir::{Dir, include_dir};
 use tokio_shutdown::Shutdown;
 
+use devenv_cache_core::compute_string_hash;
 use devenv_core::GlobalOptions;
 use devenv_core::cachix::{Cachix, CachixCacheInfo, CachixManager};
 use devenv_core::config::Config;
@@ -117,10 +118,6 @@ pub struct NixRustBackend {
     // Cached import expression: (import /path/to/default.nix { ... args ... })
     // Set once in assemble() and used directly in evaluations
     cached_import_expr: Arc<OnceCell<String>>,
-
-    // Temp files that must live as long as the backend (e.g., NIXPKGS_CONFIG)
-    #[allow(dead_code)]
-    _temp_files: Vec<tempfile::NamedTempFile>,
 
     // GC collection guard - drops BEFORE gc_registration to ensure GC runs while thread is still registered
     _gc_guard: GcCollectionGuard,
@@ -264,21 +261,19 @@ impl NixRustBackend {
             base = nixpkgs_config_base
         );
 
-        // Write nixpkgs config to a temp file (NIXPKGS_CONFIG expects a file path)
-        let mut temp_files = Vec::new();
-        let nixpkgs_config_file = tempfile::Builder::new()
-            .prefix("devenv-nixpkgs-config-")
-            .suffix(".nix")
-            .tempfile()
-            .map_err(|e| miette::miette!("Failed to create temp file for nixpkgs config: {}", e))?;
-        std::fs::write(nixpkgs_config_file.path(), &nixpkgs_config_nix)
-            .map_err(|e| miette::miette!("Failed to write nixpkgs config to temp file: {}", e))?;
-        let nixpkgs_config_path = nixpkgs_config_file
-            .path()
+        // Write nixpkgs config to a content-addressed file (NIXPKGS_CONFIG expects a file path)
+        // Using content hash in filename allows eval cache to track it properly while
+        // avoiding race conditions between parallel sessions (same content = same file)
+        let config_hash = &compute_string_hash(&nixpkgs_config_nix)[..16];
+        let nixpkgs_config_path = paths
+            .dotfile
+            .join(format!("nixpkgs-config-{}.nix", config_hash));
+        std::fs::write(&nixpkgs_config_path, &nixpkgs_config_nix)
+            .map_err(|e| miette::miette!("Failed to write nixpkgs config: {}", e))?;
+        let nixpkgs_config_path = nixpkgs_config_path
             .to_str()
             .ok_or_else(|| miette::miette!("Nixpkgs config path contains invalid UTF-8"))?
             .to_string();
-        temp_files.push(nixpkgs_config_file);
 
         // Create eval state with flake support and NIXPKGS_CONFIG
         // load_config() loads settings from nix.conf files including access-tokens
@@ -369,7 +364,6 @@ impl NixRustBackend {
             cachix_caches: Arc::new(Mutex::new(None)),
             cachix_daemon: cachix_daemon.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
-            _temp_files: temp_files,
             _gc_guard: GcCollectionGuard,
             _gc_registration: gc_registration,
             shutdown: shutdown.clone(),
