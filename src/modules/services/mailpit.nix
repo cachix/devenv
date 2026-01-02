@@ -41,13 +41,11 @@ in
     # For `sendmail`
     packages = [ cfg.package ];
 
-    processes.mailpit.exec = ''
-      mkdir -p "$DEVENV_STATE/mailpit"
-      exec "${cfg.package}/bin/mailpit" \
-        --db-file "$DEVENV_STATE/mailpit/db.sqlite3" \
-        --listen ${lib.escapeShellArg cfg.uiListenAddress} \
-        --smtp ${lib.escapeShellArg cfg.smtpListenAddress} \
-        ${lib.escapeShellArgs cfg.additionalArgs}
-    '';
+    tasks."devenv:mailpit:setup" = {
+      exec = ''mkdir -p "$DEVENV_STATE/mailpit"'';
+      before = [ "devenv:processes:mailpit" ];
+    };
+
+    processes.mailpit.exec = "${cfg.package}/bin/mailpit --db-file $DEVENV_STATE/mailpit/db.sqlite3 --listen ${lib.escapeShellArg cfg.uiListenAddress} --smtp ${lib.escapeShellArg cfg.smtpListenAddress} ${lib.escapeShellArgs cfg.additionalArgs}";
   };
 }

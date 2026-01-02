@@ -503,7 +503,7 @@ in
 
         in
         {
-          exec = "exec ${keycloak-start}/bin/keycloak-start";
+          exec = "${keycloak-start}/bin/keycloak-start";
 
           process-compose = {
             description = "The keycloak identity and access management server.";

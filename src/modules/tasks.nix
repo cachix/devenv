@@ -43,11 +43,16 @@ let
                 if config.binary != null
                 then config.binary == "bash"
                 else config.package.meta.mainProgram or null == "bash";
+              # Only auto-add exec for single-line process commands.
+              # Multi-line scripts need manual exec placement before the main process.
+              trimmedCommand = lib.strings.trim command;
+              isSingleLine = !lib.hasInfix "\n" trimmedCommand;
+              addExec = config.type == "process" && isSingleLine;
             in
             pkgs.writeScript name ''
               #!${binary}
               ${lib.optionalString (!isStatus && isBash) "set -e"}
-              ${command}
+              ${lib.optionalString addExec "exec "}${command}
               ${lib.optionalString (config.exports != [] && !isStatus) "${inputs.config.task.package}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
             '';
       in

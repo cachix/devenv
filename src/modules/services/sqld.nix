@@ -27,9 +27,7 @@ in
 
   config = lib.mkIf cfg.enable {
     processes.sqld = {
-      exec = ''
-        exec ${pkgs.sqld}/bin/sqld --http-listen-addr 127.0.0.1:${toString cfg.port} ${qs cfg.extraArgs}
-      '';
+      exec = "${pkgs.sqld}/bin/sqld --http-listen-addr 127.0.0.1:${toString cfg.port} ${qs cfg.extraArgs}";
 
       process-compose = {
         readiness_probe = {
