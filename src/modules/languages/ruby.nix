@@ -62,7 +62,9 @@ in
       };
     };
 
-    docSupport = lib.mkEnableOption "enable documentation support for Ruby packages";
+    documentation = {
+      enable = lib.mkEnableOption "documentation support for Ruby packages";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -85,7 +87,7 @@ in
       let
         packageFromVersion = lib.mkIf (cfg.version != null) (
           nixpkgs-ruby.packages.${pkgs.stdenv.system}."ruby-${cfg.version}".override {
-            docSupport = cfg.docSupport;
+            docSupport = cfg.documentation.enable;
           }
         );
         packageFromVersionFile = lib.mkIf (cfg.versionFile != null) (
@@ -94,7 +96,7 @@ in
             system = pkgs.stdenv.system;
           }).override
             {
-              docSupport = cfg.docSupport;
+              docSupport = cfg.documentation.enable;
             }
         );
       in

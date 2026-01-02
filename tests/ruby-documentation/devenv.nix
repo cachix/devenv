@@ -3,7 +3,7 @@
   languages.ruby = {
     enable = true;
     version = "3.4.7";
-    docSupport = true;
+    documentation.enable = true;
   };
 
   enterTest = ''
