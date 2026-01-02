@@ -33,16 +33,17 @@
 //! operations like `dev_env()` without creating duplicate activities.
 
 use devenv_activity::{
-    Activity, ActivityLevel, ExpectedCategory, FetchKind, message, message_with_details,
-    set_expected,
+    Activity, ActivityLevel, ExpectedCategory, FetchKind, current_activity_id, message,
+    message_with_details, set_expected,
 };
-use devenv_eval_cache::Op;
-use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
 use tracing::{error, trace, warn};
+
+use crate::eval_op::{EvalOp, OpObserver};
+use crate::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 
 /// State for tracking the current evaluation activity.
 ///
@@ -73,6 +74,8 @@ pub struct NixLogBridge {
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
     /// State for the current evaluation activity (lazy creation + re-entrancy)
     eval_state: Mutex<EvalActivityState>,
+    /// Observers for file/env operations during eval (used by caching systems)
+    observers: Mutex<Vec<Arc<dyn OpObserver>>>,
 }
 
 /// Information about an active Nix activity
@@ -96,7 +99,60 @@ impl NixLogBridge {
                 pending_level: ActivityLevel::Info,
                 current_eval: None,
             }),
+            observers: Mutex::new(Vec::new()),
         })
+    }
+
+    /// Add an observer to receive operation notifications during evaluation.
+    ///
+    /// Observers are notified of file/env operations (EvalOp) as they are parsed
+    /// from Nix log messages. This is used by caching systems to track dependencies.
+    pub fn add_observer(&self, observer: Arc<dyn OpObserver>) {
+        if let Ok(mut guard) = self.observers.lock() {
+            guard.push(observer);
+        }
+    }
+
+    /// Clear all observers after evaluation completes.
+    ///
+    /// This should be called after evaluation to stop notifying observers
+    /// and allow them to be garbage collected.
+    pub fn clear_observers(&self) {
+        if let Ok(mut guard) = self.observers.lock() {
+            guard.clear();
+        }
+    }
+
+    /// Mark the evaluation activity as cached.
+    ///
+    /// Call this when the entire evaluation was served from cache
+    /// and no actual Nix evaluation was performed.
+    ///
+    /// Note: This only works if called within an active eval scope (after `begin_eval`).
+    /// For standalone cached evaluations without an eval scope, use `mark_eval_cached()`.
+    pub fn mark_cached(&self) {
+        let state = self.eval_state.lock().expect("eval_state mutex poisoned");
+
+        if let Some(ref eval) = state.current_eval {
+            eval.cached();
+        }
+    }
+
+    /// Create a standalone cached evaluation activity.
+    ///
+    /// Use this when a cached result is returned without going through the normal
+    /// eval session flow. This creates a short-lived activity that immediately
+    /// completes with cached status, making it visible in the TUI.
+    ///
+    /// The parent activity is automatically captured from the task-local activity stack.
+    pub fn mark_eval_cached(&self, name: &str, level: ActivityLevel) {
+        let parent_id = current_activity_id();
+        let activity = Activity::evaluate(name)
+            .parent(parent_id)
+            .level(level)
+            .start();
+        activity.cached();
+        // Activity completes on drop - will show as completed+cached in TUI
     }
 
     /// Begin a new evaluation scope.
@@ -229,12 +285,22 @@ impl NixLogBridge {
                 }
             }
             InternalLog::Msg { level, ref msg, .. } => {
-                // First check if this is a file evaluation message
-                if let Some(op) = Op::from_internal_log(&log)
-                    && let Op::EvaluatedFile { source } = op
-                {
-                    self.handle_file_evaluation(source);
-                    return;
+                // Extract any input operation from the log for caching
+                if let Some(op) = EvalOp::from_internal_log(&log) {
+                    // Notify all active observers
+                    if let Ok(guard) = self.observers.lock() {
+                        for observer in guard.iter() {
+                            if observer.is_active() {
+                                observer.on_op(op.clone());
+                            }
+                        }
+                    }
+
+                    // Handle file evaluation messages for UI
+                    if let EvalOp::EvaluatedFile { source } = op {
+                        self.handle_file_evaluation(source);
+                        return;
+                    }
                 }
 
                 // Filter out noise - fast local operations that aren't meaningful to users

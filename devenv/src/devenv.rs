@@ -252,6 +252,7 @@ impl Devenv {
                     global_options.clone(),
                     cachix_manager.clone(),
                     options.shutdown.clone(),
+                    Some(eval_cache_pool.clone()),
                     None,
                 )
                 .expect("Failed to initialize Nix backend"),
@@ -815,11 +816,8 @@ impl Devenv {
             cache_output: true,
             ..Default::default()
         };
-        let search = self.nix.search(name, Some(search_options)).await?;
-        let search_json: PackageResults =
-            serde_json::from_slice(&search.stdout).expect("Failed to parse search results");
-        let search_results = search_json
-            .0
+        let search_results = self.nix.search(name, Some(search_options)).await?;
+        let results = search_results
             .into_iter()
             .map(|(key, value)| DevenvPackageResult {
                 name: format!(
@@ -831,7 +829,7 @@ impl Devenv {
             })
             .collect::<Vec<_>>();
 
-        Ok(search_results)
+        Ok(results)
     }
 
     pub async fn has_processes(&self) -> Result<bool> {
@@ -1739,29 +1737,18 @@ impl Devenv {
             );
         }
 
-        use devenv_eval_cache::command::{FileInputDesc, Input};
         util::write_file_with_lock(
             self.devenv_dotfile.join("input-paths.txt"),
             env.inputs
                 .iter()
-                .filter_map(|input| match input {
-                    Input::File(FileInputDesc { path, .. }) => {
-                        // We include --option in the eval cache, but we don't want it
-                        // to trigger direnv reload on each invocation
-                        let cli_options_path = self.devenv_dotfile.join("cli-options.nix");
-                        if path == &cli_options_path {
-                            return None;
-                        }
-                        Some(path.to_string_lossy().to_string())
-                    }
-                    // TODO(sander): update direnvrc to handle env vars if possible
-                    _ => None,
-                })
+                .map(|path| path.to_string_lossy().to_string())
                 .collect::<Vec<_>>()
                 .join("\n"),
         )?;
 
-        Ok(DevEnv { output: env.stdout })
+        Ok(DevEnv {
+            output: env.bash_env,
+        })
     }
 }
 
@@ -1801,15 +1788,6 @@ fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
 
 pub struct DevEnv {
     output: Vec<u8>,
-}
-
-#[derive(Deserialize)]
-struct PackageResults(BTreeMap<String, PackageResult>);
-
-#[derive(Deserialize)]
-struct PackageResult {
-    version: String,
-    description: String,
 }
 
 #[derive(Deserialize)]

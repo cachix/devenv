@@ -5,9 +5,9 @@
 
 use async_trait::async_trait;
 use devenv_core::{
-    CachixManager, Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend, Options,
+    CachixManager, Config, DevEnvOutput, DevenvPaths, GlobalOptions, NixArgs, NixBackend, Options,
+    SearchResults,
 };
-use devenv_eval_cache::Output;
 use miette::{Result, bail};
 use snix_build::buildservice::{BuildService, DummyBuildService};
 use snix_castore::blobservice::from_addr as blob_from_addr;
@@ -126,7 +126,7 @@ impl NixBackend for SnixBackend {
         Ok(())
     }
 
-    async fn dev_env(&self, _json: bool, _gc_root: &Path) -> Result<Output> {
+    async fn dev_env(&self, _json: bool, _gc_root: &Path) -> Result<DevEnvOutput> {
         // TODO: This is a complex operation that requires implementing the equivalent
         // of `nix print-dev-env`. For now, we'll return a placeholder error.
         bail!(
@@ -174,7 +174,7 @@ impl NixBackend for SnixBackend {
         bail!("Flake metadata is not yet implemented for Snix backend")
     }
 
-    async fn search(&self, _name: &str, _options: Option<Options>) -> Result<Output> {
+    async fn search(&self, _name: &str, _options: Option<Options>) -> Result<SearchResults> {
         // TODO: Implement package search functionality
         bail!("Package search is not yet implemented for Snix backend")
     }
