@@ -47,63 +47,113 @@ jobs:
           devenv_path=$(nix build -L --print-out-paths .#devenv)
           echo "path=$devenv_path" >> $GITHUB_OUTPUT
 
-      # Enable core dumps
-      - name: Setup core dumps
+      # Check current core dump settings (read-only)
+      - name: Check core dump settings
         run: |
-          ulimit -c unlimited
-          sudo mkdir -p /tmp/cores
-          sudo chmod 777 /tmp/cores
-          echo '/tmp/cores/core.%e.%p' | sudo tee /proc/sys/kernel/core_pattern
+          echo "=== Current core pattern ==="
+          cat /proc/sys/kernel/core_pattern || true
+          echo "=== ulimit ==="
+          ulimit -a || true
 
       # Get backtrace with GDB on crash
       - name: Test with GDB backtrace
         continue-on-error: true
         env:
-          RUST_BACKTRACE: 1
+          RUST_BACKTRACE: full
         run: |
           echo "=== Running with GDB to get backtrace ==="
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- bash -c '
-            # Build test binary
-            cargo test -p devenv --features integration-tests test_fetch_packages_live --no-run 2>&1 | tail -5
+            # Build test binary with debug info
+            cargo test -p devenv --features integration-tests test_fetch_packages_live --no-run 2>&1 | tail -10
 
             # Find test binary
             TEST_BIN=$(find target/debug/deps -name "devenv-*" -type f -executable ! -name "*.d" | head -1)
             echo "Test binary: $TEST_BIN"
+            ls -la "$TEST_BIN"
 
-            # Run under GDB
+            # Run under GDB - catch SIGSEGV/SIGABRT
             gdb -batch \
               -ex "set confirm off" \
+              -ex "handle SIGSEGV stop print" \
+              -ex "handle SIGABRT stop print" \
               -ex "run test_fetch_packages_live --nocapture" \
               -ex "bt full" \
               -ex "info registers" \
               -ex "info threads" \
-              -ex "thread apply all bt" \
+              -ex "thread apply all bt full" \
+              -ex "info sharedlibrary" \
               "$TEST_BIN" 2>&1 || true
           '
 
-      # Try with different GC_NPROCS values
+      # Run baseline test (expected to crash)
+      - name: Baseline test (expected to crash)
+        id: baseline
+        continue-on-error: true
+        env:
+          RUST_BACKTRACE: full
+        run: |
+          echo "=== Baseline (no GC env vars) ==="
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+            cargo test -p devenv --features integration-tests test_fetch_packages_live -- --nocapture 2>&1
+          echo "EXIT CODE: $?"
+
+      # Test with GC debugging
+      - name: Test with GC_PRINT_STATS
+        id: gc_stats
+        continue-on-error: true
+        env:
+          GC_PRINT_STATS: 1
+          GC_PRINT_VERBOSE_STATS: 1
+          RUST_BACKTRACE: full
+        run: |
+          echo "=== With GC_PRINT_STATS ==="
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+            cargo test -p devenv --features integration-tests test_fetch_packages_live -- --nocapture 2>&1 || echo "EXIT CODE: $?"
+
+      # Try with single GC marker thread (should fix the crash)
+      - name: Test with GC_MARKERS=1
+        id: markers1
+        continue-on-error: true
+        env:
+          GC_MARKERS: 1
+          RUST_BACKTRACE: full
+        run: |
+          echo "=== With GC_MARKERS=1 (single marker thread) ==="
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+            cargo test -p devenv --features integration-tests test_fetch_packages_live -- --nocapture 2>&1 || echo "EXIT CODE: $?"
+
+      # Try with GC disabled entirely
+      - name: Test with GC_DONT_GC=1
+        id: no_gc
+        continue-on-error: true
+        env:
+          GC_DONT_GC: 1
+          RUST_BACKTRACE: full
+        run: |
+          echo "=== With GC_DONT_GC=1 (GC disabled) ==="
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+            cargo test -p devenv --features integration-tests test_fetch_packages_live -- --nocapture 2>&1 || echo "EXIT CODE: $?"
+
+      # Try with GC_NPROCS=1
       - name: Test with GC_NPROCS=1
         id: nprocs1
         continue-on-error: true
         env:
           GC_NPROCS: 1
+          RUST_BACKTRACE: full
         run: |
           echo "=== With GC_NPROCS=1 ==="
-          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
-            cargo test -p devenv --features integration-tests test_fetch_packages_live -- --nocapture 2>&1 || echo "EXIT CODE: $?"
-
-      - name: Test with GC_MARKERS=2
-        id: markers2
-        continue-on-error: true
-        env:
-          GC_MARKERS: 2
-        run: |
-          echo "=== With GC_MARKERS=2 ==="
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
             cargo test -p devenv --features integration-tests test_fetch_packages_live -- --nocapture 2>&1 || echo "EXIT CODE: $?"
 
       - name: Summary
         run: |
           echo "=== Results ==="
-          echo "GC_NPROCS=1: ${{ steps.nprocs1.outcome }}"
-          echo "GC_MARKERS=2: ${{ steps.markers2.outcome }}"
+          echo "Baseline:      ${{ steps.baseline.outcome }}"
+          echo "GC_PRINT_STATS: ${{ steps.gc_stats.outcome }}"
+          echo "GC_MARKERS=1:  ${{ steps.markers1.outcome }}"
+          echo "GC_DONT_GC=1:  ${{ steps.no_gc.outcome }}"
+          echo "GC_NPROCS=1:   ${{ steps.nprocs1.outcome }}"
+          echo ""
+          echo "If baseline=failure but GC_MARKERS=1=success, the bug is in parallel GC marking"
+          echo "If baseline=failure but GC_DONT_GC=1=success, the bug is GC-related"
