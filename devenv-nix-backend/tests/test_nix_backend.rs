@@ -195,6 +195,7 @@ fn setup_isolated_test_env(
         cachix_manager,
         shutdown,
         None,
+        None,
     )
     .expect("Failed to create NixRustBackend");
 
@@ -989,6 +990,7 @@ async fn test_eval_nonexistent_attribute() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        None,
     )
     .expect("Failed to create backend");
     backend
@@ -1212,6 +1214,7 @@ async fn test_backend_creation_with_offline_mode() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        None,
     );
 
     // TODO: Verify backend was created with offline mode
@@ -1235,6 +1238,7 @@ async fn test_backend_with_system_override() {
         global_options,
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     );
 
@@ -1260,6 +1264,7 @@ async fn test_backend_with_impure_mode() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        None,
     );
 
     // TODO: Verify impure mode is enabled
@@ -1284,6 +1289,7 @@ async fn test_backend_with_custom_nix_options() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        None,
     );
 
     // TODO: Verify custom nix options are applied
@@ -1307,6 +1313,7 @@ async fn test_backend_with_nix_debugger_enabled() {
         global_options,
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     );
 
@@ -1333,6 +1340,7 @@ async fn test_update_with_invalid_override_input() {
         global_options,
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -1377,6 +1385,7 @@ async fn test_eval_empty_attributes_array() {
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -1462,6 +1471,7 @@ async fn test_dev_env_bash_output_format() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        None,
     )
     .expect("Failed to create backend");
     backend
@@ -1494,6 +1504,7 @@ async fn test_dev_env_multiple_calls_same_gc_root() {
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -1528,6 +1539,7 @@ async fn test_dev_env_gc_root_already_exists_as_file() {
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -1622,6 +1634,7 @@ async fn test_update_lock_file_already_exists() {
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -2643,6 +2656,7 @@ async fn test_backend_reuse_across_operations() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        None,
     )
     .expect("Failed to create backend");
 
@@ -2685,6 +2699,7 @@ inputs:
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -2766,6 +2781,7 @@ inputs:
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -2893,6 +2909,7 @@ async fn test_eval_state_mutex_under_concurrent_eval() {
             GlobalOptions::default(),
             cachix_manager,
             Shutdown::new(),
+            None,
             None,
         )
         .expect("Failed to create backend"),
@@ -3071,6 +3088,7 @@ inputs:
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), Some(mock.socket_path().to_path_buf())),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");

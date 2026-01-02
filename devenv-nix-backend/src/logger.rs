@@ -30,11 +30,11 @@ use std::sync::Arc;
 /// Result of setting up the Nix logger.
 ///
 /// Contains both the logger (which must be kept alive) and the bridge
-/// (which is used to track eval activities).
+/// (which is used to track eval activities and input collection for caching).
 pub struct NixLoggerSetup {
     /// The activity logger - must be kept alive for the duration of Nix operations
     pub logger: nix_bindings_expr::logger::ActivityLogger,
-    /// The bridge for tracking eval activities
+    /// The bridge for tracking eval activities and input collection
     pub bridge: Arc<NixLogBridge>,
 }
 
@@ -44,7 +44,8 @@ pub struct NixLoggerSetup {
 /// via NixLogBridge. Returns both the logger and the bridge.
 ///
 /// The logger must be kept alive for the duration of Nix operations.
-/// The bridge is used to track eval activities dynamically via `begin_eval`/`end_eval`.
+/// The bridge is used to track eval activities dynamically via `begin_eval`/`end_eval`
+/// and to collect input operations for caching via observers.
 pub fn setup_nix_logger() -> Result<NixLoggerSetup> {
     let bridge = NixLogBridge::new();
 
