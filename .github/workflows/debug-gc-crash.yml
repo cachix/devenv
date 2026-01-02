@@ -1,0 +1,119 @@
+name: "Debug GC Crash"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  debug-gc-crash:
+    name: Debug GC crash (x86_64-linux)
+    runs-on: ["self-hosted", "linux", "X64"]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Cachix
+        uses: cachix/cachix-action@v16
+        with:
+          name: devenv
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Capture environment info
+        run: |
+          echo "=== System Info ==="
+          uname -a
+          cat /proc/version
+          echo "=== Memory Info ==="
+          free -h
+          cat /proc/meminfo | head -30
+          echo "=== VM Settings ==="
+          cat /proc/sys/vm/overcommit_memory || true
+          cat /proc/sys/vm/overcommit_ratio || true
+          cat /proc/sys/kernel/randomize_va_space || true
+          echo "=== Transparent Huge Pages ==="
+          cat /sys/kernel/mm/transparent_hugepage/enabled || true
+          echo "=== CPU Info ==="
+          cat /proc/cpuinfo | grep -E "model name|flags" | head -4
+
+      - name: Build devenv
+        id: build-devenv
+        run: |
+          devenv_path=$(nix build -L --print-out-paths .#devenv)
+          echo "path=$devenv_path" >> $GITHUB_OUTPUT
+
+      - name: Test with GC debugging (baseline)
+        id: baseline
+        continue-on-error: true
+        env:
+          GC_PRINT_STATS: 1
+        run: |
+          echo "=== Running baseline test ==="
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+            cargo test -p devenv --features integration-tests test_fetch_options_live -- --nocapture
+
+      - name: Test with GC_DONT_GC=1 (disable GC)
+        id: no-gc
+        continue-on-error: true
+        env:
+          GC_DONT_GC: 1
+        run: |
+          echo "=== Running with GC disabled ==="
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+            cargo test -p devenv --features integration-tests test_fetch_options_live -- --nocapture
+
+      - name: Test with single GC marker
+        id: single-marker
+        continue-on-error: true
+        env:
+          GC_MARKERS: 1
+        run: |
+          echo "=== Running with single GC marker ==="
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+            cargo test -p devenv --features integration-tests test_fetch_options_live -- --nocapture
+
+      - name: Test with large initial heap
+        id: large-heap
+        continue-on-error: true
+        env:
+          GC_INITIAL_HEAP_SIZE: 1073741824
+        run: |
+          echo "=== Running with 1GB initial heap ==="
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+            cargo test -p devenv --features integration-tests test_fetch_options_live -- --nocapture
+
+      - name: Test with MALLOC debugging
+        id: malloc-debug
+        continue-on-error: true
+        env:
+          MALLOC_CHECK_: 3
+        run: |
+          echo "=== Running with MALLOC_CHECK_=3 ==="
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+            cargo test -p devenv --features integration-tests test_fetch_options_live -- --nocapture
+
+      - name: Run test 10 times to check flakiness
+        continue-on-error: true
+        run: |
+          echo "=== Running test 10 times ==="
+          for i in {1..10}; do
+            echo "--- Run $i ---"
+            ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+              cargo test -p devenv --features integration-tests test_fetch_options_live 2>&1 || echo "FAILED at run $i"
+          done
+
+      - name: Summary
+        run: |
+          echo "=== Test Results Summary ==="
+          echo "Baseline: ${{ steps.baseline.outcome }}"
+          echo "GC_DONT_GC=1: ${{ steps.no-gc.outcome }}"
+          echo "GC_MARKERS=1: ${{ steps.single-marker.outcome }}"
+          echo "Large heap: ${{ steps.large-heap.outcome }}"
+          echo "MALLOC debug: ${{ steps.malloc-debug.outcome }}"
