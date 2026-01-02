@@ -37,7 +37,6 @@ use tokio::process;
 use tokio::sync::{OnceCell, RwLock, Semaphore};
 use tracing::{Instrument, debug, info, instrument, trace, warn};
 
-
 // templates
 const REQUIRED_FILES: [&str; 4] = ["devenv.nix", "devenv.yaml", ".envrc", ".gitignore"];
 const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
@@ -529,13 +528,19 @@ impl Devenv {
         self.nix.update(input_name).in_activity(&activity).await?;
 
         // Assemble is required for changelog.show_new() which builds changelog.json
-        self.assemble(false).await?;
-
-        // Show new changelogs (if any)
-        let changelog = crate::changelog::Changelog::new(&**self.nix, &self.paths());
-        if let Err(e) = changelog.show_new().await {
-            // Don't fail the update if changelogs fail to load
-            tracing::warn!("Failed to show changelogs: {}", e);
+        // Allow assemble to fail gracefully - changelogs are informational only
+        match self.assemble(false).await {
+            Ok(_) => {
+                // Show new changelogs (if any)
+                let changelog = crate::changelog::Changelog::new(&**self.nix, &self.paths());
+                if let Err(e) = changelog.show_new().await {
+                    // Don't fail the update if changelogs fail to load
+                    tracing::warn!("Failed to show changelogs: {}", e);
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to assemble environment, skipping changelog: {}", e);
+            }
         }
 
         Ok(())
