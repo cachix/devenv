@@ -190,6 +190,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    processes.caddy.exec = ''XDG_DATA_HOME="${cfg.dataDir}/data" XDG_CONFIG_HOME="${cfg.dataDir}/config" ${cfg.package}/bin/${cfg.package.meta.mainProgram} run ${optionalString cfg.resume "--resume"} --config ${configJSON}'';
+    processes.caddy.exec = ''XDG_DATA_HOME="${cfg.dataDir}/data" XDG_CONFIG_HOME="${cfg.dataDir}/config" exec ${cfg.package}/bin/${cfg.package.meta.mainProgram} run ${optionalString cfg.resume "--resume"} --config ${configJSON}'';
   };
 }
