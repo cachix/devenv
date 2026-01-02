@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   domainList = lib.concatStringsSep " " config.certificates;
@@ -15,6 +20,18 @@ in
         "*.example.com"
       ];
     };
+    certFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Custom certificate file name, uses mkcert default if unset";
+      example = "mycert.pem";
+    };
+    keyFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Custom key file name, uses mkcert default if unset";
+      example = "mykey.pem";
+    };
   };
 
   config = lib.mkIf (domainList != "") {
@@ -30,7 +47,10 @@ in
 
         pushd ${config.env.DEVENV_STATE}/mkcert > /dev/null
 
-        PATH="${pkgs.nssTools}/bin:$PATH" ${pkgs.mkcert}/bin/mkcert ${domainList} 2> /dev/null
+        PATH="${pkgs.nssTools}/bin:$PATH" ${pkgs.mkcert}/bin/mkcert \
+          ${lib.optionalString (config.keyFile != null) "-key-file ${config.keyFile}"} \
+          ${lib.optionalString (config.certFile != null) "-cert-file ${config.certFile}"} \
+          ${domainList} 2> /dev/null
 
         popd > /dev/null
       fi

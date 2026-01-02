@@ -992,6 +992,32 @@ null or string
 
 
 
+## certFile
+
+
+
+Custom certificate file name, uses mkcert default if unset
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "mycert.pem" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix)
+
+
+
 ## certificates
 
 
@@ -2422,8 +2448,6 @@ null or string
 
 ## containers.\<name>.startupCommand
 
-
-
 Command to run in the container.
 
 Can be a string, a package, or a list of strings for individual arguments.
@@ -2446,6 +2470,8 @@ null or string or package or list of string
 
 
 ## containers.\<name>.version
+
+
 
 Version/tag of the container.
 
@@ -13387,6 +13413,32 @@ list of package
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
+## keyFile
+
+
+
+Custom key file name, uses mkcert default if unset
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "mykey.pem" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix)
 
 
 
