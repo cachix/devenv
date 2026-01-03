@@ -55,59 +55,44 @@ jobs:
           echo "=== ulimit ==="
           ulimit -a || true
 
-      # Get backtrace with GDB on crash - run multiple times
-      - name: Test with GDB backtrace (20 iterations)
+      # Run nextest under GDB wrapper
+      - name: Test nextest with GDB wrapper
         continue-on-error: true
         env:
           RUST_BACKTRACE: full
         run: |
-          echo "=== Running with GDB to get backtrace (20 iterations) ==="
+          echo "=== Running nextest with GDB wrapper ==="
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- bash -c '
             # Build all test binaries
             cargo test --all-features --no-run 2>&1 | tail -10
 
-            # Find test binaries
-            DEVENV_LIB=$(cargo test -p devenv --lib --features integration-tests --no-run --message-format=json 2>/dev/null | jq -r "select(.executable != null) | .executable" | grep "devenv-" | head -1)
-            BACKEND_LIB=$(cargo test -p devenv-nix-backend --lib --no-run --message-format=json 2>/dev/null | jq -r "select(.executable != null) | .executable" | head -1)
+            # Create a GDB wrapper script
+            cat > /tmp/gdb-wrapper.sh << '\''WRAPPER'\''
+#!/bin/bash
+exec gdb -batch \
+  -ex "set confirm off" \
+  -ex "handle SIGSEGV stop print nopass" \
+  -ex "handle SIGABRT stop print nopass" \
+  -ex "run" \
+  -ex "bt full" \
+  -ex "info registers" \
+  -ex "info threads" \
+  -ex "thread apply all bt full" \
+  --args "$@"
+WRAPPER
+            chmod +x /tmp/gdb-wrapper.sh
 
-            echo "Test binaries:"
-            echo "  devenv lib: $DEVENV_LIB"
-            echo "  backend lib: $BACKEND_LIB"
+            # Run nextest with the wrapper - target_runner makes nextest run each test through gdb
+            CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER=/tmp/gdb-wrapper.sh \
+              cargo nextest run --all-features -j 1 2>&1 | tee /tmp/nextest_gdb.log || true
 
-            # Run tests in a loop under GDB
-            for i in $(seq 1 20); do
-              echo "=== Iteration $i/20 ==="
-
-              # Alternate between different tests that have crashed
-              if [ $((i % 2)) -eq 0 ]; then
-                TEST_BIN="$DEVENV_LIB"
-                TEST_NAME="test_fetch_packages_live"
-              else
-                TEST_BIN="$BACKEND_LIB"
-                TEST_NAME="test_full_workflow"
-              fi
-
-              echo "Running $TEST_NAME..."
-
-              gdb -batch \
-                -ex "set confirm off" \
-                -ex "handle SIGSEGV stop print" \
-                -ex "handle SIGABRT stop print" \
-                -ex "run $TEST_NAME --nocapture" \
-                -ex "bt full" \
-                -ex "info registers" \
-                -ex "info threads" \
-                -ex "thread apply all bt full" \
-                "$TEST_BIN" 2>&1 | tee /tmp/gdb_output_$i.txt
-
-              # Check if we got a signal
-              if grep -q "Program received signal" /tmp/gdb_output_$i.txt; then
-                echo "!!! CRASH DETECTED on iteration $i !!!"
-                cat /tmp/gdb_output_$i.txt
-                exit 0
-              fi
-            done
-            echo "No crash after 20 iterations"
+            # Check for crashes
+            if grep -q "Program received signal" /tmp/nextest_gdb.log; then
+              echo "!!! CRASH DETECTED !!!"
+              grep -A 100 "Program received signal" /tmp/nextest_gdb.log | head -120
+            else
+              echo "No crash detected in nextest run"
+            fi
           '
 
       # Run full test suite like CI (with nextest)
