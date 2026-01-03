@@ -64,10 +64,18 @@ jobs:
           echo "=== Running with GDB to get backtrace ==="
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- bash -c '
             # Build test binary with debug info
-            cargo test -p devenv --features integration-tests test_fetch_packages_live --no-run 2>&1 | tail -10
+            cargo test -p devenv --lib --features integration-tests test_fetch_packages_live --no-run 2>&1 | tail -10
 
-            # Find test binary
-            TEST_BIN=$(find target/debug/deps -name "devenv-*" -type f -executable ! -name "*.d" | head -1)
+            # Find the lib test binary (the one with mcp::tests::test_fetch_packages_live)
+            # Use cargo test message-format to get exact path
+            TEST_BIN=$(cargo test -p devenv --lib --features integration-tests --no-run --message-format=json 2>/dev/null | jq -r "select(.executable != null) | .executable" | grep "devenv-" | head -1)
+
+            if [ -z "$TEST_BIN" ]; then
+              echo "Could not find test binary via cargo"
+              # Fallback: find the lib binary (usually has shorter hash in name)
+              TEST_BIN=$(find target/debug/deps -name "devenv-*" -type f -executable ! -name "*.d" -newer target/debug/deps | head -1)
+            fi
+
             echo "Test binary: $TEST_BIN"
             ls -la "$TEST_BIN"
 
