@@ -55,38 +55,35 @@ jobs:
           echo "=== ulimit ==="
           ulimit -a || true
 
+      # Create GDB wrapper script
+      - name: Create GDB wrapper
+        run: |
+          cat > /tmp/gdb-wrapper.sh << 'EOF'
+          #!/bin/bash
+          exec gdb -batch \
+            -ex "set confirm off" \
+            -ex "handle SIGSEGV stop print nopass" \
+            -ex "handle SIGABRT stop print nopass" \
+            -ex "run" \
+            -ex "bt full" \
+            -ex "info registers" \
+            -ex "info threads" \
+            -ex "thread apply all bt full" \
+            --args "$@"
+          EOF
+          chmod +x /tmp/gdb-wrapper.sh
+
       # Run nextest under GDB wrapper
       - name: Test nextest with GDB wrapper
         continue-on-error: true
         env:
           RUST_BACKTRACE: full
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER: /tmp/gdb-wrapper.sh
         run: |
           echo "=== Running nextest with GDB wrapper ==="
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- bash -c '
-            # Build all test binaries
             cargo test --all-features --no-run 2>&1 | tail -10
-
-            # Create a GDB wrapper script
-            cat > /tmp/gdb-wrapper.sh << '\''WRAPPER'\''
-#!/bin/bash
-exec gdb -batch \
-  -ex "set confirm off" \
-  -ex "handle SIGSEGV stop print nopass" \
-  -ex "handle SIGABRT stop print nopass" \
-  -ex "run" \
-  -ex "bt full" \
-  -ex "info registers" \
-  -ex "info threads" \
-  -ex "thread apply all bt full" \
-  --args "$@"
-WRAPPER
-            chmod +x /tmp/gdb-wrapper.sh
-
-            # Run nextest with the wrapper - target_runner makes nextest run each test through gdb
-            CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER=/tmp/gdb-wrapper.sh \
-              cargo nextest run --all-features -j 1 2>&1 | tee /tmp/nextest_gdb.log || true
-
-            # Check for crashes
+            cargo nextest run --all-features -j 1 2>&1 | tee /tmp/nextest_gdb.log || true
             if grep -q "Program received signal" /tmp/nextest_gdb.log; then
               echo "!!! CRASH DETECTED !!!"
               grep -A 100 "Program received signal" /tmp/nextest_gdb.log | head -120
