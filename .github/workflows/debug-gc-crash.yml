@@ -55,42 +55,59 @@ jobs:
           echo "=== ulimit ==="
           ulimit -a || true
 
-      # Get backtrace with GDB on crash
-      - name: Test with GDB backtrace
+      # Get backtrace with GDB on crash - run multiple times
+      - name: Test with GDB backtrace (20 iterations)
         continue-on-error: true
         env:
           RUST_BACKTRACE: full
         run: |
-          echo "=== Running with GDB to get backtrace ==="
+          echo "=== Running with GDB to get backtrace (20 iterations) ==="
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- bash -c '
-            # Build test binary with debug info
-            cargo test -p devenv --lib --features integration-tests test_fetch_packages_live --no-run 2>&1 | tail -10
+            # Build all test binaries
+            cargo test --all-features --no-run 2>&1 | tail -10
 
-            # Find the lib test binary (the one with mcp::tests::test_fetch_packages_live)
-            # Use cargo test message-format to get exact path
-            TEST_BIN=$(cargo test -p devenv --lib --features integration-tests --no-run --message-format=json 2>/dev/null | jq -r "select(.executable != null) | .executable" | grep "devenv-" | head -1)
+            # Find test binaries
+            DEVENV_LIB=$(cargo test -p devenv --lib --features integration-tests --no-run --message-format=json 2>/dev/null | jq -r "select(.executable != null) | .executable" | grep "devenv-" | head -1)
+            BACKEND_LIB=$(cargo test -p devenv-nix-backend --lib --no-run --message-format=json 2>/dev/null | jq -r "select(.executable != null) | .executable" | head -1)
 
-            if [ -z "$TEST_BIN" ]; then
-              echo "Could not find test binary via cargo"
-              # Fallback: find the lib binary (usually has shorter hash in name)
-              TEST_BIN=$(find target/debug/deps -name "devenv-*" -type f -executable ! -name "*.d" -newer target/debug/deps | head -1)
-            fi
+            echo "Test binaries:"
+            echo "  devenv lib: $DEVENV_LIB"
+            echo "  backend lib: $BACKEND_LIB"
 
-            echo "Test binary: $TEST_BIN"
-            ls -la "$TEST_BIN"
+            # Run tests in a loop under GDB
+            for i in $(seq 1 20); do
+              echo "=== Iteration $i/20 ==="
 
-            # Run under GDB - catch SIGSEGV/SIGABRT
-            gdb -batch \
-              -ex "set confirm off" \
-              -ex "handle SIGSEGV stop print" \
-              -ex "handle SIGABRT stop print" \
-              -ex "run test_fetch_packages_live --nocapture" \
-              -ex "bt full" \
-              -ex "info registers" \
-              -ex "info threads" \
-              -ex "thread apply all bt full" \
-              -ex "info sharedlibrary" \
-              "$TEST_BIN" 2>&1 || true
+              # Alternate between different tests that have crashed
+              if [ $((i % 2)) -eq 0 ]; then
+                TEST_BIN="$DEVENV_LIB"
+                TEST_NAME="test_fetch_packages_live"
+              else
+                TEST_BIN="$BACKEND_LIB"
+                TEST_NAME="test_full_workflow"
+              fi
+
+              echo "Running $TEST_NAME..."
+
+              gdb -batch \
+                -ex "set confirm off" \
+                -ex "handle SIGSEGV stop print" \
+                -ex "handle SIGABRT stop print" \
+                -ex "run $TEST_NAME --nocapture" \
+                -ex "bt full" \
+                -ex "info registers" \
+                -ex "info threads" \
+                -ex "thread apply all bt full" \
+                "$TEST_BIN" 2>&1 | tee /tmp/gdb_output_$i.txt
+
+              # Check if we got a signal
+              if grep -q "Program received signal" /tmp/gdb_output_$i.txt; then
+                echo "!!! CRASH DETECTED on iteration $i !!!"
+                cat /tmp/gdb_output_$i.txt
+                exit 0
+              fi
+            done
+            echo "No crash after 20 iterations"
           '
 
       # Run full test suite like CI (with nextest)
