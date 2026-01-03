@@ -85,25 +85,21 @@ jobs:
               "$TEST_BIN" 2>&1 || true
           '
 
-      # Run baseline test multiple times (crash is intermittent)
-      - name: Baseline test - multiple runs
+      # Run full test suite like CI (with nextest)
+      - name: Full test suite (nextest)
         id: baseline
         continue-on-error: true
         env:
           RUST_BACKTRACE: full
         run: |
-          echo "=== Baseline (no GC env vars) - multiple runs ==="
-          for i in 1 2 3 4 5; do
-            echo "--- Run $i ---"
-            ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
-              cargo test -p devenv --features integration-tests test_fetch_packages_live -- --nocapture 2>&1 || {
-                echo "CRASHED on run $i with exit code $?"
-                exit 1
-              }
-          done
-          echo "All 5 runs passed"
+          echo "=== Full test suite with nextest (like CI) ==="
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+            cargo nextest run --all-features -j 1 2>&1 || {
+              echo "CRASHED with exit code $?"
+              exit 1
+            }
 
       - name: Summary
         run: |
           echo "=== Results ==="
-          echo "Baseline (5 runs): ${{ steps.baseline.outcome }}"
+          echo "Full nextest suite: ${{ steps.baseline.outcome }}"
