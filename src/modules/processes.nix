@@ -159,6 +159,8 @@ in
             type = "process";
             exec = process.exec;
             cwd = process.cwd;
+            # Always show output for process tasks so process-compose can capture it
+            showOutput = true;
           };
         })
         config.processes;
