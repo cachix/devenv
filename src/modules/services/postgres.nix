@@ -420,7 +420,7 @@ in
     };
 
     processes.postgres = {
-      exec = "exec ${startScript}/bin/start-postgres";
+      exec = "${startScript}/bin/start-postgres";
 
       process-compose = {
         # SIGINT (= 2) for faster shutdown: https://www.postgresql.org/docs/current/server-shutdown.html
