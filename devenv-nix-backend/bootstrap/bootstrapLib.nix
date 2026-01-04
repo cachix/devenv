@@ -567,7 +567,7 @@ rec {
       optionsJSON = options.optionsJSON;
       info = config.info;
       ci = config.ciDerivation;
-      build = build options config;
+      build = build project.options config;
       devenv = {
         # Backwards compatibility: wrap config in devenv attribute for code expecting devenv.config.*
         config = config;

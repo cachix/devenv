@@ -1024,6 +1024,31 @@ impl Devenv {
         let activity = Activity::operation("Building").start();
         async move {
             self.assemble(false).await?;
+
+            fn flatten_object(prefix: &str, value: &serde_json::Value) -> Vec<String> {
+                match value {
+                    // Null values indicate unevaluable/missing attributes - skip them
+                    serde_json::Value::Null => vec![],
+                    // String values are store paths - these are buildable leaves
+                    serde_json::Value::String(_) => {
+                        vec![format!("devenv.config.{}", prefix)]
+                    }
+                    serde_json::Value::Object(obj) => {
+                        // If this object has outPath, it's a derivation - treat as leaf
+                        if obj.contains_key("outPath") {
+                            vec![format!("devenv.config.{}", prefix)]
+                        } else {
+                            // Recurse into nested objects
+                            obj.iter()
+                                .flat_map(|(k, v)| flatten_object(&format!("{prefix}.{k}"), v))
+                                .collect()
+                        }
+                    }
+                    // Other values (numbers, bools, arrays) shouldn't appear but skip them
+                    _ => vec![],
+                }
+            }
+
             let attributes: Vec<String> = if attributes.is_empty() {
                 // construct dotted names of all attributes that we need to build
                 let build_output = self.nix.eval(&["build"]).await?;
@@ -1032,24 +1057,34 @@ impl Devenv {
                     .as_object()
                     .ok_or_else(|| miette::miette!("Build output is not an object"))?
                     .iter()
-                    .flat_map(|(key, value)| {
-                        fn flatten_object(prefix: &str, value: &serde_json::Value) -> Vec<String> {
-                            match value {
-                                serde_json::Value::Object(obj) => obj
-                                    .iter()
-                                    .flat_map(|(k, v)| flatten_object(&format!("{prefix}.{k}"), v))
-                                    .collect(),
-                                _ => vec![format!("devenv.config.{}", prefix)],
-                            }
-                        }
-                        flatten_object(key, value)
-                    })
+                    .flat_map(|(key, value)| flatten_object(key, value))
                     .collect()
             } else {
-                attributes
-                    .iter()
-                    .map(|attr| format!("devenv.config.{attr}"))
-                    .collect()
+                // Evaluate each attribute to check if it needs flattening
+                let mut flattened = Vec::new();
+                for attr in attributes {
+                    // Try to get from build.{attr} first (for output types that need flattening)
+                    let eval_result = self.nix.eval(&[&format!("build.{attr}")]).await;
+                    match eval_result {
+                        Ok(eval_output) => {
+                            let value: serde_json::Value = serde_json::from_str(&eval_output)
+                                .map_err(|e| {
+                                    miette::miette!(
+                                        "Failed to parse eval output for {}: {}",
+                                        attr,
+                                        e
+                                    )
+                                })?;
+                            let flat = flatten_object(attr, &value);
+                            flattened.extend(flat);
+                        }
+                        Err(_) => {
+                            // Not in build, try as direct config attribute
+                            flattened.push(format!("devenv.config.{attr}"));
+                        }
+                    }
+                }
+                flattened
             };
             let paths = self
                 .nix

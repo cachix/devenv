@@ -1132,13 +1132,10 @@ impl NixBackend for NixRustBackend {
 
             // If it's a derivation (attrs with .outPath), get the outPath
             // Otherwise use the value as-is (might be a string already)
-            let build_value = eval_state
-                .require_attrs_select_opt(&value, "outPath")
-                .to_miette()
-                .wrap_err(format!(
-                    "Failed to check for outPath in attribute: {attr_path}",
-                ))?
-                .unwrap_or_else(|| value.clone());
+            let build_value = match eval_state.require_attrs_select_opt(&value, "outPath") {
+                Ok(Some(out_path)) => out_path,
+                Ok(None) | Err(_) => value.clone(),
+            };
 
             // PHASE 2: Build - Realize the value, which triggers the actual build
             // realise_string uses the cached evaluation from above
