@@ -55,35 +55,37 @@ jobs:
           echo "=== ulimit ==="
           ulimit -a || true
 
-      # Run tests under rr to catch the crash
-      - name: Run tests under rr
+      # Run tests many times to catch crash
+      - name: Run tests (50 iterations)
         continue-on-error: true
         env:
           RUST_BACKTRACE: full
+          # Boehm GC debug options
+          GC_PRINT_STATS: 1
+          GC_PRINT_VERBOSE_STATS: 1
         run: |
-          echo "=== Running tests under rr ==="
-          # rr needs perf_event_paranoid <= 1
-          perf_paranoid=$(cat /proc/sys/kernel/perf_event_paranoid)
-          echo "perf_event_paranoid: $perf_paranoid"
-          if [ "$perf_paranoid" -gt 1 ]; then
-            echo "WARNING: perf_event_paranoid > 1, rr may not work"
-          fi
+          echo "=== Running tests 50 times to catch crash ==="
 
           # Build test binaries first
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo test --all-features --no-run 2>&1 | tail -10
 
-          for i in $(seq 1 20); do
+          for i in $(seq 1 50); do
             echo "=== Iteration $i ==="
             ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
-              nix run nixpkgs#rr -- record --chaos cargo nextest run --all-features -j 1 2>&1 || {
+              cargo nextest run --all-features -j 1 2>&1 || {
                 exit_code=$?
                 echo "!!! CRASH on iteration $i with exit code $exit_code !!!"
-                echo "=== Replaying crash with backtrace ==="
-                nix run nixpkgs#rr -- replay -a -ex "bt full" -ex "info threads" -ex "thread apply all bt full" -ex "quit"
-                exit 0
+                echo "Exit code: $exit_code"
+                # Signal 11 = SIGSEGV, Signal 6 = SIGABRT
+                if [ $exit_code -gt 128 ]; then
+                  signal=$((exit_code - 128))
+                  echo "Killed by signal: $signal"
+                fi
+                exit 1
               }
+            echo "Iteration $i passed"
           done
-          echo "No crash after 20 iterations"
+          echo "No crash after 50 iterations"
 
       - name: Summary
         run: |
