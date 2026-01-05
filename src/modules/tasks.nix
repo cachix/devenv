@@ -233,6 +233,8 @@ in
         description = "Runs when entering the shell";
         exec = ''
           mkdir -p "$DEVENV_DOTFILE" || { echo "Failed to create $DEVENV_DOTFILE"; exit 1; }
+          # Remove first in case file is owned by another user (chmod would fail otherwise)
+          rm -f "$DEVENV_DOTFILE/load-exports" 2>/dev/null || true
           echo "$DEVENV_TASK_ENV" > "$DEVENV_DOTFILE/load-exports"
           chmod +x "$DEVENV_DOTFILE/load-exports"
         '';
