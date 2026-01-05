@@ -361,6 +361,40 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// Macro for async tests that properly registers tokio worker threads with Boehm GC.
+    /// This matches production runtime behavior where all threads accessing Nix FFI are registered.
+    macro_rules! gc_test {
+        (#[cfg(feature = $feature:literal)] async fn $name:ident() $body:block) => {
+            #[test]
+            #[cfg(feature = $feature)]
+            fn $name() {
+                tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .on_thread_start(|| {
+                        use devenv_nix_backend::gc_register_current_thread;
+                        let _ = gc_register_current_thread();
+                    })
+                    .build()
+                    .expect("Failed to create test runtime")
+                    .block_on(async $body)
+            }
+        };
+        (async fn $name:ident() $body:block) => {
+            #[test]
+            fn $name() {
+                tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .on_thread_start(|| {
+                        use devenv_nix_backend::gc_register_current_thread;
+                        let _ = gc_register_current_thread();
+                    })
+                    .build()
+                    .expect("Failed to create test runtime")
+                    .block_on(async $body)
+            }
+        };
+    }
+
     #[cfg(feature = "integration-tests")]
     async fn create_test_devenv_dir() -> std::io::Result<tempfile::TempDir> {
         let temp_dir = tempfile::tempdir()?;
@@ -423,25 +457,27 @@ mod tests {
         assert_eq!(parse_type_to_value("unknown"), json!(null));
     }
 
-    #[tokio::test]
-    async fn test_list_packages_request_deserialization() {
-        let json = json!({
-            "search": "python"
-        });
+    gc_test!(
+        async fn test_list_packages_request_deserialization() {
+            let json = json!({
+                "search": "python"
+            });
 
-        let request: ListPackagesRequest = serde_json::from_value(json).unwrap();
-        assert_eq!(request.search, Some("python".to_string()));
-    }
+            let request: ListPackagesRequest = serde_json::from_value(json).unwrap();
+            assert_eq!(request.search, Some("python".to_string()));
+        }
+    );
 
-    #[tokio::test]
-    async fn test_list_options_request_deserialization() {
-        let json = json!({
-            "prefix": "languages"
-        });
+    gc_test!(
+        async fn test_list_options_request_deserialization() {
+            let json = json!({
+                "prefix": "languages"
+            });
 
-        let request: ListOptionsRequest = serde_json::from_value(json).unwrap();
-        assert_eq!(request.prefix, Some("languages".to_string()));
-    }
+            let request: ListOptionsRequest = serde_json::from_value(json).unwrap();
+            assert_eq!(request.prefix, Some("languages".to_string()));
+        }
+    );
 
     // Integration tests that use live Nix data
     // Note: These tests require:
@@ -449,124 +485,128 @@ mod tests {
     // 2. Being run from a devenv project root (with devenv.nix) for options test
     // 3. Network access to fetch packages
 
-    #[tokio::test]
-    #[cfg(feature = "integration-tests")]
-    async fn test_fetch_packages_live() {
-        // Create temporary directory with test devenv configuration
-        let temp_dir = create_test_devenv_dir().await.unwrap();
+    gc_test!(
+        #[cfg(feature = "integration-tests")]
+        async fn test_fetch_packages_live() {
+            // Create temporary directory with test devenv configuration
+            let temp_dir = create_test_devenv_dir().await.unwrap();
 
-        let config = Config::default();
-        let server = DevenvMcpServer::new_with_root(config, Some(temp_dir.path().to_path_buf()));
+            let config = Config::default();
+            let server =
+                DevenvMcpServer::new_with_root(config, Some(temp_dir.path().to_path_buf()));
 
-        let packages = server.fetch_packages().await;
+            let packages = server.fetch_packages().await;
 
-        // Should be able to fetch packages without error
-        assert!(packages.is_ok(), "Failed to fetch packages: {packages:?}");
+            // Should be able to fetch packages without error
+            assert!(packages.is_ok(), "Failed to fetch packages: {packages:?}");
 
-        let packages = packages.unwrap();
+            let packages = packages.unwrap();
 
-        // Should have some packages
-        assert!(!packages.is_empty(), "No packages were fetched");
+            // Should have some packages
+            assert!(!packages.is_empty(), "No packages were fetched");
 
-        // Check that packages have the expected format
-        for package in packages.iter().take(5) {
-            assert!(
-                package.name.starts_with("pkgs."),
-                "Package name should start with 'pkgs.': {}",
-                package.name
-            );
-            assert!(
-                !package.version.is_empty(),
-                "Package version should not be empty"
-            );
-            assert!(
-                package.description.is_some(),
-                "Package should have a description"
-            );
-        }
-
-        // Check for specific package: cachix
-        let cachix_package = packages.iter().find(|p| p.name == "pkgs.cachix");
-        assert!(
-            cachix_package.is_some(),
-            "Expected to find 'pkgs.cachix' package in the list"
-        );
-
-        let cachix = cachix_package.unwrap();
-        assert!(
-            !cachix.version.is_empty(),
-            "Cachix package should have a version"
-        );
-        assert!(
-            cachix.description.is_some(),
-            "Cachix package should have a description"
-        );
-
-        println!("Successfully fetched {} packages", packages.len());
-        println!("Found cachix package: {} ({})", cachix.name, cachix.version);
-        println!("Sample packages:");
-        for package in packages.iter().take(5) {
-            println!("  - {} ({})", package.name, package.version);
-        }
-
-        // Temporary directory will be automatically cleaned up when dropped
-    }
-
-    #[tokio::test]
-    #[cfg(feature = "integration-tests")]
-    async fn test_fetch_options_live() {
-        // Create temporary directory with test devenv configuration
-        let temp_dir = create_test_devenv_dir().await.unwrap();
-
-        let config = Config::default();
-        let server = DevenvMcpServer::new_with_root(config, Some(temp_dir.path().to_path_buf()));
-
-        let options = server.fetch_options().await;
-
-        match options {
-            Ok(options) => {
-                // Should have some options
-                assert!(!options.is_empty(), "No options were fetched");
-
-                // Check for some known devenv options
-                let known_options = vec![
-                    "languages.python.enable",
-                    "languages.rust.enable",
-                    "services.postgres.enable",
-                    "packages",
-                ];
-
-                for known_option in known_options {
-                    assert!(
-                        options.iter().any(|opt| opt.name == known_option),
-                        "Expected option '{known_option}' not found"
-                    );
-                }
-
-                // Check that options have proper structure
-                for option in options.iter().take(5) {
-                    assert!(!option.name.is_empty(), "Option name should not be empty");
-                    assert!(
-                        option.description.is_some(),
-                        "Option should have a description"
-                    );
-                }
-
-                println!("Successfully fetched {} options", options.len());
-                println!("Sample options:");
-                for option in options.iter().take(5) {
-                    println!("  - {}", option.name);
-                }
-            }
-            Err(e) => {
-                // Expected to fail in test environment
-                eprintln!("Expected failure in test environment: {e:?}");
-                eprintln!(
-                    "This test requires running from a devenv project root with proper setup"
+            // Check that packages have the expected format
+            for package in packages.iter().take(5) {
+                assert!(
+                    package.name.starts_with("pkgs."),
+                    "Package name should start with 'pkgs.': {}",
+                    package.name
+                );
+                assert!(
+                    !package.version.is_empty(),
+                    "Package version should not be empty"
+                );
+                assert!(
+                    package.description.is_some(),
+                    "Package should have a description"
                 );
             }
-        }
 
-        // Temporary directory will be automatically cleaned up when dropped
-    }
+            // Check for specific package: cachix
+            let cachix_package = packages.iter().find(|p| p.name == "pkgs.cachix");
+            assert!(
+                cachix_package.is_some(),
+                "Expected to find 'pkgs.cachix' package in the list"
+            );
+
+            let cachix = cachix_package.unwrap();
+            assert!(
+                !cachix.version.is_empty(),
+                "Cachix package should have a version"
+            );
+            assert!(
+                cachix.description.is_some(),
+                "Cachix package should have a description"
+            );
+
+            println!("Successfully fetched {} packages", packages.len());
+            println!("Found cachix package: {} ({})", cachix.name, cachix.version);
+            println!("Sample packages:");
+            for package in packages.iter().take(5) {
+                println!("  - {} ({})", package.name, package.version);
+            }
+
+            // Temporary directory will be automatically cleaned up when dropped
+        }
+    );
+
+    gc_test!(
+        #[cfg(feature = "integration-tests")]
+        async fn test_fetch_options_live() {
+            // Create temporary directory with test devenv configuration
+            let temp_dir = create_test_devenv_dir().await.unwrap();
+
+            let config = Config::default();
+            let server =
+                DevenvMcpServer::new_with_root(config, Some(temp_dir.path().to_path_buf()));
+
+            let options = server.fetch_options().await;
+
+            match options {
+                Ok(options) => {
+                    // Should have some options
+                    assert!(!options.is_empty(), "No options were fetched");
+
+                    // Check for some known devenv options
+                    let known_options = vec![
+                        "languages.python.enable",
+                        "languages.rust.enable",
+                        "services.postgres.enable",
+                        "packages",
+                    ];
+
+                    for known_option in known_options {
+                        assert!(
+                            options.iter().any(|opt| opt.name == known_option),
+                            "Expected option '{known_option}' not found"
+                        );
+                    }
+
+                    // Check that options have proper structure
+                    for option in options.iter().take(5) {
+                        assert!(!option.name.is_empty(), "Option name should not be empty");
+                        assert!(
+                            option.description.is_some(),
+                            "Option should have a description"
+                        );
+                    }
+
+                    println!("Successfully fetched {} options", options.len());
+                    println!("Sample options:");
+                    for option in options.iter().take(5) {
+                        println!("  - {}", option.name);
+                    }
+                }
+                Err(e) => {
+                    // Expected to fail in test environment
+                    eprintln!("Expected failure in test environment: {e:?}");
+                    eprintln!(
+                        "This test requires running from a devenv project root with proper setup"
+                    );
+                }
+            }
+
+            // Temporary directory will be automatically cleaned up when dropped
+        }
+    );
 }
