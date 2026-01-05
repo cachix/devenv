@@ -14,11 +14,13 @@ use include_dir::{Dir, include_dir};
 use tokio_shutdown::Shutdown;
 
 use devenv_cache_core::compute_string_hash;
+use devenv_activity::current_activity_id;
 use devenv_core::GlobalOptions;
 use devenv_core::cachix::{Cachix, CachixCacheInfo, CachixManager};
 use devenv_core::config::Config;
 use devenv_core::nix_args::NixArgs;
 use devenv_core::nix_backend::{DevenvPaths, NixBackend, Options};
+use devenv_core::nix_log_bridge::NixLogBridge;
 use devenv_eval_cache::Output;
 use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use nix_bindings_expr::eval_state::{EvalState, EvalStateBuilder, gc_register_my_thread};
@@ -104,6 +106,10 @@ pub struct NixRustBackend {
     #[allow(dead_code)]
     _activity_logger: nix_bindings_expr::logger::ActivityLogger,
 
+    // Bridge for tracking eval activities dynamically
+    // Used by eval_session() to create/complete eval activities
+    nix_log_bridge: Arc<NixLogBridge>,
+
     // Cachix manager for handling binary cache configuration
     cachix_manager: Arc<CachixManager>,
 
@@ -160,6 +166,48 @@ pub struct NixRustBackend {
 // 3. Consider upstreaming Send/Sync impls to nix-store and nix-expr crates with proper safety analysis
 unsafe impl Send for NixRustBackend {}
 unsafe impl Sync for NixRustBackend {}
+
+/// RAII guard that manages eval_state lock and evaluation activity tracking.
+///
+/// This guard provides two key behaviors:
+/// 1. **Lazy activity creation**: The eval activity is only created when Nix
+///    callbacks actually arrive, avoiding empty 0ms activities for cached operations.
+/// 2. **Re-entrancy support**: Nested sessions share a single activity, with only
+///    the outermost session controlling activity lifecycle.
+///
+/// When created (via `eval_session()`):
+/// 1. Captures the current activity ID from the task-local stack
+/// 2. Acquires the eval_state mutex lock
+/// 3. Calls `bridge.begin_eval(parent_id)` to register the pending parent
+///
+/// When dropped:
+/// 1. Calls `bridge.end_eval()` to decrement nesting depth
+/// 2. If outermost session, completes the eval activity (if one was created)
+/// 3. Releases the eval_state lock
+pub(crate) struct EvalSession<'a> {
+    guard: std::sync::MutexGuard<'a, EvalState>,
+    bridge: Arc<NixLogBridge>,
+}
+
+impl<'a> std::ops::Deref for EvalSession<'a> {
+    type Target = EvalState;
+    fn deref(&self) -> &Self::Target {
+        &self.guard
+    }
+}
+
+impl<'a> std::ops::DerefMut for EvalSession<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.guard
+    }
+}
+
+impl Drop for EvalSession<'_> {
+    fn drop(&mut self) {
+        // Decrement nesting depth; if outermost, complete the eval activity
+        self.bridge.end_eval();
+    }
+}
 
 impl NixRustBackend {
     /// Create a new NixRustBackend with initialized Nix FFI components with GlobalOptions
@@ -307,8 +355,9 @@ impl NixRustBackend {
 
         // Set up activity logger integration with tracing
         // MUST be initialized after EvalState is created to ensure Nix is initialized
-        // Note: parent activity ID is captured lazily by NixLogBridge when first activity is processed
-        let activity_logger =
+        // The bridge tracks eval activities dynamically - begin_eval/end_eval are called
+        // automatically by eval_session() via RAII
+        let logger_setup =
             crate::logger::setup_nix_logger().wrap_err("Failed to set up activity logger")?;
 
         let cachix_daemon: Arc<
@@ -357,7 +406,8 @@ impl NixRustBackend {
             flake_settings,
             fetchers_settings,
             bootstrap_path,
-            _activity_logger: activity_logger,
+            _activity_logger: logger_setup.logger,
+            nix_log_bridge: logger_setup.bridge,
             cachix_manager,
             cachix_caches: Arc::new(Mutex::new(None)),
             cachix_daemon: cachix_daemon.clone(),
@@ -368,6 +418,38 @@ impl NixRustBackend {
         };
 
         Ok(backend)
+    }
+
+    /// Create an eval session with automatic activity tracking.
+    ///
+    /// This method:
+    /// 1. Captures the current activity ID from the task-local stack
+    /// 2. Acquires the eval_state mutex
+    /// 3. Registers the parent ID for lazy eval activity creation
+    /// 4. Returns an EvalSession that tracks nesting and completes the activity on drop
+    ///
+    /// The eval activity is created **lazily** when the first Nix FFI callback
+    /// arrives. If no callbacks occur (e.g., cached inputs), no activity is created.
+    ///
+    /// Nested calls share a single activity - only the outermost session's parent
+    /// is used, and the activity completes when the outermost session ends.
+    fn eval_session(&self) -> Result<EvalSession<'_>> {
+        // Capture parent activity ID while still in async context
+        let parent_id = current_activity_id();
+
+        // Acquire the eval_state lock
+        let guard = self
+            .eval_state
+            .lock()
+            .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
+
+        // Register parent ID for lazy activity creation
+        self.nix_log_bridge.begin_eval(parent_id);
+
+        Ok(EvalSession {
+            guard,
+            bridge: Arc::clone(&self.nix_log_bridge),
+        })
     }
 
     /// Extract embedded bootstrap files to filesystem for Nix to access
@@ -669,10 +751,7 @@ impl NixRustBackend {
 
         // Get eval state for locking operation
         let lock_result = {
-            let eval_state = self
-                .eval_state
-                .lock()
-                .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
+            let eval_state = self.eval_session()?;
 
             // Check if locks are in sync
             locker.lock(fetch_settings, &eval_state)
@@ -855,10 +934,7 @@ impl NixBackend for NixRustBackend {
         // Validate lock file before evaluation
         self.validate_lock_file().await?;
 
-        let mut eval_state = self
-            .eval_state
-            .lock()
-            .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
+        let mut eval_state = self.eval_session()?;
 
         // Import default.nix with parameters and evaluate to get the devenv structure
         let import_expr = self
@@ -1016,10 +1092,7 @@ impl NixBackend for NixRustBackend {
             .wrap_err("Failed to initialize Nix command library")?;
 
         // Lock the eval_state for REPL access
-        let mut eval_state = self
-            .eval_state
-            .lock()
-            .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
+        let mut eval_state = self.eval_session()?;
 
         // Load default.nix into the REPL scope
         let import_expr = self
@@ -1094,10 +1167,7 @@ impl NixBackend for NixRustBackend {
         }
 
         // Lock eval_state for the entire operation
-        let mut eval_state = self
-            .eval_state
-            .lock()
-            .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
+        let mut eval_state = self.eval_session()?;
 
         // Import default.nix to get the attribute set
         let import_expr = self
@@ -1196,10 +1266,7 @@ impl NixBackend for NixRustBackend {
         // Lock file validation is done once in assemble(), not here
 
         // Lock the eval_state for the duration of evaluation
-        let mut eval_state = self
-            .eval_state
-            .lock()
-            .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
+        let mut eval_state = self.eval_session()?;
 
         // Import default.nix once to get the attribute set
         let import_expr = self
@@ -1326,10 +1393,7 @@ impl NixBackend for NixRustBackend {
 
         // Get eval state from mutex only when needed for locking
         // This ensures we reuse the same eval state across calls
-        let eval_state = self
-            .eval_state
-            .lock()
-            .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
+        let eval_state = self.eval_session()?;
 
         // Lock the inputs - pass eval_state by reference to avoid cloning
         let lock_file = locker
@@ -1352,10 +1416,7 @@ impl NixBackend for NixRustBackend {
         // Validate lock file before reading metadata
         self.validate_lock_file().await?;
 
-        let mut eval_state = self
-            .eval_state
-            .lock()
-            .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
+        let mut eval_state = self.eval_session()?;
 
         // PART 1: Format inputs from lock file using new FFI iterator
         let lock_file_path = self.paths.root.join("devenv.lock");
@@ -1423,10 +1484,7 @@ impl NixBackend for NixRustBackend {
         // Validate lock file before searching
         self.validate_lock_file().await?;
 
-        let mut eval_state = self
-            .eval_state
-            .lock()
-            .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
+        let mut eval_state = self.eval_session()?;
 
         // Import default.nix to get the configured pkgs with overlays and settings
         let import_expr = self

@@ -6,6 +6,31 @@
 //!
 //! Both backends convert their input to `InternalLog` and feed it to `NixLogBridge`,
 //! ensuring consistent activity tracking and progress reporting.
+//!
+//! # Eval Activity Lifecycle
+//!
+//! The bridge uses **lazy activity creation** to avoid creating empty activities
+//! when no Nix work actually happens. This is important because some operations
+//! (like lock validation) may or may not trigger Nix callbacks depending on
+//! whether inputs are cached.
+//!
+//! ## How It Works
+//!
+//! 1. Caller captures the parent activity ID from the task-local stack
+//! 2. Caller acquires the eval_state lock
+//! 3. Caller calls `begin_eval(parent_id)` to register the pending parent
+//! 4. **Lazy**: When the first Nix callback arrives, the bridge creates the
+//!    eval activity using the stored parent ID
+//! 5. Caller calls `end_eval()` when done, which completes the activity (if created)
+//!
+//! This is handled automatically by `EvalSession` in `devenv-nix-backend`.
+//!
+//! ## Re-entrancy
+//!
+//! The bridge supports nested eval sessions. Only the outermost session's parent
+//! ID is used, and the activity is only completed when all sessions have ended.
+//! This allows methods like `validate_lock_file()` to be called from within
+//! operations like `dev_env()` without creating duplicate activities.
 
 use devenv_activity::{Activity, ActivityLevel, FetchKind, message, message_with_details};
 use devenv_eval_cache::Op;
@@ -16,16 +41,31 @@ use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
 use tracing::{error, info, trace, warn};
 
+/// State for tracking the current evaluation activity.
+///
+/// This tracks both the pending parent (for lazy creation) and the nesting depth
+/// (for re-entrancy support).
+struct EvalActivityState {
+    /// Nesting depth - how many EvalSessions are currently active.
+    /// Only the outermost session controls activity creation/completion.
+    depth: usize,
+    /// Parent activity ID captured by the outermost session.
+    /// Used when lazily creating the eval activity on first Nix callback.
+    pending_parent: Option<u64>,
+    /// The current evaluation activity, created lazily on first Nix callback.
+    current_eval: Option<Activity>,
+}
+
 /// Bridge that converts Nix internal logs to tracing events.
 ///
-/// The bridge must be created with an evaluation activity that is captured
-/// before crossing thread boundaries, since the stderr callback runs in
-/// a separate thread and cannot access the task-local activity stack.
+/// The bridge manages eval activity lifecycle with lazy creation - the activity
+/// is only created when the first Nix callback arrives, avoiding empty activities
+/// for operations that don't trigger any Nix work.
 pub struct NixLogBridge {
-    /// Current active operations and their associated Nix activities
+    /// Current active operations and their associated Nix activities (Build, Fetch, etc.)
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
-    /// The evaluation activity for tracking file evaluations and as parent for Nix activities
-    eval_activity: Activity,
+    /// State for the current evaluation activity (lazy creation + re-entrancy)
+    eval_state: Mutex<EvalActivityState>,
 }
 
 /// Information about an active Nix activity
@@ -35,15 +75,99 @@ struct NixActivityInfo {
 }
 
 impl NixLogBridge {
-    /// Create a new NixLogBridge with the given evaluation activity.
+    /// Create a new NixLogBridge.
     ///
-    /// The activity is used both as the parent for Nix activities (Build, Fetch, etc.)
-    /// and for logging file evaluations directly.
-    pub fn new(eval_activity: Activity) -> Arc<Self> {
+    /// The bridge starts with no active evaluation. Call `begin_eval()` before
+    /// performing Nix operations to enable activity tracking.
+    pub fn new() -> Arc<Self> {
         Arc::new(Self {
             active_activities: Arc::new(Mutex::new(HashMap::new())),
-            eval_activity,
+            eval_state: Mutex::new(EvalActivityState {
+                depth: 0,
+                pending_parent: None,
+                current_eval: None,
+            }),
         })
+    }
+
+    /// Begin a new evaluation scope.
+    ///
+    /// Call this after acquiring the eval_state lock. The `parent_id` should be
+    /// captured from the task-local activity stack (`current_activity_id()`)
+    /// **before** acquiring the lock.
+    ///
+    /// The eval activity is created **lazily** when the first Nix callback arrives.
+    /// If no callbacks arrive, no activity is created (avoiding empty 0ms activities).
+    ///
+    /// This method supports re-entrancy: nested calls increment a depth counter,
+    /// and only the outermost call's `parent_id` is used.
+    pub fn begin_eval(&self, parent_id: Option<u64>) {
+        let mut state = self
+            .eval_state
+            .lock()
+            .expect("eval_state mutex poisoned");
+
+        if state.depth == 0 {
+            // Outermost session - store the parent ID for lazy activity creation
+            state.pending_parent = parent_id;
+            // Clear any stale activity (shouldn't happen, but be safe)
+            state.current_eval = None;
+        }
+        // Nested sessions don't change pending_parent - outer session's parent is used
+
+        state.depth += 1;
+    }
+
+    /// End the current evaluation scope.
+    ///
+    /// Call this when the eval_state lock is released (typically via RAII guard).
+    /// This decrements the nesting depth, and when the outermost scope ends,
+    /// completes the eval activity (if one was created).
+    pub fn end_eval(&self) {
+        let mut state = self
+            .eval_state
+            .lock()
+            .expect("eval_state mutex poisoned");
+
+        if state.depth == 0 {
+            // Unbalanced end_eval call - shouldn't happen but don't panic
+            tracing::warn!("end_eval called without matching begin_eval");
+            return;
+        }
+
+        state.depth -= 1;
+
+        if state.depth == 0 {
+            // Outermost scope ended - complete the activity by dropping it
+            state.current_eval = None;
+            state.pending_parent = None;
+        }
+    }
+
+    /// Ensure an eval activity exists and return its ID.
+    ///
+    /// Creates the eval activity lazily on first call within an eval scope.
+    /// Returns `None` if not in an eval scope (depth == 0).
+    fn ensure_eval_activity(&self) -> Option<u64> {
+        let mut state = self
+            .eval_state
+            .lock()
+            .expect("eval_state mutex poisoned");
+
+        if state.depth == 0 {
+            // Not in an eval scope - no activity to create
+            return None;
+        }
+
+        if state.current_eval.is_none() {
+            // First callback in this eval scope - create the activity lazily
+            let eval = Activity::evaluate()
+                .parent(state.pending_parent)
+                .start();
+            state.current_eval = Some(eval);
+        }
+
+        state.current_eval.as_ref().map(|a| a.id())
     }
 
     /// Returns a callback that can be used by any log source.
@@ -164,8 +288,11 @@ impl NixLogBridge {
     }
 
     /// Get the parent activity ID for Nix activities.
+    ///
+    /// This triggers lazy creation of the eval activity if we're in an eval scope.
+    /// Returns `None` if not in an eval scope.
     fn get_parent_activity_id(&self) -> Option<u64> {
-        Some(self.eval_activity.id())
+        self.ensure_eval_activity()
     }
 
     /// Handle the start of a Nix activity
@@ -392,7 +519,17 @@ impl NixLogBridge {
 
     /// Handle file evaluation events
     fn handle_file_evaluation(&self, file_path: std::path::PathBuf) {
-        self.eval_activity.log(file_path.display().to_string());
+        // Ensure eval activity exists (lazy creation) and log to it
+        self.ensure_eval_activity();
+
+        let state = self
+            .eval_state
+            .lock()
+            .expect("eval_state mutex poisoned");
+
+        if let Some(ref eval) = state.current_eval {
+            eval.log(file_path.display().to_string());
+        }
     }
 }
 

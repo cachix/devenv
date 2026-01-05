@@ -6,8 +6,20 @@
 //! FFI callbacks receive raw field data which is converted to `InternalLog`
 //! and processed by the shared `NixLogBridge` for consistent behavior with
 //! the CLI backend.
+//!
+//! # Eval Activity Tracking
+//!
+//! The logger is set up once during backend initialization. Eval activities are
+//! managed by the caller and registered with the NixLogBridge:
+//!
+//! 1. Capture the parent activity ID from the task-local stack
+//! 2. Acquire the eval_state lock
+//! 3. Create an eval activity with the captured parent
+//! 4. Call `bridge.set_eval_activity(activity)` to register it
+//! 5. When done, call `bridge.clear_eval_activity()` and drop the activity
+//!
+//! This is handled automatically by the `EvalSession` RAII wrapper in the backend.
 
-use devenv_activity::{Activity, current_activity_id};
 use devenv_core::nix_log_bridge::{NixLogBridge, activity_type_from_str, result_type_from_str};
 use devenv_eval_cache::internal_log::{Field, InternalLog, Verbosity};
 use miette::Result;
@@ -15,25 +27,26 @@ use nix_bindings_expr::logger::ActivityLoggerBuilder;
 use nix_bindings_util::context::Context;
 use std::sync::Arc;
 
-/// Initialize the Nix activity logger with Activity system integration
+/// Result of setting up the Nix logger.
 ///
-/// Sets up callbacks that forward Nix activity events to the devenv Activity system
-/// via NixLogBridge. The returned ActivityLogger must be kept alive for the duration
-/// of Nix operations.
-pub fn setup_nix_logger() -> Result<nix_bindings_expr::logger::ActivityLogger> {
-    setup_nix_logger_with_parent(current_activity_id())
+/// Contains both the logger (which must be kept alive) and the bridge
+/// (which is used to track eval activities).
+pub struct NixLoggerSetup {
+    /// The activity logger - must be kept alive for the duration of Nix operations
+    pub logger: nix_bindings_expr::logger::ActivityLogger,
+    /// The bridge for tracking eval activities
+    pub bridge: Arc<NixLogBridge>,
 }
 
-/// Initialize the Nix activity logger with a specific parent activity ID
+/// Initialize the Nix activity logger with Activity system integration.
 ///
-/// Use this when you need to specify the parent activity explicitly,
-/// such as when the logger is created from a different async context.
-pub fn setup_nix_logger_with_parent(
-    parent_activity_id: Option<u64>,
-) -> Result<nix_bindings_expr::logger::ActivityLogger> {
-    // Create an evaluation activity with the given parent
-    let eval_activity = Activity::evaluate().parent(parent_activity_id).start();
-    let bridge = NixLogBridge::new(eval_activity);
+/// Sets up callbacks that forward Nix activity events to the devenv Activity system
+/// via NixLogBridge. Returns both the logger and the bridge.
+///
+/// The logger must be kept alive for the duration of Nix operations.
+/// The bridge is used to track eval activities dynamically via `begin_eval`/`end_eval`.
+pub fn setup_nix_logger() -> Result<NixLoggerSetup> {
+    let bridge = NixLogBridge::new();
 
     let mut context = Context::new();
 
@@ -60,7 +73,7 @@ pub fn setup_nix_logger_with_parent(
         .register(&mut context)
         .map_err(|e| miette::miette!("Failed to register Nix logger: {}", e))?;
 
-    Ok(logger)
+    Ok(NixLoggerSetup { logger, bridge })
 }
 
 /// Convert raw FFI field arrays to Vec<Field>
@@ -176,7 +189,7 @@ mod tests {
         let _gc_registration = gc_register_my_thread();
 
         // Create logger - this registers the activity callbacks
-        let _logger = setup_nix_logger().expect("Failed to setup logger");
+        let _setup = setup_nix_logger().expect("Failed to setup logger");
 
         // If we get here without panicking, the logger was set up correctly
         assert!(true, "Logger setup should not panic");
@@ -189,7 +202,10 @@ mod tests {
         let _gc_registration = gc_register_my_thread();
 
         // Create logger - this registers the activity callbacks
-        let _logger = setup_nix_logger().expect("Failed to setup logger");
+        let setup = setup_nix_logger().expect("Failed to setup logger");
+
+        // Begin eval scope - activity will be created lazily on first callback
+        setup.bridge.begin_eval(None);
 
         let store = Store::open(None, []).expect("Failed to open store");
         let mut eval_state = EvalStateBuilder::new(store)
@@ -201,6 +217,9 @@ mod tests {
         let expr = "1 + 1";
         let result = eval_state.eval_from_string(expr, ".");
         assert!(result.is_ok(), "Simple evaluation should work");
+
+        // End eval scope - activity (if created) completes
+        setup.bridge.end_eval();
     }
 
     #[test]
