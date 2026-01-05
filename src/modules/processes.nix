@@ -119,6 +119,18 @@ in
       internal = true;
       default = pkgs.writeShellScript "no-processes" "";
     };
+
+    process.taskCommandsBase = lib.mkOption {
+      type = types.attrsOf types.str;
+      internal = true;
+      description = "The base command to run each process through devenv-tasks, supporting before/after task dependencies.";
+    };
+
+    process.taskCommands = lib.mkOption {
+      type = types.attrsOf types.str;
+      internal = true;
+      description = "The command to run each process through devenv-tasks with exec prefix for proper signal handling.";
+    };
   };
 
   config = lib.mkMerge [
@@ -165,9 +177,20 @@ in
         })
         config.processes;
 
+      # Provide the devenv-tasks command for each process so process managers can use it
+      # to support before/after task dependencies
+      process.taskCommandsBase = lib.mapAttrs
+        (name: _: "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all devenv:processes:${name}")
+        config.processes;
+
+      # With exec prefix for proper signal handling (derived from base)
+      process.taskCommands = lib.mapAttrs
+        (name: cmd: "exec ${cmd}")
+        config.process.taskCommandsBase;
+
       procfile =
         pkgs.writeText "procfile" (lib.concatStringsSep "\n"
-          (lib.mapAttrsToList (name: process: "${name}: exec ${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all devenv:processes:${name}")
+          (lib.mapAttrsToList (name: _: "${name}: ${config.process.taskCommands.${name}}")
             config.processes));
 
       procfileEnv =

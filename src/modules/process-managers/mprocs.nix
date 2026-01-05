@@ -57,10 +57,9 @@ in
           lib.mapAttrs
             (
               name: value:
-                let scriptPath = pkgs.writeShellScript name value.exec;
-                in
                 {
-                  cmd = [ scriptPath ];
+                  # Run through devenv-tasks to support before/after task dependencies
+                  cmd = [ "bash" "-c" config.process.taskCommands.${name} ];
                 }
                 // lib.optionalAttrs (lib.hasAttr "cwd" value && value.cwd != null) { cwd = value.cwd; }
             )
