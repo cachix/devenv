@@ -55,58 +55,41 @@ jobs:
           echo "=== ulimit ==="
           ulimit -a || true
 
-      # Create GDB wrapper script
-      - name: Create GDB wrapper
+      # Install rr for record/replay debugging
+      - name: Install rr
         run: |
-          cat > /tmp/gdb-wrapper.sh << 'EOF'
-          #!/bin/bash
-          exec gdb -batch \
-            -ex "set confirm off" \
-            -ex "handle SIGSEGV stop print nopass" \
-            -ex "handle SIGABRT stop print nopass" \
-            -ex "run" \
-            -ex "bt full" \
-            -ex "info registers" \
-            -ex "info threads" \
-            -ex "thread apply all bt full" \
-            --args "$@"
-          EOF
-          chmod +x /tmp/gdb-wrapper.sh
+          sudo apt-get update
+          sudo apt-get install -y rr
 
-      # Run nextest under GDB wrapper
-      - name: Test nextest with GDB wrapper
+      # Run tests under rr to catch the crash
+      - name: Run tests under rr
         continue-on-error: true
         env:
           RUST_BACKTRACE: full
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER: /tmp/gdb-wrapper.sh
         run: |
-          echo "=== Running nextest with GDB wrapper ==="
+          echo "=== Running tests under rr ==="
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- bash -c '
+            # Build test binaries first
             cargo test --all-features --no-run 2>&1 | tail -10
-            cargo nextest run --all-features -j 1 2>&1 | tee /tmp/nextest_gdb.log || true
-            if grep -q "Program received signal" /tmp/nextest_gdb.log; then
-              echo "!!! CRASH DETECTED !!!"
-              grep -A 100 "Program received signal" /tmp/nextest_gdb.log | head -120
-            else
-              echo "No crash detected in nextest run"
-            fi
-          '
 
-      # Run full test suite like CI (with nextest)
-      - name: Full test suite (nextest)
-        id: baseline
-        continue-on-error: true
-        env:
-          RUST_BACKTRACE: full
-        run: |
-          echo "=== Full test suite with nextest (like CI) ==="
-          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
-            cargo nextest run --all-features -j 1 2>&1 || {
-              echo "CRASHED with exit code $?"
-              exit 1
-            }
+            # Run nextest under rr - record the execution
+            # rr needs perf_event_paranoid <= 1
+            echo "perf_event_paranoid: $(cat /proc/sys/kernel/perf_event_paranoid)"
+
+            for i in $(seq 1 20); do
+              echo "=== Iteration $i ==="
+              rr record --chaos cargo nextest run --all-features -j 1 2>&1 || {
+                exit_code=$?
+                echo "!!! CRASH on iteration $i with exit code $exit_code !!!"
+                echo "=== Replaying crash with backtrace ==="
+                rr replay -a -ex "bt full" -ex "info threads" -ex "thread apply all bt full" -ex "quit"
+                exit 0
+              }
+            done
+            echo "No crash after 20 iterations"
+          '
 
       - name: Summary
         run: |
           echo "=== Results ==="
-          echo "Full nextest suite: ${{ steps.baseline.outcome }}"
+          echo "Check logs above for crash replay"
