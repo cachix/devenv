@@ -56,7 +56,7 @@ jobs:
           ulimit -a || true
 
       # Run tests many times to catch crash
-      - name: Run tests (50 iterations)
+      - name: Run tests (100 iterations)
         continue-on-error: true
         env:
           RUST_BACKTRACE: full
@@ -64,12 +64,12 @@ jobs:
           GC_PRINT_STATS: 1
           GC_PRINT_VERBOSE_STATS: 1
         run: |
-          echo "=== Running tests 50 times to catch crash ==="
+          echo "=== Running tests 100 times to catch crash ==="
 
           # Build test binaries first
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo test --all-features --no-run 2>&1 | tail -10
 
-          for i in $(seq 1 50); do
+          for i in $(seq 1 100); do
             echo "=== Iteration $i ==="
             ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
               cargo nextest run --all-features -j 1 2>&1 || {
@@ -85,7 +85,7 @@ jobs:
               }
             echo "Iteration $i passed"
           done
-          echo "No crash after 50 iterations"
+          echo "No crash after 100 iterations"
 
       - name: Summary
         run: |
