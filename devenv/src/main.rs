@@ -110,9 +110,18 @@ fn main() -> Result<()> {
     // - Tracing mode: when trace-output is stdout/stderr (conflicts with TUI/CLI output)
     // - TUI mode: interactive terminal UI (default)
     // - Legacy CLI mode: spinners and progress indicators (--no-tui or --log-format cli)
+    //
+    // Some commands require specific modes regardless of user options:
+    // - MCP stdio mode uses legacy CLI (stdout is JSON-RPC, progress goes to stderr)
+    // - MCP HTTP mode can use TUI
+    let force_legacy_cli = matches!(
+        &cli.command,
+        Some(Commands::Mcp { http: None }) // stdio mode needs legacy CLI (stderr output)
+    );
+
     if cli.global_options.use_tracing_mode() {
         run_with_tracing(cli)
-    } else if cli.global_options.use_legacy_cli() {
+    } else if force_legacy_cli || cli.global_options.use_legacy_cli() {
         run_with_legacy_cli(cli)
     } else {
         run_with_tui(cli)
@@ -461,9 +470,9 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
                 .wrap_err("Failed to generate JSON schema")?;
             CommandResult::Done
         }
-        Commands::Mcp {} => {
+        Commands::Mcp { http } => {
             let config = devenv.config.read().await.clone();
-            devenv::mcp::run_mcp_server(config).await?;
+            devenv::mcp::run_mcp_server(config, http.map(|p| p.unwrap_or(8080))).await?;
             CommandResult::Done
         }
         Commands::Lsp { print_config } => {

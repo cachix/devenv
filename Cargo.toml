@@ -140,7 +140,8 @@ reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
 rustls = { version = "0.23.32" }
 rustls-platform-verifier = "0.6.1"
 shell-escape = "0.1.5"
-rmcp = { version = "0.7", features = ["server", "transport-io"] }
+rmcp = { version = "0.7", features = ["server", "transport-io", "transport-streamable-http-server"] }
+axum = "0.8"
 rmcp-macros = "0.7"
 
 # Optional snix dependencies
