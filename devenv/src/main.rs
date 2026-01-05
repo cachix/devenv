@@ -132,6 +132,14 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     let devenv_thread = std::thread::spawn(move || {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
+            .on_thread_start(|| {
+                // Register each tokio worker thread with Boehm GC
+                // This is needed because Nix uses Boehm GC with parallel marking,
+                // and GC must know about all threads that access GC-managed memory.
+                // Without this, tokio thread migration causes GC to miss roots.
+                use devenv_nix_backend::gc_register_current_thread;
+                let _ = gc_register_current_thread();
+            })
             .build()
             .expect("Failed to create devenv runtime")
             .block_on(async {

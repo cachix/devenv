@@ -10,6 +10,43 @@ use std::path::Path;
 pub mod nix_backend;
 pub use nix_backend::ProjectRoot;
 
+use std::cell::RefCell;
+
+// Thread-local storage to keep GC registration guards alive for the thread's lifetime
+thread_local! {
+    static GC_REGISTRATION: RefCell<Option<nix_bindings_expr::eval_state::ThreadRegistrationGuard>> = const { RefCell::new(None) };
+}
+
+/// Register the current thread with Boehm GC.
+///
+/// This must be called from any thread that will access Nix/GC-managed memory.
+/// Tokio worker threads should call this via `on_thread_start` to ensure
+/// the GC can properly scan their stacks during collection.
+///
+/// Without this, parallel GC marking can race with unregistered threads,
+/// causing memory corruption and crashes.
+///
+/// The registration is kept alive in thread-local storage until the thread exits.
+pub fn gc_register_current_thread() -> Result<()> {
+    use nix_bindings_expr::eval_state::gc_register_my_thread;
+
+    GC_REGISTRATION.with(|reg| {
+        let mut guard = reg.borrow_mut();
+        if guard.is_none() {
+            match gc_register_my_thread() {
+                Ok(registration) => {
+                    *guard = Some(registration);
+                    Ok(())
+                }
+                Err(e) => Err(anyhow::anyhow!("Failed to register thread with GC: {}", e)),
+            }
+        } else {
+            // Already registered
+            Ok(())
+        }
+    })
+}
+
 // Activity logger integration with tracing
 pub mod logger;
 

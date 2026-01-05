@@ -114,53 +114,54 @@ fn test_base_dir_loading() {
     );
 }
 
-#[tokio::test]
-async fn test_create_flake_inputs() {
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    create_test_devenv_yaml(temp_dir.path());
+gc_test!(
+    async fn test_create_flake_inputs() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        create_test_devenv_yaml(temp_dir.path());
 
-    let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
-    let paths = DevenvPaths {
-        root: temp_dir.path().to_path_buf(),
-        dotfile: temp_dir.path().join(".devenv"),
-        dot_gc: temp_dir.path().join(".devenv/gc"),
-        home_gc: temp_dir.path().join(".devenv/home-gc"),
-    };
+        let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
+        let paths = DevenvPaths {
+            root: temp_dir.path().to_path_buf(),
+            dotfile: temp_dir.path().join(".devenv"),
+            dot_gc: temp_dir.path().join(".devenv/gc"),
+            home_gc: temp_dir.path().join(".devenv/home-gc"),
+        };
 
-    let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    let backend = NixRustBackend::new(
-        paths.clone(),
-        config.clone(),
-        GlobalOptions::default(),
-        cachix_manager,
-        Shutdown::new(),
-        None,
-    )
-    .expect("Failed to create backend");
+        let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
+        let backend = NixRustBackend::new(
+            paths.clone(),
+            config.clone(),
+            GlobalOptions::default(),
+            cachix_manager,
+            Shutdown::new(),
+            None,
+        )
+        .expect("Failed to create backend");
 
-    let test_args = TestNixArgs::new(&paths);
-    backend
-        .assemble(&test_args.to_nix_args(
-            &paths,
-            &config,
-            config.nixpkgs_config(get_current_system()),
-        ))
-        .await
-        .expect("Failed to assemble backend");
+        let test_args = TestNixArgs::new(&paths);
+        backend
+            .assemble(&test_args.to_nix_args(
+                &paths,
+                &config,
+                config.nixpkgs_config(get_current_system()),
+            ))
+            .await
+            .expect("Failed to assemble backend");
 
-    // Call update() which enables flakes and creates flake inputs
-    let result = backend.update(&None).await;
+        // Call update() which enables flakes and creates flake inputs
+        let result = backend.update(&None).await;
 
-    assert!(
-        result.is_ok(),
-        "Failed to update/create flake inputs: {:?}",
-        result.err()
-    );
+        assert!(
+            result.is_ok(),
+            "Failed to update/create flake inputs: {:?}",
+            result.err()
+        );
 
-    // Verify lock file was created
-    let lock_file = temp_dir.path().join("devenv.lock");
-    assert!(lock_file.exists(), "Lock file should be created");
-}
+        // Verify lock file was created
+        let lock_file = temp_dir.path().join("devenv.lock");
+        assert!(lock_file.exists(), "Lock file should be created");
+    }
+);
 
 #[test]
 fn test_load_nonexistent_lock_file() {
@@ -177,136 +178,140 @@ fn test_load_nonexistent_lock_file() {
     );
 }
 
-#[tokio::test]
-async fn test_selective_input_update() {
-    // Test updating only a specific input while keeping others locked
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    create_test_devenv_yaml(temp_dir.path());
+gc_test!(
+    async fn test_selective_input_update() {
+        // Test updating only a specific input while keeping others locked
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        create_test_devenv_yaml(temp_dir.path());
 
-    // Create DevenvPaths for the temp directory
-    let paths = DevenvPaths {
-        root: temp_dir.path().to_path_buf(),
-        dotfile: temp_dir.path().join(".devenv"),
-        dot_gc: temp_dir.path().join(".devenv/gc"),
-        home_gc: temp_dir.path().join(".devenv/home-gc"),
-    };
+        // Create DevenvPaths for the temp directory
+        let paths = DevenvPaths {
+            root: temp_dir.path().to_path_buf(),
+            dotfile: temp_dir.path().join(".devenv"),
+            dot_gc: temp_dir.path().join(".devenv/gc"),
+            home_gc: temp_dir.path().join(".devenv/home-gc"),
+        };
 
-    // Create directories
-    fs::create_dir_all(&paths.dot_gc).expect("Failed to create .devenv/gc");
-    fs::create_dir_all(&paths.home_gc).expect("Failed to create home_gc");
+        // Create directories
+        fs::create_dir_all(&paths.dot_gc).expect("Failed to create .devenv/gc");
+        fs::create_dir_all(&paths.home_gc).expect("Failed to create home_gc");
 
-    // Load config from devenv.yaml
-    let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
+        // Load config from devenv.yaml
+        let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
 
-    // Create NixBackend
-    let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    let backend = NixRustBackend::new(
-        paths,
-        config,
-        GlobalOptions::default(),
-        cachix_manager,
-        Shutdown::new(),
-        None,
-    )
-    .expect("Failed to create backend");
+        // Create NixBackend
+        let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
+        let backend = NixRustBackend::new(
+            paths,
+            config,
+            GlobalOptions::default(),
+            cachix_manager,
+            Shutdown::new(),
+            None,
+        )
+        .expect("Failed to create backend");
 
-    // First, create an initial lock (update all inputs)
-    backend
-        .update(&None)
-        .await
-        .expect("Failed to create initial lock");
+        // First, create an initial lock (update all inputs)
+        backend
+            .update(&None)
+            .await
+            .expect("Failed to create initial lock");
 
-    let lock_path = temp_dir.path().join("devenv.lock");
-    assert!(lock_path.exists(), "Initial lock file should be created");
+        let lock_path = temp_dir.path().join("devenv.lock");
+        assert!(lock_path.exists(), "Initial lock file should be created");
 
-    // Read initial lock to verify nixpkgs was locked
-    let initial_lock_content = fs::read_to_string(&lock_path).expect("Failed to read initial lock");
-    assert!(
-        initial_lock_content.contains("nixpkgs"),
-        "Lock should contain nixpkgs"
-    );
-    assert!(
-        initial_lock_content.contains("devenv"),
-        "Lock should contain devenv"
-    );
+        // Read initial lock to verify nixpkgs was locked
+        let initial_lock_content =
+            fs::read_to_string(&lock_path).expect("Failed to read initial lock");
+        assert!(
+            initial_lock_content.contains("nixpkgs"),
+            "Lock should contain nixpkgs"
+        );
+        assert!(
+            initial_lock_content.contains("devenv"),
+            "Lock should contain devenv"
+        );
 
-    // Now update only nixpkgs
-    backend
-        .update(&Some("nixpkgs".to_string()))
-        .await
-        .expect("Failed to update nixpkgs");
+        // Now update only nixpkgs
+        backend
+            .update(&Some("nixpkgs".to_string()))
+            .await
+            .expect("Failed to update nixpkgs");
 
-    // Verify lock file still exists and was updated
-    assert!(lock_path.exists(), "Updated lock file should exist");
-    let updated_lock_content = fs::read_to_string(&lock_path).expect("Failed to read updated lock");
-    assert!(
-        updated_lock_content.contains("nixpkgs"),
-        "Updated lock should still contain nixpkgs"
-    );
-    assert!(
-        updated_lock_content.contains("devenv"),
-        "Updated lock should still contain devenv"
-    );
-}
+        // Verify lock file still exists and was updated
+        assert!(lock_path.exists(), "Updated lock file should exist");
+        let updated_lock_content =
+            fs::read_to_string(&lock_path).expect("Failed to read updated lock");
+        assert!(
+            updated_lock_content.contains("nixpkgs"),
+            "Updated lock should still contain nixpkgs"
+        );
+        assert!(
+            updated_lock_content.contains("devenv"),
+            "Updated lock should still contain devenv"
+        );
+    }
+);
 
 /// Test that demonstrates the full workflow using NixBackend
-#[tokio::test]
-async fn test_full_workflow() {
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+gc_test!(
+    async fn test_full_workflow() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
 
-    // 1. Create devenv.yaml
-    create_minimal_devenv_yaml(temp_dir.path());
+        // 1. Create devenv.yaml
+        create_minimal_devenv_yaml(temp_dir.path());
 
-    // 2. Create DevenvPaths for the temp directory
-    let paths = DevenvPaths {
-        root: temp_dir.path().to_path_buf(),
-        dotfile: temp_dir.path().join(".devenv"),
-        dot_gc: temp_dir.path().join(".devenv/gc"),
-        home_gc: temp_dir.path().join(".devenv/home-gc"),
-    };
+        // 2. Create DevenvPaths for the temp directory
+        let paths = DevenvPaths {
+            root: temp_dir.path().to_path_buf(),
+            dotfile: temp_dir.path().join(".devenv"),
+            dot_gc: temp_dir.path().join(".devenv/gc"),
+            home_gc: temp_dir.path().join(".devenv/home-gc"),
+        };
 
-    // Create required directories
-    fs::create_dir_all(&paths.dot_gc).expect("Failed to create .devenv/gc");
-    fs::create_dir_all(&paths.home_gc).expect("Failed to create home_gc");
+        // Create required directories
+        fs::create_dir_all(&paths.dot_gc).expect("Failed to create .devenv/gc");
+        fs::create_dir_all(&paths.home_gc).expect("Failed to create home_gc");
 
-    // Load config from devenv.yaml
-    let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
+        // Load config from devenv.yaml
+        let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
 
-    // 3. Create NixBackend
-    let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    let backend = NixRustBackend::new(
-        paths,
-        config,
-        GlobalOptions::default(),
-        cachix_manager,
-        Shutdown::new(),
-        None,
-    )
-    .expect("Failed to create backend");
+        // 3. Create NixBackend
+        let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
+        let backend = NixRustBackend::new(
+            paths,
+            config,
+            GlobalOptions::default(),
+            cachix_manager,
+            Shutdown::new(),
+            None,
+        )
+        .expect("Failed to create backend");
 
-    // 4. Update all inputs (creates lock file)
-    backend
-        .update(&None)
-        .await
-        .expect("Failed to update inputs");
+        // 4. Update all inputs (creates lock file)
+        backend
+            .update(&None)
+            .await
+            .expect("Failed to update inputs");
 
-    // 5. Verify the lock file exists and can be read
-    let lock_file_path = temp_dir.path().join("devenv.lock");
-    assert!(lock_file_path.exists(), "Lock file should exist");
+        // 5. Verify the lock file exists and can be read
+        let lock_file_path = temp_dir.path().join("devenv.lock");
+        assert!(lock_file_path.exists(), "Lock file should exist");
 
-    let content = fs::read_to_string(&lock_file_path).expect("Failed to read lock file");
-    assert!(!content.is_empty(), "Lock file should not be empty");
-    assert!(
-        content.contains("\"nodes\""),
-        "Lock file should contain nodes"
-    );
-    assert!(
-        content.contains("nixpkgs"),
-        "Lock file should contain nixpkgs input"
-    );
+        let content = fs::read_to_string(&lock_file_path).expect("Failed to read lock file");
+        assert!(!content.is_empty(), "Lock file should not be empty");
+        assert!(
+            content.contains("\"nodes\""),
+            "Lock file should contain nodes"
+        );
+        assert!(
+            content.contains("nixpkgs"),
+            "Lock file should contain nixpkgs input"
+        );
 
-    println!(
-        "✅ Successfully created lock file at: {}",
-        lock_file_path.display()
-    );
-}
+        println!(
+            "✅ Successfully created lock file at: {}",
+            lock_file_path.display()
+        );
+    }
+);
