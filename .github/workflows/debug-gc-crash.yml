@@ -63,24 +63,27 @@ jobs:
         run: |
           echo "=== Running tests under rr ==="
           # rr needs perf_event_paranoid <= 1
-          echo "perf_event_paranoid: $(cat /proc/sys/kernel/perf_event_paranoid)"
+          perf_paranoid=$(cat /proc/sys/kernel/perf_event_paranoid)
+          echo "perf_event_paranoid: $perf_paranoid"
+          if [ "$perf_paranoid" -gt 1 ]; then
+            echo "WARNING: perf_event_paranoid > 1, rr may not work"
+          fi
 
-          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- bash -c '
-            # Build test binaries first
-            cargo test --all-features --no-run 2>&1 | tail -10
+          # Build test binaries first
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo test --all-features --no-run 2>&1 | tail -10
 
-            for i in $(seq 1 20); do
-              echo "=== Iteration $i ==="
-              nix-shell -p rr --run "rr record --chaos cargo nextest run --all-features -j 1" 2>&1 || {
+          for i in $(seq 1 20); do
+            echo "=== Iteration $i ==="
+            ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- \
+              nix run nixpkgs#rr -- record --chaos cargo nextest run --all-features -j 1 2>&1 || {
                 exit_code=$?
                 echo "!!! CRASH on iteration $i with exit code $exit_code !!!"
                 echo "=== Replaying crash with backtrace ==="
-                nix-shell -p rr --run "rr replay -a -ex \"bt full\" -ex \"info threads\" -ex \"thread apply all bt full\" -ex \"quit\""
+                nix run nixpkgs#rr -- replay -a -ex "bt full" -ex "info threads" -ex "thread apply all bt full" -ex "quit"
                 exit 0
               }
-            done
-            echo "No crash after 20 iterations"
-          '
+          done
+          echo "No crash after 20 iterations"
 
       - name: Summary
         run: |
