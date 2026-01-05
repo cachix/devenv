@@ -58,7 +58,7 @@
 
   # Project dependencies
   packages = [
-    inputs.nix.packages.${pkgs.system}.nix # Required for integration tests
+    inputs.nix.packages.${pkgs.stdenv.system}.nix # Required for integration tests
     pkgs.git
     pkgs.xorg.libxcb
     pkgs.yaml2json
