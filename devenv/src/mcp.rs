@@ -368,6 +368,9 @@ mod tests {
             #[test]
             #[cfg(feature = $feature)]
             fn $name() {
+                // Initialize Nix/GC BEFORE spawning worker threads
+                devenv_nix_backend::nix_init();
+
                 tokio::runtime::Builder::new_multi_thread()
                     .enable_all()
                     .on_thread_start(|| {
@@ -382,6 +385,9 @@ mod tests {
         (async fn $name:ident() $body:block) => {
             #[test]
             fn $name() {
+                // Initialize Nix/GC BEFORE spawning worker threads
+                devenv_nix_backend::nix_init();
+
                 tokio::runtime::Builder::new_multi_thread()
                     .enable_all()
                     .on_thread_start(|| {

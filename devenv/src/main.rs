@@ -130,6 +130,10 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Devenv on background thread (own runtime)
     let shutdown_clone = shutdown.clone();
     let devenv_thread = std::thread::spawn(move || {
+        // Initialize Nix/GC in the parent thread BEFORE spawning worker threads.
+        // This ensures GC is fully set up before any thread tries to register.
+        devenv_nix_backend::nix_init();
+
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .on_thread_start(|| {

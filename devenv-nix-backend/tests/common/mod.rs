@@ -29,6 +29,9 @@ macro_rules! gc_test {
         #[test]
         #[ignore]
         fn $name() {
+            // Initialize Nix/GC BEFORE spawning worker threads
+            devenv_nix_backend::nix_init();
+
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .on_thread_start(|| {
@@ -43,6 +46,9 @@ macro_rules! gc_test {
     (async fn $name:ident() $body:block) => {
         #[test]
         fn $name() {
+            // Initialize Nix/GC BEFORE spawning worker threads
+            devenv_nix_backend::nix_init();
+
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .on_thread_start(|| {
