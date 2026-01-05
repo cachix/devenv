@@ -55,12 +55,6 @@ jobs:
           echo "=== ulimit ==="
           ulimit -a || true
 
-      # Install rr for record/replay debugging
-      - name: Install rr
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y rr
-
       # Run tests under rr to catch the crash
       - name: Run tests under rr
         continue-on-error: true
@@ -68,21 +62,20 @@ jobs:
           RUST_BACKTRACE: full
         run: |
           echo "=== Running tests under rr ==="
+          # rr needs perf_event_paranoid <= 1
+          echo "perf_event_paranoid: $(cat /proc/sys/kernel/perf_event_paranoid)"
+
           ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- bash -c '
             # Build test binaries first
             cargo test --all-features --no-run 2>&1 | tail -10
 
-            # Run nextest under rr - record the execution
-            # rr needs perf_event_paranoid <= 1
-            echo "perf_event_paranoid: $(cat /proc/sys/kernel/perf_event_paranoid)"
-
             for i in $(seq 1 20); do
               echo "=== Iteration $i ==="
-              rr record --chaos cargo nextest run --all-features -j 1 2>&1 || {
+              nix-shell -p rr --run "rr record --chaos cargo nextest run --all-features -j 1" 2>&1 || {
                 exit_code=$?
                 echo "!!! CRASH on iteration $i with exit code $exit_code !!!"
                 echo "=== Replaying crash with backtrace ==="
-                rr replay -a -ex "bt full" -ex "info threads" -ex "thread apply all bt full" -ex "quit"
+                nix-shell -p rr --run "rr replay -a -ex \"bt full\" -ex \"info threads\" -ex \"thread apply all bt full\" -ex \"quit\""
                 exit 0
               }
             done
