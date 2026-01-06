@@ -34,6 +34,34 @@ pub fn Spinner(mut hooks: Hooks, props: &SpinnerProps) -> impl Into<AnyElement<'
     }
 }
 
+/// Reusable status indicator component.
+/// Renders completion status: ✓ for success, ✗ for failure, spinner or space for in-progress.
+#[derive(Default, Props)]
+pub struct StatusIndicatorProps {
+    /// Completion state: None = active, Some(true) = success, Some(false) = failed
+    pub completed: Option<bool>,
+    /// Whether to show a spinner when active (None). If false, shows a space.
+    pub show_spinner: bool,
+}
+
+#[component]
+pub fn StatusIndicator(
+    _hooks: Hooks,
+    props: &StatusIndicatorProps,
+) -> impl Into<AnyElement<'static>> {
+    match props.completed {
+        Some(true) => element!(Text(content: "✓", color: COLOR_COMPLETED)).into_any(),
+        Some(false) => element!(Text(content: "✗", color: COLOR_FAILED)).into_any(),
+        None => {
+            if props.show_spinner {
+                element!(Spinner(color: COLOR_ACTIVE)).into_any()
+            } else {
+                element!(Text(content: " ")).into_any()
+            }
+        }
+    }
+}
+
 /// Build logs viewport height for collapsed preview (press 'e' to expand to fullscreen)
 pub const LOG_VIEWPORT_COLLAPSED: usize = 10;
 
@@ -77,123 +105,36 @@ pub fn format_elapsed_time(elapsed: Duration, high_resolution: bool) -> String {
     }
 }
 
-/// Component for building consistent hierarchy prefix for activities
+/// Component for rendering hierarchy structure (indentation + branch) for nested activities.
+/// Only used for nested items (depth > 0). Top-level items don't need hierarchy rendering.
 pub struct HierarchyPrefixComponent {
-    pub indent: String,
     pub depth: usize,
-    pub show_spinner: bool,
-    /// Completion state: None = active, Some(true) = success, Some(false) = failed
-    pub completed: Option<bool>,
-    /// Whether this activity is currently selected
-    pub is_selected: bool,
-    /// Whether this activity's result was cached
-    pub cached: bool,
 }
 
 impl HierarchyPrefixComponent {
-    pub fn new(indent: String, depth: usize) -> Self {
-        Self {
-            indent,
-            depth,
-            show_spinner: false,
-            completed: None,
-            is_selected: false,
-            cached: false,
-        }
+    pub fn new(depth: usize) -> Self {
+        Self { depth }
     }
 
-    pub fn with_spinner(mut self) -> Self {
-        self.show_spinner = true;
-        self
-    }
-
-    pub fn with_completed(mut self, completed: Option<bool>) -> Self {
-        self.completed = completed;
-        self
-    }
-
-    pub fn with_selected(mut self, is_selected: bool) -> Self {
-        self.is_selected = is_selected;
-        self
-    }
-
-    pub fn with_cached(mut self, cached: bool) -> Self {
-        self.cached = cached;
-        self
-    }
-
+    /// Renders the hierarchy prefix: [indent][branch]
+    /// The indent aligns with parent's content (after their status indicator).
     pub fn render(&self) -> Vec<AnyElement<'static>> {
-        let mut prefix_children = vec![];
-
-        // Show spinner for top-level items (depth == 0), or failure indicator if failed
         if self.depth == 0 {
-            match self.completed {
-                Some(true) => {
-                    // Success - show green checkmark
-                    prefix_children.push(
-                        element!(View(margin_right: 1) {
-                            Text(content: "✓", color: COLOR_COMPLETED)
-                        })
-                        .into_any(),
-                    );
-                }
-                Some(false) => {
-                    // Failed - show X
-                    prefix_children.push(
-                        element!(View(margin_right: 1) {
-                            Text(content: "✗", color: COLOR_FAILED)
-                        })
-                        .into_any(),
-                    );
-                }
-                None => {
-                    // Active - show spinner
-                    if self.show_spinner {
-                        prefix_children.push(
-                            element!(View(margin_right: 1) {
-                                Spinner(color: COLOR_ACTIVE)
-                            })
-                            .into_any(),
-                        );
-                    }
-                }
-            }
-        } else {
-            // Indented items: align hierarchy line with parent's first char (after spinner if any)
-            // Parent has: [spinner + space] + content, so we need 2 spaces for spinner width
-            // Then (depth-1) * 2 for additional nesting levels
-            let spinner_offset = if self.show_spinner || self.completed.is_some() {
-                2
-            } else {
-                0
-            };
-            let nesting_indent = "  ".repeat(self.depth - 1);
-            let total_indent = format!("{}{}", " ".repeat(spinner_offset), nesting_indent);
-            prefix_children.push(element!(Text(content: total_indent)).into_any());
-
-            // For child items, show failure indicator or hierarchy line
-            match self.completed {
-                Some(false) => {
-                    prefix_children.push(
-                        element!(View(margin_right: 1) {
-                            Text(content: "✗", color: COLOR_FAILED)
-                        })
-                        .into_any(),
-                    );
-                }
-                _ => {
-                    // Active or completed - show hierarchy line
-                    prefix_children.push(
-                        element!(View(margin_right: 1) {
-                            Text(content: "⎿", color: COLOR_HIERARCHY)
-                        })
-                        .into_any(),
-                    );
-                }
-            }
+            return vec![];
         }
 
-        prefix_children
+        // Indentation: 2 spaces for status indicator width + 2 spaces per additional nesting level
+        let status_indicator_offset = 2;
+        let nesting_indent = "  ".repeat(self.depth - 1);
+        let total_indent = format!("{}{}", " ".repeat(status_indicator_offset), nesting_indent);
+
+        vec![
+            element!(Text(content: total_indent)).into_any(),
+            element!(View(margin_right: 1) {
+                Text(content: "⎿", color: COLOR_HIERARCHY)
+            })
+            .into_any(),
+        ]
     }
 }
 
@@ -480,13 +421,14 @@ impl<'a> DownloadActivityComponent<'a> {
 
         let mut elements = vec![];
 
-        // First line: activity name
-        let prefix = HierarchyPrefixComponent::new(indent.clone(), self.depth)
-            .with_spinner()
-            .with_completed(self.completed)
-            .with_selected(self.is_selected)
-            .with_cached(self.cached)
-            .render();
+        // First line: activity name with hierarchy prefix and status indicator
+        let mut prefix = HierarchyPrefixComponent::new(self.depth).render();
+        prefix.push(
+            element!(View(margin_right: 1) {
+                StatusIndicator(completed: self.completed, show_spinner: true)
+            })
+            .into_any(),
+        );
 
         // Get substituter from download variant
         let substituter =

@@ -3,9 +3,9 @@ source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
 ⠋ Evaluating
-  ⎿ Fetching github:NixOS/nixpkgs
-  ⎿ Building hello-2.12 buildPhase
-    ⎿ Downloading glibc-2.35
-  ⎿ Downloading openssl-3.0.0
+  ⎿ ⠋ Fetching github:NixOS/nixpkgs
+  ⎿ ⠋ Building hello-2.12 buildPhase
+    ⎿ ⠋ Downloading glibc-2.35
+  ⎿ ⠋ Downloading openssl-3.0.0
 
  0 of 1 builds  │  0 of 2 downloa    ↑↓ nav • ^e expand

@@ -263,6 +263,22 @@ struct ActivityRenderContext {
     cached: bool,
 }
 
+/// Helper to build activity prefix with hierarchy and status indicator.
+/// - Top-level (depth == 0): [StatusIndicator]
+/// - Nested (depth > 0): [HierarchyPrefix][StatusIndicator]
+fn build_activity_prefix(depth: usize, completed: Option<bool>) -> Vec<AnyElement<'static>> {
+    let mut prefix = HierarchyPrefixComponent::new(depth).render();
+
+    prefix.push(
+        element!(View(margin_right: 1) {
+            StatusIndicator(completed: completed, show_spinner: true)
+        })
+        .into_any(),
+    );
+
+    prefix
+}
+
 /// Render a single activity (owned version)
 #[component]
 fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -276,7 +292,6 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         completed,
         cached,
     } = &*ctx;
-    let indent = "  ".repeat(*depth);
 
     // Calculate elapsed time - use stored duration for completed activities, skip for queued
     let elapsed_str = match &activity.state {
@@ -300,12 +315,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             // For selected build activities, use custom multi-line rendering
             if *is_selected {
-                let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                    .with_spinner()
-                    .with_completed(*completed)
-                    .with_selected(*is_selected)
-                    .with_cached(*cached)
-                    .render();
+                let prefix = build_activity_prefix(*depth, *completed);
 
                 let main_line = ActivityTextComponent::new(
                     "building".to_string(),
@@ -323,12 +333,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
 
             // Non-selected build activities use normal rendering
-            let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner()
-                .with_completed(*completed)
-                .with_selected(*is_selected)
-                .with_cached(*cached)
-                .render();
+            let prefix = build_activity_prefix(*depth, *completed);
 
             return ActivityTextComponent::new(
                 "building".to_string(),
@@ -349,12 +354,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 TaskDisplayStatus::Skipped => Some("skipped"),
                 TaskDisplayStatus::Cancelled => Some("cancelled"),
             };
-            let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner()
-                .with_completed(*completed)
-                .with_selected(*is_selected)
-                .with_cached(*cached)
-                .render();
+            let prefix = build_activity_prefix(*depth, *completed);
 
             let main_line = ActivityTextComponent::new(
                 "".to_string(), // No action prefix for tasks
@@ -406,12 +406,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             progress.current.unwrap_or(0).human_count_bytes()
                         )
                     });
-                    let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                        .with_spinner()
-                        .with_completed(*completed)
-                        .with_selected(*is_selected)
-                        .with_cached(*cached)
-                        .render();
+                    let prefix = build_activity_prefix(*depth, *completed);
 
                     return ActivityTextComponent::new(
                         "downloading".to_string(),
@@ -429,12 +424,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .substituter
                     .as_ref()
                     .map(|s| format!("from {}", s));
-                let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                    .with_spinner()
-                    .with_completed(*completed)
-                    .with_selected(*is_selected)
-                    .with_cached(*cached)
-                    .render();
+                let prefix = build_activity_prefix(*depth, *completed);
 
                 return ActivityTextComponent::new(
                     "downloading".to_string(),
@@ -448,12 +438,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
         }
         ActivityVariant::Copy => {
-            let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner()
-                .with_completed(*completed)
-                .with_selected(*is_selected)
-                .with_cached(*cached)
-                .render();
+            let prefix = build_activity_prefix(*depth, *completed);
 
             return ActivityTextComponent::new(
                 "copying".to_string(),
@@ -470,12 +455,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .substituter
                 .as_ref()
                 .map(|s| format!("from {}", s));
-            let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner()
-                .with_completed(*completed)
-                .with_selected(*is_selected)
-                .with_cached(*cached)
-                .render();
+            let prefix = build_activity_prefix(*depth, *completed);
 
             return ActivityTextComponent::new(
                 "querying".to_string(),
@@ -488,12 +468,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::FetchTree => {
-            let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner()
-                .with_completed(*completed)
-                .with_selected(*is_selected)
-                .with_cached(*cached)
-                .render();
+            let prefix = build_activity_prefix(*depth, *completed);
 
             return ActivityTextComponent::new(
                 "fetching".to_string(),
@@ -516,12 +491,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             // For selected evaluation activities, show expandable file list
             if *is_selected && logs.is_some() {
-                let prefix = HierarchyPrefixComponent::new(indent.clone(), *depth)
-                    .with_spinner()
-                    .with_completed(*completed)
-                    .with_selected(*is_selected)
-                    .with_cached(*cached)
-                    .render();
+                let prefix = build_activity_prefix(*depth, *completed);
 
                 let main_line = ActivityTextComponent::new(
                     "evaluating".to_string(),
@@ -538,12 +508,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .render_with_main_line(main_line);
             }
 
-            let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner()
-                .with_completed(*completed)
-                .with_selected(*is_selected)
-                .with_cached(*cached)
-                .render();
+            let prefix = build_activity_prefix(*depth, *completed);
 
             return ActivityTextComponent::new(
                 "evaluating".to_string(),
@@ -556,12 +521,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::UserOperation => {
-            let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner()
-                .with_completed(*completed)
-                .with_selected(*is_selected)
-                .with_cached(*cached)
-                .render();
+            let prefix = build_activity_prefix(*depth, *completed);
 
             return ActivityTextComponent::new(
                 "".to_string(), // No action prefix for user operations
@@ -573,12 +533,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Devenv => {
-            let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner()
-                .with_completed(*completed)
-                .with_selected(*is_selected)
-                .with_cached(*cached)
-                .render();
+            let prefix = build_activity_prefix(*depth, *completed);
 
             return ActivityTextComponent::new(
                 "".to_string(), // No action prefix for devenv operations
@@ -732,12 +687,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
         }
         ActivityVariant::Unknown => {
-            let prefix = HierarchyPrefixComponent::new(indent, *depth)
-                .with_spinner()
-                .with_completed(*completed)
-                .with_selected(*is_selected)
-                .with_cached(*cached)
-                .render();
+            let prefix = build_activity_prefix(*depth, *completed);
 
             return ActivityTextComponent::new(
                 "unknown".to_string(),
