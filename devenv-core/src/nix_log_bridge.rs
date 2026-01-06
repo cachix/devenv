@@ -353,9 +353,7 @@ impl NixLogBridge {
                 if let Some(store_path) = fields.first().and_then(Self::extract_string_field) {
                     let source_uri = fields.get(1).and_then(Self::extract_string_field);
 
-                    let is_local_copy = source_uri
-                        .as_ref()
-                        .is_some_and(|uri| uri.starts_with('/'));
+                    let is_local_copy = source_uri.as_ref().is_some_and(|uri| uri.starts_with('/'));
 
                     let activity = if is_local_copy {
                         // Local copy to the store - use the full source path as the name

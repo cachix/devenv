@@ -13,8 +13,8 @@ use async_trait::async_trait;
 use include_dir::{Dir, include_dir};
 use tokio_shutdown::Shutdown;
 
-use devenv_cache_core::compute_string_hash;
 use devenv_activity::current_activity_id;
+use devenv_cache_core::compute_string_hash;
 use devenv_core::GlobalOptions;
 use devenv_core::cachix::{Cachix, CachixCacheInfo, CachixManager};
 use devenv_core::config::Config;

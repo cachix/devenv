@@ -62,7 +62,6 @@ pub struct DownloadActivity {
     pub substituter: Option<String>,
 }
 
-
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct ProgressActivity {
     pub current: Option<u64>,

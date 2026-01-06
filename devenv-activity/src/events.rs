@@ -351,7 +351,12 @@ mod tests {
 
     #[test]
     fn test_fetch_kinds() {
-        let kinds = [FetchKind::Download, FetchKind::Query, FetchKind::Tree, FetchKind::Copy];
+        let kinds = [
+            FetchKind::Download,
+            FetchKind::Query,
+            FetchKind::Tree,
+            FetchKind::Copy,
+        ];
         for kind in kinds {
             let event = ActivityEvent::Fetch(Fetch::Start {
                 id: 1,
