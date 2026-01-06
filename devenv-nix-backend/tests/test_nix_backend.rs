@@ -7,6 +7,7 @@
 
 use devenv_core::{Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend, Options};
 use devenv_nix_backend::ProjectRoot;
+use devenv_nix_backend::gc_test;
 use devenv_nix_backend::nix_backend::NixRustBackend;
 use once_cell::sync::OnceCell;
 use secretspec;

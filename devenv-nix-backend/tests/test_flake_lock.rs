@@ -1,7 +1,7 @@
 //! Integration tests for flake locking functionality
 
 use devenv_core::{Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend};
-use devenv_nix_backend::{ProjectRoot, load_lock_file, nix_backend::NixRustBackend};
+use devenv_nix_backend::{ProjectRoot, gc_test, load_lock_file, nix_backend::NixRustBackend};
 use nix_bindings_fetchers::FetchersSettings;
 use std::fs;
 use std::path::{Path, PathBuf};

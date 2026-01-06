@@ -12,6 +12,7 @@ use std::time::Duration;
 
 // Import the daemon module
 use devenv_nix_backend::cachix_daemon::{BuildPathCallback, DaemonConfig, StreamingCachixDaemon};
+use devenv_nix_backend::gc_test;
 
 // Import shared test utilities
 mod common;

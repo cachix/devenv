@@ -70,6 +70,52 @@ pub fn gc_register_current_thread() -> Result<()> {
     })
 }
 
+/// Macro for async tests that properly registers tokio worker threads with Boehm GC.
+///
+/// This is needed because Nix uses Boehm GC with parallel marking,
+/// and GC must know about all threads that access GC-managed memory.
+#[macro_export]
+macro_rules! gc_test {
+    (#[ignore] async fn $name:ident() $body:block) => {
+        #[test]
+        #[ignore]
+        fn $name() {
+            $crate::nix_init();
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .on_thread_start(|| { let _ = $crate::gc_register_current_thread(); })
+                .build()
+                .expect("Failed to create test runtime")
+                .block_on(async $body)
+        }
+    };
+    (#[cfg(feature = $feature:literal)] async fn $name:ident() $body:block) => {
+        #[test]
+        #[cfg(feature = $feature)]
+        fn $name() {
+            $crate::nix_init();
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .on_thread_start(|| { let _ = $crate::gc_register_current_thread(); })
+                .build()
+                .expect("Failed to create test runtime")
+                .block_on(async $body)
+        }
+    };
+    (async fn $name:ident() $body:block) => {
+        #[test]
+        fn $name() {
+            $crate::nix_init();
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .on_thread_start(|| { let _ = $crate::gc_register_current_thread(); })
+                .build()
+                .expect("Failed to create test runtime")
+                .block_on(async $body)
+        }
+    };
+}
+
 // Activity logger integration with tracing
 pub mod logger;
 
