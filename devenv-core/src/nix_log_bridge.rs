@@ -39,7 +39,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
-use tracing::{error, info, trace, warn};
+use tracing::{error, trace, warn};
 
 /// State for tracking the current evaluation activity.
 ///
@@ -244,12 +244,6 @@ impl NixLogBridge {
                         _ => ActivityLevel::Info,
                     };
                     message(activity_level, msg);
-
-                    // Also log to tracing for file export and non-TUI modes
-                    match level {
-                        Verbosity::Warn => warn!("{msg}"),
-                        _ => info!("{msg}"),
-                    }
                 }
             }
         }
