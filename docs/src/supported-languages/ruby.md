@@ -97,6 +97,32 @@ package
 
 
 
+### languages\.ruby\.documentation\.enable
+
+
+
+Whether to enable documentation support for Ruby packages\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
+
+
+
 ### languages\.ruby\.version
 
 
