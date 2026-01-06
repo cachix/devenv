@@ -59,6 +59,16 @@ in
       default = false;
       description = "Enable hardening workaround required for Delve debugger (https://github.com/go-delve/delve/issues/3085)";
     };
+
+    lsp = {
+      enable = lib.mkEnableOption "Go Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.gopls;
+        defaultText = lib.literalExpression "pkgs.gopls";
+        description = "The Go language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -78,12 +88,11 @@ in
       (buildWithSpecificGo pkgs.gomodifytags)
       (buildWithSpecificGo pkgs.impl)
       (buildWithSpecificGo pkgs.go-tools)
-      (buildWithSpecificGo pkgs.gopls)
       (buildWithSpecificGo pkgs.gotests)
 
       # Required by vim-go
       (buildWithSpecificGo pkgs.iferr)
-    ];
+    ] ++ lib.optional cfg.lsp.enable (buildWithSpecificGo cfg.lsp.package);
 
     hardeningDisable = lib.optional (cfg.enableHardeningWorkaround) "fortify";
 

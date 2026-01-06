@@ -13,6 +13,17 @@ in
       default = pkgs.elixir;
       defaultText = lib.literalExpression "pkgs.elixir";
     };
+
+    lsp = {
+      enable = lib.mkEnableOption "Elixir Language Server" // { default = true; };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.elixir-ls;
+        defaultText = lib.literalExpression "pkgs.elixir-ls";
+        description = "The Elixir language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable
@@ -24,9 +35,8 @@ in
         mix-test.package = cfg.package;
       };
 
-      packages = with pkgs; [
+      packages = [
         cfg.package
-        elixir-ls
-      ];
+      ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
     };
 }

@@ -17,13 +17,23 @@ in
       default = pkgs.erlang;
       defaultText = lib.literalExpression "pkgs.erlang";
     };
+
+    lsp = {
+      enable = lib.mkEnableOption "Erlang Language Server" // { default = true; };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.erlang-language-platform;
+        defaultText = lib.literalExpression "pkgs.erlang-language-platform";
+        description = "The Erlang language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-      pkgs.erlang-language-platform
       rebar3
-    ];
+    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

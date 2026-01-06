@@ -13,12 +13,26 @@ in
       defaultText = lib.literalExpression "pkgs.dotnet-sdk";
       description = "The .NET SDK package to use.";
     };
+
+    lsp = {
+      enable = lib.mkEnableOption ".NET Language Server" // {
+        # csharp-ls crashes on aarch64-darwin due to missing code signatures
+        # https://github.com/razzmatazz/csharp-language-server/issues/211
+        default = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.csharp-ls;
+      };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.csharp-ls;
+        defaultText = lib.literalExpression "pkgs.csharp-ls";
+        description = "The .NET language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-    ];
+    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
     env.DOTNET_ROOT = "${
         if lib.hasAttr "unwrapped" cfg.package

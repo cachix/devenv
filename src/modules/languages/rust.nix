@@ -81,6 +81,16 @@ in
       '';
     };
 
+    lsp = {
+      enable = lib.mkEnableOption "Rust Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.rust-analyzer;
+        defaultText = lib.literalExpression "pkgs.rust-analyzer";
+        description = "The Rust language server package to use.";
+      };
+    };
+
     toolchain = lib.mkOption {
       type = lib.types.submodule ({
         freeformType = lib.types.attrsOf lib.types.package;
@@ -241,7 +251,8 @@ in
 
         packages =
           lib.optional cfg.mold.enable pkgs.mold-wrapped
-          ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
+          ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv
+          ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
         # enable compiler tooling by default to expose things like cc
         languages.c.enable = lib.mkDefault true;

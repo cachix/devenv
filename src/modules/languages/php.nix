@@ -230,6 +230,16 @@ in
       '';
     };
 
+    lsp = {
+      enable = lib.mkEnableOption "PHP Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.phpactor;
+        defaultText = lib.literalExpression "pkgs.phpactor";
+        description = "The PHP language server package to use.";
+      };
+    };
+
     fpm = {
       settings = mkOption {
         type = with types; attrsOf (oneOf [ str int bool ]);
@@ -332,7 +342,8 @@ in
 
       packages = with pkgs; [
         cfg.package
-      ] ++ lib.optional (cfg.packages.composer != null) cfg.packages.composer;
+      ] ++ lib.optional (cfg.packages.composer != null) cfg.packages.composer
+        ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
       env.PHPFPMDIR = runtimeDir;
 
