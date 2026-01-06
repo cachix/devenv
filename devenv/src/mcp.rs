@@ -1,11 +1,19 @@
 #![allow(dead_code)]
 
 use crate::devenv::{Devenv, DevenvOptions};
+use devenv_activity::Activity;
 use devenv_core::{Config, Options};
 use miette::Result;
+use rmcp::handler::server::tool::{ToolCallContext, ToolRouter};
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{ServerCapabilities, ServerInfo};
-use rmcp::{ServerHandler, ServiceExt, tool, tool_router};
+use rmcp::model::{
+    CallToolRequestParam, CallToolResult, ListToolsResult, PaginatedRequestParam,
+    ServerCapabilities, ServerInfo,
+};
+use rmcp::service::RequestContext;
+use rmcp::transport::streamable_http_server::StreamableHttpService;
+use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
+use rmcp::{ErrorData as McpError, RoleServer, ServerHandler, ServiceExt, tool, tool_router};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -19,6 +27,7 @@ struct DevenvMcpServer {
     config: Config,
     cache: Arc<RwLock<McpCache>>,
     devenv_root: Option<PathBuf>,
+    tool_router: ToolRouter<Self>,
 }
 
 #[derive(Default)]
@@ -37,44 +46,14 @@ impl DevenvMcpServer {
             config,
             cache: Arc::new(RwLock::new(McpCache::default())),
             devenv_root,
+            tool_router: Self::tool_router(),
         }
     }
 
     async fn initialize(&self) -> Result<()> {
         info!("Initializing MCP server cache...");
 
-        // Fetch and cache packages
-        match self.fetch_packages().await {
-            Ok(packages) => {
-                let mut cache = self.cache.write().await;
-                cache.packages = Some(packages);
-                info!("Successfully cached packages");
-            }
-            Err(e) => {
-                warn!("Failed to fetch packages during initialization: {}", e);
-            }
-        }
-
-        // Fetch and cache options
-        match self.fetch_options().await {
-            Ok(options) => {
-                let mut cache = self.cache.write().await;
-                cache.options = Some(options);
-                info!("Successfully cached options");
-            }
-            Err(e) => {
-                warn!("Failed to fetch options during initialization: {}", e);
-            }
-        }
-
-        info!("MCP server initialization completed successfully");
-        Ok(())
-    }
-
-    async fn fetch_packages(&self) -> Result<Vec<PackageInfo>> {
-        info!("Fetching available packages from nixpkgs...");
-
-        // Create a Devenv instance to access nix functionality
+        // Create a single Devenv instance for all operations
         let devenv_options = DevenvOptions {
             config: self.config.clone(),
             devenv_root: self.devenv_root.clone(),
@@ -82,8 +61,45 @@ impl DevenvMcpServer {
         };
         let devenv = Devenv::new(devenv_options).await;
 
-        // Assemble the devenv to create required flake files
+        // Assemble once for all operations
         devenv.assemble(true).await?;
+
+        // Fetch and cache packages
+        {
+            let _activity = Activity::operation("Caching packages").start();
+            match self.fetch_packages_with_devenv(&devenv).await {
+                Ok(packages) => {
+                    let mut cache = self.cache.write().await;
+                    cache.packages = Some(packages);
+                    info!("Successfully cached packages");
+                }
+                Err(e) => {
+                    warn!("Failed to fetch packages during initialization: {}", e);
+                }
+            }
+        }
+
+        // Fetch and cache options
+        {
+            let _activity = Activity::operation("Caching options").start();
+            match self.fetch_options_with_devenv(&devenv).await {
+                Ok(options) => {
+                    let mut cache = self.cache.write().await;
+                    cache.options = Some(options);
+                    info!("Successfully cached options");
+                }
+                Err(e) => {
+                    warn!("Failed to fetch options during initialization: {}", e);
+                }
+            }
+        }
+
+        info!("MCP server initialization completed successfully");
+        Ok(())
+    }
+
+    async fn fetch_packages_with_devenv(&self, devenv: &Devenv) -> Result<Vec<PackageInfo>> {
+        info!("Fetching available packages from nixpkgs...");
 
         // Search for common/popular packages
         // Note: Using ".*" would match all packages but causes resource exhaustion
@@ -126,19 +142,8 @@ impl DevenvMcpServer {
         Ok(packages)
     }
 
-    async fn fetch_options(&self) -> Result<Vec<OptionInfo>> {
+    async fn fetch_options_with_devenv(&self, devenv: &Devenv) -> Result<Vec<OptionInfo>> {
         info!("Fetching available configuration options...");
-
-        // Create a Devenv instance to access nix functionality
-        let devenv_options = DevenvOptions {
-            config: self.config.clone(),
-            devenv_root: self.devenv_root.clone(),
-            ..Default::default()
-        };
-        let devenv = Devenv::new(devenv_options).await;
-
-        // Assemble the devenv to create required flake files
-        devenv.assemble(true).await?;
 
         // Build the optionsJSON attribute like in devenv.rs search function
         let build_options = Options {
@@ -250,17 +255,17 @@ struct OptionInfo {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ListPackagesRequest {
-    #[schemars(description = "Optional search term to filter packages")]
-    search: Option<String>,
+struct SearchPackagesRequest {
+    #[schemars(description = "Search term to filter packages by name or description")]
+    query: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ListOptionsRequest {
+struct SearchOptionsRequest {
     #[schemars(
-        description = "Optional search string to filter options by name or description (e.g., 'python' or 'languages.python')"
+        description = "Search string to filter options by name or description (e.g., 'python' or 'languages.python')"
     )]
-    prefix: Option<String>,
+    query: String,
 }
 
 impl ServerHandler for DevenvMcpServer {
@@ -271,12 +276,34 @@ impl ServerHandler for DevenvMcpServer {
             ..Default::default()
         }
     }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParam>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        std::future::ready(Ok(ListToolsResult {
+            tools: self.tool_router.list_all(),
+            next_cursor: None,
+        }))
+    }
+
+    fn call_tool(
+        &self,
+        request: CallToolRequestParam,
+        context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+        async move {
+            let tool_context = ToolCallContext::new(self, request, context);
+            self.tool_router.call(tool_context).await
+        }
+    }
 }
 
 #[tool_router]
 impl DevenvMcpServer {
-    #[tool(description = "List available packages in devenv")]
-    async fn list_packages(&self, params: Parameters<ListPackagesRequest>) -> String {
+    #[tool(description = "Search available packages in devenv")]
+    async fn search_packages(&self, params: Parameters<SearchPackagesRequest>) -> String {
         let request = params.0;
 
         // Always use cached data
@@ -287,25 +314,22 @@ impl DevenvMcpServer {
         });
 
         // Filter packages based on search term
-        let filtered_packages: Vec<PackageInfo> = if let Some(ref search_term) = request.search {
-            packages
-                .into_iter()
-                .filter(|p| {
-                    p.name.to_lowercase().contains(&search_term.to_lowercase())
-                        || p.description
-                            .as_ref()
-                            .is_some_and(|d| d.to_lowercase().contains(&search_term.to_lowercase()))
-                })
-                .collect()
-        } else {
-            packages
-        };
+        let search_lower = request.query.to_lowercase();
+        let filtered_packages: Vec<PackageInfo> = packages
+            .into_iter()
+            .filter(|p| {
+                p.name.to_lowercase().contains(&search_lower)
+                    || p.description
+                        .as_ref()
+                        .is_some_and(|d| d.to_lowercase().contains(&search_lower))
+            })
+            .collect();
 
         serde_json::to_string(&filtered_packages).unwrap_or_default()
     }
 
-    #[tool(description = "List all available configuration options")]
-    async fn list_options(&self, params: Parameters<ListOptionsRequest>) -> String {
+    #[tool(description = "Search available configuration options")]
+    async fn search_options(&self, params: Parameters<SearchOptionsRequest>) -> String {
         let request = params.0;
 
         // Always use cached data
@@ -316,42 +340,87 @@ impl DevenvMcpServer {
         });
 
         // Filter options based on search string (searches in both name and description)
-        let filtered_options: Vec<OptionInfo> = if let Some(ref search_str) = request.prefix {
-            let search_lower = search_str.to_lowercase();
-            options
-                .into_iter()
-                .filter(|o| {
-                    o.name.to_lowercase().contains(&search_lower)
-                        || o.description
-                            .as_ref()
-                            .is_some_and(|d| d.to_lowercase().contains(&search_lower))
-                })
-                .collect()
-        } else {
-            options
-        };
+        let search_lower = request.query.to_lowercase();
+        let filtered_options: Vec<OptionInfo> = options
+            .into_iter()
+            .filter(|o| {
+                o.name.to_lowercase().contains(&search_lower)
+                    || o.description
+                        .as_ref()
+                        .is_some_and(|d| d.to_lowercase().contains(&search_lower))
+            })
+            .collect();
 
         serde_json::to_string(&filtered_options).unwrap_or_default()
     }
 }
 
-pub async fn run_mcp_server(config: Config) -> Result<()> {
+pub async fn run_mcp_server(config: Config, http_port: Option<u16>) -> Result<()> {
     info!("Starting devenv MCP server");
 
     let server = DevenvMcpServer::new(config);
 
-    // Initialize cache before starting the server
-    server.initialize().await?;
+    // Initialize cache in background thread (Nix FFI futures are not Send)
+    // Server starts immediately, tools return empty results until cache is ready
+    // Activities from the background thread are sent to TUI via global channel
+    let init_server = server.clone();
+    std::thread::Builder::new()
+        .name("mcp-cache-init".into())
+        .spawn(move || {
+            let rt =
+                tokio::runtime::Runtime::new().expect("Failed to create runtime for MCP cache");
+            rt.block_on(async move {
+                if let Err(e) = init_server.initialize().await {
+                    warn!("Failed to initialize MCP cache: {}", e);
+                }
+            });
+        })
+        .expect("Failed to spawn MCP cache init thread");
 
-    let service = server
-        .serve(rmcp::transport::stdio())
-        .await
-        .map_err(|e| miette::miette!("Failed to start MCP server: {}", e))?;
+    match http_port {
+        Some(port) => {
+            info!("Starting MCP server in HTTP mode on port {}", port);
 
-    service
-        .waiting()
-        .await
-        .map_err(|e| miette::miette!("MCP server error: {}", e))?;
+            let service = StreamableHttpService::new(
+                move || Ok(server.clone()),
+                LocalSessionManager::default().into(),
+                Default::default(),
+            );
+
+            let router = axum::Router::new().fallback_service(service);
+            let addr = format!("0.0.0.0:{}", port);
+            let tcp_listener = tokio::net::TcpListener::bind(&addr)
+                .await
+                .map_err(|e| miette::miette!("Failed to bind to {}: {}", addr, e))?;
+
+            info!("MCP server ready at http://{}/", addr);
+
+            // Show TUI progress for HTTP server
+            let _activity = Activity::operation("Running MCP server")
+                .detail(format!("http://0.0.0.0:{}/", port))
+                .start();
+
+            axum::serve(tcp_listener, router)
+                .with_graceful_shutdown(async {
+                    tokio::signal::ctrl_c().await.ok();
+                })
+                .await
+                .map_err(|e| miette::miette!("HTTP server error: {}", e))?;
+        }
+        None => {
+            info!("Starting MCP server in stdio mode");
+
+            let service = server
+                .serve(rmcp::transport::stdio())
+                .await
+                .map_err(|e| miette::miette!("Failed to start MCP server: {}", e))?;
+
+            service
+                .waiting()
+                .await
+                .map_err(|e| miette::miette!("MCP server error: {}", e))?;
+        }
+    }
 
     Ok(())
 }
@@ -427,23 +496,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_list_packages_request_deserialization() {
+    async fn test_search_packages_request_deserialization() {
         let json = json!({
-            "search": "python"
+            "query": "python"
         });
 
-        let request: ListPackagesRequest = serde_json::from_value(json).unwrap();
-        assert_eq!(request.search, Some("python".to_string()));
+        let request: SearchPackagesRequest = serde_json::from_value(json).unwrap();
+        assert_eq!(request.query, "python".to_string());
     }
 
     #[tokio::test]
-    async fn test_list_options_request_deserialization() {
+    async fn test_search_options_request_deserialization() {
         let json = json!({
-            "prefix": "languages"
+            "query": "languages"
         });
 
-        let request: ListOptionsRequest = serde_json::from_value(json).unwrap();
-        assert_eq!(request.prefix, Some("languages".to_string()));
+        let request: SearchOptionsRequest = serde_json::from_value(json).unwrap();
+        assert_eq!(request.query, "languages".to_string());
     }
 
     // Integration tests that use live Nix data
@@ -455,13 +524,25 @@ mod tests {
     #[nix_test]
     #[cfg(feature = "integration-tests")]
     async fn test_fetch_packages_live() {
+        use crate::devenv::{Devenv, DevenvOptions};
+
         // Create temporary directory with test devenv configuration
         let temp_dir = create_test_devenv_dir().await.unwrap();
 
         let config = Config::default();
-        let server = DevenvMcpServer::new_with_root(config, Some(temp_dir.path().to_path_buf()));
+        let server =
+            DevenvMcpServer::new_with_root(config.clone(), Some(temp_dir.path().to_path_buf()));
 
-        let packages = server.fetch_packages().await;
+        // Create Devenv and assemble
+        let devenv_options = DevenvOptions {
+            config,
+            devenv_root: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+        let devenv = Devenv::new(devenv_options).await;
+        devenv.assemble(true).await.unwrap();
+
+        let packages = server.fetch_packages_with_devenv(&devenv).await;
 
         // Should be able to fetch packages without error
         assert!(packages.is_ok(), "Failed to fetch packages: {packages:?}");
@@ -518,13 +599,25 @@ mod tests {
     #[nix_test]
     #[cfg(feature = "integration-tests")]
     async fn test_fetch_options_live() {
+        use crate::devenv::{Devenv, DevenvOptions};
+
         // Create temporary directory with test devenv configuration
         let temp_dir = create_test_devenv_dir().await.unwrap();
 
         let config = Config::default();
-        let server = DevenvMcpServer::new_with_root(config, Some(temp_dir.path().to_path_buf()));
+        let server =
+            DevenvMcpServer::new_with_root(config.clone(), Some(temp_dir.path().to_path_buf()));
 
-        let options = server.fetch_options().await;
+        // Create Devenv and assemble
+        let devenv_options = DevenvOptions {
+            config,
+            devenv_root: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+        let devenv = Devenv::new(devenv_options).await;
+        devenv.assemble(true).await.unwrap();
+
+        let options = server.fetch_options_with_devenv(&devenv).await;
 
         match options {
             Ok(options) => {

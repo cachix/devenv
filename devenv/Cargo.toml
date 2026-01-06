@@ -64,6 +64,7 @@ pathdiff.workspace = true
 shell-escape.workspace = true
 rmcp.workspace = true
 rmcp-macros.workspace = true
+axum.workspace = true
 async-trait.workspace = true
 blake3.workspace = true
 chrono.workspace = true

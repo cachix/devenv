@@ -150,7 +150,13 @@ pub enum Commands {
     GenerateJSONSchema,
 
     #[command(about = "Launch Model Context Protocol server for AI assistants")]
-    Mcp {},
+    Mcp {
+        #[arg(
+            long,
+            help = "Run as HTTP server instead of stdio. Optionally specify port (default: 8080)"
+        )]
+        http: Option<Option<u16>>,
+    },
 
     #[command(
         about = "Start the nixd language server for devenv.nix. https://devenv.sh/editor-support/"
