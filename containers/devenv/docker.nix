@@ -353,6 +353,7 @@ dockerTools.buildLayeredImageWithNixDb {
   config = {
     inherit Cmd Labels;
     User = "${toString uid}:${toString gid}";
+    WorkingDir = userHome;
     Env = [
       "USER=${uname}"
       "PATH=${
