@@ -1,0 +1,34 @@
+name: "Auto format"
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+
+      - uses: cachix/cachix-action@v16
+        with:
+          name: devenv
+
+      - name: Install devenv
+        run: nix profile install . -L --accept-flake-config
+
+      - name: Run formatters
+        run: devenv shell -- prek run || true
+
+      - uses: EndBug/add-and-commit@v9
+        with:
+          default_author: github_actions
+          add: "."
+          message: "Auto format code"
