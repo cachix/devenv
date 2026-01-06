@@ -5350,8 +5350,6 @@ boolean
 
 ## git-hooks.hooks.clippy.settings.denyWarnings
 
-
-
 Fail when warnings are present
 
 
@@ -5370,6 +5368,8 @@ boolean
 
 
 ## git-hooks.hooks.clippy.settings.extraArgs
+
+
 
 Additional arguments to pass to clippy
 
@@ -7402,8 +7402,6 @@ string
 
 ## git-hooks.hooks.hpack.settings.silent
 
-
-
 Whether generation should be silent.
 
 
@@ -7422,6 +7420,8 @@ boolean
 
 
 ## git-hooks.hooks.isort
+
+
 
 isort hook
 
@@ -17311,6 +17311,32 @@ package
 
 *Default:*
 ` pkgs.bundler.override { ruby = cfg.package; } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
+
+
+
+## languages.ruby.documentation.enable
+
+
+
+Whether to enable documentation support for Ruby packages.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
