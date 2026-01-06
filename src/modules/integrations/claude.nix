@@ -407,7 +407,12 @@ in
           };
         }
       );
-      default = { };
+      default = {
+        "mcp.devenv.new" = {
+          type = "http";
+          url = "https://mcp.devenv.new";
+        };
+      };
       description = ''
         MCP (Model Context Protocol) servers to configure.
         These servers provide additional capabilities and context to Claude Code.
