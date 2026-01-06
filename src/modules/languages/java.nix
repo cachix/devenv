@@ -46,6 +46,15 @@ in
         '';
       };
     };
+    lsp = {
+      enable = mkEnableOption "Java Language Server" // { default = true; };
+      package = mkOption {
+        type = types.package;
+        default = pkgs.jdt-language-server;
+        defaultText = literalExpression "pkgs.jdt-language-server";
+        description = "The Java language server package to use.";
+      };
+    };
   };
 
   config = mkIf cfg.enable {
@@ -53,7 +62,8 @@ in
     languages.java.gradle.package = mkDefault (pkgs.gradle.override { java = cfg.jdk.package; });
     packages = (optional cfg.enable cfg.jdk.package)
       ++ (optional cfg.maven.enable cfg.maven.package)
-      ++ (optional cfg.gradle.enable cfg.gradle.package);
+      ++ (optional cfg.gradle.enable cfg.gradle.package)
+      ++ (optional cfg.lsp.enable cfg.lsp.package);
 
     env.JAVA_HOME = cfg.jdk.package.home;
   };

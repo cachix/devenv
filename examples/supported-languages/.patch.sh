@@ -10,5 +10,7 @@ cat > devenv.local.nix << EOF
   languages.odin.enable = lib.mkForce (!(pkgs.stdenv.isDarwin || (pkgs.stdenv.isLinux && pkgs.stdenv.isAarch64)));
   # macOS is broken.
   languages.racket.enable = lib.mkForce (!pkgs.stdenv.isDarwin);
+  # Swift broken on Linux with GCC 14 - https://github.com/NixOS/nixpkgs/pull/468796
+  languages.swift.enable = lib.mkForce pkgs.stdenv.isDarwin;
 }
 EOF

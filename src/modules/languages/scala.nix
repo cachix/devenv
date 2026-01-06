@@ -36,6 +36,16 @@ in
         default = "mill";
       };
     };
+
+    lsp = {
+      enable = lib.mkEnableOption "Scala Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.metals;
+        defaultText = lib.literalExpression "pkgs.metals";
+        description = "The Scala language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -43,10 +53,10 @@ in
       with pkgs;
       [
         (cfg.package.override { jre = java.jdk.package; })
-        (metals.override { jre = java.jdk.package; })
         (coursier.override { jre = java.jdk.package; })
         (scalafmt.override { jre = java.jdk.package; })
       ]
+      ++ lib.optional cfg.lsp.enable (cfg.lsp.package.override { jre = java.jdk.package; })
       ++ lib.optionals cfg.sbt.enable [
         (sbt.override (
           old:

@@ -13,6 +13,16 @@ in
         default = [ ];
         example = [ "Mojolicious" ];
       };
+
+    lsp = {
+      enable = lib.mkEnableOption "Perl Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.perlnavigator;
+        defaultText = lib.literalExpression "pkgs.perlnavigator";
+        description = "The Perl language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -20,6 +30,6 @@ in
       (perl.withPackages (p: (with builtins; map
         (pkg: p.${ replaceStrings [ "::" ] [ "" ] pkg })
         cfg.packages)))
-    ];
+    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

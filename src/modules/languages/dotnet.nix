@@ -13,12 +13,22 @@ in
       defaultText = lib.literalExpression "pkgs.dotnet-sdk";
       description = "The .NET SDK package to use.";
     };
+
+    lsp = {
+      enable = lib.mkEnableOption ".NET Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.csharp-ls;
+        defaultText = lib.literalExpression "pkgs.csharp-ls";
+        description = "The .NET language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-    ];
+    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
     env.DOTNET_ROOT = "${
         if lib.hasAttr "unwrapped" cfg.package

@@ -7,6 +7,16 @@ in
   options.languages.c = {
     enable = lib.mkEnableOption "tools for C development";
 
+    lsp = {
+      enable = lib.mkEnableOption "C Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.ccls;
+        defaultText = lib.literalExpression "pkgs.ccls";
+        description = "The C language server package to use.";
+      };
+    };
+
     debugger = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
       default =
@@ -26,9 +36,9 @@ in
       clang-tools
       stdenv
       gnumake
-      ccls
       pkg-config
-    ] ++ lib.optional (cfg.debugger != null) cfg.debugger
+    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package
+    ++ lib.optional (cfg.debugger != null) cfg.debugger
     ++ lib.optional (lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.valgrind && !pkgs.valgrind.meta.broken) pkgs.valgrind;
   };
 }

@@ -20,8 +20,18 @@ in
       example = [ "algorithms" "latexmk" ];
       description = "Extra packages to add to the base TeX Live set";
     };
+
+    lsp = {
+      enable = lib.mkEnableOption "TeX Live Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.texlab;
+        defaultText = lib.literalExpression "pkgs.texlab";
+        description = "The TeX Live language server package to use.";
+      };
+    };
   };
   config = lib.mkIf cfg.enable {
-    packages = [ package ];
+    packages = [ package ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }
