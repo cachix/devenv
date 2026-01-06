@@ -311,3 +311,98 @@ async fn test_full_workflow() {
         lock_file_path.display()
     );
 }
+
+/// Test that relative paths with `..` in the path portion resolve correctly
+/// This tests the bug where `path:..?dir=src/modules` was resolving incorrectly
+/// because `create_flake_inputs` didn't set base_directory on parse_flags.
+#[nix_test]
+async fn test_relative_path_with_parent_dir_in_path() {
+    // Create structure:
+    // temp_dir/
+    //   outer/
+    //     flake.nix (simple flake we reference)
+    //     flake.lock
+    //   inner/
+    //     devenv.yaml (references path:../outer)
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let outer_dir = temp_dir.path().join("outer");
+    let inner_dir = temp_dir.path().join("inner");
+
+    fs::create_dir_all(&outer_dir).expect("Failed to create outer dir");
+    fs::create_dir_all(&inner_dir).expect("Failed to create inner dir");
+
+    // Create a minimal flake.nix in outer/
+    let flake_nix = r#"{
+  inputs = { };
+  outputs = { self }: {
+    # Minimal flake with no outputs
+  };
+}"#;
+    fs::write(outer_dir.join("flake.nix"), flake_nix).expect("Failed to write flake.nix");
+
+    // Create a minimal flake.lock in outer/
+    let flake_lock = r#"{
+  "nodes": {
+    "root": {}
+  },
+  "root": "root",
+  "version": 7
+}"#;
+    fs::write(outer_dir.join("flake.lock"), flake_lock).expect("Failed to write flake.lock");
+
+    // Create devenv.yaml in inner/ with relative path using .. in path portion
+    let yaml_content = r#"inputs:
+  test-outer:
+    url: path:..?dir=outer
+"#;
+    fs::write(inner_dir.join("devenv.yaml"), yaml_content).expect("Failed to write devenv.yaml");
+
+    // Create DevenvPaths for inner directory
+    let paths = DevenvPaths {
+        root: inner_dir.clone(),
+        dotfile: inner_dir.join(".devenv"),
+        dot_gc: inner_dir.join(".devenv/gc"),
+        home_gc: inner_dir.join(".devenv/home-gc"),
+    };
+
+    // Create required directories
+    fs::create_dir_all(&paths.dot_gc).expect("Failed to create .devenv/gc");
+    fs::create_dir_all(&paths.home_gc).expect("Failed to create home_gc");
+
+    // Load config from devenv.yaml
+    let config = Config::load_from(&inner_dir).expect("Failed to load config");
+
+    // Create NixBackend
+    let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
+    let backend = NixRustBackend::new(
+        paths,
+        config,
+        GlobalOptions::default(),
+        cachix_manager,
+        Shutdown::new(),
+        None,
+    )
+    .expect("Failed to create backend");
+
+    // Update should resolve the relative path correctly
+    // Before the fix, this would fail because `..` in the path portion was resolved
+    // relative to the wrong base directory
+    let result = backend.update(&None).await;
+
+    assert!(
+        result.is_ok(),
+        "Failed to update with relative path using .. in path portion: {:?}",
+        result.err()
+    );
+
+    // Verify lock file was created
+    let lock_file = inner_dir.join("devenv.lock");
+    assert!(lock_file.exists(), "Lock file should be created");
+
+    // Verify the lock file contains our input
+    let lock_content = fs::read_to_string(&lock_file).expect("Failed to read lock file");
+    assert!(
+        lock_content.contains("test-outer"),
+        "Lock file should contain test-outer input"
+    );
+}

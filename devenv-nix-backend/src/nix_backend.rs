@@ -736,16 +736,17 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to create flake inputs")?;
 
-        let base_dir_str = self
-            .paths
-            .root
+        // Nix's resolveRelativePath uses parent() on the source_path to get the directory.
+        // Since it expects a file path (like flake.nix), we append devenv.nix so parent() returns our root.
+        let source_path = self.paths.root.join("devenv.nix");
+        let source_path_str = source_path
             .to_str()
-            .ok_or_else(|| miette!("Root path contains invalid UTF-8"))?;
+            .ok_or_else(|| miette!("Source path contains invalid UTF-8"))?;
 
         // Create a locker in Check mode to validate without modifying
         let locker = InputsLocker::new(flake_settings)
             .with_inputs(flake_inputs)
-            .source_path(base_dir_str)
+            .source_path(source_path_str)
             .old_lock_file(&old_lock)
             .mode(LockMode::Check);
 
@@ -1339,16 +1340,23 @@ impl NixBackend for NixRustBackend {
             .to_miette()
             .wrap_err("Failed to load lock file: {}")?;
 
-        // Lock the inputs using InputsLocker directly
+        // Base directory for parsing override inputs
         let base_dir_str = self
             .paths
             .root
             .to_str()
             .ok_or_else(|| miette!("Root path contains invalid UTF-8"))?;
 
+        // Nix's resolveRelativePath uses parent() on the source_path to get the directory.
+        // Since it expects a file path (like flake.nix), we append devenv.nix so parent() returns our root.
+        let source_path = self.paths.root.join("devenv.nix");
+        let source_path_str = source_path
+            .to_str()
+            .ok_or_else(|| miette!("Source path contains invalid UTF-8"))?;
+
         let mut locker = InputsLocker::new(flake_settings)
             .with_inputs(flake_inputs)
-            .source_path(base_dir_str)
+            .source_path(source_path_str)
             .mode(LockMode::Virtual);
 
         // Set the old lock file if provided
