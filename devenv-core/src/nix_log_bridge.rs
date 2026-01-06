@@ -102,10 +102,7 @@ impl NixLogBridge {
     /// This method supports re-entrancy: nested calls increment a depth counter,
     /// and only the outermost call's `parent_id` is used.
     pub fn begin_eval(&self, parent_id: Option<u64>) {
-        let mut state = self
-            .eval_state
-            .lock()
-            .expect("eval_state mutex poisoned");
+        let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
         if state.depth == 0 {
             // Outermost session - store the parent ID for lazy activity creation
@@ -124,10 +121,7 @@ impl NixLogBridge {
     /// This decrements the nesting depth, and when the outermost scope ends,
     /// completes the eval activity (if one was created).
     pub fn end_eval(&self) {
-        let mut state = self
-            .eval_state
-            .lock()
-            .expect("eval_state mutex poisoned");
+        let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
         if state.depth == 0 {
             // Unbalanced end_eval call - shouldn't happen but don't panic
@@ -149,10 +143,7 @@ impl NixLogBridge {
     /// Creates the eval activity lazily on first call within an eval scope.
     /// Returns `None` if not in an eval scope (depth == 0).
     fn ensure_eval_activity(&self) -> Option<u64> {
-        let mut state = self
-            .eval_state
-            .lock()
-            .expect("eval_state mutex poisoned");
+        let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
         if state.depth == 0 {
             // Not in an eval scope - no activity to create
@@ -161,9 +152,7 @@ impl NixLogBridge {
 
         if state.current_eval.is_none() {
             // First callback in this eval scope - create the activity lazily
-            let eval = Activity::evaluate()
-                .parent(state.pending_parent)
-                .start();
+            let eval = Activity::evaluate().parent(state.pending_parent).start();
             state.current_eval = Some(eval);
         }
 
@@ -356,24 +345,41 @@ impl NixLogBridge {
                 }
             }
             ActivityType::CopyPath => {
-                // Only show CopyPath if it has a substituter URL (actual download)
-                // Skip local copies to the store (fast, not meaningful)
+                // CopyPath fields:
+                // - Field 0: store path (what's being copied)
+                // - Field 1: source store URI
+                // - Field 2: destination store URI
+                // If field 1 is an absolute path, it's a local copy; otherwise it's a remote download
                 if let Some(store_path) = fields.first().and_then(Self::extract_string_field) {
-                    let substituter = fields.get(1).and_then(Self::extract_string_field);
+                    let source_uri = fields.get(1).and_then(Self::extract_string_field);
 
-                    // Skip if no substituter - it's a local copy
-                    if substituter.is_none() {
-                        return;
-                    }
+                    let is_local_copy = source_uri
+                        .as_ref()
+                        .is_some_and(|uri| uri.starts_with('/'));
 
-                    let package_name = extract_package_name(&store_path);
-                    let mut builder = Activity::fetch(FetchKind::Download, package_name)
-                        .id(activity_id)
-                        .parent(parent_id);
-                    if let Some(url) = substituter {
-                        builder = builder.url(url);
-                    }
-                    let activity = builder.start();
+                    let activity = if is_local_copy {
+                        // Local copy to the store - use the full source path as the name
+                        let source_path = source_uri.as_ref().unwrap();
+                        Activity::fetch(FetchKind::Copy, source_path)
+                            .id(activity_id)
+                            .parent(parent_id)
+                            .start()
+                    } else if let Some(url) = source_uri {
+                        // Remote download from substituter
+                        let package_name = extract_package_name(&store_path);
+                        Activity::fetch(FetchKind::Download, package_name)
+                            .id(activity_id)
+                            .parent(parent_id)
+                            .url(url)
+                            .start()
+                    } else {
+                        // No source URI - treat as local copy with store path name
+                        let package_name = extract_package_name(&store_path);
+                        Activity::fetch(FetchKind::Copy, package_name)
+                            .id(activity_id)
+                            .parent(parent_id)
+                            .start()
+                    };
 
                     self.insert_activity(activity_id, activity_type, activity);
                 }
@@ -522,10 +528,7 @@ impl NixLogBridge {
         // Ensure eval activity exists (lazy creation) and log to it
         self.ensure_eval_activity();
 
-        let state = self
-            .eval_state
-            .lock()
-            .expect("eval_state mutex poisoned");
+        let state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
         if let Some(ref eval) = state.current_eval {
             eval.log(file_path.display().to_string());
@@ -536,12 +539,13 @@ impl NixLogBridge {
 /// Convert a string activity type (from FFI) to ActivityType enum
 pub fn activity_type_from_str(s: &str) -> ActivityType {
     match s {
-        "build" => ActivityType::Build,
+        "unknown" => ActivityType::Unknown,
         "copy-path" => ActivityType::CopyPath,
-        "copy-paths" => ActivityType::CopyPaths,
         "file-transfer" => ActivityType::FileTransfer,
         "realise" => ActivityType::Realise,
+        "copy-paths" => ActivityType::CopyPaths,
         "builds" => ActivityType::Builds,
+        "build" => ActivityType::Build,
         "optimise-store" => ActivityType::OptimiseStore,
         "verify-paths" => ActivityType::VerifyPaths,
         "substitute" => ActivityType::Substitute,

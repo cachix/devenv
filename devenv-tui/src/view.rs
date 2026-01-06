@@ -135,11 +135,7 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         });
 
         // Add extra line for downloads with progress
-        if matches!(
-            display_activity.activity.variant,
-            ActivityVariant::Download(_)
-        ) && let ActivityVariant::Download(ref download_data) = display_activity.activity.variant
-        {
+        if let ActivityVariant::Download(ref download_data) = display_activity.activity.variant {
             if download_data.size_current.is_some() && download_data.size_total.is_some() {
                 total_height += 1; // Extra line for progress bar
             } else if let Some(progress) = &display_activity.activity.progress
@@ -450,6 +446,24 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .with_selection(*is_selected)
                 .render(terminal_width, *depth, prefix);
             }
+        }
+        ActivityVariant::Copy => {
+            let prefix = HierarchyPrefixComponent::new(indent, *depth)
+                .with_spinner()
+                .with_completed(*completed)
+                .with_selected(*is_selected)
+                .with_cached(*cached)
+                .render();
+
+            return ActivityTextComponent::new(
+                "copying".to_string(),
+                activity.short_name.clone(),
+                elapsed_str,
+            )
+            .with_suffix(Some("to the store".to_string()))
+            .with_completed(completed.is_some())
+            .with_selection(*is_selected)
+            .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Query(query_data) => {
             let suffix = query_data

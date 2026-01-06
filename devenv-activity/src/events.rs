@@ -116,6 +116,8 @@ pub enum FetchKind {
     Query,
     /// Fetching git trees/flake inputs
     Tree,
+    /// Copying local sources to the store (e.g., flake inputs)
+    Copy,
 }
 
 /// Evaluate activity events - has Log only
@@ -349,7 +351,7 @@ mod tests {
 
     #[test]
     fn test_fetch_kinds() {
-        let kinds = [FetchKind::Download, FetchKind::Query, FetchKind::Tree];
+        let kinds = [FetchKind::Download, FetchKind::Query, FetchKind::Tree, FetchKind::Copy];
         for kind in kinds {
             let event = ActivityEvent::Fetch(Fetch::Start {
                 id: 1,

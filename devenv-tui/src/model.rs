@@ -62,6 +62,7 @@ pub struct DownloadActivity {
     pub substituter: Option<String>,
 }
 
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct ProgressActivity {
     pub current: Option<u64>,
@@ -100,6 +101,8 @@ pub enum ActivityVariant {
     Evaluating(EvaluatingActivity),
     Build(BuildActivity),
     Download(DownloadActivity),
+    /// Copying local sources to the store
+    Copy,
     Query(QueryActivity),
     FetchTree,
     /// Devenv-specific operations (e.g., "Building shell", "Entering shell")
@@ -411,6 +414,7 @@ impl ActivityModel {
                         speed: None,
                         substituter,
                     }),
+                    FetchKind::Copy => ActivityVariant::Copy,
                 };
                 self.create_activity(id, name, parent, url, variant, ActivityLevel::Info);
             }
@@ -562,6 +566,7 @@ impl ActivityModel {
             variant,
             ActivityVariant::Build(_)
                 | ActivityVariant::Download(_)
+                | ActivityVariant::Copy
                 | ActivityVariant::Evaluating(_)
                 | ActivityVariant::Query(_)
                 | ActivityVariant::FetchTree
@@ -920,11 +925,11 @@ impl ActivityModel {
                     summary.failed_builds += 1;
                 }
                 (
-                    ActivityVariant::Download(_),
+                    ActivityVariant::Download(_) | ActivityVariant::Copy,
                     NixActivityState::Queued | NixActivityState::Active,
                 ) => summary.active_downloads += 1,
                 (
-                    ActivityVariant::Download(_),
+                    ActivityVariant::Download(_) | ActivityVariant::Copy,
                     NixActivityState::Completed { success: true, .. },
                 ) => {
                     summary.completed_downloads += 1;
