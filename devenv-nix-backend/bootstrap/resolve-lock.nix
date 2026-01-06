@@ -58,7 +58,7 @@ let
             else
               let
                 locked = node.locked;
-                isRelativePath = p: p != null && builtins.substring 0 1 p != "/";
+                isRelativePath = p: p != null && (builtins.substring 0 2 p == "./" || builtins.substring 0 3 p == "../");
                 # Resolve relative paths against src
                 resolvedLocked = locked
                   // (if locked.type or null == "path" && isRelativePath (locked.path or null)
