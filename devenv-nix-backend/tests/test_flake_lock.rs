@@ -1,7 +1,7 @@
 //! Integration tests for flake locking functionality
 
 use devenv_core::{Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend};
-use devenv_nix_backend::{ProjectRoot, gc_test, load_lock_file, nix_backend::NixRustBackend};
+use devenv_nix_backend::{ProjectRoot, load_lock_file, nix_backend::NixRustBackend, nix_test};
 use nix_bindings_fetchers::FetchersSettings;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -114,7 +114,7 @@ fn test_base_dir_loading() {
     );
 }
 
-gc_test!(
+nix_test!(
     async fn test_create_flake_inputs() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         create_test_devenv_yaml(temp_dir.path());
@@ -178,7 +178,7 @@ fn test_load_nonexistent_lock_file() {
     );
 }
 
-gc_test!(
+nix_test!(
     async fn test_selective_input_update() {
         // Test updating only a specific input while keeping others locked
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -254,7 +254,7 @@ gc_test!(
 );
 
 /// Test that demonstrates the full workflow using NixBackend
-gc_test!(
+nix_test!(
     async fn test_full_workflow() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
 

@@ -7,8 +7,8 @@
 
 use devenv_core::{Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend, Options};
 use devenv_nix_backend::ProjectRoot;
-use devenv_nix_backend::gc_test;
 use devenv_nix_backend::nix_backend::NixRustBackend;
+use devenv_nix_backend::nix_test;
 use once_cell::sync::OnceCell;
 use secretspec;
 use std::collections::HashMap;
@@ -201,7 +201,7 @@ fn setup_isolated_test_env(
     (temp_dir, cwd_guard, backend, paths, config)
 }
 
-gc_test!(
+nix_test!(
     async fn test_backend_creation() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -215,7 +215,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_assemble() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -239,7 +239,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_update_all_inputs() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -268,7 +268,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_update_specific_input() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -300,7 +300,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_eval_expression() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -345,7 +345,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_eval_multiple_attributes() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -387,7 +387,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_build_package() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -420,7 +420,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_build_with_gc_root() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -463,7 +463,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_dev_env() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -503,7 +503,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_metadata() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -541,7 +541,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_gc() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -575,7 +575,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_search_simple() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -639,7 +639,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_search_case_insensitive() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -683,7 +683,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_search_regex_special_chars() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -721,7 +721,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_search_empty_results() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -780,7 +780,7 @@ fn test_backend_options_default() {
 
 /// Benchmark test comparing FFI vs shell-based operations
 /// (Placeholder for future performance testing)
-gc_test!(
+nix_test!(
     async fn benchmark_ffi_vs_shell() {
         // TODO: Once compilation issues are fixed, add benchmarks comparing:
         // - eval() time: FFI vs `nix eval`
@@ -790,7 +790,7 @@ gc_test!(
 );
 
 /// Test metadata operation in isolation
-gc_test!(
+nix_test!(
     async fn test_metadata_standalone() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -819,7 +819,7 @@ gc_test!(
 );
 
 /// Test metadata after update
-gc_test!(
+nix_test!(
     async fn test_metadata_after_update() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -852,7 +852,7 @@ gc_test!(
 );
 
 /// Integration test demonstrating full workflow
-gc_test!(
+nix_test!(
     async fn test_full_backend_workflow() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -899,7 +899,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_update_with_input_overrides() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -948,7 +948,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_backend_update_with_multiple_overrides() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -997,7 +997,7 @@ gc_test!(
 // ============================================================================
 
 /// Test that eval() fails gracefully when evaluating an attribute that doesn't exist
-gc_test!(
+nix_test!(
     async fn test_eval_nonexistent_attribute() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
         let paths = create_test_paths();
@@ -1042,7 +1042,7 @@ gc_test!(
 );
 
 /// Test that build() returns proper error for non-existent attribute
-gc_test!(
+nix_test!(
     async fn test_build_nonexistent_attribute() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -1085,7 +1085,7 @@ gc_test!(
 );
 
 /// Test build/eval fails when default.nix has syntax error
-gc_test!(
+nix_test!(
     async fn test_build_with_syntax_error_in_nix() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -1136,7 +1136,7 @@ gc_test!(
 );
 
 /// Test metadata() when devenv.lock exists but contains invalid JSON
-gc_test!(
+nix_test!(
     async fn test_metadata_with_corrupted_lock_file() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -1183,7 +1183,7 @@ gc_test!(
 );
 
 /// Test gc() with paths that aren't valid Nix store paths
-gc_test!(
+nix_test!(
     async fn test_gc_with_invalid_store_paths() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -1223,7 +1223,7 @@ gc_test!(
 // ============================================================================
 
 /// Create backend with offline mode and verify substituters are disabled
-gc_test!(
+nix_test!(
     #[ignore]
     async fn test_backend_creation_with_offline_mode() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
@@ -1248,7 +1248,7 @@ gc_test!(
 );
 
 /// Test system override in global_options
-gc_test!(
+nix_test!(
     #[ignore]
     async fn test_backend_with_system_override() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
@@ -1273,7 +1273,7 @@ gc_test!(
 );
 
 /// Test impure mode enables in global_options
-gc_test!(
+nix_test!(
     #[ignore]
     async fn test_backend_with_impure_mode() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
@@ -1298,7 +1298,7 @@ gc_test!(
 );
 
 /// Test custom nix_option key-value pairs
-gc_test!(
+nix_test!(
     #[ignore]
     async fn test_backend_with_custom_nix_options() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
@@ -1323,7 +1323,7 @@ gc_test!(
 );
 
 /// Test nix_debugger option
-gc_test!(
+nix_test!(
     #[ignore]
     async fn test_backend_with_nix_debugger_enabled() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
@@ -1349,7 +1349,7 @@ gc_test!(
 
 /// Test update() with malformed override_input
 /// Odd number of override elements are silently ignored (chunks_exact(2) behavior)
-gc_test!(
+nix_test!(
     async fn test_update_with_invalid_override_input() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
         let paths = create_test_paths();
@@ -1399,7 +1399,7 @@ gc_test!(
 // ============================================================================
 
 /// Test eval() with empty attributes array
-gc_test!(
+nix_test!(
     async fn test_eval_empty_attributes_array() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
         let paths = create_test_paths();
@@ -1446,7 +1446,7 @@ gc_test!(
 );
 
 /// Test build() with empty attributes array
-gc_test!(
+nix_test!(
     async fn test_build_empty_attributes_array() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -1484,7 +1484,7 @@ gc_test!(
 );
 
 /// Test dev_env() bash output format
-gc_test!(
+nix_test!(
     #[ignore]
     async fn test_dev_env_bash_output_format() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
@@ -1518,7 +1518,7 @@ gc_test!(
 );
 
 /// Test dev_env() multiple calls with same gc_root
-gc_test!(
+nix_test!(
     #[ignore]
     async fn test_dev_env_multiple_calls_same_gc_root() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
@@ -1553,7 +1553,7 @@ gc_test!(
 );
 
 /// Test dev_env() when gc_root already exists as regular file
-gc_test!(
+nix_test!(
     #[ignore]
     async fn test_dev_env_gc_root_already_exists_as_file() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
@@ -1591,7 +1591,7 @@ gc_test!(
 );
 
 /// Test build() when gc_root already exists as file/symlink
-gc_test!(
+nix_test!(
     async fn test_build_gc_root_already_exists() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -1650,7 +1650,7 @@ gc_test!(
 );
 
 /// Test update() when lock file already exists - should update in place
-gc_test!(
+nix_test!(
     async fn test_update_lock_file_already_exists() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
         let paths = create_test_paths();
@@ -1724,7 +1724,7 @@ gc_test!(
 );
 
 /// Test metadata() before any update
-gc_test!(
+nix_test!(
     async fn test_metadata_before_any_update() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -1773,7 +1773,7 @@ gc_test!(
 // ============================================================================
 
 /// Test that build after update uses new lock
-gc_test!(
+nix_test!(
     async fn test_build_after_update_uses_new_lock() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -1822,7 +1822,7 @@ gc_test!(
 // ============================================================================
 
 /// Test get_bash() returns valid executable path
-gc_test!(
+nix_test!(
     async fn test_get_bash_returns_valid_path() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -1867,7 +1867,7 @@ gc_test!(
 );
 
 /// Test get_bash() caching behavior
-gc_test!(
+nix_test!(
     async fn test_get_bash_caching_with_gc_root() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -1917,7 +1917,7 @@ gc_test!(
 );
 
 /// Test get_bash() with refresh_cached_output parameter
-gc_test!(
+nix_test!(
     async fn test_get_bash_with_refresh_cached_output() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -1962,7 +1962,7 @@ gc_test!(
 );
 
 /// Test get_bash() returns executable bash
-gc_test!(
+nix_test!(
     async fn test_get_bash_returns_executable() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -2017,7 +2017,7 @@ gc_test!(
 // ============================================================================
 
 /// Test search matches package descriptions
-gc_test!(
+nix_test!(
     async fn test_search_matches_description_field() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -2076,7 +2076,7 @@ gc_test!(
 );
 
 /// Test search with very long query
-gc_test!(
+nix_test!(
     async fn test_search_with_very_long_query() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -2128,7 +2128,7 @@ gc_test!(
 );
 
 /// Test search with unicode characters
-gc_test!(
+nix_test!(
     async fn test_search_with_unicode_characters() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -2178,7 +2178,7 @@ gc_test!(
 );
 
 /// Test search depth limitation
-gc_test!(
+nix_test!(
     async fn test_search_depth_limitation() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -2235,7 +2235,7 @@ gc_test!(
 // ============================================================================
 
 /// Test GC with actual Nix store paths
-gc_test!(
+nix_test!(
     async fn test_gc_with_actual_nix_store_paths() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -2296,7 +2296,7 @@ gc_test!(
 );
 
 /// Test GC with protected gc_roots
-gc_test!(
+nix_test!(
     async fn test_gc_with_protected_gc_roots() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -2369,7 +2369,7 @@ gc_test!(
 );
 
 /// Test GC computes closure correctly
-gc_test!(
+nix_test!(
     async fn test_gc_computes_closure_correctly() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -2424,7 +2424,7 @@ gc_test!(
 );
 
 /// Test GC reports freed space
-gc_test!(
+nix_test!(
     async fn test_gc_reports_bytes_freed() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -2480,7 +2480,7 @@ gc_test!(
 );
 
 /// Test GC with mixed store and temp paths
-gc_test!(
+nix_test!(
     async fn test_gc_with_mixed_store_and_temp_paths() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -2576,7 +2576,7 @@ gc_test!(
 // ============================================================================
 
 /// Test build then incremental update
-gc_test!(
+nix_test!(
     async fn test_workflow_build_then_incremental_update() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -2630,7 +2630,7 @@ gc_test!(
 );
 
 /// Test multiple builds with different gc_roots
-gc_test!(
+nix_test!(
     async fn test_workflow_multiple_builds_different_gc_roots() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -2687,7 +2687,7 @@ gc_test!(
 );
 
 /// Test backend reuse across operations
-gc_test!(
+nix_test!(
     #[ignore]
     async fn test_backend_reuse_across_operations() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
@@ -2714,7 +2714,7 @@ gc_test!(
 // ============================================================================
 
 /// Test update with many inputs - verify all inputs are successfully locked
-gc_test!(
+nix_test!(
     async fn test_update_with_many_inputs() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
         let _temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -2797,7 +2797,7 @@ inputs:
 );
 
 /// Test update with nested input follows - verify "follows" references work
-gc_test!(
+nix_test!(
     async fn test_update_with_nested_input_follows() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
         let _temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -2888,7 +2888,7 @@ inputs:
 );
 
 /// Test build multiple attributes in single call
-gc_test!(
+nix_test!(
     async fn test_build_multiple_attributes_single_call() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -2941,7 +2941,7 @@ gc_test!(
 // ============================================================================
 
 /// Test eval_state Mutex under concurrent eval calls
-gc_test!(
+nix_test!(
     async fn test_eval_state_mutex_under_concurrent_eval() {
         let _cwd_guard = CwdGuard::new(&get_repo_root());
         let paths = create_test_paths();
@@ -2993,7 +2993,7 @@ gc_test!(
 );
 
 /// Test concurrent build operations
-gc_test!(
+nix_test!(
     async fn test_concurrent_build_operations() {
         let yaml = r#"inputs:
   nixpkgs:
@@ -3073,7 +3073,7 @@ gc_test!(
 /// 2. Creates a backend configured with cachix.push
 /// 3. Builds a dynamic derivation (always rebuilds due to builtins.currentTime)
 /// 4. Verifies the built paths were pushed to the daemon
-gc_test!(
+nix_test!(
     async fn test_build_with_cachix_push_integration() {
         // Start mock daemon
         let mock = Arc::new(

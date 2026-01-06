@@ -75,7 +75,7 @@ pub fn gc_register_current_thread() -> Result<()> {
 /// This is needed because Nix uses Boehm GC with parallel marking,
 /// and GC must know about all threads that access GC-managed memory.
 #[macro_export]
-macro_rules! gc_test {
+macro_rules! nix_test {
     (#[ignore] async fn $name:ident() $body:block) => {
         #[test]
         #[ignore]

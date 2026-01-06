@@ -12,13 +12,13 @@ use std::time::Duration;
 
 // Import the daemon module
 use devenv_nix_backend::cachix_daemon::{BuildPathCallback, DaemonConfig, StreamingCachixDaemon};
-use devenv_nix_backend::gc_test;
+use devenv_nix_backend::nix_test;
 
 // Import shared test utilities
 mod common;
 use common::mock_cachix_daemon::MockCachixDaemon;
 
-gc_test!(
+nix_test!(
     async fn test_daemon_startup_shutdown() {
         // Test basic daemon startup with default config
         let config = DaemonConfig::default();
@@ -39,7 +39,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_daemon_metrics_initialization() {
         // Test that metrics are properly initialized
         let config = DaemonConfig::default();
@@ -61,7 +61,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_queue_multiple_paths() {
         let config = DaemonConfig::default();
 
@@ -91,7 +91,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_queue_single_path() {
         let config = DaemonConfig::default();
 
@@ -117,7 +117,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_metrics_summary() {
         let config = DaemonConfig::default();
 
@@ -152,7 +152,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_daemon_config_timeouts() {
         // Test custom timeout configuration
         let config = DaemonConfig {
@@ -170,7 +170,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_wait_for_completion_timeout() {
         let config = DaemonConfig::default();
 
@@ -206,7 +206,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_callback_path_queuing() {
         let config = DaemonConfig::default();
 
@@ -233,7 +233,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_concurrent_queueing() {
         let config = DaemonConfig::default();
 
@@ -274,7 +274,7 @@ gc_test!(
     }
 );
 
-gc_test!(
+nix_test!(
     async fn test_empty_queue_operations() {
         let config = DaemonConfig::default();
 
@@ -305,7 +305,7 @@ fn test_daemon_config_default() {
     assert_eq!(config.reconnect_backoff_ms, 500);
 }
 
-gc_test!(
+nix_test!(
     async fn test_daemon_with_mock_socket() {
         // Start mock daemon
         let mock = Arc::new(

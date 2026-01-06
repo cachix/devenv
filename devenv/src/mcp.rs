@@ -359,7 +359,7 @@ pub async fn run_mcp_server(config: Config) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use devenv_nix_backend::gc_test;
+    use devenv_nix_backend::nix_test;
     use serde_json::json;
 
     #[cfg(feature = "integration-tests")]
@@ -424,7 +424,7 @@ mod tests {
         assert_eq!(parse_type_to_value("unknown"), json!(null));
     }
 
-    gc_test!(
+    nix_test!(
         async fn test_list_packages_request_deserialization() {
             let json = json!({
                 "search": "python"
@@ -435,7 +435,7 @@ mod tests {
         }
     );
 
-    gc_test!(
+    nix_test!(
         async fn test_list_options_request_deserialization() {
             let json = json!({
                 "prefix": "languages"
@@ -452,7 +452,7 @@ mod tests {
     // 2. Being run from a devenv project root (with devenv.nix) for options test
     // 3. Network access to fetch packages
 
-    gc_test!(
+    nix_test!(
         #[cfg(feature = "integration-tests")]
         async fn test_fetch_packages_live() {
             // Create temporary directory with test devenv configuration
@@ -517,7 +517,7 @@ mod tests {
         }
     );
 
-    gc_test!(
+    nix_test!(
         #[cfg(feature = "integration-tests")]
         async fn test_fetch_options_live() {
             // Create temporary directory with test devenv configuration
