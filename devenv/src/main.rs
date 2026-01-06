@@ -12,6 +12,22 @@ use tempfile::TempDir;
 use tokio_shutdown::Shutdown;
 use tracing::info;
 
+/// Create a tokio runtime with worker threads registered with Boehm GC.
+///
+/// Nix uses Boehm GC with parallel marking. During stop-the-world collection,
+/// only registered threads are paused. This ensures all tokio worker threads
+/// are properly registered to avoid race conditions.
+fn build_gc_runtime() -> tokio::runtime::Runtime {
+    devenv_nix_backend::nix_init();
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .on_thread_start(|| {
+            let _ = devenv_nix_backend::gc_register_current_thread();
+        })
+        .build()
+        .expect("Failed to create tokio runtime")
+}
+
 /// Result of a CLI command execution.
 /// This is a CLI concern - the library returns domain types.
 #[derive(Debug)]
@@ -127,21 +143,17 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Shutdown coordination (TUI handles Ctrl+C, no install_signals needed)
     let shutdown = Shutdown::new();
 
-    // Devenv on background thread (own runtime)
+    // Devenv on background thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
     let devenv_thread = std::thread::spawn(move || {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to create devenv runtime")
-            .block_on(async {
-                let result = tokio::select! {
-                    result = run_devenv(cli, shutdown_clone.clone()) => result,
-                    _ = shutdown_clone.wait_for_shutdown() => Ok(CommandResult::Done),
-                };
-                devenv_activity::signal_done();
-                result
-            })
+        build_gc_runtime().block_on(async {
+            let result = tokio::select! {
+                result = run_devenv(cli, shutdown_clone.clone()) => result,
+                _ = shutdown_clone.wait_for_shutdown() => Ok(CommandResult::Done),
+            };
+            devenv_activity::signal_done();
+            result
+        })
     });
 
     // TUI on main thread (owns terminal)
@@ -178,40 +190,42 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     result.exec()
 }
 
-#[tokio::main]
-async fn run_with_legacy_cli(cli: Cli) -> Result<()> {
-    let shutdown = Shutdown::new();
-    shutdown.install_signals().await;
+fn run_with_legacy_cli(cli: Cli) -> Result<()> {
+    build_gc_runtime().block_on(async {
+        let shutdown = Shutdown::new();
+        shutdown.install_signals().await;
 
-    let level = get_log_level(&cli);
-    devenv_tracing::init_cli_tracing(level, cli.global_options.trace_output.as_ref());
+        let level = get_log_level(&cli);
+        devenv_tracing::init_cli_tracing(level, cli.global_options.trace_output.as_ref());
 
-    let result = tokio::select! {
-        result = run_devenv(cli, shutdown.clone()) => result,
-        _ = shutdown.wait_for_shutdown() => Ok(CommandResult::Done),
-    }?;
+        let result = tokio::select! {
+            result = run_devenv(cli, shutdown.clone()) => result,
+            _ = shutdown.wait_for_shutdown() => Ok(CommandResult::Done),
+        }?;
 
-    result.exec()
+        result.exec()
+    })
 }
 
-#[tokio::main]
-async fn run_with_tracing(cli: Cli) -> Result<()> {
-    let shutdown = Shutdown::new();
-    shutdown.install_signals().await;
+fn run_with_tracing(cli: Cli) -> Result<()> {
+    build_gc_runtime().block_on(async {
+        let shutdown = Shutdown::new();
+        shutdown.install_signals().await;
 
-    let level = get_log_level(&cli);
-    devenv_tracing::init_tracing(
-        level,
-        cli.global_options.trace_format,
-        cli.global_options.trace_output.as_ref(),
-    );
+        let level = get_log_level(&cli);
+        devenv_tracing::init_tracing(
+            level,
+            cli.global_options.trace_format,
+            cli.global_options.trace_output.as_ref(),
+        );
 
-    let result = tokio::select! {
-        result = run_devenv(cli, shutdown.clone()) => result,
-        _ = shutdown.wait_for_shutdown() => Ok(CommandResult::Done),
-    }?;
+        let result = tokio::select! {
+            result = run_devenv(cli, shutdown.clone()) => result,
+            _ = shutdown.wait_for_shutdown() => Ok(CommandResult::Done),
+        }?;
 
-    result.exec()
+        result.exec()
+    })
 }
 
 fn get_log_level(cli: &Cli) -> devenv_tracing::Level {

@@ -9,6 +9,7 @@ members = [
   "devenv-eval-cache",
   "devenv-generate",
   "devenv-nix-backend",
+  "devenv-nix-backend-macros",
   "devenv-run-tests",
   "devenv-snix-backend",
   "devenv-tasks",
@@ -35,6 +36,7 @@ devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-run-tests = { path = "devenv-run-tests" }
 devenv-snix-backend = { path = "devenv-snix-backend" }
 devenv-nix-backend = { path = "devenv-nix-backend" }
+devenv-nix-backend-macros = { path = "devenv-nix-backend-macros" }
 devenv-tasks = { path = "devenv-tasks" }
 devenv-tui = { path = "devenv-tui" }
 devenv-cache-core = { path = "devenv-cache-core" }

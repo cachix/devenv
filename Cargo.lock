@@ -1337,6 +1337,7 @@ dependencies = [
  "devenv-core",
  "devenv-eval-cache",
  "devenv-nix-backend",
+ "devenv-nix-backend-macros",
  "devenv-snix-backend",
  "devenv-tasks",
  "devenv-tui",
@@ -1512,6 +1513,7 @@ dependencies = [
  "devenv-cache-core",
  "devenv-core",
  "devenv-eval-cache",
+ "devenv-nix-backend-macros",
  "include_dir",
  "miette",
  "nix-bindings-bindgen-raw",
@@ -1531,6 +1533,15 @@ dependencies = [
  "tokio-shutdown",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "devenv-nix-backend-macros"
+version = "2.0.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.112",
 ]
 
 [[package]]

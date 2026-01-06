@@ -5,10 +5,70 @@ use nix_bindings_flake::{
     FlakeInput, FlakeInputs, FlakeReference, FlakeReferenceParseFlags, FlakeSettings, LockFile,
 };
 use std::path::Path;
+use std::sync::Once;
 
 // Export the NixBackend implementation
 pub mod nix_backend;
 pub use nix_backend::ProjectRoot;
+
+use std::cell::RefCell;
+
+// Ensure Nix/GC is initialized exactly once across all threads
+static NIX_INIT: Once = Once::new();
+
+// Thread-local storage to keep GC registration guards alive for the thread's lifetime
+thread_local! {
+    static GC_REGISTRATION: RefCell<Option<nix_bindings_expr::eval_state::ThreadRegistrationGuard>> = const { RefCell::new(None) };
+}
+
+/// Initialize the Nix expression library and Boehm GC.
+///
+/// This is safe to call multiple times - initialization only happens once.
+/// Must be called before any thread tries to register with GC.
+pub fn nix_init() {
+    NIX_INIT.call_once(|| {
+        nix_bindings_expr::eval_state::init().expect("Failed to initialize Nix expression library");
+    });
+}
+
+/// Register the current thread with Boehm GC.
+///
+/// This must be called from any thread that will access Nix/GC-managed memory.
+/// Tokio worker threads should call this via `on_thread_start` to ensure
+/// the GC can properly scan their stacks during collection.
+///
+/// Without this, parallel GC marking can race with unregistered threads,
+/// causing memory corruption and crashes.
+///
+/// The registration is kept alive in thread-local storage until the thread exits.
+///
+/// Note: This function ensures Nix/GC is initialized before registering,
+/// so it's safe to call from any thread at any time.
+pub fn gc_register_current_thread() -> Result<()> {
+    use nix_bindings_expr::eval_state::gc_register_my_thread;
+
+    // Ensure GC is initialized before any thread tries to register.
+    // Without this, registering threads before GC_INIT() causes
+    // signal handlers to not be properly installed, leading to
+    // "Signals delivery fails" errors during stop-the-world collection.
+    nix_init();
+
+    GC_REGISTRATION.with(|reg| {
+        let mut guard = reg.borrow_mut();
+        if guard.is_none() {
+            match gc_register_my_thread() {
+                Ok(registration) => {
+                    *guard = Some(registration);
+                    Ok(())
+                }
+                Err(e) => Err(anyhow::anyhow!("Failed to register thread with GC: {}", e)),
+            }
+        } else {
+            // Already registered
+            Ok(())
+        }
+    })
+}
 
 // Activity logger integration with tracing
 pub mod logger;

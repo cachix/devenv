@@ -80,6 +80,9 @@ snix-build = { workspace = true, optional = true }
 nix-compat = { workspace = true, optional = true }
 nix-compat-derive = { workspace = true, optional = true }
 
+[dev-dependencies]
+devenv-nix-backend-macros.workspace = true
+
 [features]
 default = []
 integration-tests = []

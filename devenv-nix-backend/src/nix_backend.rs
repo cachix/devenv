@@ -30,7 +30,6 @@ use nix_bindings_flake::{
     LockMode,
 };
 use nix_bindings_store::build_env::BuildEnvironment;
-use nix_bindings_store::path::StorePath;
 use nix_bindings_store::store::{GcAction, Store, TrustedFlag};
 use nix_bindings_util::settings;
 use nix_cmd::ReplExitStatus;
@@ -180,10 +179,9 @@ impl NixRustBackend {
         shutdown: Arc<Shutdown>,
         store: Option<std::path::PathBuf>,
     ) -> Result<Self> {
-        // Initialize Nix libexpr FIRST - this initializes the Nix C++ library
-        nix_bindings_expr::eval_state::init()
-            .to_miette()
-            .wrap_err("Failed to initialize Nix expression library")?;
+        // Initialize Nix libexpr - uses Once internally so safe to call multiple times.
+        // This may already have been called by worker threads via gc_register_current_thread().
+        crate::nix_init();
 
         // Register thread with garbage collector IMMEDIATELY after init()
         // This MUST happen before any other Nix FFI calls (including settings::set)

@@ -23,6 +23,7 @@ let
           ./devenv-core
           ./devenv-snix-backend
           ./devenv-nix-backend
+          ./devenv-nix-backend-macros
           ./devenv-run-tests
           ./devenv-tasks
           ./devenv-tui

@@ -362,6 +362,9 @@ mod tests {
     use serde_json::json;
 
     #[cfg(feature = "integration-tests")]
+    use devenv_nix_backend_macros::nix_test;
+
+    #[cfg(feature = "integration-tests")]
     async fn create_test_devenv_dir() -> std::io::Result<tempfile::TempDir> {
         let temp_dir = tempfile::tempdir()?;
 
@@ -449,7 +452,7 @@ mod tests {
     // 2. Being run from a devenv project root (with devenv.nix) for options test
     // 3. Network access to fetch packages
 
-    #[tokio::test]
+    #[nix_test]
     #[cfg(feature = "integration-tests")]
     async fn test_fetch_packages_live() {
         // Create temporary directory with test devenv configuration
@@ -512,7 +515,7 @@ mod tests {
         // Temporary directory will be automatically cleaned up when dropped
     }
 
-    #[tokio::test]
+    #[nix_test]
     #[cfg(feature = "integration-tests")]
     async fn test_fetch_options_live() {
         // Create temporary directory with test devenv configuration
