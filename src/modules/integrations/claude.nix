@@ -408,9 +408,9 @@ in
         }
       );
       default = {
-        "mcp.devenv.new" = {
+        "mcp.devenv.sh" = {
           type = "http";
-          url = "https://mcp.devenv.new";
+          url = "https://mcp.devenv.sh";
         };
       };
       description = ''
