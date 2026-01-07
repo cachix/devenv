@@ -12,6 +12,7 @@
     inputs.nix.packages.${pkgs.stdenv.system}.nix-flake-c
     inputs.nix.packages.${pkgs.stdenv.system}.nix-cmd-c
     inputs.nix.packages.${pkgs.stdenv.system}.nix-fetchers-c
+    inputs.nix.packages.${pkgs.stdenv.system}.nix-main-c
     pkgs.boehmgc
     pkgs.rustPlatform.bindgenHook
   ];

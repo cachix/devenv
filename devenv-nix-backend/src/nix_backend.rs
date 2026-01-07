@@ -375,6 +375,9 @@ impl NixRustBackend {
             // Wait for shutdown signal
             shutdown_for_task.cancellation_token().cancelled().await;
 
+            // Interrupt any ongoing Nix operations
+            nix_bindings_util::trigger_interrupt();
+
             // Cleanup: finalize any queued cachix pushes
             let daemon = {
                 let mut guard = daemon_for_cleanup.lock().await;

@@ -45,6 +45,7 @@ rustPlatform.buildRustPackage {
     nix.libs.nix-flake-c
     nix.libs.nix-cmd-c
     nix.libs.nix-fetchers-c
+    nix.libs.nix-main-c
     boehmgc
     llvmPackages.clang-unwrapped
   ]
