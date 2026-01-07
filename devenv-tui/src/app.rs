@@ -106,15 +106,13 @@ impl TuiApp {
         let notify = Arc::new(Notify::new());
         let shutdown = self.shutdown;
 
-        // Channel for event processor to signal completion
-        let (ep_done_tx, mut ep_done_rx) = tokio::sync::oneshot::channel::<()>();
-
         // Spawn event processor with batching for performance
         // This only writes to ActivityModel, never touches UiState
-        // When backend_done fires, it drains remaining events and exits
+        // When backend_done fires, it drains remaining events and signals shutdown
         tokio::spawn({
             let activity_model = activity_model.clone();
             let notify = notify.clone();
+            let shutdown = shutdown.clone();
             let event_batch_size = config.event_batch_size;
             let mut activity_rx = self.activity_rx;
             let mut backend_done = backend_done;
@@ -166,8 +164,10 @@ impl TuiApp {
                     }
                 }
 
-                // Signal that event processing is complete
-                let _ = ep_done_tx.send(());
+                // Signal completion (idempotent - no-op if Ctrl+C already triggered).
+                // Model writes above are visible to the final render because the RwLock
+                // is released before this call.
+                shutdown.shutdown();
             }
         });
 
@@ -179,11 +179,13 @@ impl TuiApp {
         // UiState is only modified by the UI thread.
         let ui_state = Arc::new(RwLock::new(UiState::new()));
 
-        // Main loop - runs until event processor signals completion
+        // Main loop - runs until shutdown (either Ctrl+C or event processor signals completion)
         loop {
             tokio::select! {
-                _ = &mut ep_done_rx => {
-                    // Event processor done (backend finished + events drained)
+                _ = shutdown.wait_for_shutdown() => {
+                    // Shutdown triggered - but we need to wait for event processor to finish draining
+                    // If this was Ctrl+C, event processor will see backend_done after backend cleanup
+                    // If this was normal completion, event processor already drained and called shutdown
                     break;
                 }
 
@@ -198,22 +200,38 @@ impl TuiApp {
             }
         }
 
-        // Only clear the TUI output on user interrupt (Ctrl+C), not on normal completion.
-        // This allows users to see task results after completion.
-        if shutdown.last_signal().is_some() {
-            let lines_to_clear = {
-                let ui = ui_state.read().unwrap();
-                let model = activity_model.read().unwrap();
-                model.calculate_rendered_height(ui.selected_activity, ui.terminal_size.height)
-            };
+        // Final render pass to ensure all drained events are displayed
+        // This replaces the old is_done() check that triggered shutdown AFTER rendering
+        //
+        // On interrupt (Ctrl+C): clear the output so the user sees a clean terminal
+        // On normal completion: clear previous render, then render final state
+        {
+            let ui = ui_state.read().unwrap();
+            if let Ok(model_guard) = activity_model.read() {
+                // Clear the previous inline render output
+                let lines_to_clear =
+                    model_guard.calculate_rendered_height(ui.selected_activity, ui.terminal_size.height);
 
-            if lines_to_clear > 0 {
-                let mut stdout = io::stdout();
-                let _ = execute!(
-                    stdout,
-                    cursor::MoveToPreviousLine(lines_to_clear),
-                    terminal::Clear(terminal::ClearType::FromCursorDown)
-                );
+                if lines_to_clear > 0 {
+                    let mut stdout = io::stdout();
+                    let _ = execute!(
+                        stdout,
+                        cursor::MoveToPreviousLine(lines_to_clear),
+                        terminal::Clear(terminal::ClearType::FromCursorDown)
+                    );
+                }
+
+                // On interrupt, don't render final state (user wants to exit quickly)
+                // On normal completion, render the final state with all events processed
+                if shutdown.last_signal().is_none() {
+                    let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
+                    let mut element = element! {
+                        View(width: terminal_width) {
+                            #(vec![view(&model_guard, &ui).into()])
+                        }
+                    };
+                    element.print();
+                }
             }
         }
 
