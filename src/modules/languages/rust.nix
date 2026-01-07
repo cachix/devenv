@@ -262,15 +262,11 @@ in
             RUSTDOCFLAGS = optionalEnv (moldFlags != "") moldFlags;
           };
 
-        git-hooks.tools =
-          let
-            mkOverrideTool = lib.mkOverride (lib.modules.defaultOverridePriority - 1);
-          in
-          {
-            cargo = mkOverrideTool cfg.toolchainPackage;
-            rustfmt = mkOverrideTool cfg.toolchainPackage;
-            clippy = mkOverrideTool cfg.toolchainPackage;
-          };
+        git-hooks.tools = {
+          cargo = config.lib.mkOverrideDefault cfg.toolchainPackage;
+          rustfmt = config.lib.mkOverrideDefault cfg.toolchainPackage;
+          clippy = config.lib.mkOverrideDefault cfg.toolchainPackage;
+        };
 
         # Allow clippy to access the internet to fetch dependencies.
         git-hooks.hooks.clippy.settings.offline = lib.mkDefault false;

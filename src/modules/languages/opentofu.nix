@@ -17,8 +17,8 @@ in
 
   config = lib.mkIf cfg.enable {
     git-hooks.hooks = {
-      terraform-format.package = lib.mkDefault cfg.package;
-      terraform-validate.package = lib.mkDefault cfg.package;
+      terraform-format.package = config.lib.mkOverrideDefault cfg.package;
+      terraform-validate.package = config.lib.mkOverrideDefault cfg.package;
     };
 
     packages = [
