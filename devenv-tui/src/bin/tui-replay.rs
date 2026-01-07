@@ -176,12 +176,18 @@ async fn main() -> Result<()> {
     let (tx, rx) = mpsc::unbounded_channel();
     let shutdown = Shutdown::new();
 
+    // Channel to signal TUI when replay is done
+    let (backend_done_tx, backend_done_rx) = tokio::sync::oneshot::channel();
+
     info!("Spawning TUI");
 
     let mut tui_task = tokio::spawn({
         let shutdown = shutdown.clone();
         async move {
-            match devenv_tui::TuiApp::new(rx, shutdown).run().await {
+            match devenv_tui::TuiApp::new(rx, shutdown)
+                .run(backend_done_rx)
+                .await
+            {
                 Ok(_) => info!("TUI exited normally"),
                 Err(e) => warn!("TUI error: {e}"),
             }
@@ -197,7 +203,8 @@ async fn main() -> Result<()> {
             if let Err(e) = result {
                 warn!("Replay error: {e}");
             }
-            shutdown.shutdown();
+            // Signal TUI that replay is done
+            let _ = backend_done_tx.send(());
         }
         _ = &mut tui_task => {
             info!("TUI exited");
@@ -205,6 +212,8 @@ async fn main() -> Result<()> {
         _ = ctrl_c() => {
             info!("Interrupted");
             shutdown.shutdown();
+            // Signal TUI that we're done (after interrupt)
+            let _ = backend_done_tx.send(());
         }
     }
 

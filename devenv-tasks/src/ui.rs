@@ -78,7 +78,7 @@ impl TasksUi {
         }
     }
 
-    /// Run the UI, processing activity events until Done signal
+    /// Run the UI, processing activity events until task runner completes
     pub async fn run(
         mut self,
         run_handle: tokio::task::JoinHandle<Outputs>,
@@ -89,20 +89,36 @@ impl TasksUi {
             self.console_write_stderr(&format!("{:17} {}\n", "Running tasks", names));
         }
 
-        // Process events until Done signal
-        while let Some(event) = self.activity_rx.recv().await {
-            match event {
-                ActivityEvent::Task(task_event) => self.handle_task_event(task_event)?,
-                ActivityEvent::Done => break,
-                // Ignore other activity types (Build, Fetch, etc.)
-                _ => {}
+        // Process events until task runner completes
+        let mut run_handle = run_handle;
+        let outputs = loop {
+            tokio::select! {
+                event = self.activity_rx.recv() => {
+                    let Some(event) = event else {
+                        // Channel closed unexpectedly - wait for run_handle
+                        break run_handle.await.map_err(|e| {
+                            Error::IoError(std::io::Error::other(format!("Task runner panicked: {e}")))
+                        })?;
+                    };
+                    match event {
+                        ActivityEvent::Task(task_event) => self.handle_task_event(task_event)?,
+                        // Ignore other activity types (Build, Fetch, etc.)
+                        _ => {}
+                    }
+                }
+                result = &mut run_handle => {
+                    // Task runner completed - drain any remaining events
+                    while let Ok(event) = self.activity_rx.try_recv() {
+                        if let ActivityEvent::Task(task_event) = event {
+                            self.handle_task_event(task_event)?;
+                        }
+                    }
+                    break result.map_err(|e| {
+                        Error::IoError(std::io::Error::other(format!("Task runner panicked: {e}")))
+                    })?;
+                }
             }
-        }
-
-        // Wait for task runner to complete and get outputs
-        let outputs = run_handle.await.map_err(|e| {
-            Error::IoError(std::io::Error::other(format!("Task runner panicked: {e}")))
-        })?;
+        };
 
         // Print summary
         self.print_summary().await?;

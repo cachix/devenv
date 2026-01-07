@@ -19,7 +19,7 @@ Rendering is throttled to 30 FPS by default.
 ## Usage
 
 ```rust
-use devenv_activity::{init, signal_done};
+use devenv_activity::init;
 use devenv_tui::TuiApp;
 use tokio_shutdown::Shutdown;
 
@@ -28,8 +28,14 @@ handle.install();
 
 let shutdown = Shutdown::new().expect("shutdown");
 
+// Channel to signal TUI when backend work is done
+let (backend_done_tx, backend_done_rx) = tokio::sync::oneshot::channel();
+
+// When your backend work completes:
+// let _ = backend_done_tx.send(());
+
 TuiApp::new(activity_rx, shutdown.clone())
-    .run()
+    .run(backend_done_rx)
     .await?;
 ```
 
@@ -43,7 +49,7 @@ TuiApp::new(activity_rx, shutdown)
     .collapsed_lines(10)         // Log lines in collapsed preview
     .max_fps(30)                 // Render rate limit
     .filter_level(ActivityLevel::Info)
-    .run()
+    .run(backend_done_rx)
     .await?;
 ```
 

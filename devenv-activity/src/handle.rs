@@ -43,14 +43,6 @@ impl ActivityHandle {
     }
 }
 
-/// Signal that all work is complete.
-/// Sends a Done event to the TUI, which should trigger a final render and graceful shutdown.
-pub fn signal_done() {
-    if let Some(sender) = ACTIVITY_SENDER.get() {
-        let _ = sender.send(ActivityEvent::Done);
-    }
-}
-
 /// Initialize the activity system.
 /// Returns receiver for TUI and a handle for installing the channel.
 ///

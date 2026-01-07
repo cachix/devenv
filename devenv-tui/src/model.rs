@@ -37,8 +37,6 @@ pub struct ActivityModel {
     pub completed_messages: Vec<String>,
     next_message_id: u64,
     config: Arc<TuiConfig>,
-    /// Set to true when Done event is received, signaling graceful shutdown
-    done: bool,
 }
 
 impl Default for ActivityModel {
@@ -296,13 +294,7 @@ impl ActivityModel {
             completed_messages: Vec::new(),
             next_message_id: u64::MAX / 2,
             config,
-            done: false,
         }
-    }
-
-    /// Returns true if a Done event has been received, signaling work is complete.
-    pub fn is_done(&self) -> bool {
-        self.done
     }
 
     /// Get the TUI configuration.
@@ -319,7 +311,6 @@ impl ActivityModel {
             ActivityEvent::Command(cmd_event) => self.handle_command_event(cmd_event),
             ActivityEvent::Operation(op_event) => self.handle_operation_event(op_event),
             ActivityEvent::Message(msg) => self.handle_message(msg),
-            ActivityEvent::Done => self.done = true,
         }
     }
 

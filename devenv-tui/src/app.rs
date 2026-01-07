@@ -93,40 +93,81 @@ impl TuiApp {
         self
     }
 
-    /// Run the TUI application.
-    pub async fn run(self) -> std::io::Result<()> {
+    /// Run the TUI application until the backend completes.
+    ///
+    /// The `backend_done` receiver signals when the backend has fully completed
+    /// (including cleanup). The TUI will drain any remaining events and then exit.
+    pub async fn run(
+        self,
+        backend_done: tokio::sync::oneshot::Receiver<()>,
+    ) -> std::io::Result<()> {
         let config = Arc::new(self.config);
         let activity_model = Arc::new(RwLock::new(ActivityModel::with_config(config.clone())));
         let notify = Arc::new(Notify::new());
         let shutdown = self.shutdown;
 
+        // Channel for event processor to signal completion
+        let (ep_done_tx, mut ep_done_rx) = tokio::sync::oneshot::channel::<()>();
+
         // Spawn event processor with batching for performance
         // This only writes to ActivityModel, never touches UiState
+        // When backend_done fires, it drains remaining events and exits
         tokio::spawn({
             let activity_model = activity_model.clone();
             let notify = notify.clone();
             let event_batch_size = config.event_batch_size;
             let mut activity_rx = self.activity_rx;
+            let mut backend_done = backend_done;
             async move {
                 let mut batch = Vec::with_capacity(event_batch_size);
 
-                while let Some(event) = activity_rx.recv().await {
-                    batch.push(event);
-                    while let Ok(event) = activity_rx.try_recv() {
-                        batch.push(event);
-                        if batch.len() >= event_batch_size {
+                loop {
+                    tokio::select! {
+                        event = activity_rx.recv() => {
+                            let Some(event) = event else {
+                                // Channel closed unexpectedly
+                                break;
+                            };
+
+                            batch.push(event);
+                            while let Ok(event) = activity_rx.try_recv() {
+                                batch.push(event);
+                                if batch.len() >= event_batch_size {
+                                    break;
+                                }
+                            }
+
+                            if let Ok(mut m) = activity_model.write() {
+                                for event in batch.drain(..) {
+                                    m.apply_activity_event(event);
+                                }
+                            }
+
+                            notify.notify_waiters();
+                        }
+
+                        _ = &mut backend_done => {
+                            // Backend is done - drain any remaining events
+                            while let Ok(event) = activity_rx.try_recv() {
+                                batch.push(event);
+                            }
+
+                            if !batch.is_empty() {
+                                if let Ok(mut m) = activity_model.write() {
+                                    for event in batch.drain(..) {
+                                        m.apply_activity_event(event);
+                                    }
+                                }
+                                notify.notify_waiters();
+                            }
+
                             break;
                         }
                     }
-
-                    if let Ok(mut m) = activity_model.write() {
-                        for event in batch.drain(..) {
-                            m.apply_activity_event(event);
-                        }
-                    }
-
-                    notify.notify_waiters();
                 }
+
+                // Signal that event processing is complete
+                let _ = ep_done_tx.send(());
             }
         });
 
@@ -138,9 +179,11 @@ impl TuiApp {
         // UiState is only modified by the UI thread.
         let ui_state = Arc::new(RwLock::new(UiState::new()));
 
+        // Main loop - runs until event processor signals completion
         loop {
             tokio::select! {
-                _ = shutdown.wait_for_shutdown() => {
+                _ = &mut ep_done_rx => {
+                    // Event processor done (backend finished + events drained)
                     break;
                 }
 
@@ -280,32 +323,24 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
     });
 
-    // Exit immediately for explicit exit requests (user pressed 'e' to expand, or Ctrl+C)
-    if should_exit.get() || shutdown.is_cancelled() {
+    // Exit for explicit view mode switch (user pressed 'e' to expand)
+    // Note: We do NOT exit on shutdown.is_cancelled() - we keep running until
+    // the backend is fully done so all events are processed and displayed.
+    if should_exit.get() {
         system.exit();
     }
 
     // Render the view - read activity model briefly, UI state separately
     let ui = ui_state.read().unwrap();
-    let (rendered, is_done) = if let Ok(model_guard) = activity_model.read() {
-        let done = model_guard.is_done();
-        (
-            element! {
-                View(width: terminal_width) {
-                    #(vec![view(&model_guard, &ui).into()])
-                }
-            },
-            done,
-        )
+    let rendered = if let Ok(model_guard) = activity_model.read() {
+        element! {
+            View(width: terminal_width) {
+                #(vec![view(&model_guard, &ui).into()])
+            }
+        }
     } else {
-        (element!(View(width: terminal_width)), false)
+        element!(View(width: terminal_width))
     };
-
-    // For normal completion (is_done), trigger shutdown AFTER rendering this frame.
-    // This ensures the final state is displayed before exit.
-    if is_done {
-        shutdown.shutdown();
-    }
 
     rendered
 }

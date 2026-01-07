@@ -152,6 +152,9 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Shutdown coordination (TUI handles Ctrl+C, no install_signals needed)
     let shutdown = Shutdown::new();
 
+    // Channel to signal TUI when backend is fully done (including cleanup)
+    let (backend_done_tx, backend_done_rx) = tokio::sync::oneshot::channel();
+
     // Devenv on background thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
     let devenv_thread = std::thread::spawn(move || {
@@ -160,15 +163,22 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
                 result = run_devenv(cli, shutdown_clone.clone()) => result,
                 _ = shutdown_clone.wait_for_shutdown() => Ok(CommandResult::Done),
             };
-            devenv_activity::signal_done();
+
+            // Wait for cleanup to complete (e.g., Nix interrupt, cachix finalization)
+            shutdown_clone.wait_for_shutdown_complete().await;
+
+            // Signal TUI that backend is fully done
+            let _ = backend_done_tx.send(());
+
             result
         })
     });
 
     // TUI on main thread (owns terminal)
+    // Runs until backend signals completion, then drains remaining events
     let _ = devenv_tui::TuiApp::new(activity_rx, shutdown)
         .filter_level(filter_level)
-        .run()
+        .run(backend_done_rx)
         .await;
 
     // Restore terminal to normal state (disable raw mode, show cursor)

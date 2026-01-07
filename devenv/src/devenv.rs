@@ -866,12 +866,8 @@ impl Devenv {
             let tasks = Arc::new(tasks);
             let tasks_clone = Arc::clone(&tasks);
 
-            // Spawn task runner - it will signal_done() when complete
-            let run_handle = tokio::spawn(async move {
-                let result = tasks_clone.run().await;
-                devenv_activity::signal_done();
-                result
-            });
+            // Spawn task runner - UI will detect completion via JoinHandle
+            let run_handle = tokio::spawn(async move { tasks_clone.run().await });
 
             // Run UI - processes events and waits for run_handle
             let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
