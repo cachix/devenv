@@ -1,11 +1,12 @@
-{ config, lib, self, ... }:
+{ config, lib, ... }:
 
 let
   cfg = config.dotenv;
 
   normalizeFilenames = filenames: if lib.isList filenames then filenames else [ filenames ];
   dotenvFiles = normalizeFilenames cfg.filename;
-  dotenvPaths = map (filename: (self + ("/" + filename))) dotenvFiles;
+  devenvRoot = /. + config.devenv.root;
+  dotenvPaths = map (filename: devenvRoot + "/" + filename) dotenvFiles;
 
   parseLine = line:
     let

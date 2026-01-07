@@ -1,4 +1,4 @@
-{ pkgs, config, lib, self, ... }:
+{ pkgs, config, lib, ... }:
 
 let
   projectName = name:
@@ -7,6 +7,7 @@ let
     else config.name;
   types = lib.types;
   envContainerName = builtins.getEnv "DEVENV_CONTAINER";
+  inherit (config.devenv) source;
 
   nix2containerInput = config.lib.getInput {
     name = "nix2container";
@@ -204,9 +205,9 @@ let
 
       copyToRoot = lib.mkOption {
         type = types.either types.path (types.listOf types.path);
-        description = "Add a path to the container. Defaults to the whole git repo.";
-        default = self;
-        defaultText = lib.literalExpression "self";
+        description = "Add a path to the container. Defaults to the project source filtered by .gitignore.";
+        default = source;
+        defaultText = lib.literalExpression "config.devenv.source";
       };
 
       startupCommand = lib.mkOption {

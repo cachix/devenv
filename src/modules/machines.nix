@@ -1,4 +1,4 @@
-{ pkgs, config, lib, self, ... }:
+{ pkgs, config, lib, ... }:
 
 let
   machineOptions = lib.types.submodule ({ name, config, ... }: {
