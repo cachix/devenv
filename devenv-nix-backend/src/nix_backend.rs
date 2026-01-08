@@ -10,6 +10,7 @@
 use crate::anyhow_ext::AnyhowToMiette;
 
 use async_trait::async_trait;
+use cstr::cstr;
 use include_dir::{Dir, include_dir};
 use tokio_shutdown::Shutdown;
 
@@ -21,9 +22,11 @@ use devenv_core::config::Config;
 use devenv_core::nix_args::NixArgs;
 use devenv_core::nix_backend::{DevenvPaths, NixBackend, Options};
 use devenv_core::nix_log_bridge::NixLogBridge;
+use devenv_core::ports::PortAllocator;
 use devenv_eval_cache::Output;
 use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use nix_bindings_expr::eval_state::{EvalState, EvalStateBuilder, gc_register_my_thread};
+use nix_bindings_expr::primop::{PrimOp, PrimOpMeta};
 use nix_bindings_expr::to_json::value_to_json;
 use nix_bindings_expr::{EvalCache, SearchParams, SearchResult, search};
 use nix_bindings_fetchers::FetchersSettings;
@@ -124,6 +127,16 @@ pub struct NixRustBackend {
     // Set once in assemble() and used directly in evaluations
     cached_import_expr: Arc<OnceCell<String>>,
 
+    // Port allocator for the devenvAllocatePort primop
+    // Shared with Devenv to allow releasing port reservations before process spawn
+    // Kept alive to hold port reservations; accessed via primop closure
+    #[allow(dead_code)]
+    port_allocator: Arc<PortAllocator>,
+
+    // Custom primops registered with the eval state - must be kept alive for the duration of the backend
+    #[allow(dead_code)]
+    _primops: Vec<PrimOp>,
+
     // GC collection guard - drops BEFORE gc_registration to ensure GC runs while thread is still registered
     _gc_guard: GcCollectionGuard,
 
@@ -219,6 +232,7 @@ impl NixRustBackend {
     /// * `cachix_manager` - CachixManager for handling binary cache configuration
     /// * `shutdown` - Shutdown coordinator for graceful cleanup of cachix daemon
     /// * `store` - Optional custom Nix store path (for testing with restricted permissions)
+    /// * `port_allocator` - Shared port allocator for devenvAllocatePort primop
     pub fn new(
         paths: DevenvPaths,
         config: Config,
@@ -226,6 +240,7 @@ impl NixRustBackend {
         cachix_manager: Arc<CachixManager>,
         shutdown: Arc<Shutdown>,
         store: Option<std::path::PathBuf>,
+        port_allocator: Arc<PortAllocator>,
     ) -> Result<Self> {
         // Initialize Nix libexpr - uses Once internally so safe to call multiple times.
         // This may already have been called by worker threads via gc_register_current_thread().
@@ -353,6 +368,9 @@ impl NixRustBackend {
                 .wrap_err("Failed to enable Nix debugger")?;
         }
 
+        // Register custom primops
+        let primops = Self::register_primops(&mut eval_state, port_allocator.clone())?;
+
         // Set up activity logger integration with tracing
         // MUST be initialized after EvalState is created to ensure Nix is initialized
         // The bridge tracks eval activities dynamically - begin_eval/end_eval are called
@@ -419,6 +437,8 @@ impl NixRustBackend {
             cachix_caches: Arc::new(Mutex::new(None)),
             cachix_daemon: cachix_daemon.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
+            port_allocator,
+            _primops: primops,
             _gc_guard: GcCollectionGuard,
             _gc_registration: gc_registration,
             shutdown: shutdown.clone(),
@@ -1702,6 +1722,48 @@ impl NixBackend for NixRustBackend {
 
 // Helper methods for NixRustBackend
 impl NixRustBackend {
+    /// Register custom primops with the eval state
+    ///
+    /// Creates primops for devenv-specific functionality like port allocation.
+    /// The primops are registered as builtins (e.g., `builtins.devenvAllocatePort`).
+    fn register_primops(
+        eval_state: &mut EvalState,
+        port_allocator: Arc<PortAllocator>,
+    ) -> Result<Vec<PrimOp>> {
+        let mut primops = Vec::new();
+
+        // devenvAllocatePort: Find an available port starting from a base port
+        // Usage in Nix: builtins.devenvAllocatePort 8080
+        // Returns the first available port >= the argument
+        // The port is held via TcpListener until take_reservations() is called
+        let allocator = port_allocator.clone();
+        let port_primop = PrimOp::new(
+            eval_state,
+            PrimOpMeta {
+                name: cstr!("devenvAllocatePort"),
+                doc: cstr!("Allocate an available port starting from the given base port. Returns the first free port >= the argument."),
+                args: [cstr!("basePort")],
+            },
+            Box::new(move |es, [base_port]| {
+                let base = es.require_int(base_port)? as u16;
+
+                let allocated = allocator
+                    .allocate(base)
+                    .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                tracing::debug!("Allocated port {} (base: {})", allocated, base);
+
+                es.new_value_int(allocated as i64)
+            }),
+        )
+        .to_miette()
+        .wrap_err("Failed to create devenvAllocatePort primop")?;
+
+        primops.push(port_primop);
+
+        Ok(primops)
+    }
+
     /// Format lock file inputs as a tree structure
     fn format_lock_inputs(lock_file: &nix_bindings_flake::LockFile) -> Result<String> {
         let mut iter = lock_file
