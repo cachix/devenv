@@ -6,11 +6,11 @@ expression: output
 ⠋ Downloading dependency-1 from cache.nixos.org
     ──────────────────────────────────────────────────2MB / 10MB at 20MB/s
 ⠋ task-2
-⠋ Evaluating
+⠋ Evaluating Nix
 ⠋ Building package-4 buildPhase
 ⠋ Downloading dependency-5 from cache.nixos.org
     ──────────────────────────────────────────────────6MB / 10MB at 60MB/s
 ⠋ task-6
-⠋ Evaluating
+⠋ Evaluating Nix
 
  0 of 2 builds  │  0 of 2 downloads  │  0 of 2 task    ↑↓ nav • ^e expand

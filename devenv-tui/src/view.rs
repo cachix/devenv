@@ -494,7 +494,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let prefix = build_activity_prefix(*depth, *completed);
 
                 let main_line = ActivityTextComponent::new(
-                    "evaluating".to_string(),
+                    "evaluating Nix".to_string(),
                     activity.name.clone(),
                     elapsed_str,
                 )
@@ -511,7 +511,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let prefix = build_activity_prefix(*depth, *completed);
 
             return ActivityTextComponent::new(
-                "evaluating".to_string(),
+                "evaluating Nix".to_string(),
                 activity.name.clone(),
                 elapsed_str,
             )

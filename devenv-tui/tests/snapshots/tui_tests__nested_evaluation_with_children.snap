@@ -2,7 +2,7 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Evaluating
+⠋ Evaluating Nix
   ⎿ ⠋ Fetching github:NixOS/nixpkgs
   ⎿ ⠋ Building hello-2.12 buildPhase
     ⎿ ⠋ Downloading glibc-2.35
