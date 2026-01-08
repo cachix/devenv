@@ -10,6 +10,7 @@
 use crate::anyhow_ext::AnyhowToMiette;
 
 use async_trait::async_trait;
+use cstr::cstr;
 use include_dir::{Dir, include_dir};
 use tokio_shutdown::Shutdown;
 
@@ -21,9 +22,11 @@ use devenv_core::config::Config;
 use devenv_core::nix_args::NixArgs;
 use devenv_core::nix_backend::{DevenvPaths, NixBackend, Options};
 use devenv_core::nix_log_bridge::NixLogBridge;
+use devenv_core::ports::PortAllocator;
 use devenv_eval_cache::Output;
 use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use nix_bindings_expr::eval_state::{EvalState, EvalStateBuilder, gc_register_my_thread};
+use nix_bindings_expr::primop::{PrimOp, PrimOpMeta};
 use nix_bindings_expr::to_json::value_to_json;
 use nix_bindings_expr::{EvalCache, SearchParams, SearchResult, search};
 use nix_bindings_fetchers::FetchersSettings;
@@ -78,6 +81,13 @@ struct PackageInfo {
     description: String,
 }
 
+/// Custom primops injected into Nix evaluation as an attrset
+/// Stored as a Value so it can be reused across evaluations via reference
+struct Primops {
+    /// The primops attrset: { allocatePort = <primop>; }
+    attrset: nix_bindings_expr::value::Value,
+}
+
 /// FFI-based Nix backend implementation using direct Rust bindings
 pub struct NixRustBackend {
     pub global_options: GlobalOptions,
@@ -123,6 +133,15 @@ pub struct NixRustBackend {
     // Cached import expression: (import /path/to/default.nix { ... args ... })
     // Set once in assemble() and used directly in evaluations
     cached_import_expr: Arc<OnceCell<String>>,
+
+    // Port allocator for the devenvAllocatePort primop
+    // Shared with Devenv to allow releasing port reservations before process spawn
+    // Kept alive to hold port reservations; accessed via primop closure
+    #[allow(dead_code)]
+    port_allocator: Arc<PortAllocator>,
+
+    // Custom primops - must be kept alive for the duration of the backend
+    primops: Primops,
 
     // GC collection guard - drops BEFORE gc_registration to ensure GC runs while thread is still registered
     _gc_guard: GcCollectionGuard,
@@ -219,6 +238,7 @@ impl NixRustBackend {
     /// * `cachix_manager` - CachixManager for handling binary cache configuration
     /// * `shutdown` - Shutdown coordinator for graceful cleanup of cachix daemon
     /// * `store` - Optional custom Nix store path (for testing with restricted permissions)
+    /// * `port_allocator` - Shared port allocator for devenvAllocatePort primop
     pub fn new(
         paths: DevenvPaths,
         config: Config,
@@ -226,6 +246,7 @@ impl NixRustBackend {
         cachix_manager: Arc<CachixManager>,
         shutdown: Arc<Shutdown>,
         store: Option<std::path::PathBuf>,
+        port_allocator: Arc<PortAllocator>,
     ) -> Result<Self> {
         // Initialize Nix libexpr - uses Once internally so safe to call multiple times.
         // This may already have been called by worker threads via gc_register_current_thread().
@@ -353,6 +374,9 @@ impl NixRustBackend {
                 .wrap_err("Failed to enable Nix debugger")?;
         }
 
+        // Register custom primops
+        let primops = Self::register_primops(&mut eval_state, port_allocator.clone())?;
+
         // Set up activity logger integration with tracing
         // MUST be initialized after EvalState is created to ensure Nix is initialized
         // The bridge tracks eval activities dynamically - begin_eval/end_eval are called
@@ -419,6 +443,8 @@ impl NixRustBackend {
             cachix_caches: Arc::new(Mutex::new(None)),
             cachix_daemon: cachix_daemon.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
+            port_allocator,
+            primops,
             _gc_guard: GcCollectionGuard,
             _gc_registration: gc_registration,
             shutdown: shutdown.clone(),
@@ -622,16 +648,7 @@ impl NixRustBackend {
                 let mut eval_state =
                     self.eval_session("Checking cachix config", ActivityLevel::Debug)?;
 
-                let import_expr = self
-                    .cached_import_expr
-                    .get()
-                    .expect("assemble() must be called first")
-                    .to_string();
-
-                let root_attrs = match eval_state
-                    .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-                    .to_miette()
-                {
+                let root_attrs = match self.eval_devenv(&mut eval_state) {
                     Ok(attrs) => attrs,
                     Err(e) => {
                         tracing::warn!("Failed to import default.nix for cachix config: {}", e);
@@ -831,16 +848,7 @@ impl NixRustBackend {
             let mut eval_state =
                 self.eval_session("Checking cachix config", ActivityLevel::Debug)?;
 
-            let import_expr = self
-                .cached_import_expr
-                .get()
-                .expect("assemble() must be called first")
-                .to_string();
-
-            let root_attrs = match eval_state
-                .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-                .to_miette()
-            {
+            let root_attrs = match self.eval_devenv(&mut eval_state) {
                 Ok(attrs) => attrs,
                 Err(_) => return Ok(()), // Eval failed, skip cachix
             };
@@ -991,8 +999,9 @@ impl NixBackend for NixRustBackend {
             // Unquote special Nix expressions that should be evaluated
             args_nix = args_nix.replace("\"builtins.currentSystem\"", "builtins.currentSystem");
 
+            // Wrap in function that accepts primops attrset, merged into args
             let import_expr = format!(
-                "(import {import_path} {args_nix})",
+                "primops: (import {import_path} ({args_nix} // {{ inherit primops; }}))",
                 import_path = default_nix_path.display(),
             );
 
@@ -1022,16 +1031,7 @@ impl NixBackend for NixRustBackend {
         let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
 
         // Import default.nix with parameters and evaluate to get the devenv structure
-        let import_expr = self
-            .cached_import_expr
-            .get()
-            .expect("assemble() must be called first")
-            .to_string();
-
-        let devenv = eval_state
-            .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let devenv = self.eval_devenv(&mut eval_state)?;
 
         // Get the shell derivation from devenv.shell
         let shell_drv = eval_state
@@ -1181,16 +1181,7 @@ impl NixBackend for NixRustBackend {
         let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
 
         // Load default.nix into the REPL scope
-        let import_expr = self
-            .cached_import_expr
-            .get()
-            .expect("assemble() must be called first")
-            .to_string();
-
-        let devenv_attrs = eval_state
-            .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix for REPL")?;
+        let devenv_attrs = self.eval_devenv(&mut eval_state)?;
 
         // Create a ValMap to inject variables into the REPL scope
         let mut env = nix_cmd::ValMap::new()
@@ -1256,16 +1247,7 @@ impl NixBackend for NixRustBackend {
         let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
 
         // Import default.nix to get the attribute set
-        let import_expr = self
-            .cached_import_expr
-            .get()
-            .expect("assemble() must be called first")
-            .to_string();
-
-        let root_attrs = eval_state
-            .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let root_attrs = self.eval_devenv(&mut eval_state)?;
 
         let mut output_paths = Vec::new();
 
@@ -1360,16 +1342,7 @@ impl NixBackend for NixRustBackend {
         let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
 
         // Import default.nix once to get the attribute set
-        let import_expr = self
-            .cached_import_expr
-            .get()
-            .expect("assemble() must be called first")
-            .to_string();
-
-        let root_attrs = eval_state
-            .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let root_attrs = self.eval_devenv(&mut eval_state)?;
 
         let mut results = Vec::new();
 
@@ -1533,16 +1506,7 @@ impl NixBackend for NixRustBackend {
         };
 
         // PART 2: Evaluate config.info from default.nix
-        let import_expr = self
-            .cached_import_expr
-            .get()
-            .expect("assemble() must be called first")
-            .to_string();
-
-        let root_attrs = eval_state
-            .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let root_attrs = self.eval_devenv(&mut eval_state)?;
 
         let info_json = if let Ok(Some(info_val)) = eval_state
             .require_attrs_select_opt(&root_attrs, "config.info")
@@ -1585,16 +1549,7 @@ impl NixBackend for NixRustBackend {
         let mut eval_state = self.eval_session("Searching packages", ActivityLevel::Info)?;
 
         // Import default.nix to get the configured pkgs with overlays and settings
-        let import_expr = self
-            .cached_import_expr
-            .get()
-            .expect("assemble() must be called first")
-            .to_string();
-
-        let devenv = eval_state
-            .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let devenv = self.eval_devenv(&mut eval_state)?;
 
         // Extract the pkgs attribute from the devenv output
         let pkgs = eval_state
@@ -1784,6 +1739,87 @@ impl NixBackend for NixRustBackend {
 
 // Helper methods for NixRustBackend
 impl NixRustBackend {
+    /// Evaluate devenv.nix with primops injected via specialArgs
+    ///
+    /// The cached import expression is a function: `primops: (import ... (args // { inherit primops; }))`
+    /// This method calls the function with the pre-built primops attrset.
+    fn eval_devenv(&self, eval_state: &mut EvalState) -> Result<nix_bindings_expr::value::Value> {
+        let import_expr = self
+            .cached_import_expr
+            .get()
+            .expect("assemble() must be called first");
+
+        // Evaluate to get the function: primops: (import ...)
+        let import_fn = eval_state
+            .eval_from_string(import_expr, self.paths.root.to_str().unwrap())
+            .to_miette()
+            .wrap_err("Failed to evaluate import expression")?;
+
+        // Call function with pre-built primops attrset (cloned since call() takes ownership)
+        eval_state
+            .call(import_fn, self.primops.attrset.clone())
+            .to_miette()
+            .wrap_err("Failed to call import function with primops")
+    }
+
+    /// Register custom primops with the eval state
+    ///
+    /// Creates primops for devenv-specific functionality like port allocation.
+    /// Returns an attrset Value containing all primops, to be passed via `primops` specialArg.
+    fn register_primops(
+        eval_state: &mut EvalState,
+        port_allocator: Arc<PortAllocator>,
+    ) -> Result<Primops> {
+        // allocatePort: Find an available port for a process, with caching
+        // Usage in Nix: primops.allocatePort "processName" "portName" 8080
+        // Returns the first available port >= base, or cached value if already allocated
+        // The port is held via TcpListener until take_reservations() is called
+        let allocator = port_allocator.clone();
+        let allocate_port_primop = PrimOp::new(
+            eval_state,
+            PrimOpMeta {
+                name: cstr!("allocatePort"),
+                doc: cstr!("Allocate an available port for a process. Args: processName, portName, basePort. Returns cached value if already allocated, otherwise first free port >= base."),
+                args: [cstr!("processName"), cstr!("portName"), cstr!("basePort")],
+            },
+            Box::new(move |es, [process_name, port_name, base_port]| {
+                let process = es.require_string(process_name)?;
+                let port = es.require_string(port_name)?;
+                let base = es.require_int(base_port)? as u16;
+
+                let allocated = allocator
+                    .allocate(&process, &port, base)
+                    .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                tracing::debug!(
+                    "Allocated port {} for {}.{} (base: {})",
+                    allocated,
+                    process,
+                    port,
+                    base
+                );
+
+                es.new_value_int(allocated as i64)
+            }),
+        )
+        .to_miette()
+        .wrap_err("Failed to create allocatePort primop")?;
+
+        // Convert PrimOp to Value (consumes the PrimOp)
+        let allocate_port_value = eval_state
+            .new_value_primop(allocate_port_primop)
+            .to_miette()
+            .wrap_err("Failed to create allocatePort primop value")?;
+
+        // Build the primops attrset: { allocatePort = <primop>; }
+        let attrset = eval_state
+            .new_value_attrs([("allocatePort".to_string(), allocate_port_value)])
+            .to_miette()
+            .wrap_err("Failed to create primops attrset")?;
+
+        Ok(Primops { attrset })
+    }
+
     /// Format lock file inputs as a tree structure
     fn format_lock_inputs(lock_file: &nix_bindings_flake::LockFile) -> Result<String> {
         let mut iter = lock_file

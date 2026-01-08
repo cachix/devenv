@@ -7,6 +7,7 @@
 
 use devenv_core::{
     CliOptionsConfig, Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend, Options,
+    PortAllocator,
 };
 use devenv_nix_backend::ProjectRoot;
 use devenv_nix_backend::nix_backend::NixRustBackend;
@@ -191,6 +192,7 @@ fn setup_isolated_test_env(
     let shutdown = Shutdown::new();
 
     // Create backend with default project_root (project directory)
+    let port_allocator = Arc::new(PortAllocator::new());
     let backend = NixRustBackend::new(
         paths.clone(),
         config.clone(),
@@ -198,6 +200,7 @@ fn setup_isolated_test_env(
         cachix_manager,
         shutdown,
         None,
+        port_allocator,
     )
     .expect("Failed to create NixRustBackend");
 
@@ -992,6 +995,7 @@ async fn test_eval_nonexistent_attribute() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -1215,6 +1219,7 @@ async fn test_backend_creation_with_offline_mode() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     );
 
     // TODO: Verify backend was created with offline mode
@@ -1239,6 +1244,7 @@ async fn test_backend_with_system_override() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     );
 
     // TODO: Verify system override is applied
@@ -1263,6 +1269,7 @@ async fn test_backend_with_impure_mode() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     );
 
     // TODO: Verify impure mode is enabled
@@ -1287,6 +1294,7 @@ async fn test_backend_with_custom_nix_options() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     );
 
     // TODO: Verify custom nix options are applied
@@ -1311,6 +1319,7 @@ async fn test_backend_with_nix_debugger_enabled() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     );
 
     // TODO: Verify debugger is enabled
@@ -1337,6 +1346,7 @@ async fn test_update_with_invalid_override_input() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -1381,6 +1391,7 @@ async fn test_eval_empty_attributes_array() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -1465,6 +1476,7 @@ async fn test_dev_env_bash_output_format() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -1498,6 +1510,7 @@ async fn test_dev_env_multiple_calls_same_gc_root() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -1532,6 +1545,7 @@ async fn test_dev_env_gc_root_already_exists_as_file() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -1626,6 +1640,7 @@ async fn test_update_lock_file_already_exists() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -2646,6 +2661,7 @@ async fn test_backend_reuse_across_operations() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
 
@@ -2689,6 +2705,7 @@ inputs:
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -2770,6 +2787,7 @@ inputs:
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -2897,6 +2915,7 @@ async fn test_eval_state_mutex_under_concurrent_eval() {
             cachix_manager,
             Shutdown::new(),
             None,
+            Arc::new(PortAllocator::new()),
         )
         .expect("Failed to create backend"),
     );
@@ -3075,6 +3094,7 @@ inputs:
         create_test_cachix_manager(&get_repo_root(), Some(mock.socket_path().to_path_buf())),
         Shutdown::new(),
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
 
