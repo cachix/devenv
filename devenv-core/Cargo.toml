@@ -8,8 +8,8 @@ license.workspace = true
 snix = []
 
 [dependencies]
-devenv-eval-cache.workspace = true
 devenv-activity.workspace = true
+devenv-cache-core.workspace = true
 nix-conf-parser.workspace = true
 pathdiff.workspace = true
 regex.workspace = true
@@ -17,12 +17,14 @@ regex.workspace = true
 async-trait.workspace = true
 clap.workspace = true
 miette.workspace = true
+num_enum.workspace = true
 thiserror.workspace = true
 once_cell.workspace = true
 schemars.workspace = true
 schematic.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_repr.workspace = true
 serde_yaml.workspace = true
 ser_nix.workspace = true
 tokio.workspace = true
