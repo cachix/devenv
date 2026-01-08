@@ -325,8 +325,13 @@ async fn test_relative_path_with_parent_dir_in_path() {
     //   inner/
     //     devenv.yaml (references path:../outer)
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let outer_dir = temp_dir.path().join("outer");
-    let inner_dir = temp_dir.path().join("inner");
+    // Canonicalize to resolve symlinks (e.g., /var -> /private/var on macOS)
+    let temp_path = temp_dir
+        .path()
+        .canonicalize()
+        .expect("Failed to canonicalize temp dir");
+    let outer_dir = temp_path.join("outer");
+    let inner_dir = temp_path.join("inner");
 
     fs::create_dir_all(&outer_dir).expect("Failed to create outer dir");
     fs::create_dir_all(&inner_dir).expect("Failed to create inner dir");
