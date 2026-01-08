@@ -70,6 +70,9 @@ in
     # Set an empty default to detect when the user wants to use a custom root file.
     treefmt.config.projectRootFile = lib.mkDefault "";
 
-    tasks."devenv:treefmt:run".exec = "${treefmtWrapper}/bin/treefmt";
+    tasks."devenv:treefmt:run" = {
+      before = [ "devenv:enterShell" ];
+      exec = "${treefmtWrapper}/bin/treefmt";
+    };
   };
 }
