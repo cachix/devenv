@@ -8,6 +8,7 @@ license.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
+cstr.workspace = true
 miette.workspace = true
 serde.workspace = true
 ser_nix.workspace = true
