@@ -1,0 +1,4 @@
+{ ... }:
+{
+  services.openbao.enable = true;
+}
