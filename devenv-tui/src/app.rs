@@ -209,8 +209,8 @@ impl TuiApp {
             let ui = ui_state.read().unwrap();
             if let Ok(model_guard) = activity_model.read() {
                 // Clear the previous inline render output
-                let lines_to_clear =
-                    model_guard.calculate_rendered_height(ui.selected_activity, ui.terminal_size.height);
+                let lines_to_clear = model_guard
+                    .calculate_rendered_height(ui.selected_activity, ui.terminal_size.height);
 
                 if lines_to_clear > 0 {
                     let mut stdout = io::stdout();

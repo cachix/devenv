@@ -1,3 +1,4 @@
+use crate::tracing as devenv_tracing;
 use clap::{Parser, Subcommand, crate_version};
 use devenv_core::GlobalOptions;
 use devenv_tasks::RunMode;
@@ -26,6 +27,16 @@ impl Cli {
         let mut cli = Self::parse();
         cli.global_options.resolve_overrides();
         cli
+    }
+
+    pub fn get_log_level(&self) -> devenv_tracing::Level {
+        if self.global_options.verbose {
+            devenv_tracing::Level::Debug
+        } else if self.global_options.quiet {
+            devenv_tracing::Level::Silent
+        } else {
+            devenv_tracing::Level::default()
+        }
     }
 }
 

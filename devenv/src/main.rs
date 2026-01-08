@@ -107,9 +107,9 @@ fn main() -> Result<()> {
     }
 
     // Determine which mode to run in:
-    // - Tracing mode: when trace-output is stdout/stderr (conflicts with TUI/CLI output)
     // - TUI mode: interactive terminal UI (default)
     // - Legacy CLI mode: spinners and progress indicators (--no-tui or --log-format cli)
+    // - Tracing mode: when --trace-output is stdout/stderr (conflicts with TUI/CLI output)
     //
     // Some commands require specific modes regardless of user options:
     // - MCP stdio mode uses legacy CLI (stdout is JSON-RPC, progress goes to stderr)
@@ -135,7 +135,7 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     activity_handle.install();
 
     // Initialize tracing
-    let level = get_log_level(&cli);
+    let level = cli.get_log_level();
     devenv_tracing::init_tracing(
         level,
         cli.global_options.trace_format,
@@ -184,16 +184,10 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Restore terminal to normal state (disable raw mode, show cursor)
     devenv_tui::app::restore_terminal();
 
-    // Wait for devenv thread to finish and get the result
-    let thread_result = devenv_thread
-        .join()
-        .map_err(|_| miette::miette!("Devenv thread panicked"))?;
-
-    // Check if secrets need prompting (special case: TUI stopped for password entry)
-    let result = match thread_result {
+    let result = match devenv_thread.join()? {
         Ok(cmd_result) => cmd_result,
         Err(err) => {
-            // Check if error is SecretsNeedPrompting
+            // Check if secrets need prompting (special case: TUI stopped for password entry)
             if let Some(secrets_err) = err.downcast_ref::<devenv::SecretsNeedPrompting>() {
                 CommandResult::PromptSecrets {
                     provider: secrets_err.provider.clone(),
@@ -214,7 +208,7 @@ fn run_with_legacy_cli(cli: Cli) -> Result<()> {
         let shutdown = Shutdown::new();
         shutdown.install_signals().await;
 
-        let level = get_log_level(&cli);
+        let level = cli.get_log_level();
         devenv_tracing::init_cli_tracing(level, cli.global_options.trace_output.as_ref());
 
         let result = tokio::select! {
@@ -231,7 +225,7 @@ fn run_with_tracing(cli: Cli) -> Result<()> {
         let shutdown = Shutdown::new();
         shutdown.install_signals().await;
 
-        let level = get_log_level(&cli);
+        let level = cli.get_log_level();
         devenv_tracing::init_tracing(
             level,
             cli.global_options.trace_format,
@@ -245,16 +239,6 @@ fn run_with_tracing(cli: Cli) -> Result<()> {
 
         result.exec()
     })
-}
-
-fn get_log_level(cli: &Cli) -> devenv_tracing::Level {
-    if cli.global_options.verbose {
-        devenv_tracing::Level::Debug
-    } else if cli.global_options.quiet {
-        devenv_tracing::Level::Silent
-    } else {
-        devenv_tracing::Level::default()
-    }
 }
 
 async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> {
