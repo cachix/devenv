@@ -1017,9 +1017,6 @@ impl NixBackend for NixRustBackend {
         self.queue_realized_paths(&[PathBuf::from(&path_str)])
             .await?;
 
-        // Release eval_state lock before using FFI
-        drop(eval_state);
-
         // Extract build environment from the derivation store path using FFI
         // Parse the derivation path to get a StorePath
         let mut store = (*self.store).clone();
@@ -1033,6 +1030,10 @@ impl NixBackend for NixRustBackend {
         let mut build_env = BuildEnvironment::get_dev_environment(&self.store, &drv_store_path)
             .to_miette()
             .wrap_err("Failed to get dev environment from derivation")?;
+
+        // Release eval_state lock after FFI operations complete
+        // This keeps activities nested under the eval scope
+        drop(eval_state);
 
         // Serialize to the requested format
         let output_str = if json {
