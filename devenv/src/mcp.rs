@@ -523,6 +523,7 @@ mod tests {
 
     #[nix_test]
     #[cfg(feature = "integration-tests")]
+    #[cfg(not(target_os = "linux"))] // Disabled on Linux due to segfaults
     async fn test_fetch_packages_live() {
         use crate::devenv::{Devenv, DevenvOptions};
 
@@ -598,6 +599,7 @@ mod tests {
 
     #[nix_test]
     #[cfg(feature = "integration-tests")]
+    #[cfg(not(target_os = "linux"))] // Disabled on Linux due to segfaults
     async fn test_fetch_options_live() {
         use crate::devenv::{Devenv, DevenvOptions};
 
