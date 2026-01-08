@@ -1637,7 +1637,15 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```
+{
+  "mcp.devenv.sh" = {
+    type = "http";
+    url = "https://mcp.devenv.sh";
+  };
+}
+```
 
 
 
