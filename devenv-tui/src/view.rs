@@ -489,11 +489,12 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             if *is_selected && logs.is_some() {
                 let prefix = build_activity_prefix(*depth, *completed);
 
-                let main_line = ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
-                    .with_suffix(suffix)
-                    .with_completed(completed.is_some())
-                    .with_selection(*is_selected)
-                    .render(terminal_width, *depth, prefix);
+                let main_line =
+                    ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
+                        .with_suffix(suffix)
+                        .with_completed(completed.is_some())
+                        .with_selection(*is_selected)
+                        .render(terminal_width, *depth, prefix);
 
                 return ExpandedContentComponent::new(logs.as_deref())
                     .with_empty_message("  → no files evaluated yet (press '^e' to expand)")

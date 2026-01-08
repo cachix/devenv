@@ -6,7 +6,7 @@ use devenv::{
 };
 use devenv_activity::ActivityLevel;
 use devenv_core::config::{self, Config};
-use miette::{bail, IntoDiagnostic, Result, WrapErr};
+use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use std::{process::Command, sync::Arc};
 use tempfile::TempDir;
 use tokio_shutdown::Shutdown;
@@ -149,8 +149,11 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
         ActivityLevel::Info
     };
 
-    // Shutdown coordination (TUI handles Ctrl+C, no install_signals needed)
+    // Shutdown coordination
+    // Signal handlers catch external signals (SIGINT from `kill`, SIGTERM, etc.)
+    // TUI also handles Ctrl+C as keyboard event and sets last_signal manually
     let shutdown = Shutdown::new();
+    shutdown.install_signals().await;
 
     // Channel to signal TUI when backend is fully done (including cleanup)
     let (backend_done_tx, backend_done_rx) = tokio::sync::oneshot::channel();

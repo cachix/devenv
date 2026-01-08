@@ -9,7 +9,7 @@ use iocraft::prelude::*;
 use std::io::{self, Write};
 use std::sync::{Arc, RwLock};
 use tokio::sync::{Notify, mpsc};
-use tokio_shutdown::Shutdown;
+use tokio_shutdown::{Shutdown, Signal};
 use tracing::debug;
 
 /// Configuration for the TUI application.
@@ -302,6 +302,8 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 debug!("Key event: {:?}", key_event);
                 match key_event.code {
                     KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                        // Set signal so Nix backend knows to interrupt operations
+                        shutdown.set_last_signal(Signal::SIGINT);
                         shutdown.shutdown();
                     }
                     KeyCode::Char('e') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {

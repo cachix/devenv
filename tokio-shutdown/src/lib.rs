@@ -1,7 +1,10 @@
 use nix::sys::signal::{
-    self as nix_signal, SaFlags, SigAction, SigHandler as NixSigHandler, SigSet, Signal,
+    self as nix_signal, SaFlags, SigAction, SigHandler as NixSigHandler, SigSet,
 };
 use nix::unistd;
+
+// Re-export Signal for consumers who need to set it manually (e.g., TUI mode)
+pub use nix::sys::signal::Signal;
 use std::future::Future;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -195,6 +198,14 @@ impl Shutdown {
             0 => None,
             i => Signal::try_from(i).ok(),
         }
+    }
+
+    /// Set the last signal manually.
+    ///
+    /// Used in TUI mode where Ctrl+C is received as a keyboard event rather than
+    /// a signal. Setting this ensures the Nix backend knows to interrupt operations.
+    pub fn set_last_signal(&self, signal: Signal) {
+        self.last_signal.store(signal as i32, Ordering::Relaxed);
     }
 
     /// Restore the default handler for the last received signal and re-raise the signal
