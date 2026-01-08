@@ -25,7 +25,7 @@ jobs:
         run: nix profile install . -L --accept-flake-config
 
       - name: Run formatters
-        run: devenv shell -- prek run || true
+        run: devenv shell -- prek run -a || true
 
       - uses: EndBug/add-and-commit@v9
         with:
