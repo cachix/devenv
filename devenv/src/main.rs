@@ -417,13 +417,23 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
             devenv.update(&name).await?;
             CommandResult::Done
         }
-        Commands::Up { processes, detach }
+        Commands::Up {
+            processes,
+            detach,
+            strict_ports,
+        }
         | Commands::Processes {
-            command: ProcessesCommand::Up { processes, detach },
+            command:
+                ProcessesCommand::Up {
+                    processes,
+                    detach,
+                    strict_ports,
+                },
         } => {
             let options = devenv::ProcessOptions {
                 detach,
                 log_to_file: detach,
+                strict_ports,
                 ..Default::default()
             };
             match devenv.up(processes, &options).await? {

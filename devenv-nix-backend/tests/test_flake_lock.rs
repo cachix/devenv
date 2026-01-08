@@ -1,11 +1,14 @@
 //! Integration tests for flake locking functionality
 
-use devenv_core::{CliOptionsConfig, Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend};
+use devenv_core::{
+    CliOptionsConfig, Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend, PortAllocator,
+};
 use devenv_nix_backend::{ProjectRoot, load_lock_file, nix_backend::NixRustBackend};
 use devenv_nix_backend_macros::nix_test;
 use nix_bindings_fetchers::FetchersSettings;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tempfile::TempDir;
 use tokio_shutdown::Shutdown;
 
@@ -138,6 +141,7 @@ async fn test_create_flake_inputs() {
         Shutdown::new(),
         None,
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
 
@@ -211,6 +215,7 @@ async fn test_selective_input_update() {
         Shutdown::new(),
         None,
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
 
@@ -286,6 +291,7 @@ async fn test_full_workflow() {
         Shutdown::new(),
         None,
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
 
@@ -391,6 +397,7 @@ async fn test_relative_path_with_parent_dir_in_path() {
         Shutdown::new(),
         None,
         None,
+        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
 
