@@ -6,7 +6,7 @@ use devenv::{
 };
 use devenv_activity::ActivityLevel;
 use devenv_core::config::{self, Config};
-use miette::{IntoDiagnostic, Result, WrapErr};
+use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use std::{process::Command, sync::Arc};
 use tempfile::TempDir;
 use tokio_shutdown::Shutdown;
@@ -184,7 +184,11 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Restore terminal to normal state (disable raw mode, show cursor)
     devenv_tui::app::restore_terminal();
 
-    let result = match devenv_thread.join()? {
+    let Ok(devenv_result) = devenv_thread.join() else {
+        bail!("devenv thread panicked");
+    };
+
+    let result = match devenv_result {
         Ok(cmd_result) => cmd_result,
         Err(err) => {
             // Check if secrets need prompting (special case: TUI stopped for password entry)
