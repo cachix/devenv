@@ -375,8 +375,12 @@ impl NixRustBackend {
             // Wait for shutdown signal
             shutdown_for_task.cancellation_token().cancelled().await;
 
-            // Interrupt any ongoing Nix operations
-            nix_bindings_util::trigger_interrupt();
+            // Only interrupt Nix operations if this was a user-initiated shutdown (actual signal received).
+            // Without this check, normal backend drops would set a global interrupt flag that persists
+            // and causes subsequent Nix operations to fail with "interrupted by the user".
+            if shutdown_for_task.last_signal().is_some() {
+                nix_bindings_util::trigger_interrupt();
+            }
 
             // Cleanup: finalize any queued cachix pushes
             let daemon = {
