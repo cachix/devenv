@@ -356,15 +356,11 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             };
             let prefix = build_activity_prefix(*depth, *completed);
 
-            let main_line = ActivityTextComponent::new(
-                "".to_string(), // No action prefix for tasks
-                activity.name.clone(),
-                elapsed_str,
-            )
-            .with_suffix(status_text.map(String::from))
-            .with_completed(completed.is_some())
-            .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            let main_line = ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
+                .with_suffix(status_text.map(String::from))
+                .with_completed(completed.is_some())
+                .with_selection(*is_selected)
+                .render(terminal_width, *depth, prefix);
 
             // Show logs inline for tasks with show_output=true or failed tasks
             let task_failed = *completed == Some(false);
@@ -493,15 +489,11 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             if *is_selected && logs.is_some() {
                 let prefix = build_activity_prefix(*depth, *completed);
 
-                let main_line = ActivityTextComponent::new(
-                    "evaluating Nix".to_string(),
-                    activity.name.clone(),
-                    elapsed_str,
-                )
-                .with_suffix(suffix)
-                .with_completed(completed.is_some())
-                .with_selection(*is_selected)
-                .render(terminal_width, *depth, prefix);
+                let main_line = ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
+                    .with_suffix(suffix)
+                    .with_completed(completed.is_some())
+                    .with_selection(*is_selected)
+                    .render(terminal_width, *depth, prefix);
 
                 return ExpandedContentComponent::new(logs.as_deref())
                     .with_empty_message("  → no files evaluated yet (press '^e' to expand)")
@@ -510,39 +502,27 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             let prefix = build_activity_prefix(*depth, *completed);
 
-            return ActivityTextComponent::new(
-                "evaluating Nix".to_string(),
-                activity.name.clone(),
-                elapsed_str,
-            )
-            .with_suffix(suffix)
-            .with_completed(completed.is_some())
-            .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            return ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
+                .with_suffix(suffix)
+                .with_completed(completed.is_some())
+                .with_selection(*is_selected)
+                .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::UserOperation => {
             let prefix = build_activity_prefix(*depth, *completed);
 
-            return ActivityTextComponent::new(
-                "".to_string(), // No action prefix for user operations
-                activity.name.clone(),
-                elapsed_str,
-            )
-            .with_completed(completed.is_some())
-            .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            return ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
+                .with_completed(completed.is_some())
+                .with_selection(*is_selected)
+                .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Devenv => {
             let prefix = build_activity_prefix(*depth, *completed);
 
-            return ActivityTextComponent::new(
-                "".to_string(), // No action prefix for devenv operations
-                activity.name.clone(),
-                elapsed_str,
-            )
-            .with_completed(completed.is_some())
-            .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            return ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
+                .with_completed(completed.is_some())
+                .with_selection(*is_selected)
+                .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Message(msg_data) => {
             // Determine icon and color based on message level

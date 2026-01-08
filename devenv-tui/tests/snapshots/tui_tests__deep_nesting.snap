@@ -2,7 +2,7 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Evaluating Nix
+⠋ Building shell
   ⎿ ⠋ Building wrapper-scripts buildPhase
     ⎿ ⠋ Downloading bash-5.2 from cache.nixos.org
         ──────────────────────────────────────────────500kB / 1MB at 5MB/s

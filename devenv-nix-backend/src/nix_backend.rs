@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use include_dir::{Dir, include_dir};
 use tokio_shutdown::Shutdown;
 
-use devenv_activity::current_activity_id;
+use devenv_activity::{ActivityLevel, current_activity_id};
 use devenv_cache_core::compute_string_hash;
 use devenv_core::GlobalOptions;
 use devenv_core::cachix::{Cachix, CachixCacheInfo, CachixManager};
@@ -432,7 +432,7 @@ impl NixRustBackend {
     /// This method:
     /// 1. Captures the current activity ID from the task-local stack
     /// 2. Acquires the eval_state mutex
-    /// 3. Registers the parent ID for lazy eval activity creation
+    /// 3. Registers the parent ID, name, and level for lazy eval activity creation
     /// 4. Returns an EvalSession that tracks nesting and completes the activity on drop
     ///
     /// The eval activity is created **lazily** when the first Nix FFI callback
@@ -440,7 +440,11 @@ impl NixRustBackend {
     ///
     /// Nested calls share a single activity - only the outermost session's parent
     /// is used, and the activity completes when the outermost session ends.
-    fn eval_session(&self) -> Result<EvalSession<'_>> {
+    fn eval_session(
+        &self,
+        name: impl Into<String>,
+        level: ActivityLevel,
+    ) -> Result<EvalSession<'_>> {
         // Capture parent activity ID while still in async context
         let parent_id = current_activity_id();
 
@@ -450,8 +454,9 @@ impl NixRustBackend {
             .lock()
             .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
 
-        // Register parent ID for lazy activity creation
-        self.nix_log_bridge.begin_eval(parent_id);
+        // Register parent ID, name, and level for lazy activity creation
+        self.nix_log_bridge
+            .begin_eval(parent_id, name.into(), level);
 
         Ok(EvalSession {
             guard,
@@ -612,37 +617,78 @@ impl NixRustBackend {
             caches.clone()
         } else {
             // Attempt to load cachix configuration from devenv config
-            // Evaluate individual attributes to avoid circular references in the attrset
+            // Use a single Debug-level eval session for all cachix config checks
+            let (enable, pull, push) = {
+                let mut eval_state =
+                    self.eval_session("Checking cachix config", ActivityLevel::Debug)?;
 
-            // Check if cachix is enabled
-            let enable = match self.eval(&["config.cachix.enable"]).await {
-                Ok(json) => serde_json::from_str::<bool>(&json).unwrap_or(true),
-                Err(e) => {
-                    tracing::warn!("Failed to evaluate cachix.enable: {}", e);
+                let import_expr = self
+                    .cached_import_expr
+                    .get()
+                    .expect("assemble() must be called first")
+                    .to_string();
+
+                let root_attrs = match eval_state
+                    .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
+                    .to_miette()
+                {
+                    Ok(attrs) => attrs,
+                    Err(e) => {
+                        tracing::warn!("Failed to import default.nix for cachix config: {}", e);
+                        return Ok(());
+                    }
+                };
+
+                // Check if cachix is enabled
+                let enable = match eval_state
+                    .require_attrs_select(&root_attrs, "config.cachix.enable")
+                    .to_miette()
+                    .and_then(|v| {
+                        eval_state.force(&v).to_miette()?;
+                        value_to_json(&mut eval_state, &v).to_miette()
+                    }) {
+                    Ok(json) => serde_json::from_value::<bool>(json).unwrap_or(true),
+                    Err(e) => {
+                        tracing::warn!("Failed to evaluate cachix.enable: {}", e);
+                        return Ok(());
+                    }
+                };
+
+                if !enable {
                     return Ok(());
                 }
-            };
 
-            if !enable {
-                return Ok(());
-            }
+                // Get pull caches
+                let pull = match eval_state
+                    .require_attrs_select(&root_attrs, "config.cachix.pull")
+                    .to_miette()
+                    .and_then(|v| {
+                        eval_state.force(&v).to_miette()?;
+                        value_to_json(&mut eval_state, &v).to_miette()
+                    }) {
+                    Ok(json) => serde_json::from_value::<Vec<String>>(json).unwrap_or_default(),
+                    Err(e) => {
+                        tracing::warn!("Failed to evaluate cachix.pull: {}", e);
+                        Vec::new()
+                    }
+                };
 
-            // Get pull caches
-            let pull = match self.eval(&["config.cachix.pull"]).await {
-                Ok(json) => serde_json::from_str::<Vec<String>>(&json).unwrap_or_default(),
-                Err(e) => {
-                    tracing::warn!("Failed to evaluate cachix.pull: {}", e);
-                    Vec::new()
-                }
-            };
+                // Get push cache
+                let push = match eval_state
+                    .require_attrs_select(&root_attrs, "config.cachix.push")
+                    .to_miette()
+                    .and_then(|v| {
+                        eval_state.force(&v).to_miette()?;
+                        value_to_json(&mut eval_state, &v).to_miette()
+                    }) {
+                    Ok(json) => serde_json::from_value::<Option<String>>(json).unwrap_or(None),
+                    Err(e) => {
+                        tracing::warn!("Failed to evaluate cachix.push: {}", e);
+                        None
+                    }
+                };
 
-            // Get push cache
-            let push = match self.eval(&["config.cachix.push"]).await {
-                Ok(json) => serde_json::from_str::<Option<String>>(&json).unwrap_or(None),
-                Err(e) => {
-                    tracing::warn!("Failed to evaluate cachix.push: {}", e);
-                    None
-                }
+                (enable, pull, push)
             };
 
             // Load known keys from trusted keys file if it exists
@@ -655,6 +701,9 @@ impl NixRustBackend {
             } else {
                 Default::default()
             };
+
+            // enable was already checked above
+            let _ = enable;
 
             let cachix_caches = CachixCacheInfo {
                 caches: Cachix { pull, push },
@@ -759,7 +808,7 @@ impl NixRustBackend {
 
         // Get eval state for locking operation
         let lock_result = {
-            let eval_state = self.eval_session()?;
+            let eval_state = self.eval_session("Validating lock", ActivityLevel::Debug)?;
 
             // Check if locks are in sync
             locker.lock(fetch_settings, &eval_state)
@@ -777,35 +826,65 @@ impl NixRustBackend {
     /// Initialize cachix daemon if push is configured
     async fn init_cachix_daemon(&self) -> Result<()> {
         // Check if cachix push is configured in devenv.nix
-        match self.eval(&["config.cachix.push"]).await {
-            Ok(push_cache_json) => {
-                // Parse the push cache name
-                if let Ok(push_cache) = serde_json::from_str::<Option<String>>(&push_cache_json) {
-                    if push_cache.is_some() {
-                        // Start the daemon with config (using custom socket path if provided)
-                        tracing::debug!("Starting cachix daemon for push operations");
-                        let daemon_config = crate::cachix_daemon::DaemonConfig {
-                            socket_path: self.cachix_manager.paths.daemon_socket.clone(),
-                            ..Default::default()
-                        };
-                        match crate::cachix_daemon::StreamingCachixDaemon::start(daemon_config)
-                            .await
-                        {
-                            Ok(daemon) => {
-                                let mut handle = self.cachix_daemon.lock().await;
-                                *handle = Some(daemon);
-                                tracing::info!("Cachix daemon started successfully");
-                            }
-                            Err(e) => {
-                                // Graceful degradation: daemon not available
-                                tracing::warn!("Failed to start cachix daemon: {}", e);
-                            }
+        // Use Debug level since this is an internal check, not user-visible work
+        let push_cache_json = {
+            let mut eval_state =
+                self.eval_session("Checking cachix config", ActivityLevel::Debug)?;
+
+            let import_expr = self
+                .cached_import_expr
+                .get()
+                .expect("assemble() must be called first")
+                .to_string();
+
+            let root_attrs = match eval_state
+                .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
+                .to_miette()
+            {
+                Ok(attrs) => attrs,
+                Err(_) => return Ok(()), // Eval failed, skip cachix
+            };
+
+            let value = match eval_state
+                .require_attrs_select(&root_attrs, "config.cachix.push")
+                .to_miette()
+            {
+                Ok(v) => v,
+                Err(_) => return Ok(()), // Attribute not found, skip cachix
+            };
+
+            if let Err(_) = eval_state.force(&value).to_miette() {
+                return Ok(()); // Force failed, skip cachix
+            }
+
+            match value_to_json(&mut eval_state, &value).to_miette() {
+                Ok(json_value) => serde_json::to_string(&json_value).ok(),
+                Err(_) => None,
+            }
+        };
+
+        if let Some(push_cache_json) = push_cache_json {
+            // Parse the push cache name
+            if let Ok(push_cache) = serde_json::from_str::<Option<String>>(&push_cache_json) {
+                if push_cache.is_some() {
+                    // Start the daemon with config (using custom socket path if provided)
+                    tracing::debug!("Starting cachix daemon for push operations");
+                    let daemon_config = crate::cachix_daemon::DaemonConfig {
+                        socket_path: self.cachix_manager.paths.daemon_socket.clone(),
+                        ..Default::default()
+                    };
+                    match crate::cachix_daemon::StreamingCachixDaemon::start(daemon_config).await {
+                        Ok(daemon) => {
+                            let mut handle = self.cachix_daemon.lock().await;
+                            *handle = Some(daemon);
+                            tracing::info!("Cachix daemon started successfully");
+                        }
+                        Err(e) => {
+                            // Graceful degradation: daemon not available
+                            tracing::warn!("Failed to start cachix daemon: {}", e);
                         }
                     }
                 }
-            }
-            Err(_) => {
-                // Cachix push not configured, this is fine
             }
         }
 
@@ -939,10 +1018,8 @@ impl NixBackend for NixRustBackend {
         // Evaluate the devenv shell environment from default.nix
         // This replaces: nix print-dev-env --profile gc_root [--json]
 
-        // Validate lock file before evaluation
-        self.validate_lock_file().await?;
-
-        let mut eval_state = self.eval_session()?;
+        // Note: Lock file validation is done in assemble(), which must be called first
+        let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
 
         // Import default.nix with parameters and evaluate to get the devenv structure
         let import_expr = self
@@ -1101,7 +1178,7 @@ impl NixBackend for NixRustBackend {
             .wrap_err("Failed to initialize Nix command library")?;
 
         // Lock the eval_state for REPL access
-        let mut eval_state = self.eval_session()?;
+        let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
 
         // Load default.nix into the REPL scope
         let import_expr = self
@@ -1176,7 +1253,7 @@ impl NixBackend for NixRustBackend {
         }
 
         // Lock eval_state for the entire operation
-        let mut eval_state = self.eval_session()?;
+        let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
 
         // Import default.nix to get the attribute set
         let import_expr = self
@@ -1275,7 +1352,7 @@ impl NixBackend for NixRustBackend {
         // Lock file validation is done once in assemble(), not here
 
         // Lock the eval_state for the duration of evaluation
-        let mut eval_state = self.eval_session()?;
+        let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
 
         // Import default.nix once to get the attribute set
         let import_expr = self
@@ -1409,7 +1486,7 @@ impl NixBackend for NixRustBackend {
 
         // Get eval state from mutex only when needed for locking
         // This ensures we reuse the same eval state across calls
-        let eval_state = self.eval_session()?;
+        let eval_state = self.eval_session("Updating inputs", ActivityLevel::Info)?;
 
         // Lock the inputs - pass eval_state by reference to avoid cloning
         let lock_file = locker
@@ -1432,7 +1509,7 @@ impl NixBackend for NixRustBackend {
         // Validate lock file before reading metadata
         self.validate_lock_file().await?;
 
-        let mut eval_state = self.eval_session()?;
+        let mut eval_state = self.eval_session("Reading metadata", ActivityLevel::Debug)?;
 
         // PART 1: Format inputs from lock file using new FFI iterator
         let lock_file_path = self.paths.root.join("devenv.lock");
@@ -1500,7 +1577,7 @@ impl NixBackend for NixRustBackend {
         // Validate lock file before searching
         self.validate_lock_file().await?;
 
-        let mut eval_state = self.eval_session()?;
+        let mut eval_state = self.eval_session("Searching packages", ActivityLevel::Info)?;
 
         // Import default.nix to get the configured pkgs with overlays and settings
         let import_expr = self

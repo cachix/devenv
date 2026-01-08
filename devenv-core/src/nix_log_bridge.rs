@@ -52,6 +52,10 @@ struct EvalActivityState {
     /// Parent activity ID captured by the outermost session.
     /// Used when lazily creating the eval activity on first Nix callback.
     pending_parent: Option<u64>,
+    /// Name for the evaluation activity (e.g., "Building shell", "Searching packages").
+    pending_name: String,
+    /// Activity level for the evaluation (Info for user-visible, Debug for internal).
+    pending_level: ActivityLevel,
     /// The current evaluation activity, created lazily on first Nix callback.
     current_eval: Option<Activity>,
 }
@@ -85,6 +89,8 @@ impl NixLogBridge {
             eval_state: Mutex::new(EvalActivityState {
                 depth: 0,
                 pending_parent: None,
+                pending_name: String::new(),
+                pending_level: ActivityLevel::Info,
                 current_eval: None,
             }),
         })
@@ -101,16 +107,18 @@ impl NixLogBridge {
     ///
     /// This method supports re-entrancy: nested calls increment a depth counter,
     /// and only the outermost call's `parent_id` is used.
-    pub fn begin_eval(&self, parent_id: Option<u64>) {
+    pub fn begin_eval(&self, parent_id: Option<u64>, name: String, level: ActivityLevel) {
         let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
         if state.depth == 0 {
-            // Outermost session - store the parent ID for lazy activity creation
+            // Outermost session - store the parent ID, name, and level for lazy activity creation
             state.pending_parent = parent_id;
+            state.pending_name = name;
+            state.pending_level = level;
             // Clear any stale activity (shouldn't happen, but be safe)
             state.current_eval = None;
         }
-        // Nested sessions don't change pending_parent - outer session's parent is used
+        // Nested sessions don't change pending state - outer session's values are used
 
         state.depth += 1;
     }
@@ -135,6 +143,8 @@ impl NixLogBridge {
             // Outermost scope ended - complete the activity by dropping it
             state.current_eval = None;
             state.pending_parent = None;
+            state.pending_name.clear();
+            state.pending_level = ActivityLevel::Info;
         }
     }
 
@@ -152,7 +162,10 @@ impl NixLogBridge {
 
         if state.current_eval.is_none() {
             // First callback in this eval scope - create the activity lazily
-            let eval = Activity::evaluate().parent(state.pending_parent).start();
+            let eval = Activity::evaluate(&state.pending_name)
+                .parent(state.pending_parent)
+                .level(state.pending_level)
+                .start();
             state.current_eval = Some(eval);
         }
 

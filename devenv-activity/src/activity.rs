@@ -66,8 +66,8 @@ impl Activity {
     }
 
     /// Create a builder for an Evaluate activity
-    pub fn evaluate() -> EvaluateBuilder {
-        EvaluateBuilder::new()
+    pub fn evaluate(name: impl Into<String>) -> EvaluateBuilder {
+        EvaluateBuilder::new(name)
     }
 
     /// Create a builder for a Task activity

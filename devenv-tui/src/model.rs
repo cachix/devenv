@@ -421,16 +421,15 @@ impl ActivityModel {
 
     fn handle_evaluate_event(&mut self, event: Evaluate) {
         match event {
-            Evaluate::Start { id, parent, .. } => {
+            Evaluate::Start {
+                id,
+                name,
+                level,
+                parent,
+                ..
+            } => {
                 let variant = ActivityVariant::Evaluating(EvaluatingActivity::default());
-                self.create_activity(
-                    id,
-                    String::new(),
-                    parent,
-                    None,
-                    variant,
-                    ActivityLevel::Info,
-                );
+                self.create_activity(id, name, parent, None, variant, level);
             }
             Evaluate::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);

@@ -2,7 +2,7 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Evaluating Nix
+⠋ Building shell
   ✗ error: simple error
 
 

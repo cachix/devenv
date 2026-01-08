@@ -360,6 +360,8 @@ fn test_evaluating_activity() {
 
     let event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 1,
+        name: "Building shell".to_string(),
+        level: ActivityLevel::Info,
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -447,6 +449,8 @@ fn test_nested_evaluation_with_children() {
     // Parent: Nix evaluation
     let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 100,
+        name: "Building shell".to_string(),
+        level: ActivityLevel::Info,
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -714,6 +718,8 @@ fn test_deep_nesting() {
     // Level 0: Root evaluation
     let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 1,
+        name: "Building shell".to_string(),
+        level: ActivityLevel::Info,
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -829,6 +835,8 @@ fn test_many_concurrent_activities() {
             _ => {
                 model.apply_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
                     id: i as u64 + 1,
+                    name: "Building shell".to_string(),
+                    level: ActivityLevel::Info,
                     parent: None,
                     timestamp: Timestamp::now(),
                 }));
@@ -962,6 +970,8 @@ fn test_error_message_with_parent() {
     // Start an evaluation
     let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 1,
+        name: "Building shell".to_string(),
+        level: ActivityLevel::Info,
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -989,6 +999,8 @@ fn test_warning_message_with_parent() {
     // Start an evaluation
     let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 1,
+        name: "Building shell".to_string(),
+        level: ActivityLevel::Info,
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -1050,6 +1062,8 @@ fn test_error_message_with_details() {
     // Start an evaluation
     let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 1,
+        name: "Building shell".to_string(),
+        level: ActivityLevel::Info,
         parent: None,
         timestamp: Timestamp::now(),
     });
@@ -1077,6 +1091,8 @@ fn test_error_message_without_details() {
     // Start an evaluation
     let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
         id: 1,
+        name: "Building shell".to_string(),
+        level: ActivityLevel::Info,
         parent: None,
         timestamp: Timestamp::now(),
     });

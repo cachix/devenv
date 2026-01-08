@@ -160,6 +160,12 @@ impl ActivityTextComponent {
         }
     }
 
+    /// Create a component that displays only the name (no action prefix).
+    /// Use this for activities where the name is self-describing (e.g., "Evaluating Nix").
+    pub fn name_only(name: String, elapsed: String) -> Self {
+        Self::new(String::new(), name, elapsed)
+    }
+
     pub fn with_suffix(mut self, suffix: Option<String>) -> Self {
         self.suffix = suffix;
         self
