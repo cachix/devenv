@@ -516,13 +516,23 @@ async fn run_devenv_inner(devenv: &mut Devenv, command: Commands) -> Result<Comm
             devenv.update(&name).await?;
             CommandResult::Done
         }
-        Commands::Up { processes, detach }
+        Commands::Up {
+            processes,
+            detach,
+            strict_ports,
+        }
         | Commands::Processes {
-            command: ProcessesCommand::Up { processes, detach },
+            command:
+                ProcessesCommand::Up {
+                    processes,
+                    detach,
+                    strict_ports,
+                },
         } => {
             let options = devenv::ProcessOptions {
                 detach,
                 log_to_file: detach,
+                strict_ports,
                 ..Default::default()
             };
             match devenv.up(processes, &options).await? {

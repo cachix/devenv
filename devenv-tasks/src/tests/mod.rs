@@ -3644,9 +3644,10 @@ mod property_tests {
             task_names in task_hierarchy()
         ) {
             tokio_test::block_on(async {
-                // Create database once for this test invocation (reused across all iterations)
+                // Use separate database paths to avoid SQLite locking issues
                 let temp_dir = TempDir::new().unwrap();
-                let db_path = temp_dir.path().join("tasks.db");
+                let shorter_db = temp_dir.path().join("shorter.db");
+                let longer_db = temp_dir.path().join("longer.db");
 
                 // For each task, test that shorter prefixes include longer ones
                 for task in &task_names {
@@ -3664,8 +3665,8 @@ mod property_tests {
                             continue;
                         }
 
-                        let shorter_matches = get_matching_task_names(&task_names, &shorter_prefix, &db_path).await?;
-                        let longer_matches = get_matching_task_names(&task_names, &longer_prefix, &db_path).await?;
+                        let shorter_matches = get_matching_task_names(&task_names, &shorter_prefix, &shorter_db).await?;
+                        let longer_matches = get_matching_task_names(&task_names, &longer_prefix, &longer_db).await?;
 
                         // Every task matched by longer prefix should also be matched by shorter prefix
                         for longer_match in &longer_matches {
