@@ -43,7 +43,7 @@ let
     lockFile = "${src}/Cargo.lock";
     outputHashes = {
       "nix-compat-0.1.0" = "sha256-dSkomGSFJgTtsxHWsBG8Qy2hqQDuemqDsKRJxvmuZ54=";
-      "nix-bindings-bindgen-raw-0.1.0" = "sha256-+rVoXzHxti3BtTYfIUoq+ZBfJOi0TT4IN4ZPwfb+/dk=";
+      "nix-bindings-bindgen-raw-0.1.0" = "sha256-SHSMfZtmWk+n+x2JkcgVkSK0NQh6TULzWNkFr7QHrx4=";
       "secretspec-0.5.0" = "sha256-YKBZcdbR62IxchnGO/Vn5hWac3phvAlE6gGeAhBS50A=";
       "ser_nix-0.1.2" = "sha256-IjTsHTAEBQQ8xyDHW51wufu2mmfmiw+alVjrLrG8bkY=";
       "wu-manber-0.1.0" = "sha256-7YIttaQLfFC/32utojh2DyOHVsZiw8ul/z0lvOhAE/4=";
