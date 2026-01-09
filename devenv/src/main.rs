@@ -117,6 +117,7 @@ fn main() -> Result<()> {
     let force_legacy_cli = matches!(
         &cli.command,
         Some(Commands::Mcp { http: None }) // stdio mode needs legacy CLI (stderr output)
+            | Some(Commands::Lsp { .. }) // LSP needs direct stdout for protocol/config output
     );
 
     if cli.global_options.use_tracing_mode() {
