@@ -88,6 +88,6 @@ in
     env.BLACKFIRE_CLIENT_TOKEN = cfg.client-token;
     env.BLACKFIRE_APM_ENABLED = (if cfg.enableApm then "1" else "0");
 
-    processes.blackfire-agent.exec = "${cfg.package}/bin/blackfire agent:start --config=${configFile}";
+    processes.blackfire-agent.exec = "exec ${cfg.package}/bin/blackfire agent:start --config=${configFile}";
   };
 }

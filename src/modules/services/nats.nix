@@ -269,7 +269,7 @@ in
     '';
 
     processes.nats = {
-      exec = "${cfg.package}/bin/nats-server ${buildArgs}";
+      exec = "exec ${cfg.package}/bin/nats-server ${buildArgs}";
 
       process-compose = {
         readiness_probe = {

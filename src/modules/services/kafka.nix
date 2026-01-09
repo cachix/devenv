@@ -174,7 +174,7 @@ in
         mkdir -p ${stateDir}
         ${formatLogDirsScript}/bin/format-log-dirs
 
-        ${cfg.jre}/bin/java \
+        exec ${cfg.jre}/bin/java \
           -cp "${cfg.package}/libs/*" \
           -Dlog4j.configuration=file:${cfg.configFiles.log4jProperties} \
           ${toString cfg.jvmOptions} \

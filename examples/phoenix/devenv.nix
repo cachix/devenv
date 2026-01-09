@@ -23,5 +23,5 @@
     initialDatabases = [{ name = "hello_dev"; }];
   };
 
-  processes.phoenix.exec = "cd hello && mix phx.server";
+  processes.phoenix.exec = "cd hello && exec mix phx.server";
 }

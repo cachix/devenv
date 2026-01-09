@@ -44,6 +44,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    processes.mailhog.exec = "${cfg.package}/bin/MailHog -api-bind-addr ${cfg.apiListenAddress} -ui-bind-addr ${cfg.uiListenAddress} -smtp-bind-addr ${cfg.smtpListenAddress} ${lib.concatStringsSep " " cfg.additionalArgs}";
+    processes.mailhog.exec = "exec ${cfg.package}/bin/MailHog -api-bind-addr ${cfg.apiListenAddress} -ui-bind-addr ${cfg.uiListenAddress} -smtp-bind-addr ${cfg.smtpListenAddress} ${lib.concatStringsSep " " cfg.additionalArgs}";
   };
 }

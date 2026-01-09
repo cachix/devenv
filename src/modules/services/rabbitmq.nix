@@ -164,7 +164,7 @@ in
     env.ERL_EPMD_ADDRESS = cfg.listenAddress;
 
     processes.rabbitmq = {
-      exec = "${cfg.package}/bin/rabbitmq-server";
+      exec = "exec ${cfg.package}/bin/rabbitmq-server";
 
       process-compose = {
         readiness_probe = {

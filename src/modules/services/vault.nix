@@ -119,7 +119,7 @@ in
     env.VAULT_API_ADDR = "http://${cfg.address}";
     env.VAULT_ADDR = "http://${cfg.address}";
     scripts.vault.exec = "exec ${cfg.package}/bin/vault $@";
-    processes.vault.exec = "${cfg.package}/bin/vault server -config=${configFile}";
+    processes.vault.exec = "exec ${cfg.package}/bin/vault server -config=${configFile}";
     processes.vault-configure.exec = "${configureScript}/bin/configure-vault";
   };
 }

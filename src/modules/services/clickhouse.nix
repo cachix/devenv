@@ -52,7 +52,7 @@ in
           path: ${cfg.package}/etc//clickhouse-server/users.xml
     '';
     processes.clickhouse-server = {
-      exec = "clickhouse-server --config-file=${pkgs.writeText "clickhouse-config.yaml" cfg.config}";
+      exec = "exec clickhouse-server --config-file=${pkgs.writeText "clickhouse-config.yaml" cfg.config}";
 
       process-compose = {
         readiness_probe = {

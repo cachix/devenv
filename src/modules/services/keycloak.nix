@@ -498,7 +498,7 @@ in
             echo "========================"
 
             echo "Start keycloak:"
-            ${keycloakBuild}/bin/kc.sh start --optimized --import-realm
+            exec ${keycloakBuild}/bin/kc.sh start --optimized --import-realm
           '';
 
         in

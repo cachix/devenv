@@ -43,17 +43,11 @@ let
                 if config.binary != null
                 then config.binary == "bash"
                 else config.package.meta.mainProgram or null == "bash";
-              # Only auto-add exec for single-line process commands that don't already have exec.
-              # Multi-line scripts need manual exec placement before the main process.
-              trimmedCommand = lib.strings.trim command;
-              isSingleLine = !lib.hasInfix "\n" trimmedCommand;
-              alreadyHasExec = lib.hasPrefix "exec " trimmedCommand;
-              addExec = config.type == "process" && isSingleLine && !alreadyHasExec;
             in
             pkgs.writeScript name ''
               #!${binary}
               ${lib.optionalString (!isStatus && isBash) "set -e"}
-              ${lib.optionalString addExec "exec "}${command}
+              ${command}
               ${lib.optionalString (config.exports != [] && !isStatus) "${inputs.config.task.package}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
             '';
       in
@@ -191,23 +185,6 @@ in
   };
 
   config = {
-    warnings =
-      let
-        multiLineProcessesWithoutExec = lib.filterAttrs
-          (name: task:
-            task.type == "process" &&
-            task.exec != null &&
-            lib.hasInfix "\n" (lib.strings.trim task.exec) &&
-            !lib.hasInfix "exec " task.exec
-          )
-          config.tasks;
-      in
-      lib.mapAttrsToList
-        (name: _:
-          "Process '${name}' has a multi-line command without 'exec'. This may cause SIGTERM to not reach the actual process. Consider adding 'exec' before the main process command."
-        )
-        multiLineProcessesWithoutExec;
-
     assertions = [
       {
         assertion = lib.all (task: task.package.meta.mainProgram == "bash" || task.binary == "bash" || task.exports == [ ]) (lib.attrValues config.tasks);

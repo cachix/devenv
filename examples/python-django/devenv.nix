@@ -28,7 +28,7 @@ in
   };
 
   processes.runserver = {
-    exec = "python manage.py runserver";
+    exec = "exec python manage.py runserver";
     process-compose.depends_on.postgres.condition = "process_healthy";
   };
 

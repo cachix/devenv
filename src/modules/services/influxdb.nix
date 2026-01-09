@@ -23,6 +23,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    processes.influxdb-server.exec = "${cfg.package}/bin/influxd -config ${pkgs.writeText "influxdb.conf" cfg.config}";
+    processes.influxdb-server.exec = "exec ${cfg.package}/bin/influxd -config ${pkgs.writeText "influxdb.conf" cfg.config}";
   };
 }

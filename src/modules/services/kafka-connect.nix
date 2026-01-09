@@ -172,7 +172,7 @@ in
 
       startKafkaConnect = pkgs.writeShellScriptBin "start-kafka-connect" ''
         mkdir -p ${stateDir}
-        ${pkg}/bin/connect-standalone.sh ${configFile} ${connectorFilesConcatted}
+        exec ${pkg}/bin/connect-standalone.sh ${configFile} ${connectorFilesConcatted}
       '';
     in
     (lib.mkIf cfg.enable (lib.mkIf kafkaCfg.enable {

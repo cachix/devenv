@@ -83,7 +83,7 @@ in
     env.MEILI_MAX_INDEX_SIZE = cfg.maxIndexSize;
 
     processes.meilisearch = {
-      exec = "${cfg.package}/bin/meilisearch";
+      exec = "exec ${cfg.package}/bin/meilisearch";
     };
   };
 }

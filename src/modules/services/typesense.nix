@@ -59,6 +59,6 @@ in
       before = [ "devenv:processes:typesense" ];
     };
 
-    processes.typesense.exec = "${cfg.package}/bin/typesense-server --data-dir $DEVENV_STATE/typesense --api-key ${lib.escapeShellArg cfg.apiKey} --api-host ${cfg.host} --api-port ${toString cfg.port} ${lib.optionalString (cfg.searchOnlyKey != null) "--search-only-api-key ${lib.escapeShellArg cfg.searchOnlyKey}"} ${lib.escapeShellArgs cfg.additionalArgs}";
+    processes.typesense.exec = "exec ${cfg.package}/bin/typesense-server --data-dir $DEVENV_STATE/typesense --api-key ${lib.escapeShellArg cfg.apiKey} --api-host ${cfg.host} --api-port ${toString cfg.port} ${lib.optionalString (cfg.searchOnlyKey != null) "--search-only-api-key ${lib.escapeShellArg cfg.searchOnlyKey}"} ${lib.escapeShellArgs cfg.additionalArgs}";
   };
 }

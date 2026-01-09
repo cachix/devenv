@@ -18,7 +18,7 @@ let
       extraFlags+="-sharedDb"
     fi
 
-    ${config.services.dynamodb-local.package}/bin/dynamodb-local -port ${toString cfg.port} -dbPath ${baseDir} -disableTelemetry $extraFlags
+    exec ${config.services.dynamodb-local.package}/bin/dynamodb-local -port ${toString cfg.port} -dbPath ${baseDir} -disableTelemetry $extraFlags
   '';
 in
 {

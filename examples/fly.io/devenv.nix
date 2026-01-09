@@ -9,7 +9,7 @@ in
   packages = [ pythonPackages.flask ]
     ++ lib.optionals (!config.container.isBuilding) [ pkgs.flyctl ];
 
-  processes.serve.exec = "flask --app hello run";
+  processes.serve.exec = "exec flask --app hello run";
 
   containers.processes = {
     name = "simple-python-app";

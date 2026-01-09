@@ -21,7 +21,7 @@ in
 
   config.processes = lib.mkIf cfg.funnel.enable {
     "tailscale-funnel" = {
-      exec = "${pkgs.tailscale}/bin/tailscale funnel --yes ${cfg.funnel.target}";
+      exec = "exec ${pkgs.tailscale}/bin/tailscale funnel --yes ${cfg.funnel.target}";
     };
   };
 }

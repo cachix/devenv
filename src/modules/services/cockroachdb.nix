@@ -39,7 +39,7 @@ in
     env.COCKROACH_DATA = config.env.DEVENV_STATE + "/cockroachdb";
 
     processes.cockroachdb = {
-      exec = "${cfg.package}/bin/cockroachdb start-single-node --insecure --listen-addr=${cfg.listen_addr} --http-addr=${cfg.http_addr} --store=path=$COCKROACH_DATA";
+      exec = "exec ${cfg.package}/bin/cockroachdb start-single-node --insecure --listen-addr=${cfg.listen_addr} --http-addr=${cfg.http_addr} --store=path=$COCKROACH_DATA";
     };
   };
 }

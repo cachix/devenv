@@ -26,7 +26,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    processes.httpbin.exec = "${python}/bin/gunicorn httpbin:app -k gevent ${qs binds} ${qs cfg.extraArgs}";
+    processes.httpbin.exec = "exec ${python}/bin/gunicorn httpbin:app -k gevent ${qs binds} ${qs cfg.extraArgs}";
   };
 }
 

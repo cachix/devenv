@@ -121,6 +121,6 @@ in
 
   config = lib.mkIf cfg.enable {
     packages = [ cfg.package ];
-    processes.temporal.exec = "${cfg.package}/bin/temporal server start-dev ${lib.concatStringsSep " " commandArgs}";
+    processes.temporal.exec = "exec ${cfg.package}/bin/temporal server start-dev ${lib.concatStringsSep " " commandArgs}";
   };
 }

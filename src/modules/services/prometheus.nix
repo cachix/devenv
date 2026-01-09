@@ -158,7 +158,7 @@ in
     ];
 
     processes.prometheus = {
-      exec = "${cfg.package}/bin/prometheus ${prometheusArgs}";
+      exec = "exec ${cfg.package}/bin/prometheus ${prometheusArgs}";
 
       process-compose = {
         readiness_probe = {

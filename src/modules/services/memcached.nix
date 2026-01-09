@@ -50,7 +50,7 @@ in
 
   config = lib.mkIf cfg.enable {
     processes.memcached = {
-      exec = "${cfg.package}/bin/memcached --port=${toString cfg.port} --listen=${cfg.bind} ${lib.concatStringsSep " " cfg.startArgs}";
+      exec = "exec ${cfg.package}/bin/memcached --port=${toString cfg.port} --listen=${cfg.bind} ${lib.concatStringsSep " " cfg.startArgs}";
 
       process-compose = {
         readiness_probe = {

@@ -23,6 +23,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    processes.elasticmq-server.exec = "JAVA_TOOL_OPTIONS=\"-Dconfig.file=${pkgs.writeText "elasticmq-server.conf" cfg.settings}\" ${cfg.package}/bin/elasticmq-server";
+    processes.elasticmq-server.exec = "exec env JAVA_TOOL_OPTIONS=\"-Dconfig.file=${pkgs.writeText "elasticmq-server.conf" cfg.settings}\" ${cfg.package}/bin/elasticmq-server";
   };
 }

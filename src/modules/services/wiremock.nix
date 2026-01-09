@@ -90,7 +90,7 @@ in
         ++ lib.optional cfg.verbose "--verbose";
       in
       ''
-        ${cfg.package}/bin/wiremock ${lib.concatStringsSep " " arguments} "$@"
+        exec ${cfg.package}/bin/wiremock ${lib.concatStringsSep " " arguments} "$@"
       '';
   };
 }

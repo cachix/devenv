@@ -54,7 +54,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    processes.varnish.exec = "${cfg.package}/bin/varnishd -n ${workingDir} -F -f ${cfgFile} -s malloc,${toString cfg.memorySize} -a ${cfg.listen} ${lib.optionalString (cfg.extraModules != []) " -p vmod_path='${lib.makeSearchPathOutput "lib" "lib/varnish/vmods" ([cfg.package] ++ cfg.extraModules)}' -r vmod_path"}";
+    processes.varnish.exec = "exec ${cfg.package}/bin/varnishd -n ${workingDir} -F -f ${cfgFile} -s malloc,${toString cfg.memorySize} -a ${cfg.listen} ${lib.optionalString (cfg.extraModules != []) " -p vmod_path='${lib.makeSearchPathOutput "lib" "lib/varnish/vmods" ([cfg.package] ++ cfg.extraModules)}' -r vmod_path"}";
 
     scripts.varnishadm.exec = "exec ${cfg.package}/bin/varnishadm -n ${workingDir} $@";
     scripts.varnishtop.exec = "exec ${cfg.package}/bin/varnishtop -n ${workingDir} $@";

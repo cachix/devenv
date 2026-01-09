@@ -62,7 +62,7 @@ in
 
   config = lib.mkIf cfg.enable {
     processes.opentelemetry-collector = {
-      exec = "${lib.getExe cfg.package} --config ${otelConfig}";
+      exec = "exec ${lib.getExe cfg.package} --config ${otelConfig}";
 
       process-compose = {
         readiness_probe = {
