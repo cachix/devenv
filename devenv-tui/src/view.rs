@@ -923,25 +923,15 @@ fn build_summary_view_impl(
             help_children.push(element!(Text(content: " clear")).into_any());
         }
     } else {
-        // Always show navigate hint (even when no selection)
+        // Show navigate hint only when no selection (^e requires selection)
         help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
         help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
         if !use_symbols {
             if use_short_text {
-                help_children.push(element!(Text(content: " nav • ")).into_any());
+                help_children.push(element!(Text(content: " nav")).into_any());
             } else {
-                help_children.push(element!(Text(content: " navigate • ")).into_any());
+                help_children.push(element!(Text(content: " navigate")).into_any());
             }
-        } else {
-            help_children.push(element!(Text(content: " • ")).into_any());
-        }
-        help_children.push(element!(Text(content: "^e", color: COLOR_INTERACTIVE)).into_any());
-        if use_symbols {
-            help_children.push(element!(Text(content: " ▼")).into_any());
-        } else if use_short_text {
-            help_children.push(element!(Text(content: " expand")).into_any());
-        } else {
-            help_children.push(element!(Text(content: " expand")).into_any());
         }
     }
 
