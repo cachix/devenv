@@ -1288,7 +1288,12 @@ impl NixBackend for NixRustBackend {
             // Otherwise use the value as-is (might be a string already)
             let build_value = match eval_state.require_attrs_select_opt(&value, "outPath") {
                 Ok(Some(out_path)) => out_path,
-                Ok(None) | Err(_) => value.clone(),
+                Ok(None) => value.clone(),
+                Err(e) => {
+                    return Err(e)
+                        .to_miette()
+                        .wrap_err(format!("Failed to evaluate attribute: {attr_path}"));
+                }
             };
 
             // PHASE 2: Build - Realize the value, which triggers the actual build
