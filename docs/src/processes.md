@@ -88,6 +88,40 @@ Processes can reference the git repository root path using `${config.git.root}`,
 
 This allows processes to reference paths relative to the repository root regardless of where the `devenv.nix` file is located within the repository.
 
+## Automatic port allocation
+
+!!! tip "New in devenv 2.0"
+
+Devenv can automatically allocate free ports for your processes, preventing conflicts when a port is already in use or when running multiple devenv projects simultaneously.
+
+Define ports using `ports.<name>.allocate` with a base port number. Devenv will find a free port starting from that base, incrementing until one is available:
+
+```nix title="devenv.nix"
+{ config, ... }:
+
+{
+  processes.server = {
+    ports.http.allocate = 8080;
+    ports.admin.allocate = 9000;
+    exec = ''
+      echo "HTTP server on port ${toString config.processes.server.ports.http.value}"
+      echo "Admin panel on port ${toString config.processes.server.ports.admin.value}"
+      python -m http.server ${toString config.processes.server.ports.http.value}
+    '';
+  };
+}
+```
+
+The resolved port is available via `config.processes.<name>.ports.<port>.value`. If port 8080 is already in use, devenv will automatically try 8081, 8082, and so on until it finds an available port.
+
+Devenv holds the allocated ports during configuration evaluation to prevent race conditions, then releases them just before starting the processes so your application can bind to them.
+
+This is particularly useful for:
+
+- **Running multiple projects**: Each project gets its own ports without manual coordination
+- **CI environments**: Tests can run in parallel without port conflicts
+- **Shared development machines**: Multiple developers can run the same project simultaneously
+
 ## Running tasks before/after the process
 
 Processes are automatically available as tasks, allowing you to define pre and post hooks. See the [Processes as tasks](tasks.md#processes-as-tasks) section for details on how to run tasks before a process starts or after it stops.

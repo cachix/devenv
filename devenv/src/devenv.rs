@@ -13,6 +13,7 @@ use devenv_core::{
     config::{Config, NixBackendType},
     nix_args::{NixArgs, SecretspecData},
     nix_backend::{DevenvPaths, NixBackend, Options},
+    ports::PortAllocator,
 };
 use include_dir::{Dir, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
@@ -170,6 +171,9 @@ pub struct Devenv {
     // Cached serialized NixArgs from assemble
     nix_args_string: Arc<OnceCell<String>>,
 
+    // Port allocator shared with NixBackend for holding port reservations
+    port_allocator: Arc<PortAllocator>,
+
     // TODO: make private.
     // Pass as an arg or have a setter.
     pub container_name: Option<String>,
@@ -244,6 +248,9 @@ impl Devenv {
         // Create eval-cache pool (framework layer concern, used by backends)
         let eval_cache_pool = Arc::new(OnceCell::new());
 
+        // Create port allocator shared with backend for holding port reservations
+        let port_allocator = Arc::new(PortAllocator::new());
+
         let nix: Box<dyn NixBackend> = match backend_type {
             NixBackendType::Nix => Box::new(
                 devenv_nix_backend::nix_backend::NixRustBackend::new(
@@ -253,6 +260,7 @@ impl Devenv {
                     cachix_manager.clone(),
                     options.shutdown.clone(),
                     None,
+                    port_allocator.clone(),
                 )
                 .expect("Failed to initialize Nix backend"),
             ),
@@ -286,6 +294,7 @@ impl Devenv {
             eval_cache_pool,
             secretspec_resolved,
             nix_args_string: Arc::new(OnceCell::new()),
+            port_allocator,
             container_name: None,
             shutdown: options.shutdown,
         }
@@ -1162,6 +1171,11 @@ impl Devenv {
                     .await?
             };
 
+            // Release port reservations just before spawning processes.
+            // Ports were held during Nix evaluation to prevent race conditions.
+            // Dropping the guard releases the TcpListeners so processes can bind.
+            drop(self.port_allocator.take_reservations());
+
             if options.detach {
                 // Check if processes are already running
                 if self.processes_pid().exists() {
@@ -1564,7 +1578,7 @@ impl Devenv {
         // Cache the serialized args
         self.nix_args_string
             .set(nix_args_str.clone())
-            .map_err(|_| miette!("nix_args_string already set"))?;
+            .expect("nix_args_string should only be set once");
 
         self.assembled.store(true, Ordering::Release);
         Ok(nix_args_str)

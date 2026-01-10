@@ -2,11 +2,50 @@
 let
   types = lib.types;
 
+  portType = types.submodule ({ config, ... }: {
+    options = {
+      allocate = lib.mkOption {
+        type = types.port;
+        description = "Base port for auto-allocation (increments until free)";
+        example = 8080;
+      };
+
+      value = lib.mkOption {
+        type = types.port;
+        readOnly = true;
+        description = "Resolved port value (allocated by devenv)";
+        default =
+          if builtins ? devenvAllocatePort
+          then builtins.devenvAllocatePort config.allocate
+          else config.allocate;
+      };
+    };
+  });
+
   processType = types.submodule ({ config, ... }: {
     options = {
       exec = lib.mkOption {
         type = types.str;
         description = "Bash code to run the process.";
+      };
+
+      ports = lib.mkOption {
+        type = types.attrsOf portType;
+        default = { };
+        description = ''
+          Named ports with auto-allocation for this process.
+
+          Define ports with a base value and devenv will automatically find
+          a free port starting from that base, incrementing until available.
+
+          The resolved port is available via `config.processes.<name>.ports.<port>.value`.
+        '';
+        example = lib.literalExpression ''
+          {
+            http.allocate = 8080;
+            admin.allocate = 9000;
+          }
+        '';
       };
 
       cwd = lib.mkOption {
