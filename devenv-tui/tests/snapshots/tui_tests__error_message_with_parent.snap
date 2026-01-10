@@ -6,4 +6,4 @@ expression: output
   ✗ error: undefined variable 'pkgs'
 
 
-                  ↑↓ nav • ^e expand
+                              ↑↓ nav

@@ -7,4 +7,4 @@ expression: output
 
 
  ✗ error: attribute 'nonExistentPackage' not
-                                ↑↓ nav • ^e expand
+                                            ↑↓ nav

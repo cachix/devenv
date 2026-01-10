@@ -6,4 +6,4 @@ expression: output
   Running test suite...
   FAILED: assertion error in test_foo
   Expected: 42, Got: 0
- 0 of 1 tasks      ↑↓ nav • ^e expand
+ 0 of 1 tasks                  ↑↓ nav
