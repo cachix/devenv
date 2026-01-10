@@ -47,3 +47,50 @@ package
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/lua\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)
+
+
+
+### languages\.lua\.lsp\.enable
+
+
+
+Whether to enable Lua Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/lua\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)
+
+
+
+### languages\.lua\.lsp\.package
+
+
+
+The Lua language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.lua-language-server `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/lua\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)

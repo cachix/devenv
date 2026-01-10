@@ -52,3 +52,50 @@ package
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/idris\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)
+
+
+
+### languages\.idris\.lsp\.enable
+
+
+
+Whether to enable Idris Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/idris\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)
+
+
+
+### languages\.idris\.lsp\.package
+
+
+
+The Idris language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.idris2Packages.idris2Lsp `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/idris\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)

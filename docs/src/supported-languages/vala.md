@@ -52,3 +52,50 @@ package
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/vala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)
+
+
+
+### languages\.vala\.lsp\.enable
+
+
+
+Whether to enable Vala Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/vala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)
+
+
+
+### languages\.vala\.lsp\.package
+
+
+
+The Vala language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.vala-language-server `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/vala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)

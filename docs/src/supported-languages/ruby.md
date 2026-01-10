@@ -123,6 +123,53 @@ boolean
 
 
 
+### languages\.ruby\.lsp\.enable
+
+
+
+Whether to enable Ruby Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
+
+
+
+### languages\.ruby\.lsp\.package
+
+
+
+The Ruby language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.solargraph `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
+
+
+
 ### languages\.ruby\.version
 
 

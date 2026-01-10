@@ -50,11 +50,11 @@ package
 
 
 
-### languages\.helm\.languageServer\.enable
+### languages\.helm\.lsp\.enable
 
 
 
-Whether to enable Helm language server\.
+Whether to enable Helm Language Server\.
 
 
 
@@ -64,7 +64,7 @@ boolean
 
 
 *Default:*
-` false `
+` true `
 
 
 
@@ -76,11 +76,11 @@ boolean
 
 
 
-### languages\.helm\.languageServer\.package
+### languages\.helm\.lsp\.package
 
 
 
-The Helm language server package to include\.
+The Helm language server package to use\.
 
 
 

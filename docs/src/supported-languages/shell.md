@@ -26,3 +26,50 @@ boolean
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/shell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/shell.nix)
+
+
+
+### languages\.shell\.lsp\.enable
+
+
+
+Whether to enable Shell Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/shell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/shell.nix)
+
+
+
+### languages\.shell\.lsp\.package
+
+
+
+The Shell language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.bash-language-server `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/shell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/shell.nix)

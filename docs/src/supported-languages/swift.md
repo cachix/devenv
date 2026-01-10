@@ -47,3 +47,50 @@ package
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/swift\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
+
+
+
+### languages\.swift\.lsp\.enable
+
+
+
+Whether to enable Swift Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/swift\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
+
+
+
+### languages\.swift\.lsp\.package
+
+
+
+The Swift language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.sourcekit-lsp `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/swift\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)

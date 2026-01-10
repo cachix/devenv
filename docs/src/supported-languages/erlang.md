@@ -47,3 +47,50 @@ package
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/erlang\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)
+
+
+
+### languages\.erlang\.lsp\.enable
+
+
+
+Whether to enable Erlang Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/erlang\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)
+
+
+
+### languages\.erlang\.lsp\.package
+
+
+
+The Erlang language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.erlang-language-platform `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/erlang\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)

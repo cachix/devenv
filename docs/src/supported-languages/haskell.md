@@ -92,16 +92,42 @@ package
 
 
 
-### languages\.haskell\.languageServer
+### languages\.haskell\.lsp\.enable
 
 
 
-Haskell language server to use\.
+Whether to enable Haskell Language Server\.
 
 
 
 *Type:*
-null or package
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+
+
+
+### languages\.haskell\.lsp\.package
+
+
+
+The Haskell language server package to use\.
+
+
+
+*Type:*
+package
 
 
 

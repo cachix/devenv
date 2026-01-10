@@ -50,6 +50,53 @@ package
 
 
 
+### languages\.crystal\.lsp\.enable
+
+
+
+Whether to enable Crystal Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/crystal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
+
+
+
+### languages\.crystal\.lsp\.package
+
+
+
+The Crystal language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.crystalline `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/crystal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
+
+
+
 ### languages\.crystal\.shards
 
 

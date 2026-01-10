@@ -104,6 +104,53 @@ package
 
 
 
+### languages\.java\.lsp\.enable
+
+
+
+Whether to enable Java Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
+
+
+
+### languages\.java\.lsp\.package
+
+
+
+The Java language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.jdt-language-server `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
+
+
+
 ### languages\.java\.maven\.enable
 
 

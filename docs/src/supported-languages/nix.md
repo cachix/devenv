@@ -29,11 +29,37 @@ boolean
 
 
 
+### languages\.nix\.lsp\.enable
+
+
+
+Whether to enable Nix Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nix\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix)
+
+
+
 ### languages\.nix\.lsp\.package
 
 
 
-The LSP package to use
+The Nix language server package to use\.
 
 
 
@@ -43,7 +69,7 @@ package
 
 
 *Default:*
-` pkgs.nil `
+` pkgs.nixd `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nix\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix)

@@ -47,3 +47,50 @@ package
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elixir\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)
+
+
+
+### languages\.elixir\.lsp\.enable
+
+
+
+Whether to enable Elixir Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elixir\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)
+
+
+
+### languages\.elixir\.lsp\.package
+
+
+
+The Elixir language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.elixir-ls `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elixir\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)

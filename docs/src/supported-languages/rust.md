@@ -239,6 +239,53 @@ function that evaluates to a(n) function that evaluates to a(n) package
 
 
 
+### languages\.rust\.lsp\.enable
+
+
+
+Whether to enable Rust Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages\.rust\.lsp\.package
+
+
+
+The Rust language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.rust-analyzer `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ### languages\.rust\.mold\.enable
 
 

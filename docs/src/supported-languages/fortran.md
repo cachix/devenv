@@ -47,3 +47,50 @@ package
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/fortran\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix)
+
+
+
+### languages\.fortran\.lsp\.enable
+
+
+
+Whether to enable Fortran Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/fortran\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix)
+
+
+
+### languages\.fortran\.lsp\.package
+
+
+
+The Fortran language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.fortls `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/fortran\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix)

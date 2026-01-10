@@ -104,6 +104,53 @@ list of absolute path
 
 
 
+### languages\.python\.lsp\.enable
+
+
+
+Whether to enable Python Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
+
+
+
+### languages\.python\.lsp\.package
+
+
+
+The Python language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.pyright `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
+
+
+
 ### languages\.python\.manylinux\.enable
 
 

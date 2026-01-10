@@ -26,3 +26,50 @@ boolean
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/clojure\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix)
+
+
+
+### languages\.clojure\.lsp\.enable
+
+
+
+Whether to enable Clojure Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/clojure\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix)
+
+
+
+### languages\.clojure\.lsp\.package
+
+
+
+The Clojure language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.clojure-lsp `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/clojure\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix)

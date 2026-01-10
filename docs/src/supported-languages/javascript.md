@@ -176,6 +176,53 @@ string
 
 
 
+### languages\.javascript\.lsp\.enable
+
+
+
+Whether to enable TypeScript Language Server for JavaScript\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
+### languages\.javascript\.lsp\.package
+
+
+
+The TypeScript/JavaScript language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.typescript-language-server `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
 ### languages\.javascript\.npm\.enable
 
 

@@ -48,3 +48,50 @@ null or package
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/c\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix)
+
+
+
+### languages\.c\.lsp\.enable
+
+
+
+Whether to enable C Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/c\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix)
+
+
+
+### languages\.c\.lsp\.package
+
+
+
+The C language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ccls `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/c\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix)

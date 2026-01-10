@@ -47,3 +47,50 @@ package
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dotnet\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
+
+
+
+### languages\.dotnet\.lsp\.enable
+
+
+
+Whether to enable \.NET Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dotnet\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
+
+
+
+### languages\.dotnet\.lsp\.package
+
+
+
+The \.NET language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.csharp-ls `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dotnet\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
