@@ -26,6 +26,16 @@ in
       description = "Configuration for shards";
       default = { };
     };
+
+    lsp = {
+      enable = lib.mkEnableOption "Crystal Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.crystalline;
+        defaultText = lib.literalExpression "pkgs.crystalline";
+        description = "The Crystal language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -35,6 +45,6 @@ in
     packages = [
       cfg.package
       cfg.shards.package
-    ];
+    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

@@ -33,7 +33,8 @@ boolean
 
 
 
-The PureScript package to use\.
+The PureScript compiler package to use\.
+Uses [purescript-overlay](https://github\.com/thomashoneyman/purescript-overlay) by default\.
 
 
 
@@ -43,7 +44,103 @@ package
 
 
 *Default:*
-` pkgs.purescript `
+` purescript-overlay.packages.${pkgs.stdenv.system}.purs `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
+
+
+
+### languages\.purescript\.lsp\.enable
+
+
+
+Whether to enable PureScript Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
+
+
+
+### languages\.purescript\.lsp\.package
+
+
+
+The PureScript language server package to use\.
+Uses [purescript-overlay](https://github\.com/thomashoneyman/purescript-overlay) by default\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` purescript-overlay.packages.${pkgs.stdenv.system}.purescript-language-server `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
+
+
+
+### languages\.purescript\.spago\.enable
+
+
+
+Whether to enable Spago package manager\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
+
+
+
+### languages\.purescript\.spago\.package
+
+
+
+The Spago package manager to use\.
+Uses [purescript-overlay](https://github\.com/thomashoneyman/purescript-overlay) by default\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` purescript-overlay.packages.${pkgs.stdenv.system}.spago `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)

@@ -47,3 +47,50 @@ package
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/opentofu\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)
+
+
+
+### languages\.opentofu\.lsp\.enable
+
+
+
+Whether to enable OpenTofu Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/opentofu\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)
+
+
+
+### languages\.opentofu\.lsp\.package
+
+
+
+The OpenTofu language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.terraform-ls `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/opentofu\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)

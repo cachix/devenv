@@ -50,6 +50,53 @@ package
 
 
 
+### languages\.r\.lsp\.enable
+
+
+
+Whether to enable R Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/r\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+
+
+
+### languages\.r\.lsp\.package
+
+
+
+The R language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.rPackages.languageserver `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/r\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+
+
+
 ### languages\.r\.radian\.enable
 
 

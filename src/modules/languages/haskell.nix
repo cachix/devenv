@@ -16,6 +16,10 @@ let
   ghcVersion = lib.replaceStrings [ "." ] [ "" ] cfg.package.version;
 in
 {
+  imports = [
+    (lib.mkRenamedOptionModule [ "languages" "haskell" "languageServer" ] [ "languages" "haskell" "lsp" "package" ])
+  ];
+
   options.languages.haskell = {
     enable = lib.mkEnableOption "tools for Haskell development";
 
@@ -28,16 +32,18 @@ in
       '';
     };
 
-    languageServer = lib.mkOption {
-      type = lib.types.nullOr lib.types.package;
-      default = pkgs.haskell-language-server.override
-        {
-          supportedGhcVersions = [ ghcVersion ];
-        };
-      defaultText = lib.literalExpression "pkgs.haskell-language-server";
-      description = ''
-        Haskell language server to use.
-      '';
+    lsp = {
+      enable = lib.mkEnableOption "Haskell Language Server" // { default = true; };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.haskell-language-server.override
+          {
+            supportedGhcVersions = [ ghcVersion ];
+          };
+        defaultText = lib.literalExpression "pkgs.haskell-language-server";
+        description = "The Haskell language server package to use.";
+      };
     };
 
     stack = {
@@ -93,7 +99,7 @@ in
       zlib
       hpack
     ]
-    ++ (lib.optional (cfg.languageServer != null) cfg.languageServer)
+    ++ (lib.optional cfg.lsp.enable cfg.lsp.package)
     ++ (lib.optional cfg.cabal.enable cfg.cabal.package)
     ++ (lib.optional cfg.stack.enable stackWrapper);
   };

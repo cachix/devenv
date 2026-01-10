@@ -73,3 +73,50 @@ list of string
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/typst\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
+
+
+
+### languages\.typst\.lsp\.enable
+
+
+
+Whether to enable Typst Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/typst\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
+
+
+
+### languages\.typst\.lsp\.package
+
+
+
+The Typst language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.tinymist `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/typst\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)

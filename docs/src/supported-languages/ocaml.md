@@ -47,3 +47,50 @@ attribute set
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ocaml\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)
+
+
+
+### languages\.ocaml\.lsp\.enable
+
+
+
+Whether to enable OCaml Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ocaml\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)
+
+
+
+### languages\.ocaml\.lsp\.package
+
+
+
+The OCaml language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ocamlPackages.ocaml-lsp `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ocaml\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)

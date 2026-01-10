@@ -57,3 +57,50 @@ list of string
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/perl\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix)
+
+
+
+### languages\.perl\.lsp\.enable
+
+
+
+Whether to enable Perl Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/perl\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix)
+
+
+
+### languages\.perl\.lsp\.package
+
+
+
+The Perl language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.perlnavigator `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/perl\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix)

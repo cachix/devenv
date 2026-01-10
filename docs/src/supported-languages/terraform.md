@@ -50,6 +50,53 @@ package
 
 
 
+### languages\.terraform\.lsp\.enable
+
+
+
+Whether to enable Terraform Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/terraform\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
+
+
+
+### languages\.terraform\.lsp\.package
+
+
+
+The Terraform language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.terraform-ls `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/terraform\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
+
+
+
 ### languages\.terraform\.version
 
 

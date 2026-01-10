@@ -84,3 +84,50 @@ unspecified value
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/texlive\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
+
+
+
+### languages\.texlive\.lsp\.enable
+
+
+
+Whether to enable TeX Live Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/texlive\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
+
+
+
+### languages\.texlive\.lsp\.package
+
+
+
+The TeX Live language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.texlab `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/texlive\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)

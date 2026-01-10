@@ -26,3 +26,50 @@ boolean
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/typescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typescript.nix)
+
+
+
+### languages\.typescript\.lsp\.enable
+
+
+
+Whether to enable TypeScript Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/typescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typescript.nix)
+
+
+
+### languages\.typescript\.lsp\.package
+
+
+
+The TypeScript language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.typescript-language-server `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/typescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typescript.nix)

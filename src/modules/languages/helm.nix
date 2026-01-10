@@ -18,6 +18,11 @@ let
   };
 in
 {
+  imports = [
+    (lib.mkRenamedOptionModule [ "languages" "helm" "languageServer" "enable" ] [ "languages" "helm" "lsp" "enable" ])
+    (lib.mkRenamedOptionModule [ "languages" "helm" "languageServer" "package" ] [ "languages" "helm" "lsp" "package" ])
+  ];
+
   options.languages.helm = {
     enable = lib.mkEnableOption "tools for Helm development";
 
@@ -39,14 +44,14 @@ in
       '';
     };
 
-    languageServer = {
-      enable = lib.mkEnableOption "Helm language server";
+    lsp = {
+      enable = lib.mkEnableOption "Helm Language Server" // { default = true; };
 
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.helm-ls;
         defaultText = lib.literalExpression "pkgs.helm-ls";
-        description = "The Helm language server package to include.";
+        description = "The Helm language server package to use.";
       };
     };
   };
@@ -54,7 +59,7 @@ in
   config = lib.mkIf cfg.enable {
     packages =
       [ cfg.package ]
-      ++ lib.optional cfg.languageServer.enable cfg.languageServer.package;
+      ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
     env.HELM_PLUGINS = "${helm-plugins-dir}";
   };

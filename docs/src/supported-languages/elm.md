@@ -26,3 +26,50 @@ boolean
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elm\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix)
+
+
+
+### languages\.elm\.lsp\.enable
+
+
+
+Whether to enable Elm Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elm\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix)
+
+
+
+### languages\.elm\.lsp\.package
+
+
+
+The Elm language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.elmPackages.elm-language-server `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elm\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix)

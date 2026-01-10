@@ -47,3 +47,50 @@ package
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cue\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)
+
+
+
+### languages\.cue\.lsp\.enable
+
+
+
+Whether to enable CUE Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cue\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)
+
+
+
+### languages\.cue\.lsp\.package
+
+
+
+The CUE language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.cuelsp `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cue\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)

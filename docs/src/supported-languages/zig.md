@@ -73,12 +73,59 @@ package
 
 
 
+### languages\.zig\.lsp\.enable
+
+
+
+Whether to enable Zig Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/zig\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
+
+
+
+### languages\.zig\.lsp\.package
+
+
+
+The Zig language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.zls `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/zig\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
+
+
+
 ### languages\.zig\.version
 
 
 
 The Zig version to use\.
-This automatically sets the ` languages.zig.package ` and ` languages.zig.zls.package ` using [zig-overlay](https://github\.com/mitchellh/zig-overlay)\.
+This automatically sets the ` languages.zig.package ` and ` languages.zig.lsp.package ` using [zig-overlay](https://github\.com/mitchellh/zig-overlay)\.
 
 
 
@@ -94,27 +141,6 @@ null or string
 
 *Example:*
 ` "0.15.1" `
-
-*Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/zig\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
-
-
-
-### languages\.zig\.zls\.package
-
-
-
-Which package of zls to use\.
-
-
-
-*Type:*
-package
-
-
-
-*Default:*
-` pkgs.zls `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/zig\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)

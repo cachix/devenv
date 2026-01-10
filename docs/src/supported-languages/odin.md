@@ -69,3 +69,50 @@ null or package
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/odin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
+
+
+
+### languages\.odin\.lsp\.enable
+
+
+
+Whether to enable Odin Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/odin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
+
+
+
+### languages\.odin\.lsp\.package
+
+
+
+The Odin language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ols `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/odin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)

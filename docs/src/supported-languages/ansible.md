@@ -47,3 +47,50 @@ package
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ansible\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)
+
+
+
+### languages\.ansible\.lsp\.enable
+
+
+
+Whether to enable Ansible Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ansible\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)
+
+
+
+### languages\.ansible\.lsp\.package
+
+
+
+The Ansible language server package to use\.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` pkgs.ansible-language-server `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ansible\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)

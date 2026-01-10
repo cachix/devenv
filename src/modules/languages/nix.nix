@@ -14,11 +14,16 @@ in
 {
   options.languages.nix = {
     enable = lib.mkEnableOption "tools for Nix development";
-    lsp.package = lib.mkOption {
-      type = lib.types.package;
-      default = pkgs.nil;
-      defaultText = lib.literalExpression "pkgs.nil";
-      description = "The LSP package to use";
+
+    lsp = {
+      enable = lib.mkEnableOption "Nix Language Server" // { default = true; };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.nixd;
+        defaultText = lib.literalExpression "pkgs.nixd";
+        description = "The Nix language server package to use.";
+      };
     };
   };
 
@@ -26,8 +31,8 @@ in
     packages = with pkgs; [
       statix
       deadnix
-      cfg.lsp.package
       vulnix
-    ] ++ (lib.optional config.cachix.enable cachix);
+    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package
+      ++ lib.optional config.cachix.enable cachix;
   };
 }

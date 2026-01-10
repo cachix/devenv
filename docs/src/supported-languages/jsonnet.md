@@ -26,3 +26,50 @@ boolean
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/jsonnet\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/jsonnet.nix)
+
+
+
+### languages\.jsonnet\.lsp\.enable
+
+
+
+Whether to enable Jsonnet Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/jsonnet\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/jsonnet.nix)
+
+
+
+### languages\.jsonnet\.lsp\.package
+
+
+
+The Jsonnet language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.jsonnet-language-server `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/jsonnet\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/jsonnet.nix)

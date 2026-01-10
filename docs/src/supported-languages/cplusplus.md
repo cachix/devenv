@@ -26,3 +26,50 @@ boolean
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cplusplus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix)
+
+
+
+### languages\.cplusplus\.lsp\.enable
+
+
+
+Whether to enable C++ Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cplusplus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix)
+
+
+
+### languages\.cplusplus\.lsp\.package
+
+
+
+The C++ language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ccls `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cplusplus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix)

@@ -492,6 +492,53 @@ null or strings concatenated with “\\n”
 
 
 
+### languages\.php\.lsp\.enable
+
+
+
+Whether to enable PHP Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+
+
+
+### languages\.php\.lsp\.package
+
+
+
+The PHP language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.phpactor `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+
+
+
 ### languages\.php\.version
 
 

@@ -26,3 +26,50 @@ boolean
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/kotlin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix)
+
+
+
+### languages\.kotlin\.lsp\.enable
+
+
+
+Whether to enable Kotlin Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/kotlin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix)
+
+
+
+### languages\.kotlin\.lsp\.package
+
+
+
+The Kotlin language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.kotlin-language-server `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/kotlin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix)

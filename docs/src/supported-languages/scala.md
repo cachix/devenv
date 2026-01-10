@@ -52,6 +52,53 @@ package
 
 
 
+### languages\.scala\.lsp\.enable
+
+
+
+Whether to enable Scala Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/scala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+
+
+
+### languages\.scala\.lsp\.package
+
+
+
+The Scala language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.metals `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/scala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+
+
+
 ### languages\.scala\.mill\.enable
 
 

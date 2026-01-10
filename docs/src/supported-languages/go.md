@@ -71,6 +71,53 @@ package
 
 
 
+### languages\.go\.lsp\.enable
+
+
+
+Whether to enable Go Language Server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/go\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
+
+
+
+### languages\.go\.lsp\.package
+
+
+
+The Go language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.gopls `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/go\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
+
+
+
 ### languages\.go\.version
 
 

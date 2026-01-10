@@ -29,6 +29,17 @@ in
       '';
       example = "1.5.0 or 1.6.2";
     };
+
+    lsp = {
+      enable = lib.mkEnableOption "Terraform Language Server" // { default = true; };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.terraform-ls;
+        defaultText = lib.literalExpression "pkgs.terraform-ls";
+        description = "The Terraform language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -45,10 +56,9 @@ in
           or (throw "Unsupported Terraform version, update the nixpkgs-terraform input or go to https://github.com/stackbuilders/nixpkgs-terraform/blob/main/versions.json for the full list of supported versions.")
     );
 
-    packages = with pkgs; [
+    packages = [
       cfg.package
-      terraform-ls
-      tfsec
-    ];
+      pkgs.tfsec
+    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }
