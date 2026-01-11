@@ -408,6 +408,10 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
                 .join("\n");
             CommandResult::Print(format!("{output}\n"))
         }
+        Commands::Eval { attributes } => {
+            let json = devenv.eval(&attributes).await?;
+            CommandResult::Print(format!("{json}\n"))
+        }
         Commands::Update { name } => {
             devenv.update(&name).await?;
             CommandResult::Done

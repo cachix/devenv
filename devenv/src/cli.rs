@@ -139,6 +139,12 @@ pub enum Commands {
         attributes: Vec<String>,
     },
 
+    #[command(about = "Evaluate any attribute in devenv.nix and return JSON.")]
+    Eval {
+        #[arg(num_args=1..)]
+        attributes: Vec<String>,
+    },
+
     #[command(
         about = "Print a direnvrc that adds devenv support to direnv. See https://devenv.sh/automatic-shell-activation.",
         long_about = "Print a direnvrc that adds devenv support to direnv.\n\nExample .envrc:\n\n  eval \"$(devenv direnvrc)\"\n\n  # You can pass flags to the devenv command\n  # For example: use devenv --impure --option services.postgres.enable:bool true\n  use devenv\n\nSee https://devenv.sh/automatic-shell-activation."

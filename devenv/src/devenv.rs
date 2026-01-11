@@ -1096,6 +1096,31 @@ impl Devenv {
         .await
     }
 
+    pub async fn eval(&self, attributes: &[String]) -> Result<String> {
+        let activity = Activity::operation("Evaluating").start();
+        async move {
+            self.assemble(false).await?;
+
+            let mut results = serde_json::Map::new();
+
+            for attr in attributes {
+                let full_attr = format!("devenv.config.{attr}");
+                let eval_output = self.nix.eval(&[&full_attr]).await?;
+                let value: serde_json::Value = serde_json::from_str(&eval_output).map_err(|e| {
+                    miette::miette!("Failed to parse eval output for {}: {}", attr, e)
+                })?;
+                results.insert(attr.clone(), value);
+            }
+
+            let json = serde_json::to_string_pretty(&results)
+                .map_err(|e| miette::miette!("Failed to serialize JSON: {}", e))?;
+
+            Ok(json)
+        }
+        .in_activity(&activity)
+        .await
+    }
+
     pub async fn up<'a>(
         &self,
         processes: Vec<String>,
