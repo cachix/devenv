@@ -400,13 +400,14 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
             CommandResult::Done
         }
         Commands::Build { attributes } => {
-            let paths = devenv.build(&attributes).await?;
-            let output = paths
-                .iter()
-                .map(|p| p.display().to_string())
-                .collect::<Vec<_>>()
-                .join("\n");
-            CommandResult::Print(format!("{output}\n"))
+            let results = devenv.build(&attributes).await?;
+            let json_map: serde_json::Map<String, serde_json::Value> = results
+                .into_iter()
+                .map(|(attr, path)| (attr, serde_json::Value::String(path.display().to_string())))
+                .collect();
+            let json = serde_json::to_string_pretty(&json_map)
+                .map_err(|e| miette::miette!("Failed to serialize JSON: {}", e))?;
+            CommandResult::Print(format!("{json}\n"))
         }
         Commands::Eval { attributes } => {
             let json = devenv.eval(&attributes).await?;

@@ -1016,7 +1016,7 @@ impl Devenv {
         self.nix.metadata().await
     }
 
-    pub async fn build(&self, attributes: &[String]) -> Result<Vec<PathBuf>> {
+    pub async fn build(&self, attributes: &[String]) -> Result<Vec<(String, PathBuf)>> {
         let activity = Activity::operation("Building").start();
         async move {
             self.assemble(false).await?;
@@ -1027,12 +1027,12 @@ impl Devenv {
                     serde_json::Value::Null => vec![],
                     // String values are store paths - these are buildable leaves
                     serde_json::Value::String(_) => {
-                        vec![format!("devenv.config.{}", prefix)]
+                        vec![prefix.to_string()]
                     }
                     serde_json::Value::Object(obj) => {
                         // If this object has outPath, it's a derivation - treat as leaf
                         if obj.contains_key("outPath") {
-                            vec![format!("devenv.config.{}", prefix)]
+                            vec![prefix.to_string()]
                         } else {
                             // Recurse into nested objects
                             obj.iter()
@@ -1076,21 +1076,29 @@ impl Devenv {
                         }
                         Err(_) => {
                             // Not in build, try as direct config attribute
-                            flattened.push(format!("devenv.config.{attr}"));
+                            flattened.push(attr.to_string());
                         }
                     }
                 }
                 flattened
             };
+
+            // Build with full paths (adding devenv.config. prefix)
+            let full_attrs: Vec<String> = attributes
+                .iter()
+                .map(|a| format!("devenv.config.{a}"))
+                .collect();
             let paths = self
                 .nix
                 .build(
-                    &attributes.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
+                    &full_attrs.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
                     None,
                     None,
                 )
                 .await?;
-            Ok(paths)
+
+            // Return pairs of (attribute, path)
+            Ok(attributes.into_iter().zip(paths).collect())
         }
         .in_activity(&activity)
         .await
