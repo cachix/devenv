@@ -42,7 +42,7 @@ devenv-cache-core = { path = "devenv-cache-core" }
 nix-conf-parser = { path = "nix-conf-parser" }
 tokio-shutdown = { path = "tokio-shutdown" }
 xtask = { path = "xtask" }
-nix-bindings-rust = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
+
 nix-bindings-flake = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
 nix-bindings-expr = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
 nix-bindings-store = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
