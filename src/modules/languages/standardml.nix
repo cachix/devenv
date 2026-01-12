@@ -15,13 +15,23 @@ in
         The Standard ML package to use.
       '';
     };
+
+    lsp = {
+      enable = lib.mkEnableOption "Standard ML Language Server" // { default = true; };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.millet;
+        defaultText = lib.literalExpression "pkgs.millet";
+        description = "The Standard ML language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-      pkgs.millet
       pkgs.smlfmt
-    ];
+    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

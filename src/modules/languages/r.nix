@@ -21,9 +21,23 @@ in
         description = "The radian package to use.";
       };
     };
+
+    lsp = {
+      enable = lib.mkEnableOption "R Language Server" // { default = true; };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.rPackages.languageserver;
+        defaultText = lib.literalExpression "pkgs.rPackages.languageserver";
+        description = "The R language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [ cfg.package ] ++ lib.lists.optional cfg.radian.enable cfg.radian.package;
+    packages = [
+      cfg.package
+    ] ++ lib.optional cfg.radian.enable cfg.radian.package
+      ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

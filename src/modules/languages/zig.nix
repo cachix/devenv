@@ -33,6 +33,10 @@ let
   };
 in
 {
+  imports = [
+    (lib.mkRenamedOptionModule [ "languages" "zig" "zls" "package" ] [ "languages" "zig" "lsp" "package" ])
+  ];
+
   options.languages.zig = {
     enable = lib.mkEnableOption "tools for Zig development";
 
@@ -41,7 +45,7 @@ in
       default = null;
       description = ''
         The Zig version to use.
-        This automatically sets the `languages.zig.package` and `languages.zig.zls.package` using [zig-overlay](https://github.com/mitchellh/zig-overlay).
+        This automatically sets the `languages.zig.package` and `languages.zig.lsp.package` using [zig-overlay](https://github.com/mitchellh/zig-overlay).
       '';
       example = "0.15.1";
     };
@@ -53,11 +57,14 @@ in
       defaultText = lib.literalExpression "pkgs.zig";
     };
 
-    zls.package = lib.mkOption {
-      type = lib.types.package;
-      description = "Which package of zls to use.";
-      default = pkgs.zls;
-      defaultText = lib.literalExpression "pkgs.zls";
+    lsp = {
+      enable = lib.mkEnableOption "Zig Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.zls;
+        defaultText = lib.literalExpression "pkgs.zls";
+        description = "The Zig language server package to use.";
+      };
     };
   };
 
@@ -66,13 +73,12 @@ in
       zig-overlay.packages.${pkgs.stdenv.system}.${cfg.version}
     );
 
-    languages.zig.zls.package = lib.mkIf (cfg.version != null) (
+    languages.zig.lsp.package = lib.mkIf (cfg.version != null) (
       zls.packages.${pkgs.stdenv.system}.zls
     );
 
     packages = [
       cfg.package
-      cfg.zls.package
-    ];
+    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

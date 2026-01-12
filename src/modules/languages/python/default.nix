@@ -467,6 +467,16 @@ in
       };
     };
 
+    lsp = {
+      enable = lib.mkEnableOption "Python Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.pyright;
+        defaultText = lib.literalExpression "pkgs.pyright";
+        description = "The Python language server package to use.";
+      };
+    };
+
     poetry = {
       enable = lib.mkEnableOption "poetry";
       install = {
@@ -599,7 +609,8 @@ in
       cfg.package
     ]
     ++ (lib.optional cfg.poetry.enable cfg.poetry.package)
-    ++ (lib.optional cfg.uv.enable cfg.uv.package);
+    ++ (lib.optional cfg.uv.enable cfg.uv.package)
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
     env =
       (lib.optionalAttrs cfg.uv.enable {

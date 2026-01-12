@@ -25,14 +25,23 @@ in
       defaultText = lib.literalExpression "[]";
       example = lib.literalExpression ''[ "''${pkgs.roboto}/share/fonts/truetype" ]'';
     };
+
+    lsp = {
+      enable = lib.mkEnableOption "Typst Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.tinymist;
+        defaultText = lib.literalExpression "pkgs.tinymist";
+        description = "The Typst language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-      pkgs.tinymist # lsp
       pkgs.typstyle # formatter
-    ];
+    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
     env.TYPST_FONT_PATHS = if cfg.fontPaths != [ ] then (lib.concatStringsSep ":" cfg.fontPaths) else null;
   };

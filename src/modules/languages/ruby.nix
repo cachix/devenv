@@ -65,6 +65,16 @@ in
     documentation = {
       enable = lib.mkEnableOption "documentation support for Ruby packages";
     };
+
+    lsp = {
+      enable = lib.mkEnableOption "Ruby Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.solargraph;
+        defaultText = lib.literalExpression "pkgs.solargraph";
+        description = "The Ruby language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -107,7 +117,7 @@ in
 
     packages = lib.optional cfg.bundler.enable cfg.bundler.package ++ [
       cfg.package
-    ];
+    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
     env.BUNDLE_PATH = config.env.DEVENV_STATE + "/.bundle";
 

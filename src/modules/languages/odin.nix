@@ -26,6 +26,16 @@ in
         The default is `gdb`, if supported on the current system.
       '';
     };
+
+    lsp = {
+      enable = lib.mkEnableOption "Odin Language Server" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.ols;
+        defaultText = lib.literalExpression "pkgs.ols";
+        description = "The Odin language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -35,6 +45,6 @@ in
       gnumake
       cfg.package
     ] ++ lib.optional (cfg.debugger != null) cfg.debugger
-    ++ lib.optional (lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.ols) pkgs.ols;
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }
