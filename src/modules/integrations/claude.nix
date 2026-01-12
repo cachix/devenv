@@ -89,9 +89,16 @@ let
     hooks = lib.filterAttrs (n: v: v != null) {
       PreToolUse = buildHooks "PreToolUse" (groupedHooks.PreToolUse or [ ]);
       PostToolUse = buildHooks "PostToolUse" postToolUseHooks;
+      PostToolUseFailure = buildHooks "PostToolUseFailure" (groupedHooks.PostToolUseFailure or [ ]);
       Notification = buildHooks "Notification" (groupedHooks.Notification or [ ]);
+      UserPromptSubmit = buildHooks "UserPromptSubmit" (groupedHooks.UserPromptSubmit or [ ]);
+      SessionStart = buildHooks "SessionStart" (groupedHooks.SessionStart or [ ]);
+      SessionEnd = buildHooks "SessionEnd" (groupedHooks.SessionEnd or [ ]);
       Stop = buildHooks "Stop" (groupedHooks.Stop or [ ]);
+      SubagentStart = buildHooks "SubagentStart" (groupedHooks.SubagentStart or [ ]);
       SubagentStop = buildHooks "SubagentStop" (groupedHooks.SubagentStop or [ ]);
+      PreCompact = buildHooks "PreCompact" (groupedHooks.PreCompact or [ ]);
+      PermissionRequest = buildHooks "PermissionRequest" (groupedHooks.PermissionRequest or [ ]);
     };
     inherit (cfg)
       apiKeyHelper
@@ -129,18 +136,32 @@ in
               type = lib.types.enum [
                 "PreToolUse"
                 "PostToolUse"
+                "PostToolUseFailure"
                 "Notification"
+                "UserPromptSubmit"
+                "SessionStart"
+                "SessionEnd"
                 "Stop"
+                "SubagentStart"
                 "SubagentStop"
+                "PreCompact"
+                "PermissionRequest"
               ];
               default = "PostToolUse";
               description = ''
                 The type of hook:
                 - PreToolUse: Runs before tool calls (can block them)
                 - PostToolUse: Runs after tool calls complete
+                - PostToolUseFailure: Runs after a tool call fails
                 - Notification: Runs when Claude Code sends notifications
+                - UserPromptSubmit: Runs when user submits a prompt
+                - SessionStart: Runs when a Claude Code session starts
+                - SessionEnd: Runs when a Claude Code session ends
                 - Stop: Runs when Claude Code finishes responding
+                - SubagentStart: Runs when a subagent task starts
                 - SubagentStop: Runs when subagent tasks complete
+                - PreCompact: Runs before message compaction
+                - PermissionRequest: Runs when a permission is requested
               '';
             };
             matcher = lib.mkOption {
