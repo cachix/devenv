@@ -6,7 +6,6 @@ license.workspace = true
 
 [dependencies]
 devenv.workspace = true
-http-client-tls.workspace = true
 
 astral-tokio-tar.workspace = true
 binaryornot.workspace = true

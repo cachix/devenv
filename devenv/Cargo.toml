@@ -19,7 +19,6 @@ devenv-cache-core.workspace = true
 devenv-snix-backend = { workspace = true, optional = true }
 devenv-nix-backend.workspace = true
 rand.workspace = true
-http-client-tls.workspace = true
 nix-conf-parser.workspace = true
 tokio-shutdown.workspace = true
 

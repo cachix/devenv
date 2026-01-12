@@ -96,11 +96,7 @@ async fn main() -> Result<()> {
         None
     };
 
-    let client = reqwest::Client::builder()
-        .use_preconfigured_tls(http_client_tls::tls_config())
-        .build()
-        .expect("Failed to create reqwest client");
-    let mut request = client
+    let mut request = reqwest::Client::new()
         .post(&cli.host)
         .query(&[("disable_telemetry", cli.disable_telemetry)])
         .header(reqwest::header::USER_AGENT, crate_version!());

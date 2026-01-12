@@ -14,7 +14,6 @@ members = [
   "devenv-snix-backend",
   "devenv-tasks",
   "devenv-tui",
-  "http-client-tls",
   "nix-conf-parser",
   "tokio-shutdown",
   "xtask",
@@ -40,7 +39,6 @@ devenv-nix-backend-macros = { path = "devenv-nix-backend-macros" }
 devenv-tasks = { path = "devenv-tasks" }
 devenv-tui = { path = "devenv-tui" }
 devenv-cache-core = { path = "devenv-cache-core" }
-http-client-tls = { path = "http-client-tls" }
 nix-conf-parser = { path = "nix-conf-parser" }
 tokio-shutdown = { path = "tokio-shutdown" }
 xtask = { path = "xtask" }
@@ -133,14 +131,13 @@ xdg = "3.0.0"
 walkdir = "2.5"
 url = "2"
 
-# The version of rustls must match the version used by reqwest to set up rustls-platform-verifier.
-# If you encounter an error, lock these versions down.
-# Keep webpki certificates by default, to avoid issues with downstream dependencies.
-reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
-rustls = { version = "0.23.32" }
-rustls-platform-verifier = "0.6.1"
+reqwest = { version = "0.13", features = ["json", "query", "stream"] }
 shell-escape = "0.1.5"
-rmcp = { version = "0.7", features = ["server", "transport-io", "transport-streamable-http-server"] }
+rmcp = { version = "0.7", features = [
+  "server",
+  "transport-io",
+  "transport-streamable-http-server",
+] }
 axum = "0.8"
 rmcp-macros = "0.7"
 
