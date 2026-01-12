@@ -38,6 +38,6 @@ in
     packages = [
       cfg.package
     ] ++ lib.optional cfg.radian.enable cfg.radian.package
-      ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

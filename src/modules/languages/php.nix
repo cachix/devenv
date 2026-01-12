@@ -343,7 +343,7 @@ in
       packages = with pkgs; [
         cfg.package
       ] ++ lib.optional (cfg.packages.composer != null) cfg.packages.composer
-        ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+      ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
       env.PHPFPMDIR = runtimeDir;
 

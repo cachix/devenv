@@ -33,6 +33,6 @@ in
       deadnix
       vulnix
     ] ++ lib.optional cfg.lsp.enable cfg.lsp.package
-      ++ lib.optional config.cachix.enable cachix;
+    ++ lib.optional config.cachix.enable cachix;
   };
 }
