@@ -235,6 +235,11 @@ in
               default = [ ];
               description = "List of allowed tools for this sub-agent";
             };
+            model = lib.mkOption {
+              type = lib.types.nullOr (lib.types.enum [ "opus" "sonnet" "haiku" ]);
+              default = null;
+              description = "Override the model for this agent.";
+            };
             prompt = lib.mkOption {
               type = lib.types.lines;
               description = "The system prompt for the sub-agent";
@@ -255,6 +260,7 @@ in
           code-reviewer = {
             description = "Expert code review specialist that checks for quality, security, and best practices";
             proactive = true;
+            model = "opus";
             tools = [ "Read" "Grep" "TodoWrite" ];
             prompt = '''
               You are an expert code reviewer. When reviewing code, check for:
@@ -488,6 +494,7 @@ in
               description: ${agent.description}
               proactive: ${lib.boolToString agent.proactive}
               ${lib.optionalString (agent.tools != []) "tools:\n${lib.concatMapStringsSep "\n" (tool: "  - ${tool}") agent.tools}"}
+              ${lib.optionalString (agent.model != null) "model: ${agent.model}"}
               ---
 
               ${agent.prompt}
