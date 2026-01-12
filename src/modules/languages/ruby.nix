@@ -70,8 +70,8 @@ in
       enable = lib.mkEnableOption "Ruby Language Server" // { default = true; };
       package = lib.mkOption {
         type = lib.types.package;
-        default = pkgs.solargraph;
-        defaultText = lib.literalExpression "pkgs.solargraph";
+        default = pkgs.solargraph.override { ruby = cfg.package; };
+        defaultText = lib.literalExpression "pkgs.solargraph.override { ruby = cfg.package; }";
         description = "The Ruby language server package to use.";
       };
     };
