@@ -19,6 +19,7 @@ in
         # csharp-ls crashes on aarch64-darwin due to missing code signatures
         # https://github.com/razzmatazz/csharp-language-server/issues/211
         default = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.csharp-ls;
+        defaultText = lib.literalMD "`true` if csharp-ls is available on the host platform, `false` otherwise";
       };
       package = lib.mkOption {
         type = lib.types.package;
