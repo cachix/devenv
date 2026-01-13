@@ -1,5 +1,4 @@
 { pkgs
-, self
 , lib
 , config
 , inputs
@@ -52,7 +51,7 @@ let
           modules = [
             (git-hooks + "/modules/all-modules.nix")
             {
-              rootSrc = self;
+              rootSrc = config.devenv.source;
               package = lib.mkDefault pkgs.pre-commit;
               tools = import (git-hooks + "/nix/call-tools.nix") pkgs;
             }

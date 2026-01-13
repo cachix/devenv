@@ -1,6 +1,18 @@
-{ config, pkgs, lib, bootstrapPkgs ? null, ... }:
+{ config, pkgs, lib, inputs, self ? null, bootstrapPkgs ? null, ... }:
 let
   types = lib.types;
+
+  # Source filtering: use flake self if available, otherwise filter with gitignore.nix
+  gitignoreLib = inputs.gitignore.lib or null;
+  filterSource = src:
+    if gitignoreLib != null
+    then gitignoreLib.gitignoreSource src
+    else lib.cleanSource src;
+
+  defaultSource =
+    if self != null
+    then self
+    else filterSource (/. + config.devenv.root);
   # Returns a list of all the entries in a folder
   listEntries = path:
     map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
@@ -261,6 +273,15 @@ in
         type = types.package;
         internal = true;
       };
+
+      source = lib.mkOption {
+        type = types.path;
+        description = ''
+          The project source, filtered according to .gitignore rules.
+          Used as default for containers.copyToRoot and similar options.
+        '';
+        defaultText = lib.literalExpression "gitignoreSource of devenv.root";
+      };
     };
   };
 
@@ -310,6 +331,7 @@ in
     devenv.state = builtins.toPath (config.devenv.dotfile + "/state");
     devenv.dotfile = lib.mkDefault (builtins.toPath (config.devenv.root + "/.devenv"));
     devenv.profile = profile;
+    devenv.source = lib.mkDefault defaultSource;
 
     env.DEVENV_PROFILE = config.devenv.profile;
     env.DEVENV_STATE = config.devenv.state;
