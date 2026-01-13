@@ -4,6 +4,7 @@ use std::time::Duration;
 use tokio::sync::Notify;
 
 pub mod model_events;
+pub mod shell_runner;
 pub mod tracing_interface;
 
 // UI modules
@@ -20,6 +21,7 @@ pub use model::{
     UiState, ViewMode,
 };
 pub use model_events::UiEvent;
+pub use shell_runner::{ShellRunner, ShellRunnerError};
 
 /// Runs a loop that waits for notifications and triggers redraws at a throttled rate.
 ///

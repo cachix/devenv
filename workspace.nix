@@ -25,6 +25,7 @@ let
           ./devenv-snix-backend
           ./devenv-nix-backend
           ./devenv-nix-backend-macros
+          ./devenv-reload
           ./devenv-run-tests
           ./devenv-tasks
           ./devenv-tui

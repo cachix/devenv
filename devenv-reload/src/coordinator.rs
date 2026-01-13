@@ -1,0 +1,266 @@
+//! Shell coordinator for TUI integration.
+//!
+//! Unlike ShellManager which owns the PTY and terminal, ShellCoordinator
+//! only handles build coordination. The TUI owns the PTY and terminal.
+
+use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
+use crate::config::Config;
+use crate::watcher::FileWatcher;
+use portable_pty::CommandBuilder;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use thiserror::Error;
+use tokio::sync::mpsc;
+
+/// Compute blake3 hash of file contents.
+/// Returns None if the file cannot be read.
+fn hash_file(path: &Path) -> Option<blake3::Hash> {
+    let content = std::fs::read(path).ok()?;
+    Some(blake3::hash(&content))
+}
+
+/// Commands sent from coordinator to TUI for PTY management.
+#[derive(Debug)]
+pub enum ShellCommand {
+    /// Spawn the initial shell with this command.
+    Spawn {
+        command: CommandBuilder,
+        watch_files: Vec<PathBuf>,
+    },
+    /// Rebuild triggered by file changes, swap to new shell.
+    Reload {
+        command: CommandBuilder,
+        changed_files: Vec<PathBuf>,
+    },
+    /// Build failed, keep current shell.
+    BuildFailed {
+        changed_files: Vec<PathBuf>,
+        error: String,
+    },
+    /// Coordinator is shutting down.
+    Shutdown,
+}
+
+/// Events sent from TUI to coordinator.
+#[derive(Debug)]
+pub enum ShellEvent {
+    /// Shell process exited.
+    Exited,
+    /// Terminal was resized.
+    Resize { cols: u16, rows: u16 },
+}
+
+#[derive(Debug, Error)]
+pub enum CoordinatorError {
+    #[error("build failed: {0}")]
+    Build(#[source] crate::builder::BuildError),
+    #[error("watcher error: {0}")]
+    Watcher(#[source] crate::watcher::WatcherError),
+    #[error("channel closed")]
+    ChannelClosed,
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+enum Event {
+    FileChange(PathBuf),
+    BuildComplete(Result<CommandBuilder, crate::builder::BuildError>),
+    TuiEvent(ShellEvent),
+}
+
+/// Shell coordinator for TUI mode.
+///
+/// Coordinates shell builds and file watching, but does not own the PTY.
+/// The TUI is responsible for PTY management and terminal I/O.
+pub struct ShellCoordinator;
+
+impl ShellCoordinator {
+    /// Run the shell coordinator.
+    ///
+    /// Sends commands to TUI for PTY spawning/swapping.
+    /// Receives events from TUI (exit, resize).
+    pub async fn run<B: ShellBuilder + 'static>(
+        config: Config,
+        builder: B,
+        command_tx: mpsc::Sender<ShellCommand>,
+        mut event_rx: mpsc::Receiver<ShellEvent>,
+    ) -> Result<(), CoordinatorError> {
+        let builder = Arc::new(builder);
+        let cwd = std::env::current_dir()?;
+
+        // Set up file watcher
+        let mut watcher =
+            FileWatcher::new(&config.watch_files).map_err(CoordinatorError::Watcher)?;
+        let watcher_handle = watcher.handle();
+
+        // Collect watch files for reporting
+        let watch_files: Vec<PathBuf> = config.watch_files.clone();
+
+        // Initial build - run in spawn_blocking since builder may block
+        let ctx = BuildContext {
+            cwd: cwd.clone(),
+            env: std::env::vars().collect(),
+            trigger: BuildTrigger::Initial,
+            watcher: watcher_handle.clone(),
+        };
+        let builder_clone = builder.clone();
+        let cmd = tokio::task::spawn_blocking(move || builder_clone.build(&ctx))
+            .await
+            .map_err(|e| {
+                CoordinatorError::Build(crate::builder::BuildError::new(format!(
+                    "build task panicked: {}",
+                    e
+                )))
+            })?
+            .map_err(CoordinatorError::Build)?;
+
+        // Send initial spawn command to TUI
+        command_tx
+            .send(ShellCommand::Spawn {
+                command: cmd,
+                watch_files,
+            })
+            .await
+            .map_err(|_| CoordinatorError::ChannelClosed)?;
+
+        let (event_tx, mut internal_rx) = mpsc::channel::<Event>(100);
+
+        // Forward file watcher events
+        let watch_tx = event_tx.clone();
+        tokio::spawn(async move {
+            while let Some(event) = watcher.recv().await {
+                if watch_tx.send(Event::FileChange(event.path)).await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        // Forward TUI events
+        let tui_tx = event_tx.clone();
+        tokio::spawn(async move {
+            while let Some(event) = event_rx.recv().await {
+                if tui_tx.send(Event::TuiEvent(event)).await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        // Track the currently running build task for cancellation
+        let mut current_build: Option<tokio::task::AbortHandle> = None;
+        // Track files that changed and triggered rebuilds
+        let mut pending_changes: Vec<PathBuf> = Vec::new();
+        // Track file content hashes to detect actual changes
+        let mut file_hashes: HashMap<PathBuf, blake3::Hash> = HashMap::new();
+
+        while let Some(event) = internal_rx.recv().await {
+            match event {
+                Event::FileChange(path) => {
+                    // Check if file content actually changed by comparing hashes
+                    let new_hash = match hash_file(&path) {
+                        Some(h) => h,
+                        None => {
+                            tracing::debug!("Could not read file: {:?}", path);
+                            continue;
+                        }
+                    };
+
+                    if let Some(old_hash) = file_hashes.get(&path) {
+                        if *old_hash == new_hash {
+                            tracing::debug!("File unchanged (same hash): {:?}", path);
+                            continue;
+                        }
+                    }
+
+                    // Update stored hash
+                    file_hashes.insert(path.clone(), new_hash);
+
+                    tracing::debug!("File content changed: {:?}", path);
+
+                    // Track the file that triggered this rebuild
+                    pending_changes.push(path.clone());
+
+                    // Cancel any running build
+                    if let Some(handle) = current_build.take() {
+                        handle.abort();
+                    }
+
+                    let ctx = BuildContext {
+                        cwd: cwd.clone(),
+                        env: std::env::vars().collect(),
+                        trigger: BuildTrigger::FileChanged(path),
+                        watcher: watcher_handle.clone(),
+                    };
+
+                    // Spawn build in background task
+                    let builder = builder.clone();
+                    let build_tx = event_tx.clone();
+                    let handle = tokio::spawn(async move {
+                        let result = tokio::task::spawn_blocking(move || builder.build(&ctx))
+                            .await
+                            .unwrap_or_else(|e| {
+                                Err(crate::builder::BuildError::new(format!(
+                                    "build task panicked: {}",
+                                    e
+                                )))
+                            });
+                        let _ = build_tx.send(Event::BuildComplete(result)).await;
+                    });
+                    current_build = Some(handle.abort_handle());
+                }
+
+                Event::BuildComplete(result) => {
+                    current_build = None;
+
+                    // Collect changed files as relative paths
+                    let files: Vec<PathBuf> = pending_changes
+                        .drain(..)
+                        .map(|p| p.strip_prefix(&cwd).map(|p| p.to_path_buf()).unwrap_or(p))
+                        .collect();
+
+                    let cmd = match result {
+                        Ok(cmd) => ShellCommand::Reload {
+                            command: cmd,
+                            changed_files: files,
+                        },
+                        Err(e) => ShellCommand::BuildFailed {
+                            changed_files: files,
+                            error: e.to_string(),
+                        },
+                    };
+
+                    if command_tx.send(cmd).await.is_err() {
+                        // TUI disconnected
+                        break;
+                    }
+                }
+
+                Event::TuiEvent(ShellEvent::Exited) => {
+                    // Shell exited, we're done
+                    break;
+                }
+
+                Event::TuiEvent(ShellEvent::Resize { .. }) => {
+                    // Resize is handled by TUI directly on the PTY
+                    // We might use this for future features
+                }
+            }
+        }
+
+        // Send shutdown command
+        let _ = command_tx.send(ShellCommand::Shutdown).await;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_coordinator_error_display() {
+        let err = CoordinatorError::ChannelClosed;
+        assert_eq!(format!("{}", err), "channel closed");
+    }
+}

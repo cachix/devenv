@@ -94,6 +94,9 @@ pub enum Commands {
         cmd: Option<String>,
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
+
+        #[arg(long, help = "Disable auto-reload when config files change")]
+        no_reload: bool,
     },
 
     #[command(about = "Update devenv.lock from devenv.yaml inputs. http://devenv.sh/inputs/")]

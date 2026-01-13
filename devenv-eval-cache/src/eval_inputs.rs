@@ -214,6 +214,24 @@ pub fn check_file_state(file: &FileInputDesc) -> io::Result<FileState> {
     }
 }
 
+/// Check if a file's content has changed (ignoring metadata-only changes).
+///
+/// Returns true if:
+/// - File content has changed (different hash)
+/// - File was removed
+///
+/// Returns false if:
+/// - File is unchanged
+/// - Only metadata changed (e.g., touch without content change)
+/// - Error reading file (conservative: assume unchanged)
+pub fn has_file_content_changed(file: &FileInputDesc) -> bool {
+    match check_file_state(file) {
+        Ok(FileState::Unchanged) | Ok(FileState::MetadataModified { .. }) => false,
+        Ok(FileState::Modified { .. }) | Ok(FileState::Removed) => true,
+        Err(_) => false, // Conservative: treat errors as unchanged
+    }
+}
+
 /// Check if an environment variable has changed since it was cached.
 ///
 /// Note: In Nix, `builtins.getEnv "FOO"` returns "" for both unset and empty vars.

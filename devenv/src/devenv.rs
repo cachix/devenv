@@ -409,6 +409,33 @@ impl Devenv {
         &self.devenv_dotfile
     }
 
+    /// Get the eval cache database pool, if initialized.
+    ///
+    /// The pool is initialized lazily during `assemble()` when eval caching is enabled.
+    pub fn eval_cache_pool(&self) -> Option<&SqlitePool> {
+        self.eval_cache_pool.get()
+    }
+
+    /// Get the NixArgs string used for cache key computation.
+    ///
+    /// This is set during `assemble()` and can be used to compute cache keys
+    /// for specific evaluations.
+    pub fn nix_args_string(&self) -> Option<&str> {
+        self.nix_args_string.get().map(|s| s.as_str())
+    }
+
+    /// Get the cache key for shell evaluation.
+    ///
+    /// This returns the same key that was used to cache the shell evaluation,
+    /// which can be used to look up the file inputs that the shell depends on.
+    pub fn shell_cache_key(&self) -> Option<devenv_eval_cache::EvalCacheKey> {
+        let nix_args_str = self.nix_args_string.get()?;
+        Some(devenv_eval_cache::EvalCacheKey::from_nix_args_str(
+            nix_args_str,
+            "shell",
+        ))
+    }
+
     pub fn init(&self, target: &Option<PathBuf>) -> Result<()> {
         let target = target.clone().unwrap_or_else(|| {
             std::fs::canonicalize(".").expect("Failed to get current directory")

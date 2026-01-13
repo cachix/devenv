@@ -1,8 +1,9 @@
 use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
-    Devenv, RunMode,
+    Devenv, DevenvOptions, RunMode,
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
+    reload::DevenvShellBuilder,
     tracing as devenv_tracing,
 };
 use devenv_activity::ActivityLevel;
@@ -10,6 +11,7 @@ use devenv_core::config::{self, Config};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use std::{process::Command, sync::Arc};
 use tempfile::TempDir;
+use tokio::sync::Mutex;
 use tokio_shutdown::Shutdown;
 use tracing::info;
 
@@ -168,12 +170,15 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Channel to signal TUI when backend is fully done (including cleanup)
     let (backend_done_tx, backend_done_rx) = tokio::sync::oneshot::channel();
 
+    // Channel for terminal handoff: signals ShellRunner when TUI has released the terminal
+    let (terminal_ready_tx, terminal_ready_rx) = tokio::sync::oneshot::channel();
+
     // Devenv on background thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
     let devenv_thread = std::thread::spawn(move || {
         build_gc_runtime().block_on(async {
             let output = tokio::select! {
-                output = run_devenv(cli, shutdown_clone.clone()) => output,
+                output = run_devenv(cli, shutdown_clone.clone(), backend_done_tx, Some(terminal_ready_rx)) => output,
                 _ = shutdown_clone.wait_for_shutdown() => DevenvOutput::done(),
             };
 
@@ -196,6 +201,9 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
 
     // Restore terminal to normal state (disable raw mode, show cursor)
     devenv_tui::app::restore_terminal();
+
+    // Signal backend that terminal is now available for shell
+    let _ = terminal_ready_tx.send(());
 
     let Ok(devenv_output) = devenv_thread.join() else {
         bail!("devenv thread panicked");
@@ -233,8 +241,11 @@ fn run_with_legacy_cli(cli: Cli) -> Result<()> {
         let level = cli.get_log_level();
         devenv_tracing::init_cli_tracing(level, cli.global_options.trace_output.as_ref());
 
+        // No TUI in legacy mode - create dummy channel (drop receiver immediately)
+        let (backend_done_tx, _) = tokio::sync::oneshot::channel();
+
         tokio::select! {
-            output = run_devenv(cli, shutdown.clone()) => output,
+            output = run_devenv(cli, shutdown.clone(), backend_done_tx, None) => output,
             _ = shutdown.wait_for_shutdown() => DevenvOutput::done(),
         }
     });
@@ -257,8 +268,11 @@ fn run_with_tracing(cli: Cli) -> Result<()> {
             cli.global_options.trace_output.as_ref(),
         );
 
+        // No TUI in tracing mode - create dummy channel (drop receiver immediately)
+        let (backend_done_tx, _) = tokio::sync::oneshot::channel();
+
         tokio::select! {
-            output = run_devenv(cli, shutdown.clone()) => output,
+            output = run_devenv(cli, shutdown.clone(), backend_done_tx, None) => output,
             _ = shutdown.wait_for_shutdown() => DevenvOutput::done(),
         }
     });
@@ -315,7 +329,12 @@ impl DevenvOutput {
 }
 
 /// Setup devenv and run the command.
-async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> DevenvOutput {
+async fn run_devenv(
+    cli: Cli,
+    shutdown: Arc<Shutdown>,
+    backend_done_tx: tokio::sync::oneshot::Sender<()>,
+    terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<()>>,
+) -> DevenvOutput {
     // Command is guaranteed to exist (Version/Direnvrc handled in main)
     let command = cli.command.clone().expect("Command should exist");
     let nix_debugger = cli.global_options.nix_debugger;
@@ -416,7 +435,14 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> DevenvOutput {
     let mut devenv = Devenv::new(options).await;
 
     // Run the command
-    let result = run_devenv_inner(&mut devenv, command).await;
+    let result = run_devenv_inner(
+        &mut devenv,
+        command,
+        shutdown,
+        backend_done_tx,
+        terminal_ready_rx,
+    )
+    .await;
 
     // If nix_debugger is enabled and command failed, keep devenv for REPL debugging
     if nix_debugger && result.is_err() {
@@ -430,14 +456,48 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> DevenvOutput {
 }
 
 /// Run the devenv command.
-async fn run_devenv_inner(devenv: &mut Devenv, command: Commands) -> Result<CommandResult> {
+async fn run_devenv_inner(
+    devenv: &mut Devenv,
+    command: Commands,
+    shutdown: Arc<Shutdown>,
+    backend_done_tx: tokio::sync::oneshot::Sender<()>,
+    terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<()>>,
+) -> Result<CommandResult> {
+    // Wrap in Option so shell commands can consume it, others send at end
+    let mut backend_done_tx = Some(backend_done_tx);
+
     let result = match command {
-        Commands::Shell { cmd, ref args } => {
-            let shell_config = match cmd {
-                Some(cmd) => devenv.prepare_exec(Some(cmd), args).await?,
-                None => devenv.shell().await?,
-            };
-            CommandResult::Exec(shell_config.command)
+        Commands::Shell {
+            cmd,
+            ref args,
+            no_reload,
+        } => {
+            if no_reload {
+                // Run shell without hot-reload - signal TUI can exit, then exec
+                if let Some(tx) = backend_done_tx.take() {
+                    let _ = tx.send(());
+                }
+                let shell_config = match cmd {
+                    Some(cmd) => devenv.prepare_exec(Some(cmd), args).await?,
+                    None => devenv.shell().await?,
+                };
+                CommandResult::Exec(shell_config.command)
+            } else {
+                // Run shell with hot-reload capability (default)
+                // Passes channels for TUI-to-shell terminal handoff
+                run_reload_shell(
+                    devenv,
+                    cmd,
+                    args.clone(),
+                    shutdown,
+                    backend_done_tx
+                        .take()
+                        .expect("backend_done_tx should exist"),
+                    terminal_ready_rx,
+                )
+                .await?;
+                CommandResult::Done
+            }
         }
         Commands::Test { .. } => {
             devenv.test().await?;
@@ -612,6 +672,11 @@ async fn run_devenv_inner(devenv: &mut Devenv, command: Commands) -> Result<Comm
         Commands::Version => unreachable!(),
     };
 
+    // Signal TUI that backend is done (if not already consumed by shell commands)
+    if let Some(tx) = backend_done_tx {
+        let _ = tx.send(());
+    }
+
     Ok(result)
 }
 
@@ -634,4 +699,71 @@ fn build_rev() -> Option<String> {
     option_env!("DEVENV_GIT_REV")
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
+}
+
+/// Run shell with hot-reload capability.
+///
+/// This function manages a shell session that automatically reloads
+/// when configuration files change. Uses the inverted architecture where:
+/// - ShellCoordinator handles file watching and build coordination
+/// - ShellRunner owns the PTY and handles terminal I/O
+///
+/// Terminal handoff:
+/// - `backend_done_tx`: Signals TUI to exit (sent after initial build completes)
+/// - `terminal_ready_rx`: Waits for TUI cleanup before ShellRunner takes terminal
+async fn run_reload_shell(
+    devenv: &Devenv,
+    cmd: Option<String>,
+    args: Vec<String>,
+    shutdown: Arc<Shutdown>,
+    backend_done_tx: tokio::sync::oneshot::Sender<()>,
+    terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<()>>,
+) -> Result<()> {
+    use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
+    use devenv_tui::ShellRunner;
+    use tokio::sync::mpsc;
+
+    let config = devenv.config.read().await.clone();
+    let root = devenv.root().to_path_buf();
+
+    // Create reload config - watch files will be populated from eval cache
+    // during the first build by DevenvShellBuilder
+    let reload_config = ReloadConfig::new(vec![]);
+
+    // Wrap devenv in Arc<Mutex> for the builder
+    // We need to create a new Devenv instance since we can't move the reference
+    let devenv_options = DevenvOptions {
+        config,
+        global_options: Some(devenv.global_options.clone()),
+        devenv_root: Some(root),
+        devenv_dotfile: Some(devenv.dotfile().to_path_buf()),
+        shutdown: shutdown.clone(),
+    };
+    let new_devenv = Devenv::new(devenv_options).await;
+    let devenv_arc = Arc::new(Mutex::new(new_devenv));
+
+    // Create the shell builder
+    let handle = tokio::runtime::Handle::current();
+    let builder = DevenvShellBuilder::new(handle, devenv_arc, cmd, args);
+
+    // Set up communication channels between coordinator and shell runner
+    let (command_tx, command_rx) = mpsc::channel(16);
+    let (event_tx, event_rx) = mpsc::channel(16);
+
+    // Spawn coordinator in background task
+    let coordinator_handle = tokio::spawn(async move {
+        ShellCoordinator::run(reload_config, builder, command_tx, event_rx).await
+    });
+
+    // Run shell runner on current thread (owns terminal)
+    // Pass terminal_ready signal so ShellRunner waits for TUI to release terminal
+    let shell_runner = ShellRunner::new();
+    let runner_result = shell_runner
+        .run(command_rx, event_tx, backend_done_tx, terminal_ready_rx)
+        .await;
+
+    // Wait for coordinator to finish
+    let _ = coordinator_handle.await;
+
+    runner_result.map_err(|e| miette::miette!("Shell runner error: {}", e))
 }

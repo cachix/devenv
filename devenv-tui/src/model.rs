@@ -337,6 +337,10 @@ impl ActivityModel {
             ActivityEvent::Operation(op_event) => self.handle_operation_event(op_event),
             ActivityEvent::Message(msg) => self.handle_message(msg),
             ActivityEvent::SetExpected(expected) => self.handle_set_expected(expected),
+            ActivityEvent::Shell(_) => {
+                // Shell events are handled separately by the shell runner
+                // They don't affect the activity model
+            }
         }
     }
 

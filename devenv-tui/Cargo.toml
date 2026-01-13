@@ -48,6 +48,13 @@ devenv-eval-cache = { path = "../devenv-eval-cache" }
 # Activity system
 devenv-activity = { path = "../devenv-activity" }
 
+# Shell reload support
+devenv-reload = { path = "../devenv-reload" }
+avt = "0.14"
+portable-pty = "0.9"
+term_size = "0.3"
+libc = "0.2"
+
 # Shared task types
 devenv-cache-core = { path = "../devenv-cache-core" }
 
