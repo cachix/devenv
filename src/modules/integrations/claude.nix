@@ -7,6 +7,30 @@
 let
   cfg = config.claude.code;
 
+  # Tool permissions submodule (reused for both rules and backward compat)
+  toolPermissionsSubmodule = lib.types.submodule {
+    options = {
+      allow = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = "List of allowed patterns.";
+      };
+      ask = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = "List of patterns that require user approval.";
+      };
+      deny = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = "List of denied patterns.";
+      };
+    };
+  };
+
+  # Reserved keys that are not tool names (for backward compat detection)
+  reservedPermissionKeys = [ "defaultMode" "disableBypassPermissionsMode" "additionalDirectories" "rules" ];
+
   # Build hooks configuration
   buildHooks =
     hookType: hooks:
@@ -56,6 +80,39 @@ let
 
   # Add pre-commit hook if git-hooks are enabled
   postToolUseHooks = (groupedHooks.PostToolUse or [ ]) ++ preCommitHook;
+
+  # Build permissions configuration
+  # Transforms per-tool permissions to Claude Code's flat format: Tool(pattern)
+  buildPermissions =
+    let
+      perms = cfg.permissions;
+      # Get direct tool attrs (backward compat: permissions.Bash instead of permissions.rules.Bash)
+      directToolAttrs = lib.filterAttrs (n: v: !builtins.elem n reservedPermissionKeys && builtins.isAttrs v) perms;
+      # Merge rules with direct tool attrs (rules take precedence)
+      toolPerms = directToolAttrs // perms.rules;
+      flattenTier = tier:
+        lib.flatten (
+          lib.mapAttrsToList
+            (tool: toolPerms:
+              map (pattern: "${tool}(${pattern})") (toolPerms.${tier} or [ ])
+            )
+            toolPerms
+        );
+      allowList = flattenTier "allow";
+      askList = flattenTier "ask";
+      denyList = flattenTier "deny";
+    in
+    if toolPerms == { } && perms.defaultMode == null && perms.disableBypassPermissionsMode == null && perms.additionalDirectories == [ ] then
+      null
+    else
+      lib.filterAttrs (n: v: v != null && v != [ ]) {
+        defaultMode = perms.defaultMode;
+        disableBypassPermissionsMode = perms.disableBypassPermissionsMode;
+        additionalDirectories = if perms.additionalDirectories == [ ] then null else perms.additionalDirectories;
+        allow = if allowList == [ ] then null else allowList;
+        ask = if askList == [ ] then null else askList;
+        deny = if denyList == [ ] then null else denyList;
+      };
 
   # Build MCP servers configuration
   mcpServers = lib.mapAttrs
@@ -107,7 +164,7 @@ let
       cleanupPeriodDays
       ;
     env = if cfg.env == { } then null else cfg.env;
-    permissions = if cfg.permissions == { } then null else cfg.permissions;
+    permissions = buildPermissions;
   };
 
   # Generate the MCP configuration content
@@ -265,6 +322,18 @@ in
               type = lib.types.lines;
               description = "The system prompt for the sub-agent";
             };
+            permissionMode = lib.mkOption {
+              type = lib.types.nullOr (
+                lib.types.enum [
+                  "default"
+                  "acceptEdits"
+                  "plan"
+                  "bypassPermissions"
+                ]
+              );
+              default = null;
+              description = "Permission mode for this specific sub-agent.";
+            };
           };
         }
       );
@@ -283,6 +352,7 @@ in
             proactive = true;
             model = "opus";
             tools = [ "Read" "Grep" "TodoWrite" ];
+            permissionMode = "plan";
             prompt = '''
               You are an expert code reviewer. When reviewing code, check for:
               - Code readability and maintainability
@@ -365,34 +435,73 @@ in
     };
 
     permissions = lib.mkOption {
-      type = lib.types.attrsOf (
-        lib.types.submodule {
-          options = {
-            allow = lib.mkOption {
-              type = lib.types.listOf lib.types.str;
-              default = [ ];
-              description = "List of allowed tools or patterns.";
-            };
-            deny = lib.mkOption {
-              type = lib.types.listOf lib.types.str;
-              default = [ ];
-              description = "List of denied tools or patterns.";
-            };
+      type = lib.types.submodule {
+        freeformType = lib.types.attrsOf toolPermissionsSubmodule;
+        options = {
+          defaultMode = lib.mkOption {
+            type = lib.types.nullOr (
+              lib.types.enum [
+                "default"
+                "acceptEdits"
+                "plan"
+                "bypassPermissions"
+              ]
+            );
+            default = null;
+            description = ''
+              Global permission mode for Claude Code.
+              - default: Prompts on first use of each tool
+              - acceptEdits: Auto-accepts file edits
+              - plan: Read-only mode
+              - bypassPermissions: Skips all permission prompts
+            '';
+            example = "acceptEdits";
           };
-        }
-      );
+          disableBypassPermissionsMode = lib.mkOption {
+            type = lib.types.nullOr lib.types.bool;
+            default = null;
+            description = ''
+              Security option to prevent the dangerous bypassPermissions mode.
+            '';
+            example = true;
+          };
+          additionalDirectories = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            description = ''
+              Allow Claude Code to access directories outside the project root.
+            '';
+            example = [ "/shared/libs" "/common/configs" ];
+          };
+          rules = lib.mkOption {
+            type = lib.types.attrsOf toolPermissionsSubmodule;
+            default = { };
+            description = ''
+              Per-tool permission rules. Preferred location for tool permissions.
+            '';
+          };
+        };
+      };
       default = { };
       description = ''
         Fine-grained permissions for tool usage.
-        Can specify allow/deny rules for different tools.
+        Supports global settings and per-tool allow/ask/deny rules.
+        Tool rules can be placed under `rules` or directly (backward compatible).
       '';
       example = lib.literalExpression ''
         {
-          Edit = {
-            deny = [ "*.secret" "*.env" ];
-          };
-          Bash = {
-            deny = [ "rm -rf" ];
+          defaultMode = "acceptEdits";
+          disableBypassPermissionsMode = true;
+          additionalDirectories = [ "/shared/libs" ];
+          rules = {
+            Edit = {
+              deny = [ "*.secret" "*.env" ];
+            };
+            Bash = {
+              allow = [ "ls:*" "cat:*" ];
+              ask = [ "git:*" "npm:*" ];
+              deny = [ "rm -rf:*" "sudo:*" ];
+            };
           };
         }
       '';
@@ -516,6 +625,7 @@ in
               proactive: ${lib.boolToString agent.proactive}
               ${lib.optionalString (agent.tools != []) "tools:\n${lib.concatMapStringsSep "\n" (tool: "  - ${tool}") agent.tools}"}
               ${lib.optionalString (agent.model != null) "model: ${agent.model}"}
+              ${lib.optionalString (agent.permissionMode != null) "permissionMode: ${agent.permissionMode}"}
               ---
 
               ${agent.prompt}
