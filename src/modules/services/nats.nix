@@ -5,17 +5,23 @@ with lib;
 let
   cfg = config.services.nats;
 
+  # Port allocation
+  basePort = cfg.port;
+  baseMonitoringPort = cfg.monitoring.port;
+  allocatedPort = config.processes.nats.ports.main.value;
+  allocatedMonitoringPort = config.processes.nats.ports.monitoring.value;
+
   # Generate NATS config file from settings (only if settings are provided)
   configFile = pkgs.writeText "nats.conf" (builtins.toJSON cfg.settings);
 
   # Build command-line arguments
   buildArgs = concatStringsSep " " (
     [ "-a ${cfg.host}" ]
-    ++ [ "-p ${toString cfg.port}" ]
+    ++ [ "-p ${toString allocatedPort}" ]
     ++ optional (cfg.serverName != "") "-n ${cfg.serverName}"
     ++ optional (cfg.clientAdvertise != "") "--client_advertise ${cfg.clientAdvertise}"
     ++ optional cfg.jetstream.enable "-js"
-    ++ optional cfg.monitoring.enable "-m ${toString cfg.monitoring.port}"
+    ++ optional cfg.monitoring.enable "-m ${toString allocatedMonitoringPort}"
     ++ optional (cfg.logFile != "") "-l ${cfg.logFile}"
     ++ optional cfg.debug "-D"
     ++ optional cfg.trace "-V"
@@ -61,7 +67,6 @@ in
       default = 4222;
       description = ''
         Port to listen on for client connections.
-        Default NATS client port is 4222.
       '';
     };
 
@@ -269,6 +274,8 @@ in
     '';
 
     processes.nats = {
+      ports.main.allocate = basePort;
+      ports.monitoring.allocate = baseMonitoringPort;
       exec = "exec ${cfg.package}/bin/nats-server ${buildArgs}";
 
       process-compose = {
@@ -276,9 +283,9 @@ in
           # Use HTTP healthz endpoint if monitoring is enabled, otherwise TCP check
           exec.command =
             if cfg.monitoring.enable then
-              "${pkgs.curl}/bin/curl -f http://${cfg.host}:${toString cfg.monitoring.port}/healthz"
+              "${pkgs.curl}/bin/curl -f http://${cfg.host}:${toString allocatedMonitoringPort}/healthz"
             else
-              "${pkgs.netcat}/bin/nc -z ${cfg.host} ${toString cfg.port}";
+              "${pkgs.netcat}/bin/nc -z ${cfg.host} ${toString allocatedPort}";
           initial_delay_seconds = 2;
           period_seconds = 5;
           timeout_seconds = 3;

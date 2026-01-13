@@ -5,14 +5,27 @@ let
   types = lib.types;
   json = pkgs.formats.json { };
 
+  # Port allocation: extract port from address strings
+  parsePort = addr: lib.toInt (lib.last (lib.splitString ":" addr));
+  parseHost = addr: lib.head (lib.splitString ":" addr);
+
+  baseApiPort = parsePort cfg.listenAddress;
+  baseConsolePort = parsePort cfg.consoleAddress;
+  allocatedApiPort = config.processes.minio.ports.api.value;
+  allocatedConsolePort = config.processes.minio.ports.console.value;
+  apiHost = parseHost cfg.listenAddress;
+  consoleHost = parseHost cfg.consoleAddress;
+  apiAddr = "${apiHost}:${toString allocatedApiPort}";
+  consoleAddr = "${consoleHost}:${toString allocatedConsolePort}";
+
   serverCommand = lib.escapeShellArgs [
     "${cfg.package}/bin/minio"
     "server"
     "--json"
     "--address"
-    cfg.listenAddress
+    apiAddr
     "--console-address"
-    cfg.consoleAddress
+    consoleAddr
     "--config-dir=${config.env.MINIO_CONFIG_DIR}"
     config.env.MINIO_DATA_DIR
   ];
@@ -142,6 +155,8 @@ in
       }
     ];
 
+    processes.minio.ports.api.allocate = baseApiPort;
+    processes.minio.ports.console.allocate = baseConsolePort;
     processes.minio.exec = "${startScript}";
 
     env.MINIO_DATA_DIR = config.env.DEVENV_STATE + "/minio/data";
@@ -159,7 +174,7 @@ in
     services.minio.clientConfig = lib.mkBefore {
       version = "10";
       aliases.local = {
-        url = "http://${if lib.hasPrefix ":" cfg.listenAddress then "localhost:${cfg.listenAddress}" else cfg.listenAddress}";
+        url = "http://${apiAddr}";
         inherit (cfg) accessKey secretKey;
         api = "S3v4";
         path = "auto";

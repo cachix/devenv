@@ -3,6 +3,11 @@
 let
   cfg = config.services.dynamodb-local;
   types = lib.types;
+
+  # Port allocation
+  portBase = cfg.port;
+  allocatedPort = config.processes.dynamodb.ports.main.value;
+
   baseDir = config.env.DEVENV_STATE + "/dynamodb-local";
   startScript = pkgs.writeShellScript "start-dynamodb-local" ''
     set -euo pipefail
@@ -18,7 +23,7 @@ let
       extraFlags+="-sharedDb"
     fi
 
-    exec ${config.services.dynamodb-local.package}/bin/dynamodb-local -port ${toString cfg.port} -dbPath ${baseDir} -disableTelemetry $extraFlags
+    exec ${config.services.dynamodb-local.package}/bin/dynamodb-local -port ${toString allocatedPort} -dbPath ${baseDir} -disableTelemetry $extraFlags
   '';
 in
 {
@@ -34,7 +39,7 @@ in
 
     port = lib.mkOption {
       type = types.port;
-      description = "Listen address for the Dynamodb-local.";
+      description = "Listen port for DynamoDB Local.";
       default = 8000;
     };
     sharedDb = lib.mkOption {
@@ -50,12 +55,13 @@ in
 
   config = lib.mkIf cfg.enable {
     processes.dynamodb = {
+      ports.main.allocate = portBase;
       exec = "${startScript}";
       process-compose = {
         readiness_probe = {
           exec.command = ''
             AWS_ACCESS_KEY_ID=dummy AWS_SECRET_ACCESS_KEY=dummy AWS_DEFAULT_REGION=us-east-1 \
-            ${pkgs.awscli2}/bin/aws dynamodb list-tables --endpoint-url http://127.0.0.1:${toString cfg.port} --output text --no-cli-pager >/dev/null 2>&1
+            ${pkgs.awscli2}/bin/aws dynamodb list-tables --endpoint-url http://127.0.0.1:${toString allocatedPort} --output text --no-cli-pager >/dev/null 2>&1
           '';
           initial_delay_seconds = 2;
           period_seconds = 10;

@@ -3,11 +3,29 @@
 let
   cfg = config.services.blackfire;
 
+  # Port allocation: extract port from socket address (format: tcp://host:port)
+  parseSocketPort = socket:
+    let
+      withoutProtocol = lib.removePrefix "tcp://" socket;
+    in
+    lib.toInt (lib.last (lib.splitString ":" withoutProtocol));
+
+  parseSocketHost = socket:
+    let
+      withoutProtocol = lib.removePrefix "tcp://" socket;
+    in
+    lib.head (lib.splitString ":" withoutProtocol);
+
+  basePort = parseSocketPort cfg.socket;
+  allocatedPort = config.processes.blackfire-agent.ports.main.value;
+  host = parseSocketHost cfg.socket;
+  socketAddr = "tcp://${host}:${toString allocatedPort}";
+
   configFile = pkgs.writeText "blackfire.conf" ''
     [blackfire]
     server-id=${cfg.server-id}
     server-token=${cfg.server-token}
-    socket=${cfg.socket}
+    socket=${socketAddr}
   '';
 in
 {
@@ -83,11 +101,12 @@ in
       cfg.package
     ];
 
-    env.BLACKFIRE_AGENT_SOCKET = cfg.socket;
+    env.BLACKFIRE_AGENT_SOCKET = socketAddr;
     env.BLACKFIRE_CLIENT_ID = cfg.client-id;
     env.BLACKFIRE_CLIENT_TOKEN = cfg.client-token;
     env.BLACKFIRE_APM_ENABLED = (if cfg.enableApm then "1" else "0");
 
+    processes.blackfire-agent.ports.main.allocate = basePort;
     processes.blackfire-agent.exec = "exec ${cfg.package}/bin/blackfire agent:start --config=${configFile}";
   };
 }

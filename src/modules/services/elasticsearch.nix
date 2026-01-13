@@ -6,12 +6,18 @@ let
   cfg = config.services.elasticsearch;
   es7 = builtins.compareVersions cfg.package.version "7" >= 0;
 
+  # Port allocation
+  baseHttpPort = cfg.port;
+  baseTransportPort = cfg.tcp_port;
+  allocatedHttpPort = config.processes.elasticsearch.ports.http.value;
+  allocatedTransportPort = config.processes.elasticsearch.ports.transport.value;
+
   esConfig = ''
     network.host: ${cfg.listenAddress}
     cluster.name: ${cfg.cluster_name}
     ${lib.optionalString cfg.single_node "discovery.type: single-node"}
-    http.port: ${toString cfg.port}
-    transport.port: ${toString cfg.tcp_port}
+    http.port: ${toString allocatedHttpPort}
+    transport.port: ${toString allocatedTransportPort}
     ${cfg.extraConf}
   '';
 
@@ -96,13 +102,13 @@ in
     port = mkOption {
       description = "Elasticsearch port to listen for HTTP traffic.";
       default = 9200;
-      type = types.int;
+      type = types.port;
     };
 
     tcp_port = mkOption {
       description = "Elasticsearch port for the node to node communication.";
       default = 9300;
-      type = types.int;
+      type = types.port;
     };
 
     cluster_name = mkOption {
@@ -180,11 +186,13 @@ in
     env.ELASTICSEARCH_DATA = config.env.DEVENV_STATE + "/elasticsearch";
 
     processes.elasticsearch = {
+      ports.http.allocate = baseHttpPort;
+      ports.transport.allocate = baseTransportPort;
       exec = "${startScript}";
 
       process-compose = {
         readiness_probe = {
-          exec.command = "${pkgs.curl}/bin/curl -f -k http://${cfg.listenAddress}:${toString cfg.port}";
+          exec.command = "${pkgs.curl}/bin/curl -f -k http://${cfg.listenAddress}:${toString allocatedHttpPort}";
           initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 2;

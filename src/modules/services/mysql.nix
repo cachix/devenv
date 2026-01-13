@@ -6,8 +6,24 @@
 with lib; let
   cfg = config.services.mysql;
   isMariaDB = getName cfg.package == getName pkgs.mariadb;
+
+  # Port allocation: only allocate if mysqld.port is configured
+  hasPort = hasAttrByPath [ "mysqld" "port" ] cfg.settings;
+  basePort = if hasPort then cfg.settings.mysqld.port else 3306;
+  allocatedPort = config.processes.mysql.ports.main.value;
+
+  # Override settings with allocated port if configured
+  settingsWithPort =
+    if hasPort then
+      cfg.settings // {
+        mysqld = cfg.settings.mysqld // {
+          port = allocatedPort;
+        };
+      }
+    else cfg.settings;
+
   format = pkgs.formats.ini { listsAsDuplicateKeys = true; };
-  configFile = format.generate "my.cnf" cfg.settings;
+  configFile = format.generate "my.cnf" settingsWithPort;
   # Generate an empty config file to not resolve globally installed MySQL config like in /etc/my.cnf or ~/.my.cnf
   emptyConfig = format.generate "empty.cnf" { };
   mysqlOptions =
@@ -302,8 +318,8 @@ in
         MYSQL_UNIX_PORT = config.env.DEVENV_RUNTIME + "/mysql.sock";
         MYSQLX_UNIX_PORT = config.env.DEVENV_RUNTIME + "/mysqlx.sock";
       }
-      // (optionalAttrs (hasAttrByPath [ "mysqld" "port" ] cfg.settings) {
-        MYSQL_TCP_PORT = toString cfg.settings.mysqld.port;
+      // (optionalAttrs hasPort {
+        MYSQL_TCP_PORT = toString allocatedPort;
       });
 
     scripts.mysql.exec = ''
@@ -318,6 +334,7 @@ in
       ${mysqldumpWrapped}/bin/mysqldump "$@"
     '';
 
+    processes.mysql.ports.main.allocate = basePort;
     processes.mysql.exec = "${startScript}/bin/start-mysql";
     processes.mysql-configure.exec = "${configureScript}/bin/configure-mysql";
   };

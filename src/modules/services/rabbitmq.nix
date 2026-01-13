@@ -7,6 +7,12 @@ let
 
   inherit (builtins) concatStringsSep;
 
+  # Port allocation
+  basePort = cfg.port;
+  baseManagementPort = cfg.managementPlugin.port;
+  allocatedPort = config.processes.rabbitmq.ports.main.value;
+  allocatedManagementPort = config.processes.rabbitmq.ports.management.value;
+
   config_file_content = lib.generators.toKeyValue { } cfg.configItems;
   config_file = pkgs.writeText "rabbitmq.conf" config_file_content;
 
@@ -132,7 +138,7 @@ in
         default = 15672;
         type = types.port;
         description = ''
-          On which port to run the management plugin
+          On which port to run the management plugin.
         '';
       };
     };
@@ -142,10 +148,10 @@ in
     packages = [ cfg.package ];
 
     services.rabbitmq.configItems = {
-      "listeners.tcp.1" = mkDefault "${cfg.listenAddress}:${toString cfg.port}";
+      "listeners.tcp.1" = mkDefault "${cfg.listenAddress}:${toString allocatedPort}";
       "distribution.listener.interface" = mkDefault cfg.listenAddress;
     } // optionalAttrs cfg.managementPlugin.enable {
-      "management.tcp.port" = toString cfg.managementPlugin.port;
+      "management.tcp.port" = toString allocatedManagementPort;
       "management.tcp.ip" = cfg.listenAddress;
     };
 
@@ -164,6 +170,8 @@ in
     env.ERL_EPMD_ADDRESS = cfg.listenAddress;
 
     processes.rabbitmq = {
+      ports.main.allocate = basePort;
+      ports.management.allocate = baseManagementPort;
       exec = "exec ${cfg.package}/bin/rabbitmq-server";
 
       process-compose = {
