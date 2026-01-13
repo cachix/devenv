@@ -3,6 +3,19 @@
 let
   cfg = config.services.cockroachdb;
   types = lib.types;
+
+  # Port allocation: extract port from address strings
+  parsePort = addr: lib.toInt (lib.last (lib.splitString ":" addr));
+  parseHost = addr: lib.head (lib.splitString ":" addr);
+
+  baseListenPort = parsePort cfg.listen_addr;
+  baseHttpPort = parsePort cfg.http_addr;
+  allocatedListenPort = config.processes.cockroachdb.ports.main.value;
+  allocatedHttpPort = config.processes.cockroachdb.ports.http.value;
+  listenHost = parseHost cfg.listen_addr;
+  httpHost = parseHost cfg.http_addr;
+  listenAddr = "${listenHost}:${toString allocatedListenPort}";
+  httpAddr = "${httpHost}:${toString allocatedHttpPort}";
 in
 {
   options.services.cockroachdb = {
@@ -39,7 +52,9 @@ in
     env.COCKROACH_DATA = config.env.DEVENV_STATE + "/cockroachdb";
 
     processes.cockroachdb = {
-      exec = "exec ${cfg.package}/bin/cockroachdb start-single-node --insecure --listen-addr=${cfg.listen_addr} --http-addr=${cfg.http_addr} --store=path=$COCKROACH_DATA";
+      ports.main.allocate = baseListenPort;
+      ports.http.allocate = baseHttpPort;
+      exec = "exec ${cfg.package}/bin/cockroachdb start-single-node --insecure --listen-addr=${listenAddr} --http-addr=${httpAddr} --store=path=$COCKROACH_DATA";
     };
   };
 }

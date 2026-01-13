@@ -3,6 +3,19 @@
 let
   cfg = config.services.mailpit;
   types = lib.types;
+
+  # Port allocation: extract port from address strings
+  parsePort = addr: lib.toInt (lib.last (lib.splitString ":" addr));
+  parseHost = addr: lib.head (lib.splitString ":" addr);
+
+  baseUiPort = parsePort cfg.uiListenAddress;
+  baseSmtpPort = parsePort cfg.smtpListenAddress;
+  allocatedUiPort = config.processes.mailpit.ports.ui.value;
+  allocatedSmtpPort = config.processes.mailpit.ports.smtp.value;
+  uiHost = parseHost cfg.uiListenAddress;
+  smtpHost = parseHost cfg.smtpListenAddress;
+  uiAddr = "${uiHost}:${toString allocatedUiPort}";
+  smtpAddr = "${smtpHost}:${toString allocatedSmtpPort}";
 in
 {
   options.services.mailpit = {
@@ -46,6 +59,8 @@ in
       before = [ "devenv:processes:mailpit" ];
     };
 
-    processes.mailpit.exec = "exec ${cfg.package}/bin/mailpit --db-file $DEVENV_STATE/mailpit/db.sqlite3 --listen ${lib.escapeShellArg cfg.uiListenAddress} --smtp ${lib.escapeShellArg cfg.smtpListenAddress} ${lib.escapeShellArgs cfg.additionalArgs}";
+    processes.mailpit.ports.ui.allocate = baseUiPort;
+    processes.mailpit.ports.smtp.allocate = baseSmtpPort;
+    processes.mailpit.exec = "exec ${cfg.package}/bin/mailpit --db-file $DEVENV_STATE/mailpit/db.sqlite3 --listen ${lib.escapeShellArg uiAddr} --smtp ${lib.escapeShellArg smtpAddr} ${lib.escapeShellArgs cfg.additionalArgs}";
   };
 }

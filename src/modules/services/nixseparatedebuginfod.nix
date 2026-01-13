@@ -6,7 +6,12 @@
 
 let
   cfg = config.services.nixseparatedebuginfod;
-  listen_address = "${cfg.host}:${toString cfg.port}";
+
+  # Port allocation
+  basePort = cfg.port;
+  allocatedPort = config.processes.nixseparatedebuginfod.ports.main.value;
+
+  listen_address = "${cfg.host}:${toString allocatedPort}";
 in
 {
   options.services.nixseparatedebuginfod = {
@@ -65,6 +70,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    processes.nixseparatedebuginfod.ports.main.allocate = basePort;
     processes.nixseparatedebuginfod.exec =
       let
         args = [
