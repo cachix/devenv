@@ -11,7 +11,7 @@ use devenv_core::{
     cachix::{CachixManager, CachixPaths},
     cli::GlobalOptions,
     config::{Config, NixBackendType},
-    nix_args::{NixArgs, SecretspecData},
+    nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
     nix_backend::{DevenvPaths, NixBackend, Options},
 };
 use include_dir::{Dir, include_dir};
@@ -1565,6 +1565,9 @@ impl Devenv {
             Vec::new()
         };
 
+        // Parse CLI options into structured format with typed values
+        let cli_options = CliOptionsConfig(parse_cli_options(&self.global_options.option)?);
+
         // Create the Nix arguments struct
         let nixpkgs_config = config.nixpkgs_config(&self.global_options.system);
         let args = NixArgs {
@@ -1580,6 +1583,7 @@ impl Devenv {
             devenv_direnvrc_latest_version: *DIRENVRC_VERSION,
             container_name: self.container_name.as_deref(),
             active_profiles: &active_profiles,
+            cli_options,
             hostname: hostname.as_deref(),
             username: username.as_deref(),
             git_root: git_root.as_deref(),

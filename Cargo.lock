@@ -5210,7 +5210,7 @@ checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 [[package]]
 name = "ser_nix"
 version = "0.1.2"
-source = "git+https://github.com/cachix/ser_nix?branch=support-paths#3bb3ddc87749361f2aaa04565faeabaab892aa02"
+source = "git+https://github.com/cachix/ser_nix?branch=support-paths#15b61a91d16ba39ceb3b82fb9906d564bb889e47"
 dependencies = [
  "serde",
 ]

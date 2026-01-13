@@ -1,6 +1,6 @@
 //! Integration tests for flake locking functionality
 
-use devenv_core::{Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend};
+use devenv_core::{CliOptionsConfig, Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend};
 use devenv_nix_backend::{ProjectRoot, load_lock_file, nix_backend::NixRustBackend};
 use devenv_nix_backend_macros::nix_test;
 use nix_bindings_fetchers::FetchersSettings;
@@ -49,6 +49,7 @@ impl TestNixArgs {
             devenv_direnvrc_latest_version: 5,
             container_name: None,
             active_profiles: &[],
+            cli_options: CliOptionsConfig::default(),
             hostname: None,
             username: None,
             git_root: None,

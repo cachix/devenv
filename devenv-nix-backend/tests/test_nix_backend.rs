@@ -5,7 +5,9 @@
 
 #![cfg(test)]
 
-use devenv_core::{Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend, Options};
+use devenv_core::{
+    CliOptionsConfig, Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend, Options,
+};
 use devenv_nix_backend::ProjectRoot;
 use devenv_nix_backend::nix_backend::NixRustBackend;
 use devenv_nix_backend_macros::nix_test;
@@ -125,6 +127,7 @@ impl TestNixArgs {
             devenv_direnvrc_latest_version: 5,
             container_name: None,
             active_profiles: &[],
+            cli_options: CliOptionsConfig::default(),
             hostname: None,
             username: None,
             git_root: None,

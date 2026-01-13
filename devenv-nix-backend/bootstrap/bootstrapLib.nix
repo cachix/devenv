@@ -19,107 +19,6 @@ rec {
             or (throw "Input `${inputName}` has no overlay called `${overlay}`. Supported overlays: ${lib.concatStringsSep ", " (builtins.attrNames input.overlays)}")
       ) inputAttrs.overlays or [ ];
 
-  # Generate cli-options configuration from key:type/value pairs
-  # Input: list of [key_with_type, value] pairs
-  # Example: ["languages.rust.version:string" "1.70.0" "languages.python.version:string" "3.11"]
-  # Supported types: string, int, float, bool, path, pkg, pkgs
-  mkCliOptions =
-    options:
-    let
-      lib = inputs.nixpkgs.lib;
-      supportedTypes = [
-        "string"
-        "int"
-        "float"
-        "bool"
-        "path"
-        "pkg"
-        "pkgs"
-      ];
-
-      # Process pairs of [key:type, value]
-      processOption =
-        chunk:
-        let
-          keyParts = lib.splitString ":" chunk.key;
-          path = builtins.elemAt keyParts 0;
-          type_name = builtins.elemAt keyParts 1;
-
-          # Validate type is in supported list
-          typeValid = builtins.elem type_name supportedTypes;
-
-          # Format value based on type
-          formattedValue =
-            if !typeValid then
-              throw "Unsupported type: '${type_name}'. Supported types: ${builtins.concatStringsSep ", " supportedTypes}"
-            else if type_name == "string" then
-              ''"${chunk.value}''
-            else if
-              builtins.elem type_name [
-                "int"
-                "float"
-                "bool"
-              ]
-            then
-              chunk.value
-            else if type_name == "path" then
-              "./${chunk.value}"
-            else if type_name == "pkg" then
-              "pkgs.${chunk.value}"
-            else if type_name == "pkgs" then
-              let
-                items = builtins.map (item: "pkgs.${item}") (builtins.split " " chunk.value);
-              in
-              "[ ${builtins.concatStringsSep " " items} ]"
-            else
-              chunk.value;
-
-          # Use lib.mkForce for all types except pkgs
-          finalValue = if type_name == "pkgs" then formattedValue else "lib.mkForce ${formattedValue}";
-        in
-        {
-          inherit path finalValue;
-        };
-
-      # Convert flat list to pairs
-      pairList = lib.lists.chunksOf 2 options;
-
-      # Map chunks to objects with key and value
-      optionPairs = map
-        (chunk: {
-          key = builtins.elemAt chunk 0;
-          value = builtins.elemAt chunk 1;
-        })
-        pairList;
-
-      # Process all options and build attribute set
-      processedOptions = map processOption optionPairs;
-
-      # Convert processed options to final attribute set
-      toNixConfig =
-        processed:
-        builtins.listToAttrs (
-          map
-            (opt: {
-              name = opt.path;
-              value = opt.finalValue;
-            })
-            processed
-        );
-    in
-    if options == [ ] then
-      { }
-    else
-      {
-        config =
-          { pkgs
-          , lib
-          , config
-          , ...
-          }:
-          toNixConfig processedOptions;
-      };
-
   # Main function to create devenv configuration for a specific system with profiles support
   # This is the full-featured version used by default.nix
   mkDevenvForSystem =
@@ -270,7 +169,7 @@ rec {
           let localPath = devenv_root + "/devenv.local.nix"; in
           if builtins.pathExists localPath then import localPath else { }
         )
-        (mkCliOptions cli_options)
+        cli_options
       ];
 
       # Phase 1: Base evaluation to extract profile definitions
