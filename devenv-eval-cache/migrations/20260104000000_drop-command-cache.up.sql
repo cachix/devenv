@@ -10,10 +10,7 @@ DROP TABLE IF EXISTS cmd_input_path;
 -- Drop the command cache table
 DROP TABLE IF EXISTS cached_cmd;
 
--- Clean up orphaned file_input rows that are no longer referenced by any eval
-DELETE FROM file_input
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM eval_input_path
-    WHERE eval_input_path.file_input_id = file_input.id
-);
+-- Note: Orphaned file_input rows are not cleaned up because turso/limbo
+-- doesn't support subqueries in WHERE clauses yet.
+-- See: https://github.com/tursodatabase/turso/issues/4632
+-- This is fine - orphaned rows will be overwritten when new files are tracked.

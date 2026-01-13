@@ -6,11 +6,12 @@ license.workspace = true
 
 [dependencies]
 devenv-core.workspace = true
+devenv-cache-core.workspace = true
 devenv-eval-cache.workspace = true
 
 async-trait.workspace = true
 miette.workspace = true
-sqlx.workspace = true
+turso.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 

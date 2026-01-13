@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 blake3.workspace = true
 devenv-cache-core.workspace = true
+include_dir.workspace = true
 devenv-core.workspace = true
 ser_nix.workspace = true
 futures.workspace = true
@@ -15,7 +16,7 @@ num_enum.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_repr.workspace = true
-sqlx.workspace = true
+turso.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true

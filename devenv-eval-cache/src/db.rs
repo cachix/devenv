@@ -1,14 +1,21 @@
 use crate::eval_inputs::{EnvInputDesc, FileInputDesc, Input};
+use devenv_cache_core::db::Dir;
+use devenv_cache_core::error::CacheError;
 use devenv_cache_core::{file::TrackedFile, time};
-use sqlx::sqlite::{Sqlite, SqliteRow};
-use sqlx::{Acquire, Row, SqlitePool};
+use include_dir::include_dir;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use turso::{Connection, Row};
 
-// Create a constant for embedded migrations
-pub const MIGRATIONS: sqlx::migrate::Migrator = sqlx::migrate!();
+/// Embedded migrations directory for the eval cache database.
+/// These are included at compile time so they work in Nix-built binaries.
+pub static MIGRATIONS_DIR: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/migrations");
+
+/// Path to the migrations folder (only used during development/testing)
+#[cfg(test)]
+pub const MIGRATIONS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/migrations");
 
 /// The row type for the `file_input` table.
 #[derive(Clone, Debug, PartialEq)]
@@ -25,25 +32,22 @@ pub struct FileInputRow {
     pub updated_at: SystemTime,
 }
 
-impl sqlx::FromRow<'_, SqliteRow> for FileInputRow {
-    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-        let path: &[u8] = row.get("path");
-        let is_directory: bool = row.get("is_directory");
-        let content_hash: String = row.get("content_hash");
-        let modified_at: i64 = row.get("modified_at");
-        let updated_at: i64 = row.get("updated_at");
+impl FileInputRow {
+    fn from_row(row: &Row) -> Result<Self, turso::Error> {
+        let path: Vec<u8> = row.get(0)?;
+        let is_directory: bool = row.get(1)?;
+        let content_hash: String = row.get(2)?;
+        let modified_at: i64 = row.get(3)?;
+        let updated_at: i64 = row.get(4)?;
         Ok(Self {
-            path: PathBuf::from(OsStr::from_bytes(path)),
+            path: PathBuf::from(OsStr::from_bytes(&path)),
             is_directory,
             content_hash,
             modified_at: time::system_time_from_unix_seconds(modified_at),
             updated_at: time::system_time_from_unix_seconds(updated_at),
         })
     }
-}
 
-// Helper method to convert a FileInputRow to a TrackedFile
-impl FileInputRow {
     pub fn to_tracked_file(&self) -> TrackedFile {
         TrackedFile {
             path: self.path.clone(),
@@ -82,10 +86,10 @@ pub struct EnvInputRow {
     pub content_hash: String,
 }
 
-impl sqlx::FromRow<'_, SqliteRow> for EnvInputRow {
-    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-        let name: String = row.get("name");
-        let content_hash: String = row.get("content_hash");
+impl EnvInputRow {
+    fn from_row(row: &Row) -> Result<Self, turso::Error> {
+        let name: String = row.get(0)?;
+        let content_hash: String = row.get(1)?;
         Ok(Self { name, content_hash })
     }
 }
@@ -110,24 +114,22 @@ impl From<EnvInputRow> for EnvInputDesc {
 }
 
 pub async fn update_file_modified_at<P: AsRef<Path>>(
-    pool: &SqlitePool,
+    conn: &Connection,
     path: P,
     modified_at: SystemTime,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), CacheError> {
     let modified_at = time::system_time_to_unix_seconds(modified_at);
     let now = time::system_time_to_unix_seconds(SystemTime::now());
+    let path_bytes = path.as_ref().to_path_buf().into_os_string();
 
-    sqlx::query(
+    conn.execute(
         r#"
         UPDATE file_input
         SET modified_at = ?, updated_at = ?
         WHERE path = ?
         "#,
+        turso::params![modified_at, now, path_bytes.as_bytes()],
     )
-    .bind(modified_at)
-    .bind(now)
-    .bind(path.as_ref().to_path_buf().into_os_string().as_bytes())
-    .execute(pool)
     .await?;
 
     Ok(())
@@ -154,14 +156,14 @@ pub struct EvalRow {
     pub updated_at: SystemTime,
 }
 
-impl sqlx::FromRow<'_, SqliteRow> for EvalRow {
-    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-        let id: i64 = row.get("id");
-        let key_hash: String = row.get("key_hash");
-        let attr_name: String = row.get("attr_name");
-        let input_hash: String = row.get("input_hash");
-        let json_output: String = row.get("json_output");
-        let updated_at: i64 = row.get("updated_at");
+impl EvalRow {
+    fn from_row(row: &Row) -> Result<Self, turso::Error> {
+        let id: i64 = row.get(0)?;
+        let key_hash: String = row.get(1)?;
+        let attr_name: String = row.get(2)?;
+        let input_hash: String = row.get(3)?;
+        let json_output: String = row.get(4)?;
+        let updated_at: i64 = row.get(5)?;
         Ok(Self {
             id,
             key_hash,
@@ -174,141 +176,130 @@ impl sqlx::FromRow<'_, SqliteRow> for EvalRow {
 }
 
 /// Get a cached eval by its key hash.
-pub async fn get_eval_by_key_hash<'a, A>(
-    conn: A,
+pub async fn get_eval_by_key_hash(
+    conn: &Connection,
     key_hash: &str,
-) -> Result<Option<EvalRow>, sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
-
-    let record = sqlx::query_as(
-        r#"
-            SELECT *
+) -> Result<Option<EvalRow>, CacheError> {
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT id, key_hash, attr_name, input_hash, json_output, updated_at
             FROM cached_eval
             WHERE key_hash = ?
         "#,
-    )
-    .bind(key_hash)
-    .fetch_optional(&mut *conn)
-    .await?;
+        )
+        .await?;
 
-    Ok(record)
+    let mut rows = stmt.query(turso::params![key_hash]).await?;
+
+    match rows.next().await? {
+        Some(row) => Ok(Some(EvalRow::from_row(&row)?)),
+        None => Ok(None),
+    }
 }
 
 /// Insert a cached eval with its inputs (files and env vars).
-pub async fn insert_eval_with_inputs<'a, A>(
-    conn: A,
+pub async fn insert_eval_with_inputs(
+    conn: &Connection,
     key_hash: &str,
     attr_name: &str,
     input_hash: &str,
     json_output: &str,
     inputs: &[Input],
-) -> Result<(i64, Vec<i64>, Vec<i64>), sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
-    let mut tx = conn.begin().await?;
+) -> Result<(i64, Vec<i64>, Vec<i64>), CacheError> {
+    // Start transaction
+    conn.execute("BEGIN TRANSACTION", ()).await?;
 
-    delete_eval(&mut tx, key_hash).await?;
-    let eval_id = insert_eval(&mut tx, key_hash, attr_name, input_hash, json_output).await?;
+    let result = async {
+        delete_eval(conn, key_hash).await?;
+        let eval_id = insert_eval(conn, key_hash, attr_name, input_hash, json_output).await?;
 
-    // Partition and extract file and env inputs
-    let (file_inputs, env_inputs) = Input::partition_refs(inputs);
+        // Partition and extract file and env inputs
+        let (file_inputs, env_inputs) = Input::partition_refs(inputs);
 
-    let file_ids = insert_eval_file_inputs(&mut tx, &file_inputs, eval_id).await?;
-    let env_ids = insert_eval_env_inputs(&mut tx, &env_inputs, eval_id).await?;
+        let file_ids = insert_eval_file_inputs(conn, &file_inputs, eval_id).await?;
+        let env_ids = insert_eval_env_inputs(conn, &env_inputs, eval_id).await?;
 
-    tx.commit().await?;
+        Ok::<_, CacheError>((eval_id, file_ids, env_ids))
+    }
+    .await;
 
-    Ok((eval_id, file_ids, env_ids))
+    match result {
+        Ok(data) => {
+            conn.execute("COMMIT", ()).await?;
+            Ok(data)
+        }
+        Err(e) => {
+            let _ = conn.execute("ROLLBACK", ()).await;
+            Err(e)
+        }
+    }
 }
 
-async fn insert_eval<'a, A>(
-    conn: A,
+async fn insert_eval(
+    conn: &Connection,
     key_hash: &str,
     attr_name: &str,
     input_hash: &str,
     json_output: &str,
-) -> Result<i64, sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
-
-    let record = sqlx::query(
-        r#"
+) -> Result<i64, CacheError> {
+    let mut stmt = conn
+        .prepare(
+            r#"
         INSERT INTO cached_eval (key_hash, attr_name, input_hash, json_output)
         VALUES (?, ?, ?, ?)
         RETURNING id
         "#,
-    )
-    .bind(key_hash)
-    .bind(attr_name)
-    .bind(input_hash)
-    .bind(json_output)
-    .fetch_one(&mut *conn)
-    .await?;
+        )
+        .await?;
 
-    let id: i64 = record.get(0);
+    let mut rows = stmt
+        .query(turso::params![key_hash, attr_name, input_hash, json_output])
+        .await?;
+
+    let row = rows
+        .next()
+        .await?
+        .ok_or_else(|| CacheError::initialization("Insert failed - no row returned"))?;
+    let id: i64 = row.get(0)?;
     Ok(id)
 }
 
-async fn delete_eval<'a, A>(conn: A, key_hash: &str) -> Result<(), sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
-
-    sqlx::query(
+async fn delete_eval(conn: &Connection, key_hash: &str) -> Result<(), CacheError> {
+    conn.execute(
         r#"
         DELETE FROM cached_eval
         WHERE key_hash = ?
         "#,
+        turso::params![key_hash],
     )
-    .bind(key_hash)
-    .execute(&mut *conn)
     .await?;
 
     Ok(())
 }
 
 /// Update the updated_at timestamp for a cached eval.
-pub async fn update_eval_updated_at<'a, A>(conn: A, id: i64) -> Result<(), sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
+pub async fn update_eval_updated_at(conn: &Connection, id: i64) -> Result<(), CacheError> {
     let now = time::system_time_to_unix_seconds(SystemTime::now());
 
-    sqlx::query(
+    conn.execute(
         r#"
         UPDATE cached_eval
         SET updated_at = ?
         WHERE id = ?
         "#,
+        turso::params![now, id],
     )
-    .bind(now)
-    .bind(id)
-    .execute(&mut *conn)
     .await?;
 
     Ok(())
 }
 
-async fn insert_eval_file_inputs<'a, A>(
-    conn: A,
+async fn insert_eval_file_inputs(
+    conn: &Connection,
     file_inputs: &[&FileInputDesc],
     eval_id: i64,
-) -> Result<Vec<i64>, sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
-
-    // Reuse the same file_input table as command caching
+) -> Result<Vec<i64>, CacheError> {
     let insert_file_input = r#"
         INSERT INTO file_input (path, is_directory, content_hash, modified_at)
         VALUES (?, ?, ?, ?)
@@ -322,6 +313,7 @@ where
 
     let now = time::system_time_to_unix_seconds(SystemTime::now());
     let mut file_ids = Vec::with_capacity(file_inputs.len());
+
     for FileInputDesc {
         path,
         is_directory,
@@ -330,15 +322,25 @@ where
     } in file_inputs
     {
         let modified_at = time::system_time_to_unix_seconds(*modified_at);
-        let id: i64 = sqlx::query(insert_file_input)
-            .bind(path.to_path_buf().into_os_string().as_bytes())
-            .bind(is_directory)
-            .bind(content_hash.as_ref().unwrap_or(&"".to_string()))
-            .bind(modified_at)
-            .bind(now)
-            .fetch_one(&mut *conn)
+        let path_bytes = path.to_path_buf().into_os_string();
+        let content_hash_str = content_hash.as_ref().map(|s| s.as_str()).unwrap_or("");
+
+        let mut stmt = conn.prepare(insert_file_input).await?;
+        let mut rows = stmt
+            .query(turso::params![
+                path_bytes.as_bytes(),
+                is_directory,
+                content_hash_str,
+                modified_at,
+                now
+            ])
+            .await?;
+
+        let row = rows
+            .next()
             .await?
-            .get(0);
+            .ok_or_else(|| CacheError::initialization("Insert file failed - no row returned"))?;
+        let id: i64 = row.get(0)?;
         file_ids.push(id);
     }
 
@@ -350,25 +352,18 @@ where
     "#;
 
     for &file_id in &file_ids {
-        sqlx::query(eval_input_path_query)
-            .bind(eval_id)
-            .bind(file_id)
-            .execute(&mut *conn)
+        conn.execute(eval_input_path_query, turso::params![eval_id, file_id])
             .await?;
     }
+
     Ok(file_ids)
 }
 
-async fn insert_eval_env_inputs<'a, A>(
-    conn: A,
+async fn insert_eval_env_inputs(
+    conn: &Connection,
     env_inputs: &[&EnvInputDesc],
     eval_id: i64,
-) -> Result<Vec<i64>, sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
-
+) -> Result<Vec<i64>, CacheError> {
     let insert_env_input = r#"
         INSERT INTO eval_env_input (cached_eval_id, name, content_hash)
         VALUES (?, ?, ?)
@@ -380,15 +375,20 @@ where
 
     let now = time::system_time_to_unix_seconds(SystemTime::now());
     let mut env_input_ids = Vec::with_capacity(env_inputs.len());
+
     for EnvInputDesc { name, content_hash } in env_inputs {
-        let id: i64 = sqlx::query(insert_env_input)
-            .bind(eval_id)
-            .bind(name)
-            .bind(content_hash.as_ref().unwrap_or(&"".to_string()))
-            .bind(now)
-            .fetch_one(&mut *conn)
+        let content_hash_str = content_hash.as_ref().map(|s| s.as_str()).unwrap_or("");
+
+        let mut stmt = conn.prepare(insert_env_input).await?;
+        let mut rows = stmt
+            .query(turso::params![eval_id, name.clone(), content_hash_str, now])
+            .await?;
+
+        let row = rows
+            .next()
             .await?
-            .get(0);
+            .ok_or_else(|| CacheError::initialization("Insert env failed - no row returned"))?;
+        let id: i64 = row.get(0)?;
         env_input_ids.push(id);
     }
 
@@ -397,52 +397,76 @@ where
 
 /// Get file inputs for a cached eval by eval ID.
 pub async fn get_files_by_eval_id(
-    pool: &SqlitePool,
+    conn: &Connection,
     eval_id: i64,
-) -> Result<Vec<FileInputRow>, sqlx::Error> {
-    let files = sqlx::query_as(
-        r#"
+) -> Result<Vec<FileInputRow>, CacheError> {
+    let mut stmt = conn
+        .prepare(
+            r#"
             SELECT f.path, f.is_directory, f.content_hash, f.modified_at, f.updated_at
             FROM file_input f
             JOIN eval_input_path eip ON f.id = eip.file_input_id
             WHERE eip.cached_eval_id = ?
         "#,
-    )
-    .bind(eval_id)
-    .fetch_all(pool)
-    .await?;
+        )
+        .await?;
+
+    let mut rows = stmt.query(turso::params![eval_id]).await?;
+    let mut files = Vec::new();
+
+    while let Some(row) = rows.next().await? {
+        files.push(FileInputRow::from_row(&row)?);
+    }
 
     Ok(files)
 }
 
 /// Get env inputs for a cached eval by eval ID.
 pub async fn get_envs_by_eval_id(
-    pool: &SqlitePool,
+    conn: &Connection,
     eval_id: i64,
-) -> Result<Vec<EnvInputRow>, sqlx::Error> {
-    let envs = sqlx::query_as(
-        r#"
+) -> Result<Vec<EnvInputRow>, CacheError> {
+    let mut stmt = conn
+        .prepare(
+            r#"
             SELECT e.name, e.content_hash
             FROM eval_env_input e
             WHERE e.cached_eval_id = ?
         "#,
-    )
-    .bind(eval_id)
-    .fetch_all(pool)
-    .await?;
+        )
+        .await?;
+
+    let mut rows = stmt.query(turso::params![eval_id]).await?;
+    let mut envs = Vec::new();
+
+    while let Some(row) = rows.next().await? {
+        envs.push(EnvInputRow::from_row(&row)?);
+    }
 
     Ok(envs)
 }
 
 #[cfg(test)]
 mod tests {
-    use devenv_cache_core::compute_string_hash;
-
     use super::*;
-    use sqlx::SqlitePool;
+    use devenv_cache_core::compute_string_hash;
+    use devenv_cache_core::db::Database;
+    use std::path::Path;
+    use tempfile::TempDir;
 
-    #[sqlx::test]
-    async fn test_insert_and_retrieve_eval(pool: SqlitePool) {
+    async fn setup_test_db() -> (Database, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let migrations_path = Path::new(MIGRATIONS_PATH);
+        let db = Database::new(db_path, migrations_path).await.unwrap();
+        (db, temp_dir)
+    }
+
+    #[tokio::test]
+    async fn test_insert_and_retrieve_eval() {
+        let (db, _temp_dir) = setup_test_db().await;
+        let conn = db.connect().await.unwrap();
+
         let key_hash = compute_string_hash("(import /foo/bar {}):config.shell");
         let attr_name = "config.shell";
         let json_output = r#"{"type":"derivation","path":"/nix/store/abc-shell"}"#;
@@ -462,7 +486,7 @@ mod tests {
         let input_hash = Input::compute_input_hash(&inputs);
 
         let (eval_id, file_ids, env_ids) = insert_eval_with_inputs(
-            &pool,
+            &conn,
             &key_hash,
             attr_name,
             &input_hash,
@@ -476,7 +500,7 @@ mod tests {
         assert_eq!(env_ids.len(), 1);
 
         // Retrieve the eval
-        let retrieved_eval = get_eval_by_key_hash(&pool, &key_hash)
+        let retrieved_eval = get_eval_by_key_hash(&conn, &key_hash)
             .await
             .unwrap()
             .unwrap();
@@ -486,20 +510,23 @@ mod tests {
         assert_eq!(retrieved_eval.input_hash, input_hash);
 
         // Retrieve file inputs
-        let files = get_files_by_eval_id(&pool, eval_id).await.unwrap();
+        let files = get_files_by_eval_id(&conn, eval_id).await.unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].path, PathBuf::from("/path/to/devenv.nix"));
         assert_eq!(files[0].content_hash, "hash1");
 
         // Retrieve env inputs
-        let envs = get_envs_by_eval_id(&pool, eval_id).await.unwrap();
+        let envs = get_envs_by_eval_id(&conn, eval_id).await.unwrap();
         assert_eq!(envs.len(), 1);
         assert_eq!(envs[0].name, "HOME");
         assert_eq!(envs[0].content_hash, "hash2");
     }
 
-    #[sqlx::test]
-    async fn test_eval_update_replaces_old(pool: SqlitePool) {
+    #[tokio::test]
+    async fn test_eval_update_replaces_old() {
+        let (db, _temp_dir) = setup_test_db().await;
+        let conn = db.connect().await.unwrap();
+
         let key_hash = compute_string_hash("(import /foo/bar {}):config.packages");
         let attr_name = "config.packages";
         let modified_at = SystemTime::now();
@@ -515,7 +542,7 @@ mod tests {
         let json_output1 = r#"["pkg1"]"#;
 
         insert_eval_with_inputs(
-            &pool,
+            &conn,
             &key_hash,
             attr_name,
             &input_hash1,
@@ -536,7 +563,7 @@ mod tests {
         let json_output2 = r#"["pkg1","pkg2"]"#;
 
         let (eval_id, _, _) = insert_eval_with_inputs(
-            &pool,
+            &conn,
             &key_hash,
             attr_name,
             &input_hash2,
@@ -547,7 +574,7 @@ mod tests {
         .unwrap();
 
         // Should have replaced the old eval
-        let retrieved = get_eval_by_key_hash(&pool, &key_hash)
+        let retrieved = get_eval_by_key_hash(&conn, &key_hash)
             .await
             .unwrap()
             .unwrap();
@@ -555,13 +582,16 @@ mod tests {
         assert_eq!(retrieved.input_hash, input_hash2);
 
         // Should have only the new file input
-        let files = get_files_by_eval_id(&pool, eval_id).await.unwrap();
+        let files = get_files_by_eval_id(&conn, eval_id).await.unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].path, PathBuf::from("/path/to/file2.nix"));
     }
 
-    #[sqlx::test]
-    async fn test_eval_file_reuse_across_evals(pool: SqlitePool) {
+    #[tokio::test]
+    async fn test_eval_file_reuse_across_evals() {
+        let (db, _temp_dir) = setup_test_db().await;
+        let conn = db.connect().await.unwrap();
+
         let modified_at = SystemTime::now();
 
         // Shared file input
@@ -578,7 +608,7 @@ mod tests {
         let input_hash1 = Input::compute_input_hash(&inputs1);
 
         let (_, file_ids1, _) =
-            insert_eval_with_inputs(&pool, &key1, "attr1", &input_hash1, "{}", &inputs1)
+            insert_eval_with_inputs(&conn, &key1, "attr1", &input_hash1, "{}", &inputs1)
                 .await
                 .unwrap();
 
@@ -588,7 +618,7 @@ mod tests {
         let input_hash2 = Input::compute_input_hash(&inputs2);
 
         let (_, file_ids2, _) =
-            insert_eval_with_inputs(&pool, &key2, "attr2", &input_hash2, "{}", &inputs2)
+            insert_eval_with_inputs(&conn, &key2, "attr2", &input_hash2, "{}", &inputs2)
                 .await
                 .unwrap();
 
