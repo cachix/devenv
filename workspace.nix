@@ -40,6 +40,7 @@ let
   cargoLock = {
     lockFile = "${src}/Cargo.lock";
     outputHashes = {
+      "geni-1.1.8" = "sha256-mGGea6tyQaem0/HXvyuHBHwr+3xEErtNatXACkxEeeo=";
       "nix-compat-0.1.0" = "sha256-dSkomGSFJgTtsxHWsBG8Qy2hqQDuemqDsKRJxvmuZ54=";
       "nix-bindings-bindgen-raw-0.1.0" = "sha256-SHSMfZtmWk+n+x2JkcgVkSK0NQh6TULzWNkFr7QHrx4=";
       "secretspec-0.6.1" = "sha256-gOmxzGTbKWVXkv2ZPmxxGUV1LB7vOYd7BXqaVd2LaFc=";

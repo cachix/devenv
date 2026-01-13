@@ -44,7 +44,7 @@ impl SnixBackend {
         global_options: GlobalOptions,
         paths: DevenvPaths,
         cachix_manager: Arc<CachixManager>,
-        _pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
+        _db: Option<Arc<tokio::sync::OnceCell<Arc<devenv_cache_core::db::Database>>>>,
     ) -> Result<Self> {
         info!("Initializing Snix backend");
         // Note: Snix backend doesn't use eval cache at the moment

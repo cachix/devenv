@@ -110,9 +110,9 @@ pub struct NixRustBackend {
     // Also used for caching via observers
     nix_log_bridge: Arc<NixLogBridge>,
 
-    // Optional eval cache pool from framework layer (shared with other backends)
+    // Optional eval cache database from framework layer (shared with other backends)
     // Note: Uses tokio::sync::OnceCell to match the framework layer type
-    eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
+    eval_cache_db: Option<Arc<tokio::sync::OnceCell<Arc<devenv_cache_core::db::Database>>>>,
 
     // Unified caching wrapper combining EvalState + CachedEval (initialized in assemble())
     // Provides cache_key() for key generation and uncached() for explicit bypass
@@ -226,7 +226,7 @@ impl NixRustBackend {
     /// * `global_options` - Global Nix options (offline mode, max jobs, etc.)
     /// * `cachix_manager` - CachixManager for handling binary cache configuration
     /// * `shutdown` - Shutdown coordinator for graceful cleanup of cachix daemon
-    /// * `eval_cache_pool` - Optional eval cache database pool from framework layer
+    /// * `eval_cache_db` - Optional eval cache database from framework layer
     /// * `store` - Optional custom Nix store path (for testing with restricted permissions)
     pub fn new(
         paths: DevenvPaths,
@@ -234,7 +234,7 @@ impl NixRustBackend {
         global_options: GlobalOptions,
         cachix_manager: Arc<CachixManager>,
         shutdown: Arc<Shutdown>,
-        eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
+        eval_cache_db: Option<Arc<tokio::sync::OnceCell<Arc<devenv_cache_core::db::Database>>>>,
         store: Option<std::path::PathBuf>,
     ) -> Result<Self> {
         // Initialize Nix libexpr - uses Once internally so safe to call multiple times.
@@ -427,7 +427,7 @@ impl NixRustBackend {
             bootstrap_path,
             _activity_logger: activity_logger,
             nix_log_bridge: log_bridge,
-            eval_cache_pool,
+            eval_cache_db,
             caching_eval_state: OnceCell::new(),
             cachix_manager,
             cachix_caches: Arc::new(Mutex::new(None)),
@@ -1014,18 +1014,18 @@ impl NixBackend for NixRustBackend {
             self.cached_import_expr.set(import_expr).ok();
 
             // Create CachedEval wrapper
-            let cached_eval = if let Some(ref pool_cell) = self.eval_cache_pool {
-                if let Some(pool) = pool_cell.get() {
-                    let service = CachingEvalService::new(pool.clone());
+            let cached_eval = if let Some(ref db_cell) = self.eval_cache_db {
+                if let Some(db) = db_cell.get() {
+                    let service = CachingEvalService::new(db.clone());
                     let config = CachingConfig::default();
-                    tracing::debug!("Eval caching enabled from framework pool");
+                    tracing::debug!("Eval caching enabled from framework database");
                     CachedEval::with_cache(service, self.nix_log_bridge.clone(), config)
                 } else {
-                    tracing::debug!("Eval caching disabled (pool not ready)");
+                    tracing::debug!("Eval caching disabled (database not ready)");
                     CachedEval::without_cache(self.nix_log_bridge.clone())
                 }
             } else {
-                tracing::debug!("Eval caching disabled (no pool configured)");
+                tracing::debug!("Eval caching disabled (no database configured)");
                 CachedEval::without_cache(self.nix_log_bridge.clone())
             };
 
