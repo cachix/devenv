@@ -1499,27 +1499,10 @@ impl NixBackend for NixRustBackend {
             .to_miette()
             .wrap_err("Failed to lock inputs")?;
 
-        // Check if the lock file contains any unlocked inputs
-        //
-        // NOTE: this replicates the logic used by Nix in `lockFlake`.
-        // Nix only writes the lock file if all inputs are locked by default.
-        // --allow-dirty-lock overrides this behaviour, but that introduces a lot of annoyng hash checks for local inputs that makes development work a chore.
-        if let Some(unlocked_input) = lock_file
-            .get_unlocked_input(fetch_settings)
+        // Write the updated lock file
+        write_lock_file(&lock_file, &lock_file_path)
             .to_miette()
-            .wrap_err("Failed to check for unlocked inputs")?
-        {
-            tracing::warn!(
-                "Not writing lock file because input '{}' is unlocked (has no revision). \
-                 Use --nix-option allow-dirty-locks true to override.",
-                unlocked_input
-            );
-        } else {
-            // Write the updated lock file
-            write_lock_file(&lock_file, &lock_file_path)
-                .to_miette()
-                .wrap_err("Failed to write lock file")?;
-        }
+            .wrap_err("Failed to write lock file")?;
 
         Ok(())
     }
