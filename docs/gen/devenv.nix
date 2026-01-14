@@ -187,6 +187,8 @@ in
 {
   devenv.warnOnNewVersion = false;
 
+  packages = [ pkgs.jq ];
+
   # Expose the outputs for the flake and scripts to use
   outputs = {
     devenv-docs-options = allOptions.optionsCommonMark;
