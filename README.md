@@ -10,6 +10,7 @@
 
 # [devenv.sh](https://devenv.sh) - Fast, Declarative, Reproducible, and Composable Developer Environments
 
+[![Built with devenv](https://devenv.sh/assets/devenv-badge.svg)](https://devenv.sh)
 [![Built with Nix](https://img.shields.io/static/v1?logo=nixos&logoColor=white&label=&message=Built%20with%20Nix&color=41439a)](https://builtwithnix.org)
 [![Discord channel](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FnaMgvexb6q%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&logo=discord&logoColor=white&label=Discord%20users&color=green&style=flat)](https://discord.gg/naMgvexb6q)
 ![License: Apache 2.0](https://img.shields.io/github/license/cachix/devenv)

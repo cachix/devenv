@@ -160,3 +160,13 @@ devenv update
 ```
 
 Learn more about [Inputs](inputs.md).
+
+## Show your support
+
+Add a badge to your project's README to show it's built with devenv:
+
+[![Built with devenv](assets/devenv-badge.svg)](https://devenv.sh)
+
+```markdown
+[![Built with devenv](https://devenv.sh/assets/devenv-badge.svg)](https://devenv.sh)
+```
