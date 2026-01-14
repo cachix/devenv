@@ -116,12 +116,12 @@ let
     {
       options = options.languages;
       srcDir = "languages";
-      outDir = "$out/docs/individual-docs/supported-languages";
+      outDir = "$out/docs/individual-docs/languages";
     }
     {
       options = options.services;
       srcDir = "services";
-      outDir = "$out/docs/individual-docs/supported-services";
+      outDir = "$out/docs/individual-docs/services";
     }
     {
       options = options.process.managers;

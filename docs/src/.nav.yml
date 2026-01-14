@@ -11,15 +11,11 @@ nav:
       - Scripts: scripts.md
       - Creating Files: creating-files.md
       - Tasks: tasks.md
-      - Languages:
-        - Overview: languages.md
-        - Supported languages: supported-languages
+      - Languages: languages
       - Processes:
         - Overview: processes.md
         - Supported process managers: supported-process-managers
-      - Services:
-        - Overview: services.md
-        - Supported services: supported-services
+      - Services: services
       - Containers: containers.md
       - Binary caching: binary-caching.md
       - Git hooks: git-hooks.md
