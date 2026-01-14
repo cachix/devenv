@@ -17816,6 +17816,36 @@ string
 
 
 
+## languages.python.import
+
+
+
+Import a Python project using uv2nix.
+
+This function takes a path to a directory containing a pyproject.toml file
+and returns a derivation that builds the Python project using uv2nix.
+
+Example usage:
+
+```nix
+let
+  mypackage = config.languages.python.import ./path/to/python/project {};
+in {
+  languages.python.enable = true;
+  packages = [ mypackage ];
+}
+```
+
+
+
+*Type:*
+function that evaluates to a(n) function that evaluates to a(n) package
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
+
+
+
 ## languages.python.libraries
 
 
