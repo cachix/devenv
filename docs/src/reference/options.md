@@ -1207,6 +1207,7 @@ attribute set of (submodule)
     proactive = true;
     model = "opus";
     tools = [ "Read" "Grep" "TodoWrite" ];
+    permissionMode = "plan";
     prompt = ''
       You are an expert code reviewer. When reviewing code, check for:
       - Code readability and maintainability
@@ -1266,6 +1267,27 @@ Override the model for this agent.
 
 *Type:*
 null or one of “opus”, “sonnet”, “haiku”
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.agents.\<name>.permissionMode
+
+
+
+Permission mode for this specific sub-agent.
+
+
+
+*Type:*
+null or one of “default”, “acceptEdits”, “plan”, “bypassPermissions”
 
 
 
@@ -1868,12 +1890,13 @@ null or string
 
 
 Fine-grained permissions for tool usage.
-Can specify allow/deny rules for different tools.
+Supports global settings and per-tool allow/ask/deny rules.
+Tool rules can be placed under ` rules ` or directly (backward compatible).
 
 
 
 *Type:*
-attribute set of (submodule)
+open submodule of attribute set of (submodule)
 
 
 
@@ -1886,11 +1909,18 @@ attribute set of (submodule)
 
 ```
 {
-  Edit = {
-    deny = [ "*.secret" "*.env" ];
-  };
-  Bash = {
-    deny = [ "rm -rf" ];
+  defaultMode = "acceptEdits";
+  disableBypassPermissionsMode = true;
+  additionalDirectories = [ "/shared/libs" ];
+  rules = {
+    Edit = {
+      deny = [ "*.secret" "*.env" ];
+    };
+    Bash = {
+      allow = [ "ls:*" "cat:*" ];
+      ask = [ "git:*" "npm:*" ];
+      deny = [ "rm -rf:*" "sudo:*" ];
+    };
   };
 }
 
@@ -1905,7 +1935,171 @@ attribute set of (submodule)
 
 
 
-List of allowed tools or patterns.
+List of allowed patterns.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+## claude.code.permissions.\<name>.ask
+
+
+
+List of patterns that require user approval.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+## claude.code.permissions.\<name>.deny
+
+
+
+List of denied patterns.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+## claude.code.permissions.additionalDirectories
+
+
+
+Allow Claude Code to access directories outside the project root.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "/shared/libs"
+  "/common/configs"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.permissions.defaultMode
+
+
+
+Global permission mode for Claude Code.
+
+ - default: Prompts on first use of each tool
+ - acceptEdits: Auto-accepts file edits
+ - plan: Read-only mode
+ - bypassPermissions: Skips all permission prompts
+
+
+
+*Type:*
+null or one of “default”, “acceptEdits”, “plan”, “bypassPermissions”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "acceptEdits" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.permissions.disableBypassPermissionsMode
+
+
+
+Security option to prevent the dangerous bypassPermissions mode.
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.permissions.rules
+
+
+
+Per-tool permission rules. Preferred location for tool permissions.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.permissions.rules.\<name>.allow
+
+
+
+List of allowed patterns.
 
 
 
@@ -1922,11 +2116,32 @@ list of string
 
 
 
-## claude.code.permissions.\<name>.deny
+## claude.code.permissions.rules.\<name>.ask
 
 
 
-List of denied tools or patterns.
+List of patterns that require user approval.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.permissions.rules.\<name>.deny
+
+
+
+List of denied patterns.
 
 
 
@@ -2255,8 +2470,6 @@ null or signed integer
 
 ## containers.\<name>.layers.\*.perms.\*.gname
 
-
-
 The group name to apply to all of the files matched by the ` regex `.
 
 
@@ -2463,6 +2676,8 @@ null or string
 
 
 ## containers.\<name>.registry
+
+
 
 Registry to push the container to.
 
@@ -5197,8 +5412,6 @@ string
 
 ## git-hooks.hooks.cabal2nix
 
-
-
 cabal2nix hook
 
 
@@ -5365,6 +5578,8 @@ string
 
 
 ## git-hooks.hooks.clippy.settings.allFeatures
+
+
 
 Run clippy with --all-features
 
@@ -7260,8 +7475,6 @@ boolean
 
 ## git-hooks.hooks.hledger-fmt.description
 
-
-
 Description of the hook. Used for metadata purposes only.
 
 
@@ -7396,6 +7609,8 @@ submodule
 
 
 ## git-hooks.hooks.hpack.enable
+
+
 
 Whether to enable this pre-commit hook.
 
