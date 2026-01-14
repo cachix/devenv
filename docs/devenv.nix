@@ -71,5 +71,8 @@
         "${config.git.root}/docs/requirements.txt"
       ];
     };
+    "docs:generate-badge" = {
+      exec = "node ${config.git.root}/docs/src/assets/generate-badge.mjs";
+    };
   };
 }
