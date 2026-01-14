@@ -44,11 +44,3 @@ Services start in the foreground by default. If you want to start services up in
 
 $ devenv up -d
 ```
-
-## Supported services
-
-{%
-  include-markdown "snippets/services-all.md"
-%}
-
-You can find all supported options for services [here](https://devenv.sh/reference/options/#servicesadminerenable).
