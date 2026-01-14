@@ -48,7 +48,7 @@ but eventually went quiet. Having companies like Shopify adopt Nix would be a ma
 ## An interface as the heart of the Developer Experience
 
 Since the [0.1 release two years ago](https://devenv.sh/blog/2022/11/11/hello-world-devenv-01/), we've been rapidly iterating on a declarative interface for
-developer environments. We now have support for over [50 languages](../../supported-languages/ansible.md) and [30 services](../../supported-services/adminer.md):
+developer environments. We now have support for over [50 languages](../../languages/ansible.md) and [30 services](../../services/adminer.md):
 
 ```nix title="devenv.nix"
 { pkgs, config, ... }: {

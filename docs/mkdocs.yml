@@ -102,12 +102,12 @@ plugins:
         - getting-started.md
         - basics.md
       Core Features:
-        - languages.md
+        - languages/index.md
         - packages.md
         - scripts.md
         - tasks.md
         - processes.md
-        - services.md
+        - services/index.md
       Configuration:
         - files-and-variables.md
       Advanced:

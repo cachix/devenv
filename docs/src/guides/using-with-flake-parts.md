@@ -127,7 +127,7 @@ devenv.shells.default = {
 You can use definitions from your flake in your devenv configuration.
 When you do so it's recommended to use a different file name than `devenv.nix`, because it may not be standalone capable.
 
-For example, if `devenv-foo.nix` declares a devenv [service](../services.md), and you've packaged it locally into [`perSystem.packages`](https://flake.parts/options/flake-parts.html#opt-perSystem.packages), you can provide the package as follows:
+For example, if `devenv-foo.nix` declares a devenv [service](../services/index.md), and you've packaged it locally into [`perSystem.packages`](https://flake.parts/options/flake-parts.html#opt-perSystem.packages), you can provide the package as follows:
 
 ```nix
 # inside perSystem = { config, ... }: {

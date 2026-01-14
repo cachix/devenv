@@ -15,3 +15,7 @@
 /common-patterns/#run-x86-binaries-on-apple-silicon-with-rosetta /recipes/macos/#run-x86-binaries-on-apple-silicon-with-rosetta 302
 /common-patterns/#compile-x86-dependencies-on-arm-macs-via-rosetta /recipes/macos/#compile-x86-dependencies-on-arm-macs-via-rosetta 302
 /common-patterns /recipes/nix 302
+/supported-languages/* /languages/:splat 301
+/languages.md /languages/ 301
+/supported-services/* /services/:splat 301
+/services.md /services/ 301
