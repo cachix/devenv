@@ -245,6 +245,7 @@ pub struct TaskBuilder {
     detail: Option<String>,
     show_output: bool,
     is_process: bool,
+    selectable: bool,
     id: Option<u64>,
     parent: Option<Option<u64>>,
     level: Option<ActivityLevel>,
@@ -257,6 +258,7 @@ impl TaskBuilder {
             detail: None,
             show_output: false,
             is_process: false,
+            selectable: false,
             id: None,
             parent: None,
             level: None,
@@ -275,6 +277,12 @@ impl TaskBuilder {
 
     pub fn is_process(mut self, is_process: bool) -> Self {
         self.is_process = is_process;
+        self
+    }
+
+    /// Mark this task as selectable in the TUI
+    pub fn selectable(mut self) -> Self {
+        self.selectable = true;
         self
     }
 
@@ -311,6 +319,7 @@ impl TaskBuilder {
             detail: self.detail,
             show_output: self.show_output,
             is_process: self.is_process,
+            selectable: self.selectable,
             timestamp: Timestamp::now(),
         }));
 
@@ -388,6 +397,7 @@ pub struct OperationBuilder {
     id: Option<u64>,
     parent: Option<Option<u64>>,
     level: Option<ActivityLevel>,
+    selectable: bool,
 }
 
 impl OperationBuilder {
@@ -398,6 +408,7 @@ impl OperationBuilder {
             id: None,
             parent: None,
             level: None,
+            selectable: false,
         }
     }
 
@@ -418,6 +429,12 @@ impl OperationBuilder {
 
     pub fn level(mut self, level: ActivityLevel) -> Self {
         self.level = Some(level);
+        self
+    }
+
+    /// Mark this activity as selectable in the TUI
+    pub fn selectable(mut self) -> Self {
+        self.selectable = true;
         self
     }
 
@@ -473,6 +490,7 @@ impl OperationBuilder {
             parent,
             detail: self.detail,
             level,
+            selectable: self.selectable,
             timestamp: Timestamp::now(),
         }));
 

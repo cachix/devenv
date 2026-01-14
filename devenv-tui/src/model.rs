@@ -133,6 +133,8 @@ pub struct Activity {
     pub details: Vec<ActivityDetail>,
     /// Activity level for filtering (defaults to Info)
     pub level: ActivityLevel,
+    /// Whether this activity can be selected in the TUI
+    pub selectable: bool,
 }
 
 /// UI state - lives outside the RwLock, managed by the UI thread.
@@ -336,6 +338,7 @@ impl ActivityModel {
                     variant,
                     ActivityLevel::Info,
                     NixActivityState::Queued,
+                    true,
                 );
             }
             Build::Start {
@@ -357,6 +360,7 @@ impl ActivityModel {
                     derivation_path,
                     variant,
                     ActivityLevel::Info,
+                    true,
                 );
             }
             Build::Complete { id, outcome, .. } => {
@@ -406,7 +410,7 @@ impl ActivityModel {
                     }),
                     FetchKind::Copy => ActivityVariant::Copy,
                 };
-                self.create_activity(id, name, parent, url, variant, ActivityLevel::Info);
+                self.create_activity(id, name, parent, url, variant, ActivityLevel::Info, false);
             }
             Fetch::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -429,7 +433,7 @@ impl ActivityModel {
                 ..
             } => {
                 let variant = ActivityVariant::Evaluating(EvaluatingActivity::default());
-                self.create_activity(id, name, parent, None, variant, level);
+                self.create_activity(id, name, parent, None, variant, level, true);
             }
             Evaluate::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -456,7 +460,7 @@ impl ActivityModel {
                     duration: None,
                     show_output,
                 });
-                self.create_activity(id, name, parent, detail, variant, ActivityLevel::Info);
+                self.create_activity(id, name, parent, detail, variant, ActivityLevel::Info, true);
             }
             Task::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -484,7 +488,15 @@ impl ActivityModel {
                 ..
             } => {
                 let variant = ActivityVariant::UserOperation;
-                self.create_activity(id, name, parent, command, variant, ActivityLevel::Debug);
+                self.create_activity(
+                    id,
+                    name,
+                    parent,
+                    command,
+                    variant,
+                    ActivityLevel::Debug,
+                    false,
+                );
             }
             Command::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -505,13 +517,19 @@ impl ActivityModel {
                 parent,
                 detail,
                 level,
+                selectable,
                 ..
             } => {
                 let variant = ActivityVariant::Devenv;
-                self.create_activity(id, name, parent, detail, variant, level);
+                self.create_activity(id, name, parent, detail, variant, level, selectable);
             }
             Operation::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
+            }
+            Operation::Log {
+                id, line, is_error, ..
+            } => {
+                self.handle_activity_log(id, line, is_error);
             }
         }
     }
@@ -524,6 +542,7 @@ impl ActivityModel {
         detail: Option<String>,
         variant: ActivityVariant,
         level: ActivityLevel,
+        selectable: bool,
     ) {
         self.create_activity_with_options(
             id,
@@ -533,6 +552,7 @@ impl ActivityModel {
             variant,
             level,
             NixActivityState::Active,
+            selectable,
         );
     }
 
@@ -545,6 +565,7 @@ impl ActivityModel {
         variant: ActivityVariant,
         level: ActivityLevel,
         state: NixActivityState,
+        selectable: bool,
     ) {
         // Nix stream activities (Build, Fetch, Evaluate) don't have explicit levels
         // in their events - they come from Nix's JSON output. We inherit level from
@@ -594,6 +615,7 @@ impl ActivityModel {
             progress: None,
             details: Vec::new(),
             level: effective_level,
+            selectable,
         };
 
         if parent.is_none() {
@@ -784,6 +806,7 @@ impl ActivityModel {
                 variant,
                 level,
                 NixActivityState::Active,
+                false,
             );
 
             // Store details as lines in build_logs for expansion
@@ -826,12 +849,7 @@ impl ActivityModel {
     pub fn get_selectable_activity_ids(&self) -> Vec<u64> {
         self.get_display_activities()
             .into_iter()
-            .filter(|da| {
-                matches!(
-                    da.activity.variant,
-                    ActivityVariant::Build(_) | ActivityVariant::Evaluating(_)
-                )
-            })
+            .filter(|da| da.activity.selectable)
             .map(|da| da.activity.id)
             .collect()
     }

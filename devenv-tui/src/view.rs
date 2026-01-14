@@ -27,11 +27,6 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
     let selected_activity = selected_id.and_then(|id| model.get_activity(id));
     let selected_logs = selected_activity
         .as_ref()
-        .filter(|a| {
-            matches!(a.variant, ActivityVariant::Build(_))
-                || matches!(a.variant, ActivityVariant::Evaluating(_))
-                || matches!(a.variant, ActivityVariant::Message(_))
-        })
         .and_then(|a| model.get_build_logs(a.id));
 
     // Get standalone error messages for display
@@ -50,7 +45,7 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         // Pass logs for activities that should display them:
         // - Tasks with show_output=true or failed: show logs inline
         // - Messages with details: always show details inline
-        // - Selected build/eval activities: show logs when selected
+        // - Selected activities: show logs when selected
         let task_failed = matches!(
             (&activity.variant, &activity.state),
             (
@@ -66,10 +61,7 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
             && msg_data.details.is_some()
         {
             model.get_build_logs(activity.id).cloned()
-        } else if is_selected
-            && (matches!(activity.variant, ActivityVariant::Build(_))
-                || matches!(activity.variant, ActivityVariant::Evaluating(_)))
-        {
+        } else if is_selected {
             selected_logs.cloned()
         } else {
             None
@@ -145,13 +137,14 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
             }
         }
 
-        // Build and evaluation activities show logs when selected (collapsed preview)
+        // Build, evaluation, and devenv activities show logs when selected (collapsed preview)
         if is_selected
             && (matches!(display_activity.activity.variant, ActivityVariant::Build(_))
                 || matches!(
                     display_activity.activity.variant,
                     ActivityVariant::Evaluating(_)
-                ))
+                )
+                || matches!(display_activity.activity.variant, ActivityVariant::Devenv))
             && let Some(logs) = selected_logs
         {
             let logs_component = ExpandedContentComponent::new(Some(logs));
@@ -520,10 +513,19 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         ActivityVariant::Devenv => {
             let prefix = build_activity_prefix(*depth, *completed);
 
-            return ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
+            let main_line = ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
                 .with_completed(completed.is_some())
                 .with_selection(*is_selected)
                 .render(terminal_width, *depth, prefix);
+
+            // Show logs when selected
+            if *is_selected && logs.is_some() {
+                return ExpandedContentComponent::new(logs.as_deref())
+                    .with_empty_message("  → no output yet")
+                    .render_with_main_line(main_line);
+            }
+
+            return main_line;
         }
         ActivityVariant::Message(msg_data) => {
             // Determine icon and color based on message level

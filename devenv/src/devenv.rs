@@ -500,24 +500,86 @@ impl Devenv {
         })
     }
 
-    /// Run a command and return the output.
+    /// Run a command and return the output, streaming stdout/stderr to the TUI.
     ///
     /// This method accepts `String` (not `Option<String>`) because it's specifically
     /// designed for running commands and capturing their output. Unlike `exec_in_shell`,
-    /// this method always requires a command and uses `spawn` + `wait_with_output`
-    /// to return control to the caller with the command's output.
+    /// this method always requires a command and spawns the process to stream output
+    /// line by line to the TUI activity.
     pub async fn run_in_shell(
         &self,
         cmd: String,
         args: &[String],
         activity_name: Option<&str>,
+        selectable: bool,
     ) -> Result<Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
-        let activity = Activity::operation(activity_name.unwrap_or("Running in shell")).start();
-        // Capture all output - never write directly to terminal
-        async move { shell_cmd.output().await.into_diagnostic() }
-            .in_activity(&activity)
-            .await
+        shell_cmd.stdout(Stdio::piped());
+        shell_cmd.stderr(Stdio::piped());
+
+        let mut builder = Activity::operation(activity_name.unwrap_or("Running in shell"));
+        if selectable {
+            builder = builder.selectable();
+        }
+        let activity = builder.start();
+
+        let mut child = shell_cmd.spawn().into_diagnostic()?;
+
+        let stdout = child.stdout.take().expect("stdout was piped");
+        let stderr = child.stderr.take().expect("stderr was piped");
+
+        let mut stdout_reader = BufReader::new(stdout).lines();
+        let mut stderr_reader = BufReader::new(stderr).lines();
+
+        let mut stdout_bytes: Vec<u8> = Vec::new();
+        let mut stderr_bytes: Vec<u8> = Vec::new();
+        let mut stdout_closed = false;
+        let mut stderr_closed = false;
+
+        loop {
+            if stdout_closed && stderr_closed {
+                break;
+            }
+
+            tokio::select! {
+                result = stdout_reader.next_line(), if !stdout_closed => {
+                    match result {
+                        Ok(Some(line)) => {
+                            activity.log(&line);
+                            stdout_bytes.extend(line.as_bytes());
+                            stdout_bytes.push(b'\n');
+                        }
+                        Ok(None) => stdout_closed = true,
+                        Err(e) => {
+                            activity.error(format!("Error reading stdout: {e}"));
+                            stdout_closed = true;
+                        }
+                    }
+                }
+                result = stderr_reader.next_line(), if !stderr_closed => {
+                    match result {
+                        Ok(Some(line)) => {
+                            activity.error(&line);
+                            stderr_bytes.extend(line.as_bytes());
+                            stderr_bytes.push(b'\n');
+                        }
+                        Ok(None) => stderr_closed = true,
+                        Err(e) => {
+                            activity.error(format!("Error reading stderr: {e}"));
+                            stderr_closed = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        let status = child.wait().await.into_diagnostic()?;
+
+        Ok(Output {
+            status,
+            stdout: stdout_bytes,
+            stderr: stderr_bytes,
+        })
     }
 
     pub async fn update(&self, input_name: &Option<String>) -> Result<()> {
@@ -1002,7 +1064,7 @@ impl Devenv {
 
         // Run the test script through the shell, which runs enterShell tasks first
         let result = self
-            .run_in_shell(test_script, &[], Some("Running tests"))
+            .run_in_shell(test_script, &[], Some("Running tests"), true)
             .await?;
 
         if self.has_processes().await? {

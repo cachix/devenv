@@ -162,6 +162,9 @@ pub enum Task {
         /// Whether this is a long-running process task (always shows output)
         #[serde(default)]
         is_process: bool,
+        /// Whether this task is selectable in the TUI
+        #[serde(default)]
+        selectable: bool,
         timestamp: Timestamp,
     },
     Complete {
@@ -217,7 +220,7 @@ pub enum Command {
     },
 }
 
-/// Operation activity events - minimal (generic devenv operations)
+/// Operation activity events - generic devenv operations with log support
 #[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Operation {
@@ -231,12 +234,23 @@ pub enum Operation {
         detail: Option<String>,
         #[serde(default)]
         level: ActivityLevel,
+        /// Whether this activity can be selected in the TUI
+        #[serde(default)]
+        selectable: bool,
         timestamp: Timestamp,
     },
     Complete {
         #[serde(alias = "activity_id")]
         id: u64,
         outcome: ActivityOutcome,
+        timestamp: Timestamp,
+    },
+    Log {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        line: String,
+        #[serde(default)]
+        is_error: bool,
         timestamp: Timestamp,
     },
 }

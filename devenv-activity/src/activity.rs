@@ -269,6 +269,12 @@ impl Activity {
                 is_error: false,
                 timestamp: Timestamp::now(),
             }),
+            ActivityType::Operation => ActivityEvent::Operation(Operation::Log {
+                id: self.id,
+                line: line_str,
+                is_error: false,
+                timestamp: Timestamp::now(),
+            }),
             _ => return,
         };
         send_activity_event(event);
@@ -292,6 +298,12 @@ impl Activity {
                 timestamp: Timestamp::now(),
             }),
             ActivityType::Command => ActivityEvent::Command(Command::Log {
+                id: self.id,
+                line: line_str,
+                is_error: true,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Operation => ActivityEvent::Operation(Operation::Log {
                 id: self.id,
                 line: line_str,
                 is_error: true,
