@@ -72,6 +72,13 @@ jobs:
           add: docs/src/devenv.schema.json
           message: "Auto generate docs/src/devenv.schema.json"
 
+      - uses: EndBug/add-and-commit@v9
+        if: ${{ github.event_name == 'push' }}
+        with:
+          default_author: github_actions
+          add: docs/requirements.txt
+          message: "Auto update docs/requirements.txt"
+
       - name: Check for uncommitted changes
         run: |
           diff=$(git diff --stat)
