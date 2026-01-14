@@ -506,9 +506,14 @@ impl Devenv {
     /// designed for running commands and capturing their output. Unlike `exec_in_shell`,
     /// this method always requires a command and uses `spawn` + `wait_with_output`
     /// to return control to the caller with the command's output.
-    pub async fn run_in_shell(&self, cmd: String, args: &[String]) -> Result<Output> {
+    pub async fn run_in_shell(
+        &self,
+        cmd: String,
+        args: &[String],
+        activity_name: Option<&str>,
+    ) -> Result<Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
-        let activity = Activity::operation("Running in shell").start();
+        let activity = Activity::operation(activity_name.unwrap_or("Running in shell")).start();
         // Capture all output - never write directly to terminal
         async move { shell_cmd.output().await.into_diagnostic() }
             .in_activity(&activity)
@@ -996,7 +1001,9 @@ impl Devenv {
         }
 
         // Run the test script through the shell, which runs enterShell tasks first
-        let result = self.run_in_shell(test_script, &[]).await?;
+        let result = self
+            .run_in_shell(test_script, &[], Some("Running tests"))
+            .await?;
 
         if self.has_processes().await? {
             self.down().await?;

@@ -396,7 +396,11 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         if PathBuf::from(setup_script).exists() {
             eprintln!("    Running {setup_script}");
             let output = devenv
-                .run_in_shell(format!("./{setup_script}"), &[])
+                .run_in_shell(
+                    format!("./{setup_script}"),
+                    &[],
+                    Some("Running setup script"),
+                )
                 .await?;
             if !output.status.success() {
                 return Err(miette::miette!(
