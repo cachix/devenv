@@ -53,13 +53,13 @@ When you run `devenv up`, devenv generates a process-compose configuration file 
 
 ## Using pre-built services
 
-Devenv provides many pre-configured services that are already set up with proper process management. See the [Services documentation](services.md) for a complete list of available services like:
+Devenv provides many pre-configured services that are already set up with proper process management. See the [Services documentation](services/index.md) for a complete list of available services like:
 
-- [PostgreSQL](supported-services/postgres.md)
-- [Redis](supported-services/redis.md)
-- [MySQL](supported-services/mysql.md)
-- [MongoDB](supported-services/mongodb.md)
-- [Elasticsearch](supported-services/elasticsearch.md)
+- [PostgreSQL](services/postgres.md)
+- [Redis](services/redis.md)
+- [MySQL](services/mysql.md)
+- [MongoDB](services/mongodb.md)
+- [Elasticsearch](services/elasticsearch.md)
 - And many more...
 
 These services come with sensible defaults, health checks, and proper initialization scripts.
