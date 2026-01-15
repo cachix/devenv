@@ -12,6 +12,17 @@ let
     let
       lock = builtins.fromJSON (builtins.readFile ./../../flake.lock);
       lockedNixpkgs = lock.nodes.nixpkgs.locked;
+      lockedRustOverlay = lock.nodes.rust-overlay.locked or null;
+      # Fetch rust-overlay if it's in the lock file
+      rustOverlaySource =
+        if lockedRustOverlay != null && lockedRustOverlay.type == "github" then
+          pkgs.fetchFromGitHub
+            {
+              inherit (lockedRustOverlay) owner repo rev;
+              hash = lockedRustOverlay.narHash;
+            }
+        else
+          null;
       devenvPkgs =
         if lockedNixpkgs.type == "github" then
           let
@@ -19,11 +30,23 @@ let
               inherit (lockedNixpkgs) owner repo rev;
               hash = lock.nodes.nixpkgs.locked.narHash;
             };
+            # rust-overlay default.nix returns an overlay function when imported
+            rustOverlay = if rustOverlaySource != null then import rustOverlaySource else null;
+            overlays = lib.optional (rustOverlay != null) rustOverlay;
           in
-          import source { system = pkgs.stdenv.system; }
+          import source { inherit overlays; system = pkgs.stdenv.system; }
         else
           pkgs;
-      workspace = devenvPkgs.callPackage ./../../workspace.nix { };
+      # Use rust-overlay's stable Rust for buildRustCrate
+      rustToolchain =
+        if devenvPkgs ? rust-bin
+        then devenvPkgs.rust-bin.stable.latest.default
+        else devenvPkgs.rustc;
+      workspace = devenvPkgs.callPackage ./../../workspace.nix {
+        pkgs = devenvPkgs;
+        rustc = rustToolchain;
+        cargo = rustToolchain;
+      };
     in
     workspace.crates.devenv-tasks-fast-build;
 
