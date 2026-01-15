@@ -3,6 +3,10 @@
 let
   cfg = config.services.memcached;
   types = lib.types;
+
+  # Port allocation
+  basePort = cfg.port;
+  allocatedPort = config.processes.memcached.ports.main.value;
 in
 {
   imports = [
@@ -50,12 +54,13 @@ in
 
   config = lib.mkIf cfg.enable {
     processes.memcached = {
-      exec = "exec ${cfg.package}/bin/memcached --port=${toString cfg.port} --listen=${cfg.bind} ${lib.concatStringsSep " " cfg.startArgs}";
+      ports.main.allocate = basePort;
+      exec = "exec ${cfg.package}/bin/memcached --port=${toString allocatedPort} --listen=${cfg.bind} ${lib.concatStringsSep " " cfg.startArgs}";
 
       process-compose = {
         readiness_probe = {
           exec.command = ''
-            echo -e "stats\nquit" | ${pkgs.netcat}/bin/nc ${cfg.bind} ${toString cfg.port} > /dev/null 2>&1
+            echo -e "stats\nquit" | ${pkgs.netcat}/bin/nc ${cfg.bind} ${toString allocatedPort} > /dev/null 2>&1
           '';
           initial_delay_seconds = 2;
           period_seconds = 10;

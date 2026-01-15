@@ -5,13 +5,17 @@ with lib;
 let
   cfg = config.services.redis;
 
+  # Port allocation (port 0 means unix socket only)
+  basePort = cfg.port;
+  allocatedPort = if cfg.port == 0 then 0 else config.processes.redis.ports.main.value;
+
   REDIS_UNIX_SOCKET = "${config.env.DEVENV_RUNTIME}/redis.sock";
 
   redisConfig = pkgs.writeText "redis.conf" ''
-    port ${toString cfg.port}
+    port ${toString allocatedPort}
     ${optionalString (cfg.bind != null) "bind ${cfg.bind}"}
-    ${optionalString (cfg.port == 0) "unixsocket ${REDIS_UNIX_SOCKET}"}
-    ${optionalString (cfg.port == 0) "unixsocketperm 700"}
+    ${optionalString (allocatedPort == 0) "unixsocket ${REDIS_UNIX_SOCKET}"}
+    ${optionalString (allocatedPort == 0) "unixsocketperm 700"}
     ${cfg.extraConfig}
   '';
 
@@ -25,7 +29,7 @@ let
     exec ${cfg.package}/bin/redis-server ${redisConfig} --daemonize no --dir "$REDISDATA"
   '';
 
-  tcpPing = "${cfg.package}/bin/redis-cli -p ${toString cfg.port} ping";
+  tcpPing = "${cfg.package}/bin/redis-cli -p ${toString allocatedPort} ping";
   unixSocketPing = "${cfg.package}/bin/redis-cli -s ${REDIS_UNIX_SOCKET} ping";
 in
 {
@@ -58,7 +62,7 @@ in
       default = 6379;
       description = ''
         The TCP port to accept connections.
-        If port 0 is specified Redis, will not listen on a TCP socket and a unix socket file will be found at $REDIS_UNIX_SOCKET.
+        If port 0 is specified, Redis will not listen on a TCP socket and a unix socket file will be found at $REDIS_UNIX_SOCKET.
       '';
     };
 
@@ -76,15 +80,16 @@ in
 
     env = {
       REDISDATA = config.env.DEVENV_STATE + "/redis";
-      REDIS_UNIX_SOCKET = if cfg.port == 0 then REDIS_UNIX_SOCKET else null;
+      REDIS_UNIX_SOCKET = if allocatedPort == 0 then REDIS_UNIX_SOCKET else null;
     };
 
     processes.redis = {
+      ports.main.allocate = basePort;
       exec = "${startScript}/bin/start-redis";
 
       process-compose = {
         readiness_probe = {
-          exec.command = if cfg.port == 0 then unixSocketPing else tcpPing;
+          exec.command = if allocatedPort == 0 then unixSocketPing else tcpPing;
           initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 4;

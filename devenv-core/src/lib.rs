@@ -9,9 +9,11 @@ pub mod config;
 pub mod nix_args;
 pub mod nix_backend;
 pub mod nix_log_bridge;
+pub mod ports;
 
 pub use cachix::{CachixCacheInfo, CachixManager, CachixPaths};
 pub use cli::{GlobalOptions, NixBuildDefaults, TraceFormat, default_system};
 pub use config::Config;
 pub use nix_args::{CliOptionsConfig, NixArgs, SecretspecData};
 pub use nix_backend::{DevenvPaths, NixBackend, Options};
+pub use ports::PortAllocator;
