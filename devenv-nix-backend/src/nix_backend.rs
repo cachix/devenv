@@ -1016,9 +1016,12 @@ impl NixBackend for NixRustBackend {
             // Create CachedEval wrapper
             let cached_eval = if let Some(ref db_cell) = self.eval_cache_db {
                 if let Some(db) = db_cell.get() {
-                    let service = CachingEvalService::new(db.clone());
-                    let config = CachingConfig::default();
-                    tracing::debug!("Eval caching enabled from framework database");
+                    let config = CachingConfig {
+                        force_refresh: self.global_options.refresh_eval_cache,
+                        ..Default::default()
+                    };
+                    let service = CachingEvalService::with_config(db.clone(), config.clone());
+                    tracing::debug!(?config, "Eval caching enabled from framework database");
                     CachedEval::with_cache(service, self.nix_log_bridge.clone(), config)
                 } else {
                     tracing::debug!("Eval caching disabled (database not ready)");
