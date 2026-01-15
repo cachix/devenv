@@ -5141,8 +5141,8 @@ dependencies = [
 
 [[package]]
 name = "secretspec"
-version = "0.5.0"
-source = "git+https://github.com/cachix/secretspec?tag=v0.5.0#099b23b97478751a77f5b0c2b8c4bb0cc8f61bd9"
+version = "0.6.1"
+source = "git+https://github.com/cachix/secretspec?tag=v0.6.1#23650316932342c62fa6a6ba48ae39e772df784b"
 dependencies = [
  "clap",
  "colored",

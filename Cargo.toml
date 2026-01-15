@@ -89,7 +89,7 @@ schematic = { version = "0.18.12", features = [
   "renderer_json_schema",
 ] }
 secrecy = "0.10"
-secretspec = { git = "https://github.com/cachix/secretspec", tag = "v0.5.0" }
+secretspec = { git = "https://github.com/cachix/secretspec", tag = "v0.6.1" }
 serde = { version = "1.0.226", features = ["derive"] }
 serde_json = "1.0.145"
 serde_repr = "0.1.20"
