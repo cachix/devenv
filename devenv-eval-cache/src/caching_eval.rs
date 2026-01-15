@@ -171,6 +171,7 @@ impl CachingEvalService {
     /// Get the file input paths for a cached eval by key.
     ///
     /// Returns the list of file paths that were tracked during evaluation.
+    /// Directories are filtered out since direnv's watch_file only works with files.
     /// Returns an empty vec if the key is not found.
     pub async fn get_file_inputs(
         &self,
@@ -183,7 +184,12 @@ impl CachingEvalService {
         };
 
         let file_rows = db::get_files_by_eval_id(&conn, eval_row.id).await?;
-        Ok(file_rows.into_iter().map(|r| r.path).collect())
+        // Filter out directories - direnv watch_file only works with files
+        Ok(file_rows
+            .into_iter()
+            .filter(|r| !r.is_directory)
+            .map(|r| r.path)
+            .collect())
     }
 
     /// Validate that cached inputs haven't changed.
