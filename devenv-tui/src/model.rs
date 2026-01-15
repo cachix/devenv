@@ -1,7 +1,7 @@
 use crate::app::TuiConfig;
 use devenv_activity::{
-    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind,
-    Message, Operation, Task,
+    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, ExpectedCategory,
+    Fetch, FetchKind, Message, Operation, SetExpected, Task,
 };
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -39,6 +39,10 @@ pub struct ActivityModel {
     pub completed_messages: Vec<String>,
     next_message_id: u64,
     config: Arc<TuiConfig>,
+    /// Expected build count announced by Nix (via SetExpected events)
+    expected_builds: Option<u64>,
+    /// Expected download count announced by Nix (via SetExpected events)
+    expected_downloads: Option<u64>,
 }
 
 impl Default for ActivityModel {
@@ -299,6 +303,8 @@ impl ActivityModel {
             completed_messages: Vec::new(),
             next_message_id: u64::MAX / 2,
             config,
+            expected_builds: None,
+            expected_downloads: None,
         }
     }
 
@@ -316,6 +322,7 @@ impl ActivityModel {
             ActivityEvent::Command(cmd_event) => self.handle_command_event(cmd_event),
             ActivityEvent::Operation(op_event) => self.handle_operation_event(op_event),
             ActivityEvent::Message(msg) => self.handle_message(msg),
+            ActivityEvent::SetExpected(expected) => self.handle_set_expected(expected),
         }
     }
 
@@ -533,6 +540,23 @@ impl ActivityModel {
                 id, line, is_error, ..
             } => {
                 self.handle_activity_log(id, line, is_error);
+            }
+        }
+    }
+
+    fn handle_set_expected(&mut self, event: SetExpected) {
+        match event.category {
+            ExpectedCategory::Build => {
+                // Accumulate expected builds
+                self.expected_builds = Some(
+                    self.expected_builds.unwrap_or(0) + event.expected,
+                );
+            }
+            ExpectedCategory::Download => {
+                // Accumulate expected downloads
+                self.expected_downloads = Some(
+                    self.expected_downloads.unwrap_or(0) + event.expected,
+                );
             }
         }
     }
@@ -971,6 +995,8 @@ impl ActivityModel {
 
         summary.total_builds =
             summary.active_builds + summary.completed_builds + summary.failed_builds;
+        summary.expected_builds = self.expected_builds;
+        summary.expected_downloads = self.expected_downloads;
         summary
     }
 
@@ -1224,8 +1250,12 @@ pub struct ActivitySummary {
     pub completed_builds: usize,
     pub failed_builds: usize,
     pub total_builds: usize,
+    /// Expected build count from Nix (via SetExpected events)
+    pub expected_builds: Option<u64>,
     pub active_downloads: usize,
     pub completed_downloads: usize,
+    /// Expected download count from Nix (via SetExpected events)
+    pub expected_downloads: Option<u64>,
     pub active_queries: usize,
     pub completed_queries: usize,
     pub running_tasks: usize,

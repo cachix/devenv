@@ -16,6 +16,30 @@ pub enum ActivityEvent {
     Command(Command),
     Operation(Operation),
     Message(Message),
+    /// Aggregate expected counts announcement from Nix
+    SetExpected(SetExpected),
+}
+
+/// Expected count announcement for aggregate activity tracking.
+/// Nix emits these events to announce how many items/bytes are expected
+/// before individual activities start (e.g., "expect 10 downloads").
+#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+pub struct SetExpected {
+    /// The category of activity this expectation applies to
+    pub category: ExpectedCategory,
+    /// The expected count (items for builds, bytes for downloads)
+    pub expected: u64,
+    pub timestamp: Timestamp,
+}
+
+/// Categories for expected count tracking
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Valuable)]
+#[serde(rename_all = "lowercase")]
+pub enum ExpectedCategory {
+    /// Build activities (derivations to build)
+    Build,
+    /// Download activities (store paths to download, bytes to transfer)
+    Download,
 }
 
 /// Build activity events - has Phase, Progress, Log

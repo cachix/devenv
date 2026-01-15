@@ -771,7 +771,13 @@ fn build_summary_view_impl(
                 Text(content: "│", color: COLOR_HIERARCHY)
             }).into_any());
         }
-        let total_builds = summary.active_builds + summary.completed_builds + summary.failed_builds;
+        // Use expected count from SetExpected events if available, otherwise fall back to observed total
+        let observed_total = summary.active_builds + summary.completed_builds + summary.failed_builds;
+        let total_builds = summary
+            .expected_builds
+            .map(|e| e as usize)
+            .unwrap_or(observed_total)
+            .max(observed_total);
 
         // Format: "2 of 4 builds" or "2/4 builds" - protect numbers from truncation
         if use_symbols {
@@ -807,7 +813,13 @@ fn build_summary_view_impl(
                 Text(content: "│", color: COLOR_HIERARCHY)
             }).into_any());
         }
-        let total_downloads = summary.active_downloads + summary.completed_downloads;
+        // Use expected count from SetExpected events if available, otherwise fall back to observed total
+        let observed_total = summary.active_downloads + summary.completed_downloads;
+        let total_downloads = summary
+            .expected_downloads
+            .map(|e| e as usize)
+            .unwrap_or(observed_total)
+            .max(observed_total);
 
         // Format: "3 of 7 downloads" or "3/7 downloads" - protect numbers from truncation
         if use_symbols {

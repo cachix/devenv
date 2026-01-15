@@ -32,7 +32,10 @@
 //! This allows methods like `validate_lock_file()` to be called from within
 //! operations like `dev_env()` without creating duplicate activities.
 
-use devenv_activity::{Activity, ActivityLevel, FetchKind, message, message_with_details};
+use devenv_activity::{
+    Activity, ActivityLevel, ExpectedCategory, FetchKind, message, message_with_details,
+    set_expected,
+};
 use devenv_eval_cache::Op;
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 use regex::Regex;
@@ -515,6 +518,32 @@ impl NixLogBridge {
                     && let Some(activity_info) = activities.get(&activity_id)
                 {
                     activity_info.activity.log(log_line);
+                }
+            }
+            ResultType::SetExpected => {
+                // Handle expected count announcements from Nix.
+                // fields[0] is the ActivityType (as int), fields[1] is the expected count.
+                // This announces aggregate expected counts (e.g., "expect 10 downloads").
+                if let (Some(Field::Int(activity_type_int)), Some(Field::Int(expected))) =
+                    (fields.first(), fields.get(1))
+                {
+                    // Map Nix ActivityType to ExpectedCategory
+                    let category =
+                        ActivityType::try_from(*activity_type_int as i32).ok().and_then(|at| {
+                            match at {
+                                ActivityType::CopyPath
+                                | ActivityType::FileTransfer
+                                | ActivityType::Substitute => Some(ExpectedCategory::Download),
+                                ActivityType::Build | ActivityType::BuildWaiting => {
+                                    Some(ExpectedCategory::Build)
+                                }
+                                _ => None,
+                            }
+                        });
+
+                    if let Some(cat) = category {
+                        set_expected(cat, *expected);
+                    }
                 }
             }
             _ => {

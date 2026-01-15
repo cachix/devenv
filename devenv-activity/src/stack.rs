@@ -35,7 +35,7 @@ use tokio::sync::mpsc;
 use valuable::Valuable;
 
 use crate::Timestamp;
-use crate::events::{ActivityEvent, ActivityLevel, Message};
+use crate::events::{ActivityEvent, ActivityLevel, ExpectedCategory, Message, SetExpected};
 use crate::serde_valuable::SerdeValue;
 
 /// Global sender for activity events (installed by ActivityHandle::install())
@@ -109,6 +109,17 @@ pub fn message_with_details(
         text: text.into(),
         details,
         parent,
+        timestamp: Timestamp::now(),
+    }));
+}
+
+/// Emit a SetExpected event to announce aggregate expected counts.
+/// This is used by Nix to announce how many items/bytes are expected
+/// before individual activities start.
+pub fn set_expected(category: ExpectedCategory, expected: u64) {
+    send_activity_event(ActivityEvent::SetExpected(SetExpected {
+        category,
+        expected,
         timestamp: Timestamp::now(),
     }));
 }
