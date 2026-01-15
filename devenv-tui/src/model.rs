@@ -548,15 +548,12 @@ impl ActivityModel {
         match event.category {
             ExpectedCategory::Build => {
                 // Accumulate expected builds
-                self.expected_builds = Some(
-                    self.expected_builds.unwrap_or(0) + event.expected,
-                );
+                self.expected_builds = Some(self.expected_builds.unwrap_or(0) + event.expected);
             }
             ExpectedCategory::Download => {
                 // Accumulate expected downloads
-                self.expected_downloads = Some(
-                    self.expected_downloads.unwrap_or(0) + event.expected,
-                );
+                self.expected_downloads =
+                    Some(self.expected_downloads.unwrap_or(0) + event.expected);
             }
         }
     }

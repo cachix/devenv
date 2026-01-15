@@ -772,7 +772,8 @@ fn build_summary_view_impl(
             }).into_any());
         }
         // Use expected count from SetExpected events if available, otherwise fall back to observed total
-        let observed_total = summary.active_builds + summary.completed_builds + summary.failed_builds;
+        let observed_total =
+            summary.active_builds + summary.completed_builds + summary.failed_builds;
         let total_builds = summary
             .expected_builds
             .map(|e| e as usize)

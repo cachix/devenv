@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ test:without-output
+⠋ test:without-output 2 lines
 
 
 
- 0 of 1 task    ↑↓ nav
+ 0 of 1 tasks           ↑↓ nav
