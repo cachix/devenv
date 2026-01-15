@@ -1,0 +1,21 @@
+{
+  "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#nix-bindings-bindgen-raw@0.1.0": "07mg0ysay1frb3rl4kbs10sv88li2p49328xzfklynk6kdyqqx28",
+  "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#nix-bindings-expr@0.1.0": "07mg0ysay1frb3rl4kbs10sv88li2p49328xzfklynk6kdyqqx28",
+  "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#nix-bindings-fetchers@0.1.0": "07mg0ysay1frb3rl4kbs10sv88li2p49328xzfklynk6kdyqqx28",
+  "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#nix-bindings-flake@0.1.0": "07mg0ysay1frb3rl4kbs10sv88li2p49328xzfklynk6kdyqqx28",
+  "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#nix-bindings-store@0.1.0": "07mg0ysay1frb3rl4kbs10sv88li2p49328xzfklynk6kdyqqx28",
+  "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#nix-bindings-util@0.1.0": "07mg0ysay1frb3rl4kbs10sv88li2p49328xzfklynk6kdyqqx28",
+  "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#nix-cmd@0.1.0": "07mg0ysay1frb3rl4kbs10sv88li2p49328xzfklynk6kdyqqx28",
+  "git+https://github.com/cachix/secretspec?tag=v0.6.1#0.6.1": "0mv8igfmb6ks0mxqffgg3qn7ai8rf5n3x6gxj9bnaafvck6b3sc0",
+  "git+https://github.com/cachix/ser_nix?branch=support-paths#0.1.2": "095hs3l95548wm2v8329j999v1l1ziw8cn7cx2ny94a32mzcynqk",
+  "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#nix-compat-derive@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
+  "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#nix-compat@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
+  "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-build@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
+  "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-castore@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
+  "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-eval-builtin-macros@0.0.1": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
+  "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-eval@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
+  "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-glue@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
+  "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-store@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
+  "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-tracing@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
+  "git+https://github.com/tvlfyi/wu-manber.git#wu-manber@0.1.0": "1zhk83lbq99xzyjwphv2qrb8f8qgfqwa5bbbvyzm0z0bljsjv0pd"
+}
