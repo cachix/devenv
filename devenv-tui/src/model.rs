@@ -33,6 +33,8 @@ pub struct ActivityModel {
     pub activities: HashMap<u64, Activity>,
     pub root_activities: Vec<u64>,
     pub build_logs: HashMap<u64, Arc<VecDeque<String>>>,
+    /// Total count of log lines received per activity (not affected by buffer rotation)
+    pub log_line_counts: HashMap<u64, usize>,
     pub app_state: AppState,
     pub completed_messages: Vec<String>,
     next_message_id: u64,
@@ -292,6 +294,7 @@ impl ActivityModel {
             activities: HashMap::new(),
             root_activities: Vec::new(),
             build_logs: HashMap::new(),
+            log_line_counts: HashMap::new(),
             app_state: AppState::Running,
             completed_messages: Vec::new(),
             next_message_id: u64::MAX / 2,
@@ -767,6 +770,9 @@ impl ActivityModel {
         }
         logs_mut.push_back(line.clone());
 
+        // Track total line count (not affected by buffer rotation)
+        *self.log_line_counts.entry(id).or_insert(0) += 1;
+
         if let Some(activity) = self.activities.get_mut(&id) {
             match &mut activity.variant {
                 ActivityVariant::Build(build) => {
@@ -974,6 +980,11 @@ impl ActivityModel {
 
     pub fn get_build_logs(&self, activity_id: u64) -> Option<&Arc<VecDeque<String>>> {
         self.build_logs.get(&activity_id)
+    }
+
+    /// Get total log line count for an activity (not affected by buffer rotation)
+    pub fn get_log_line_count(&self, activity_id: u64) -> usize {
+        self.log_line_counts.get(&activity_id).copied().unwrap_or(0)
     }
 
     /// Get standalone error messages (those without a parent activity).

@@ -82,6 +82,7 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
                     depth: display_activity.depth,
                     is_selected,
                     logs: activity_logs,
+                    log_line_count: model.get_log_line_count(activity.id),
                     completed,
                     cached,
                 })) {
@@ -250,6 +251,8 @@ struct ActivityRenderContext {
     depth: usize,
     is_selected: bool,
     logs: Option<Arc<VecDeque<String>>>,
+    /// Total log line count (not affected by buffer rotation)
+    log_line_count: usize,
     /// Completion state: None = active, Some(true) = success, Some(false) = failed
     completed: Option<bool>,
     /// Whether this activity's result was cached
@@ -282,6 +285,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         depth,
         is_selected,
         logs,
+        log_line_count,
         completed,
         cached,
     } = &*ctx;
@@ -298,10 +302,19 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         ActivityVariant::Build(build_data) => {
             let is_completed = completed.is_some();
 
-            // Completed builds: no suffix, just show the build name and duration
-            // Active/queued builds: show phase as suffix
+            // Show line count for completed builds, phase + line count for active builds
             let phase_suffix = if is_completed {
-                None
+                if *log_line_count > 0 {
+                    Some(format!("{} lines", log_line_count))
+                } else {
+                    None
+                }
+            } else if *log_line_count > 0 {
+                build_data
+                    .phase
+                    .as_ref()
+                    .map(|p| format!("{} ({} lines)", p, log_line_count))
+                    .or_else(|| Some(format!("{} lines", log_line_count)))
             } else {
                 build_data.phase.clone()
             };
@@ -340,17 +353,26 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
         ActivityVariant::Task(task_data) => {
             let status_text = match task_data.status {
-                TaskDisplayStatus::Pending => Some("pending"),
+                TaskDisplayStatus::Pending => Some("pending".to_string()),
+                TaskDisplayStatus::Running if *log_line_count > 0 => {
+                    Some(format!("{} lines", log_line_count))
+                }
                 TaskDisplayStatus::Running => None, // Don't show "running", the spinner indicates it
-                TaskDisplayStatus::Success => Some("success"),
-                TaskDisplayStatus::Failed => Some("failed"),
-                TaskDisplayStatus::Skipped => Some("skipped"),
-                TaskDisplayStatus::Cancelled => Some("cancelled"),
+                TaskDisplayStatus::Success if *log_line_count > 0 => {
+                    Some(format!("{} lines", log_line_count))
+                }
+                TaskDisplayStatus::Success => None,
+                TaskDisplayStatus::Failed if *log_line_count > 0 => {
+                    Some(format!("failed ({} lines)", log_line_count))
+                }
+                TaskDisplayStatus::Failed => Some("failed".to_string()),
+                TaskDisplayStatus::Skipped => Some("skipped".to_string()),
+                TaskDisplayStatus::Cancelled => Some("cancelled".to_string()),
             };
             let prefix = build_activity_prefix(*depth, *completed);
 
             let main_line = ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
-                .with_suffix(status_text.map(String::from))
+                .with_suffix(status_text)
                 .with_completed(completed.is_some())
                 .with_selection(*is_selected)
                 .render(terminal_width, *depth, prefix);
@@ -513,7 +535,17 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         ActivityVariant::Devenv => {
             let prefix = build_activity_prefix(*depth, *completed);
 
+            // Show line count as suffix when active with logs
+            let suffix = if completed.is_some() {
+                None
+            } else if *log_line_count > 0 {
+                Some(format!("{} lines", log_line_count))
+            } else {
+                None
+            };
+
             let main_line = ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
+                .with_suffix(suffix)
                 .with_completed(completed.is_some())
                 .with_selection(*is_selected)
                 .render(terminal_width, *depth, prefix);
