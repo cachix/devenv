@@ -618,15 +618,22 @@ impl NixRustBackend {
         let cache_key = caching_state.cache_key("config.cachix");
         let (json_str, _cache_hit) = caching_state
             .cached_eval()
-            .eval(&cache_key, || {
-                async move {
-                    self.eval_attr_uncached(
-                        self.cached_import_expr.get().unwrap(),
-                        "config.cachix",
-                        "config.cachix",
-                    )
-                }
-            })
+            .eval(
+                &cache_key,
+                "Checking cachix config",
+                ActivityLevel::Debug,
+                || {
+                    async move {
+                        self.eval_attr_uncached(
+                            self.cached_import_expr.get().unwrap(),
+                            "config.cachix",
+                            "config.cachix",
+                            "Checking cachix config",
+                            ActivityLevel::Debug,
+                        )
+                    }
+                },
+            )
             .await
             .map_err(cache_error_to_miette)?;
 
@@ -1014,10 +1021,15 @@ impl NixBackend for NixRustBackend {
             // Cache miss or invalid paths - do full evaluation with input collection
             let (paths, _) = caching_state
                 .cached_eval()
-                .eval_typed::<CachedShellPaths, _, _>(&cache_key, || {
-                    let import_expr = import_expr.clone();
-                    async move { self.build_shell_uncached(&import_expr) }
-                })
+                .eval_typed::<CachedShellPaths, _, _>(
+                    &cache_key,
+                    "Building shell",
+                    ActivityLevel::Info,
+                    || {
+                        let import_expr = import_expr.clone();
+                        async move { self.build_shell_uncached(&import_expr) }
+                    },
+                )
                 .await
                 .map_err(cache_error_to_miette)?;
 
@@ -1252,22 +1264,28 @@ impl NixBackend for NixRustBackend {
                 None
             };
 
+            let activity_name = format!("Building {}", attr_path);
             let (path_str, cache_hit) = if let Some(path) = cached_path {
                 // Cache hit with valid path
                 caching_state
                     .cached_eval()
                     .log_bridge()
-                    .mark_eval_cached(&format!("Building {}", attr_path), ActivityLevel::Info);
+                    .mark_eval_cached(&activity_name, ActivityLevel::Info);
                 (path, true)
             } else {
                 // Cache miss or invalid path - do full build with input collection
                 let (path, _) = caching_state
                     .cached_eval()
-                    .eval_typed::<String, _, _>(&cache_key, || {
-                        let import_expr = import_expr.clone();
-                        let attr_path = attr_path.to_string();
-                        async move { self.build_attr_uncached(&import_expr, &attr_path) }
-                    })
+                    .eval_typed::<String, _, _>(
+                        &cache_key,
+                        &activity_name,
+                        ActivityLevel::Info,
+                        || {
+                            let import_expr = import_expr.clone();
+                            let attr_path = attr_path.to_string();
+                            async move { self.build_attr_uncached(&import_expr, &attr_path) }
+                        },
+                    )
                     .await
                     .map_err(cache_error_to_miette)?;
 
@@ -1346,16 +1364,26 @@ impl NixBackend for NixRustBackend {
             // Use transparent caching - handles cache check, input collection, and storage
             let (json_str, _cache_hit) = caching_state
                 .cached_eval()
-                .eval(&cache_key, || {
-                    // Capture values for the async block
-                    let import_expr = import_expr.clone();
-                    let attr_path_owned = attr_path.to_string();
-                    let clean_path_owned = clean_path.to_string();
+                .eval(
+                    &cache_key,
+                    "Evaluating Nix",
+                    ActivityLevel::Info,
+                    || {
+                        let import_expr = import_expr.clone();
+                        let attr_path_owned = attr_path.to_string();
+                        let clean_path_owned = clean_path.to_string();
 
-                    async move {
-                        self.eval_attr_uncached(&import_expr, &attr_path_owned, &clean_path_owned)
-                    }
-                })
+                        async move {
+                            self.eval_attr_uncached(
+                                &import_expr,
+                                &attr_path_owned,
+                                &clean_path_owned,
+                                "Evaluating Nix",
+                                ActivityLevel::Info,
+                            )
+                        }
+                    },
+                )
                 .await
                 .map_err(cache_error_to_miette)?;
 
@@ -1791,9 +1819,10 @@ impl NixRustBackend {
         import_expr: &str,
         attr_path: &str,
         clean_path: &str,
+        activity_name: &str,
+        activity_level: ActivityLevel,
     ) -> Result<String> {
-        // Use eval_session() to properly set up activity tracking
-        let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
+        let mut eval_state = self.eval_session(activity_name, activity_level)?;
 
         // Import default.nix to get the attribute set
         let root_attrs = eval_state

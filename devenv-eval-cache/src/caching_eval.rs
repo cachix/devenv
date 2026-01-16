@@ -29,6 +29,7 @@ use crate::eval_inputs::{
     EnvInputDesc, FileInputDesc, FileState, Input, check_env_state, check_file_state,
 };
 use crate::ffi_cache::{CachingConfig, EvalCacheKey, EvalInputCollector, ops_to_inputs};
+use devenv_activity::ActivityLevel;
 use devenv_core::nix_log_bridge::NixLogBridge;
 
 /// Result of a cache lookup.
@@ -373,6 +374,10 @@ impl CachedEval {
     /// The `eval_fn` closure is only called on cache miss. It should perform
     /// the actual Nix evaluation and return the result as a JSON string.
     ///
+    /// Activity tracking is handled automatically:
+    /// - On cache hit: creates activity marked as cached
+    /// - On cache miss: eval_fn should create the activity via eval_session
+    ///
     /// Returns `(result, cache_hit)` where `cache_hit` indicates whether the
     /// result came from cache.
     ///
@@ -383,6 +388,8 @@ impl CachedEval {
     pub async fn eval<F, Fut>(
         &self,
         key: &EvalCacheKey,
+        activity_name: &str,
+        activity_level: ActivityLevel,
         eval_fn: F,
     ) -> Result<(String, bool), CacheError>
     where
@@ -400,7 +407,8 @@ impl CachedEval {
         // Check cache first
         match service.get_cached(key).await {
             Ok(Some(cached)) => {
-                self.log_bridge.mark_cached();
+                self.log_bridge
+                    .mark_eval_cached(activity_name, activity_level);
                 return Ok((cached.json_output, true));
             }
             Ok(None) => {
@@ -439,30 +447,21 @@ impl CachedEval {
     /// which is serialized to JSON for caching. On cache hit, the cached JSON
     /// is deserialized back to `T`.
     ///
-    /// This is useful when you want to cache structured data (like paths or configs)
-    /// rather than raw JSON strings.
+    /// Activity tracking is handled automatically:
+    /// - On cache hit: creates activity marked as cached
+    /// - On cache miss: eval_fn should create the activity via eval_session
+    ///
+    /// Returns `(result, cache_hit)` where `cache_hit` indicates whether the
+    /// result came from cache.
     ///
     /// # Type Parameters
     ///
     /// - `T`: The result type, must implement `Serialize` and `DeserializeOwned`
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// #[derive(Serialize, Deserialize)]
-    /// struct ShellPaths {
-    ///     drv_path: String,
-    ///     out_path: String,
-    /// }
-    ///
-    /// let (paths, cache_hit) = cached_eval.eval_typed::<ShellPaths, _, _>(
-    ///     &key,
-    ///     || async { Ok(ShellPaths { drv_path, out_path }) },
-    /// ).await?;
-    /// ```
     pub async fn eval_typed<T, F, Fut>(
         &self,
         key: &EvalCacheKey,
+        activity_name: &str,
+        activity_level: ActivityLevel,
         eval_fn: F,
     ) -> Result<(T, bool), CacheError>
     where
@@ -481,7 +480,8 @@ impl CachedEval {
         // Check cache first
         match service.get_cached(key).await {
             Ok(Some(cached)) => {
-                self.log_bridge.mark_cached();
+                self.log_bridge
+                    .mark_eval_cached(activity_name, activity_level);
                 let value: T = serde_json::from_str(&cached.json_output)?;
                 return Ok((value, true));
             }
