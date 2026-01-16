@@ -7,6 +7,7 @@ use cli_table::{WithTitle, print_stderr};
 use devenv_activity::ActivityInstrument;
 use devenv_activity::{Activity, ActivityLevel, activity, message};
 use devenv_cache_core::compute_string_hash;
+use devenv_cache_core::db::Database;
 use devenv_core::{
     cachix::{CachixManager, CachixPaths},
     cli::GlobalOptions,
@@ -21,7 +22,6 @@ use secrecy::ExposeSecret;
 use serde::Deserialize;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
-use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -161,8 +161,8 @@ pub struct Devenv {
 
     has_processes: Arc<OnceCell<bool>>,
 
-    // Eval-cache pool (framework layer concern, used by backends)
-    eval_cache_pool: Arc<OnceCell<SqlitePool>>,
+    // Eval-cache database (framework layer concern, used by backends)
+    eval_cache_db: Arc<OnceCell<Arc<Database>>>,
 
     // Secretspec resolved data to pass to Nix
     secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
@@ -242,7 +242,7 @@ impl Devenv {
         let secretspec_resolved = Arc::new(OnceCell::new());
 
         // Create eval-cache pool (framework layer concern, used by backends)
-        let eval_cache_pool = Arc::new(OnceCell::new());
+        let eval_cache_db = Arc::new(OnceCell::new());
 
         let nix: Box<dyn NixBackend> = match backend_type {
             NixBackendType::Nix => Box::new(
@@ -252,6 +252,7 @@ impl Devenv {
                     global_options.clone(),
                     cachix_manager.clone(),
                     options.shutdown.clone(),
+                    Some(eval_cache_db.clone()),
                     None,
                 )
                 .expect("Failed to initialize Nix backend"),
@@ -263,7 +264,7 @@ impl Devenv {
                     global_options.clone(),
                     paths,
                     cachix_manager,
-                    Some(eval_cache_pool.clone()),
+                    Some(eval_cache_db.clone()),
                 )
                 .await
                 .expect("Failed to initialize Snix backend"),
@@ -283,7 +284,7 @@ impl Devenv {
             assembled: Arc::new(AtomicBool::new(false)),
             assemble_lock: Arc::new(Semaphore::new(1)),
             has_processes: Arc::new(OnceCell::new()),
-            eval_cache_pool,
+            eval_cache_db,
             secretspec_resolved,
             nix_args_string: Arc::new(OnceCell::new()),
             container_name: None,
@@ -815,11 +816,8 @@ impl Devenv {
             cache_output: true,
             ..Default::default()
         };
-        let search = self.nix.search(name, Some(search_options)).await?;
-        let search_json: PackageResults =
-            serde_json::from_slice(&search.stdout).expect("Failed to parse search results");
-        let search_results = search_json
-            .0
+        let search_results = self.nix.search(name, Some(search_options)).await?;
+        let results = search_results
             .into_iter()
             .map(|(key, value)| DevenvPackageResult {
                 name: format!(
@@ -831,7 +829,7 @@ impl Devenv {
             })
             .collect::<Vec<_>>();
 
-        Ok(search_results)
+        Ok(results)
     }
 
     pub async fn has_processes(&self) -> Result<bool> {
@@ -1480,18 +1478,18 @@ impl Devenv {
 
         // Initialize eval-cache database (framework layer concern, used by backends)
         if self.global_options.eval_cache {
-            self.eval_cache_pool
+            self.eval_cache_db
                 .get_or_try_init(|| async {
                     let db_path = self.devenv_dotfile.join("nix-eval-cache.db");
-                    let db = devenv_cache_core::db::Database::new(
+                    let db = devenv_cache_core::db::Database::new_with_embedded_migrations(
                         db_path,
-                        &devenv_eval_cache::db::MIGRATIONS,
+                        &devenv_eval_cache::db::MIGRATIONS_DIR,
                     )
                     .await
                     .map_err(|e| {
                         miette::miette!("Failed to initialize eval cache database: {}", e)
                     })?;
-                    Ok::<_, miette::Report>(db.pool().clone())
+                    Ok::<_, miette::Report>(Arc::new(db))
                 })
                 .await?;
         }
@@ -1739,29 +1737,18 @@ impl Devenv {
             );
         }
 
-        use devenv_eval_cache::command::{FileInputDesc, Input};
         util::write_file_with_lock(
             self.devenv_dotfile.join("input-paths.txt"),
             env.inputs
                 .iter()
-                .filter_map(|input| match input {
-                    Input::File(FileInputDesc { path, .. }) => {
-                        // We include --option in the eval cache, but we don't want it
-                        // to trigger direnv reload on each invocation
-                        let cli_options_path = self.devenv_dotfile.join("cli-options.nix");
-                        if path == &cli_options_path {
-                            return None;
-                        }
-                        Some(path.to_string_lossy().to_string())
-                    }
-                    // TODO(sander): update direnvrc to handle env vars if possible
-                    _ => None,
-                })
+                .map(|path| path.to_string_lossy().to_string())
                 .collect::<Vec<_>>()
                 .join("\n"),
         )?;
 
-        Ok(DevEnv { output: env.stdout })
+        Ok(DevEnv {
+            output: env.bash_env,
+        })
     }
 }
 
@@ -1801,15 +1788,6 @@ fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
 
 pub struct DevEnv {
     output: Vec<u8>,
-}
-
-#[derive(Deserialize)]
-struct PackageResults(BTreeMap<String, PackageResult>);
-
-#[derive(Deserialize)]
-struct PackageResult {
-    version: String,
-    description: String,
 }
 
 #[derive(Deserialize)]

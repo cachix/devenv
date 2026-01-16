@@ -365,7 +365,6 @@ impl StreamingCachixDaemon {
 
         // Spawn background event processing task
         let event_task = {
-            let daemon_id = daemon_id.clone();
             let client = Arc::clone(&client);
             let pending_paths = Arc::clone(&pending_paths);
             let work_notify = Arc::clone(&work_notify);
@@ -489,7 +488,7 @@ impl StreamingCachixDaemon {
 
             // Process pending paths and read events
             let should_wait = Self::process_cycle(
-                daemon_id.clone(),
+                daemon_id,
                 Arc::clone(&client),
                 Arc::clone(&pending_paths),
                 Arc::clone(&metrics),

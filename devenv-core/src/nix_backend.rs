@@ -4,11 +4,32 @@
 //! such as the traditional C++ Nix binary or alternative implementations like Snix.
 
 use async_trait::async_trait;
-use devenv_eval_cache::Output;
 use miette::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::nix_args::NixArgs;
+
+/// Output of dev_env evaluation.
+#[derive(Debug, Clone, Default)]
+pub struct DevEnvOutput {
+    /// The bash environment script.
+    pub bash_env: Vec<u8>,
+    /// File paths that the evaluation depends on (for direnv to watch).
+    pub inputs: Vec<PathBuf>,
+}
+
+/// Package search result from nixpkgs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackageSearchResult {
+    pub pname: String,
+    pub version: String,
+    pub description: String,
+}
+
+/// Result type for package search operations.
+pub type SearchResults = BTreeMap<String, PackageSearchResult>;
 
 /// Common paths used by devenv backends
 #[derive(Debug, Clone)]
@@ -68,7 +89,7 @@ pub trait NixBackend: Send + Sync {
     async fn assemble(&self, args: &NixArgs<'_>) -> Result<()>;
 
     /// Get the development environment
-    async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<Output>;
+    async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<DevEnvOutput>;
 
     /// Open a Nix REPL
     async fn repl(&self) -> Result<()>;
@@ -91,7 +112,7 @@ pub trait NixBackend: Send + Sync {
     async fn metadata(&self) -> Result<String>;
 
     /// Search for packages
-    async fn search(&self, name: &str, options: Option<Options>) -> Result<Output>;
+    async fn search(&self, name: &str, options: Option<Options>) -> Result<SearchResults>;
 
     /// Garbage collect the specified paths
     /// Returns (paths_deleted, bytes_freed)
