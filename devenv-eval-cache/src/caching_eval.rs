@@ -29,7 +29,7 @@ use crate::eval_inputs::{
     EnvInputDesc, FileInputDesc, FileState, Input, check_env_state, check_file_state,
 };
 use crate::ffi_cache::{CachingConfig, EvalCacheKey, EvalInputCollector, ops_to_inputs};
-use devenv_activity::ActivityLevel;
+use devenv_activity::Activity;
 use devenv_core::nix_log_bridge::NixLogBridge;
 
 /// Result of a cache lookup.
@@ -374,9 +374,8 @@ impl CachedEval {
     /// The `eval_fn` closure is only called on cache miss. It should perform
     /// the actual Nix evaluation and return the result as a JSON string.
     ///
-    /// Activity tracking is handled automatically:
-    /// - On cache hit: creates activity marked as cached
-    /// - On cache miss: eval_fn should create the activity via eval_session
+    /// Activity tracking is handled automatically - the caching layer creates
+    /// the activity upfront and runs eval_fn under it on cache miss.
     ///
     /// Returns `(result, cache_hit)` where `cache_hit` indicates whether the
     /// result came from cache.
@@ -388,8 +387,7 @@ impl CachedEval {
     pub async fn eval<F, Fut>(
         &self,
         key: &EvalCacheKey,
-        activity_name: &str,
-        activity_level: ActivityLevel,
+        activity: &Activity,
         eval_fn: F,
     ) -> Result<(String, bool), CacheError>
     where
@@ -397,7 +395,7 @@ impl CachedEval {
         Fut: Future<Output = Result<String, miette::Error>>,
     {
         let Some(service) = &self.service else {
-            // No caching - just evaluate
+            // No caching configured - just evaluate directly
             let result = eval_fn()
                 .await
                 .map_err(|e| CacheError::Eval(e.to_string()))?;
@@ -407,8 +405,7 @@ impl CachedEval {
         // Check cache first
         match service.get_cached(key).await {
             Ok(Some(cached)) => {
-                self.log_bridge
-                    .mark_eval_cached(activity_name, activity_level);
+                activity.cached();
                 return Ok((cached.json_output, true));
             }
             Ok(None) => {
@@ -447,9 +444,8 @@ impl CachedEval {
     /// which is serialized to JSON for caching. On cache hit, the cached JSON
     /// is deserialized back to `T`.
     ///
-    /// Activity tracking is handled automatically:
-    /// - On cache hit: creates activity marked as cached
-    /// - On cache miss: eval_fn should create the activity via eval_session
+    /// Activity tracking is handled automatically - the caching layer creates
+    /// the activity upfront and runs eval_fn under it on cache miss.
     ///
     /// Returns `(result, cache_hit)` where `cache_hit` indicates whether the
     /// result came from cache.
@@ -460,8 +456,7 @@ impl CachedEval {
     pub async fn eval_typed<T, F, Fut>(
         &self,
         key: &EvalCacheKey,
-        activity_name: &str,
-        activity_level: ActivityLevel,
+        activity: &Activity,
         eval_fn: F,
     ) -> Result<(T, bool), CacheError>
     where
@@ -470,7 +465,7 @@ impl CachedEval {
         Fut: Future<Output = Result<T, miette::Error>>,
     {
         let Some(service) = &self.service else {
-            // No caching - just evaluate
+            // No caching configured - just evaluate directly
             let result = eval_fn()
                 .await
                 .map_err(|e| CacheError::Eval(e.to_string()))?;
@@ -480,8 +475,7 @@ impl CachedEval {
         // Check cache first
         match service.get_cached(key).await {
             Ok(Some(cached)) => {
-                self.log_bridge
-                    .mark_eval_cached(activity_name, activity_level);
+                activity.cached();
                 let value: T = serde_json::from_str(&cached.json_output)?;
                 return Ok((value, true));
             }

@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use include_dir::{Dir, include_dir};
 use tokio_shutdown::Shutdown;
 
-use devenv_activity::{ActivityLevel, current_activity_id};
+use devenv_activity::{Activity, ActivityInstrument, ActivityLevel, current_activity_id};
 use devenv_cache_core::compute_string_hash;
 use devenv_core::GlobalOptions;
 use devenv_core::cachix::{CachixCacheInfo, CachixConfig, CachixManager};
@@ -474,6 +474,15 @@ impl NixRustBackend {
         })
     }
 
+    /// Acquire the eval state lock without activity tracking.
+    ///
+    /// Use this when activity tracking is handled externally (e.g., by the caching layer).
+    fn eval_lock(&self) -> Result<std::sync::MutexGuard<'_, EvalState>> {
+        self.eval_state
+            .lock()
+            .map_err(|e| miette!("Failed to lock eval state: {}", e))
+    }
+
     /// Extract embedded bootstrap files to filesystem for Nix to access
     fn extract_bootstrap_files(dotfile_dir: &Path) -> Result<PathBuf> {
         use std::io::Write;
@@ -616,26 +625,29 @@ impl NixRustBackend {
             .expect("assemble() must be called first");
 
         let cache_key = caching_state.cache_key("config.cachix");
-        let (json_str, _cache_hit) = caching_state
-            .cached_eval()
-            .eval(
-                &cache_key,
-                "Checking cachix config",
-                ActivityLevel::Debug,
-                || {
-                    async move {
+        let activity = Activity::evaluate("Checking cachix config")
+            .level(ActivityLevel::Debug)
+            .start();
+
+        let (json_str, _cache_hit) = async {
+            caching_state
+                .cached_eval()
+                .eval(
+                    &cache_key,
+                    &activity,
+                    || async {
                         self.eval_attr_uncached(
                             self.cached_import_expr.get().unwrap(),
                             "config.cachix",
                             "config.cachix",
-                            "Checking cachix config",
-                            ActivityLevel::Debug,
                         )
-                    }
-                },
-            )
-            .await
-            .map_err(cache_error_to_miette)?;
+                    },
+                )
+                .await
+        }
+        .in_activity(&activity)
+        .await
+        .map_err(cache_error_to_miette)?;
 
         let cachix_config: CachixConfig = match serde_json::from_str(&json_str) {
             Ok(config) => config,
@@ -1010,28 +1022,30 @@ impl NixBackend for NixRustBackend {
                 None
             };
 
+        let activity = Activity::evaluate("Building shell")
+            .level(ActivityLevel::Info)
+            .start();
+
         let (drv_path_str, out_path_str, cache_hit) = if let Some(paths) = cached_paths {
-            // Cache hit with valid paths - skip evaluation entirely
-            caching_state
-                .cached_eval()
-                .log_bridge()
-                .mark_eval_cached("Building shell", ActivityLevel::Info);
+            // Cache hit - skip evaluation entirely
+            activity.cached();
             (paths.drv_path, paths.out_path, true)
         } else {
-            // Cache miss or invalid paths - do full evaluation with input collection
-            let (paths, _) = caching_state
-                .cached_eval()
-                .eval_typed::<CachedShellPaths, _, _>(
-                    &cache_key,
-                    "Building shell",
-                    ActivityLevel::Info,
-                    || {
-                        let import_expr = import_expr.clone();
-                        async move { self.build_shell_uncached(&import_expr) }
-                    },
-                )
-                .await
-                .map_err(cache_error_to_miette)?;
+            // Cache miss or invalid paths - do full evaluation
+            let import_expr = import_expr.clone();
+            let (paths, _) = async {
+                caching_state
+                    .cached_eval()
+                    .eval_typed::<CachedShellPaths, _, _>(
+                        &cache_key,
+                        &activity,
+                        || async move { self.build_shell_uncached(&import_expr) },
+                    )
+                    .await
+            }
+            .in_activity(&activity)
+            .await
+            .map_err(cache_error_to_miette)?;
 
             (paths.drv_path, paths.out_path, false)
         };
@@ -1264,30 +1278,31 @@ impl NixBackend for NixRustBackend {
                 None
             };
 
-            let activity_name = format!("Building {}", attr_path);
+            let activity = Activity::evaluate(format!("Building {}", attr_path))
+                .level(ActivityLevel::Info)
+                .start();
+
             let (path_str, cache_hit) = if let Some(path) = cached_path {
-                // Cache hit with valid path
-                caching_state
-                    .cached_eval()
-                    .log_bridge()
-                    .mark_eval_cached(&activity_name, ActivityLevel::Info);
+                // Cache hit - skip evaluation entirely
+                activity.cached();
                 (path, true)
             } else {
-                // Cache miss or invalid path - do full build with input collection
-                let (path, _) = caching_state
-                    .cached_eval()
-                    .eval_typed::<String, _, _>(
-                        &cache_key,
-                        &activity_name,
-                        ActivityLevel::Info,
-                        || {
-                            let import_expr = import_expr.clone();
-                            let attr_path = attr_path.to_string();
-                            async move { self.build_attr_uncached(&import_expr, &attr_path) }
-                        },
-                    )
-                    .await
-                    .map_err(cache_error_to_miette)?;
+                // Cache miss or invalid path - do full build
+                let import_expr = import_expr.clone();
+                let attr_path = attr_path.to_string();
+                let (path, _) = async {
+                    caching_state
+                        .cached_eval()
+                        .eval_typed::<String, _, _>(
+                            &cache_key,
+                            &activity,
+                            || async move { self.build_attr_uncached(&import_expr, &attr_path) },
+                        )
+                        .await
+                }
+                .in_activity(&activity)
+                .await
+                .map_err(cache_error_to_miette)?;
 
                 (path, false)
             };
@@ -1358,34 +1373,34 @@ impl NixBackend for NixRustBackend {
             // Parse attribute path - remove leading ".#" if present
             let clean_path = attr_path.trim_start_matches(".#");
 
-            // Create cache key for this attribute
             let cache_key = caching_state.cache_key(clean_path);
+            let activity = Activity::evaluate("Evaluating Nix")
+                .level(ActivityLevel::Info)
+                .start();
 
-            // Use transparent caching - handles cache check, input collection, and storage
-            let (json_str, _cache_hit) = caching_state
-                .cached_eval()
-                .eval(
-                    &cache_key,
-                    "Evaluating Nix",
-                    ActivityLevel::Info,
-                    || {
-                        let import_expr = import_expr.clone();
-                        let attr_path_owned = attr_path.to_string();
-                        let clean_path_owned = clean_path.to_string();
+            let import_expr = import_expr.clone();
+            let attr_path_owned = attr_path.to_string();
+            let clean_path_owned = clean_path.to_string();
 
-                        async move {
+            let (json_str, _cache_hit) = async {
+                caching_state
+                    .cached_eval()
+                    .eval(
+                        &cache_key,
+                        &activity,
+                        || async {
                             self.eval_attr_uncached(
                                 &import_expr,
                                 &attr_path_owned,
                                 &clean_path_owned,
-                                "Evaluating Nix",
-                                ActivityLevel::Info,
                             )
-                        }
-                    },
-                )
-                .await
-                .map_err(cache_error_to_miette)?;
+                        },
+                    )
+                    .await
+            }
+            .in_activity(&activity)
+            .await
+            .map_err(cache_error_to_miette)?;
 
             results.push(json_str);
         }
@@ -1813,16 +1828,14 @@ impl NixRustBackend {
     /// Evaluate a single attribute without caching.
     ///
     /// This is the pure evaluation logic extracted for use with transparent caching.
-    /// It uses eval_session() to properly track eval activities.
+    /// Activity tracking is handled by the caller (caching layer).
     fn eval_attr_uncached(
         &self,
         import_expr: &str,
         attr_path: &str,
         clean_path: &str,
-        activity_name: &str,
-        activity_level: ActivityLevel,
     ) -> Result<String> {
-        let mut eval_state = self.eval_session(activity_name, activity_level)?;
+        let mut eval_state = self.eval_lock()?;
 
         // Import default.nix to get the attribute set
         let root_attrs = eval_state
@@ -1858,10 +1871,9 @@ impl NixRustBackend {
     /// Build shell derivation without caching.
     ///
     /// This is the pure build logic extracted for use with transparent caching.
-    /// It uses eval_session() to properly track eval activities.
+    /// Activity tracking is handled by the caller (caching layer).
     fn build_shell_uncached(&self, import_expr: &str) -> Result<CachedShellPaths> {
-        // Use eval_session() to properly set up activity tracking
-        let mut eval_state = self.eval_session("Building shell", ActivityLevel::Info)?;
+        let mut eval_state = self.eval_lock()?;
 
         let devenv = eval_state
             .eval_from_string(import_expr, self.paths.root.to_str().unwrap())
@@ -1920,10 +1932,9 @@ impl NixRustBackend {
     /// Build a single attribute without caching.
     ///
     /// This is the pure build logic extracted for use with transparent caching.
-    /// It uses eval_session() to properly track eval activities.
+    /// Activity tracking is handled by the caller (caching layer).
     fn build_attr_uncached(&self, import_expr: &str, attr_path: &str) -> Result<String> {
-        // Use eval_session() to properly set up activity tracking
-        let mut eval_state = self.eval_session("Building derivation", ActivityLevel::Info)?;
+        let mut eval_state = self.eval_lock()?;
 
         let root_attrs = eval_state
             .eval_from_string(import_expr, self.paths.root.to_str().unwrap())

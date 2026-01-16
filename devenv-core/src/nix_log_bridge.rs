@@ -123,36 +123,18 @@ impl NixLogBridge {
         }
     }
 
-    /// Mark the evaluation activity as cached.
+    /// Mark the current evaluation activity as cached.
     ///
     /// Call this when the entire evaluation was served from cache
     /// and no actual Nix evaluation was performed.
     ///
-    /// Note: This only works if called within an active eval scope (after `begin_eval`).
-    /// For standalone cached evaluations without an eval scope, use `mark_eval_cached()`.
+    /// Only works if called within an active eval scope (after `begin_eval`).
     pub fn mark_cached(&self) {
         let state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
         if let Some(ref eval) = state.current_eval {
             eval.cached();
         }
-    }
-
-    /// Create a standalone cached evaluation activity.
-    ///
-    /// Use this when a cached result is returned without going through the normal
-    /// eval session flow. This creates a short-lived activity that immediately
-    /// completes with cached status, making it visible in the TUI.
-    ///
-    /// The parent activity is automatically captured from the task-local activity stack.
-    pub fn mark_eval_cached(&self, name: &str, level: ActivityLevel) {
-        let parent_id = current_activity_id();
-        let activity = Activity::evaluate(name)
-            .parent(parent_id)
-            .level(level)
-            .start();
-        activity.cached();
-        // Activity completes on drop - will show as completed+cached in TUI
     }
 
     /// Begin a new evaluation scope.
@@ -209,14 +191,20 @@ impl NixLogBridge {
 
     /// Ensure an eval activity exists and return its ID.
     ///
-    /// Creates the eval activity lazily on first call within an eval scope.
-    /// Returns `None` if not in an eval scope (depth == 0).
+    /// When in an eval scope (after `begin_eval`), creates the activity lazily
+    /// on first call using the pending name/level. When NOT in an eval scope,
+    /// falls back to the task-local activity if present (e.g., from the caching
+    /// layer using `.in_activity()`).
+    ///
+    /// Returns `None` if not in an eval scope and no task-local activity exists.
     fn ensure_eval_activity(&self) -> Option<u64> {
         let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
         if state.depth == 0 {
-            // Not in an eval scope - no activity to create
-            return None;
+            // Not in an eval scope - fall back to task-local activity if present
+            // (e.g., from the caching layer using .in_activity())
+            drop(state);
+            return current_activity_id();
         }
 
         if state.current_eval.is_none() {
