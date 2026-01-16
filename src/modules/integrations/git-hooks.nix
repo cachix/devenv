@@ -127,7 +127,7 @@ in
         fi
 
         # Only remove if it's a symlink to the nix store
-        if $(nix-store --quiet --verify-path "$configFile" > /dev/null 2>&1); then
+        if nix-store --quiet --verify-path "$configFile" > /dev/null 2>&1; then
           echo "Removing $configFile"
           rm "$configFile" || echo "Warning: Failed to uninstall git-hooks at $configFile" >&2
         fi
