@@ -4,4 +4,4 @@ inputs:
 clean:
   enabled: true
   keep:
-    - DEVENV_NIX
+    - RUST_LOG

@@ -579,6 +579,10 @@ exec '{bin_dir}/devenv' \
     if let Ok(tzdir) = env::var("TZDIR") {
         env.push(("TZDIR", tzdir));
     }
+    // RUST_LOG is needed for tests that verify environment variable handling
+    if let Ok(rust_log) = env::var("RUST_LOG") {
+        env.push(("RUST_LOG", rust_log));
+    }
 
     let mut cmd = Command::new(&executable_path);
     cmd.stdin(Stdio::inherit())
