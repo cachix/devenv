@@ -16,7 +16,7 @@ use tokio_shutdown::Shutdown;
 use devenv_activity::{ActivityLevel, current_activity_id};
 use devenv_cache_core::compute_string_hash;
 use devenv_core::GlobalOptions;
-use devenv_core::cachix::{Cachix, CachixCacheInfo, CachixManager};
+use devenv_core::cachix::{CachixCacheInfo, CachixConfig, CachixManager};
 use devenv_core::config::Config;
 use devenv_core::nix_args::NixArgs;
 use devenv_core::nix_backend::{
@@ -120,9 +120,6 @@ pub struct NixRustBackend {
 
     // Cachix manager for handling binary cache configuration
     cachix_manager: Arc<CachixManager>,
-
-    // Cached Cachix configuration (lazy-loaded on first use)
-    cachix_caches: Arc<Mutex<Option<CachixCacheInfo>>>,
 
     // Cachix daemon for pushing store paths
     // Optional as it's only used when cachix.push is configured
@@ -430,7 +427,6 @@ impl NixRustBackend {
             eval_cache_db,
             caching_eval_state: OnceCell::new(),
             cachix_manager,
-            cachix_caches: Arc::new(Mutex::new(None)),
             cachix_daemon: cachix_daemon.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
             _gc_guard: GcCollectionGuard,
@@ -606,134 +602,74 @@ impl NixRustBackend {
         Ok(())
     }
 
-    /// Apply Cachix settings from CachixManager to Nix configuration
+    /// Get cachix configuration from devenv.nix via eval cache.
     ///
-    /// This method retrieves cachix configuration and applies substituters and trusted keys
-    /// to the Nix environment using the settings API.
-    ///
-    /// THREAD SAFETY: Like apply_global_options, this uses global Nix settings which are
-    /// not thread-safe. Should only be called during initialization.
-    async fn apply_cachix_settings(&self) -> Result<()> {
-        // Skip cachix settings if offline mode is enabled
+    /// Returns the cachix configuration if enabled, None otherwise.
+    async fn get_cachix_config(&self) -> Result<Option<CachixCacheInfo>> {
         if self.global_options.offline {
-            return Ok(());
+            return Ok(None);
         }
 
-        let cachix_manager = &self.cachix_manager;
+        let caching_state = self
+            .caching_eval_state
+            .get()
+            .expect("assemble() must be called first");
 
-        let cachix_caches: CachixCacheInfo = {
-            // Try to get cached cachix config
-            let mut cached = self
-                .cachix_caches
-                .lock()
-                .map_err(|e| miette::miette!("Failed to lock cachix cache: {}", e))?;
-
-            if let Some(ref caches) = *cached {
-                caches.clone()
-            } else {
-                // Attempt to load cachix configuration from devenv config
-                // Use a single Debug-level eval session for all cachix config checks
-                let mut eval_state =
-                    self.eval_session("Checking cachix config", ActivityLevel::Debug)?;
-
-                let import_expr = self
-                    .cached_import_expr
-                    .get()
-                    .expect("assemble() must be called first")
-                    .to_string();
-
-                let root_attrs = match eval_state
-                    .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-                    .to_miette()
-                {
-                    Ok(attrs) => attrs,
-                    Err(e) => {
-                        tracing::warn!("Failed to import default.nix for cachix config: {}", e);
-                        return Ok(());
-                    }
-                };
-
-                // Check if cachix is enabled
-                let enable = match eval_state
-                    .require_attrs_select(&root_attrs, "config.cachix.enable")
-                    .to_miette()
-                    .and_then(|v| {
-                        eval_state.force(&v).to_miette()?;
-                        value_to_json(&mut eval_state, &v).to_miette()
-                    }) {
-                    Ok(json) => serde_json::from_value::<bool>(json).unwrap_or(true),
-                    Err(e) => {
-                        tracing::warn!("Failed to evaluate cachix.enable: {}", e);
-                        return Ok(());
-                    }
-                };
-
-                if !enable {
-                    return Ok(());
+        let cache_key = caching_state.cache_key("config.cachix");
+        let (json_str, _cache_hit) = caching_state
+            .cached_eval()
+            .eval(&cache_key, || {
+                async move {
+                    self.eval_attr_uncached(
+                        self.cached_import_expr.get().unwrap(),
+                        "config.cachix",
+                        "config.cachix",
+                    )
                 }
+            })
+            .await
+            .map_err(cache_error_to_miette)?;
 
-                // Get pull caches
-                let pull = match eval_state
-                    .require_attrs_select(&root_attrs, "config.cachix.pull")
-                    .to_miette()
-                    .and_then(|v| {
-                        eval_state.force(&v).to_miette()?;
-                        value_to_json(&mut eval_state, &v).to_miette()
-                    }) {
-                    Ok(json) => serde_json::from_value::<Vec<String>>(json).unwrap_or_default(),
-                    Err(e) => {
-                        tracing::warn!("Failed to evaluate cachix.pull: {}", e);
-                        Vec::new()
-                    }
-                };
-
-                // Get push cache
-                let push = match eval_state
-                    .require_attrs_select(&root_attrs, "config.cachix.push")
-                    .to_miette()
-                    .and_then(|v| {
-                        eval_state.force(&v).to_miette()?;
-                        value_to_json(&mut eval_state, &v).to_miette()
-                    }) {
-                    Ok(json) => serde_json::from_value::<Option<String>>(json).unwrap_or(None),
-                    Err(e) => {
-                        tracing::warn!("Failed to evaluate cachix.push: {}", e);
-                        None
-                    }
-                };
-
-                // Load known keys from trusted keys file if it exists
-                let trusted_keys_path = &cachix_manager.paths.trusted_keys;
-                let known_keys = if trusted_keys_path.exists() {
-                    match std::fs::read_to_string(trusted_keys_path) {
-                        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
-                        Err(_) => Default::default(),
-                    }
-                } else {
-                    Default::default()
-                };
-
-                let cachix_caches = CachixCacheInfo {
-                    caches: Cachix { pull, push },
-                    known_keys,
-                };
-
-                *cached = Some(cachix_caches.clone());
-                cachix_caches
+        let cachix_config: CachixConfig = match serde_json::from_str(&json_str) {
+            Ok(config) => config,
+            Err(e) => {
+                tracing::warn!("Failed to parse cachix config: {}", e);
+                return Ok(None);
             }
         };
 
-        // Apply cachix settings via CachixManager
-        // Note: netrc-file path was already set in new() before store creation
-        match cachix_manager.get_nix_settings(&cachix_caches).await {
+        if !cachix_config.enable {
+            return Ok(None);
+        }
+
+        // Load known keys from trusted keys file
+        let trusted_keys_path = &self.cachix_manager.paths.trusted_keys;
+        let known_keys = if trusted_keys_path.exists() {
+            std::fs::read_to_string(trusted_keys_path)
+                .ok()
+                .and_then(|content| serde_json::from_str(&content).ok())
+                .unwrap_or_default()
+        } else {
+            Default::default()
+        };
+
+        Ok(Some(CachixCacheInfo {
+            caches: cachix_config.caches,
+            known_keys,
+        }))
+    }
+
+    /// Apply cachix substituters and trusted keys to the Nix store.
+    ///
+    /// THREAD SAFETY: These Nix FFI calls modify global state and are not thread-safe.
+    /// Should only be called during initialization.
+    async fn apply_cachix_substituters(&self, cachix_config: &CachixCacheInfo) -> Result<()> {
+        match self.cachix_manager.get_nix_settings(cachix_config).await {
             Ok(settings) => {
-                // Get mutable store reference for applying settings
                 let mut store = (*self.store).clone();
 
-                // Apply substituters via store FFI
                 if let Some(extra_substituters) = settings.get("extra-substituters") {
-                    let substituters: Vec<&str> = extra_substituters.split_whitespace().collect();
-                    for substituter in substituters {
+                    for substituter in extra_substituters.split_whitespace() {
                         if let Err(e) = store.add_substituter(substituter).to_miette() {
                             tracing::warn!("Failed to add substituter {}: {}", substituter, e);
                         } else {
@@ -742,7 +678,6 @@ impl NixRustBackend {
                     }
                 }
 
-                // Apply trusted keys via store FFI
                 if let Some(extra_trusted_keys) = settings.get("extra-trusted-public-keys") {
                     let keys: Vec<&str> = extra_trusted_keys.split_whitespace().collect();
                     if !keys.is_empty() {
@@ -833,70 +768,22 @@ impl NixRustBackend {
     }
 
     /// Initialize cachix daemon if push is configured
-    async fn init_cachix_daemon(&self) -> Result<()> {
-        // Check if cachix push is configured in devenv.nix
-        // Use Debug level since this is an internal check, not user-visible work
-        let push_cache_json = {
-            let mut eval_state =
-                self.eval_session("Checking cachix config", ActivityLevel::Debug)?;
-
-            let import_expr = self
-                .cached_import_expr
-                .get()
-                .expect("assemble() must be called first")
-                .to_string();
-
-            let root_attrs = match eval_state
-                .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-                .to_miette()
-            {
-                Ok(attrs) => attrs,
-                Err(_) => return Ok(()), // Eval failed, skip cachix
-            };
-
-            let value = match eval_state
-                .require_attrs_select(&root_attrs, "config.cachix.push")
-                .to_miette()
-            {
-                Ok(v) => v,
-                Err(_) => return Ok(()), // Attribute not found, skip cachix
-            };
-
-            if let Err(_) = eval_state.force(&value).to_miette() {
-                return Ok(()); // Force failed, skip cachix
-            }
-
-            match value_to_json(&mut eval_state, &value).to_miette() {
-                Ok(json_value) => serde_json::to_string(&json_value).ok(),
-                Err(_) => None,
-            }
+    async fn init_cachix_daemon(&self, push_cache: &str) -> Result<()> {
+        tracing::debug!("Starting cachix daemon for push operations");
+        let daemon_config = crate::cachix_daemon::DaemonConfig {
+            socket_path: self.cachix_manager.paths.daemon_socket.clone(),
+            ..Default::default()
         };
-
-        if let Some(push_cache_json) = push_cache_json {
-            // Parse the push cache name
-            if let Ok(push_cache) = serde_json::from_str::<Option<String>>(&push_cache_json) {
-                if push_cache.is_some() {
-                    // Start the daemon with config (using custom socket path if provided)
-                    tracing::debug!("Starting cachix daemon for push operations");
-                    let daemon_config = crate::cachix_daemon::DaemonConfig {
-                        socket_path: self.cachix_manager.paths.daemon_socket.clone(),
-                        ..Default::default()
-                    };
-                    match crate::cachix_daemon::StreamingCachixDaemon::start(daemon_config).await {
-                        Ok(daemon) => {
-                            let mut handle = self.cachix_daemon.lock().await;
-                            *handle = Some(daemon);
-                            tracing::info!("Cachix daemon started successfully");
-                        }
-                        Err(e) => {
-                            // Graceful degradation: daemon not available
-                            tracing::warn!("Failed to start cachix daemon: {}", e);
-                        }
-                    }
-                }
+        match crate::cachix_daemon::StreamingCachixDaemon::start(daemon_config).await {
+            Ok(daemon) => {
+                let mut handle = self.cachix_daemon.lock().await;
+                *handle = Some(daemon);
+                tracing::info!(push_cache, "Cachix daemon started successfully");
+            }
+            Err(e) => {
+                tracing::warn!("Failed to start cachix daemon: {}", e);
             }
         }
-
         Ok(())
     }
 
@@ -1037,12 +924,12 @@ impl NixBackend for NixRustBackend {
         // This ensures all subsequent evaluations have a valid lock to work with
         self.validate_lock_file().await?;
 
-        // Apply Cachix settings if a CachixManager is available
-        self.apply_cachix_settings().await?;
-
-        // Start cachix daemon if push is configured (skip in offline mode)
-        if !self.global_options.offline {
-            self.init_cachix_daemon().await?;
+        // Configure cachix substituters and start daemon if push is configured
+        if let Some(cachix_config) = self.get_cachix_config().await? {
+            self.apply_cachix_substituters(&cachix_config).await?;
+            if let Some(ref push_cache) = cachix_config.caches.push {
+                self.init_cachix_daemon(push_cache).await?;
+            }
         }
 
         Ok(())
