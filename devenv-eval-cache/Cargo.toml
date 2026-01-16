@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 blake3.workspace = true
+devenv-activity.workspace = true
 devenv-cache-core.workspace = true
 include_dir.workspace = true
 devenv-core.workspace = true

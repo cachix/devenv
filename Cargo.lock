@@ -1729,6 +1729,7 @@ name = "devenv-eval-cache"
 version = "2.0.0"
 dependencies = [
  "blake3",
+ "devenv-activity",
  "devenv-cache-core",
  "devenv-core",
  "futures",
