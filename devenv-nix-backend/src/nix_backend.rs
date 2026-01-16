@@ -621,18 +621,18 @@ impl NixRustBackend {
 
         let cachix_manager = &self.cachix_manager;
 
-        // Try to get cached cachix config
-        let mut cached = self
-            .cachix_caches
-            .lock()
-            .map_err(|e| miette::miette!("Failed to lock cachix cache: {}", e))?;
+        let cachix_caches: CachixCacheInfo = {
+            // Try to get cached cachix config
+            let mut cached = self
+                .cachix_caches
+                .lock()
+                .map_err(|e| miette::miette!("Failed to lock cachix cache: {}", e))?;
 
-        let cachix_caches: CachixCacheInfo = if let Some(ref caches) = *cached {
-            caches.clone()
-        } else {
-            // Attempt to load cachix configuration from devenv config
-            // Use a single Debug-level eval session for all cachix config checks
-            let (enable, pull, push) = {
+            if let Some(ref caches) = *cached {
+                caches.clone()
+            } else {
+                // Attempt to load cachix configuration from devenv config
+                // Use a single Debug-level eval session for all cachix config checks
                 let mut eval_state =
                     self.eval_session("Checking cachix config", ActivityLevel::Debug)?;
 
@@ -702,30 +702,25 @@ impl NixRustBackend {
                     }
                 };
 
-                (enable, pull, push)
-            };
+                // Load known keys from trusted keys file if it exists
+                let trusted_keys_path = &cachix_manager.paths.trusted_keys;
+                let known_keys = if trusted_keys_path.exists() {
+                    match std::fs::read_to_string(trusted_keys_path) {
+                        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+                        Err(_) => Default::default(),
+                    }
+                } else {
+                    Default::default()
+                };
 
-            // Load known keys from trusted keys file if it exists
-            let trusted_keys_path = &cachix_manager.paths.trusted_keys;
-            let known_keys = if trusted_keys_path.exists() {
-                match std::fs::read_to_string(trusted_keys_path) {
-                    Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
-                    Err(_) => Default::default(),
-                }
-            } else {
-                Default::default()
-            };
+                let cachix_caches = CachixCacheInfo {
+                    caches: Cachix { pull, push },
+                    known_keys,
+                };
 
-            // enable was already checked above
-            let _ = enable;
-
-            let cachix_caches = CachixCacheInfo {
-                caches: Cachix { pull, push },
-                known_keys,
-            };
-
-            *cached = Some(cachix_caches.clone());
-            cachix_caches
+                *cached = Some(cachix_caches.clone());
+                cachix_caches
+            }
         };
 
         // Apply cachix settings via CachixManager
