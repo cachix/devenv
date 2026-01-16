@@ -75,6 +75,7 @@
     pkgs.protobuf # snix
     pkgs.dbus # secretspec
     pkgs.nixd # LSP for devenv lsp command
+    pkgs.crate2nix # Generate Cargo.nix from Cargo.lock
   ];
 
   languages = {
@@ -111,7 +112,14 @@
     '';
   };
 
+  tasks."devenv:crate2nix" = {
+    description = "Generate Cargo.nix from Cargo.lock";
+    exec = "crate2nix generate";
+    execIfModified = [ "Cargo.lock" ];
+  };
+
   git-hooks.package = pkgs.prek;
+  git-hooks.excludes = [ "Cargo.nix" ];
   git-hooks.hooks = {
     nixpkgs-fmt.enable = true;
     rustfmt.enable = true;
