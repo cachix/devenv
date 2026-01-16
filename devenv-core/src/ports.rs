@@ -2,11 +2,19 @@
 //!
 //! Provides utilities for finding available ports, used by the Nix backend's
 //! `builtins.devenvAllocatePort` primop.
+//!
+//! Implements the `ReplayableResource` trait to support eval caching:
+//! - After evaluation, port allocations are snapshotted to a `PortSpec`
+//! - On cache hit, the spec is replayed to re-acquire the same ports
+//! - If replay fails (port in use), the cache is invalidated
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::TcpListener;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+
+use crate::resource::{ReplayError, ReplayableResource};
 
 /// Default host for port allocation (localhost only).
 pub const DEFAULT_HOST: &str = "127.0.0.1";
@@ -56,7 +64,23 @@ impl Drop for PortReservations {
 /// The listener is taken when processes start, but the port value remains for caching.
 struct PortEntry {
     port: u16,
+    base: u16,
     listener: Option<TcpListener>,
+}
+
+/// Spec for replaying port allocations from cache.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PortSpec {
+    pub allocations: Vec<PortAllocation>,
+}
+
+/// A single port allocation record.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PortAllocation {
+    pub process_name: String,
+    pub port_name: String,
+    pub base_port: u16,
+    pub allocated_port: u16,
 }
 
 /// Thread-safe port allocator that holds reservations until released.
@@ -139,6 +163,7 @@ impl PortAllocator {
                         key,
                         PortEntry {
                             port: base,
+                            base,
                             listener: Some(listener),
                         },
                     );
@@ -173,6 +198,7 @@ impl PortAllocator {
                     key,
                     PortEntry {
                         port,
+                        base,
                         listener: Some(listener),
                     },
                 );
@@ -203,6 +229,104 @@ impl PortAllocator {
             .collect();
 
         PortReservations::new(listeners)
+    }
+
+    /// Allocate a specific port (for cache replay).
+    ///
+    /// Tries to bind exactly the specified port. Used during cache replay
+    /// to re-acquire ports that were allocated in a previous evaluation.
+    ///
+    /// Returns Ok(port) if successful, Err if the port is unavailable.
+    pub fn allocate_exact(
+        &self,
+        process_name: &str,
+        port_name: &str,
+        port: u16,
+    ) -> Result<u16, String> {
+        let mut ports = self.ports.lock().map_err(|e| e.to_string())?;
+        let key = (process_name.to_string(), port_name.to_string());
+
+        // Already allocated (idempotent)
+        if let Some(entry) = ports.get(&key) {
+            if entry.port == port {
+                return Ok(port);
+            }
+            return Err(format!(
+                "Port {}.{} already allocated as {}, cannot replay as {}",
+                process_name, port_name, entry.port, port
+            ));
+        }
+
+        // Check if port is already allocated to another process in this session
+        let allocated_ports: std::collections::HashSet<u16> =
+            ports.values().map(|e| e.port).collect();
+        if allocated_ports.contains(&port) {
+            return Err(format!(
+                "Port {} is already allocated to another process in this session",
+                port
+            ));
+        }
+
+        // Try to bind exactly this port
+        let addr = format!("{}:{}", self.host, port);
+        match TcpListener::bind(&addr) {
+            Ok(listener) => {
+                ports.insert(
+                    key,
+                    PortEntry {
+                        port,
+                        base: port, // base == allocated for replay
+                        listener: Some(listener),
+                    },
+                );
+                Ok(port)
+            }
+            Err(_) => {
+                let info = get_process_using_port(port);
+                Err(format!("Port {} unavailable{}", port, info))
+            }
+        }
+    }
+
+    /// Clear all port allocations.
+    ///
+    /// Used after a replay failure to reset state before re-evaluation.
+    pub fn clear(&self) {
+        if let Ok(mut ports) = self.ports.lock() {
+            ports.clear();
+        }
+    }
+}
+
+impl ReplayableResource for PortAllocator {
+    type Spec = PortSpec;
+    const TYPE_ID: &'static str = "ports";
+
+    fn snapshot(&self) -> PortSpec {
+        let ports = self.ports.lock().unwrap();
+        PortSpec {
+            allocations: ports
+                .iter()
+                .map(|((process_name, port_name), entry)| PortAllocation {
+                    process_name: process_name.clone(),
+                    port_name: port_name.clone(),
+                    base_port: entry.base,
+                    allocated_port: entry.port,
+                })
+                .collect(),
+        }
+    }
+
+    fn replay(&self, spec: &PortSpec) -> Result<(), ReplayError> {
+        for alloc in &spec.allocations {
+            self.allocate_exact(&alloc.process_name, &alloc.port_name, alloc.allocated_port)
+                .map_err(ReplayError::Unavailable)?;
+        }
+        Ok(())
+    }
+
+    fn clear(&self) {
+        PortAllocator::clear(self);
     }
 }
 
@@ -326,5 +450,112 @@ mod tests {
 
         // Port should now be available
         assert!(TcpListener::bind(&addr).is_ok());
+    }
+
+    #[test]
+    fn test_snapshot_and_replay() {
+        let allocator = PortAllocator::new();
+
+        // Allocate some ports
+        let port1 = allocator.allocate("server1", "http", 49600).unwrap();
+        let port2 = allocator.allocate("server2", "grpc", 49700).unwrap();
+
+        // Snapshot the allocations
+        let spec = allocator.snapshot();
+        assert_eq!(spec.allocations.len(), 2);
+
+        // Clear and release ports
+        drop(allocator.take_reservations());
+        allocator.clear();
+        assert!(allocator.snapshot().allocations.is_empty());
+
+        // Replay should re-acquire the same ports
+        allocator.replay(&spec).unwrap();
+        let replayed = allocator.snapshot();
+        assert_eq!(replayed.allocations.len(), 2);
+
+        // Verify the ports are the same
+        let find_port = |spec: &PortSpec, process: &str, port: &str| {
+            spec.allocations
+                .iter()
+                .find(|a| a.process_name == process && a.port_name == port)
+                .map(|a| a.allocated_port)
+        };
+        assert_eq!(find_port(&replayed, "server1", "http"), Some(port1));
+        assert_eq!(find_port(&replayed, "server2", "grpc"), Some(port2));
+    }
+
+    #[test]
+    fn test_allocate_exact_success() {
+        let allocator = PortAllocator::new();
+
+        // First, find an available port
+        let port = allocator.allocate("server", "http", 49800).unwrap();
+        drop(allocator.take_reservations());
+        allocator.clear();
+
+        // Now allocate exactly that port
+        let exact = allocator.allocate_exact("server", "http", port).unwrap();
+        assert_eq!(exact, port);
+    }
+
+    #[test]
+    fn test_allocate_exact_idempotent() {
+        let allocator = PortAllocator::new();
+
+        let port = allocator.allocate("server", "http", 49850).unwrap();
+
+        // Calling allocate_exact with same port should succeed
+        let exact = allocator.allocate_exact("server", "http", port).unwrap();
+        assert_eq!(exact, port);
+    }
+
+    #[test]
+    fn test_allocate_exact_conflict() {
+        let allocator = PortAllocator::new();
+
+        let port = allocator.allocate("server", "http", 49900).unwrap();
+
+        // Trying to allocate_exact with different port should fail
+        let err = allocator
+            .allocate_exact("server", "http", port + 1)
+            .unwrap_err();
+        assert!(err.contains("already allocated"));
+    }
+
+    #[test]
+    fn test_clear() {
+        let allocator = PortAllocator::new();
+
+        allocator.allocate("server1", "http", 49950).unwrap();
+        allocator.allocate("server2", "grpc", 49960).unwrap();
+
+        assert!(!allocator.snapshot().allocations.is_empty());
+
+        allocator.clear();
+        assert!(allocator.snapshot().allocations.is_empty());
+    }
+
+    #[test]
+    fn test_replay_failure_when_port_in_use() {
+        // Allocate a port externally
+        let external = TcpListener::bind(format!("{}:49970", DEFAULT_HOST)).unwrap();
+        let external_port = external.local_addr().unwrap().port();
+
+        let allocator = PortAllocator::new();
+        let spec = PortSpec {
+            allocations: vec![PortAllocation {
+                process_name: "server".to_string(),
+                port_name: "http".to_string(),
+                base_port: external_port,
+                allocated_port: external_port,
+            }],
+        };
+
+        // Replay should fail because port is in use
+        let err = allocator.replay(&spec).unwrap_err();
+        assert!(matches!(err, ReplayError::Unavailable(_)));
+
+        drop(external);
     }
 }
