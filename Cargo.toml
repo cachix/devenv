@@ -7,7 +7,6 @@ members = [
   "devenv-cache-core",
   "devenv-core",
   "devenv-eval-cache",
-  "devenv-generate",
   "devenv-nix-backend",
   "devenv-nix-backend-macros",
   "devenv-run-tests",

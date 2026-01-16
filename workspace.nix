@@ -17,7 +17,6 @@ let
           ./devenv
           ./devenv-activity
           ./devenv-activity-macros
-          ./devenv-generate
           ./devenv-eval-cache
           ./devenv-cache-core
           ./devenv-core

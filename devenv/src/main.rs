@@ -363,22 +363,17 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
             devenv.init(&target)?;
             CommandResult::Done
         }
-        Commands::Generate { .. } => match which::which("devenv-generate") {
-            Ok(devenv_generate) => {
-                let mut cmd = Command::new(devenv_generate);
-                cmd.args(std::env::args().skip(1).filter(|arg| arg != "generate"));
-                CommandResult::Exec(cmd)
-            }
-            Err(_) => {
-                miette::bail!(indoc::formatdoc! {"
-                    devenv-generate was not found in PATH
+        Commands::Generate => {
+            miette::bail!(indoc::indoc! {"
+                The generate command has been removed.
 
-                    It was moved to a separate binary due to https://github.com/cachix/devenv/issues/1733
+                To generate devenv.yaml and devenv.nix using AI, you can:
 
-                    For now, use the web version at https://devenv.new
-                "})
-            }
-        },
+                1. Use the web version at https://devenv.new
+
+                2. Use `devenv mcp` with an AI agent (Claude Code, Cursor, etc.)
+            "})
+        }
         Commands::Search { name } => {
             devenv.search(&name).await?;
             CommandResult::Done
