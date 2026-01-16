@@ -1,10 +1,4 @@
-#!/usr/bin/env bash
-set -e
-
-# Create local config
 echo '{ env.LOCAL = "1";}' > devenv.local.nix
-
-# Create .env files that dotenv module will read
 cat <<EOF > .env
 FOO=1
 BAR=2

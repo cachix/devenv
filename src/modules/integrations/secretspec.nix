@@ -1,14 +1,14 @@
-{ config, lib, pkgs, secretspec ? null, ... }:
+{ config, lib, pkgs, ... }:
 
 let
-  # Use secretspec from specialArgs (2.x) if available,
-  # otherwise fall back to _module.args (1.x compatibility),
-  # otherwise fall back to SECRETSPEC_SECRETS environment variable (for flakes)
+  # Use secretspec from _module.args if available,
+  # otherwise fall back to SECRETSPEC_SECRETS environment variable (sigh, flakes)
   secretspecData =
+    let
+      secretspec = config._module.args.secretspec or null;
+    in
     if secretspec != null then
       secretspec
-    else if (config._module.args.secretspec or null) != null then
-      config._module.args.secretspec
     else
       let
         envVar = builtins.getEnv "SECRETSPEC_SECRETS";
