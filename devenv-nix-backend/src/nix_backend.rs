@@ -632,17 +632,13 @@ impl NixRustBackend {
         let (json_str, _cache_hit) = async {
             caching_state
                 .cached_eval()
-                .eval(
-                    &cache_key,
-                    &activity,
-                    || async {
-                        self.eval_attr_uncached(
-                            self.cached_import_expr.get().unwrap(),
-                            "config.cachix",
-                            "config.cachix",
-                        )
-                    },
-                )
+                .eval(&cache_key, &activity, || async {
+                    self.eval_attr_uncached(
+                        self.cached_import_expr.get().unwrap(),
+                        "config.cachix",
+                        "config.cachix",
+                    )
+                })
                 .await
         }
         .in_activity(&activity)
@@ -1036,11 +1032,9 @@ impl NixBackend for NixRustBackend {
             let (paths, _) = async {
                 caching_state
                     .cached_eval()
-                    .eval_typed::<CachedShellPaths, _, _>(
-                        &cache_key,
-                        &activity,
-                        || async move { self.build_shell_uncached(&import_expr) },
-                    )
+                    .eval_typed::<CachedShellPaths, _, _>(&cache_key, &activity, || async move {
+                        self.build_shell_uncached(&import_expr)
+                    })
                     .await
             }
             .in_activity(&activity)
@@ -1293,11 +1287,9 @@ impl NixBackend for NixRustBackend {
                 let (path, _) = async {
                     caching_state
                         .cached_eval()
-                        .eval_typed::<String, _, _>(
-                            &cache_key,
-                            &activity,
-                            || async move { self.build_attr_uncached(&import_expr, &attr_path) },
-                        )
+                        .eval_typed::<String, _, _>(&cache_key, &activity, || async move {
+                            self.build_attr_uncached(&import_expr, &attr_path)
+                        })
                         .await
                 }
                 .in_activity(&activity)
@@ -1385,17 +1377,9 @@ impl NixBackend for NixRustBackend {
             let (json_str, _cache_hit) = async {
                 caching_state
                     .cached_eval()
-                    .eval(
-                        &cache_key,
-                        &activity,
-                        || async {
-                            self.eval_attr_uncached(
-                                &import_expr,
-                                &attr_path_owned,
-                                &clean_path_owned,
-                            )
-                        },
-                    )
+                    .eval(&cache_key, &activity, || async {
+                        self.eval_attr_uncached(&import_expr, &attr_path_owned, &clean_path_owned)
+                    })
                     .await
             }
             .in_activity(&activity)
