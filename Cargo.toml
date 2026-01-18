@@ -97,7 +97,8 @@ serde_yaml = "0.9.34"
 ser_nix = { git = "https://github.com/cachix/ser_nix", branch = "support-paths" }
 similar = "2.7.0"
 sha2 = "0.10.9"
-sqlx = { version = "0.8.6", features = ["time", "sqlite", "runtime-tokio"] }
+turso = "0.4.3"
+geni = { git = "https://github.com/cachix/geni.git", branch = "turso-0.4.3" }
 strum = { version = "0.27", features = ["derive"] }
 tempfile = "3.23.0"
 termimad = "0.30.0"
