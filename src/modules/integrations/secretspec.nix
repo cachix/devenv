@@ -1,16 +1,12 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, secretspec ? null, ... }:
 
 let
-  # Use secretspec from _module.args if available,
-  # otherwise fall back to SECRETSPEC_SECRETS environment variable (sigh, flakes)
   secretspecData =
-    let
-      secretspec = config._module.args.secretspec or null;
-    in
     if secretspec != null then
       secretspec
     else
       let
+        # The env var fallback is for flakes users who can't use the devenv CLI integration.
         envVar = builtins.getEnv "SECRETSPEC_SECRETS";
       in
       if envVar != "" then
