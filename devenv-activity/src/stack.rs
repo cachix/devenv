@@ -35,6 +35,7 @@ use tokio::sync::mpsc;
 use valuable::Valuable;
 
 use crate::Timestamp;
+use crate::builders::next_id;
 use crate::events::{ActivityEvent, ActivityLevel, ExpectedCategory, Message, SetExpected};
 use crate::serde_valuable::SerdeValue;
 
@@ -105,6 +106,7 @@ pub fn message_with_details(
 ) {
     let parent = current_activity_id();
     send_activity_event(ActivityEvent::Message(Message {
+        id: next_id(),
         level,
         text: text.into(),
         details,

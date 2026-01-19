@@ -282,6 +282,7 @@ pub enum Operation {
 /// Message - standalone (not an activity)
 #[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 pub struct Message {
+    pub id: u64,
     pub level: ActivityLevel,
     pub text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -487,6 +488,7 @@ mod tests {
     #[test]
     fn test_message_event() {
         let event = ActivityEvent::Message(Message {
+            id: 1,
             level: ActivityLevel::Info,
             text: "Test message".to_string(),
             details: None,

@@ -37,7 +37,6 @@ pub struct ActivityModel {
     pub log_line_counts: HashMap<u64, usize>,
     pub app_state: AppState,
     pub completed_messages: Vec<String>,
-    next_message_id: u64,
     config: Arc<TuiConfig>,
     /// Expected build count announced by Nix (via SetExpected events)
     expected_builds: Option<u64>,
@@ -301,7 +300,6 @@ impl ActivityModel {
             log_line_counts: HashMap::new(),
             app_state: AppState::Running,
             completed_messages: Vec::new(),
-            next_message_id: u64::MAX / 2,
             config,
             expected_builds: None,
             expected_downloads: None,
@@ -816,9 +814,7 @@ impl ActivityModel {
 
         // Only create activity for messages with a parent
         if msg.parent.is_some() {
-            let id = self.next_message_id;
-            self.next_message_id += 1;
-
+            let id = msg.id;
             let level = msg.level;
             let has_details = msg.details.is_some();
             let variant = ActivityVariant::Message(MessageActivity {
