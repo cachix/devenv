@@ -121,6 +121,9 @@ async fn test_create_flake_inputs() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     create_test_devenv_yaml(temp_dir.path());
 
+    // Create minimal devenv.nix - required when assemble() evaluates default.nix
+    fs::write(temp_dir.path().join("devenv.nix"), "{ }").expect("Failed to write devenv.nix");
+
     let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
     let paths = DevenvPaths {
         root: temp_dir.path().to_path_buf(),
@@ -130,10 +133,16 @@ async fn test_create_flake_inputs() {
     };
 
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
+    // Use offline mode to skip cachix config evaluation in assemble()
+    // This test focuses on lock file creation, not cachix configuration
+    let global_options = GlobalOptions {
+        offline: true,
+        ..GlobalOptions::default()
+    };
     let backend = NixRustBackend::new(
         paths.clone(),
         config.clone(),
-        GlobalOptions::default(),
+        global_options,
         cachix_manager,
         Shutdown::new(),
         None,
