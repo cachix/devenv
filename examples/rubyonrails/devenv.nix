@@ -8,7 +8,7 @@
 # bundle
 {
   languages.ruby.enable = true;
-  languages.ruby.version = "3.2.2";
+  languages.ruby.version = "3.3";
 
   packages = [
     pkgs.openssl

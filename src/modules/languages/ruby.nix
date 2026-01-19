@@ -7,6 +7,36 @@
 let
   cfg = config.languages.ruby;
 
+  # Whether using a custom Ruby version (from nixpkgs-ruby)
+  usingCustomRuby = cfg.version != null || cfg.versionFile != null;
+
+  # Wrap a Ruby gem package to only expose binaries, without propagating
+  # gem dependencies to the environment. The gem's own wrapper script
+  # handles its dependencies, so propagation just causes conflicts.
+  wrapGemBin = pkg: pkgs.runCommand "${pkg.name}-bin" { } ''
+    mkdir -p $out/bin
+    for f in ${pkg}/bin/*; do
+      ln -s "$f" "$out/bin/$(basename "$f")"
+    done
+  '';
+
+  # Build solargraph LSP with the user's Ruby using bundlerEnv.
+  # This ensures native extensions are compiled against the correct Ruby.
+  lspEnv = pkgs.bundlerEnv {
+    name = "solargraph-lsp";
+    ruby = cfg.package;
+    gemdir = ../lib/ruby-lsp;
+  };
+
+  lspPackage =
+    if usingCustomRuby
+    # Use bundlerEnv to build solargraph with the user's Ruby,
+    # ensuring native extensions are compiled against the correct Ruby.
+    then lspEnv
+    # Use pre-built solargraph, wrapped to prevent its gem dependencies
+    # from polluting the user's GEM_PATH (avoiding version conflicts).
+    else wrapGemBin cfg.lsp.package;
+
   nixpkgs-ruby = config.lib.getInput {
     name = "nixpkgs-ruby";
     url = "github:bobvanderlinden/nixpkgs-ruby";
@@ -117,7 +147,7 @@ in
 
     packages = lib.optional cfg.bundler.enable cfg.bundler.package ++ [
       cfg.package
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    ] ++ lib.optional cfg.lsp.enable lspPackage;
 
     env.BUNDLE_PATH = config.env.DEVENV_STATE + "/.bundle";
 
