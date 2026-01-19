@@ -4,11 +4,27 @@ use std::path::PathBuf;
 pub struct Config {
     /// Files to watch for changes (relative to cwd)
     pub watch_files: Vec<PathBuf>,
+    /// Path for pending environment file (used for hot-reload)
+    /// The shell's PROMPT_COMMAND will check this file
+    pub reload_file: PathBuf,
 }
 
 impl Config {
     pub fn new(watch_files: Vec<PathBuf>) -> Self {
-        Self { watch_files }
+        // Generate a unique temp file path for this session
+        let reload_file =
+            std::env::temp_dir().join(format!("devenv-reload-{}.sh", std::process::id()));
+        Self {
+            watch_files,
+            reload_file,
+        }
+    }
+
+    pub fn with_reload_file(watch_files: Vec<PathBuf>, reload_file: PathBuf) -> Self {
+        Self {
+            watch_files,
+            reload_file,
+        }
     }
 }
 

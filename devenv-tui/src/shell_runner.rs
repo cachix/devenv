@@ -40,9 +40,11 @@ enum Event {
 struct StatusLine {
     /// Current status message
     message: Option<String>,
-    /// Files that changed (shown during reload)
+    /// Files that changed (shown during build/reload)
     changed_files: Vec<PathBuf>,
-    /// Whether a reload is in progress
+    /// Whether a build is in progress (evaluating nix)
+    building: bool,
+    /// Whether a reload is in progress (applying env to shell)
     reloading: bool,
 }
 
@@ -51,6 +53,7 @@ impl StatusLine {
         Self {
             message: None,
             changed_files: Vec::new(),
+            building: false,
             reloading: false,
         }
     }
@@ -212,6 +215,44 @@ impl ShellRunner {
         }
     }
 
+    /// Inject the PROMPT_COMMAND hook for hot-reload support.
+    ///
+    /// This sets up a shell hook that checks for `$DEVENV_RELOAD_FILE`
+    /// before each prompt. If the file exists, it sources it and removes it.
+    /// This allows hot-reload to update the environment between commands
+    /// without interrupting the user.
+    fn inject_prompt_hook(pty: &Arc<Mutex<Pty>>) -> Result<(), ShellRunnerError> {
+        // The hook script:
+        // 1. Defines __devenv_reload_hook function that checks for pending env
+        // 2. Prepends it to PROMPT_COMMAND (bash) or adds to precmd (zsh)
+        // 3. Uses a marker to avoid re-injection
+        let hook_script = r#"
+# devenv hot-reload hook (injected by devenv shell --reload)
+if [ -z "$__DEVENV_RELOAD_HOOK_INSTALLED" ] && [ -n "$DEVENV_RELOAD_FILE" ]; then
+    __devenv_reload_hook() {
+        if [ -f "$DEVENV_RELOAD_FILE" ]; then
+            source "$DEVENV_RELOAD_FILE"
+            rm -f "$DEVENV_RELOAD_FILE"
+        fi
+    }
+    # Install hook based on shell type
+    if [ -n "$BASH_VERSION" ]; then
+        PROMPT_COMMAND="__devenv_reload_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+    elif [ -n "$ZSH_VERSION" ]; then
+        precmd_functions+=(__devenv_reload_hook)
+    fi
+    export __DEVENV_RELOAD_HOOK_INSTALLED=1
+fi
+"#;
+
+        let mut pty_guard = pty.lock().unwrap();
+        // Write the hook script silently (won't show in terminal because
+        // we write it before the shell prompt appears)
+        pty_guard.write_all(hook_script.as_bytes())?;
+        pty_guard.flush()?;
+        Ok(())
+    }
+
     /// Run the shell with the given command channels.
     ///
     /// This function takes over the terminal and runs until the shell exits
@@ -262,6 +303,10 @@ impl ShellRunner {
 
         // Spawn initial PTY
         let pty = Arc::new(Mutex::new(Pty::spawn(initial_cmd, self.size)?));
+
+        // Inject the PROMPT_COMMAND hook for hot-reload support
+        // This hook checks for $DEVENV_STATE/pending-env.sh and sources it
+        Self::inject_prompt_hook(&pty)?;
 
         // Set up terminal state tracking
         let mut vt = Vt::new(self.size.cols as usize, self.size.rows as usize);
@@ -382,73 +427,26 @@ impl ShellRunner {
 
                 Event::Command(cmd) => {
                     match cmd {
-                        ShellCommand::Reload {
-                            command,
-                            changed_files,
-                        } => {
-                            // Note: VT state capture/replay is disabled because the dump()
-                            // produces escape sequences that don't replay cleanly to a fresh terminal
-                            let _state = vt.dump();
-
-                            // Show reloading status
-                            self.status.reloading = true;
-                            self.status.changed_files = changed_files.clone();
+                        ShellCommand::ReloadReady { changed_files } => {
+                            // Build completed, env written to $DEVENV_STATE/pending-env.sh
+                            // The shell's PROMPT_COMMAND hook will pick it up on next prompt
+                            self.status.building = false;
+                            self.status.reloading = false;
+                            let files_str: Vec<_> = changed_files
+                                .iter()
+                                .map(|p| p.display().to_string())
+                                .collect();
+                            self.status.message =
+                                Some(format!("Ready: {} (press Enter)", files_str.join(", ")));
                             self.draw_status_line(&mut stdout)?;
+                        }
 
-                            // Get new terminal size
-                            let new_size = get_terminal_size();
-                            self.size = new_size;
-
-                            // Hold the lock for the entire swap operation to prevent
-                            // the reader thread from seeing a killed PTY
-                            let reload_result = {
-                                let mut pty_guard = pty.lock().unwrap();
-                                let _ = pty_guard.kill();
-
-                                match Pty::spawn(command, new_size) {
-                                    Ok(new_pty) => {
-                                        *pty_guard = new_pty;
-
-                                        // VT state replay disabled - the dump() escape sequences
-                                        // don't work well with fresh terminals
-                                        // let _ = stdout.write_all(_state.as_bytes());
-                                        // let _ = stdout.flush();
-                                        Ok(())
-                                    }
-                                    Err(e) => Err(e),
-                                }
-                            };
-
-                            match reload_result {
-                                Ok(()) => {
-                                    // Reset VT
-                                    *vt = Vt::new(new_size.cols as usize, new_size.rows as usize);
-
-                                    // Update status
-                                    self.status.reloading = false;
-                                    let files_str: Vec<_> = changed_files
-                                        .iter()
-                                        .map(|p| p.display().to_string())
-                                        .collect();
-                                    self.status.message =
-                                        Some(format!("Reloaded: {}", files_str.join(", ")));
-                                    self.draw_status_line(&mut stdout)?;
-                                }
-                                Err(e) => {
-                                    // Failed to spawn, show error
-                                    let files_str: Vec<_> = changed_files
-                                        .iter()
-                                        .map(|p| p.display().to_string())
-                                        .collect();
-                                    self.status.message = Some(format!(
-                                        "Reload failed ({}): {}",
-                                        files_str.join(", "),
-                                        e
-                                    ));
-                                    self.status.reloading = false;
-                                    self.draw_status_line(&mut stdout)?;
-                                }
-                            }
+                        ShellCommand::Building { changed_files } => {
+                            // File changed, build started - show building status
+                            self.status.building = true;
+                            self.status.changed_files = changed_files;
+                            self.status.message = None;
+                            self.draw_status_line(&mut stdout)?;
                         }
 
                         ShellCommand::BuildFailed {
@@ -465,6 +463,7 @@ impl ShellRunner {
                                 files_str.join(", "),
                                 error
                             ));
+                            self.status.building = false;
                             self.status.reloading = false;
                             self.draw_status_line(&mut stdout)?;
                         }
@@ -511,7 +510,8 @@ impl ShellRunner {
         execute!(stdout, terminal::Clear(ClearType::CurrentLine))?;
 
         // Build status text
-        let status_text = if self.status.reloading {
+        let (status_text, bg_color) = if self.status.building {
+            // Building environment (Nix evaluation in progress)
             let files: Vec<_> = self
                 .status
                 .changed_files
@@ -524,18 +524,37 @@ impl ShellRunner {
                 })
                 .take(3)
                 .collect();
-            format!(" Reloading... [{}]", files.join(", "))
+            (format!(" Building... [{}]", files.join(", ")), Color::Blue)
+        } else if self.status.reloading {
+            // Applying environment to shell
+            let files: Vec<_> = self
+                .status
+                .changed_files
+                .iter()
+                .map(|p| {
+                    p.file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string()
+                })
+                .take(3)
+                .collect();
+            (
+                format!(" Reloading... [{}]", files.join(", ")),
+                Color::Yellow,
+            )
         } else if let Some(ref msg) = self.status.message {
-            format!(" {}", msg)
+            // Check if message indicates success or failure
+            let color = if msg.starts_with("Reloaded:") {
+                Color::Green
+            } else if msg.contains("failed") {
+                Color::Red
+            } else {
+                Color::DarkGrey
+            };
+            (format!(" {}", msg), color)
         } else {
-            " devenv shell (--reload)".to_string()
-        };
-
-        // Draw status with inverse colors
-        let bg_color = if self.status.reloading {
-            Color::Yellow
-        } else {
-            Color::DarkGrey
+            (" devenv shell (--reload)".to_string(), Color::DarkGrey)
         };
 
         execute!(

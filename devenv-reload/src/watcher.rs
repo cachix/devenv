@@ -1,5 +1,5 @@
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -26,11 +26,11 @@ pub struct WatcherHandle {
 
 impl WatcherHandle {
     /// Add a new path to watch
-    pub fn watch(&self, path: &PathBuf) -> Result<(), WatcherError> {
+    pub fn watch(&self, path: &Path) -> Result<(), WatcherError> {
         let mut watcher = self.watcher.lock().unwrap();
         watcher
             .watch(path, RecursiveMode::NonRecursive)
-            .map_err(|e| WatcherError::Watch(path.clone(), e))
+            .map_err(|e| WatcherError::Watch(path.to_path_buf(), e))
     }
 }
 

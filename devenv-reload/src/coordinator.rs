@@ -28,11 +28,12 @@ pub enum ShellCommand {
         command: CommandBuilder,
         watch_files: Vec<PathBuf>,
     },
-    /// Rebuild triggered by file changes, swap to new shell.
-    Reload {
-        command: CommandBuilder,
-        changed_files: Vec<PathBuf>,
-    },
+    /// File changed, build started. Show "Building..." status.
+    Building { changed_files: Vec<PathBuf> },
+    /// Environment rebuild completed successfully.
+    /// The new environment has been written to $DEVENV_STATE/pending-env.sh
+    /// and will be picked up by the shell's PROMPT_COMMAND hook.
+    ReloadReady { changed_files: Vec<PathBuf> },
     /// Build failed, keep current shell.
     BuildFailed {
         changed_files: Vec<PathBuf>,
@@ -65,8 +66,9 @@ pub enum CoordinatorError {
 
 enum Event {
     FileChange(PathBuf),
-    BuildComplete(Result<CommandBuilder, crate::builder::BuildError>),
-    TuiEvent(ShellEvent),
+    /// Reload build completed (env written to file)
+    ReloadBuildComplete(Result<(), crate::builder::BuildError>),
+    Tui(ShellEvent),
 }
 
 /// Shell coordinator for TUI mode.
@@ -96,6 +98,7 @@ impl ShellCoordinator {
 
         // Collect watch files for reporting
         let watch_files: Vec<PathBuf> = config.watch_files.clone();
+        let reload_file = config.reload_file.clone();
 
         // Initial build - run in spawn_blocking since builder may block
         let ctx = BuildContext {
@@ -103,6 +106,7 @@ impl ShellCoordinator {
             env: std::env::vars().collect(),
             trigger: BuildTrigger::Initial,
             watcher: watcher_handle.clone(),
+            reload_file: Some(reload_file.clone()),
         };
         let builder_clone = builder.clone();
         let cmd = tokio::task::spawn_blocking(move || builder_clone.build(&ctx))
@@ -140,7 +144,7 @@ impl ShellCoordinator {
         let tui_tx = event_tx.clone();
         tokio::spawn(async move {
             while let Some(event) = event_rx.recv().await {
-                if tui_tx.send(Event::TuiEvent(event)).await.is_err() {
+                if tui_tx.send(Event::Tui(event)).await.is_err() {
                     break;
                 }
             }
@@ -185,31 +189,48 @@ impl ShellCoordinator {
                         handle.abort();
                     }
 
+                    // Notify TUI that build has started
+                    let relative_files: Vec<PathBuf> = pending_changes
+                        .iter()
+                        .map(|p| {
+                            p.strip_prefix(&cwd)
+                                .map(|p| p.to_path_buf())
+                                .unwrap_or(p.clone())
+                        })
+                        .collect();
+                    let _ = command_tx
+                        .send(ShellCommand::Building {
+                            changed_files: relative_files,
+                        })
+                        .await;
+
                     let ctx = BuildContext {
                         cwd: cwd.clone(),
                         env: std::env::vars().collect(),
                         trigger: BuildTrigger::FileChanged(path),
                         watcher: watcher_handle.clone(),
+                        reload_file: Some(reload_file.clone()),
                     };
 
-                    // Spawn build in background task
+                    // Spawn build in background task - use build_reload_env for hot-reload
                     let builder = builder.clone();
                     let build_tx = event_tx.clone();
                     let handle = tokio::spawn(async move {
-                        let result = tokio::task::spawn_blocking(move || builder.build(&ctx))
-                            .await
-                            .unwrap_or_else(|e| {
-                                Err(crate::builder::BuildError::new(format!(
-                                    "build task panicked: {}",
-                                    e
-                                )))
-                            });
-                        let _ = build_tx.send(Event::BuildComplete(result)).await;
+                        let result =
+                            tokio::task::spawn_blocking(move || builder.build_reload_env(&ctx))
+                                .await
+                                .unwrap_or_else(|e| {
+                                    Err(crate::builder::BuildError::new(format!(
+                                        "build task panicked: {}",
+                                        e
+                                    )))
+                                });
+                        let _ = build_tx.send(Event::ReloadBuildComplete(result)).await;
                     });
                     current_build = Some(handle.abort_handle());
                 }
 
-                Event::BuildComplete(result) => {
+                Event::ReloadBuildComplete(result) => {
                     current_build = None;
 
                     // Collect changed files as relative paths
@@ -219,8 +240,7 @@ impl ShellCoordinator {
                         .collect();
 
                     let cmd = match result {
-                        Ok(cmd) => ShellCommand::Reload {
-                            command: cmd,
+                        Ok(()) => ShellCommand::ReloadReady {
                             changed_files: files,
                         },
                         Err(e) => ShellCommand::BuildFailed {
@@ -235,12 +255,12 @@ impl ShellCoordinator {
                     }
                 }
 
-                Event::TuiEvent(ShellEvent::Exited) => {
+                Event::Tui(ShellEvent::Exited) => {
                     // Shell exited, we're done
                     break;
                 }
 
-                Event::TuiEvent(ShellEvent::Resize { .. }) => {
+                Event::Tui(ShellEvent::Resize { .. }) => {
                     // Resize is handled by TUI directly on the PTY
                     // We might use this for future features
                 }

@@ -27,6 +27,12 @@ impl ShellBuilder for SignalingBuilder {
         cmd.arg("sleep 0.5; exit 0");
         Ok(cmd)
     }
+
+    fn build_reload_env(&self, _ctx: &BuildContext) -> Result<(), BuildError> {
+        let n = self.count.fetch_add(1, Ordering::SeqCst) + 1;
+        let _ = self.build_tx.try_send(n);
+        Ok(())
+    }
 }
 
 /// Builder that fails
@@ -34,6 +40,10 @@ struct FailingBuilder;
 
 impl ShellBuilder for FailingBuilder {
     fn build(&self, _ctx: &BuildContext) -> Result<CommandBuilder, BuildError> {
+        Err(BuildError::new("intentional test failure"))
+    }
+
+    fn build_reload_env(&self, _ctx: &BuildContext) -> Result<(), BuildError> {
         Err(BuildError::new("intentional test failure"))
     }
 }
@@ -154,6 +164,19 @@ async fn test_manager_provides_correct_context() {
             cmd.arg("sleep 0.5; exit 0");
             Ok(cmd)
         }
+
+        fn build_reload_env(&self, ctx: &BuildContext) -> Result<(), BuildError> {
+            let trigger_str = match &ctx.trigger {
+                BuildTrigger::Initial => "initial".to_string(),
+                BuildTrigger::FileChanged(p) => format!("file:{}", p.display()),
+            };
+            self.triggers.lock().unwrap().push(trigger_str);
+
+            let n = self.count.fetch_add(1, Ordering::SeqCst) + 1;
+            let _ = self.build_tx.try_send(n);
+
+            Ok(())
+        }
     }
 
     let builder = TriggerTracker {
@@ -224,6 +247,18 @@ async fn test_manager_keeps_shell_on_build_failure_during_reload() {
                     cmd.arg("sleep 10");
                     Ok(cmd)
                 }
+                BuildTrigger::FileChanged(_) => {
+                    Err(BuildError::new("simulated build failure during reload"))
+                }
+            }
+        }
+
+        fn build_reload_env(&self, ctx: &BuildContext) -> Result<(), BuildError> {
+            let n = self.count.fetch_add(1, Ordering::SeqCst) + 1;
+            let _ = self.build_tx.try_send(n);
+
+            match &ctx.trigger {
+                BuildTrigger::Initial => Ok(()),
                 BuildTrigger::FileChanged(_) => {
                     Err(BuildError::new("simulated build failure during reload"))
                 }
@@ -312,6 +347,19 @@ async fn test_manager_keeps_shell_on_spawn_failure_during_reload() {
                     // Return a command that will fail to spawn
                     let cmd = CommandBuilder::new("/nonexistent/command/that/does/not/exist");
                     Ok(cmd)
+                }
+            }
+        }
+
+        fn build_reload_env(&self, ctx: &BuildContext) -> Result<(), BuildError> {
+            let n = self.count.fetch_add(1, Ordering::SeqCst) + 1;
+            let _ = self.build_tx.try_send(n);
+
+            match &ctx.trigger {
+                BuildTrigger::Initial => Ok(()),
+                BuildTrigger::FileChanged(_) => {
+                    // Simulate a failed reload by returning an error
+                    Err(BuildError::new("reload failed"))
                 }
             }
         }
@@ -409,6 +457,29 @@ async fn test_manager_cancels_old_build_on_new_change() {
                     cmd.arg("-c");
                     cmd.arg("read x");
                     Ok(cmd)
+                }
+            }
+        }
+
+        fn build_reload_env(&self, ctx: &BuildContext) -> Result<(), BuildError> {
+            match &ctx.trigger {
+                BuildTrigger::Initial => Ok(()),
+                BuildTrigger::FileChanged(_) => {
+                    let build_num = self.build_counter.fetch_add(1, Ordering::SeqCst) + 1;
+
+                    // Signal that this build has started
+                    let _ = self.build_started_tx.try_send(build_num);
+
+                    // Wait for release signal with timeout (prevents hang if aborted)
+                    let release_rx = self.release_rx.clone();
+                    std::thread::sleep(Duration::from_millis(100));
+                    let rt = tokio::runtime::Handle::current();
+                    let _ = rt.block_on(async {
+                        let mut rx = release_rx.lock().await;
+                        tokio::time::timeout(Duration::from_millis(500), rx.recv()).await
+                    });
+
+                    Ok(())
                 }
             }
         }

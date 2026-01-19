@@ -62,11 +62,13 @@ impl ShellManager {
         let watcher_handle = watcher.handle();
 
         // Initial build
+        let reload_file = config.reload_file.clone();
         let ctx = BuildContext {
             cwd: cwd.clone(),
             env: env.clone(),
             trigger: BuildTrigger::Initial,
             watcher: watcher_handle.clone(),
+            reload_file: Some(reload_file.clone()),
         };
         let cmd = builder.build(&ctx).map_err(ManagerError::Build)?;
 
@@ -184,6 +186,7 @@ impl ShellManager {
                         env: std::env::vars().collect(),
                         trigger: BuildTrigger::FileChanged(path),
                         watcher: watcher_handle.clone(),
+                        reload_file: Some(reload_file.clone()),
                     };
 
                     // Spawn build in background task

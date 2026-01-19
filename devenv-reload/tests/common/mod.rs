@@ -82,4 +82,10 @@ impl ShellBuilder for TestShellBuilder {
         }
         Ok(cmd)
     }
+
+    fn build_reload_env(&self, _ctx: &BuildContext) -> Result<(), BuildError> {
+        // For tests, this would write to ctx.reload_file
+        // but for unit tests we just return success
+        Ok(())
+    }
 }

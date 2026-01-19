@@ -24,6 +24,8 @@ pub struct BuildContext {
     pub trigger: BuildTrigger,
     /// Handle to add new watch paths at runtime
     pub watcher: WatcherHandle,
+    /// Path to write pending env for hot-reload (set by shell runner)
+    pub reload_file: Option<PathBuf>,
 }
 
 /// Error returned by shell builder
@@ -45,7 +47,14 @@ impl BuildError {
 
 /// Trait for shell builders - implemented by the consumer (e.g., devenv)
 pub trait ShellBuilder: Send + Sync {
+    /// Build for initial shell spawn.
+    /// Returns a CommandBuilder that will be used to spawn the PTY.
     fn build(&self, ctx: &BuildContext) -> Result<CommandBuilder, BuildError>;
+
+    /// Build environment for hot-reload.
+    /// Writes the new environment to $DEVENV_STATE/pending-env.sh
+    /// which will be picked up by the shell's PROMPT_COMMAND hook.
+    fn build_reload_env(&self, ctx: &BuildContext) -> Result<(), BuildError>;
 }
 
 #[cfg(test)]
