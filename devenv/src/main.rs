@@ -473,14 +473,20 @@ async fn run_devenv_inner(
             no_reload,
         } => {
             if no_reload {
-                // Run shell without hot-reload - signal TUI can exit, then exec
+                // Run enterShell tasks first (TUI shows progress)
+                let _ = devenv.run_enter_shell_tasks().await?;
+
+                // Signal TUI can exit now (tasks completed)
                 if let Some(tx) = backend_done_tx.take() {
                     let _ = tx.send(());
                 }
-                let shell_config = match cmd {
+
+                // Prepare shell with DEVENV_SKIP_TASKS=1 (tasks already ran)
+                let mut shell_config = match cmd {
                     Some(cmd) => devenv.prepare_exec(Some(cmd), args).await?,
                     None => devenv.shell().await?,
                 };
+                shell_config.command.env("DEVENV_SKIP_TASKS", "1");
                 CommandResult::Exec(shell_config.command)
             } else {
                 // Run shell with hot-reload capability (default)

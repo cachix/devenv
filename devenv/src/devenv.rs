@@ -409,6 +409,11 @@ impl Devenv {
         &self.devenv_dotfile
     }
 
+    /// Get the path to the .devenv/state directory
+    pub fn devenv_state_dir(&self) -> PathBuf {
+        self.devenv_dotfile.join("state")
+    }
+
     /// Get the eval cache database pool, if initialized.
     ///
     /// The pool is initialized lazily during `assemble()` when eval caching is enabled.
@@ -1095,6 +1100,17 @@ impl Devenv {
         }
 
         Ok(format_tasks_tree(&tasks))
+    }
+
+    /// Run enterShell tasks and return their outputs.
+    /// This runs tasks via Rust (not bash hook) to enable TUI progress reporting.
+    pub async fn run_enter_shell_tasks(&self) -> Result<String> {
+        self.tasks_run(
+            vec!["devenv:enterShell".to_string()],
+            devenv_tasks::RunMode::All,
+            false, // TUI handles display
+        )
+        .await
     }
 
     async fn capture_shell_environment(&self) -> Result<HashMap<String, String>> {
