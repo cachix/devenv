@@ -76,6 +76,9 @@ pub mod logger;
 // Extension trait for anyhow::Result conversion
 pub mod anyhow_ext;
 
+// Pure Rust BuildEnvironment parsing (for cached -env JSON)
+pub mod build_environment;
+
 // Cachix daemon client for pushing store paths
 pub mod cachix_daemon;
 

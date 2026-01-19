@@ -8,6 +8,7 @@
 //! resolve inputs from devenv.lock
 
 use crate::anyhow_ext::AnyhowToMiette;
+use crate::build_environment::BuildEnvironment as RustBuildEnvironment;
 
 use async_trait::async_trait;
 use include_dir::{Dir, include_dir};
@@ -1022,10 +1023,10 @@ impl NixBackend for NixRustBackend {
             .level(ActivityLevel::Info)
             .start();
 
-        let (drv_path_str, out_path_str, cache_hit) = if let Some(paths) = cached_paths {
+        let (drv_path_str, out_path_str, env_path, cache_hit) = if let Some(paths) = cached_paths {
             // Cache hit - skip evaluation entirely
             activity.cached();
-            (paths.drv_path, paths.out_path, true)
+            (paths.drv_path, paths.out_path, paths.env_path, true)
         } else {
             // Cache miss or invalid paths - do full evaluation
             let import_expr = import_expr.clone();
@@ -1041,7 +1042,7 @@ impl NixBackend for NixRustBackend {
             .await
             .map_err(cache_error_to_miette)?;
 
-            (paths.drv_path, paths.out_path, false)
+            (paths.drv_path, paths.out_path, paths.env_path, false)
         };
 
         // Parse store path and create GC root
@@ -1067,58 +1068,31 @@ impl NixBackend for NixRustBackend {
                 .await?;
         }
 
-        // Extract build environment from the derivation store path using FFI
-        let drv_store_path = store
-            .parse_store_path(&drv_path_str)
-            .to_miette()
-            .wrap_err("Failed to parse derivation store path")?;
+        // Try to use cached env JSON directly (fast path), otherwise fall back to FFI
+        let output_str = if let Some(ref env_path) = env_path {
+            if std::path::Path::new(env_path).exists() {
+                // Fast path: read cached -env JSON directly, skip expensive FFI
+                tracing::debug!(env_path = %env_path, "Using cached env JSON (skipping FFI)");
+                let env_json = std::fs::read_to_string(env_path)
+                    .into_diagnostic()
+                    .wrap_err("Failed to read cached env JSON")?;
+                let rust_env = RustBuildEnvironment::from_json(&env_json)
+                    .into_diagnostic()
+                    .wrap_err("Failed to parse cached env JSON")?;
 
-        // Use the FFI function to get the fully-expanded dev environment
-        // This builds a modified derivation that runs setup hooks and captures the result
-        let mut build_env = BuildEnvironment::get_dev_environment(&self.store, &drv_store_path)
-            .to_miette()
-            .wrap_err("Failed to get dev environment from derivation")?;
-
-        // Serialize to the requested format
-        let output_str = if json {
-            build_env
-                .to_json()
-                .to_miette()
-                .wrap_err("Failed to serialize environment to JSON")?
+                if json {
+                    env_json
+                } else {
+                    rust_env.to_activation_script()
+                }
+            } else {
+                tracing::debug!(env_path = %env_path, "Cached env path no longer exists, falling back to FFI");
+                self.build_dev_environment(&mut store, &drv_path_str, json)?
+            }
         } else {
-            // Match `nix develop` behavior from nix/src/nix/develop.cc:
-            // 1. Save certain env vars before toBash() overwrites them
-            // 2. Call toBash() to get the build environment
-            // 3. Restore saved vars by appending to the new values
-            // 4. Evaluate shellHook
-            const SAVED_VARS: &[&str] = &["PATH", "XDG_DATA_DIRS"];
-
-            let mut bash_output = String::new();
-
-            // Before toBash(): save current values of vars that should be preserved
-            for var in SAVED_VARS {
-                bash_output.push_str(&format!("{var}=${{{var}:-}}\n"));
-                bash_output.push_str(&format!("nix_saved_{var}=\"${var}\"\n"));
-            }
-
-            // The FFI's to_bash() outputs variables and functions
-            bash_output.push_str(
-                &build_env
-                    .to_bash()
-                    .to_miette()
-                    .wrap_err("Failed to serialize environment to bash")?,
-            );
-
-            // After toBash(): append saved values to preserve system paths
-            for var in SAVED_VARS {
-                bash_output.push_str(&format!(
-                    "{var}=\"${var}${{nix_saved_{var}:+:$nix_saved_{var}}}\"\n"
-                ));
-            }
-
-            // Evaluate shellHook to match what `nix develop` does
-            bash_output.push_str("\neval \"${shellHook:-}\"\n");
-            bash_output
+            // No cached env path, use FFI
+            tracing::debug!("No cached env path, using FFI");
+            self.build_dev_environment(&mut store, &drv_path_str, json)?
         };
 
         // Get file inputs from cache for direnv to watch
@@ -1910,7 +1884,30 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to get store path")?;
 
-        Ok(CachedShellPaths { drv_path, out_path })
+        // Get the -env output path from FFI.
+        // This builds the -env derivation and returns both the env path and the environment.
+        let drv_store_path = store
+            .parse_store_path(&drv_path)
+            .to_miette()
+            .wrap_err("Failed to parse derivation store path")?;
+        let (_build_env, env_store_path) =
+            BuildEnvironment::get_dev_environment(&self.store, &drv_store_path)
+                .to_miette()
+                .wrap_err("Failed to get dev environment")?;
+
+        // Convert the env store path to a real filesystem path for caching
+        let env_path = Some(
+            store
+                .real_path(&env_store_path)
+                .to_miette()
+                .wrap_err("Failed to get env store path")?,
+        );
+
+        Ok(CachedShellPaths {
+            drv_path,
+            out_path,
+            env_path,
+        })
     }
 
     /// Build a single attribute without caching.
@@ -1969,6 +1966,42 @@ impl NixRustBackend {
 
         Ok(path_str)
     }
+
+    /// Build the dev environment from scratch using FFI.
+    ///
+    /// This is the slow path that computes the environment when no cached
+    /// env JSON is available. It builds a modified derivation that runs
+    /// setup hooks and captures the resulting environment.
+    fn build_dev_environment(&self, store: &mut Store, drv_path_str: &str, json: bool) -> Result<String> {
+        let drv_store_path = store
+            .parse_store_path(drv_path_str)
+            .to_miette()
+            .wrap_err("Failed to parse derivation store path")?;
+
+        // Use the FFI function to get the fully-expanded dev environment
+        // This builds a modified derivation that runs setup hooks and captures the result
+        let (mut build_env, _env_path) =
+            BuildEnvironment::get_dev_environment(&self.store, &drv_store_path)
+                .to_miette()
+                .wrap_err("Failed to get dev environment from derivation")?;
+
+        if json {
+            build_env
+                .to_json()
+                .to_miette()
+                .wrap_err("Failed to serialize environment to JSON")
+        } else {
+            // Get JSON from FFI, parse with Rust, and generate activation script
+            let env_json = build_env
+                .to_json()
+                .to_miette()
+                .wrap_err("Failed to serialize environment to JSON")?;
+            let rust_env = RustBuildEnvironment::from_json(&env_json)
+                .into_diagnostic()
+                .wrap_err("Failed to parse environment JSON")?;
+            Ok(rust_env.to_activation_script())
+        }
+    }
 }
 
 /// Cached shell paths for dev_env caching.
@@ -1976,6 +2009,10 @@ impl NixRustBackend {
 struct CachedShellPaths {
     drv_path: String,
     out_path: String,
+    /// Path to the -env derivation output containing the environment JSON.
+    /// When present and valid, we can skip the expensive FFI call.
+    #[serde(default)]
+    env_path: Option<String>,
 }
 
 /// Guard that forces GC collection when dropped.
