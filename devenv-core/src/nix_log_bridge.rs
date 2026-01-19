@@ -291,27 +291,26 @@ impl NixLogBridge {
                     }
                 }
 
-                // Filter out noise - fast local operations that aren't meaningful to users
-                if msg.contains("to the store") || msg.contains("copying path") {
-                    return;
-                }
-
                 // Handle regular log messages from Nix builds
                 // Note: Nix daemon incorrectly labels many routine build messages as
                 // Verbosity::Error (e.g., "setting up chroot environment", "executing builder").
                 // Only treat Error-level messages as actual errors if they pass is_nix_error()
                 // or is_builtin_trace() checks.
-                if level == Verbosity::Error {
-                    if log.is_nix_error() || log.is_builtin_trace() {
-                        let (summary, details) = parse_nix_error(msg);
-                        message_with_details(ActivityLevel::Error, summary, details);
-                        error!("{msg}");
-                    }
-                    // Skip falsely-labeled error messages from nix daemon
-                } else if level <= Verbosity::Warn {
+                if log.is_nix_error() || log.is_builtin_trace() {
+                    let (summary, details) = parse_nix_error(msg);
+                    message_with_details(ActivityLevel::Error, summary, details);
+                    error!("{msg}");
+                } else {
                     let activity_level = match level {
+                        // Remap the Error level to Debug for non-error messages
+                        Verbosity::Error => ActivityLevel::Debug,
                         Verbosity::Warn => ActivityLevel::Warn,
-                        _ => ActivityLevel::Info,
+                        Verbosity::Notice => ActivityLevel::Warn,
+                        Verbosity::Info => ActivityLevel::Info,
+                        Verbosity::Talkative => ActivityLevel::Debug,
+                        Verbosity::Chatty => ActivityLevel::Debug,
+                        Verbosity::Debug => ActivityLevel::Debug,
+                        Verbosity::Vomit => ActivityLevel::Trace,
                     };
                     message(activity_level, msg);
                 }
