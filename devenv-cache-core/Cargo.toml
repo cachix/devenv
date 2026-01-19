@@ -6,9 +6,13 @@ license.workspace = true
 
 [dependencies]
 # Database
-turso.workspace = true
-geni.workspace = true
-include_dir.workspace = true
+sqlx = { workspace = true, features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "sqlite",
+    "migrate",
+    "macros",
+] }
 
 # Error handling
 thiserror.workspace = true
@@ -19,7 +23,6 @@ blake3.workspace = true
 
 # File operations
 walkdir.workspace = true
-tempfile.workspace = true
 
 # Async runtime
 tokio = { workspace = true, features = ["fs", "macros", "time"] }
@@ -29,4 +32,5 @@ tracing.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 tokio = { workspace = true, features = ["rt", "macros"] }

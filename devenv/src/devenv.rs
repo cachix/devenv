@@ -7,7 +7,6 @@ use cli_table::{WithTitle, print_stderr};
 use devenv_activity::ActivityInstrument;
 use devenv_activity::{Activity, ActivityLevel, activity, message};
 use devenv_cache_core::compute_string_hash;
-use devenv_cache_core::db::Database;
 use devenv_core::{
     cachix::{CachixManager, CachixPaths},
     cli::GlobalOptions,
@@ -22,6 +21,7 @@ use secrecy::ExposeSecret;
 use serde::Deserialize;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
+use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -161,8 +161,8 @@ pub struct Devenv {
 
     has_processes: Arc<OnceCell<bool>>,
 
-    // Eval-cache database (framework layer concern, used by backends)
-    eval_cache_db: Arc<OnceCell<Arc<Database>>>,
+    // Eval-cache pool (framework layer concern, used by backends)
+    eval_cache_pool: Arc<OnceCell<SqlitePool>>,
 
     // Secretspec resolved data to pass to Nix
     secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
@@ -242,7 +242,7 @@ impl Devenv {
         let secretspec_resolved = Arc::new(OnceCell::new());
 
         // Create eval-cache pool (framework layer concern, used by backends)
-        let eval_cache_db = Arc::new(OnceCell::new());
+        let eval_cache_pool = Arc::new(OnceCell::new());
 
         let nix: Box<dyn NixBackend> = match backend_type {
             NixBackendType::Nix => Box::new(
@@ -252,7 +252,7 @@ impl Devenv {
                     global_options.clone(),
                     cachix_manager.clone(),
                     options.shutdown.clone(),
-                    Some(eval_cache_db.clone()),
+                    Some(eval_cache_pool.clone()),
                     None,
                 )
                 .expect("Failed to initialize Nix backend"),
@@ -264,7 +264,7 @@ impl Devenv {
                     global_options.clone(),
                     paths,
                     cachix_manager,
-                    Some(eval_cache_db.clone()),
+                    Some(eval_cache_pool.clone()),
                 )
                 .await
                 .expect("Failed to initialize Snix backend"),
@@ -284,7 +284,7 @@ impl Devenv {
             assembled: Arc::new(AtomicBool::new(false)),
             assemble_lock: Arc::new(Semaphore::new(1)),
             has_processes: Arc::new(OnceCell::new()),
-            eval_cache_db,
+            eval_cache_pool,
             secretspec_resolved,
             nix_args_string: Arc::new(OnceCell::new()),
             container_name: None,
@@ -1478,18 +1478,18 @@ impl Devenv {
 
         // Initialize eval-cache database (framework layer concern, used by backends)
         if self.global_options.eval_cache {
-            self.eval_cache_db
+            self.eval_cache_pool
                 .get_or_try_init(|| async {
                     let db_path = self.devenv_dotfile.join("nix-eval-cache.db");
-                    let db = devenv_cache_core::db::Database::new_with_embedded_migrations(
+                    let db = devenv_cache_core::db::Database::new(
                         db_path,
-                        &devenv_eval_cache::db::MIGRATIONS_DIR,
+                        &devenv_eval_cache::db::MIGRATIONS,
                     )
                     .await
                     .map_err(|e| {
                         miette::miette!("Failed to initialize eval cache database: {}", e)
                     })?;
-                    Ok::<_, miette::Report>(Arc::new(db))
+                    Ok::<_, miette::Report>(db.pool().clone())
                 })
                 .await?;
         }

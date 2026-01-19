@@ -15,9 +15,9 @@
 //! Callers don't need to know whether caching is enabled - the interface is identical
 //! in both cases.
 
-use devenv_cache_core::db::Database;
 use futures::future::join_all;
 use serde::{Serialize, de::DeserializeOwned};
+use sqlx::SqlitePool;
 use std::future::Future;
 use std::io;
 use std::sync::Arc;
@@ -45,9 +45,7 @@ pub struct CachedEvalResult {
 #[derive(Debug, thiserror::Error)]
 pub enum CacheError {
     #[error("Database error: {0}")]
-    Database(#[from] turso::Error),
-    #[error("Cache core error: {0}")]
-    CacheCore(#[from] devenv_cache_core::error::CacheError),
+    Database(#[from] sqlx::Error),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
     #[error("Evaluation error: {0}")]
@@ -62,27 +60,27 @@ pub enum CacheError {
 /// It validates cached results by checking if input files and environment
 /// variables have changed since the result was cached.
 pub struct CachingEvalService {
-    db: Arc<Database>,
+    pool: SqlitePool,
     config: CachingConfig,
 }
 
 impl CachingEvalService {
-    /// Create a new caching service with the given database.
-    pub fn new(db: Arc<Database>) -> Self {
+    /// Create a new caching service with the given database pool.
+    pub fn new(pool: SqlitePool) -> Self {
         Self {
-            db,
+            pool,
             config: CachingConfig::default(),
         }
     }
 
     /// Create a new caching service with custom configuration.
-    pub fn with_config(db: Arc<Database>, config: CachingConfig) -> Self {
-        Self { db, config }
+    pub fn with_config(pool: SqlitePool, config: CachingConfig) -> Self {
+        Self { pool, config }
     }
 
-    /// Get the database reference.
-    pub fn db(&self) -> &Database {
-        &self.db
+    /// Get the database pool reference.
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
     }
 
     /// Check for a valid cached result.
@@ -99,17 +97,15 @@ impl CachingEvalService {
             return Ok(None);
         }
 
-        let conn = self.db.connect().await?;
-
         // Look up the cached eval
-        let Some(eval_row) = db::get_eval_by_key_hash(&conn, &key.key_hash).await? else {
+        let Some(eval_row) = db::get_eval_by_key_hash(&self.pool, &key.key_hash).await? else {
             trace!(key_hash = %key.key_hash, "Eval not found in cache");
             return Ok(None);
         };
 
         // Load file and env inputs
-        let file_rows = db::get_files_by_eval_id(&conn, eval_row.id).await?;
-        let env_rows = db::get_envs_by_eval_id(&conn, eval_row.id).await?;
+        let file_rows = db::get_files_by_eval_id(&self.pool, eval_row.id).await?;
+        let env_rows = db::get_envs_by_eval_id(&self.pool, eval_row.id).await?;
 
         // Validate inputs
         if !self
@@ -125,7 +121,7 @@ impl CachingEvalService {
         }
 
         // Update timestamp
-        db::update_eval_updated_at(&conn, eval_row.id).await?;
+        db::update_eval_updated_at(&self.pool, eval_row.id).await?;
 
         debug!(
             key_hash = %key.key_hash,
@@ -146,11 +142,10 @@ impl CachingEvalService {
         json_output: &str,
         inputs: Vec<Input>,
     ) -> Result<(), CacheError> {
-        let conn = self.db.connect().await?;
         let input_hash = Input::compute_input_hash(&inputs);
 
         db::insert_eval_with_inputs(
-            &conn,
+            &self.pool,
             &key.key_hash,
             &key.attr_name,
             &input_hash,
@@ -178,13 +173,11 @@ impl CachingEvalService {
         &self,
         key: &EvalCacheKey,
     ) -> Result<Vec<std::path::PathBuf>, CacheError> {
-        let conn = self.db.connect().await?;
-
-        let Some(eval_row) = db::get_eval_by_key_hash(&conn, &key.key_hash).await? else {
+        let Some(eval_row) = db::get_eval_by_key_hash(&self.pool, &key.key_hash).await? else {
             return Ok(Vec::new());
         };
 
-        let file_rows = db::get_files_by_eval_id(&conn, eval_row.id).await?;
+        let file_rows = db::get_files_by_eval_id(&self.pool, eval_row.id).await?;
         // Filter out directories - direnv watch_file only works with files
         Ok(file_rows
             .into_iter()
@@ -627,20 +620,10 @@ impl<'a, E> UncachedEvalState<'a, E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::MIGRATIONS_PATH;
     use crate::eval_inputs::FileInputDesc;
     use crate::ffi_cache::EvalCacheKey;
-    use std::path::Path;
     use std::time::SystemTime;
     use tempfile::TempDir;
-
-    async fn setup_test_db() -> (Arc<Database>, TempDir) {
-        let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("test.db");
-        let migrations_path = Path::new(MIGRATIONS_PATH);
-        let db = Database::new(db_path, migrations_path).await.unwrap();
-        (Arc::new(db), temp_dir)
-    }
 
     #[test]
     fn test_caching_config_default() {
@@ -650,10 +633,9 @@ mod tests {
         assert!(config.excluded_paths.is_empty());
     }
 
-    #[tokio::test]
-    async fn test_cache_miss_then_hit() {
-        let (db, temp_dir) = setup_test_db().await;
-        let service = CachingEvalService::new(db);
+    #[sqlx::test]
+    async fn test_cache_miss_then_hit(pool: SqlitePool) {
+        let service = CachingEvalService::new(pool);
         let key = EvalCacheKey::from_test_string("(import /test {})", "config.shell");
 
         // First lookup should be a miss
@@ -661,6 +643,7 @@ mod tests {
         assert!(result.is_none());
 
         // Create a real temp file for the test
+        let temp_dir = TempDir::new().unwrap();
         let temp_file = temp_dir.path().join("devenv.nix");
         std::fs::write(&temp_file, "{ }").unwrap();
 
@@ -678,14 +661,13 @@ mod tests {
         assert_eq!(cached.json_output, json_output);
     }
 
-    #[tokio::test]
-    async fn test_force_refresh_bypasses_cache() {
-        let (db, _temp_dir) = setup_test_db().await;
+    #[sqlx::test]
+    async fn test_force_refresh_bypasses_cache(pool: SqlitePool) {
         let config = CachingConfig {
             force_refresh: true,
             ..Default::default()
         };
-        let service = CachingEvalService::with_config(db, config);
+        let service = CachingEvalService::with_config(pool, config);
         let key = EvalCacheKey::from_test_string("(import /test {})", "config.packages");
 
         // Store a result (no inputs needed for this test)
@@ -697,10 +679,9 @@ mod tests {
         assert!(result.is_none());
     }
 
-    #[tokio::test]
-    async fn test_cache_with_no_inputs() {
-        let (db, _temp_dir) = setup_test_db().await;
-        let service = CachingEvalService::new(db);
+    #[sqlx::test]
+    async fn test_cache_with_no_inputs(pool: SqlitePool) {
+        let service = CachingEvalService::new(pool);
         let key = EvalCacheKey::from_test_string("(import /test {})", "config.simple");
 
         // Store with no inputs (simpler test case)
@@ -713,10 +694,9 @@ mod tests {
         assert_eq!(result.unwrap().json_output, json_output);
     }
 
-    #[tokio::test]
-    async fn test_cache_update_replaces_previous() {
-        let (db, _temp_dir) = setup_test_db().await;
-        let service = CachingEvalService::new(db);
+    #[sqlx::test]
+    async fn test_cache_update_replaces_previous(pool: SqlitePool) {
+        let service = CachingEvalService::new(pool);
         let key = EvalCacheKey::from_test_string("(import /test {})", "config.test");
 
         // Store first result
@@ -730,13 +710,13 @@ mod tests {
         assert_eq!(result.json_output, r#"{"v":2}"#);
     }
 
-    #[tokio::test]
-    async fn test_cache_invalidated_when_file_removed() {
-        let (db, temp_dir) = setup_test_db().await;
-        let service = CachingEvalService::new(db);
+    #[sqlx::test]
+    async fn test_cache_invalidated_when_file_removed(pool: SqlitePool) {
+        let service = CachingEvalService::new(pool);
         let key = EvalCacheKey::from_test_string("(import /test {})", "config.file");
 
         // Create a temp file
+        let temp_dir = TempDir::new().unwrap();
         let temp_file = temp_dir.path().join("test.nix");
         std::fs::write(&temp_file, "original content").unwrap();
 
@@ -759,13 +739,13 @@ mod tests {
         assert!(result.is_none());
     }
 
-    #[tokio::test]
-    async fn test_cache_invalidated_when_file_content_changes() {
-        let (db, temp_dir) = setup_test_db().await;
-        let service = CachingEvalService::new(db);
+    #[sqlx::test]
+    async fn test_cache_invalidated_when_file_content_changes(pool: SqlitePool) {
+        let service = CachingEvalService::new(pool);
         let key = EvalCacheKey::from_test_string("(import /test {})", "config.readfile");
 
         // Create a temp file
+        let temp_dir = TempDir::new().unwrap();
         let temp_file = temp_dir.path().join("data.txt");
         std::fs::write(&temp_file, "original content").unwrap();
 
@@ -795,13 +775,13 @@ mod tests {
         assert!(result.is_none());
     }
 
-    #[tokio::test]
-    async fn test_cache_valid_when_file_metadata_changes_but_content_unchanged() {
-        let (db, temp_dir) = setup_test_db().await;
-        let service = CachingEvalService::new(db);
+    #[sqlx::test]
+    async fn test_cache_valid_when_file_metadata_changes_but_content_unchanged(pool: SqlitePool) {
+        let service = CachingEvalService::new(pool);
         let key = EvalCacheKey::from_test_string("(import /test {})", "config.metadata");
 
         // Create a temp file
+        let temp_dir = TempDir::new().unwrap();
         let temp_file = temp_dir.path().join("stable.txt");
         std::fs::write(&temp_file, "stable content").unwrap();
 
@@ -828,13 +808,13 @@ mod tests {
         assert!(result.is_some());
     }
 
-    #[tokio::test]
-    async fn test_cache_with_multiple_file_inputs() {
-        let (db, temp_dir) = setup_test_db().await;
-        let service = CachingEvalService::new(db);
+    #[sqlx::test]
+    async fn test_cache_with_multiple_file_inputs(pool: SqlitePool) {
+        let service = CachingEvalService::new(pool);
         let key = EvalCacheKey::from_test_string("(import /test {})", "config.complex");
 
         // Create multiple temp files
+        let temp_dir = TempDir::new().unwrap();
         let file1 = temp_dir.path().join("config.json");
         let file2 = temp_dir.path().join("data.txt");
         std::fs::write(&file1, r#"{"version": "1.0"}"#).unwrap();
@@ -865,12 +845,11 @@ mod tests {
         assert!(result.is_none());
     }
 
-    #[tokio::test]
-    async fn test_cache_with_env_input() {
+    #[sqlx::test]
+    async fn test_cache_with_env_input(pool: SqlitePool) {
         use crate::eval_inputs::EnvInputDesc;
 
-        let (db, _temp_dir) = setup_test_db().await;
-        let service = CachingEvalService::new(db);
+        let service = CachingEvalService::new(pool);
         let key = EvalCacheKey::from_test_string("(import /test {})", "config.env");
 
         // Set an environment variable
@@ -903,12 +882,11 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_cache_invalidated_when_env_removed() {
+    #[sqlx::test]
+    async fn test_cache_invalidated_when_env_removed(pool: SqlitePool) {
         use crate::eval_inputs::EnvInputDesc;
 
-        let (db, _temp_dir) = setup_test_db().await;
-        let service = CachingEvalService::new(db);
+        let service = CachingEvalService::new(pool);
         let key = EvalCacheKey::from_test_string("(import /test {})", "config.envremove");
 
         // Set an environment variable
@@ -936,15 +914,15 @@ mod tests {
         assert!(result.is_none());
     }
 
-    #[tokio::test]
-    async fn test_cache_with_mixed_file_and_env_inputs() {
+    #[sqlx::test]
+    async fn test_cache_with_mixed_file_and_env_inputs(pool: SqlitePool) {
         use crate::eval_inputs::EnvInputDesc;
 
-        let (db, temp_dir) = setup_test_db().await;
-        let service = CachingEvalService::new(db);
+        let service = CachingEvalService::new(pool);
         let key = EvalCacheKey::from_test_string("(import /test {})", "config.mixed");
 
         // Create file and set env var
+        let temp_dir = TempDir::new().unwrap();
         let temp_file = temp_dir.path().join("mixed.txt");
         std::fs::write(&temp_file, "file content").unwrap();
 
@@ -980,10 +958,9 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_different_keys_have_separate_caches() {
-        let (db, _temp_dir) = setup_test_db().await;
-        let service = CachingEvalService::new(db);
+    #[sqlx::test]
+    async fn test_different_keys_have_separate_caches(pool: SqlitePool) {
+        let service = CachingEvalService::new(pool);
 
         let key1 = EvalCacheKey::from_test_string("(import /test {})", "config.attr1");
         let key2 = EvalCacheKey::from_test_string("(import /test {})", "config.attr2");
@@ -1006,18 +983,18 @@ mod tests {
         assert_eq!(result2.json_output, r#"{"attr":"attr2"}"#);
     }
 
-    #[tokio::test]
-    async fn test_cache_persistence_across_service_instances() {
-        let (db, temp_dir) = setup_test_db().await;
+    #[sqlx::test]
+    async fn test_cache_persistence_across_service_instances(pool: SqlitePool) {
         let key = EvalCacheKey::from_test_string("(import /test {})", "config.persist");
 
         // Create a temp file for the test
+        let temp_dir = TempDir::new().unwrap();
         let temp_file = temp_dir.path().join("persist.txt");
         std::fs::write(&temp_file, "persistent content").unwrap();
 
         // First service instance stores the result
         {
-            let service = CachingEvalService::new(db.clone());
+            let service = CachingEvalService::new(pool.clone());
             let json_output = r#"{"persistent":true}"#;
             let inputs = vec![Input::File(
                 FileInputDesc::new(temp_file.clone(), SystemTime::now()).unwrap(),
@@ -1027,7 +1004,7 @@ mod tests {
 
         // Second service instance should find the cached result
         {
-            let service = CachingEvalService::new(db);
+            let service = CachingEvalService::new(pool);
             let result = service.get_cached(&key).await.unwrap();
             assert!(result.is_some());
             assert_eq!(result.unwrap().json_output, r#"{"persistent":true}"#);

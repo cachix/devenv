@@ -7,7 +7,6 @@ license.workspace = true
 [dependencies]
 devenv-activity.workspace = true
 devenv-cache-core.workspace = true
-include_dir.workspace = true
 
 clap.workspace = true
 console.workspace = true
@@ -21,8 +20,7 @@ tokio = { workspace = true, features = ["signal"] }
 tokio-shutdown.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
-turso.workspace = true
-geni.workspace = true
+sqlx.workspace = true
 blake3.workspace = true
 walkdir.workspace = true
 shell-escape.workspace = true
