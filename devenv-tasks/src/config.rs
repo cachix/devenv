@@ -19,7 +19,7 @@ pub struct TaskConfig {
     #[serde(default)]
     pub exec_if_modified: Vec<String>,
     #[serde(default)]
-    pub inputs: Option<serde_json::Value>,
+    pub input: Option<serde_json::Value>,
     #[serde(default)]
     pub cwd: Option<String>,
     #[serde(default)]

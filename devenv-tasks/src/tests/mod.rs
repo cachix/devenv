@@ -2203,7 +2203,7 @@ fi
                 {
                     "name": "myapp:task_1",
                     "command": input_script.to_str().unwrap(),
-                    "inputs": {"test": "input"}
+                    "input": {"test": "input"}
                 },
                 {
                     "name": "myapp:task_2",

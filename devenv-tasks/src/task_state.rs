@@ -112,12 +112,12 @@ impl TaskState {
             command.current_dir(cwd);
         }
 
-        // Set DEVENV_TASK_INPUTS
-        if let Some(inputs) = &self.task.inputs {
-            let inputs_json = serde_json::to_string(inputs)
+        // Set DEVENV_TASK_INPUT
+        if let Some(input) = &self.task.input {
+            let input_json = serde_json::to_string(input)
                 .into_diagnostic()
-                .wrap_err("Failed to serialize task inputs to JSON")?;
-            command.env("DEVENV_TASK_INPUT", inputs_json);
+                .wrap_err("Failed to serialize task input to JSON")?;
+            command.env("DEVENV_TASK_INPUT", input_json);
         }
 
         // Create a temporary file for DEVENV_TASK_OUTPUT_FILE
