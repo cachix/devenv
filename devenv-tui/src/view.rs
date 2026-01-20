@@ -115,51 +115,8 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
     }
     .into_any();
 
-    // Calculate dynamic height based on all activities (including inline logs)
-    let mut total_height = 0;
-    for display_activity in activities_to_show.iter() {
-        total_height += 1; // Base height for activity
-
-        let is_selected = selected_id.is_some_and(|id| {
-            display_activity.activity.id == id && display_activity.activity.id != 0
-        });
-
-        // Add extra line for downloads with progress
-        if let ActivityVariant::Download(ref download_data) = display_activity.activity.variant {
-            if download_data.size_current.is_some() && download_data.size_total.is_some() {
-                total_height += 1; // Extra line for progress bar
-            } else if let Some(progress) = &display_activity.activity.progress
-                && progress.total.unwrap_or(0) > 0
-            {
-                total_height += 1; // Extra line for progress bar
-            }
-        }
-
-        // Build, evaluation, and devenv activities show logs when selected (collapsed preview)
-        if is_selected
-            && (matches!(display_activity.activity.variant, ActivityVariant::Build(_))
-                || matches!(
-                    display_activity.activity.variant,
-                    ActivityVariant::Evaluating(_)
-                )
-                || matches!(display_activity.activity.variant, ActivityVariant::Devenv))
-            && let Some(logs) = selected_logs
-        {
-            let logs_component = ExpandedContentComponent::new(Some(logs));
-            total_height += logs_component.calculate_height();
-        }
-
-        // Message activities with details show limited lines (collapsed preview)
-        if let ActivityVariant::Message(ref msg_data) = display_activity.activity.variant
-            && msg_data.details.is_some()
-            && let Some(logs) = model.get_build_logs(display_activity.activity.id)
-        {
-            let visible_count = logs.len().min(LOG_VIEWPORT_COLLAPSED);
-            total_height += visible_count;
-        }
-    }
-    let min_height = 3; // Minimum height to show at least a few items
-    let dynamic_height = total_height.max(min_height) as u32;
+    // Calculate height using model's canonical method (includes summary line and terminal clamping)
+    let total_height = model.calculate_rendered_height(selected_id, terminal_size.height) as u32;
 
     let mut children = vec![];
 
@@ -191,11 +148,6 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         }
         .into_any(),
     );
-
-    // Total height: activities (with inline logs) + summary line + buffer
-    // Constrain to terminal height to prevent overflow when logs are expanded
-    let calculated_height = dynamic_height + 2; // +1 for summary, +1 buffer
-    let total_height = calculated_height.min(terminal_size.height as u32);
 
     element! {
         ContextProvider(value: Context::owned(terminal_size)) {

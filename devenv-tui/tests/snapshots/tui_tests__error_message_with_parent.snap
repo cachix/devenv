@@ -5,5 +5,4 @@ expression: output
 ⠋ Building shell
   ✗ error: undefined variable 'pkgs'
 
-
                               ↑↓ nav

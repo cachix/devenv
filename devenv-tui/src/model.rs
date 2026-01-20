@@ -1168,7 +1168,7 @@ impl ActivityModel {
     }
 
     /// Calculate the height that the TUI will render.
-    /// This mirrors the height calculation in view.rs.
+    /// This is the canonical height calculation - view.rs should call this method.
     pub fn calculate_rendered_height(
         &self,
         selected_activity: Option<u64>,
@@ -1197,17 +1197,32 @@ impl ActivityModel {
                 }
             }
 
-            // Build and evaluation activities show logs when selected
+            // Build, evaluation, and devenv activities show logs when selected
             if is_selected
                 && (matches!(display_activity.activity.variant, ActivityVariant::Build(_))
                     || matches!(
                         display_activity.activity.variant,
                         ActivityVariant::Evaluating(_)
-                    ))
+                    )
+                    || matches!(display_activity.activity.variant, ActivityVariant::Devenv))
                 && let Some(logs) = self.get_build_logs(display_activity.activity.id)
             {
                 let visible_count = logs.len().min(10); // LOG_VIEWPORT_COLLAPSED = 10
                 total_height += visible_count.max(1);
+            }
+
+            // Task activities with show_output=true or failed show logs
+            if let ActivityVariant::Task(ref task_data) = display_activity.activity.variant {
+                let task_failed = matches!(
+                    display_activity.activity.state,
+                    NixActivityState::Completed { success: false, .. }
+                );
+                if (task_data.show_output || task_failed)
+                    && let Some(logs) = self.get_build_logs(display_activity.activity.id)
+                {
+                    let visible_count = logs.len().min(10);
+                    total_height += visible_count.max(1);
+                }
             }
 
             // Message activities with details
@@ -1220,12 +1235,8 @@ impl ActivityModel {
             }
         }
 
-        // Apply minimum height for activities (mirrors view.rs)
-        let min_height = 3;
-        let dynamic_height = total_height.max(min_height);
-
-        // Total: dynamic_height + summary line + buffer
-        let calculated = (dynamic_height + 2) as u16;
+        // Total: activities + blank line + summary line
+        let calculated = (total_height + 2) as u16;
 
         // Clamp to terminal height
         calculated.min(terminal_height)
