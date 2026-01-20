@@ -1007,11 +1007,20 @@ impl ActivityModel {
     }
 
     /// Get standalone error messages (those without a parent activity).
-    /// Returns the most recent error messages for display.
+    /// Returns the most recent error messages for display in the TUI panel.
     pub fn get_error_messages(&self) -> Vec<&Message> {
         self.message_log
             .iter()
             .filter(|msg| msg.parent.is_none() && msg.level == ActivityLevel::Error)
+            .collect()
+    }
+
+    /// Get all error messages (including those with a parent activity).
+    /// Used for printing full errors after TUI exit.
+    pub fn get_all_error_messages(&self) -> Vec<&Message> {
+        self.message_log
+            .iter()
+            .filter(|msg| msg.level == ActivityLevel::Error)
             .collect()
     }
 
@@ -1206,11 +1215,8 @@ impl ActivityModel {
         let min_height = 3;
         let dynamic_height = total_height.max(min_height);
 
-        // Error messages panel
-        let error_count = self.get_error_messages().len().min(10);
-
-        // Total: dynamic_height + error panel + summary line + buffer
-        let calculated = (dynamic_height + error_count + 2) as u16;
+        // Total: dynamic_height + summary line + buffer
+        let calculated = (dynamic_height + 2) as u16;
 
         // Clamp to terminal height
         calculated.min(terminal_height)
