@@ -1,0 +1,10 @@
+imports:
+- ./shared
+
+allowUnfree: false
+allowBroken: false
+impure: false
+
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
