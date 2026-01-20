@@ -29,9 +29,6 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         .as_ref()
         .and_then(|a| model.get_build_logs(a.id));
 
-    // Get standalone error messages for display
-    let error_messages = model.get_error_messages();
-
     // Show all activities (including the selected activity with inline logs)
     let activities_to_show: Vec<_> = active_activities.iter().collect();
 
@@ -181,41 +178,6 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         .into_any(),
     );
 
-    // Error messages panel (if there are any standalone errors)
-    let error_panel_height = if !error_messages.is_empty() {
-        // Create error message elements
-        let error_elements: Vec<AnyElement<'static>> = error_messages
-            .iter()
-            .take(10) // Limit to 10 most recent errors
-            .map(|msg| {
-                element! {
-                    View(height: 1, flex_direction: FlexDirection::Row, padding_left: 1, padding_right: 1) {
-                        View(margin_right: 1, flex_shrink: 0.0) {
-                            Text(content: "✗", color: COLOR_FAILED)
-                        }
-                        View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
-                            Text(content: msg.text.clone(), color: COLOR_FAILED)
-                        }
-                    }
-                }
-                .into_any()
-            })
-            .collect();
-
-        let error_count = error_elements.len();
-        children.push(
-            element! {
-                View(flex_direction: FlexDirection::Column, width: 100pct) {
-                    #(error_elements)
-                }
-            }
-            .into_any(),
-        );
-        error_count
-    } else {
-        0
-    };
-
     // Summary line at bottom
     children.push(
         element! {
@@ -230,9 +192,9 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         .into_any(),
     );
 
-    // Total height: activities (with inline logs) + error panel + summary line + buffer
+    // Total height: activities (with inline logs) + summary line + buffer
     // Constrain to terminal height to prevent overflow when logs are expanded
-    let calculated_height = dynamic_height + error_panel_height as u32 + 2; // +1 for summary, +1 buffer
+    let calculated_height = dynamic_height + 2; // +1 for summary, +1 buffer
     let total_height = calculated_height.min(terminal_size.height as u32);
 
     element! {

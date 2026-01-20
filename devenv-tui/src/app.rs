@@ -3,7 +3,11 @@ use crate::{
     model::{ActivityModel, UiState, ViewMode},
     view::view,
 };
-use crossterm::{cursor, execute, terminal};
+use crossterm::{
+    cursor, execute,
+    style::{Color, ResetColor, SetForegroundColor},
+    terminal,
+};
 use devenv_activity::{ActivityEvent, ActivityLevel};
 use iocraft::prelude::*;
 use std::io::{self, Write};
@@ -224,6 +228,13 @@ impl TuiApp {
                 // On interrupt, don't render final state (user wants to exit quickly)
                 // On normal completion, render the final state with all events processed
                 if shutdown.last_signal().is_none() {
+                    // Collect ALL errors for printing after TUI (including nested ones)
+                    let all_errors: Vec<_> = model_guard
+                        .get_all_error_messages()
+                        .into_iter()
+                        .map(|m| (m.text.clone(), m.details.clone()))
+                        .collect();
+
                     let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
                     let mut element = element! {
                         View(width: terminal_width) {
@@ -231,6 +242,20 @@ impl TuiApp {
                         }
                     };
                     element.print();
+
+                    // Print full error messages in red (not truncated by TUI width)
+                    if !all_errors.is_empty() {
+                        let mut stderr = io::stderr();
+                        println!();
+                        for (text, details) in all_errors {
+                            let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
+                            eprintln!("{}", text);
+                            if let Some(details) = details {
+                                eprintln!("{}", details);
+                            }
+                            let _ = execute!(stderr, ResetColor);
+                        }
+                    }
                 }
             }
         }
