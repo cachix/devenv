@@ -17,6 +17,9 @@ use tokio_shutdown::{Shutdown, Signal};
 use tracing::debug;
 
 /// Configuration for the TUI application.
+///
+/// Note: The TUI always renders to stderr to keep stdout available for command output
+/// (e.g., `devenv print-dev-env` pipes stdout to shell eval).
 #[derive(Debug, Clone)]
 pub struct TuiConfig {
     /// Maximum events to batch before processing
@@ -217,9 +220,9 @@ impl TuiApp {
                     .calculate_rendered_height(ui.selected_activity, ui.terminal_size.height);
 
                 if lines_to_clear > 0 {
-                    let mut stdout = io::stdout();
+                    let mut stderr = io::stderr();
                     let _ = execute!(
-                        stdout,
+                        stderr,
                         cursor::MoveToPreviousLine(lines_to_clear),
                         terminal::Clear(terminal::ClearType::FromCursorDown)
                     );
@@ -241,12 +244,12 @@ impl TuiApp {
                             #(vec![view(&model_guard, &ui).into()])
                         }
                     };
-                    element.print();
+                    element.eprint();
 
                     // Print full error messages in red (not truncated by TUI width)
                     if !all_errors.is_empty() {
                         let mut stderr = io::stderr();
-                        println!();
+                        eprintln!();
                         for (text, details) in all_errors {
                             let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
                             eprintln!("{}", text);
@@ -267,16 +270,16 @@ impl TuiApp {
 /// Restore terminal to normal state.
 /// Call this after the TUI has exited to ensure the terminal is usable.
 pub fn restore_terminal() {
-    let mut stdout = io::stdout();
+    let mut stderr = io::stderr();
 
     // Disable raw mode if it was enabled
     let _ = terminal::disable_raw_mode();
 
     // Show cursor (TUI may have hidden it)
-    let _ = execute!(stdout, cursor::Show);
+    let _ = execute!(stderr, cursor::Show);
 
     // Ensure output is flushed
-    let _ = stdout.flush();
+    let _ = stderr.flush();
 }
 
 /// Main TUI component (inline mode)
@@ -407,9 +410,9 @@ async fn run_view(
     match view_mode {
         ViewMode::Main => {
             if *pre_expand_height > 0 {
-                let mut stdout = io::stdout();
+                let mut stderr = io::stderr();
                 let _ = execute!(
-                    stdout,
+                    stderr,
                     cursor::MoveToPreviousLine(*pre_expand_height),
                     terminal::Clear(terminal::ClearType::FromCursorDown)
                 );
