@@ -430,7 +430,11 @@ async fn run_view(
                 }
             };
 
-            element.render_loop().ignore_ctrl_c().await
+            element
+                .render_loop()
+                .output(Output::Stderr)
+                .ignore_ctrl_c()
+                .await
         }
         ViewMode::ExpandedLogs { activity_id } => {
             // Calculate height before switching to expanded view

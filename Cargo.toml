@@ -149,6 +149,9 @@ snix-build = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a75
 nix-compat = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
 nix-compat-derive = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
 
+[patch.crates-io]
+iocraft = { git = "https://github.com/sandydoo/iocraft", branch = "feat-configure-output" }
+
 [profile.release]
 strip = "symbols"
 lto = "fat"
