@@ -1674,7 +1674,7 @@ impl Devenv {
         Ok(nix_args_str)
     }
 
-    #[activity("Building shell")]
+    #[activity("Configuring shell")]
     pub async fn get_dev_environment(&self, json: bool) -> Result<DevEnv> {
         self.assemble(false).await?;
 
