@@ -210,7 +210,7 @@ impl UiState {
         }
         match self.selected_activity {
             None => {
-                self.selected_activity = selectable.first().copied();
+                self.selected_activity = selectable.last().copied();
             }
             Some(current_id) => {
                 if let Some(current_pos) = selectable.iter().position(|&id| id == current_id) {
