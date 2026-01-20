@@ -400,6 +400,15 @@ impl ActivityModel {
                 url,
                 ..
             } => {
+                // Skip .narinfo downloads - these are redundant with Query activities.
+                // When Nix checks if a store path exists in a cache, it emits both:
+                // 1. A Query activity with the human-readable store path name
+                // 2. A Download activity for the actual .narinfo HTTP request
+                // We only display the Query since it has the better name.
+                if kind == FetchKind::Download && name.ends_with(".narinfo") {
+                    return;
+                }
+
                 let substituter = url.as_ref().and_then(|u| {
                     url::Url::parse(u)
                         .ok()
