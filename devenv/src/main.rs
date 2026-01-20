@@ -171,10 +171,13 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     let shutdown_clone = shutdown.clone();
     let devenv_thread = std::thread::spawn(move || {
         build_gc_runtime().block_on(async {
-            let result = tokio::select! {
-                result = run_devenv(cli, shutdown_clone.clone()) => result,
-                _ = shutdown_clone.wait_for_shutdown() => Ok(CommandResult::Done),
+            let output = tokio::select! {
+                output = run_devenv(cli, shutdown_clone.clone()) => output,
+                _ = shutdown_clone.wait_for_shutdown() => DevenvOutput::done(),
             };
+
+            // Trigger shutdown to start cleanup (if not already triggered by signal)
+            shutdown_clone.shutdown();
 
             // Wait for cleanup to complete (e.g., Nix interrupt, cachix finalization)
             shutdown_clone.wait_for_shutdown_complete().await;
@@ -182,25 +185,27 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
             // Signal TUI that backend is fully done
             let _ = backend_done_tx.send(());
 
-            result
+            output
         })
     });
 
     // TUI on main thread (owns terminal)
-    // Runs until backend signals completion, then drains remaining events
-    let _ = devenv_tui::TuiApp::new(activity_rx, shutdown)
-        .filter_level(filter_level)
-        .run(backend_done_rx)
-        .await;
+    let tui_app = devenv_tui::TuiApp::new(activity_rx, shutdown.clone()).filter_level(filter_level);
+    let _ = tui_app.run(backend_done_rx).await;
 
     // Restore terminal to normal state (disable raw mode, show cursor)
     devenv_tui::app::restore_terminal();
 
-    let Ok(devenv_result) = devenv_thread.join() else {
+    let Ok(devenv_output) = devenv_thread.join() else {
         bail!("devenv thread panicked");
     };
 
-    let result = match devenv_result {
+    let result = match devenv_output.try_launch_debugger() {
+        DebuggerResult::Launched(result) => return result,
+        DebuggerResult::NotLaunched(result) => result,
+    };
+
+    let result = match result {
         Ok(cmd_result) => cmd_result,
         Err(err) => {
             // Check if secrets need prompting (special case: TUI stopped for password entry)
@@ -220,24 +225,27 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
 }
 
 fn run_with_legacy_cli(cli: Cli) -> Result<()> {
-    build_gc_runtime().block_on(async {
+    let devenv_output = build_gc_runtime().block_on(async {
         let shutdown = Shutdown::new();
         shutdown.install_signals().await;
 
         let level = cli.get_log_level();
         devenv_tracing::init_cli_tracing(level, cli.global_options.trace_output.as_ref());
 
-        let result = tokio::select! {
-            result = run_devenv(cli, shutdown.clone()) => result,
-            _ = shutdown.wait_for_shutdown() => Ok(CommandResult::Done),
-        }?;
+        tokio::select! {
+            output = run_devenv(cli, shutdown.clone()) => output,
+            _ = shutdown.wait_for_shutdown() => DevenvOutput::done(),
+        }
+    });
 
-        result.exec()
-    })
+    match devenv_output.try_launch_debugger() {
+        DebuggerResult::Launched(result) => result,
+        DebuggerResult::NotLaunched(result) => result?.exec(),
+    }
 }
 
 fn run_with_tracing(cli: Cli) -> Result<()> {
-    build_gc_runtime().block_on(async {
+    let devenv_output = build_gc_runtime().block_on(async {
         let shutdown = Shutdown::new();
         shutdown.install_signals().await;
 
@@ -248,29 +256,92 @@ fn run_with_tracing(cli: Cli) -> Result<()> {
             cli.global_options.trace_output.as_ref(),
         );
 
-        let result = tokio::select! {
-            result = run_devenv(cli, shutdown.clone()) => result,
-            _ = shutdown.wait_for_shutdown() => Ok(CommandResult::Done),
-        }?;
+        tokio::select! {
+            output = run_devenv(cli, shutdown.clone()) => output,
+            _ = shutdown.wait_for_shutdown() => DevenvOutput::done(),
+        }
+    });
 
-        result.exec()
-    })
+    match devenv_output.try_launch_debugger() {
+        DebuggerResult::Launched(result) => result,
+        DebuggerResult::NotLaunched(result) => result?.exec(),
+    }
 }
 
-async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> {
-    // Command is guaranteed to exist (Version/Direnvrc handled in main)
-    let command = cli.command.expect("Command should exist");
+/// Output from run_devenv containing the command result.
+struct DevenvOutput {
+    result: Result<CommandResult>,
+    /// Devenv instance for debugger mode - kept alive when nix_debugger is enabled and error occurs
+    devenv_for_debugger: Option<devenv::Devenv>,
+}
 
-    let mut config = Config::load()?;
+/// Result of attempting to launch the debugger.
+enum DebuggerResult {
+    /// Debugger was launched and returned this result
+    Launched(Result<()>),
+    /// Debugger was not launched, proceed with normal command result
+    NotLaunched(Result<CommandResult>),
+}
+
+impl DevenvOutput {
+    /// Create output for shutdown/done state.
+    fn done() -> Self {
+        Self {
+            result: Ok(CommandResult::Done),
+            devenv_for_debugger: None,
+        }
+    }
+
+    /// If debugger mode is enabled and we have a devenv instance, launch the REPL.
+    fn try_launch_debugger(self) -> DebuggerResult {
+        if let Some(devenv) = self.devenv_for_debugger {
+            // Print the error first so user knows what went wrong
+            if let Err(ref err) = self.result {
+                eprintln!("{:?}", err);
+            }
+            // Run the REPL on a new thread with its own GC-registered runtime
+            let repl_result = std::thread::spawn(move || {
+                build_gc_runtime().block_on(async { devenv.repl().await })
+            })
+            .join()
+            .map_err(|_| miette::miette!("REPL thread panicked"))
+            .and_then(|r| r);
+            DebuggerResult::Launched(repl_result)
+        } else {
+            DebuggerResult::NotLaunched(self.result)
+        }
+    }
+}
+
+/// Setup devenv and run the command.
+async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> DevenvOutput {
+    // Command is guaranteed to exist (Version/Direnvrc handled in main)
+    let command = cli.command.clone().expect("Command should exist");
+    let nix_debugger = cli.global_options.nix_debugger;
+
+    // Helper to create output without debugger context
+    let output = |result| DevenvOutput {
+        result,
+        devenv_for_debugger: None,
+    };
+
+    let mut config = match Config::load() {
+        Ok(c) => c,
+        Err(e) => return output(Err(e)),
+    };
+
     for input in cli.global_options.override_input.chunks_exact(2) {
-        config
+        if let Err(e) = config
             .override_input_url(&input[0].clone(), &input[1].clone())
             .wrap_err_with(|| {
                 format!(
                     "Failed to override input {} with URL {}",
                     &input[0], &input[1]
                 )
-            })?;
+            })
+        {
+            return output(Err(e));
+        }
     }
 
     // If --from is provided, create a new input and add it to imports
@@ -306,35 +377,59 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
     };
 
     // we let Drop delete the dir after all commands have ran
-    let _tmpdir = if let Commands::Test {
-        dont_override_dotfile,
-    } = command
-    {
-        let pwd = std::env::current_dir()
-            .into_diagnostic()
-            .wrap_err("Failed to get current directory")?;
-        let tmpdir = TempDir::with_prefix_in(".devenv.", pwd)
-            .into_diagnostic()
-            .wrap_err("Failed to create temporary directory")?;
-        if !dont_override_dotfile {
-            let file_name = tmpdir
-                .path()
-                .file_name()
-                .ok_or_else(|| miette::miette!("Temporary directory path is invalid"))?
-                .to_str()
-                .ok_or_else(|| {
-                    miette::miette!("Temporary directory name contains invalid Unicode")
-                })?;
-            info!("Overriding .devenv to {}", file_name);
-            options.devenv_dotfile = Some(tmpdir.path().to_path_buf());
+    let _tmpdir = match &command {
+        Commands::Test {
+            dont_override_dotfile,
+        } => {
+            let setup_test_tmpdir = || -> Result<TempDir> {
+                let pwd = std::env::current_dir()
+                    .into_diagnostic()
+                    .wrap_err("Failed to get current directory")?;
+                let tmpdir = TempDir::with_prefix_in(".devenv.", pwd)
+                    .into_diagnostic()
+                    .wrap_err("Failed to create temporary directory")?;
+                Ok(tmpdir)
+            };
+            let tmpdir = match setup_test_tmpdir() {
+                Ok(t) => t,
+                Err(e) => return output(Err(e)),
+            };
+            if !dont_override_dotfile {
+                let file_name = tmpdir
+                    .path()
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .ok_or_else(|| miette::miette!("Temporary directory path is invalid"));
+                let file_name = match file_name {
+                    Ok(f) => f,
+                    Err(e) => return output(Err(e)),
+                };
+                info!("Overriding .devenv to {}", file_name);
+                options.devenv_dotfile = Some(tmpdir.path().to_path_buf());
+            }
+            Some(tmpdir)
         }
-        Some(tmpdir)
-    } else {
-        None
+        _ => None,
     };
 
     let mut devenv = Devenv::new(options).await;
 
+    // Run the command
+    let result = run_devenv_inner(&mut devenv, command).await;
+
+    // If nix_debugger is enabled and command failed, keep devenv for REPL debugging
+    if nix_debugger && result.is_err() {
+        DevenvOutput {
+            result,
+            devenv_for_debugger: Some(devenv),
+        }
+    } else {
+        output(result)
+    }
+}
+
+/// Run the devenv command.
+async fn run_devenv_inner(devenv: &mut Devenv, command: Commands) -> Result<CommandResult> {
     let result = match command {
         Commands::Shell { cmd, ref args } => {
             let shell_config = match cmd {
@@ -468,7 +563,6 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
             devenv.changelogs().await?;
             CommandResult::Done
         }
-
         // hidden
         Commands::Assemble => {
             devenv.assemble(false).await?;
@@ -490,7 +584,7 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
             CommandResult::Done
         }
         Commands::Lsp { print_config } => {
-            devenv::lsp::run(&devenv, print_config).await?;
+            devenv::lsp::run(devenv, print_config).await?;
             CommandResult::Done
         }
         Commands::Direnvrc => unreachable!(),

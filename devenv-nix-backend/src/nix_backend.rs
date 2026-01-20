@@ -106,8 +106,7 @@ pub struct NixRustBackend {
 
     // Activity logger that forwards Nix events to tracing
     // Must be kept alive for the duration of the backend
-    #[allow(dead_code)]
-    _activity_logger: nix_bindings_expr::logger::ActivityLogger,
+    activity_logger: nix_bindings_expr::logger::ActivityLogger,
 
     // Bridge for tracking eval activities dynamically and input collection
     // Used by eval_session() to create/complete eval activities
@@ -415,7 +414,7 @@ impl NixRustBackend {
             fetchers_settings,
             bootstrap_path,
             nixpkgs_config_path,
-            _activity_logger: activity_logger,
+            activity_logger,
             nix_log_bridge: log_bridge,
             eval_cache_pool,
             caching_eval_state: OnceCell::new(),
@@ -1016,7 +1015,7 @@ impl NixBackend for NixRustBackend {
         } else {
             // Cache miss or invalid paths - do full evaluation
             let import_expr = import_expr.clone();
-            let (paths, _) = async {
+            let result = async {
                 caching_state
                     .cached_eval()
                     .eval_typed::<CachedShellPaths, _, _>(&cache_key, &activity, || async {
@@ -1025,10 +1024,15 @@ impl NixBackend for NixRustBackend {
                     .await
             }
             .in_activity(&activity)
-            .await
-            .map_err(cache_error_to_miette)?;
+            .await;
 
-            (paths.drv_path, paths.out_path, paths.env_path, false)
+            match result {
+                Ok((paths, _)) => (paths.drv_path, paths.out_path, paths.env_path, false),
+                Err(e) => {
+                    activity.fail();
+                    return Err(cache_error_to_miette(e));
+                }
+            }
         };
 
         // Parse store path and create GC root
@@ -1103,48 +1107,63 @@ impl NixBackend for NixRustBackend {
             .to_miette()
             .wrap_err("Failed to initialize Nix command library")?;
 
+        // Reset the logger to restore normal stderr output for the REPL
+        self.activity_logger.reset();
+
+        // Print any stored errors (captured during evaluation)
+        for error in self.nix_log_bridge.take_pre_repl_errors() {
+            eprintln!("{}", error);
+        }
+
         // Lock the eval_state for REPL access
         let activity = Activity::evaluate("Evaluating Nix")
             .level(ActivityLevel::Info)
             .start();
         let mut eval_state = self.eval_session(&activity)?;
 
-        // Load default.nix into the REPL scope
-        let import_expr = self
-            .cached_import_expr
-            .get()
-            .expect("assemble() must be called first")
-            .to_string();
+        // Check if there's a pending debugger session from a previous error
+        // If so, run the debugger REPL which has the error context
+        let status = if nix_cmd::debugger_is_pending() {
+            nix_cmd::debugger_run_pending(&mut eval_state)
+                .to_miette()
+                .wrap_err("Debugger REPL failed")?
+        } else {
+            // No pending debugger - run a simple REPL with devenv environment
+            let import_expr = self
+                .cached_import_expr
+                .get()
+                .expect("assemble() must be called first")
+                .to_string();
 
-        let devenv_attrs = eval_state
-            .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix for REPL")?;
+            let devenv_attrs = eval_state
+                .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
+                .to_miette()
+                .wrap_err("Failed to import default.nix for REPL")?;
 
-        // Create a ValMap to inject variables into the REPL scope
-        let mut env = nix_cmd::ValMap::new()
-            .to_miette()
-            .wrap_err("Failed to create REPL environment")?;
+            // Create a ValMap to inject variables into the REPL scope
+            let mut env = nix_cmd::ValMap::new()
+                .to_miette()
+                .wrap_err("Failed to create REPL environment")?;
 
-        // Inject the devenv configuration as "devenv" variable in REPL
-        env.insert("devenv", &devenv_attrs)
-            .to_miette()
-            .wrap_err("Failed to inject devenv into REPL scope")?;
+            // Inject the devenv configuration as "devenv" variable in REPL
+            env.insert("devenv", &devenv_attrs)
+                .to_miette()
+                .wrap_err("Failed to inject devenv into REPL scope")?;
 
-        // Extract and inject pkgs for convenience
-        let pkgs = eval_state
-            .require_attrs_select(&devenv_attrs, "pkgs")
-            .to_miette()
-            .wrap_err("Failed to get pkgs attribute from devenv")?;
-        env.insert("pkgs", &pkgs)
-            .to_miette()
-            .wrap_err("Failed to inject pkgs into REPL scope")?;
+            // Extract and inject pkgs for convenience
+            let pkgs = eval_state
+                .require_attrs_select(&devenv_attrs, "pkgs")
+                .to_miette()
+                .wrap_err("Failed to get pkgs attribute from devenv")?;
+            env.insert("pkgs", &pkgs)
+                .to_miette()
+                .wrap_err("Failed to inject pkgs into REPL scope")?;
 
-        // Run the interactive REPL with pre-populated environment
-        // Note: This will block until the user exits with :quit or :continue
-        let status = nix_cmd::run_repl_simple(&mut eval_state, Some(&mut env))
-            .to_miette()
-            .wrap_err("REPL failed")?;
+            // Run the interactive REPL with pre-populated environment
+            nix_cmd::run_repl_simple(&mut eval_state, Some(&mut env))
+                .to_miette()
+                .wrap_err("REPL failed")?
+        };
 
         // Handle the exit status
         match status {
