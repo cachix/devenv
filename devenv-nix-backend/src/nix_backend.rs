@@ -1972,7 +1972,12 @@ impl NixRustBackend {
     /// This is the slow path that computes the environment when no cached
     /// env JSON is available. It builds a modified derivation that runs
     /// setup hooks and captures the resulting environment.
-    fn build_dev_environment(&self, store: &mut Store, drv_path_str: &str, json: bool) -> Result<String> {
+    fn build_dev_environment(
+        &self,
+        store: &mut Store,
+        drv_path_str: &str,
+        json: bool,
+    ) -> Result<String> {
         let drv_store_path = store
             .parse_store_path(drv_path_str)
             .to_miette()

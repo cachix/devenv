@@ -64,8 +64,7 @@ impl BuildEnvironment {
     /// Read and parse a BuildEnvironment from a JSON file.
     pub fn from_file(path: impl AsRef<Path>) -> std::io::Result<Self> {
         let json = std::fs::read_to_string(path)?;
-        Self::from_json(&json)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        Self::from_json(&json).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
 
     /// Convert the environment to a sourceable bash script.
