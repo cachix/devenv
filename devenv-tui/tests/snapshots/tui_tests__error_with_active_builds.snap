@@ -6,5 +6,4 @@ expression: output
 
 
 
- ✗ error: builder for '/nix/store/...-hello.drv'
- 0 of 1 builds                                   ↑↓ nav
+ 0 of 1 builds             ↑↓ nav

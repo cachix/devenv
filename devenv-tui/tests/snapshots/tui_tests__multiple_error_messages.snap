@@ -6,6 +6,4 @@ expression: output
 
 
 
- ✗ error: attribute 'foo' not found
- ✗ error: while evaluating 'bar': infinite
-                                              ↑↓ nav
+   ↑↓ nav
