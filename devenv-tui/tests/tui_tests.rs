@@ -931,6 +931,7 @@ fn test_standalone_error_message() {
 
     // Add a standalone error message (no parent activity)
     let error_event = ActivityEvent::Message(Message {
+        id: 100,
         level: ActivityLevel::Error,
         text: "error: attribute 'nonExistentPackage' not found".to_string(),
         details: None,
@@ -950,6 +951,7 @@ fn test_multiple_error_messages() {
 
     // Add multiple standalone error messages
     let error1 = ActivityEvent::Message(Message {
+        id: 100,
         level: ActivityLevel::Error,
         text: "error: attribute 'foo' not found".to_string(),
         details: None,
@@ -959,6 +961,7 @@ fn test_multiple_error_messages() {
     model.apply_activity_event(error1);
 
     let error2 = ActivityEvent::Message(Message {
+        id: 101,
         level: ActivityLevel::Error,
         text: "error: while evaluating 'bar': infinite recursion".to_string(),
         details: None,
@@ -988,6 +991,7 @@ fn test_error_message_with_parent() {
 
     // Add an error message attached to the evaluation
     let error_event = ActivityEvent::Message(Message {
+        id: 100,
         level: ActivityLevel::Error,
         text: "error: undefined variable 'pkgs'".to_string(),
         details: None,
@@ -1017,6 +1021,7 @@ fn test_warning_message_with_parent() {
 
     // Add a warning message attached to the evaluation
     let warn_event = ActivityEvent::Message(Message {
+        id: 100,
         level: ActivityLevel::Warn,
         text: "warning: deprecated option 'services.foo' used".to_string(),
         details: None,
@@ -1051,6 +1056,7 @@ fn test_error_with_active_builds() {
 
     // Add an error message
     let error_event = ActivityEvent::Message(Message {
+        id: 100,
         level: ActivityLevel::Error,
         text: "error: builder for '/nix/store/...-hello.drv' failed".to_string(),
         details: None,
@@ -1080,6 +1086,7 @@ fn test_error_message_with_details() {
 
     // Add an error message with details (stack trace)
     let error_event = ActivityEvent::Message(Message {
+        id: 100,
         level: ActivityLevel::Error,
         text: "error: undefined variable 'pkgs'".to_string(),
         details: Some("error:\n       … while evaluating\n         at devenv.nix:10:5\n\n       error: undefined variable 'pkgs'".to_string()),
@@ -1109,6 +1116,7 @@ fn test_error_message_without_details() {
 
     // Add an error message without details
     let error_event = ActivityEvent::Message(Message {
+        id: 100,
         level: ActivityLevel::Error,
         text: "error: simple error".to_string(),
         details: None,
