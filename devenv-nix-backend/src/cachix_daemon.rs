@@ -10,7 +10,6 @@
 use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::env;
 use std::path::PathBuf;
 use std::process::Child;
 use std::sync::Arc;
@@ -45,24 +44,40 @@ impl Default for ConnectionParams {
     }
 }
 
-/// Configuration for cachix daemon connection and behavior
+/// Configuration for spawning a cachix daemon process
 #[derive(Clone, Debug)]
-pub struct DaemonConfig {
+pub struct DaemonSpawnConfig {
     /// Name of the cachix cache to push to
     pub cache_name: String,
-    /// Connection parameters (timeouts, retries, etc.)
-    pub connection: ConnectionParams,
-    /// Optional socket path for testing (overrides env vars)
-    pub socket_path: Option<PathBuf>,
+    /// Socket path for the daemon to listen on
+    pub socket_path: PathBuf,
 }
 
-impl DaemonConfig {
-    /// Create a new DaemonConfig with the given cache name and default connection params
-    pub fn new(cache_name: impl Into<String>) -> Self {
+impl DaemonSpawnConfig {
+    /// Create spawn config with cache name and socket path
+    pub fn new(cache_name: impl Into<String>, socket_path: PathBuf) -> Self {
         Self {
             cache_name: cache_name.into(),
+            socket_path,
+        }
+    }
+}
+
+/// Configuration for connecting to a cachix daemon
+#[derive(Clone, Debug)]
+pub struct DaemonConnectConfig {
+    /// Socket path to connect to
+    pub socket_path: PathBuf,
+    /// Connection parameters (timeouts, retries, etc.)
+    pub connection: ConnectionParams,
+}
+
+impl DaemonConnectConfig {
+    /// Create connect config with socket path and default connection params
+    pub fn new(socket_path: PathBuf) -> Self {
+        Self {
+            socket_path,
             connection: ConnectionParams::default(),
-            socket_path: None,
         }
     }
 }
@@ -173,58 +188,23 @@ pub enum PushEvent {
     Unknown,
 }
 
-/// Low-level socket client
-struct CachixDaemonClient {
+/// Low-level socket client for daemon communication
+struct SocketClient {
     write_half: tokio::net::unix::OwnedWriteHalf,
     buf_reader: BufReader<tokio::net::unix::OwnedReadHalf>,
-    config: DaemonConfig,
+    config: DaemonConnectConfig,
 }
 
-impl CachixDaemonClient {
-    /// Get the cachix daemon socket path
-    fn get_socket_path(config: &DaemonConfig) -> Result<PathBuf> {
-        // Check if socket path is explicitly provided in config (for testing)
-        if let Some(socket_path) = &config.socket_path {
-            return Ok(socket_path.clone());
-        }
-
-        if let Ok(socket_path) = env::var("CACHIX_DAEMON_SOCKET") {
-            return Ok(PathBuf::from(socket_path));
-        }
-
-        if let Ok(runtime_dir) = env::var("XDG_RUNTIME_DIR") {
-            let socket_path = PathBuf::from(runtime_dir)
-                .join("cachix")
-                .join("cachix-daemon.sock");
-            if socket_path.exists() {
-                return Ok(socket_path);
-            }
-        }
-
-        if let Ok(cache_home) = env::var("XDG_CACHE_HOME") {
-            let socket_path = PathBuf::from(cache_home)
-                .join("cachix")
-                .join("cachix-daemon.sock");
-            if socket_path.exists() {
-                return Ok(socket_path);
-            }
-        }
-
-        Err(anyhow!(
-            "Cachix daemon socket not found. \
-             Set CACHIX_DAEMON_SOCKET or ensure XDG_RUNTIME_DIR is configured"
-        ))
-    }
-
+impl SocketClient {
     /// Connect to daemon with timeout
-    async fn connect(config: DaemonConfig) -> Result<Self> {
-        let socket_path = Self::get_socket_path(&config)?;
-
-        let socket =
-            tokio::time::timeout(config.connection.connect_timeout, UnixStream::connect(&socket_path))
-                .await
-                .context("Timeout connecting to cachix daemon")?
-                .context("Failed to connect to cachix daemon socket")?;
+    async fn connect(config: DaemonConnectConfig) -> Result<Self> {
+        let socket = tokio::time::timeout(
+            config.connection.connect_timeout,
+            UnixStream::connect(&config.socket_path),
+        )
+        .await
+        .context("Timeout connecting to cachix daemon")?
+        .context("Failed to connect to cachix daemon socket")?;
 
         let (read_half, write_half) = socket.into_split();
         let buf_reader = BufReader::new(read_half);
@@ -294,19 +274,183 @@ impl CachixDaemonClient {
     }
 }
 
-/// Production streaming daemon with background event processing
-pub struct StreamingCachixDaemon {
-    /// Unique ID for this daemon instance
-    daemon_id: Uuid,
-    /// Daemon process (if we spawned it)
-    daemon_process: Arc<Mutex<Option<Child>>>,
-    /// Queue of paths awaiting push
+/// Owned handle to a spawned cachix daemon process.
+/// Kills the process on drop.
+pub struct DaemonProcess {
+    child: Option<Child>,
+    socket_path: PathBuf,
+}
+
+impl DaemonProcess {
+    /// Spawn a new cachix daemon process.
+    ///
+    /// Waits for the socket to become available before returning.
+    pub async fn spawn(config: &DaemonSpawnConfig) -> Result<Self> {
+        tracing::info!(cache = %config.cache_name, "Spawning cachix daemon");
+
+        // Ensure parent directory exists for socket
+        if let Some(parent) = config.socket_path.parent() {
+            std::fs::create_dir_all(parent)
+                .context("Failed to create directory for daemon socket")?;
+        }
+
+        let child = std::process::Command::new("cachix")
+            .arg("daemon")
+            .arg("run")
+            .arg("--socket")
+            .arg(&config.socket_path)
+            .arg(&config.cache_name)
+            .spawn()
+            .context("Failed to spawn cachix daemon. Is cachix CLI installed?")?;
+
+        let mut daemon = Self {
+            child: Some(child),
+            socket_path: config.socket_path.clone(),
+        };
+
+        // Wait for socket to become available
+        if let Err(e) = daemon.wait_for_socket(Duration::from_secs(10)).await {
+            // Clean up on failure
+            daemon.kill();
+            return Err(e);
+        }
+
+        tracing::info!(socket = %config.socket_path.display(), "Daemon started");
+        Ok(daemon)
+    }
+
+    /// Wait for the daemon socket to become available
+    async fn wait_for_socket(&self, timeout: Duration) -> Result<()> {
+        let start = Instant::now();
+        let mut backoff = Duration::from_millis(100);
+
+        while start.elapsed() < timeout {
+            if self.socket_path.exists() {
+                // Try to connect to verify it's ready
+                if UnixStream::connect(&self.socket_path).await.is_ok() {
+                    return Ok(());
+                }
+            }
+            tokio::time::sleep(backoff).await;
+            backoff = (backoff * 2).min(Duration::from_secs(1));
+        }
+
+        Err(anyhow!(
+            "Timeout waiting for daemon socket at {}",
+            self.socket_path.display()
+        ))
+    }
+
+    /// Get the socket path for client connections
+    pub fn socket_path(&self) -> &std::path::Path {
+        &self.socket_path
+    }
+
+    /// Stop the daemon gracefully.
+    ///
+    /// Waits for the process to exit, or kills it after timeout.
+    pub async fn stop(mut self) -> Result<()> {
+        if let Some(mut child) = self.child.take() {
+            tracing::info!("Stopping cachix daemon");
+
+            // Try graceful shutdown first - kill the process
+            // (In the future, could send ClientStop via socket)
+            let _ = child.kill();
+
+            // Wait for process to exit with timeout
+            let wait_result = tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    match child.try_wait() {
+                        Ok(Some(_)) => return Ok(()),
+                        Ok(None) => tokio::time::sleep(Duration::from_millis(100)).await,
+                        Err(e) => return Err(anyhow!("Failed to wait for daemon: {}", e)),
+                    }
+                }
+            })
+            .await;
+
+            match wait_result {
+                Ok(Ok(())) => tracing::debug!("Daemon stopped"),
+                Ok(Err(e)) => tracing::warn!("Error stopping daemon: {}", e),
+                Err(_) => tracing::warn!("Timeout waiting for daemon to stop"),
+            }
+        }
+        Ok(())
+    }
+
+    /// Kill the daemon process immediately
+    fn kill(&mut self) {
+        if let Some(ref mut child) = self.child {
+            let _ = child.kill();
+        }
+    }
+}
+
+impl Drop for DaemonProcess {
+    fn drop(&mut self) {
+        self.kill();
+    }
+}
+
+/// Combined daemon process and client.
+/// Spawns the daemon and manages its full lifecycle.
+pub struct OwnedDaemon {
+    process: DaemonProcess,
+    client: DaemonClient,
+}
+
+impl OwnedDaemon {
+    /// Spawn daemon and connect client
+    pub async fn spawn(
+        cache_name: impl Into<String>,
+        socket_path: PathBuf,
+        connection: ConnectionParams,
+    ) -> Result<Self> {
+        let spawn_config = DaemonSpawnConfig::new(cache_name, socket_path.clone());
+        let process = DaemonProcess::spawn(&spawn_config).await?;
+
+        let connect_config = DaemonConnectConfig {
+            socket_path,
+            connection,
+        };
+        let client = DaemonClient::connect(connect_config).await?;
+
+        Ok(Self { process, client })
+    }
+
+    pub async fn queue_path(&self, path: String) -> Result<()> {
+        self.client.queue_path(path).await
+    }
+
+    pub async fn queue_paths(&self, paths: Vec<String>) -> Result<()> {
+        self.client.queue_paths(paths).await
+    }
+
+    pub fn metrics(&self) -> DaemonMetrics {
+        self.client.metrics()
+    }
+
+    pub async fn wait_for_completion(&self, timeout: Duration) -> Result<DaemonMetrics> {
+        self.client.wait_for_completion(timeout).await
+    }
+
+    pub fn as_build_callback(&self) -> ClientCallback {
+        self.client.as_build_callback()
+    }
+
+    /// Shutdown: wait for in-flight pushes, then stop daemon
+    pub async fn shutdown(self, timeout: Duration) -> Result<()> {
+        self.client.wait_for_completion(timeout).await.ok();
+        self.client.shutdown();
+        self.process.stop().await
+    }
+}
+
+/// Client for communicating with a running cachix daemon.
+pub struct DaemonClient {
     pending_paths: Arc<Mutex<VecDeque<String>>>,
-    /// Notifier to wake background task
     work_notify: Arc<Notify>,
-    /// Metrics updated by background task
     metrics: Arc<AtomicMetrics>,
-    /// Background task handle
     event_task: tokio::task::JoinHandle<()>,
 }
 
@@ -319,60 +463,15 @@ struct AtomicMetrics {
     failed_with_reasons: Arc<Mutex<HashMap<String, String>>>,
 }
 
-impl StreamingCachixDaemon {
-    /// Start or connect to cachix daemon
-    pub async fn start(config: DaemonConfig) -> Result<Self> {
-        let daemon_id = Uuid::new_v4();
-        tracing::info!(daemon_id = %daemon_id, "Starting cachix daemon");
+impl DaemonClient {
+    /// Connect to an existing cachix daemon
+    pub async fn connect(config: DaemonConnectConfig) -> Result<Self> {
+        let client_id = Uuid::new_v4();
+        tracing::debug!(client_id = %client_id, "Connecting to cachix daemon");
 
-        // Try to connect to existing daemon first
-        let client = match CachixDaemonClient::connect(config.clone()).await {
-            Ok(c) => {
-                tracing::debug!(daemon_id = %daemon_id, "Connected to existing daemon");
-                Some(c)
-            }
-            Err(e) => {
-                tracing::debug!(daemon_id = %daemon_id, "No existing daemon found: {}", e);
-                None
-            }
-        };
+        let socket_client = SocketClient::connect(config.clone()).await?;
 
-        // If no existing daemon, try to start one
-        let (client, daemon_process) = if client.is_none() {
-            let process = std::process::Command::new("cachix")
-                .arg("daemon")
-                .arg("run")
-                .arg(&config.cache_name)
-                .spawn()
-                .context("Failed to spawn cachix daemon. Is cachix CLI installed?")?;
-
-            // Poll for socket with exponential backoff
-            let mut retries = 0;
-            let mut backoff = Duration::from_millis(config.connection.reconnect_backoff_ms);
-
-            let client = loop {
-                tokio::time::sleep(backoff).await;
-
-                match CachixDaemonClient::connect(config.clone()).await {
-                    Ok(c) => {
-                        tracing::info!(daemon_id = %daemon_id, retries, "Daemon started successfully");
-                        break c;
-                    }
-                    Err(_) if retries < config.connection.max_retries => {
-                        retries += 1;
-                        backoff = backoff.saturating_mul(2).min(Duration::from_secs(5));
-                        continue;
-                    }
-                    Err(e) => return Err(e).context("Failed to connect to daemon after startup"),
-                }
-            };
-
-            (Some(client), Some(process))
-        } else {
-            (client, None)
-        };
-
-        let client = Arc::new(Mutex::new(client));
+        let client = Arc::new(Mutex::new(Some(socket_client)));
         let pending_paths = Arc::new(Mutex::new(VecDeque::new()));
         let work_notify = Arc::new(Notify::new());
         let metrics = Arc::new(AtomicMetrics {
@@ -383,7 +482,6 @@ impl StreamingCachixDaemon {
             failed_with_reasons: Arc::new(Mutex::new(HashMap::new())),
         });
 
-        // Spawn background event processing task
         let event_task = {
             let client = Arc::clone(&client);
             let pending_paths = Arc::clone(&pending_paths);
@@ -392,21 +490,11 @@ impl StreamingCachixDaemon {
             let config = config.clone();
 
             tokio::spawn(async move {
-                Self::event_loop(
-                    daemon_id,
-                    client,
-                    pending_paths,
-                    work_notify,
-                    metrics,
-                    config,
-                )
-                .await
+                Self::event_loop(client_id, client, pending_paths, work_notify, metrics, config).await
             })
         };
 
         Ok(Self {
-            daemon_id,
-            daemon_process: Arc::new(Mutex::new(daemon_process)),
             pending_paths,
             work_notify,
             metrics,
@@ -470,31 +558,30 @@ impl StreamingCachixDaemon {
         }
     }
 
-    /// Background event processing loop
     async fn event_loop(
-        daemon_id: Uuid,
-        client: Arc<Mutex<Option<CachixDaemonClient>>>,
+        client_id: Uuid,
+        client: Arc<Mutex<Option<SocketClient>>>,
         pending_paths: Arc<Mutex<VecDeque<String>>>,
         work_notify: Arc<Notify>,
         metrics: Arc<AtomicMetrics>,
-        config: DaemonConfig,
+        config: DaemonConnectConfig,
     ) {
         let mut reconnect_backoff = Duration::from_millis(config.connection.reconnect_backoff_ms);
 
         loop {
-            // Try to ensure we have a connected client
             {
                 let mut client_lock = client.lock().await;
 
                 if client_lock.is_none() {
-                    match CachixDaemonClient::connect(config.clone()).await {
+                    match SocketClient::connect(config.clone()).await {
                         Ok(c) => {
-                            tracing::info!(daemon_id = %daemon_id, "Reconnected to daemon");
+                            tracing::info!(client_id = %client_id, "Reconnected to daemon");
                             *client_lock = Some(c);
-                            reconnect_backoff = Duration::from_millis(config.connection.reconnect_backoff_ms);
+                            reconnect_backoff =
+                                Duration::from_millis(config.connection.reconnect_backoff_ms);
                         }
                         Err(e) => {
-                            tracing::warn!(daemon_id = %daemon_id, "Reconnect failed: {}", e);
+                            tracing::warn!(client_id = %client_id, "Reconnect failed: {}", e);
                             drop(client_lock);
                             tokio::time::sleep(reconnect_backoff).await;
                             reconnect_backoff = reconnect_backoff
@@ -506,9 +593,8 @@ impl StreamingCachixDaemon {
                 }
             }
 
-            // Process pending paths and read events
             let should_wait = Self::process_cycle(
-                daemon_id,
+                client_id,
                 Arc::clone(&client),
                 Arc::clone(&pending_paths),
                 Arc::clone(&metrics),
@@ -529,10 +615,9 @@ impl StreamingCachixDaemon {
         }
     }
 
-    /// Single iteration of event processing
     async fn process_cycle(
-        daemon_id: Uuid,
-        client: Arc<Mutex<Option<CachixDaemonClient>>>,
+        client_id: Uuid,
+        client: Arc<Mutex<Option<SocketClient>>>,
         pending_paths: Arc<Mutex<VecDeque<String>>>,
         metrics: Arc<AtomicMetrics>,
     ) -> bool {
@@ -561,7 +646,7 @@ impl StreamingCachixDaemon {
         let mut client_lock = client.lock().await;
         if let Some(client) = client_lock.as_mut() {
             if let Err(e) = client.send_push_request(paths_to_send.clone()).await {
-                tracing::error!(daemon_id = %daemon_id, "Failed to send push request: {}", e);
+                tracing::error!(client_id = %client_id, "Failed to send push request: {}", e);
                 // Paths go back to queue on error
                 let mut queue = pending_paths.lock().await;
                 for path in paths_to_send {
@@ -580,9 +665,8 @@ impl StreamingCachixDaemon {
         false // Don't wait, immediately process more work
     }
 
-    /// Read events until push completes
     async fn read_push_events(
-        client: &mut CachixDaemonClient,
+        client: &mut SocketClient,
         metrics: &Arc<AtomicMetrics>,
         sent_paths: &[String],
     ) {
@@ -656,64 +740,46 @@ impl StreamingCachixDaemon {
         }
     }
 
-    /// Get callback for build integration
-    pub fn as_build_callback(&self) -> StreamingCallback {
-        StreamingCallback {
-            daemon: self.clone_handle(),
+    pub fn as_build_callback(&self) -> ClientCallback {
+        ClientCallback {
+            handle: self.clone_handle(),
         }
     }
 
-    fn clone_handle(&self) -> StreamingDaemonHandle {
-        StreamingDaemonHandle {
+    fn clone_handle(&self) -> ClientHandle {
+        ClientHandle {
             pending_paths: Arc::clone(&self.pending_paths),
             work_notify: Arc::clone(&self.work_notify),
         }
     }
 
-    /// Shutdown daemon gracefully
-    pub async fn shutdown(&mut self) -> Result<()> {
-        tracing::info!(daemon_id = %self.daemon_id, "Shutting down daemon");
-
-        // Wait for any in-progress work
-        self.wait_for_completion(Duration::from_secs(60)).await.ok();
-
-        // Kill daemon process if we spawned it
-        let mut process_lock = self.daemon_process.lock().await;
-        if let Some(mut process) = process_lock.take() {
-            let _ = process.kill();
-        }
-
-        // Cancel background task
+    pub fn shutdown(&self) {
         self.event_task.abort();
-
-        Ok(())
     }
 }
 
-/// Cloneable handle for callback integration
 #[derive(Clone)]
-struct StreamingDaemonHandle {
+struct ClientHandle {
     pending_paths: Arc<Mutex<VecDeque<String>>>,
     work_notify: Arc<Notify>,
 }
 
+pub struct ClientCallback {
+    handle: ClientHandle,
+}
+
 #[async_trait::async_trait]
-impl BuildPathCallback for StreamingCallback {
+impl BuildPathCallback for ClientCallback {
     async fn on_path_realized(&self, path: &str) -> Result<()> {
-        let mut queue = self.daemon.pending_paths.lock().await;
+        let mut queue = self.handle.pending_paths.lock().await;
         queue.push_back(path.to_string());
-        self.daemon.work_notify.notify_one();
+        self.handle.work_notify.notify_one();
         Ok(())
     }
 
     async fn on_build_complete(&self, _path: &str, _success: bool) -> Result<()> {
         Ok(())
     }
-}
-
-/// Callback implementation for real-time path detection
-pub struct StreamingCallback {
-    daemon: StreamingDaemonHandle,
 }
 
 #[cfg(test)]
@@ -729,31 +795,89 @@ mod tests {
         assert!(json.contains("/nix/store/abc123-package-1.0"));
     }
 
-    #[tokio::test]
-    async fn test_queue_and_metrics() {
-        let metrics = Arc::new(AtomicMetrics {
-            queued: AtomicU64::new(0),
-            in_progress: AtomicU64::new(0),
-            completed: AtomicU64::new(0),
-            failed: AtomicU64::new(0),
-            failed_with_reasons: Arc::new(Mutex::new(HashMap::new())),
-        });
-
-        metrics.queued.fetch_add(5, Ordering::SeqCst);
-        assert_eq!(metrics.queued.load(Ordering::SeqCst), 5);
-
-        metrics.queued.fetch_sub(2, Ordering::SeqCst);
-        metrics.in_progress.fetch_add(2, Ordering::SeqCst);
-        assert_eq!(metrics.queued.load(Ordering::SeqCst), 3);
-        assert_eq!(metrics.in_progress.load(Ordering::SeqCst), 2);
+    #[test]
+    fn test_push_request_multiple_paths() {
+        let request = ClientPushRequest::new(
+            vec![
+                "/nix/store/abc-1.0".to_string(),
+                "/nix/store/def-2.0".to_string(),
+            ],
+            false,
+        );
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("storePaths"));
+        assert!(json.contains("/nix/store/abc-1.0"));
+        assert!(json.contains("/nix/store/def-2.0"));
+        assert!(json.contains("\"subscribeToUpdates\":false"));
     }
 
     #[test]
-    fn test_daemon_config_new() {
-        let config = DaemonConfig::new("my-cache");
+    fn test_spawn_config_new() {
+        let config = DaemonSpawnConfig::new("my-cache", PathBuf::from("/tmp/test.sock"));
         assert_eq!(config.cache_name, "my-cache");
+        assert_eq!(config.socket_path, PathBuf::from("/tmp/test.sock"));
+    }
+
+    #[test]
+    fn test_connect_config_new() {
+        let config = DaemonConnectConfig::new(PathBuf::from("/tmp/test.sock"));
+        assert_eq!(config.socket_path, PathBuf::from("/tmp/test.sock"));
         assert_eq!(config.connection.connect_timeout, Duration::from_secs(5));
-        assert_eq!(config.connection.operation_timeout, Duration::from_secs(30));
         assert_eq!(config.connection.max_retries, 3);
+    }
+
+    #[test]
+    fn test_connect_config_custom_params() {
+        let config = DaemonConnectConfig {
+            socket_path: PathBuf::from("/tmp/custom.sock"),
+            connection: ConnectionParams {
+                connect_timeout: Duration::from_secs(10),
+                operation_timeout: Duration::from_secs(60),
+                max_retries: 5,
+                reconnect_backoff_ms: 1000,
+            },
+        };
+        assert_eq!(config.socket_path, PathBuf::from("/tmp/custom.sock"));
+        assert_eq!(config.connection.connect_timeout, Duration::from_secs(10));
+        assert_eq!(config.connection.max_retries, 5);
+    }
+
+    #[test]
+    fn test_connection_params_default() {
+        let params = ConnectionParams::default();
+        assert_eq!(params.connect_timeout, Duration::from_secs(5));
+        assert_eq!(params.operation_timeout, Duration::from_secs(30));
+        assert_eq!(params.max_retries, 3);
+        assert_eq!(params.reconnect_backoff_ms, 500);
+    }
+
+    #[test]
+    fn test_metrics_summary_format() {
+        let metrics = DaemonMetrics {
+            queued: 10,
+            in_progress: 5,
+            completed: 100,
+            failed: 2,
+            failed_with_reasons: Arc::new(Mutex::new(HashMap::new())),
+        };
+        let summary = metrics.summary();
+        assert!(summary.contains("Queued: 10"));
+        assert!(summary.contains("In Progress: 5"));
+        assert!(summary.contains("Completed: 100"));
+        assert!(summary.contains("Failed: 2"));
+    }
+
+    #[test]
+    fn test_metrics_summary_zero_values() {
+        let metrics = DaemonMetrics {
+            queued: 0,
+            in_progress: 0,
+            completed: 0,
+            failed: 0,
+            failed_with_reasons: Arc::new(Mutex::new(HashMap::new())),
+        };
+        let summary = metrics.summary();
+        assert!(summary.contains("Queued: 0"));
+        assert!(summary.contains("Completed: 0"));
     }
 }
