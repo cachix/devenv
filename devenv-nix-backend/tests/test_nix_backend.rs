@@ -620,19 +620,15 @@ async fn test_backend_search_case_insensitive() {
         .await
         .expect("Failed to assemble");
 
-    // Search with different cases - all should succeed
-    let _results1 = backend
+    // Search with uppercase - should find results due to case-insensitive matching
+    let results = backend
         .search("HELLO", None)
         .await
         .expect("Uppercase search should succeed");
-    let _results2 = backend
-        .search("Hello", None)
-        .await
-        .expect("Mixed case search should succeed");
-    let _results3 = backend
-        .search("hello", None)
-        .await
-        .expect("Lowercase search should succeed");
+    assert!(
+        !results.is_empty(),
+        "Case-insensitive search should find 'hello' packages"
+    );
 }
 
 #[nix_test]
