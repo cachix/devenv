@@ -21,9 +21,9 @@ use tokio::net::UnixStream;
 use tokio::sync::{Mutex, Notify};
 use uuid::Uuid;
 
-/// Configuration for cachix daemon connection and behavior
+/// Connection parameters for the cachix daemon
 #[derive(Clone, Debug)]
-pub struct DaemonConfig {
+pub struct ConnectionParams {
     /// Timeout for socket connection attempts
     pub connect_timeout: Duration,
     /// Timeout for individual socket operations
@@ -32,17 +32,36 @@ pub struct DaemonConfig {
     pub max_retries: u32,
     /// Backoff multiplier for reconnection attempts
     pub reconnect_backoff_ms: u64,
-    /// Optional socket path for testing (overrides env vars)
-    pub socket_path: Option<PathBuf>,
 }
 
-impl Default for DaemonConfig {
+impl Default for ConnectionParams {
     fn default() -> Self {
         Self {
             connect_timeout: Duration::from_secs(5),
             operation_timeout: Duration::from_secs(30),
             max_retries: 3,
             reconnect_backoff_ms: 500,
+        }
+    }
+}
+
+/// Configuration for cachix daemon connection and behavior
+#[derive(Clone, Debug)]
+pub struct DaemonConfig {
+    /// Name of the cachix cache to push to
+    pub cache_name: String,
+    /// Connection parameters (timeouts, retries, etc.)
+    pub connection: ConnectionParams,
+    /// Optional socket path for testing (overrides env vars)
+    pub socket_path: Option<PathBuf>,
+}
+
+impl DaemonConfig {
+    /// Create a new DaemonConfig with the given cache name and default connection params
+    pub fn new(cache_name: impl Into<String>) -> Self {
+        Self {
+            cache_name: cache_name.into(),
+            connection: ConnectionParams::default(),
             socket_path: None,
         }
     }
@@ -202,7 +221,7 @@ impl CachixDaemonClient {
         let socket_path = Self::get_socket_path(&config)?;
 
         let socket =
-            tokio::time::timeout(config.connect_timeout, UnixStream::connect(&socket_path))
+            tokio::time::timeout(config.connection.connect_timeout, UnixStream::connect(&socket_path))
                 .await
                 .context("Timeout connecting to cachix daemon")?
                 .context("Failed to connect to cachix daemon socket")?;
@@ -235,7 +254,7 @@ impl CachixDaemonClient {
             Ok::<(), anyhow::Error>(())
         };
 
-        tokio::time::timeout(self.config.operation_timeout, write_future)
+        tokio::time::timeout(self.config.connection.operation_timeout, write_future)
             .await
             .context("Timeout writing push request")?
             .context("Failed to write push request")?;
@@ -269,7 +288,7 @@ impl CachixDaemonClient {
             }
         };
 
-        tokio::time::timeout(self.config.operation_timeout, read_future)
+        tokio::time::timeout(self.config.connection.operation_timeout, read_future)
             .await
             .context("Timeout reading from daemon")?
     }
@@ -323,12 +342,13 @@ impl StreamingCachixDaemon {
             let process = std::process::Command::new("cachix")
                 .arg("daemon")
                 .arg("run")
+                .arg(&config.cache_name)
                 .spawn()
                 .context("Failed to spawn cachix daemon. Is cachix CLI installed?")?;
 
             // Poll for socket with exponential backoff
             let mut retries = 0;
-            let mut backoff = Duration::from_millis(config.reconnect_backoff_ms);
+            let mut backoff = Duration::from_millis(config.connection.reconnect_backoff_ms);
 
             let client = loop {
                 tokio::time::sleep(backoff).await;
@@ -338,7 +358,7 @@ impl StreamingCachixDaemon {
                         tracing::info!(daemon_id = %daemon_id, retries, "Daemon started successfully");
                         break c;
                     }
-                    Err(_) if retries < config.max_retries => {
+                    Err(_) if retries < config.connection.max_retries => {
                         retries += 1;
                         backoff = backoff.saturating_mul(2).min(Duration::from_secs(5));
                         continue;
@@ -459,7 +479,7 @@ impl StreamingCachixDaemon {
         metrics: Arc<AtomicMetrics>,
         config: DaemonConfig,
     ) {
-        let mut reconnect_backoff = Duration::from_millis(config.reconnect_backoff_ms);
+        let mut reconnect_backoff = Duration::from_millis(config.connection.reconnect_backoff_ms);
 
         loop {
             // Try to ensure we have a connected client
@@ -471,7 +491,7 @@ impl StreamingCachixDaemon {
                         Ok(c) => {
                             tracing::info!(daemon_id = %daemon_id, "Reconnected to daemon");
                             *client_lock = Some(c);
-                            reconnect_backoff = Duration::from_millis(config.reconnect_backoff_ms);
+                            reconnect_backoff = Duration::from_millis(config.connection.reconnect_backoff_ms);
                         }
                         Err(e) => {
                             tracing::warn!(daemon_id = %daemon_id, "Reconnect failed: {}", e);
@@ -711,7 +731,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_queue_and_metrics() {
-        let config = DaemonConfig::default();
         let metrics = Arc::new(AtomicMetrics {
             queued: AtomicU64::new(0),
             in_progress: AtomicU64::new(0),
@@ -730,10 +749,11 @@ mod tests {
     }
 
     #[test]
-    fn test_daemon_config_default() {
-        let config = DaemonConfig::default();
-        assert_eq!(config.connect_timeout, Duration::from_secs(5));
-        assert_eq!(config.operation_timeout, Duration::from_secs(30));
-        assert_eq!(config.max_retries, 3);
+    fn test_daemon_config_new() {
+        let config = DaemonConfig::new("my-cache");
+        assert_eq!(config.cache_name, "my-cache");
+        assert_eq!(config.connection.connect_timeout, Duration::from_secs(5));
+        assert_eq!(config.connection.operation_timeout, Duration::from_secs(30));
+        assert_eq!(config.connection.max_retries, 3);
     }
 }
