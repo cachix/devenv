@@ -632,7 +632,7 @@ async fn test_backend_search_case_insensitive() {
 }
 
 #[nix_test]
-async fn test_backend_search_regex_special_chars() {
+async fn test_backend_search_regex_pattern() {
     let yaml = r#"inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
@@ -650,11 +650,11 @@ async fn test_backend_search_regex_special_chars() {
         .await
         .expect("Failed to assemble");
 
-    // Search with regex special characters (should be escaped)
-    let result = backend.search("hello.world", None).await;
+    // Search with regex pattern - verify regex syntax is accepted
+    let result = backend.search("^ripgrep$", None).await;
     assert!(
         result.is_ok(),
-        "Search with dots should succeed (should be escaped): {:?}",
+        "Search with regex anchors should succeed: {:?}",
         result.err()
     );
 }
