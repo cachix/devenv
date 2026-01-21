@@ -902,10 +902,8 @@ impl NixRustBackend {
     /// Initialize cachix daemon if push is configured
     async fn init_cachix_daemon(&self, push_cache: &str) -> Result<()> {
         tracing::debug!("Starting cachix daemon for push operations");
-        let daemon_config = crate::cachix_daemon::DaemonConfig {
-            socket_path: self.cachix_manager.paths.daemon_socket.clone(),
-            ..Default::default()
-        };
+        let mut daemon_config = crate::cachix_daemon::DaemonConfig::new(push_cache);
+        daemon_config.socket_path = self.cachix_manager.paths.daemon_socket.clone();
         match crate::cachix_daemon::StreamingCachixDaemon::start(daemon_config).await {
             Ok(daemon) => {
                 let mut handle = self.cachix_daemon.lock().await;

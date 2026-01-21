@@ -21,7 +21,7 @@ use common::mock_cachix_daemon::MockCachixDaemon;
 #[nix_test]
 async fn test_daemon_startup_shutdown() {
     // Test basic daemon startup with default config
-    let config = DaemonConfig::default();
+    let config = DaemonConfig::new("test-cache");
 
     // This may fail if daemon is not running, but that's expected in test environment
     // We're testing that the code path works without panicking
@@ -41,7 +41,7 @@ async fn test_daemon_startup_shutdown() {
 #[nix_test]
 async fn test_daemon_metrics_initialization() {
     // Test that metrics are properly initialized
-    let config = DaemonConfig::default();
+    let config = DaemonConfig::new("test-cache");
 
     match StreamingCachixDaemon::start(config).await {
         Ok(daemon) => {
@@ -61,7 +61,7 @@ async fn test_daemon_metrics_initialization() {
 
 #[nix_test]
 async fn test_queue_multiple_paths() {
-    let config = DaemonConfig::default();
+    let config = DaemonConfig::new("test-cache");
 
     match StreamingCachixDaemon::start(config).await {
         Ok(daemon) => {
@@ -90,7 +90,7 @@ async fn test_queue_multiple_paths() {
 
 #[nix_test]
 async fn test_queue_single_path() {
-    let config = DaemonConfig::default();
+    let config = DaemonConfig::new("test-cache");
 
     match StreamingCachixDaemon::start(config).await {
         Ok(daemon) => {
@@ -115,7 +115,7 @@ async fn test_queue_single_path() {
 
 #[nix_test]
 async fn test_metrics_summary() {
-    let config = DaemonConfig::default();
+    let config = DaemonConfig::new("test-cache");
 
     match StreamingCachixDaemon::start(config).await {
         Ok(daemon) => {
@@ -149,24 +149,30 @@ async fn test_metrics_summary() {
 
 #[nix_test]
 async fn test_daemon_config_timeouts() {
+    use devenv_nix_backend::cachix_daemon::ConnectionParams;
+
     // Test custom timeout configuration
     let config = DaemonConfig {
-        connect_timeout: Duration::from_secs(10),
-        operation_timeout: Duration::from_secs(60),
-        max_retries: 5,
-        reconnect_backoff_ms: 1000,
+        cache_name: "test-cache".to_string(),
+        connection: ConnectionParams {
+            connect_timeout: Duration::from_secs(10),
+            operation_timeout: Duration::from_secs(60),
+            max_retries: 5,
+            reconnect_backoff_ms: 1000,
+        },
         socket_path: None,
     };
 
-    assert_eq!(config.connect_timeout, Duration::from_secs(10));
-    assert_eq!(config.operation_timeout, Duration::from_secs(60));
-    assert_eq!(config.max_retries, 5);
-    assert_eq!(config.reconnect_backoff_ms, 1000);
+    assert_eq!(config.cache_name, "test-cache");
+    assert_eq!(config.connection.connect_timeout, Duration::from_secs(10));
+    assert_eq!(config.connection.operation_timeout, Duration::from_secs(60));
+    assert_eq!(config.connection.max_retries, 5);
+    assert_eq!(config.connection.reconnect_backoff_ms, 1000);
 }
 
 #[nix_test]
 async fn test_wait_for_completion_timeout() {
-    let config = DaemonConfig::default();
+    let config = DaemonConfig::new("test-cache");
 
     match StreamingCachixDaemon::start(config).await {
         Ok(daemon) => {
@@ -201,7 +207,7 @@ async fn test_wait_for_completion_timeout() {
 
 #[nix_test]
 async fn test_callback_path_queuing() {
-    let config = DaemonConfig::default();
+    let config = DaemonConfig::new("test-cache");
 
     match StreamingCachixDaemon::start(config).await {
         Ok(daemon) => {
@@ -227,7 +233,7 @@ async fn test_callback_path_queuing() {
 
 #[nix_test]
 async fn test_concurrent_queueing() {
-    let config = DaemonConfig::default();
+    let config = DaemonConfig::new("test-cache");
 
     match StreamingCachixDaemon::start(config).await {
         Ok(daemon) => {
@@ -267,7 +273,7 @@ async fn test_concurrent_queueing() {
 
 #[nix_test]
 async fn test_empty_queue_operations() {
-    let config = DaemonConfig::default();
+    let config = DaemonConfig::new("test-cache");
 
     match StreamingCachixDaemon::start(config).await {
         Ok(daemon) => {
@@ -287,12 +293,13 @@ async fn test_empty_queue_operations() {
 }
 
 #[test]
-fn test_daemon_config_default() {
-    let config = DaemonConfig::default();
-    assert_eq!(config.connect_timeout, Duration::from_secs(5));
-    assert_eq!(config.operation_timeout, Duration::from_secs(30));
-    assert_eq!(config.max_retries, 3);
-    assert_eq!(config.reconnect_backoff_ms, 500);
+fn test_daemon_config_new() {
+    let config = DaemonConfig::new("my-cache");
+    assert_eq!(config.cache_name, "my-cache");
+    assert_eq!(config.connection.connect_timeout, Duration::from_secs(5));
+    assert_eq!(config.connection.operation_timeout, Duration::from_secs(30));
+    assert_eq!(config.connection.max_retries, 3);
+    assert_eq!(config.connection.reconnect_backoff_ms, 500);
 }
 
 #[nix_test]
@@ -320,11 +327,15 @@ async fn test_daemon_with_mock_socket() {
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     // Start real daemon client - it will connect to our mock socket
+    use devenv_nix_backend::cachix_daemon::ConnectionParams;
     let config = DaemonConfig {
-        connect_timeout: Duration::from_secs(5),
-        operation_timeout: Duration::from_secs(10),
-        max_retries: 0, // Don't retry, just connect to existing socket
-        reconnect_backoff_ms: 100,
+        cache_name: "test-cache".to_string(),
+        connection: ConnectionParams {
+            connect_timeout: Duration::from_secs(5),
+            operation_timeout: Duration::from_secs(10),
+            max_retries: 0, // Don't retry, just connect to existing socket
+            reconnect_backoff_ms: 100,
+        },
         socket_path: Some(mock.socket_path().to_path_buf()),
     };
     let daemon = StreamingCachixDaemon::start(config)
