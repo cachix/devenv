@@ -114,9 +114,8 @@ pub struct NixRustBackend {
     // Cachix manager for handling binary cache configuration
     cachix_manager: Arc<CachixManager>,
 
-    // Cachix daemon for pushing store paths
-    // Optional as it's only used when cachix.push is configured
-    cachix_daemon: Arc<tokio::sync::Mutex<Option<crate::cachix_daemon::StreamingCachixDaemon>>>,
+    // Cachix daemon for pushing store paths (only when cachix.push is configured)
+    cachix_daemon: Arc<tokio::sync::Mutex<Option<crate::cachix_daemon::OwnedDaemon>>>,
 
     // Cached import expression: (import /path/to/default.nix { ... args ... })
     // Set once in assemble(). Kept for potential future use (e.g., debugging).
@@ -369,9 +368,8 @@ impl NixRustBackend {
         let activity_logger = logger_setup.logger;
         let log_bridge = logger_setup.bridge;
 
-        let cachix_daemon: Arc<
-            tokio::sync::Mutex<Option<crate::cachix_daemon::StreamingCachixDaemon>>,
-        > = Arc::new(tokio::sync::Mutex::new(None));
+        let cachix_daemon: Arc<tokio::sync::Mutex<Option<crate::cachix_daemon::OwnedDaemon>>> =
+            Arc::new(tokio::sync::Mutex::new(None));
 
         // Create oneshot channel for cleanup completion signaling
         let (cleanup_tx, cleanup_rx) = tokio::sync::oneshot::channel::<()>();
@@ -399,13 +397,8 @@ impl NixRustBackend {
 
             if let Some(daemon) = daemon {
                 tracing::info!("Finalizing cachix pushes on shutdown...");
-                match daemon.wait_for_completion(Duration::from_secs(300)).await {
-                    Ok(metrics) => {
-                        tracing::info!("{}", metrics.summary());
-                    }
-                    Err(e) => {
-                        tracing::warn!("Timeout waiting for cachix push completion: {}", e);
-                    }
+                if let Err(e) = daemon.shutdown(Duration::from_secs(300)).await {
+                    tracing::warn!("Error during cachix daemon shutdown: {}", e);
                 }
             }
 
@@ -902,9 +895,23 @@ impl NixRustBackend {
     /// Initialize cachix daemon if push is configured
     async fn init_cachix_daemon(&self, push_cache: &str) -> Result<()> {
         tracing::debug!("Starting cachix daemon for push operations");
-        let mut daemon_config = crate::cachix_daemon::DaemonConfig::new(push_cache);
-        daemon_config.socket_path = self.cachix_manager.paths.daemon_socket.clone();
-        match crate::cachix_daemon::StreamingCachixDaemon::start(daemon_config).await {
+
+        let socket_path = self
+            .cachix_manager
+            .paths
+            .daemon_socket
+            .clone()
+            .unwrap_or_else(|| {
+                std::env::temp_dir().join(format!("cachix-daemon-{}.sock", std::process::id()))
+            });
+
+        match crate::cachix_daemon::OwnedDaemon::spawn(
+            push_cache,
+            socket_path,
+            crate::cachix_daemon::ConnectionParams::default(),
+        )
+        .await
+        {
             Ok(daemon) => {
                 let mut handle = self.cachix_daemon.lock().await;
                 *handle = Some(daemon);
