@@ -1024,12 +1024,52 @@ impl ActivityModel {
             .collect()
     }
 
-    /// Get all error messages (including those with a parent activity).
-    /// Used for printing full errors after TUI exit.
-    pub fn get_all_error_messages(&self) -> Vec<&Message> {
-        self.message_log
-            .iter()
-            .filter(|msg| msg.level == ActivityLevel::Error)
+    /// Get error messages from Activity::Message variants.
+    /// This catches errors that may have been created as activities but not in message_log.
+    pub fn get_activity_error_messages(&self) -> Vec<(&str, Option<&str>)> {
+        self.activities
+            .values()
+            .filter_map(|activity| {
+                if let ActivityVariant::Message(msg_data) = &activity.variant
+                    && msg_data.level == ActivityLevel::Error
+                {
+                    Some((activity.name.as_str(), msg_data.details.as_deref()))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Get stderr output from failed or incomplete builds.
+    /// Returns tuples of (build_name, stderr_lines).
+    ///
+    /// This includes:
+    /// - Builds that completed with success=false
+    /// - Builds that are still active/queued but have stderr output
+    ///   (the FFI layer doesn't always report failures properly)
+    pub fn get_failed_build_errors(&self) -> Vec<(&str, &[String])> {
+        self.activities
+            .values()
+            .filter_map(|activity| {
+                if let ActivityVariant::Build(build) = &activity.variant
+                    && !build.log_stderr_lines.is_empty()
+                {
+                    // Include if explicitly failed OR still active (likely unreported failure)
+                    let is_failed = matches!(
+                        activity.state,
+                        NixActivityState::Completed { success: false, .. }
+                    );
+                    let is_incomplete = matches!(
+                        activity.state,
+                        NixActivityState::Active | NixActivityState::Queued
+                    );
+                    if is_failed || is_incomplete {
+                        return Some((activity.name.as_str(), build.log_stderr_lines.as_slice()));
+                    }
+                }
+                None
+            })
             .collect()
     }
 

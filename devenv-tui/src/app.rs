@@ -231,11 +231,25 @@ impl TuiApp {
                 // On interrupt, don't render final state (user wants to exit quickly)
                 // On normal completion, render the final state with all events processed
                 if shutdown.last_signal().is_none() {
-                    // Collect ALL errors for printing after TUI (including nested ones)
-                    let all_errors: Vec<_> = model_guard
-                        .get_all_error_messages()
+                    // Collect standalone error messages (no parent) from message_log
+                    let standalone_errors: Vec<_> = model_guard
+                        .get_error_messages()
                         .into_iter()
                         .map(|m| (m.text.clone(), m.details.clone()))
+                        .collect();
+
+                    // Collect nested error messages (with parent) from activities
+                    let activity_errors: Vec<_> = model_guard
+                        .get_activity_error_messages()
+                        .into_iter()
+                        .map(|(name, details)| (name.to_string(), details.map(|s| s.to_string())))
+                        .collect();
+
+                    // Collect stderr from failed builds
+                    let failed_build_errors: Vec<_> = model_guard
+                        .get_failed_build_errors()
+                        .into_iter()
+                        .map(|(name, lines)| (name.to_string(), lines.to_vec()))
                         .collect();
 
                     let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
@@ -247,14 +261,39 @@ impl TuiApp {
                     element.eprint();
 
                     // Print full error messages in red (not truncated by TUI width)
-                    if !all_errors.is_empty() {
+                    let has_errors = !standalone_errors.is_empty()
+                        || !activity_errors.is_empty()
+                        || !failed_build_errors.is_empty();
+                    if has_errors {
                         let mut stderr = io::stderr();
                         eprintln!();
-                        for (text, details) in all_errors {
+
+                        // Print standalone error messages (no parent activity)
+                        for (text, details) in standalone_errors {
                             let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
                             eprintln!("{}", text);
                             if let Some(details) = details {
                                 eprintln!("{}", details);
+                            }
+                            let _ = execute!(stderr, ResetColor);
+                        }
+
+                        // Print error messages from Activity::Message variants
+                        for (text, details) in activity_errors {
+                            let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
+                            eprintln!("{}", text);
+                            if let Some(details) = details {
+                                eprintln!("{}", details);
+                            }
+                            let _ = execute!(stderr, ResetColor);
+                        }
+
+                        // Print build stderr (from failed or incomplete builds)
+                        for (name, lines) in failed_build_errors {
+                            let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
+                            eprintln!("Build error: {}", name);
+                            for line in lines {
+                                eprintln!("  {}", line);
                             }
                             let _ = execute!(stderr, ResetColor);
                         }
