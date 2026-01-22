@@ -197,10 +197,11 @@ impl Devenv {
             .unwrap_or(devenv_root.join(".devenv"));
         let devenv_dot_gc = devenv_dotfile.join("gc");
 
+        // TMPDIR for build artifacts - should NOT use XDG_RUNTIME_DIR as that's
+        // a small tmpfs meant for runtime files (sockets), not build artifacts
         let devenv_tmp =
-            PathBuf::from(std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
-                std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string())
-            }));
+            PathBuf::from(std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string()));
+
         // first 7 chars of sha256 hash of devenv_state
         let devenv_state_hash = {
             let mut hasher = sha2::Sha256::new();
@@ -208,7 +209,15 @@ impl Devenv {
             let result = hasher.finalize();
             hex::encode(result)
         };
-        let devenv_runtime = devenv_tmp.join(format!("devenv-{}", &devenv_state_hash[..7]));
+
+        // Runtime directory for sockets - XDG_RUNTIME_DIR is the correct location
+        // per the XDG Base Directory Specification
+        let devenv_runtime_base =
+            PathBuf::from(std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
+                std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string())
+            }));
+        let devenv_runtime =
+            devenv_runtime_base.join(format!("devenv-{}", &devenv_state_hash[..7]));
 
         let global_options = options.global_options.unwrap_or_default();
 
