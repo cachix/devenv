@@ -769,6 +769,7 @@ impl NixRustBackend {
         Ok(Some(CachixCacheInfo {
             caches: cachix_config.caches,
             known_keys,
+            binary: cachix_config.binary,
         }))
     }
 
@@ -892,9 +893,8 @@ impl NixRustBackend {
         Ok(())
     }
 
-    /// Initialize cachix daemon if push is configured
-    async fn init_cachix_daemon(&self, push_cache: &str) -> Result<()> {
-        tracing::debug!("Starting cachix daemon for push operations");
+    async fn init_cachix_daemon(&self, push_cache: &str, binary: &Path) -> Result<()> {
+        tracing::debug!(binary = %binary.display(), "Starting cachix daemon");
 
         let socket_path = self
             .cachix_manager
@@ -905,9 +905,15 @@ impl NixRustBackend {
                 std::env::temp_dir().join(format!("cachix-daemon-{}.sock", std::process::id()))
             });
 
-        match crate::cachix_daemon::OwnedDaemon::spawn(
-            push_cache,
+        let spawn_config = crate::cachix_daemon::DaemonSpawnConfig {
+            cache_name: push_cache.to_string(),
             socket_path,
+            binary: binary.to_path_buf(),
+            dry_run: false,
+        };
+
+        match crate::cachix_daemon::OwnedDaemon::spawn(
+            spawn_config,
             crate::cachix_daemon::ConnectionParams::default(),
         )
         .await
@@ -915,7 +921,7 @@ impl NixRustBackend {
             Ok(daemon) => {
                 let mut handle = self.cachix_daemon.lock().await;
                 *handle = Some(daemon);
-                tracing::info!(push_cache, "Cachix daemon started successfully");
+                tracing::info!(push_cache, "Cachix daemon started");
             }
             Err(e) => {
                 tracing::warn!("Failed to start cachix daemon: {}", e);
@@ -1089,7 +1095,7 @@ impl NixBackend for NixRustBackend {
         if let Some(cachix_config) = self.get_cachix_config().await? {
             self.apply_cachix_substituters(&cachix_config).await?;
             if let Some(ref push_cache) = cachix_config.caches.push {
-                self.init_cachix_daemon(push_cache).await?;
+                self.init_cachix_daemon(push_cache, &cachix_config.binary).await?;
             }
         }
 
@@ -2077,7 +2083,7 @@ impl NixRustBackend {
             Err(e) => {
                 // Log the full error to help debug port allocation errors
                 tracing::error!(error = %e, "Failed to convert {} to JSON", attr_path);
-                return Err(miette::miette!("{}", e));
+                return Err(miette::miette!("Failed to convert {} to JSON: {}", attr_path, e));
             }
         };
 
