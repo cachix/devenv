@@ -1544,7 +1544,6 @@ dependencies = [
  "console 0.16.2",
  "devenv-activity",
  "devenv-cache-core",
- "glob",
  "globset",
  "miette",
  "nix 0.30.1",
