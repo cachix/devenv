@@ -8,11 +8,43 @@ use devenv_cache_core::{
     time,
 };
 use glob::{MatchOptions, glob_with};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde_json::Value;
 use sqlx::Row;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tracing::{debug, warn};
+
+/// Build a GlobSet from negation patterns (patterns starting with `!`)
+///
+/// Returns None if there are no negation patterns or if building fails.
+fn build_negation_globset(patterns: &[&str]) -> Option<GlobSet> {
+    if patterns.is_empty() {
+        return None;
+    }
+
+    let mut builder = GlobSetBuilder::new();
+    for pattern in patterns {
+        // Strip the leading `!` from the pattern
+        let pattern = &pattern[1..];
+        match Glob::new(pattern) {
+            Ok(glob) => {
+                builder.add(glob);
+            }
+            Err(e) => {
+                warn!("Invalid negation glob pattern '{}': {}", pattern, e);
+            }
+        }
+    }
+
+    match builder.build() {
+        Ok(globset) => Some(globset),
+        Err(e) => {
+            warn!("Failed to build negation globset: {}", e);
+            None
+        }
+    }
+}
 
 /// Expand glob patterns into actual file paths
 ///
@@ -22,8 +54,25 @@ use tracing::{debug, warn};
 ///   (e.g. `src**/*.rs` is invalid and will not match anything)
 /// - `require_literal_leading_dot: true` – a leading dot must be written explicitly
 ///   (e.g. `*` will not match `.hidden`, you must use `.*` or `.hidden` directly)
+///
+/// Negation patterns (starting with `!`) are supported to exclude paths:
+/// - `!**/node_modules/**` – excludes all paths containing node_modules
+/// - `!**/*.test.ts` – excludes all test files
+///
+/// Example: `["**/*.ts", "!**/node_modules/**"]` matches all TypeScript files
+/// except those in node_modules directories.
 pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
-    patterns
+    // Separate positive patterns from negation patterns
+    let (negation_patterns, positive_patterns): (Vec<&str>, Vec<&str>) = patterns
+        .iter()
+        .map(|s| s.as_str())
+        .partition(|p| p.starts_with('!'));
+
+    // Build a globset for negation patterns
+    let negation_set = build_negation_globset(&negation_patterns);
+
+    // Expand positive patterns
+    let expanded: Vec<String> = positive_patterns
         .iter()
         .flat_map(|pattern| {
             glob_with(
@@ -40,7 +89,16 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
             .filter_map(|path| path.ok())
             .filter_map(|path| path.to_str().map(String::from))
         })
-        .collect()
+        .collect();
+
+    // Filter out paths matching negation patterns
+    match negation_set {
+        Some(globset) => expanded
+            .into_iter()
+            .filter(|path| !globset.is_match(path))
+            .collect(),
+        None => expanded,
+    }
 }
 
 // Create a constant for embedded migrations
@@ -805,5 +863,82 @@ mod tests {
                 .await
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn test_expand_glob_patterns_with_negation() {
+        let temp_dir = TempDir::new().unwrap();
+        let base = temp_dir.path();
+
+        // Create directory structure:
+        // base/
+        //   src/
+        //     main.ts
+        //     util.ts
+        //   node_modules/
+        //     package/
+        //       index.ts
+        //   test.ts
+
+        let src_dir = base.join("src");
+        let node_modules_dir = base.join("node_modules");
+        let package_dir = node_modules_dir.join("package");
+
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::create_dir_all(&package_dir).unwrap();
+
+        std::fs::write(src_dir.join("main.ts"), "main").unwrap();
+        std::fs::write(src_dir.join("util.ts"), "util").unwrap();
+        std::fs::write(package_dir.join("index.ts"), "index").unwrap();
+        std::fs::write(base.join("test.ts"), "test").unwrap();
+
+        // Test: all .ts files without negation
+        let pattern = format!("{}/**/*.ts", base.display());
+        let all_files = expand_glob_patterns(&[pattern.clone()]);
+        assert_eq!(all_files.len(), 4); // main.ts, util.ts, index.ts, test.ts (via **)
+
+        // Test: exclude node_modules
+        let negation = "!**/node_modules/**".to_string();
+        let filtered = expand_glob_patterns(&[pattern.clone(), negation]);
+        assert_eq!(filtered.len(), 3); // main.ts, util.ts, test.ts (excludes index.ts)
+        assert!(filtered.iter().all(|p| !p.contains("node_modules")));
+
+        // Test: multiple negation patterns
+        let negation1 = "!**/node_modules/**".to_string();
+        let negation2 = "!**/test.ts".to_string();
+        let filtered2 = expand_glob_patterns(&[pattern.clone(), negation1, negation2]);
+        assert_eq!(filtered2.len(), 2); // main.ts, util.ts only
+        assert!(filtered2.iter().all(|p| !p.contains("node_modules")));
+        assert!(filtered2.iter().all(|p| !p.ends_with("test.ts")));
+    }
+
+    #[test]
+    fn test_expand_glob_patterns_negation_only() {
+        // Test that negation-only patterns return empty (no positive patterns to match)
+        let result = expand_glob_patterns(&["!**/node_modules/**".to_string()]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_expand_glob_patterns_empty() {
+        let result = expand_glob_patterns(&[]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_build_negation_globset() {
+        // Valid patterns
+        let patterns = vec!["!**/node_modules/**", "!**/*.test.ts"];
+        let globset = build_negation_globset(&patterns);
+        assert!(globset.is_some());
+
+        let gs = globset.unwrap();
+        assert!(gs.is_match("/some/path/node_modules/foo/bar.ts"));
+        assert!(gs.is_match("src/file.test.ts"));
+        assert!(!gs.is_match("src/file.ts"));
+
+        // Empty patterns
+        let empty: Vec<&str> = vec![];
+        assert!(build_negation_globset(&empty).is_none());
     }
 }
