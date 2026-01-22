@@ -1673,7 +1673,6 @@ dependencies = [
  "devenv-processes",
  "devenv-shell",
  "devenv-tui",
- "glob",
  "globset",
  "miette",
  "nix 0.30.1",
