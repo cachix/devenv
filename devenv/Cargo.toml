@@ -23,6 +23,7 @@ nix-conf-parser.workspace = true
 tokio-shutdown.workspace = true
 
 clap.workspace = true
+clap_complete.workspace = true
 cli-table.workspace = true
 console.workspace = true
 dialoguer.workspace = true

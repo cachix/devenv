@@ -621,6 +621,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c0da80818b2d95eca9aa614a30783e42f62bf5fdfee24e68cfb960b071ba8d1"
 dependencies = [
  "clap",
+ "clap_lex",
+ "is_executable",
+ "shlex",
 ]
 
 [[package]]
@@ -1305,6 +1308,7 @@ dependencies = [
  "blake3",
  "chrono",
  "clap",
+ "clap_complete",
  "cli-table",
  "console 0.16.2",
  "devenv-activity",
@@ -2769,6 +2773,15 @@ name = "is_ci"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7655c9839580ee829dfacba1d1278c2b7883e50a277ff7541299489d6bdfdc45"
+
+[[package]]
+name = "is_executable"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baabb8b4867b26294d818bf3f651a454b6901431711abb96e296245888d6e8c4"
+dependencies = [
+ "windows-sys 0.60.2",
+]
 
 [[package]]
 name = "is_terminal_polyfill"

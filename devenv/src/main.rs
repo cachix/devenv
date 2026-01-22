@@ -1,4 +1,5 @@
-use clap::crate_version;
+use clap::{CommandFactory, crate_version};
+use clap_complete::CompleteEnv;
 use devenv::{
     Devenv, RunMode,
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
@@ -87,6 +88,12 @@ impl CommandResult {
 }
 
 fn main() -> Result<()> {
+    // Handle shell completion requests (COMPLETE=bash devenv)
+    // Use "devenv" as completer so scripts work after installation (not absolute path)
+    CompleteEnv::with_factory(Cli::command)
+        .completer("devenv")
+        .complete();
+
     let cli = Cli::parse_and_resolve_options();
 
     // Handle commands that don't need a runtime

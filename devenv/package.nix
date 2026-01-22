@@ -102,8 +102,9 @@ rustPlatform.buildRustPackage {
       cargo xtask generate-manpages --out-dir man
       installManPage man/*
 
-      # Generate shell completions
+      # Generate shell completions (devenv must be in PATH)
       compdir=./completions
+      export PATH="$out/bin:$PATH"
       for shell in bash fish zsh; do
         cargo xtask generate-shell-completion $shell --out-dir $compdir
       done
