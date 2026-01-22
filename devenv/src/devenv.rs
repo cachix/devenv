@@ -857,6 +857,14 @@ impl Devenv {
             .expect("Failed to read config file");
         let tasks: Vec<tasks::TaskConfig> =
             serde_json::from_str(&tasks_json).expect("Failed to parse tasks config");
+
+        // Cache task names for shell completions
+        let task_names: Vec<&str> = tasks.iter().map(|t| t.name.as_str()).collect();
+        let cache_path = self.devenv_dotfile.join("task-names.txt");
+        if let Err(e) = fs::write(&cache_path, task_names.join("\n")).await {
+            debug!("Failed to write task name cache for completions: {}", e);
+        }
+
         Ok(tasks)
     }
 

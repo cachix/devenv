@@ -58,6 +58,7 @@ binaryornot = "1.0.0"
 blake3 = "1.8.2"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5.48", features = ["derive", "cargo", "env"] }
+clap_complete = { version = "4.5.58", features = ["unstable-dynamic"] }
 cli-table = "0.5.0"
 console = "0.16.1"
 dotlock = "0.5.0"

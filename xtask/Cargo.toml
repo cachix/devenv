@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 clap.workspace = true
-clap_complete = "4.5.58"
+clap_complete.workspace = true
 clap_mangen = "0.2.29"
 devenv.workspace = true
 miette.workspace = true

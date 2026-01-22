@@ -1,8 +1,49 @@
 use crate::tracing as devenv_tracing;
 use clap::{Parser, Subcommand, crate_version};
+use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use devenv_core::GlobalOptions;
 use devenv_tasks::RunMode;
+use std::ffi::OsStr;
 use std::path::PathBuf;
+
+/// Complete task names by reading from .devenv/task-names.txt cache file.
+/// Walks up from current directory to find the project root.
+/// If cache doesn't exist, spawns `devenv tasks list` in background to populate it.
+fn complete_task_names(current: &OsStr) -> Vec<CompletionCandidate> {
+    let current_str = current.to_str().unwrap_or("");
+
+    // Walk up from current directory to find .devenv directory or devenv.nix/devenv.yaml
+    let mut dir = std::env::current_dir().ok();
+    while let Some(d) = dir {
+        let cache_path = d.join(".devenv").join("task-names.txt");
+        let is_devenv_project = d.join("devenv.nix").exists() || d.join("devenv.yaml").exists();
+
+        if cache_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&cache_path) {
+                return content
+                    .lines()
+                    .filter(|name| !name.is_empty() && name.starts_with(current_str))
+                    .map(CompletionCandidate::new)
+                    .collect();
+            }
+        } else if is_devenv_project {
+            // Cache doesn't exist but this is a devenv project - spawn background task to populate it
+            let _ = std::process::Command::new("devenv")
+                .args(["tasks", "list"])
+                .current_dir(&d)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
+            // Return empty for now - next completion will have the cache
+            return Vec::new();
+        }
+
+        dir = d.parent().map(|p| p.to_path_buf());
+    }
+
+    Vec::new()
+}
 
 #[derive(Parser)]
 #[command(
@@ -188,6 +229,7 @@ pub enum ProcessesCommand {
 pub enum TasksCommand {
     #[command(about = "Run tasks.")]
     Run {
+        #[arg(add = ArgValueCompleter::new(complete_task_names))]
         tasks: Vec<String>,
 
         #[arg(
