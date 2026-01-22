@@ -20,8 +20,8 @@ futures = { workspace = true }
 async-trait = { workspace = true }
 
 # TUI library
-iocraft = { version = "0.7.10" }
-crossterm = "0.28"
+iocraft.workspace = true
+crossterm = { workspace = true }
 
 # Tracing integration
 tracing = { workspace = true }
@@ -56,7 +56,7 @@ once_cell = { workspace = true }
 chrono = { workspace = true }
 
 # Human-readable formatting
-human-repr = "1.1"
+human-repr = { workspace = true }
 
 # URL parsing
 url = { workspace = true }
@@ -72,4 +72,4 @@ name = "tui-replay"
 path = "src/bin/tui-replay.rs"
 
 [dev-dependencies]
-insta = { version = "1.40", features = ["filters", "json"] }
+insta = { workspace = true }
