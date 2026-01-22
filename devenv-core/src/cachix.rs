@@ -183,6 +183,9 @@ pub struct CachixConfig {
     pub enable: bool,
     #[serde(flatten)]
     pub caches: Cachix,
+    /// Path to the cachix binary
+    #[serde(default)]
+    pub binary: PathBuf,
 }
 
 /// Cachix cache configuration
@@ -197,6 +200,8 @@ pub struct Cachix {
 pub struct CachixCacheInfo {
     pub caches: Cachix,
     pub known_keys: BTreeMap<String, String>,
+    /// Path to the cachix binary
+    pub binary: PathBuf,
 }
 
 /// Cachix API response containing cache metadata

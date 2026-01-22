@@ -37,6 +37,10 @@ nix-bindings-bindgen-raw.workspace = true
 nix-cmd.workspace = true
 tempfile.workspace = true
 
+[features]
+default = []
+integration-tests = []
+
 [dev-dependencies]
 devenv-nix-backend-macros.workspace = true
 tempfile.workspace = true

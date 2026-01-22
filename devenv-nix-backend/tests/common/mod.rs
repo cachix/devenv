@@ -1,7 +1,5 @@
 //! Common test utilities shared across test files
 
-pub mod mock_cachix_daemon;
-
 use devenv_core::cachix::{CachixManager, CachixPaths};
 use std::path::Path;
 use std::sync::Arc;

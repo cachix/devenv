@@ -51,16 +51,10 @@ pub struct DaemonSpawnConfig {
     pub cache_name: String,
     /// Socket path for the daemon to listen on
     pub socket_path: PathBuf,
-}
-
-impl DaemonSpawnConfig {
-    /// Create spawn config with cache name and socket path
-    pub fn new(cache_name: impl Into<String>, socket_path: PathBuf) -> Self {
-        Self {
-            cache_name: cache_name.into(),
-            socket_path,
-        }
-    }
+    /// Path to the cachix binary
+    pub binary: PathBuf,
+    /// Run in dry-run mode (no actual uploads)
+    pub dry_run: bool,
 }
 
 /// Configuration for connecting to a cachix daemon
@@ -294,14 +288,18 @@ impl DaemonProcess {
                 .context("Failed to create directory for daemon socket")?;
         }
 
-        let child = std::process::Command::new("cachix")
-            .arg("daemon")
-            .arg("run")
-            .arg("--socket")
+        let mut cmd = std::process::Command::new(&config.binary);
+        cmd.arg("daemon").arg("run");
+        if config.dry_run {
+            cmd.arg("--dry-run");
+        }
+        cmd.arg("--socket")
             .arg(&config.socket_path)
-            .arg(&config.cache_name)
+            .arg(&config.cache_name);
+
+        let child = cmd
             .spawn()
-            .context("Failed to spawn cachix daemon. Is cachix CLI installed?")?;
+            .with_context(|| format!("Failed to spawn cachix daemon at {:?}", config.binary))?;
 
         let mut daemon = Self {
             child: Some(child),
@@ -401,13 +399,9 @@ pub struct OwnedDaemon {
 
 impl OwnedDaemon {
     /// Spawn daemon and connect client
-    pub async fn spawn(
-        cache_name: impl Into<String>,
-        socket_path: PathBuf,
-        connection: ConnectionParams,
-    ) -> Result<Self> {
-        let spawn_config = DaemonSpawnConfig::new(cache_name, socket_path.clone());
-        let process = DaemonProcess::spawn(&spawn_config).await?;
+    pub async fn spawn(config: DaemonSpawnConfig, connection: ConnectionParams) -> Result<Self> {
+        let socket_path = config.socket_path.clone();
+        let process = DaemonProcess::spawn(&config).await?;
 
         let connect_config = DaemonConnectConfig {
             socket_path,
@@ -812,10 +806,16 @@ mod tests {
     }
 
     #[test]
-    fn test_spawn_config_new() {
-        let config = DaemonSpawnConfig::new("my-cache", PathBuf::from("/tmp/test.sock"));
+    fn test_spawn_config() {
+        let config = DaemonSpawnConfig {
+            cache_name: "my-cache".to_string(),
+            socket_path: PathBuf::from("/tmp/test.sock"),
+            binary: PathBuf::from("/nix/store/xxx-cachix/bin/cachix"),
+            dry_run: true,
+        };
         assert_eq!(config.cache_name, "my-cache");
         assert_eq!(config.socket_path, PathBuf::from("/tmp/test.sock"));
+        assert!(config.dry_run);
     }
 
     #[test]
