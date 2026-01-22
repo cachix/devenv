@@ -7,40 +7,136 @@ use devenv_cache_core::{
     file::TrackedFile,
     time,
 };
-use glob::{MatchOptions, glob_with};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde_json::Value;
 use sqlx::Row;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tracing::{debug, warn};
+use walkdir::WalkDir;
+
+/// Build a GlobSet from patterns, optionally stripping a prefix character (e.g., `!` for negation)
+///
+/// Returns None if there are no patterns or if building fails.
+fn build_globset(patterns: &[&str], strip_prefix: Option<char>) -> Option<GlobSet> {
+    if patterns.is_empty() {
+        return None;
+    }
+
+    let mut builder = GlobSetBuilder::new();
+    for pattern in patterns {
+        // Strip the leading character if specified
+        let pattern = match strip_prefix {
+            Some(c) if pattern.starts_with(c) => &pattern[1..],
+            _ => pattern,
+        };
+        match Glob::new(pattern) {
+            Ok(glob) => {
+                builder.add(glob);
+            }
+            Err(e) => {
+                warn!("Invalid glob pattern '{}': {}", pattern, e);
+            }
+        }
+    }
+
+    match builder.build() {
+        Ok(globset) => Some(globset),
+        Err(e) => {
+            warn!("Failed to build globset: {}", e);
+            None
+        }
+    }
+}
+
+/// Extract the base directory from a glob pattern.
+///
+/// Returns the longest path prefix that doesn't contain glob special characters.
+/// This is used to determine where to start walking the filesystem.
+fn extract_base_dir(pattern: &str) -> &Path {
+    // Find the first occurrence of any glob special character
+    let special_chars = ['*', '?', '[', '{'];
+    let first_special = pattern
+        .char_indices()
+        .find(|(_, c)| special_chars.contains(c))
+        .map(|(i, _)| i)
+        .unwrap_or(pattern.len());
+
+    // Get the substring up to the first special character
+    let prefix = &pattern[..first_special];
+
+    // Find the last path separator in the prefix to get the directory
+    match prefix.rfind(std::path::MAIN_SEPARATOR) {
+        Some(last_sep) => Path::new(&pattern[..last_sep]),
+        None => {
+            // No separator found - use current directory if pattern starts with special char,
+            // otherwise the pattern itself might be a file/dir name
+            if first_special == 0 {
+                Path::new(".")
+            } else {
+                Path::new(prefix)
+            }
+        }
+    }
+}
 
 /// Expand glob patterns into actual file paths
 ///
-/// The expansion uses strict matching rules:
-/// - `case_sensitive: true` – patterns are case-sensitive (e.g. `*.RS` will not match `main.rs`)
-/// - `require_literal_separator: true` – path separators must appear literally in the pattern
-///   (e.g. `src**/*.rs` is invalid and will not match anything)
-/// - `require_literal_leading_dot: true` – a leading dot must be written explicitly
-///   (e.g. `*` will not match `.hidden`, you must use `.*` or `.hidden` directly)
+/// The expansion walks the filesystem starting from the base directory of each pattern
+/// and matches files against the glob patterns.
+///
+/// Negation patterns (starting with `!`) are supported to exclude paths:
+/// - `!**/node_modules/**` – excludes all paths containing node_modules
+/// - `!**/*.test.ts` – excludes all test files
+///
+/// Example: `["**/*.ts", "!**/node_modules/**"]` matches all TypeScript files
+/// except those in node_modules directories.
 pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
-    patterns
+    // Separate positive patterns from negation patterns
+    let (negation_patterns, positive_patterns): (Vec<&str>, Vec<&str>) = patterns
         .iter()
-        .flat_map(|pattern| {
-            glob_with(
-                pattern,
-                MatchOptions {
-                    case_sensitive: true,
-                    require_literal_separator: true,
-                    require_literal_leading_dot: true,
-                },
-            )
-            .ok()
+        .map(|s| s.as_str())
+        .partition(|p| p.starts_with('!'));
+
+    // Build globsets for positive and negation patterns
+    let positive_set = match build_globset(&positive_patterns, None) {
+        Some(set) => set,
+        None => return Vec::new(),
+    };
+    let negation_set = build_globset(&negation_patterns, Some('!'));
+
+    // Collect unique base directories to walk
+    let mut base_dirs: Vec<&Path> = positive_patterns
+        .iter()
+        .map(|p| extract_base_dir(p))
+        .collect();
+    base_dirs.sort();
+    base_dirs.dedup();
+
+    // Walk each base directory and collect matching files
+    let mut results: Vec<String> = Vec::new();
+    for base_dir in base_dirs {
+        for entry in WalkDir::new(base_dir)
+            .follow_links(true)
             .into_iter()
-            .flatten()
-            .filter_map(|path| path.ok())
-            .filter_map(|path| path.to_str().map(String::from))
-        })
-        .collect()
+            .filter_map(|e| e.ok())
+        {
+            let path = entry.path();
+            let path_str = path.to_string_lossy();
+
+            // Check if path matches any positive pattern
+            if positive_set.is_match(path) {
+                // Check if path matches any negation pattern
+                let excluded = negation_set.as_ref().is_some_and(|ns| ns.is_match(path));
+
+                if !excluded {
+                    results.push(path_str.into_owned());
+                }
+            }
+        }
+    }
+
+    results
 }
 
 // Create a constant for embedded migrations
@@ -724,5 +820,112 @@ mod tests {
                 .await
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn test_expand_glob_patterns_with_negation() {
+        let temp_dir = TempDir::new().unwrap();
+        let base = temp_dir.path();
+
+        // Create directory structure:
+        // base/
+        //   src/
+        //     main.ts
+        //     util.ts
+        //   node_modules/
+        //     package/
+        //       index.ts
+        //   test.ts
+
+        let src_dir = base.join("src");
+        let node_modules_dir = base.join("node_modules");
+        let package_dir = node_modules_dir.join("package");
+
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::create_dir_all(&package_dir).unwrap();
+
+        std::fs::write(src_dir.join("main.ts"), "main").unwrap();
+        std::fs::write(src_dir.join("util.ts"), "util").unwrap();
+        std::fs::write(package_dir.join("index.ts"), "index").unwrap();
+        std::fs::write(base.join("test.ts"), "test").unwrap();
+
+        // Test: all .ts files without negation
+        let pattern = format!("{}/**/*.ts", base.display());
+        let all_files = expand_glob_patterns(&[pattern.clone()]);
+        assert_eq!(all_files.len(), 4); // main.ts, util.ts, index.ts, test.ts (via **)
+
+        // Test: exclude node_modules
+        let negation = "!**/node_modules/**".to_string();
+        let filtered = expand_glob_patterns(&[pattern.clone(), negation]);
+        assert_eq!(filtered.len(), 3); // main.ts, util.ts, test.ts (excludes index.ts)
+        assert!(filtered.iter().all(|p| !p.contains("node_modules")));
+
+        // Test: multiple negation patterns
+        let negation1 = "!**/node_modules/**".to_string();
+        let negation2 = "!**/test.ts".to_string();
+        let filtered2 = expand_glob_patterns(&[pattern.clone(), negation1, negation2]);
+        assert_eq!(filtered2.len(), 2); // main.ts, util.ts only
+        assert!(filtered2.iter().all(|p| !p.contains("node_modules")));
+        assert!(filtered2.iter().all(|p| !p.ends_with("test.ts")));
+    }
+
+    #[test]
+    fn test_expand_glob_patterns_negation_only() {
+        // Test that negation-only patterns return empty (no positive patterns to match)
+        let result = expand_glob_patterns(&["!**/node_modules/**".to_string()]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_expand_glob_patterns_empty() {
+        let result = expand_glob_patterns(&[]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_build_globset() {
+        // Valid patterns (negation patterns with prefix stripped)
+        let patterns = vec!["!**/node_modules/**", "!**/*.test.ts"];
+        let globset = build_globset(&patterns, Some('!'));
+        assert!(globset.is_some());
+
+        let gs = globset.unwrap();
+        assert!(gs.is_match("/some/path/node_modules/foo/bar.ts"));
+        assert!(gs.is_match("src/file.test.ts"));
+        assert!(!gs.is_match("src/file.ts"));
+
+        // Empty patterns
+        let empty: Vec<&str> = vec![];
+        assert!(build_globset(&empty, None).is_none());
+
+        // Positive patterns (no prefix)
+        let positive = vec!["**/*.ts", "**/*.rs"];
+        let pos_globset = build_globset(&positive, None);
+        assert!(pos_globset.is_some());
+
+        let pgs = pos_globset.unwrap();
+        assert!(pgs.is_match("src/main.ts"));
+        assert!(pgs.is_match("lib/util.rs"));
+        assert!(!pgs.is_match("file.js"));
+    }
+
+    #[test]
+    fn test_extract_base_dir() {
+        // Pattern with base directory
+        assert_eq!(extract_base_dir("/foo/bar/**/*.ts"), Path::new("/foo/bar"));
+        assert_eq!(
+            extract_base_dir("/home/user/src/**/*.rs"),
+            Path::new("/home/user/src")
+        );
+
+        // Pattern starting with glob
+        assert_eq!(extract_base_dir("**/*.ts"), Path::new("."));
+        assert_eq!(extract_base_dir("*.ts"), Path::new("."));
+
+        // Pattern with no glob - returns directory part since no separator after the prefix
+        assert_eq!(extract_base_dir("/foo/bar/file.ts"), Path::new("/foo/bar"));
+
+        // Pattern with glob in middle
+        assert_eq!(extract_base_dir("/foo/*/bar/*.ts"), Path::new("/foo"));
     }
 }
