@@ -7,11 +7,11 @@ use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
 use crate::watcher::FileWatcher;
 use portable_pty::CommandBuilder;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 /// Compute blake3 hash of file contents.
 /// Returns None if the file cannot be read.
@@ -50,6 +50,35 @@ pub enum ShellEvent {
     Exited,
     /// Terminal was resized.
     Resize { cols: u16, rows: u16 },
+}
+
+/// Request to execute a task command in the PTY.
+///
+/// Used by PtyExecutor to run tasks inside the shell environment.
+pub struct PtyTaskRequest {
+    /// Unique ID for this task execution.
+    pub id: u64,
+    /// The command to execute (path to script).
+    pub command: String,
+    /// Environment variables to set before execution.
+    pub env: BTreeMap<String, String>,
+    /// Working directory (optional).
+    pub cwd: Option<String>,
+    /// Channel to send result back.
+    pub response_tx: oneshot::Sender<PtyTaskResult>,
+}
+
+/// Result of executing a task in the PTY.
+#[derive(Debug)]
+pub struct PtyTaskResult {
+    /// Whether the task succeeded (exit code 0).
+    pub success: bool,
+    /// Captured stdout lines with timestamps.
+    pub stdout_lines: Vec<(std::time::Instant, String)>,
+    /// Captured stderr lines with timestamps.
+    pub stderr_lines: Vec<(std::time::Instant, String)>,
+    /// Error message if the task failed.
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Error)]
@@ -108,6 +137,7 @@ impl ShellCoordinator {
             watcher: watcher_handle.clone(),
             reload_file: Some(reload_file.clone()),
         };
+
         let builder_clone = builder.clone();
         let cmd = tokio::task::spawn_blocking(move || builder_clone.build(&ctx))
             .await
@@ -132,7 +162,7 @@ impl ShellCoordinator {
 
         // Forward file watcher events
         let watch_tx = event_tx.clone();
-        tokio::spawn(async move {
+        let watcher_task = tokio::spawn(async move {
             while let Some(event) = watcher.recv().await {
                 if watch_tx.send(Event::FileChange(event.path)).await.is_err() {
                     break;
@@ -142,7 +172,7 @@ impl ShellCoordinator {
 
         // Forward TUI events
         let tui_tx = event_tx.clone();
-        tokio::spawn(async move {
+        let tui_forwarder_task = tokio::spawn(async move {
             while let Some(event) = event_rx.recv().await {
                 if tui_tx.send(Event::Tui(event)).await.is_err() {
                     break;
@@ -266,6 +296,15 @@ impl ShellCoordinator {
                 }
             }
         }
+
+        // Abort any running build task
+        if let Some(handle) = current_build.take() {
+            handle.abort();
+        }
+
+        // Abort forwarder tasks to prevent panics during runtime shutdown
+        watcher_task.abort();
+        tui_forwarder_task.abort();
 
         // Send shutdown command
         let _ = command_tx.send(ShellCommand::Shutdown).await;

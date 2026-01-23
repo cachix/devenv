@@ -232,12 +232,12 @@ in
         after = [ "devenv:enterShell" ];
       };
     };
-    enterShell = ''
-      if [ -z "''${DEVENV_SKIP_TASKS:-}" ]; then
-        ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode all || exit $?
-        if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
-          source "$DEVENV_DOTFILE/load-exports"
-        fi
+    # In devenv 2.0+, Rust runs enterShell tasks before shell spawns (with TUI progress)
+    # So we skip the bash hook to avoid running tasks twice
+    enterShell = lib.mkIf (lib.versionOlder config.devenv.cliVersion "2.0") ''
+      ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode all || exit $?
+      if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
+        source "$DEVENV_DOTFILE/load-exports"
       fi
     '';
     enterTest = lib.mkBefore ''

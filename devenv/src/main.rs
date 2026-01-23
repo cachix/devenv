@@ -481,12 +481,11 @@ async fn run_devenv_inner(
                     let _ = tx.send(());
                 }
 
-                // Prepare shell with DEVENV_SKIP_TASKS=1 (tasks already ran)
-                let mut shell_config = match cmd {
+                // Prepare shell (tasks already ran via Rust, Nix checks cliVersion >= 2.0)
+                let shell_config = match cmd {
                     Some(cmd) => devenv.prepare_exec(Some(cmd), args).await?,
                     None => devenv.shell().await?,
                 };
-                shell_config.command.env("DEVENV_SKIP_TASKS", "1");
                 CommandResult::Exec(shell_config.command)
             } else {
                 // Run shell with hot-reload capability (default)
@@ -714,6 +713,9 @@ fn build_rev() -> Option<String> {
 /// - ShellCoordinator handles file watching and build coordination
 /// - ShellRunner owns the PTY and handles terminal I/O
 ///
+/// Tasks are executed inside the PTY via PtyExecutor, allowing them to
+/// run in the same shell environment as the interactive session.
+///
 /// Terminal handoff:
 /// - `backend_done_tx`: Signals TUI to exit (sent after initial build completes)
 /// - `terminal_ready_rx`: Waits for TUI cleanup before ShellRunner takes terminal
@@ -725,12 +727,23 @@ async fn run_reload_shell(
     backend_done_tx: tokio::sync::oneshot::Sender<()>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<()>>,
 ) -> Result<()> {
-    use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
+    use devenv_reload::{Config as ReloadConfig, PtyTaskRequest, ShellCoordinator};
+    use devenv_tasks::PtyExecutor;
     use devenv_tui::ShellRunner;
     use tokio::sync::mpsc;
 
     let config = devenv.config.read().await.clone();
     let root = devenv.root().to_path_buf();
+    let dotfile = devenv.dotfile().to_path_buf();
+
+    // Pre-compute shell environment BEFORE starting coordinator.
+    // This must happen while TUI is active since get_dev_environment has #[activity].
+    let initial_env_script = devenv.print_dev_env(false).await?;
+    let bash_path = devenv.get_bash_path().await?;
+
+    // Get eval cache info from original devenv (after print_dev_env set it up)
+    let eval_cache_pool = devenv.eval_cache_pool().cloned();
+    let shell_cache_key = devenv.shell_cache_key();
 
     // Create reload config - watch files will be populated from eval cache
     // during the first build by DevenvShellBuilder
@@ -742,33 +755,92 @@ async fn run_reload_shell(
         config,
         global_options: Some(devenv.global_options.clone()),
         devenv_root: Some(root),
-        devenv_dotfile: Some(devenv.dotfile().to_path_buf()),
+        devenv_dotfile: Some(dotfile.clone()),
         shutdown: shutdown.clone(),
     };
     let new_devenv = Devenv::new(devenv_options).await;
     let devenv_arc = Arc::new(Mutex::new(new_devenv));
 
-    // Create the shell builder
+    // Clone devenv for task runner (needs its own reference)
+    let devenv_for_tasks = devenv_arc.clone();
+
+    // Disable status line for non-interactive commands to avoid escape codes in output
+    let is_interactive = cmd.is_none();
+
+    // Create the shell builder with pre-computed environment
     let handle = tokio::runtime::Handle::current();
-    let builder = DevenvShellBuilder::new(handle, devenv_arc, cmd, args);
+    let builder = DevenvShellBuilder::new(
+        handle,
+        devenv_arc,
+        cmd,
+        args,
+        initial_env_script,
+        bash_path,
+        dotfile,
+        eval_cache_pool,
+        shell_cache_key,
+    );
 
     // Set up communication channels between coordinator and shell runner
     let (command_tx, command_rx) = mpsc::channel(16);
     let (event_tx, event_rx) = mpsc::channel(16);
+
+    // Create task channel for PTY-based task execution
+    // Tasks will be sent through this channel and executed inside the PTY
+    let (task_tx, task_rx) = mpsc::channel::<PtyTaskRequest>(16);
+
+    // Create PTY ready signal - task runner waits for this before sending tasks
+    // This prevents deadlock where task runner blocks waiting for response before PTY exists
+    let (pty_ready_tx, pty_ready_rx) = tokio::sync::oneshot::channel();
 
     // Spawn coordinator in background task
     let coordinator_handle = tokio::spawn(async move {
         ShellCoordinator::run(reload_config, builder, command_tx, event_rx).await
     });
 
+    // Spawn task runner on a separate thread with its own runtime
+    // This is needed because devenv's async code has non-Send futures (due to Nix bindings)
+    let task_handle = std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create task runner runtime");
+
+        rt.block_on(async move {
+            // Wait for PTY to be ready before sending tasks
+            // This prevents deadlock: task runner would block on response, but PTY isn't processing yet
+            if pty_ready_rx.await.is_err() {
+                return Err(miette::miette!("PTY ready signal failed"));
+            }
+
+            let executor = Arc::new(PtyExecutor::new(task_tx));
+            let devenv = devenv_for_tasks.lock().await;
+            let result = devenv.run_enter_shell_tasks_with_executor(executor).await;
+            // Executor is dropped when devenv lock is released, closing the channel
+            drop(devenv);
+            result
+        })
+    });
+
     // Run shell runner on current thread (owns terminal)
-    // Pass terminal_ready signal so ShellRunner waits for TUI to release terminal
-    let shell_runner = ShellRunner::new();
+    // ShellRunner will: spawn PTY, signal ready, process tasks from channel, then go interactive
+    let shell_runner = ShellRunner::new().with_status_line(is_interactive);
     let runner_result = shell_runner
-        .run(command_rx, event_tx, backend_done_tx, terminal_ready_rx)
+        .run(
+            command_rx,
+            event_tx,
+            backend_done_tx,
+            terminal_ready_rx,
+            Some(task_rx),
+            Some(pty_ready_tx),
+        )
         .await;
 
-    // Wait for coordinator to finish
+    // Wait for task runner and coordinator to finish
+    let task_result = task_handle.join();
+    if let Ok(Err(e)) = task_result {
+        tracing::warn!("enterShell tasks failed: {}", e);
+    }
     let _ = coordinator_handle.await;
 
     runner_result.map_err(|e| miette::miette!("Shell runner error: {}", e))

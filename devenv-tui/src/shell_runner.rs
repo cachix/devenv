@@ -10,7 +10,7 @@ use crossterm::{
     style::{Color, Print, SetBackgroundColor, SetForegroundColor},
     terminal::{self, ClearType},
 };
-use devenv_reload::{ShellCommand, ShellEvent};
+use devenv_reload::{PtyTaskRequest, PtyTaskResult, ShellCommand, ShellEvent};
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
@@ -26,6 +26,35 @@ pub enum ShellRunnerError {
     Io(#[from] std::io::Error),
     #[error("Channel closed")]
     ChannelClosed,
+}
+
+/// Strip ANSI escape codes from a string.
+/// Used for marker detection to handle terminal formatting.
+fn strip_ansi_codes(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // ESC sequence - skip until we find the terminator
+            if chars.peek() == Some(&'[') {
+                chars.next(); // consume '['
+                // CSI sequence: skip until we hit a letter (0x40-0x7E) or ~
+                while let Some(&next) = chars.peek() {
+                    chars.next();
+                    if next.is_ascii_alphabetic() || next == '~' {
+                        break;
+                    }
+                }
+            }
+        } else if c == '\r' {
+            // Skip carriage returns
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
 }
 
 /// Internal events for the shell runner event loop.
@@ -203,6 +232,8 @@ pub struct ShellRunner {
     size: PtySize,
     /// Status line state
     status: StatusLine,
+    /// Whether to show the status line (disabled for non-interactive commands)
+    show_status_line: bool,
 }
 
 impl ShellRunner {
@@ -212,44 +243,155 @@ impl ShellRunner {
         Self {
             size,
             status: StatusLine::new(),
+            show_status_line: true,
         }
     }
 
-    /// Inject the PROMPT_COMMAND hook for hot-reload support.
-    ///
-    /// This sets up a shell hook that checks for `$DEVENV_RELOAD_FILE`
-    /// before each prompt. If the file exists, it sources it and removes it.
-    /// This allows hot-reload to update the environment between commands
-    /// without interrupting the user.
-    fn inject_prompt_hook(pty: &Arc<Mutex<Pty>>) -> Result<(), ShellRunnerError> {
-        // The hook script:
-        // 1. Defines __devenv_reload_hook function that checks for pending env
-        // 2. Prepends it to PROMPT_COMMAND (bash) or adds to precmd (zsh)
-        // 3. Uses a marker to avoid re-injection
-        let hook_script = r#"
-# devenv hot-reload hook (injected by devenv shell --reload)
-if [ -z "$__DEVENV_RELOAD_HOOK_INSTALLED" ] && [ -n "$DEVENV_RELOAD_FILE" ]; then
-    __devenv_reload_hook() {
-        if [ -f "$DEVENV_RELOAD_FILE" ]; then
-            source "$DEVENV_RELOAD_FILE"
-            rm -f "$DEVENV_RELOAD_FILE"
-        fi
+    /// Set whether to show the status line.
+    /// Disable for non-interactive commands.
+    pub fn with_status_line(mut self, show: bool) -> Self {
+        self.show_status_line = show;
+        self
     }
-    # Install hook based on shell type
-    if [ -n "$BASH_VERSION" ]; then
-        PROMPT_COMMAND="__devenv_reload_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
-    elif [ -n "$ZSH_VERSION" ]; then
-        precmd_functions+=(__devenv_reload_hook)
-    fi
-    export __DEVENV_RELOAD_HOOK_INSTALLED=1
-fi
-"#;
 
-        let mut pty_guard = pty.lock().unwrap();
-        // Write the hook script silently (won't show in terminal because
-        // we write it before the shell prompt appears)
-        pty_guard.write_all(hook_script.as_bytes())?;
-        pty_guard.flush()?;
+    /// Run tasks in the PTY before terminal handoff.
+    ///
+    /// This processes task requests from the channel, executing each in the PTY
+    /// using a marker-based protocol. The TUI is still active during this phase
+    /// and can show task progress via the activity system.
+    ///
+    /// Tasks are processed until the channel is closed.
+    async fn run_tasks_in_pty(
+        &mut self,
+        pty: &Arc<Mutex<Pty>>,
+        task_rx: &mut mpsc::Receiver<PtyTaskRequest>,
+    ) -> Result<(), ShellRunnerError> {
+        // Buffer for reading PTY output
+        let mut output_buffer = String::new();
+
+        while let Some(request) = task_rx.recv().await {
+            let id = request.id;
+            let start_marker = format!("__DEVENV_TASK_START_{id}__");
+            let end_marker_prefix = format!("__DEVENV_TASK_END_{id}_");
+
+            // Build the command to execute with markers
+            let mut cmd_parts = Vec::new();
+
+            // Echo start marker
+            cmd_parts.push(format!("echo '{start_marker}'"));
+
+            // Set environment variables
+            for (key, value) in &request.env {
+                let escaped = value.replace('\'', "'\\''");
+                cmd_parts.push(format!("export {key}='{escaped}'"));
+            }
+
+            // Change directory if specified
+            if let Some(ref cwd) = request.cwd {
+                cmd_parts.push(format!("cd '{cwd}'"));
+            }
+
+            // Execute the command
+            cmd_parts.push(request.command.clone());
+
+            // Echo end marker with exit code
+            cmd_parts.push(format!("echo '{end_marker_prefix}'$?'__'"));
+
+            // Join with semicolons and add newline
+            let full_cmd = format!("{}\n", cmd_parts.join("; "));
+
+            // Write command to PTY
+            {
+                let mut pty_guard = pty.lock().unwrap();
+                pty_guard.write_all(full_cmd.as_bytes())?;
+                pty_guard.flush()?;
+            }
+
+            // Read PTY output until we see the end marker
+            let mut stdout_lines = Vec::new();
+            let mut started = false;
+            let mut error_msg: Option<String> = None;
+            let mut exit_code: Option<i32> = None;
+
+            'read_loop: loop {
+                // Read from PTY with a small buffer
+                let mut buf = [0u8; 4096];
+                let n = {
+                    let mut pty_guard = pty.lock().unwrap();
+                    match pty_guard.read(&mut buf) {
+                        Ok(n) => n,
+                        Err(e) => {
+                            error_msg = Some(format!("PTY read error: {e}"));
+                            break 'read_loop;
+                        }
+                    }
+                };
+
+                if n == 0 {
+                    // PTY closed unexpectedly
+                    error_msg = Some("PTY closed unexpectedly".to_string());
+                    break 'read_loop;
+                }
+
+                output_buffer.push_str(&String::from_utf8_lossy(&buf[..n]));
+
+                // Process complete lines
+                while let Some(newline_pos) = output_buffer.find('\n') {
+                    let line = output_buffer[..newline_pos].to_string();
+                    output_buffer = output_buffer[newline_pos + 1..].to_string();
+
+                    // Strip ANSI escape codes and trim whitespace for marker detection
+                    // This handles terminal echo and prompt formatting
+                    let clean_line = strip_ansi_codes(&line);
+                    let trimmed = clean_line.trim();
+
+                    // Check for start marker - must be exact match (not contained in echoed command)
+                    if !started && trimmed == start_marker {
+                        started = true;
+                        continue;
+                    }
+
+                    // Check for end marker - must start with prefix (not contained in echoed command)
+                    if started && trimmed.starts_with(&end_marker_prefix) && trimmed.ends_with("__")
+                    {
+                        exit_code = trimmed
+                            .strip_prefix(&end_marker_prefix)
+                            .and_then(|s| s.strip_suffix("__"))
+                            .and_then(|s| s.parse::<i32>().ok());
+                        break 'read_loop;
+                    }
+
+                    // Capture output if task has started (but not the markers themselves)
+                    if started {
+                        stdout_lines.push((std::time::Instant::now(), line));
+                    }
+                }
+            }
+
+            // Send result (only once, after loop exits)
+            let (success, error) = if let Some(err) = error_msg {
+                (false, Some(err))
+            } else {
+                let code = exit_code.unwrap_or(1);
+                (
+                    code == 0,
+                    if code == 0 {
+                        None
+                    } else {
+                        Some(format!("Task exited with code {code}"))
+                    },
+                )
+            };
+
+            let result = PtyTaskResult {
+                success,
+                stdout_lines,
+                stderr_lines: Vec::new(),
+                error,
+            };
+            let _ = request.response_tx.send(result);
+        }
+
         Ok(())
     }
 
@@ -261,12 +403,16 @@ fi
     /// Terminal handoff parameters (for TUI integration):
     /// - `backend_done_tx`: Sent after initial build to signal TUI to exit
     /// - `terminal_ready_rx`: Awaited before entering raw mode (TUI cleanup complete)
+    /// - `task_rx`: Optional channel to receive task execution requests
+    /// - `pty_ready_tx`: Optional channel to signal when PTY is ready for tasks
     pub async fn run(
         mut self,
         mut command_rx: mpsc::Receiver<ShellCommand>,
         event_tx: mpsc::Sender<ShellEvent>,
         backend_done_tx: tokio::sync::oneshot::Sender<()>,
         terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<()>>,
+        task_rx: Option<mpsc::Receiver<PtyTaskRequest>>,
+        pty_ready_tx: Option<tokio::sync::oneshot::Sender<()>>,
     ) -> Result<(), ShellRunnerError> {
         // Wait for the initial Spawn command
         let initial_cmd = match command_rx.recv().await {
@@ -288,6 +434,20 @@ fi
             }
         };
 
+        // Spawn PTY early so tasks can run in it (before TUI exits)
+        // Hot-reload hook is included in the shell script (see devenv.rs prepare_shell)
+        let pty = Arc::new(Mutex::new(Pty::spawn(initial_cmd, self.size)?));
+
+        // Signal that PTY is ready for tasks (unblocks task runner)
+        if let Some(tx) = pty_ready_tx {
+            let _ = tx.send(());
+        }
+
+        // Run any tasks in the PTY (TUI still active, showing progress)
+        if let Some(mut task_rx) = task_rx {
+            self.run_tasks_in_pty(&pty, &mut task_rx).await?;
+        }
+
         // Signal TUI that initial build is complete and we're ready for terminal
         let _ = backend_done_tx.send(());
 
@@ -300,13 +460,6 @@ fi
         let _raw_guard = RawModeGuard::new()?;
 
         // Note: We intentionally don't use alternate screen to preserve shell history
-
-        // Spawn initial PTY
-        let pty = Arc::new(Mutex::new(Pty::spawn(initial_cmd, self.size)?));
-
-        // Inject the PROMPT_COMMAND hook for hot-reload support
-        // This hook checks for $DEVENV_STATE/pending-env.sh and sources it
-        Self::inject_prompt_hook(&pty)?;
 
         // Set up terminal state tracking
         let mut vt = Vt::new(self.size.cols as usize, self.size.rows as usize);
@@ -499,6 +652,11 @@ fi
 
     /// Draw the status line at the bottom of the terminal.
     fn draw_status_line(&self, stdout: &mut io::Stdout) -> Result<(), ShellRunnerError> {
+        // Skip drawing status line if disabled (non-interactive mode)
+        if !self.show_status_line {
+            return Ok(());
+        }
+
         // Save cursor position
         execute!(stdout, cursor::SavePosition)?;
 

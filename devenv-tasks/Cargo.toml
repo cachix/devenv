@@ -7,7 +7,9 @@ license.workspace = true
 [dependencies]
 devenv-activity.workspace = true
 devenv-cache-core.workspace = true
+devenv-reload = { path = "../devenv-reload" }
 
+async-trait.workspace = true
 clap.workspace = true
 console.workspace = true
 miette.workspace = true

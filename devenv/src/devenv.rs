@@ -533,6 +533,15 @@ impl Devenv {
 
         let mut shell_cmd = process::Command::new(&bash);
 
+        // The Nix output ends with "exec bash" which would start a new shell without
+        // the devenv environment. Strip it for ALL modes - we handle shell execution ourselves.
+        let output_str = String::from_utf8_lossy(&output);
+        let shell_env = output_str
+            .trim_end()
+            .trim_end_matches("exec bash")
+            .trim_end_matches("exec $SHELL")
+            .to_string();
+
         // Load the user's bashrc if it exists and if we're in an interactive shell.
         // Disable alias expansion to avoid breaking the dev shell script.
         let mut script = indoc::formatdoc! {
@@ -545,7 +554,7 @@ impl Devenv {
             {}
             shopt -s expand_aliases
             "#,
-            String::from_utf8_lossy(&output)
+            shell_env
         };
 
         // Add command for non-interactive mode
@@ -577,7 +586,14 @@ impl Devenv {
                 shell_cmd.arg(&script_path);
             }
             None => {
-                shell_cmd.args(["--rcfile", &script_path.to_string_lossy()]);
+                // Use --noprofile to skip login shell files, -i to force interactive,
+                // and --rcfile to source our script instead of ~/.bashrc
+                shell_cmd.args([
+                    "--noprofile",
+                    "-i",
+                    "--rcfile",
+                    &script_path.to_string_lossy(),
+                ]);
             }
         }
 
@@ -1113,6 +1129,74 @@ impl Devenv {
         .await
     }
 
+    /// Run enterShell tasks with a custom executor.
+    /// Used for running tasks inside a PTY for hot-reload mode.
+    pub async fn run_enter_shell_tasks_with_executor(
+        &self,
+        executor: Arc<dyn tasks::TaskExecutor>,
+    ) -> Result<String> {
+        self.assemble(false).await?;
+
+        // Capture the shell environment to ensure tasks run with proper devenv setup
+        let envs = self.capture_shell_environment().await?;
+
+        // Set environment variables in the current process
+        for (key, value) in &envs {
+            unsafe {
+                std::env::set_var(key, value);
+            }
+        }
+
+        let tasks_config = self.load_tasks().await?;
+
+        let verbosity = if self.global_options.quiet {
+            tasks::VerbosityLevel::Quiet
+        } else if self.global_options.verbose {
+            tasks::VerbosityLevel::Verbose
+        } else {
+            tasks::VerbosityLevel::Normal
+        };
+
+        let config = tasks::Config {
+            roots: vec!["devenv:enterShell".to_string()],
+            tasks: tasks_config,
+            run_mode: devenv_tasks::RunMode::All,
+            sudo_context: None,
+        };
+
+        let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
+            .with_executor(executor)
+            .build()
+            .await?;
+
+        // In TUI mode, run without TasksUi (TUI captures activity events directly)
+        let outputs = tasks.run().await;
+        let status = tasks.get_completion_status().await;
+
+        if status.has_failures() {
+            miette::bail!("Some enterShell tasks failed");
+        }
+
+        Ok(serde_json::to_string(&outputs).expect("parsing of outputs failed"))
+    }
+
+    /// Get the shell environment as a map of environment variables.
+    /// This captures the environment after running the devenv shell script.
+    pub async fn get_shell_environment(&self) -> Result<HashMap<String, String>> {
+        self.capture_shell_environment().await
+    }
+
+    /// Get the path to bash.
+    pub async fn get_bash_path(&self) -> Result<String> {
+        match self.nix.get_bash(false).await {
+            Err(e) => {
+                tracing::trace!("Failed to get bash: {}. Rebuilding.", e);
+                Ok(self.nix.get_bash(true).await?)
+            }
+            Ok(bash) => Ok(bash),
+        }
+    }
+
     async fn capture_shell_environment(&self) -> Result<HashMap<String, String>> {
         let temp_dir = tempfile::TempDir::with_prefix("devenv-env")
             .into_diagnostic()
@@ -1137,11 +1221,9 @@ impl Devenv {
             })?;
 
         // Run script and capture its environment exports
-        // Set DEVENV_SKIP_TASKS to prevent enterShell tasks from running during env capture
         let output = self
             .prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
             .await?
-            .env("DEVENV_SKIP_TASKS", "1")
             .output()
             .await
             .into_diagnostic()
