@@ -142,11 +142,11 @@
         "nixpkgs-regression": []
       },
       "locked": {
-        "lastModified": 1768865365,
-        "narHash": "sha256-Ey2hE701uiz9eSV1EEipnrYie64nAWJE2M8/5cgMzeE=",
+        "lastModified": 1769178913,
+        "narHash": "sha256-toSrwHOuF/vkUQuWDagN4xK2qMZ4RWFyXOXkokvwZSY=",
         "owner": "cachix",
         "repo": "nix",
-        "rev": "a3d9306ccccfd6c32be68ca1b02effb9a8400e50",
+        "rev": "6933a11d357f33ac0e659f3c492df6841585ec98",
         "type": "github"
       },
       "original": {

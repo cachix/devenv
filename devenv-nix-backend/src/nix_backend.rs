@@ -599,6 +599,12 @@ impl NixRustBackend {
                 .wrap_err("Failed to set pure-eval-allow-local-paths")?;
         }
 
+        // Enable registry lookups for flake input resolution
+        // Required for flakes with transitive inputs using indirect references (e.g. flake:nixpkgs)
+        settings::set("use-registries", "true")
+            .to_miette()
+            .wrap_err("Failed to set use-registries")?;
+
         // nix_option: apply custom Nix configuration pairs
         // These are passed as pairs: ["key1", "value1", "key2", "value2", ...]
         for pair in global_options.nix_option.chunks_exact(2) {
@@ -764,7 +770,8 @@ impl NixRustBackend {
             .with_inputs(flake_inputs)
             .source_path(source_path_str)
             .old_lock_file(&old_lock)
-            .mode(LockMode::Check);
+            .mode(LockMode::Check)
+            .use_registries(true);
 
         // Get eval state for locking operation
         let lock_result = {
@@ -1408,7 +1415,8 @@ impl NixBackend for NixRustBackend {
         let mut locker = InputsLocker::new(flake_settings)
             .with_inputs(flake_inputs)
             .source_path(source_path_str)
-            .mode(LockMode::Virtual);
+            .mode(LockMode::Virtual)
+            .use_registries(true);
 
         // Set the old lock file if provided
         if let Some(lock) = &old_lock {
