@@ -199,6 +199,16 @@ impl NixBackend for SnixBackend {
         bail!("get_bash is not yet implemented for Snix backend")
     }
 
+    async fn get_executable(
+        &self,
+        _package: &str,
+        _name: &str,
+        _refresh_cached_output: bool,
+    ) -> Result<String> {
+        // TODO: Implement bash shell acquisition for Snix backend
+        bail!("get_executable is not yet implemented for Snix backend")
+    }
+
     async fn is_trusted_user(&self) -> Result<bool> {
         // TODO: Implement trusted user check for Snix backend
         bail!("is_trusted_user is not yet implemented for Snix backend")

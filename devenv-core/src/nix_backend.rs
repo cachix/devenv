@@ -134,6 +134,14 @@ pub trait NixBackend: Send + Sync {
     /// Get the bash shell executable path
     async fn get_bash(&self, refresh_cached_output: bool) -> Result<String>;
 
+    /// Get package executable path
+    async fn get_executable(
+        &self,
+        package_name: &str,
+        name: &str,
+        refresh_cached_output: bool,
+    ) -> Result<String>;
+
     /// Check if the current user is a trusted user of the Nix store
     async fn is_trusted_user(&self) -> Result<bool>;
 
