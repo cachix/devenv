@@ -14,6 +14,10 @@
         user = "db";
         password = "db";
       };
+      mysqld = {
+        port = 3306;
+        bind-address = "127.0.0.1";
+      };
     };
   };
 

@@ -39,7 +39,13 @@ use tokio::sync::{OnceCell, RwLock, Semaphore};
 use tracing::{Instrument, debug, info, instrument, trace, warn};
 
 // templates
-const REQUIRED_FILES: [&str; 4] = ["devenv.nix", "devenv.yaml", ".envrc", ".gitignore"];
+// Note: gitignore is stored without the dot to work around include_dir not including dotfiles
+const REQUIRED_FILES: [(&str, &str); 4] = [
+    ("devenv.nix", "devenv.nix"),
+    ("devenv.yaml", "devenv.yaml"),
+    (".envrc", ".envrc"),
+    ("gitignore", ".gitignore"), // source name -> target name
+];
 const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
 pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
@@ -329,18 +335,18 @@ impl Devenv {
             std::fs::create_dir_all(&target).expect("Failed to create target directory");
         }
 
-        for filename in REQUIRED_FILES {
-            info!("Creating {}", filename);
+        for (source_name, target_name) in REQUIRED_FILES {
+            info!("Creating {}", target_name);
 
             let path = PROJECT_DIR
-                .get_file(filename)
-                .ok_or_else(|| miette::miette!("missing {} in the executable", filename))?;
+                .get_file(source_name)
+                .ok_or_else(|| miette::miette!("missing {} in the executable", source_name))?;
 
-            // write path.contents to target/filename
-            let target_path = target.join(filename);
+            // write path.contents to target/target_name
+            let target_path = target.join(target_name);
 
             // add a check for files like .gitignore to append buffer instead of bailing out
-            if target_path.exists() && EXISTING_REQUIRED_FILES.contains(&filename) {
+            if target_path.exists() && EXISTING_REQUIRED_FILES.contains(&target_name) {
                 std::fs::OpenOptions::new()
                     .append(true)
                     .open(&target_path)
@@ -349,7 +355,7 @@ impl Devenv {
                         file.write_all(path.contents())
                     })
                     .expect("Failed to append to existing file");
-            } else if target_path.exists() && !EXISTING_REQUIRED_FILES.contains(&filename) {
+            } else if target_path.exists() && !EXISTING_REQUIRED_FILES.contains(&target_name) {
                 if let Some(utf8_contents) = path.contents_utf8() {
                     confirm_overwrite(&target_path, utf8_contents.to_string())?;
                 } else {
@@ -765,7 +771,7 @@ impl Devenv {
             print_stderr(options_results.with_title()).expect("Failed to print options results");
         }
 
-        info!(
+        eprintln!(
             "Found {package_results_count} packages and {results_options_count} options for '{name}'."
         );
         Ok(())
