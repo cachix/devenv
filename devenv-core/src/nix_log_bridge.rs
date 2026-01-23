@@ -580,16 +580,16 @@ impl NixLogBridge {
                 if let (Some(Field::Int(activity_type_int)), Some(Field::Int(expected))) =
                     (fields.first(), fields.get(1))
                 {
-                    // Map Nix ActivityType to ExpectedCategory
                     let category = ActivityType::try_from(*activity_type_int as i32)
                         .ok()
                         .and_then(|at| match at {
-                            ActivityType::CopyPath
-                            | ActivityType::FileTransfer
-                            | ActivityType::Substitute => Some(ExpectedCategory::Download),
-                            ActivityType::Build | ActivityType::BuildWaiting => {
-                                Some(ExpectedCategory::Build)
+                            ActivityType::Builds
+                            | ActivityType::Build
+                            | ActivityType::BuildWaiting => Some(ExpectedCategory::Build),
+                            ActivityType::CopyPaths | ActivityType::Substitute => {
+                                Some(ExpectedCategory::Download)
                             }
+                            // CopyPath/FileTransfer report bytes, not counts
                             _ => None,
                         });
 
