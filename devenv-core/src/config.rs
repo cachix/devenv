@@ -185,6 +185,9 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(merge = schematic::merge::replace)]
     pub profile: Option<String>,
+    #[setting(nested)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub sandbox: Option<SandboxConfig>,
     /// Git repository root path (not serialized, computed during load)
     #[serde(skip)]
     pub git_root: Option<PathBuf>,
@@ -199,6 +202,79 @@ pub struct SecretspecConfig {
     pub profile: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub provider: Option<String>,
+}
+
+#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[config(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxConfig {
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(default = false)]
+    pub enable: bool,
+
+    /// Network configuration for the sandbox
+    #[setting(nested)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub network: Option<SandboxNetwork>,
+
+    /// Mount resources into sandbox
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[setting(nested, merge = schematic::merge::append_vec)]
+    pub mounts: Vec<SandboxBindMount>,
+}
+
+#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SandboxNetwork {
+    #[serde(skip_serializing_if = "is_true", default = "true_default")]
+    #[setting(default = true)]
+    pub enable: bool,
+
+    #[serde(skip_serializing_if = "is_true", default = "true_default")]
+    #[setting(default = true)]
+    pub host_resolv: bool,
+
+    #[serde(skip_serializing_if = "is_true", default = "true_default")]
+    #[setting(default = true)]
+    pub host_certs: bool,
+}
+
+#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[config(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxBindMount {
+    /// Source path on the host
+    pub path: String,
+
+    /// Destination path in the sandbox (defaults to same as source)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub dest: Option<String>,
+
+    /// Mount mode (readonly, readwrite, device, tmpfs)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub mode: Option<BindMountMode>,
+
+    /// Skip non-existent resources
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(default = false)]
+    pub optional: bool,
+}
+
+#[derive(
+    schematic::ConfigEnum, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum BindMountMode {
+    #[default]
+    #[serde(alias = "ro")]
+    ReadOnly,
+    #[serde(alias = "rw")]
+    ReadWrite,
+    #[serde(alias = "dev")]
+    Device,
+    Tmpfs,
+    Overlay,
+    OverlayTmpfs,
+    OverlayRo,
 }
 
 // TODO: https://github.com/moonrepo/schematic/issues/105
