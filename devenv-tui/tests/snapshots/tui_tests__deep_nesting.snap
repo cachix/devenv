@@ -6,7 +6,7 @@ expression: output
   ⎿ ⠋ Building wrapper-scripts buildPhase
     ⎿ ⠋ Downloading bash-5.2 from cache.nixos.org
         ──────────────────────────────────────────────500kB / 1MB at 5MB/s
-      ⎿ ⠋ Downloading readline-8.2
-        ⎿ ⠋ Downloading ncurses-6.4
+      ⎿ ⠋ Downloading readline-8.2 from cache.nixos.org
+        ⎿ ⠋ Downloading ncurses-6.4 from cache.nixos.org
 
  0 of 1 builds  │  0 of 3 downloads                                ↑↓ nav

@@ -266,12 +266,13 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Task(task_data) => {
-            let status_text = match task_data.status {
+            // Base status without log line (used as fallback or when no log)
+            let base_status = match task_data.status {
                 TaskDisplayStatus::Pending => Some("pending".to_string()),
                 TaskDisplayStatus::Running if *log_line_count > 0 => {
                     Some(format!("{} lines", log_line_count))
                 }
-                TaskDisplayStatus::Running => None, // Don't show "running", the spinner indicates it
+                TaskDisplayStatus::Running => None,
                 TaskDisplayStatus::Success if *log_line_count > 0 => {
                     Some(format!("{} lines", log_line_count))
                 }
@@ -283,6 +284,25 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 TaskDisplayStatus::Skipped => Some("skipped".to_string()),
                 TaskDisplayStatus::Cancelled => Some("cancelled".to_string()),
             };
+
+            // Append last log line if available (overflow will truncate naturally)
+            let status_text =
+                if let Some(last_line) = task_data.last_log_line.as_ref().map(|l| l.trim()) {
+                    if last_line.is_empty() {
+                        base_status
+                    } else {
+                        match task_data.status {
+                            TaskDisplayStatus::Failed => Some(format!("failed → {}", last_line)),
+                            _ => match base_status {
+                                Some(base) => Some(format!("{} → {}", base, last_line)),
+                                None => Some(format!("→ {}", last_line)),
+                            },
+                        }
+                    }
+                } else {
+                    base_status
+                };
+
             let prefix = build_activity_prefix(*depth, *completed);
 
             let main_line = ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
