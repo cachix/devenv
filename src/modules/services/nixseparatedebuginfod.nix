@@ -70,10 +70,12 @@ in
         args = [
           "--expiration"
           cfg.cache.expiration
-          "--cache-dir"
-          cfg.cache.directory
           "--listen-address"
           listen_address
+        ]
+        ++ lib.optionals (cfg.cache.directory != null) [
+          "--cache-dir"
+          cfg.cache.directory
         ]
         ++ (lib.lists.concatMap
           (s: [

@@ -382,7 +382,11 @@ let
         type = types.package;
         internal = true;
         default = pkgs.writeShellScript "docker-run" ''
-          docker run -it ${config.name}:${config.version} "$@"
+          if [ -t 0 ]; then
+            docker run -it ${config.name}:${config.version} "$@"
+          else
+            docker run -i ${config.name}:${config.version} "$@"
+          fi
         '';
       };
     };

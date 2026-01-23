@@ -13,21 +13,21 @@
     test-dir = {
       name = "test-dir";
       copyToRoot = ./test-dir;
-      startupCommand = "ls -la /env";
+      startupCommand = "ls -laR /env";
     };
 
     # Test copying a single file
     test-file = {
       name = "test-file";
       copyToRoot = ./test-file.txt;
-      startupCommand = "ls -la /env";
+      startupCommand = "ls -laR /env";
     };
 
     # Test copying multiple paths (list)
     test-multiple = {
       name = "test-multiple";
       copyToRoot = [ ./test-file.txt ./test-dir ];
-      startupCommand = "ls -la /env";
+      startupCommand = "ls -laR /env";
     };
   };
 }

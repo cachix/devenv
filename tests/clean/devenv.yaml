@@ -5,3 +5,5 @@ clean:
   enabled: true
   keep:
     - RUST_LOG
+    - PATH
+    - HOME

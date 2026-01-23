@@ -7,4 +7,6 @@ fn main() {
         "cargo:rustc-env=TARGET_OS={}",
         std::env::var("CARGO_CFG_TARGET_OS").unwrap()
     );
+    // Rerun if init directory changes
+    println!("cargo:rerun-if-changed=init");
 }
