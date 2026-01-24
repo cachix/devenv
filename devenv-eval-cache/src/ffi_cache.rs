@@ -68,6 +68,9 @@ pub struct CachingConfig {
     pub extra_watch_paths: Vec<PathBuf>,
     /// Paths to exclude from cache invalidation (e.g., generated files).
     pub excluded_paths: Vec<PathBuf>,
+    /// Environment variable names to exclude from cache invalidation
+    /// (e.g., vars already tracked via NixArgs).
+    pub excluded_envs: Vec<String>,
 }
 
 /// Collects input operations during an evaluation scope.
@@ -211,6 +214,10 @@ pub fn ops_to_inputs(ops: Vec<EvalOp>, config: &CachingConfig) -> Vec<Input> {
                 }
             }
             EvalOp::GetEnv { name } => {
+                // Skip excluded env vars (already tracked elsewhere, e.g., via NixArgs)
+                if config.excluded_envs.contains(&name) {
+                    continue;
+                }
                 // Create env input descriptor
                 if let Ok(desc) = EnvInputDesc::new(name) {
                     inputs.push(Input::Env(desc));
@@ -303,6 +310,26 @@ mod tests {
         }];
         let inputs = ops_to_inputs(ops, &config);
         assert!(inputs.is_empty());
+    }
+
+    #[test]
+    fn test_ops_to_inputs_filters_excluded_envs() {
+        let config = CachingConfig {
+            excluded_envs: vec!["NIXPKGS_CONFIG".to_string()],
+            ..Default::default()
+        };
+        let ops = vec![
+            EvalOp::GetEnv {
+                name: "NIXPKGS_CONFIG".to_string(),
+            },
+            EvalOp::GetEnv {
+                name: "OTHER_VAR".to_string(),
+            },
+        ];
+        let inputs = ops_to_inputs(ops, &config);
+        // NIXPKGS_CONFIG should be filtered out, only OTHER_VAR remains
+        assert_eq!(inputs.len(), 1);
+        assert!(matches!(inputs[0], Input::Env(ref e) if e.name == "OTHER_VAR"));
     }
 
     #[test]

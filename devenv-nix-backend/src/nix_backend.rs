@@ -101,6 +101,9 @@ pub struct NixRustBackend {
     // Path to extracted bootstrap directory (lives for duration of backend)
     bootstrap_path: PathBuf,
 
+    // Path to generated nixpkgs config file (for cache exclusion)
+    nixpkgs_config_path: PathBuf,
+
     // Activity logger that forwards Nix events to tracing
     // Must be kept alive for the duration of the backend
     #[allow(dead_code)]
@@ -324,7 +327,7 @@ impl NixRustBackend {
             .join(format!("nixpkgs-config-{}.nix", config_hash));
         std::fs::write(&nixpkgs_config_path, &nixpkgs_config_nix)
             .map_err(|e| miette::miette!("Failed to write nixpkgs config: {}", e))?;
-        let nixpkgs_config_path = nixpkgs_config_path
+        let nixpkgs_config_path_str = nixpkgs_config_path
             .to_str()
             .ok_or_else(|| miette::miette!("Nixpkgs config path contains invalid UTF-8"))?
             .to_string();
@@ -342,7 +345,7 @@ impl NixRustBackend {
             )
             .to_miette()
             .wrap_err("Failed to set base directory")?
-            .env_override("NIXPKGS_CONFIG", &nixpkgs_config_path)
+            .env_override("NIXPKGS_CONFIG", &nixpkgs_config_path_str)
             .to_miette()
             .wrap_err("Failed to set NIXPKGS_CONFIG environment override")?
             .flakes(&flake_settings)
@@ -423,6 +426,7 @@ impl NixRustBackend {
             flake_settings,
             fetchers_settings,
             bootstrap_path,
+            nixpkgs_config_path,
             _activity_logger: activity_logger,
             nix_log_bridge: log_bridge,
             eval_cache_pool,
@@ -923,6 +927,10 @@ impl NixBackend for NixRustBackend {
                 if let Some(pool) = pool_cell.get() {
                     let config = CachingConfig {
                         force_refresh: self.global_options.refresh_eval_cache,
+                        // NIXPKGS_CONFIG is already tracked via NixArgs.nixpkgs_config
+                        excluded_envs: vec!["NIXPKGS_CONFIG".to_string()],
+                        // The nixpkgs config file content is already reflected in the cache key
+                        excluded_paths: vec![self.nixpkgs_config_path.clone()],
                         ..Default::default()
                     };
                     let service = CachingEvalService::with_config(pool.clone(), config.clone());
