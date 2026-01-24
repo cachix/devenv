@@ -16,7 +16,7 @@ in
     registry = "docker://registry.fly.io/";
     defaultCopyArgs = [
       "--dest-creds"
-      ''x:"$(${lib.getExe pkgs.flyctl}l auth token)"''
+      ''x:"$(${lib.getExe pkgs.flyctl} auth token)"''
     ];
   };
 }
