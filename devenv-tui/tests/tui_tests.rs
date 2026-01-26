@@ -116,7 +116,6 @@ fn test_task_running() {
         detail: None,
         show_output: false,
         is_process: false,
-        selectable: false,
         timestamp: Timestamp::now(),
     });
 
@@ -168,7 +167,6 @@ fn test_multiple_activities() {
         detail: None,
         show_output: false,
         is_process: false,
-        selectable: false,
         timestamp: Timestamp::now(),
     });
 
@@ -194,7 +192,6 @@ fn test_task_success() {
         detail: None,
         show_output: false,
         is_process: false,
-        selectable: false,
         timestamp: Timestamp::now(),
     });
 
@@ -224,7 +221,6 @@ fn test_task_failed() {
         detail: None,
         show_output: false,
         is_process: false,
-        selectable: false,
         timestamp: Timestamp::now(),
     });
 
@@ -254,7 +250,6 @@ fn test_task_failed_shows_logs() {
         detail: None,
         show_output: false,
         is_process: false,
-        selectable: false,
         timestamp: Timestamp::now(),
     });
     model.apply_activity_event(start_event);
@@ -302,7 +297,6 @@ fn test_task_show_output_true() {
         detail: None,
         show_output: true,
         is_process: false,
-        selectable: false,
         timestamp: Timestamp::now(),
     });
     model.apply_activity_event(start_event);
@@ -337,7 +331,6 @@ fn test_task_show_output_false() {
         detail: None,
         show_output: false,
         is_process: false,
-        selectable: false,
         timestamp: Timestamp::now(),
     });
     model.apply_activity_event(start_event);
@@ -529,7 +522,6 @@ fn test_activity_with_details() {
         parent: None,
         detail: Some("nix eval --json .#devenv.config".to_string()),
         level: ActivityLevel::Info,
-        selectable: false,
         timestamp: Timestamp::now(),
     });
     model.apply_activity_event(parent_event);
@@ -837,7 +829,6 @@ fn test_many_concurrent_activities() {
                     detail: None,
                     show_output: false,
                     is_process: false,
-                    selectable: false,
                     timestamp: Timestamp::now(),
                 }));
             }

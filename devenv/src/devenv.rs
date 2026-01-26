@@ -512,17 +512,12 @@ impl Devenv {
         cmd: String,
         args: &[String],
         activity_name: Option<&str>,
-        selectable: bool,
     ) -> Result<Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
         shell_cmd.stdout(Stdio::piped());
         shell_cmd.stderr(Stdio::piped());
 
-        let mut builder = Activity::operation(activity_name.unwrap_or("Running in shell"));
-        if selectable {
-            builder = builder.selectable();
-        }
-        let activity = builder.start();
+        let activity = Activity::operation(activity_name.unwrap_or("Running in shell")).start();
 
         let mut child = shell_cmd.spawn().into_diagnostic()?;
 
@@ -1070,7 +1065,7 @@ impl Devenv {
 
         // Run the test script through the shell, which runs enterShell tasks first
         let result = self
-            .run_in_shell(test_script, &[], Some("Running tests"), true)
+            .run_in_shell(test_script, &[], Some("Running tests"))
             .await?;
 
         if self.has_processes().await? {

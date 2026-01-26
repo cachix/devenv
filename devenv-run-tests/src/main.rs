@@ -400,7 +400,6 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
                     format!("./{setup_script}"),
                     &[],
                     Some("Running setup script"),
-                    true,
                 )
                 .await?;
             if !output.status.success() {

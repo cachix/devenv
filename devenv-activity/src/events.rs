@@ -222,9 +222,6 @@ pub enum Task {
         /// Whether this is a long-running process task (always shows output)
         #[serde(default)]
         is_process: bool,
-        /// Whether this task is selectable in the TUI
-        #[serde(default)]
-        selectable: bool,
         timestamp: Timestamp,
     },
     Complete {
@@ -294,9 +291,6 @@ pub enum Operation {
         detail: Option<String>,
         #[serde(default)]
         level: ActivityLevel,
-        /// Whether this activity can be selected in the TUI
-        #[serde(default)]
-        selectable: bool,
         timestamp: Timestamp,
     },
     Complete {
