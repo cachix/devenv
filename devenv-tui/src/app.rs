@@ -1,6 +1,6 @@
 use crate::{
     expanded_view::ExpandedLogView,
-    model::{ActivityModel, UiState, ViewMode},
+    model::{ActivityModel, RenderContext, UiState, ViewMode},
     view::view,
 };
 use crossterm::{
@@ -215,9 +215,12 @@ impl TuiApp {
         {
             let ui = ui_state.read().unwrap();
             if let Ok(model_guard) = activity_model.read() {
-                // Clear the previous inline render output
-                let lines_to_clear = model_guard
-                    .calculate_rendered_height(ui.selected_activity, ui.terminal_size.height);
+                // Clear the previous inline render output (which had the summary line)
+                let lines_to_clear = model_guard.calculate_rendered_height(
+                    ui.selected_activity,
+                    ui.terminal_size.height,
+                    true,
+                );
 
                 if lines_to_clear > 0 {
                     let mut stderr = io::stderr();
@@ -255,7 +258,7 @@ impl TuiApp {
                     let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
                     let mut element = element! {
                         View(width: terminal_width) {
-                            #(vec![view(&model_guard, &ui).into()])
+                            #(vec![view(&model_guard, &ui, RenderContext::Final).into()])
                         }
                     };
                     element.eprint();
@@ -422,7 +425,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let rendered = if let Ok(model_guard) = activity_model.read() {
         element! {
             View(width: terminal_width) {
-                #(vec![view(&model_guard, &ui).into()])
+                #(vec![view(&model_guard, &ui, RenderContext::Normal).into()])
             }
         }
     } else {
@@ -484,7 +487,7 @@ async fn run_view(
             *pre_expand_height = {
                 let ui = ui_state.read().unwrap();
                 let model = activity_model.read().unwrap();
-                model.calculate_rendered_height(ui.selected_activity, ui.terminal_size.height)
+                model.calculate_rendered_height(ui.selected_activity, ui.terminal_size.height, true)
             };
 
             let mut element = element! {

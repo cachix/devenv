@@ -282,6 +282,18 @@ pub enum ViewMode {
     ExpandedLogs { activity_id: u64 },
 }
 
+/// Controls rendering behavior independent of view content.
+/// This is passed to the view function to control how it renders,
+/// separate from ViewMode which controls *what* to render.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub enum RenderContext {
+    /// Normal rendering with full UI (nav bar, etc.)
+    #[default]
+    Normal,
+    /// Final render before exit - no nav bar
+    Final,
+}
+
 impl ActivityModel {
     /// Create a new ActivityModel.
     pub fn new() -> Self {
@@ -522,14 +534,7 @@ impl ActivityModel {
                 ..
             } => {
                 let variant = ActivityVariant::UserOperation;
-                self.create_activity(
-                    id,
-                    name,
-                    parent,
-                    command,
-                    variant,
-                    ActivityLevel::Debug,
-                );
+                self.create_activity(id, name, parent, command, variant, ActivityLevel::Debug);
             }
             Command::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -1238,10 +1243,13 @@ impl ActivityModel {
 
     /// Calculate the height that the TUI will render.
     /// This is the canonical height calculation - view.rs should call this method.
+    ///
+    /// When `show_summary` is false (e.g., final render), the summary line is excluded.
     pub fn calculate_rendered_height(
         &self,
         selected_activity: Option<u64>,
         terminal_height: u16,
+        show_summary: bool,
     ) -> u16 {
         let activities = self.get_display_activities();
 
@@ -1304,8 +1312,12 @@ impl ActivityModel {
             }
         }
 
-        // Total: activities + blank line + summary line
-        let calculated = (total_height + 2) as u16;
+        // Total: activities + blank line (+ summary line if shown)
+        let calculated = if show_summary {
+            (total_height + 2) as u16
+        } else {
+            (total_height + 1) as u16
+        };
 
         // Clamp to terminal height
         calculated.min(terminal_height)

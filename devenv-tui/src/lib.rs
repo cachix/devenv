@@ -16,8 +16,8 @@ pub mod view;
 pub use app::{TuiApp, TuiConfig};
 pub use model::{
     Activity, ActivityModel, ActivityVariant, BuildActivity, ChildActivityLimit, DownloadActivity,
-    ProgressActivity, QueryActivity, TaskActivity, TaskDisplayStatus, TerminalSize, UiState,
-    ViewMode,
+    ProgressActivity, QueryActivity, RenderContext, TaskActivity, TaskDisplayStatus, TerminalSize,
+    UiState, ViewMode,
 };
 pub use model_events::UiEvent;
 

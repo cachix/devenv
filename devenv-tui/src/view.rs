@@ -1,7 +1,7 @@
 use crate::{
     components::{LOG_VIEWPORT_COLLAPSED, format_elapsed_time, *},
     model::{
-        Activity, ActivityModel, ActivitySummary, ActivityVariant, NixActivityState,
+        Activity, ActivityModel, ActivitySummary, ActivityVariant, NixActivityState, RenderContext,
         TaskDisplayStatus, TerminalSize, UiState,
     },
 };
@@ -15,7 +15,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// Main view function that creates the UI
-pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'static>> {
+pub fn view(
+    model: &ActivityModel,
+    ui_state: &UiState,
+    render_context: RenderContext,
+) -> impl Into<AnyElement<'static>> {
     let active_activities = model.get_display_activities();
 
     let summary = model.calculate_summary();
@@ -102,6 +106,9 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         (false, !selectable_ids.is_empty())
     };
 
+    // Show summary (nav bar) only in normal render context
+    let show_summary = render_context == RenderContext::Normal;
+
     let summary_view = element! {
         ContextProvider(value: Context::owned(SummaryViewContext {
             summary: summary.clone(),
@@ -116,7 +123,8 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
     .into_any();
 
     // Calculate height using model's canonical method (includes summary line and terminal clamping)
-    let total_height = model.calculate_rendered_height(selected_id, terminal_size.height) as u32;
+    let total_height =
+        model.calculate_rendered_height(selected_id, terminal_size.height, show_summary) as u32;
 
     let mut children = vec![];
 
@@ -135,19 +143,21 @@ pub fn view(model: &ActivityModel, ui_state: &UiState) -> impl Into<AnyElement<'
         .into_any(),
     );
 
-    // Summary line at bottom
-    children.push(
-        element! {
-            View(
-                height: 1,
-                padding_left: 1,
-                padding_right: 1
-            ) {
-                #(summary_view)
+    // Summary line at bottom (only in normal render context)
+    if show_summary {
+        children.push(
+            element! {
+                View(
+                    height: 1,
+                    padding_left: 1,
+                    padding_right: 1
+                ) {
+                    #(summary_view)
+                }
             }
-        }
-        .into_any(),
-    );
+            .into_any(),
+        );
+    }
 
     element! {
         ContextProvider(value: Context::owned(terminal_size)) {

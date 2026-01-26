@@ -22,14 +22,14 @@ use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Evaluate, Fetch, FetchKind, Message,
     Operation, Task, Timestamp,
 };
-use devenv_tui::{ActivityModel, UiState, view::view};
+use devenv_tui::{ActivityModel, RenderContext, UiState, view::view};
 use iocraft::prelude::*;
 
 const TEST_WIDTH: u16 = 80;
 const TEST_HEIGHT: u16 = 24;
 
 fn render_to_string(model: &ActivityModel, ui_state: &UiState) -> String {
-    let mut element = view(model, ui_state).into();
+    let mut element = view(model, ui_state, RenderContext::Normal).into();
     element.render(Some(TEST_WIDTH as usize)).to_string()
 }
 
