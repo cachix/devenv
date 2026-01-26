@@ -66,7 +66,8 @@ pub use builders::{
 pub use handle::{ActivityHandle, init};
 pub use serde_valuable::SerdeValue;
 pub use stack::{
-    current_activity_id, current_activity_level, message, message_with_details, set_expected,
+    current_activity_id, current_activity_level, log_to_evaluate, message, message_with_details,
+    set_expected,
 };
 
 // Trait

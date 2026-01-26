@@ -165,10 +165,11 @@ impl Parse for ActivityArgs {
 ///
 /// ```ignore
 /// async fn build_shell() -> Result<()> {
+///     use devenv_activity::ActivityInstrument;
 ///     let __activity = devenv_activity::Activity::operation("Building shell");
-///     async move {
+///     (async move {
 ///         // original function body
-///     }.instrument(__activity.span()).await
+///     }).in_activity(&__activity).await
 /// }
 /// ```
 #[proc_macro_attribute]
@@ -287,21 +288,22 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
         .collect();
 
     let output = if is_async {
-        // For async functions, wrap with scope() for parent tracking and instrument() for span
+        // For async functions, use in_activity() which handles both parent tracking and span instrumentation
         quote! {
             #(#fn_attrs)*
             #fn_vis #fn_sig {
+                use devenv_activity::ActivityInstrument;
                 let __activity = #activity_create;
-                __activity.scope(async move #fn_block.instrument(__activity.span())).await
+                (async move #fn_block).in_activity(&__activity).await
             }
         }
     } else {
-        // For sync functions, use scope_sync() for parent tracking and in_scope() for span
+        // For sync functions, use with_new_scope_sync() for parent tracking and in_scope() for span
         quote! {
             #(#fn_attrs)*
             #fn_vis #fn_sig {
                 let __activity = #activity_create;
-                __activity.scope_sync(|| __activity.in_scope(|| #fn_block))
+                __activity.with_new_scope_sync(|| __activity.in_scope(|| #fn_block))
             }
         }
     };

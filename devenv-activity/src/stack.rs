@@ -125,3 +125,17 @@ pub fn set_expected(category: ExpectedCategory, expected: u64) {
         timestamp: Timestamp::now(),
     }));
 }
+
+/// Log a line to an Evaluate activity by ID.
+///
+/// Use this when you have the activity ID but not the Activity object,
+/// such as when logging from FFI callbacks where the Activity is owned elsewhere.
+pub fn log_to_evaluate(id: u64, line: impl Into<String>) {
+    use crate::events::Evaluate;
+
+    send_activity_event(ActivityEvent::Evaluate(Evaluate::Log {
+        id,
+        line: line.into(),
+        timestamp: Timestamp::now(),
+    }));
+}

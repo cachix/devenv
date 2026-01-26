@@ -2,7 +2,7 @@ use crate::SudoContext;
 use crate::config::TaskConfig;
 use crate::task_cache::{TaskCache, expand_glob_patterns};
 use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
-use devenv_activity::{Activity, ActivityLevel};
+use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use nix::sys::signal::{self as nix_signal, Signal};
 use nix::unistd::Pid;
@@ -187,8 +187,8 @@ impl TaskState {
             .start();
 
         // Run the entire task within the activity's scope for proper parent-child nesting
-        task_activity
-            .scope(self.run_inner(now, outputs, cache, cancellation, &task_activity))
+        self.run_inner(now, outputs, cache, cancellation, &task_activity)
+            .in_activity(&task_activity)
             .await
     }
 
