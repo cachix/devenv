@@ -303,7 +303,7 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
             #(#fn_attrs)*
             #fn_vis #fn_sig {
                 let __activity = #activity_create;
-                __activity.with_new_scope_sync(|| __activity.in_scope(|| #fn_block))
+                __activity.with_new_scope_sync(|| #fn_block)
             }
         }
     };
