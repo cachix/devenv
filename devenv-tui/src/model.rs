@@ -821,6 +821,16 @@ impl ActivityModel {
     fn handle_message(&mut self, msg: Message) {
         self.add_log_message(msg.clone());
 
+        // If the parent is an Evaluating activity, log to it instead of creating a child
+        if let Some(parent_id) = msg.parent {
+            if let Some(parent) = self.activities.get(&parent_id) {
+                if matches!(parent.variant, ActivityVariant::Evaluating(_)) {
+                    self.handle_activity_log(parent_id, msg.text, false);
+                    return;
+                }
+            }
+        }
+
         // Only create activity for messages with a parent
         if msg.parent.is_some() {
             let id = msg.id;
