@@ -91,13 +91,6 @@ pub struct NixRustBackend {
     // The C++ nix::EvalState is designed for single-threaded use.
     eval_state: Arc<Mutex<EvalState>>,
 
-    // Flake and fetchers settings - created once and reused
-    // These must live for the entire duration of the backend
-    #[allow(dead_code)]
-    flake_settings: FlakeSettings,
-    #[allow(dead_code)]
-    fetchers_settings: FetchersSettings,
-
     // Path to extracted bootstrap directory (lives for duration of backend)
     bootstrap_path: PathBuf,
 
@@ -132,6 +125,20 @@ pub struct NixRustBackend {
     // Cached import expression: (import /path/to/default.nix { ... args ... })
     // Set once in assemble() and used directly in evaluations
     cached_import_expr: Arc<OnceCell<String>>,
+
+    // DROP ORDER CRITICAL: flake_settings and fetchers_settings MUST be declared after
+    // caching_eval_state (which holds the last Arc<EvalState> reference).
+    //
+    // Nix's builtins.getFlake primop captures FlakeSettings by reference via a lambda
+    // stored inside EvalState's internalPrimOps (which uses Boehm GC's traceable_allocator).
+    // If FlakeSettings is freed before EvalState, the GC traces through the dangling pointer
+    // into freed memory, causing heap corruption ("munmap_chunk(): invalid pointer").
+    //
+    // See: Nix src/libflake/flake-primops.cc - getFlake() uses [&settings] capture.
+    #[allow(dead_code)]
+    flake_settings: FlakeSettings,
+    #[allow(dead_code)]
+    fetchers_settings: FetchersSettings,
 
     // GC collection guard - drops BEFORE gc_registration to ensure GC runs while thread is still registered
     _gc_guard: GcCollectionGuard,
@@ -423,8 +430,6 @@ impl NixRustBackend {
             config,
             store: Arc::new(store),
             eval_state: Arc::new(Mutex::new(eval_state)),
-            flake_settings,
-            fetchers_settings,
             bootstrap_path,
             nixpkgs_config_path,
             _activity_logger: activity_logger,
@@ -434,6 +439,8 @@ impl NixRustBackend {
             cachix_manager,
             cachix_daemon: cachix_daemon.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
+            flake_settings,
+            fetchers_settings,
             _gc_guard: GcCollectionGuard,
             _gc_registration: gc_registration,
             shutdown: shutdown.clone(),
