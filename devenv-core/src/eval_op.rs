@@ -1,19 +1,19 @@
-//! Abstract types for evaluation operations.
+//! Evaluation operation types and parsing.
 //!
-//! This module provides an abstraction layer that allows the log bridge
-//! to report operations without depending on specific caching implementations.
-//! Caching implementations can subscribe to these operations via the `OpObserver` trait.
+//! This module provides `EvalOp` for tracking filesystem/environment operations
+//! during Nix evaluation, along with parsing logic to extract them from Nix logs.
+//!
+//! Note: `EvalOp` is duplicated in `devenv_activity::EvalOp`.
 
 use crate::internal_log::InternalLog;
 use regex::Regex;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 
-/// A sum-type of filesystem operations observed during Nix evaluation.
+/// A filesystem or environment operation observed during Nix evaluation.
 ///
-/// This is the abstract representation that NixLogBridge understands.
-/// Caching implementations can convert these to their internal types.
-#[derive(Clone, Debug, PartialEq)]
+/// These operations are used for cache invalidation and dependency tracking.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EvalOp {
     /// Copied a file to the Nix store.
     CopiedSource { source: PathBuf, target: PathBuf },
@@ -25,10 +25,27 @@ pub enum EvalOp {
     ReadDir { source: PathBuf },
     /// Read an environment variable with `builtins.getEnv`.
     GetEnv { name: String },
-    /// Check that a file exists with 'builtins.pathExists'.
+    /// Check that a file exists with `builtins.pathExists`.
     PathExists { source: PathBuf },
     /// Used a tracked devenv string path.
     TrackedPath { source: PathBuf },
+}
+
+/// Convert to the activity event type for serialization.
+impl From<EvalOp> for devenv_activity::EvalOp {
+    fn from(op: EvalOp) -> Self {
+        match op {
+            EvalOp::CopiedSource { source, target } => {
+                devenv_activity::EvalOp::CopiedSource { source, target }
+            }
+            EvalOp::EvaluatedFile { source } => devenv_activity::EvalOp::EvaluatedFile { source },
+            EvalOp::ReadFile { source } => devenv_activity::EvalOp::ReadFile { source },
+            EvalOp::ReadDir { source } => devenv_activity::EvalOp::ReadDir { source },
+            EvalOp::GetEnv { name } => devenv_activity::EvalOp::GetEnv { name },
+            EvalOp::PathExists { source } => devenv_activity::EvalOp::PathExists { source },
+            EvalOp::TrackedPath { source } => devenv_activity::EvalOp::TrackedPath { source },
+        }
+    }
 }
 
 // Regex patterns for parsing operations from log messages

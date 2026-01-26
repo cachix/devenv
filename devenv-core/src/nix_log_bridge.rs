@@ -22,8 +22,8 @@
 //! This guard-based API ensures eval scopes are always properly closed.
 
 use devenv_activity::{
-    Activity, ActivityLevel, ExpectedCategory, FetchKind, log_to_evaluate, message,
-    message_with_details, set_expected,
+    Activity, ActivityLevel, ExpectedCategory, FetchKind, message, message_with_details,
+    op_to_evaluate, set_expected,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -200,8 +200,8 @@ impl NixLogBridge {
                         }
                     }
 
-                    // Handle eval operations for UI - log to eval activity if in scope
-                    if self.log_to_current_eval(msg) {
+                    // Handle eval operations for UI - emit structured op to eval activity if in scope
+                    if self.op_to_current_eval(op) {
                         return;
                     }
                 }
@@ -516,18 +516,18 @@ impl NixLogBridge {
         }
     }
 
-    /// Log a message to the current eval activity.
+    /// Emit a structured eval op to the current eval activity.
     ///
-    /// Returns `true` if the message was logged (we're in an eval scope),
+    /// Returns `true` if the op was emitted (we're in an eval scope),
     /// `false` if there's no active eval scope (caller should fall back to `message()`).
-    fn log_to_current_eval(&self, msg: &str) -> bool {
+    fn op_to_current_eval(&self, op: EvalOp) -> bool {
         let state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
         let Some(id) = state.current_eval_id else {
             return false;
         };
 
-        log_to_evaluate(id, msg.to_string());
+        op_to_evaluate(id, op.into());
         true
     }
 }

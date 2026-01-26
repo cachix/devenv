@@ -142,7 +142,35 @@ pub enum FetchKind {
     Copy,
 }
 
-/// Evaluate activity events - has Log only
+/// A filesystem or environment operation observed during Nix evaluation.
+///
+/// These operations are logged during evaluation and can be used for
+/// cache invalidation and dependency tracking.
+///
+/// Note: Duplicated in `devenv_core::eval_op::EvalOp`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Valuable)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum EvalOp {
+    /// Copied a file to the Nix store.
+    CopiedSource {
+        source: std::path::PathBuf,
+        target: std::path::PathBuf,
+    },
+    /// Evaluated a Nix file.
+    EvaluatedFile { source: std::path::PathBuf },
+    /// Read a file's contents with `builtins.readFile`.
+    ReadFile { source: std::path::PathBuf },
+    /// List a directory's contents with `builtins.readDir`.
+    ReadDir { source: std::path::PathBuf },
+    /// Read an environment variable with `builtins.getEnv`.
+    GetEnv { name: String },
+    /// Check that a file exists with `builtins.pathExists`.
+    PathExists { source: std::path::PathBuf },
+    /// Used a tracked devenv string path.
+    TrackedPath { source: std::path::PathBuf },
+}
+
+/// Evaluate activity events.
 #[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Evaluate {
@@ -161,10 +189,18 @@ pub enum Evaluate {
         outcome: ActivityOutcome,
         timestamp: Timestamp,
     },
+    /// Plain text log line from evaluation.
     Log {
         #[serde(alias = "activity_id")]
         id: u64,
         line: String,
+        timestamp: Timestamp,
+    },
+    /// Structured evaluation operation (parsed from log).
+    Op {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        op: EvalOp,
         timestamp: Timestamp,
     },
 }

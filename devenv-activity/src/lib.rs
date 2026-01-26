@@ -52,8 +52,8 @@ pub use tracing_subscriber::Registry;
 // Core types
 pub use activity::{Activity, ActivityType};
 pub use events::{
-    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, ExpectedCategory,
-    Fetch, FetchKind, Message, Operation, SetExpected, Task,
+    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
+    ExpectedCategory, Fetch, FetchKind, Message, Operation, SetExpected, Task,
 };
 pub use timestamp::Timestamp;
 
@@ -67,7 +67,7 @@ pub use handle::{ActivityHandle, init};
 pub use serde_valuable::SerdeValue;
 pub use stack::{
     current_activity_id, current_activity_level, log_to_evaluate, message, message_with_details,
-    set_expected,
+    op_to_evaluate, set_expected,
 };
 
 // Trait

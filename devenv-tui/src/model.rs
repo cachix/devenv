@@ -1,7 +1,7 @@
 use crate::app::TuiConfig;
 use devenv_activity::{
-    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, ExpectedCategory,
-    Fetch, FetchKind, Message, Operation, SetExpected, Task,
+    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
+    ExpectedCategory, Fetch, FetchKind, Message, Operation, SetExpected, Task,
 };
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -459,6 +459,27 @@ impl ActivityModel {
                 // Evaluate logs count files
                 self.handle_activity_log(id, line, false);
             }
+            Evaluate::Op { id, op, .. } => {
+                // Log the op to the activity's log buffer
+                let line = format_eval_op(&op);
+                self.log_to_activity(id, line);
+
+                // Count file read operations for the progress display.
+                // Excludes CopiedSource, ReadDir, GetEnv, TrackedPath.
+                let is_file_read = matches!(
+                    op,
+                    EvalOp::EvaluatedFile { .. }
+                        | EvalOp::ReadFile { .. }
+                        | EvalOp::PathExists { .. }
+                );
+                if is_file_read {
+                    if let Some(activity) = self.activities.get_mut(&id) {
+                        if let ActivityVariant::Evaluating(eval) = &mut activity.variant {
+                            eval.files_evaluated += 1;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -818,18 +839,23 @@ impl ActivityModel {
         }
     }
 
+    /// Log a line to an activity's log buffer without counting or other side effects.
+    fn log_to_activity(&mut self, id: u64, line: String) {
+        let logs = self
+            .build_logs
+            .entry(id)
+            .or_insert_with(|| Arc::new(VecDeque::new()));
+        let logs_mut = Arc::make_mut(logs);
+        if logs_mut.len() >= self.config.max_log_lines_per_build {
+            logs_mut.pop_front();
+        }
+        logs_mut.push_back(line);
+
+        *self.log_line_counts.entry(id).or_insert(0) += 1;
+    }
+
     fn handle_message(&mut self, msg: Message) {
         self.add_log_message(msg.clone());
-
-        // If the parent is an Evaluating activity, log to it instead of creating a child
-        if let Some(parent_id) = msg.parent {
-            if let Some(parent) = self.activities.get(&parent_id) {
-                if matches!(parent.variant, ActivityVariant::Evaluating(_)) {
-                    self.handle_activity_log(parent_id, msg.text, false);
-                    return;
-                }
-            }
-        }
 
         // Only create activity for messages with a parent
         if msg.parent.is_some() {
@@ -1330,4 +1356,23 @@ pub struct ActivitySummary {
     pub running_tasks: usize,
     pub completed_tasks: usize,
     pub failed_tasks: usize,
+}
+
+/// Format an EvalOp as a display string for logging.
+fn format_eval_op(op: &EvalOp) -> String {
+    match op {
+        EvalOp::CopiedSource { source, target } => {
+            format!(
+                "copied source '{}' -> '{}'",
+                source.display(),
+                target.display()
+            )
+        }
+        EvalOp::EvaluatedFile { source } => format!("evaluating file '{}'", source.display()),
+        EvalOp::ReadFile { source } => format!("devenv readFile: '{}'", source.display()),
+        EvalOp::ReadDir { source } => format!("devenv readDir: '{}'", source.display()),
+        EvalOp::GetEnv { name } => format!("devenv getEnv: '{}'", name),
+        EvalOp::PathExists { source } => format!("devenv pathExists: '{}'", source.display()),
+        EvalOp::TrackedPath { source } => format!("trace: devenv path: '{}'", source.display()),
+    }
 }

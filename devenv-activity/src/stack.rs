@@ -139,3 +139,17 @@ pub fn log_to_evaluate(id: u64, line: impl Into<String>) {
         timestamp: Timestamp::now(),
     }));
 }
+
+/// Log a structured eval operation to an Evaluate activity by ID.
+///
+/// Use this for parsed/structured evaluation operations (readDir, pathExists, etc.)
+/// that carry richer data than plain text log lines.
+pub fn op_to_evaluate(id: u64, op: crate::events::EvalOp) {
+    use crate::events::Evaluate;
+
+    send_activity_event(ActivityEvent::Evaluate(Evaluate::Op {
+        id,
+        op,
+        timestamp: Timestamp::now(),
+    }));
+}
