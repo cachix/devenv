@@ -180,7 +180,6 @@ fn create_log_callback(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use devenv_activity::ActivityLevel;
     use nix_bindings_expr::eval_state::{EvalStateBuilder, gc_register_my_thread};
     use nix_bindings_store::store::Store;
 
@@ -206,10 +205,8 @@ mod tests {
         // Create logger - this registers the activity callbacks
         let setup = setup_nix_logger().expect("Failed to setup logger");
 
-        // Begin eval scope - activity will be created lazily on first callback
-        setup
-            .bridge
-            .begin_eval(None, "Test evaluation".to_string(), ActivityLevel::Info);
+        // Begin eval scope - guard calls end_eval on drop
+        let _eval_guard = setup.bridge.begin_eval(1);
 
         let store = Store::open(None, []).expect("Failed to open store");
         let mut eval_state = EvalStateBuilder::new(store)
@@ -222,8 +219,7 @@ mod tests {
         let result = eval_state.eval_from_string(expr, ".");
         assert!(result.is_ok(), "Simple evaluation should work");
 
-        // End eval scope - activity (if created) completes
-        setup.bridge.end_eval();
+        // eval_guard drops here, calling end_eval automatically
     }
 
     #[test]

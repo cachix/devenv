@@ -23,7 +23,7 @@ use devenv_core::nix_args::NixArgs;
 use devenv_core::nix_backend::{
     DevEnvOutput, DevenvPaths, NixBackend, Options, PackageSearchResult, SearchResults,
 };
-use devenv_core::nix_log_bridge::NixLogBridge;
+use devenv_core::nix_log_bridge::{EvalActivityGuard, NixLogBridge};
 use devenv_eval_cache::{
     CacheError, CachedEval, CachingConfig, CachingEvalService, CachingEvalState,
 };
@@ -183,16 +183,14 @@ unsafe impl Sync for NixRustBackend {}
 /// 2. Calls `bridge.begin_eval(activity.id())` to register the activity for file logging
 ///
 /// When dropped:
-/// 1. Calls `bridge.end_eval()` to clear the activity ID
+/// 1. The `EvalActivityGuard` clears the activity ID via its Drop impl
 /// 2. Releases the eval_state lock
 ///
 /// The caller owns the Activity and controls its lifecycle. This guard just
 /// ensures file evaluations are logged to the correct activity.
-///
-/// Re-entrancy is supported: nested sessions share the outermost session's activity.
 pub(crate) struct EvalSession<'a> {
     guard: std::sync::MutexGuard<'a, EvalState>,
-    bridge: Arc<NixLogBridge>,
+    _eval_activity: EvalActivityGuard<'a>,
 }
 
 impl<'a> std::ops::Deref for EvalSession<'a> {
@@ -205,13 +203,6 @@ impl<'a> std::ops::Deref for EvalSession<'a> {
 impl<'a> std::ops::DerefMut for EvalSession<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.guard
-    }
-}
-
-impl Drop for EvalSession<'_> {
-    fn drop(&mut self) {
-        // Decrement nesting depth; if outermost, complete the eval activity
-        self.bridge.end_eval();
     }
 }
 
@@ -448,9 +439,6 @@ impl NixRustBackend {
     ///
     /// The caller owns the Activity and controls its lifecycle. File evaluations
     /// during this session will be logged to the provided activity.
-    ///
-    /// Nested calls share a single activity - only the outermost session's
-    /// activity ID is used.
     fn eval_session(&self, activity: &Activity) -> Result<EvalSession<'_>> {
         // Acquire the eval_state lock
         let guard = self
@@ -458,12 +446,12 @@ impl NixRustBackend {
             .lock()
             .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
 
-        // Register activity ID for file evaluation logging
-        self.nix_log_bridge.begin_eval(activity.id());
+        // begin_eval returns a guard that calls end_eval on drop
+        let eval_activity = self.nix_log_bridge.begin_eval(activity.id());
 
         Ok(EvalSession {
             guard,
-            bridge: Arc::clone(&self.nix_log_bridge),
+            _eval_activity: eval_activity,
         })
     }
 

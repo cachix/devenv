@@ -15,18 +15,11 @@
 //! ## How It Works
 //!
 //! 1. Caller creates an Activity (e.g., `Activity::evaluate("Building shell")`)
-//! 2. Caller calls `begin_eval(activity.id())` to register the activity ID
+//! 2. Caller calls `begin_eval(activity.id())` which returns an `EvalActivityGuard`
 //! 3. When file evaluation messages arrive, they are logged to that activity
-//! 4. Caller calls `end_eval()` when done
+//! 4. When the guard is dropped, `end_eval()` is called automatically
 //!
-//! This is handled automatically by `EvalSession` in `devenv-nix-backend`.
-//!
-//! ## Re-entrancy
-//!
-//! The bridge supports nested eval sessions. Only the outermost session's
-//! activity ID is used. This allows methods like `validate_lock_file()` to be
-//! called from within operations like `dev_env()` without overwriting the
-//! activity ID.
+//! This guard-based API ensures eval scopes are always properly closed.
 
 use devenv_activity::{
     Activity, ActivityLevel, ExpectedCategory, FetchKind, log_to_evaluate, message,
@@ -46,11 +39,7 @@ use crate::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosit
 /// The bridge stores only the activity ID, not the Activity itself.
 /// The caller owns the Activity and controls its lifecycle.
 struct EvalActivityState {
-    /// Nesting depth - how many EvalSessions are currently active.
-    /// Only the outermost session controls activity tracking.
-    depth: usize,
-    /// The current evaluation activity ID.
-    /// Set by the outermost session, used for logging file evaluations.
+    /// The current evaluation activity ID, used for logging file evaluations.
     current_eval_id: Option<u64>,
 }
 
@@ -74,6 +63,19 @@ struct NixActivityInfo {
     activity: Activity,
 }
 
+/// Guard that calls `end_eval` when dropped.
+///
+/// This ensures the eval scope is always closed, even if the code panics.
+pub struct EvalActivityGuard<'a> {
+    bridge: &'a NixLogBridge,
+}
+
+impl Drop for EvalActivityGuard<'_> {
+    fn drop(&mut self) {
+        self.bridge.end_eval();
+    }
+}
+
 impl NixLogBridge {
     /// Create a new NixLogBridge.
     ///
@@ -83,7 +85,6 @@ impl NixLogBridge {
         Arc::new(Self {
             active_activities: Arc::new(Mutex::new(HashMap::new())),
             eval_state: Mutex::new(EvalActivityState {
-                depth: 0,
                 current_eval_id: None,
             }),
             observers: Mutex::new(Vec::new()),
@@ -110,45 +111,20 @@ impl NixLogBridge {
         }
     }
 
-    /// Begin a new evaluation scope.
+    /// Begin an evaluation scope.
     ///
-    /// Call this with the activity ID that file evaluations should be logged to.
+    /// Returns a guard that calls `end_eval` when dropped.
     /// The caller owns the Activity and controls its lifecycle.
-    ///
-    /// This method supports re-entrancy: nested calls increment a depth counter,
-    /// and only the outermost call's activity ID is used.
-    pub fn begin_eval(&self, activity_id: u64) {
+    pub fn begin_eval(&self, activity_id: u64) -> EvalActivityGuard<'_> {
         let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
-
-        if state.depth == 0 {
-            // Outermost session - store the activity ID
-            state.current_eval_id = Some(activity_id);
-        }
-        // Nested sessions don't change the activity ID - outer session's value is used
-
-        state.depth += 1;
+        state.current_eval_id = Some(activity_id);
+        EvalActivityGuard { bridge: self }
     }
 
-    /// End the current evaluation scope.
-    ///
-    /// Call this when the eval_state lock is released (typically via RAII guard).
-    /// This decrements the nesting depth, and when the outermost scope ends,
-    /// clears the activity ID.
-    pub fn end_eval(&self) {
+    /// End the current evaluation scope (called by EvalActivityGuard on drop).
+    fn end_eval(&self) {
         let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
-
-        if state.depth == 0 {
-            // Unbalanced end_eval call - shouldn't happen but don't panic
-            tracing::warn!("end_eval called without matching begin_eval");
-            return;
-        }
-
-        state.depth -= 1;
-
-        if state.depth == 0 {
-            // Outermost scope ended - clear the activity ID
-            state.current_eval_id = None;
-        }
+        state.current_eval_id = None;
     }
 
     /// Get the parent activity ID for Nix activities.
