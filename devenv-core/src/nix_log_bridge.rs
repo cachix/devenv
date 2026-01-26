@@ -200,9 +200,8 @@ impl NixLogBridge {
                         }
                     }
 
-                    // Handle file evaluation messages for UI
-                    if let EvalOp::EvaluatedFile { source } = op {
-                        self.handle_file_evaluation(source);
+                    // Handle eval operations for UI - log to eval activity if in scope
+                    if self.log_to_current_eval(msg) {
                         return;
                     }
                 }
@@ -517,13 +516,19 @@ impl NixLogBridge {
         }
     }
 
-    /// Handle file evaluation events
-    fn handle_file_evaluation(&self, file_path: std::path::PathBuf) {
+    /// Log a message to the current eval activity.
+    ///
+    /// Returns `true` if the message was logged (we're in an eval scope),
+    /// `false` if there's no active eval scope (caller should fall back to `message()`).
+    fn log_to_current_eval(&self, msg: &str) -> bool {
         let state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
-        if let Some(id) = state.current_eval_id {
-            log_to_evaluate(id, file_path.display().to_string());
-        }
+        let Some(id) = state.current_eval_id else {
+            return false;
+        };
+
+        log_to_evaluate(id, msg.to_string());
+        true
     }
 }
 
