@@ -7,33 +7,29 @@
 //! Both backends convert their input to `InternalLog` and feed it to `NixLogBridge`,
 //! ensuring consistent activity tracking and progress reporting.
 //!
-//! # Eval Activity Lifecycle
+//! # Eval Activity Tracking
 //!
-//! The bridge uses **lazy activity creation** to avoid creating empty activities
-//! when no Nix work actually happens. This is important because some operations
-//! (like lock validation) may or may not trigger Nix callbacks depending on
-//! whether inputs are cached.
+//! The bridge tracks which Activity file evaluations should be logged to.
+//! The caller owns the Activity and passes its ID to `begin_eval()`.
 //!
 //! ## How It Works
 //!
-//! 1. Caller captures the parent activity ID from the task-local stack
-//! 2. Caller acquires the eval_state lock
-//! 3. Caller calls `begin_eval(parent_id)` to register the pending parent
-//! 4. **Lazy**: When the first Nix callback arrives, the bridge creates the
-//!    eval activity using the stored parent ID
-//! 5. Caller calls `end_eval()` when done, which completes the activity (if created)
+//! 1. Caller creates an Activity (e.g., `Activity::evaluate("Building shell")`)
+//! 2. Caller calls `begin_eval(activity.id())` to register the activity ID
+//! 3. When file evaluation messages arrive, they are logged to that activity
+//! 4. Caller calls `end_eval()` when done
 //!
 //! This is handled automatically by `EvalSession` in `devenv-nix-backend`.
 //!
 //! ## Re-entrancy
 //!
-//! The bridge supports nested eval sessions. Only the outermost session's parent
-//! ID is used, and the activity is only completed when all sessions have ended.
-//! This allows methods like `validate_lock_file()` to be called from within
-//! operations like `dev_env()` without creating duplicate activities.
+//! The bridge supports nested eval sessions. Only the outermost session's
+//! activity ID is used. This allows methods like `validate_lock_file()` to be
+//! called from within operations like `dev_env()` without overwriting the
+//! activity ID.
 
 use devenv_activity::{
-    Activity, ActivityLevel, ExpectedCategory, FetchKind, current_activity_id, message,
+    Activity, ActivityLevel, ExpectedCategory, FetchKind, log_to_evaluate, message,
     message_with_details, set_expected,
 };
 use regex::Regex;
@@ -47,21 +43,15 @@ use crate::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosit
 
 /// State for tracking the current evaluation activity.
 ///
-/// This tracks both the pending parent (for lazy creation) and the nesting depth
-/// (for re-entrancy support).
+/// The bridge stores only the activity ID, not the Activity itself.
+/// The caller owns the Activity and controls its lifecycle.
 struct EvalActivityState {
     /// Nesting depth - how many EvalSessions are currently active.
-    /// Only the outermost session controls activity creation/completion.
+    /// Only the outermost session controls activity tracking.
     depth: usize,
-    /// Parent activity ID captured by the outermost session.
-    /// Used when lazily creating the eval activity on first Nix callback.
-    pending_parent: Option<u64>,
-    /// Name for the evaluation activity (e.g., "Building shell", "Searching packages").
-    pending_name: String,
-    /// Activity level for the evaluation (Info for user-visible, Debug for internal).
-    pending_level: ActivityLevel,
-    /// The current evaluation activity, created lazily on first Nix callback.
-    current_eval: Option<Activity>,
+    /// The current evaluation activity ID.
+    /// Set by the outermost session, used for logging file evaluations.
+    current_eval_id: Option<u64>,
 }
 
 /// Bridge that converts Nix internal logs to tracing events.
@@ -94,10 +84,7 @@ impl NixLogBridge {
             active_activities: Arc::new(Mutex::new(HashMap::new())),
             eval_state: Mutex::new(EvalActivityState {
                 depth: 0,
-                pending_parent: None,
-                pending_name: String::new(),
-                pending_level: ActivityLevel::Info,
-                current_eval: None,
+                current_eval_id: None,
             }),
             observers: Mutex::new(Vec::new()),
         })
@@ -123,43 +110,21 @@ impl NixLogBridge {
         }
     }
 
-    /// Mark the current evaluation activity as cached.
-    ///
-    /// Call this when the entire evaluation was served from cache
-    /// and no actual Nix evaluation was performed.
-    ///
-    /// Only works if called within an active eval scope (after `begin_eval`).
-    pub fn mark_cached(&self) {
-        let state = self.eval_state.lock().expect("eval_state mutex poisoned");
-
-        if let Some(ref eval) = state.current_eval {
-            eval.cached();
-        }
-    }
-
     /// Begin a new evaluation scope.
     ///
-    /// Call this after acquiring the eval_state lock. The `parent_id` should be
-    /// captured from the task-local activity stack (`current_activity_id()`)
-    /// **before** acquiring the lock.
-    ///
-    /// The eval activity is created **lazily** when the first Nix callback arrives.
-    /// If no callbacks arrive, no activity is created (avoiding empty 0ms activities).
+    /// Call this with the activity ID that file evaluations should be logged to.
+    /// The caller owns the Activity and controls its lifecycle.
     ///
     /// This method supports re-entrancy: nested calls increment a depth counter,
-    /// and only the outermost call's `parent_id` is used.
-    pub fn begin_eval(&self, parent_id: Option<u64>, name: String, level: ActivityLevel) {
+    /// and only the outermost call's activity ID is used.
+    pub fn begin_eval(&self, activity_id: u64) {
         let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
         if state.depth == 0 {
-            // Outermost session - store the parent ID, name, and level for lazy activity creation
-            state.pending_parent = parent_id;
-            state.pending_name = name;
-            state.pending_level = level;
-            // Clear any stale activity (shouldn't happen, but be safe)
-            state.current_eval = None;
+            // Outermost session - store the activity ID
+            state.current_eval_id = Some(activity_id);
         }
-        // Nested sessions don't change pending state - outer session's values are used
+        // Nested sessions don't change the activity ID - outer session's value is used
 
         state.depth += 1;
     }
@@ -168,7 +133,7 @@ impl NixLogBridge {
     ///
     /// Call this when the eval_state lock is released (typically via RAII guard).
     /// This decrements the nesting depth, and when the outermost scope ends,
-    /// completes the eval activity (if one was created).
+    /// clears the activity ID.
     pub fn end_eval(&self) {
         let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
@@ -181,42 +146,17 @@ impl NixLogBridge {
         state.depth -= 1;
 
         if state.depth == 0 {
-            // Outermost scope ended - complete the activity by dropping it
-            state.current_eval = None;
-            state.pending_parent = None;
-            state.pending_name.clear();
-            state.pending_level = ActivityLevel::Info;
+            // Outermost scope ended - clear the activity ID
+            state.current_eval_id = None;
         }
     }
 
-    /// Ensure an eval activity exists and return its ID.
+    /// Get the parent activity ID for Nix activities.
     ///
-    /// When in an eval scope (after `begin_eval`), creates the activity lazily
-    /// on first call using the pending name/level. When NOT in an eval scope,
-    /// falls back to the task-local activity if present (e.g., from the caching
-    /// layer using `.in_activity()`).
-    ///
-    /// Returns `None` if not in an eval scope and no task-local activity exists.
-    fn ensure_eval_activity(&self) -> Option<u64> {
-        let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
-
-        if state.depth == 0 {
-            // Not in an eval scope - fall back to task-local activity if present
-            // (e.g., from the caching layer using .in_activity())
-            drop(state);
-            return current_activity_id();
-        }
-
-        if state.current_eval.is_none() {
-            // First callback in this eval scope - create the activity lazily
-            let eval = Activity::evaluate(&state.pending_name)
-                .parent(state.pending_parent)
-                .level(state.pending_level)
-                .start();
-            state.current_eval = Some(eval);
-        }
-
-        state.current_eval.as_ref().map(|a| a.id())
+    /// Returns the current eval activity ID if we're in an eval scope.
+    fn get_parent_activity_id(&self) -> Option<u64> {
+        let state = self.eval_state.lock().expect("eval_state mutex poisoned");
+        state.current_eval_id
     }
 
     /// Returns a callback that can be used by any log source.
@@ -337,14 +277,6 @@ impl NixLogBridge {
             Field::String(s) => Some(s.clone()),
             _ => None,
         }
-    }
-
-    /// Get the parent activity ID for Nix activities.
-    ///
-    /// This triggers lazy creation of the eval activity if we're in an eval scope.
-    /// Returns `None` if not in an eval scope.
-    fn get_parent_activity_id(&self) -> Option<u64> {
-        self.ensure_eval_activity()
     }
 
     /// Handle the start of a Nix activity
@@ -611,13 +543,10 @@ impl NixLogBridge {
 
     /// Handle file evaluation events
     fn handle_file_evaluation(&self, file_path: std::path::PathBuf) {
-        // Ensure eval activity exists (lazy creation) and log to it
-        self.ensure_eval_activity();
-
         let state = self.eval_state.lock().expect("eval_state mutex poisoned");
 
-        if let Some(ref eval) = state.current_eval {
-            eval.log(file_path.display().to_string());
+        if let Some(id) = state.current_eval_id {
+            log_to_evaluate(id, file_path.display().to_string());
         }
     }
 }

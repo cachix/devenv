@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use include_dir::{Dir, include_dir};
 use tokio_shutdown::Shutdown;
 
-use devenv_activity::{Activity, ActivityInstrument, ActivityLevel, current_activity_id};
+use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
 use devenv_cache_core::compute_string_hash;
 use devenv_core::GlobalOptions;
 use devenv_core::cachix::{CachixCacheInfo, CachixConfig, CachixManager};
@@ -178,21 +178,18 @@ unsafe impl Sync for NixRustBackend {}
 
 /// RAII guard that manages eval_state lock and evaluation activity tracking.
 ///
-/// This guard provides two key behaviors:
-/// 1. **Lazy activity creation**: The eval activity is only created when Nix
-///    callbacks actually arrive, avoiding empty 0ms activities for cached operations.
-/// 2. **Re-entrancy support**: Nested sessions share a single activity, with only
-///    the outermost session controlling activity lifecycle.
-///
-/// When created (via `eval_session()`):
-/// 1. Captures the current activity ID from the task-local stack
-/// 2. Acquires the eval_state mutex lock
-/// 3. Calls `bridge.begin_eval(parent_id)` to register the pending parent
+/// When created (via `eval_session(activity)`):
+/// 1. Acquires the eval_state mutex lock
+/// 2. Calls `bridge.begin_eval(activity.id())` to register the activity for file logging
 ///
 /// When dropped:
-/// 1. Calls `bridge.end_eval()` to decrement nesting depth
-/// 2. If outermost session, completes the eval activity (if one was created)
-/// 3. Releases the eval_state lock
+/// 1. Calls `bridge.end_eval()` to clear the activity ID
+/// 2. Releases the eval_state lock
+///
+/// The caller owns the Activity and controls its lifecycle. This guard just
+/// ensures file evaluations are logged to the correct activity.
+///
+/// Re-entrancy is supported: nested sessions share the outermost session's activity.
 pub(crate) struct EvalSession<'a> {
     guard: std::sync::MutexGuard<'a, EvalState>,
     bridge: Arc<NixLogBridge>,
@@ -442,50 +439,32 @@ impl NixRustBackend {
         Ok(backend)
     }
 
-    /// Create an eval session with automatic activity tracking.
+    /// Create an eval session with activity tracking.
     ///
     /// This method:
-    /// 1. Captures the current activity ID from the task-local stack
-    /// 2. Acquires the eval_state mutex
-    /// 3. Registers the parent ID, name, and level for lazy eval activity creation
-    /// 4. Returns an EvalSession that tracks nesting and completes the activity on drop
+    /// 1. Acquires the eval_state mutex
+    /// 2. Registers the activity ID for file evaluation logging
+    /// 3. Returns an EvalSession that clears the activity ID on drop
     ///
-    /// The eval activity is created **lazily** when the first Nix FFI callback
-    /// arrives. If no callbacks occur (e.g., cached inputs), no activity is created.
+    /// The caller owns the Activity and controls its lifecycle. File evaluations
+    /// during this session will be logged to the provided activity.
     ///
-    /// Nested calls share a single activity - only the outermost session's parent
-    /// is used, and the activity completes when the outermost session ends.
-    fn eval_session(
-        &self,
-        name: impl Into<String>,
-        level: ActivityLevel,
-    ) -> Result<EvalSession<'_>> {
-        // Capture parent activity ID while still in async context
-        let parent_id = current_activity_id();
-
+    /// Nested calls share a single activity - only the outermost session's
+    /// activity ID is used.
+    fn eval_session(&self, activity: &Activity) -> Result<EvalSession<'_>> {
         // Acquire the eval_state lock
         let guard = self
             .eval_state
             .lock()
             .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
 
-        // Register parent ID, name, and level for lazy activity creation
-        self.nix_log_bridge
-            .begin_eval(parent_id, name.into(), level);
+        // Register activity ID for file evaluation logging
+        self.nix_log_bridge.begin_eval(activity.id());
 
         Ok(EvalSession {
             guard,
             bridge: Arc::clone(&self.nix_log_bridge),
         })
-    }
-
-    /// Acquire the eval state lock without activity tracking.
-    ///
-    /// Use this when activity tracking is handled externally (e.g., by the caching layer).
-    fn eval_lock(&self) -> Result<std::sync::MutexGuard<'_, EvalState>> {
-        self.eval_state
-            .lock()
-            .map_err(|e| miette!("Failed to lock eval state: {}", e))
     }
 
     /// Extract embedded bootstrap files to filesystem for Nix to access
@@ -648,6 +627,7 @@ impl NixRustBackend {
                         self.cached_import_expr.get().unwrap(),
                         "config.cachix",
                         "config.cachix",
+                        &activity,
                     )
                 })
                 .await
@@ -779,7 +759,10 @@ impl NixRustBackend {
 
         // Get eval state for locking operation
         let lock_result = {
-            let eval_state = self.eval_session("Validating lock", ActivityLevel::Debug)?;
+            let activity = Activity::evaluate("Validating lock")
+                .level(ActivityLevel::Debug)
+                .start();
+            let eval_state = self.eval_session(&activity)?;
 
             // Check if locks are in sync
             locker.lock(fetch_settings, &eval_state)
@@ -1048,8 +1031,8 @@ impl NixBackend for NixRustBackend {
             let (paths, _) = async {
                 caching_state
                     .cached_eval()
-                    .eval_typed::<CachedShellPaths, _, _>(&cache_key, &activity, || async move {
-                        self.build_shell_uncached(&import_expr)
+                    .eval_typed::<CachedShellPaths, _, _>(&cache_key, &activity, || async {
+                        self.build_shell_uncached(&import_expr, &activity)
                     })
                     .await
             }
@@ -1133,7 +1116,10 @@ impl NixBackend for NixRustBackend {
             .wrap_err("Failed to initialize Nix command library")?;
 
         // Lock the eval_state for REPL access
-        let mut eval_state = self.eval_session("Evaluating Nix", ActivityLevel::Info)?;
+        let activity = Activity::evaluate("Evaluating Nix")
+            .level(ActivityLevel::Info)
+            .start();
+        let mut eval_state = self.eval_session(&activity)?;
 
         // Load default.nix into the REPL scope
         let import_expr = self
@@ -1276,8 +1262,8 @@ impl NixBackend for NixRustBackend {
                 let (path, _) = async {
                     caching_state
                         .cached_eval()
-                        .eval_typed::<String, _, _>(&cache_key, &activity, || async move {
-                            self.build_attr_uncached(&import_expr, &attr_path)
+                        .eval_typed::<String, _, _>(&cache_key, &activity, || async {
+                            self.build_attr_uncached(&import_expr, &attr_path, &activity)
                         })
                         .await
                 }
@@ -1367,7 +1353,12 @@ impl NixBackend for NixRustBackend {
                 caching_state
                     .cached_eval()
                     .eval(&cache_key, &activity, || async {
-                        self.eval_attr_uncached(&import_expr, &attr_path_owned, &clean_path_owned)
+                        self.eval_attr_uncached(
+                            &import_expr,
+                            &attr_path_owned,
+                            &clean_path_owned,
+                            &activity,
+                        )
                     })
                     .await
             }
@@ -1468,7 +1459,10 @@ impl NixBackend for NixRustBackend {
 
         // Get eval state from mutex only when needed for locking
         // This ensures we reuse the same eval state across calls
-        let eval_state = self.eval_session("Updating inputs", ActivityLevel::Info)?;
+        let activity = Activity::evaluate("Updating inputs")
+            .level(ActivityLevel::Info)
+            .start();
+        let eval_state = self.eval_session(&activity)?;
 
         // Lock the inputs - pass eval_state by reference to avoid cloning
         let lock_file = locker
@@ -1537,7 +1531,10 @@ impl NixBackend for NixRustBackend {
         // Validate lock file before searching
         self.validate_lock_file().await?;
 
-        let mut eval_state = self.eval_session("Searching packages", ActivityLevel::Info)?;
+        let activity = Activity::evaluate("Searching packages")
+            .level(ActivityLevel::Info)
+            .start();
+        let mut eval_state = self.eval_session(&activity)?;
 
         // Import default.nix to get the configured pkgs with overlays and settings
         let import_expr = self
@@ -1802,14 +1799,14 @@ impl NixRustBackend {
     /// Evaluate a single attribute without caching.
     ///
     /// This is the pure evaluation logic extracted for use with transparent caching.
-    /// Activity tracking is handled by the caller (caching layer).
     fn eval_attr_uncached(
         &self,
         import_expr: &str,
         attr_path: &str,
         clean_path: &str,
+        activity: &Activity,
     ) -> Result<String> {
-        let mut eval_state = self.eval_lock()?;
+        let mut eval_state = self.eval_session(activity)?;
 
         // Import default.nix to get the attribute set
         let root_attrs = eval_state
@@ -1845,9 +1842,12 @@ impl NixRustBackend {
     /// Build shell derivation without caching.
     ///
     /// This is the pure build logic extracted for use with transparent caching.
-    /// Activity tracking is handled by the caller (caching layer).
-    fn build_shell_uncached(&self, import_expr: &str) -> Result<CachedShellPaths> {
-        let mut eval_state = self.eval_lock()?;
+    fn build_shell_uncached(
+        &self,
+        import_expr: &str,
+        activity: &Activity,
+    ) -> Result<CachedShellPaths> {
+        let mut eval_state = self.eval_session(activity)?;
 
         let devenv = eval_state
             .eval_from_string(import_expr, self.paths.root.to_str().unwrap())
@@ -1929,9 +1929,13 @@ impl NixRustBackend {
     /// Build a single attribute without caching.
     ///
     /// This is the pure build logic extracted for use with transparent caching.
-    /// Activity tracking is handled by the caller (caching layer).
-    fn build_attr_uncached(&self, import_expr: &str, attr_path: &str) -> Result<String> {
-        let mut eval_state = self.eval_lock()?;
+    fn build_attr_uncached(
+        &self,
+        import_expr: &str,
+        attr_path: &str,
+        activity: &Activity,
+    ) -> Result<String> {
+        let mut eval_state = self.eval_session(activity)?;
 
         let root_attrs = eval_state
             .eval_from_string(import_expr, self.paths.root.to_str().unwrap())
