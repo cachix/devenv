@@ -6,7 +6,7 @@ mod span_timings;
 
 use devenv_layer::{DevenvFieldFormatter, DevenvFormat, DevenvLayer};
 use indicatif_layer::{DevenvIndicatifFilter, IndicatifLayer};
-use span_ids::{SpanIdLayer, SpanIds};
+use span_ids::{SpanContext, SpanIdLayer};
 
 pub use devenv_core::cli::{TraceFormat, TraceOutput};
 pub use human_duration::HumanReadableDuration;
@@ -88,7 +88,7 @@ where
     layer.with_timer("timestamp", tracing_subscriber::fmt::time::SystemTime);
     layer.with_level("level");
     layer.with_target("target");
-    layer.serialize_extension::<SpanIds>("span_ids");
+    layer.serialize_extension::<SpanContext>("span_context");
     layer.with_event("fields");
     layer
 }

@@ -2,13 +2,14 @@ use serde::Serialize;
 use tracing::{Subscriber, span};
 use tracing_subscriber::{Layer, layer, registry::LookupSpan};
 
-/// Span ID information for JSON serialization
+/// Span context for JSON serialization (OTEL-aligned field names)
 #[derive(Debug, Clone, Serialize)]
-pub(crate) struct SpanIds {
+pub(crate) struct SpanContext {
     /// The ID of this span
-    span_id: String,
+    span_id: u64,
     /// The ID of the parent span, if any
-    parent_span_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_id: Option<u64>,
 }
 
 /// Layer that captures span IDs and stores them as extensions
@@ -26,15 +27,14 @@ where
     ) {
         let span = ctx.span(id).expect("Span not found in context");
 
-        // Get parent span ID if it exists
-        let parent_span_id = span.parent().map(|parent| format!("{:?}", parent.id()));
+        let parent_id = span.parent().map(|parent| parent.id().into_u64());
 
-        let span_ids = SpanIds {
-            span_id: format!("{:?}", id),
-            parent_span_id,
+        let span_context = SpanContext {
+            span_id: id.into_u64(),
+            parent_id,
         };
 
         let mut extensions = span.extensions_mut();
-        extensions.insert(span_ids);
+        extensions.insert(span_context);
     }
 }
