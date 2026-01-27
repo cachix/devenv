@@ -68,16 +68,19 @@ rec {
       pkgsBootstrap = mkPkgsForSystem targetSystem;
 
       # Helper to import a path, trying .nix first then /devenv.nix
+      # Returns a list of modules, including devenv.local.nix when present
       tryImport =
         resolvedPath: basePath:
         if lib.hasSuffix ".nix" basePath then
-          import resolvedPath
+          [ (import resolvedPath) ]
         else
           let
             devenvpath = resolvedPath + "/devenv.nix";
+            localpath = resolvedPath + "/devenv.local.nix";
           in
           if builtins.pathExists devenvpath then
-            import devenvpath
+            [ (import devenvpath) ]
+            ++ lib.optional (builtins.pathExists localpath) (import localpath)
           else
             throw (basePath + "/devenv.nix file does not exist");
 
@@ -160,10 +163,10 @@ rec {
           containers.${container_name}.isBuilding = true;
         })
       ]
-      ++ (map importModule (devenv_config.imports or [ ]))
-      ++ (if !skip_local_src then [
+      ++ (lib.flatten (map importModule (devenv_config.imports or [ ])))
+      ++ (if !skip_local_src then
         (importModule (devenv_root + "/devenv.nix"))
-      ] else [ ])
+      else [ ])
       ++ [
         (devenv_config.devenv or { })
         (
