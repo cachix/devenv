@@ -220,7 +220,10 @@ impl PortAllocator {
     /// Call this just before spawning the process manager so ports are released
     /// right before use.
     pub fn take_reservations(&self) -> PortReservations {
-        let mut ports = self.ports.lock().unwrap();
+        let mut ports = self
+            .ports
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         // Extract listeners while keeping entries for caching
         let listeners: HashMap<u16, TcpListener> = ports
@@ -303,7 +306,10 @@ impl ReplayableResource for PortAllocator {
     const TYPE_ID: &'static str = "ports";
 
     fn snapshot(&self) -> PortSpec {
-        let ports = self.ports.lock().unwrap();
+        let ports = self
+            .ports
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         PortSpec {
             allocations: ports
                 .iter()

@@ -29,6 +29,7 @@ use crate::eval_inputs::{
     EnvInputDesc, FileInputDesc, FileState, Input, check_env_state, check_file_state,
 };
 use crate::ffi_cache::{CachingConfig, EvalCacheKey, EvalInputCollector, ops_to_inputs};
+use crate::resource_manager::{ResourceManager, ResourceSpec};
 use devenv_activity::Activity;
 use devenv_core::nix_log_bridge::NixLogBridge;
 
@@ -136,15 +137,18 @@ impl CachingEvalService {
     }
 
     /// Store a new eval result with its inputs.
+    ///
+    /// Returns the eval_id of the stored result, which can be used to
+    /// store associated resource specs.
     pub async fn store(
         &self,
         key: &EvalCacheKey,
         json_output: &str,
         inputs: Vec<Input>,
-    ) -> Result<(), CacheError> {
+    ) -> Result<i64, CacheError> {
         let input_hash = Input::compute_input_hash(&inputs);
 
-        db::insert_eval_with_inputs(
+        let (eval_id, _, _) = db::insert_eval_with_inputs(
             &self.pool,
             &key.key_hash,
             &key.attr_name,
@@ -158,10 +162,11 @@ impl CachingEvalService {
             key_hash = %key.key_hash,
             attr_name = %key.attr_name,
             num_inputs = inputs.len(),
+            eval_id = eval_id,
             "Stored eval result in cache"
         );
 
-        Ok(())
+        Ok(eval_id)
     }
 
     /// Get the file input paths for a cached eval by key.
@@ -317,6 +322,7 @@ pub struct CachedEval {
     service: Option<CachingEvalService>,
     log_bridge: Arc<NixLogBridge>,
     config: CachingConfig,
+    resource_manager: Option<Arc<ResourceManager>>,
 }
 
 impl CachedEval {
@@ -332,6 +338,7 @@ impl CachedEval {
             service: Some(service),
             log_bridge,
             config,
+            resource_manager: None,
         }
     }
 
@@ -344,7 +351,19 @@ impl CachedEval {
             service: None,
             log_bridge,
             config: CachingConfig::default(),
+            resource_manager: None,
         }
+    }
+
+    /// Set the resource manager for tracking port allocations across cache hits.
+    ///
+    /// When set, on cache miss: snapshots resource allocations (e.g., ports) and
+    /// stores them alongside the cached eval result.
+    /// On cache hit: replays resource allocations. If replay fails (e.g., port
+    /// is now occupied), the cache entry is invalidated and evaluation re-runs.
+    pub fn with_resource_manager(mut self, resource_manager: Arc<ResourceManager>) -> Self {
+        self.resource_manager = Some(resource_manager);
+        self
     }
 
     /// Check if caching is enabled.
@@ -360,6 +379,90 @@ impl CachedEval {
     /// Get a reference to the log bridge.
     pub fn log_bridge(&self) -> &Arc<NixLogBridge> {
         &self.log_bridge
+    }
+
+    /// Replay resource allocations from a cached eval entry (public API).
+    ///
+    /// Call this when using a custom cache hit path that bypasses `eval()`/`eval_typed()`,
+    /// such as `dev_env()`'s store-path existence check. This ensures port allocations
+    /// are re-acquired even when the normal caching flow is skipped.
+    ///
+    /// Returns Ok(()) if replay succeeded or no resources were stored.
+    /// Returns Err if replay failed (caller should re-evaluate).
+    pub async fn try_replay_resources(&self, eval_id: i64) -> Result<(), CacheError> {
+        if let (Some(service), Some(rm)) = (&self.service, &self.resource_manager) {
+            self.replay_resources(service, rm, eval_id).await
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Clear all resource allocations (public API).
+    ///
+    /// Call this after a replay failure before re-evaluating, to ensure
+    /// the resource manager starts fresh.
+    pub fn clear_resources(&self) {
+        if let Some(ref rm) = self.resource_manager {
+            rm.clear_all();
+        }
+    }
+
+    /// Replay resource allocations from a cached eval entry.
+    ///
+    /// Loads resource specs from the database and replays them through the
+    /// resource manager. Returns Ok(()) if all resources were successfully
+    /// re-acquired, or Err if any resource failed to replay.
+    async fn replay_resources(
+        &self,
+        service: &CachingEvalService,
+        rm: &ResourceManager,
+        eval_id: i64,
+    ) -> Result<(), CacheError> {
+        let spec_rows = db::get_resource_specs_by_eval_id(&service.pool, eval_id).await?;
+
+        if spec_rows.is_empty() {
+            return Ok(());
+        }
+
+        let specs: Vec<ResourceSpec> = spec_rows
+            .into_iter()
+            .map(|row| {
+                let data: serde_json::Value = serde_json::from_str(&row.spec)?;
+                Ok(ResourceSpec {
+                    type_id: row.type_id,
+                    data,
+                })
+            })
+            .collect::<Result<Vec<_>, serde_json::Error>>()?;
+
+        debug!(
+            eval_id = eval_id,
+            num_specs = specs.len(),
+            "Replaying resource allocations from cache"
+        );
+
+        rm.replay_all(&specs)
+            .map_err(|e| CacheError::Eval(format!("Resource replay failed: {}", e)))
+    }
+
+    /// Snapshot and store resource allocations after a cache miss evaluation.
+    async fn store_resources(
+        &self,
+        service: &CachingEvalService,
+        rm: &ResourceManager,
+        eval_id: i64,
+    ) {
+        let specs = rm.snapshot_all();
+        if !specs.is_empty() {
+            debug!(
+                eval_id = eval_id,
+                num_specs = specs.len(),
+                "Storing resource allocations in cache"
+            );
+            if let Err(e) = db::insert_resource_specs(&service.pool, eval_id, &specs).await {
+                warn!(error = %e, "Failed to store resource specs in cache");
+            }
+        }
     }
 
     /// Evaluate with transparent caching, returning a JSON string.
@@ -398,8 +501,24 @@ impl CachedEval {
         // Check cache first
         match service.get_cached(key).await {
             Ok(Some(cached)) => {
-                activity.cached();
-                return Ok((cached.json_output, true));
+                // Try to replay resource allocations (ports, etc.)
+                if let Some(ref rm) = self.resource_manager {
+                    match self.replay_resources(service, rm, cached.eval_id).await {
+                        Ok(()) => {
+                            activity.cached();
+                            return Ok((cached.json_output, true));
+                        }
+                        Err(e) => {
+                            // Replay failed (e.g., port now in use) - invalidate and re-evaluate
+                            warn!(error = %e, "Resource replay failed, re-evaluating");
+                            rm.clear_all();
+                            // Fall through to evaluation
+                        }
+                    }
+                } else {
+                    activity.cached();
+                    return Ok((cached.json_output, true));
+                }
             }
             Ok(None) => {
                 // Cache miss - continue to evaluation
@@ -410,7 +529,7 @@ impl CachedEval {
             }
         }
 
-        // Cache miss - collect inputs during evaluation
+        // Cache miss (or resource replay failed) - collect inputs during evaluation
         let collector = EvalInputCollector::start();
         self.log_bridge.add_observer(collector.clone());
 
@@ -423,9 +542,17 @@ impl CachedEval {
         let ops = collector.take_ops();
         let inputs = ops_to_inputs(ops, &self.config);
 
-        if let Err(e) = service.store(key, &result, inputs).await {
-            // Log but don't fail - result is still valid
-            warn!(error = %e, "Failed to store result in cache");
+        match service.store(key, &result, inputs).await {
+            Ok(eval_id) => {
+                // Store resource specs alongside the cache entry
+                if let Some(ref rm) = self.resource_manager {
+                    self.store_resources(service, rm, eval_id).await;
+                }
+            }
+            Err(e) => {
+                // Log but don't fail - result is still valid
+                warn!(error = %e, "Failed to store result in cache");
+            }
         }
 
         Ok((result, false))
@@ -468,9 +595,26 @@ impl CachedEval {
         // Check cache first
         match service.get_cached(key).await {
             Ok(Some(cached)) => {
-                activity.cached();
-                let value: T = serde_json::from_str(&cached.json_output)?;
-                return Ok((value, true));
+                // Try to replay resource allocations (ports, etc.)
+                if let Some(ref rm) = self.resource_manager {
+                    match self.replay_resources(service, rm, cached.eval_id).await {
+                        Ok(()) => {
+                            activity.cached();
+                            let value: T = serde_json::from_str(&cached.json_output)?;
+                            return Ok((value, true));
+                        }
+                        Err(e) => {
+                            // Replay failed - invalidate and re-evaluate
+                            warn!(error = %e, "Resource replay failed, re-evaluating");
+                            rm.clear_all();
+                            // Fall through to evaluation
+                        }
+                    }
+                } else {
+                    activity.cached();
+                    let value: T = serde_json::from_str(&cached.json_output)?;
+                    return Ok((value, true));
+                }
             }
             Ok(None) => {
                 // Cache miss - continue to evaluation
@@ -481,7 +625,7 @@ impl CachedEval {
             }
         }
 
-        // Cache miss - collect inputs during evaluation
+        // Cache miss (or resource replay failed) - collect inputs during evaluation
         let collector = EvalInputCollector::start();
         self.log_bridge.add_observer(collector.clone());
 
@@ -495,9 +639,17 @@ impl CachedEval {
         let inputs = ops_to_inputs(ops, &self.config);
 
         let json = serde_json::to_string(&result)?;
-        if let Err(e) = service.store(key, &json, inputs).await {
-            // Log but don't fail - result is still valid
-            warn!(error = %e, "Failed to store result in cache");
+        match service.store(key, &json, inputs).await {
+            Ok(eval_id) => {
+                // Store resource specs alongside the cache entry
+                if let Some(ref rm) = self.resource_manager {
+                    self.store_resources(service, rm, eval_id).await;
+                }
+            }
+            Err(e) => {
+                // Log but don't fail - result is still valid
+                warn!(error = %e, "Failed to store result in cache");
+            }
         }
 
         Ok((result, false))
