@@ -22,8 +22,8 @@
 //! This guard-based API ensures eval scopes are always properly closed.
 
 use devenv_activity::{
-    Activity, ActivityLevel, ExpectedCategory, FetchKind, message, message_with_details,
-    op_to_evaluate, set_expected,
+    Activity, ActivityLevel, ExpectedCategory, FetchKind, message_with_parent, op_to_evaluate,
+    set_expected,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -188,7 +188,12 @@ impl NixLogBridge {
                     activity_info.activity.phase(&phase);
                 }
             }
-            InternalLog::Msg { level, ref msg, .. } => {
+            InternalLog::Msg {
+                level,
+                ref msg,
+                ref parent,
+                ..
+            } => {
                 // Extract any input operation from the log for caching
                 if let Some(op) = EvalOp::from_internal_log(&log) {
                     // Notify all active observers
@@ -213,7 +218,7 @@ impl NixLogBridge {
                 // or is_builtin_trace() checks.
                 if log.is_nix_error() || log.is_builtin_trace() {
                     let (summary, details) = parse_nix_error(msg);
-                    message_with_details(ActivityLevel::Error, summary, details);
+                    message_with_parent(ActivityLevel::Error, summary, details, *parent);
                     error!("{msg}");
                 } else {
                     let activity_level = match level {
@@ -227,7 +232,7 @@ impl NixLogBridge {
                         Verbosity::Debug => ActivityLevel::Debug,
                         Verbosity::Vomit => ActivityLevel::Trace,
                     };
-                    message(activity_level, msg);
+                    message_with_parent(activity_level, msg, None, *parent);
                 }
             }
         }

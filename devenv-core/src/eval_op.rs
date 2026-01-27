@@ -150,6 +150,7 @@ mod tests {
             msg: msg.to_string(),
             raw_msg: None,
             level: Verbosity::Warn,
+            parent: None,
         }
     }
 

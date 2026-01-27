@@ -14,6 +14,9 @@ pub enum InternalLog {
         msg: String,
         // Raw message when logging ErrorInfo
         raw_msg: Option<String>,
+        // Parent activity ID (from Nix's internal log format)
+        #[serde(default)]
+        parent: Option<u64>,
     },
     Start {
         id: u64,
@@ -215,6 +218,22 @@ mod test {
                 level: Verbosity::Warn,
                 msg: "hello".to_string(),
                 raw_msg: None,
+                parent: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_log_msg_with_parent() {
+        let line = r#"@nix {"action":"msg","level":0,"msg":"error: something","parent":42}"#;
+        let log = InternalLog::parse(line).unwrap().unwrap();
+        assert_eq!(
+            log,
+            InternalLog::Msg {
+                level: Verbosity::Error,
+                msg: "error: something".to_string(),
+                raw_msg: None,
+                parent: Some(42),
             }
         );
     }
@@ -284,6 +303,7 @@ mod test {
             level: Verbosity::Error,
             msg: "\u{1b}[31;1merror:\u{1b}[0m\nsomething went wrong".to_string(),
             raw_msg: None,
+            parent: None,
         };
         assert!(log.is_nix_error());
     }
@@ -296,6 +316,7 @@ mod test {
             level: Verbosity::Error,
             msg: "not an error".to_string(),
             raw_msg: None,
+            parent: None,
         };
         assert!(!log.is_nix_error());
     }

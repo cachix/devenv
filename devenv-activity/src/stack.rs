@@ -115,6 +115,28 @@ pub fn message_with_details(
     }));
 }
 
+/// Emit a standalone message with optional details and an explicit parent activity ID.
+///
+/// Use this when you know the parent activity ID from an external source (e.g., Nix's
+/// internal log format) rather than relying on the task-local activity stack.
+pub fn message_with_parent(
+    level: ActivityLevel,
+    text: impl Into<String>,
+    details: Option<String>,
+    parent: Option<u64>,
+) {
+    // Prefer the explicit parent if provided, otherwise fall back to the stack
+    let parent = parent.or_else(current_activity_id);
+    send_activity_event(ActivityEvent::Message(Message {
+        id: next_id(),
+        level,
+        text: text.into(),
+        details,
+        parent,
+        timestamp: Timestamp::now(),
+    }));
+}
+
 /// Emit a SetExpected event to announce aggregate expected counts.
 /// This is used by Nix to announce how many items/bytes are expected
 /// before individual activities start.

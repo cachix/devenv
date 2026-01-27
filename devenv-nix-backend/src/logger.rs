@@ -172,6 +172,7 @@ fn create_log_callback(
             msg: msg.to_string(),
             raw_msg: None,
             level: verbosity,
+            parent: None,
         };
         bridge.process_internal_log(log);
     }
