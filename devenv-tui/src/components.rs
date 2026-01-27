@@ -607,12 +607,12 @@ pub fn calculate_display_info(
 
     let remaining_width_without_suffix = available_width - base_width;
 
-    // Check if we can show suffix
+    // Always show suffix if present - let flexbox overflow handle truncation
+    let show_suffix = suffix.is_some();
     let suffix_width = suffix.map(|s| s.len() + 1).unwrap_or(0); // suffix + space prefix
-    let show_suffix = suffix_width <= remaining_width_without_suffix / 3; // Only show suffix if it takes less than 1/3 of remaining space
 
     let remaining_width_for_path = if show_suffix {
-        remaining_width_without_suffix - suffix_width
+        remaining_width_without_suffix.saturating_sub(suffix_width)
     } else {
         remaining_width_without_suffix
     };

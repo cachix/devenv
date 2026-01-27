@@ -5,7 +5,7 @@ expression: output
 ⠋ Building shell
   ⎿ ⠋ Fetching github:NixOS/nixpkgs
   ⎿ ⠋ Building hello-2.12 buildPhase
-    ⎿ ⠋ Downloading glibc-2.35
-  ⎿ ⠋ Downloading openssl-3.0.0
+    ⎿ ⠋ Downloading glibc-2.35 from cache.nixos.org
+  ⎿ ⠋ Downloading openssl-3.0.0 from cache.nixos.org
 
- 0 of 1 builds  │  0 of 2 downloa    ↑↓ nav
+ 0 of 1 builds  │  0 of 2 downloads            ↑↓ nav

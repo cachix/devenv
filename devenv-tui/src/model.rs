@@ -83,6 +83,7 @@ pub struct TaskActivity {
     pub status: TaskDisplayStatus,
     pub duration: Option<std::time::Duration>,
     pub show_output: bool,
+    pub last_log_line: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
@@ -505,6 +506,7 @@ impl ActivityModel {
                     status: TaskDisplayStatus::Running,
                     duration: None,
                     show_output,
+                    last_log_line: None,
                 });
                 self.create_activity(id, name, parent, detail, variant, ActivityLevel::Info);
             }
@@ -828,6 +830,9 @@ impl ActivityModel {
                 }
                 ActivityVariant::Evaluating(eval) => {
                     eval.files_evaluated += 1;
+                }
+                ActivityVariant::Task(task) => {
+                    task.last_log_line = Some(line);
                 }
                 _ => {}
             }
