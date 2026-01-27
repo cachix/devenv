@@ -82,7 +82,8 @@
             })
           ];
           pkgs = import nixpkgs { inherit overlays system; };
-          workspace = pkgs.callPackage ./workspace.nix { };
+          gitRev = self.shortRev or (self.dirtyShortRev or "");
+          workspace = pkgs.callPackage ./workspace.nix { inherit gitRev; };
         in
         {
           inherit (workspace.crates) devenv devenv-tasks devenv-tasks-fast-build;

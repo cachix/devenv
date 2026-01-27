@@ -99,11 +99,12 @@ fn main() -> Result<()> {
     // Handle commands that don't need a runtime
     match &cli.command {
         None | Some(Commands::Version) => {
-            println!(
-                "devenv {} ({})",
-                crate_version!(),
-                cli.global_options.system
-            );
+            let version = crate_version!();
+            let system = &cli.global_options.system;
+            match build_rev() {
+                Some(rev) => println!("devenv {version}+{rev} ({system})"),
+                None => println!("devenv {version} ({system})"),
+            }
             return Ok(());
         }
         Some(Commands::Direnvrc) => {
@@ -497,4 +498,25 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
     };
 
     Ok(result)
+}
+
+/// Returns the git revision suffix for the version string.
+///
+/// Prefers the vergen-injected SHA (available when building from a git checkout),
+/// falls back to DEVENV_GIT_REV (set by Nix builds where .git is unavailable).
+fn build_rev() -> Option<String> {
+    let sha = env!("VERGEN_GIT_SHA");
+    // vergen emits "VERGEN_IDEMPOTENT_OUTPUT" when git is unavailable
+    if !sha.is_empty() && sha != "VERGEN_IDEMPOTENT_OUTPUT" {
+        let dirty = env!("VERGEN_GIT_DIRTY");
+        if dirty == "true" {
+            return Some(format!("{sha}-dirty"));
+        }
+        return Some(sha.to_string());
+    }
+
+    // Nix builds pass the flake's git rev via this env var
+    option_env!("DEVENV_GIT_REV")
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
 }

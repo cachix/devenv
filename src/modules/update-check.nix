@@ -4,6 +4,10 @@ let
   cfg = config.devenv;
 in
 {
+  imports = [
+    (lib.mkAliasOptionModule [ "devenv" "cliVersion" ] [ "devenv" "cli" "version" ])
+  ];
+
   options.devenv = {
     flakesIntegration = lib.mkOption {
       type = lib.types.bool;
@@ -20,9 +24,19 @@ in
         Whether to warn when a new version of either devenv or the direnv integration is available.
       '';
     };
-    cliVersion = lib.mkOption {
-      type = lib.types.str;
-      internal = true;
+    cli = {
+      version = lib.mkOption {
+        type = lib.types.str;
+        internal = true;
+      };
+      isDevelopment = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        internal = true;
+        description = ''
+          Whether the CLI was built from a development (non-release) version.
+        '';
+      };
     };
     latestVersion = lib.mkOption {
       type = lib.types.str;
@@ -46,11 +60,13 @@ in
       let
         action = {
           "0" = "";
-          "1" = ''
-            echo "✨ devenv ${cfg.cliVersion} is newer than devenv input (${cfg.latestVersion}) in devenv.lock. Run 'devenv update' to sync." >&2
-          '';
+          "1" =
+            if cfg.cli.isDevelopment then ""
+            else ''
+              echo "✨ devenv ${cfg.cli.version} is newer than devenv input (${cfg.latestVersion}) in devenv.lock. Run 'devenv update' to sync." >&2
+            '';
           "-1" = ''
-            echo "✨ devenv ${cfg.cliVersion} is out of date. Please update to ${cfg.latestVersion}: https://devenv.sh/getting-started/#installation" >&2
+            echo "✨ devenv ${cfg.cli.version} is out of date. Please update to ${cfg.latestVersion}: https://devenv.sh/getting-started/#installation" >&2
           '';
         };
         # Normalize versions by stripping trailing .0 to make X.x.0 equivalent to X.X
@@ -59,7 +75,7 @@ in
             stripped = builtins.replaceStrings [ ".0" ] [ "" ] v;
           in
           if stripped != v then normalizeVersion stripped else v;
-        normalizedCliVersion = normalizeVersion cfg.cliVersion;
+        normalizedCliVersion = normalizeVersion cfg.cli.version;
         normalizedLatestVersion = normalizeVersion cfg.latestVersion;
         versionComparison = builtins.compareVersions normalizedCliVersion normalizedLatestVersion;
       in
