@@ -4,6 +4,7 @@
 , cargoProfile ? "release"
 , gitRev ? ""
 , isRelease ? false
+,
 }:
 
 let
@@ -41,7 +42,8 @@ let
   cargoLock = {
     lockFile = "${src}/Cargo.lock";
     outputHashes = {
-      "iocraft-0.7.16" = "sha256-MBwTP8HeJnXnnJqsKkrKIuSk2wxFChotwO58/1JB1js=";
+      "iocraft-0.7.16" = "sha256-iSvX3wzHHkqS0HtjEGQRV7p4LHaGaNrgmK0/iPuuy24=";
+      "crossterm-0.28.1" = "sha256-EC3HTF/l9E+3DnsLfB6L+SDNmfgWWJOSq8Oo+rQ3dVQ=";
       "nix-compat-0.1.0" = "sha256-dSkomGSFJgTtsxHWsBG8Qy2hqQDuemqDsKRJxvmuZ54=";
       "nix-bindings-bindgen-raw-0.1.0" = "sha256-S/oq8WqYJCyqQAJKgT4n4+2AXGt6cX4wjquQQT8x3Mw=";
       "secretspec-0.6.1" = "sha256-gOmxzGTbKWVXkv2ZPmxxGUV1LB7vOYd7BXqaVd2LaFc=";
