@@ -3,11 +3,5 @@ source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
 ⠋ Building shell
-    error:
-           … while evaluating
-             at devenv.nix:10:5
 
-           error: undefined variable 'pkgs'
-  ✗ error: undefined variable 'pkgs'
-
-                                     ↑↓ nav
+           ↑↓ nav

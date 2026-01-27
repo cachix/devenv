@@ -3,7 +3,7 @@ use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
     ExpectedCategory, Fetch, FetchKind, Message, Operation, SetExpected, Task,
 };
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -42,6 +42,8 @@ pub struct ActivityModel {
     expected_builds: Option<u64>,
     /// Expected download count announced by Nix (via SetExpected events)
     expected_downloads: Option<u64>,
+    /// Activity IDs that have received error messages (used to override success on completion)
+    activities_with_errors: HashSet<u64>,
 }
 
 impl Default for ActivityModel {
@@ -281,6 +283,8 @@ pub enum ViewMode {
     /// Expanded log view for a specific activity (fullscreen, uses alternate screen)
     /// Note: scroll_offset is managed as component-local state for immediate responsiveness
     ExpandedLogs { activity_id: u64 },
+    /// TUI stays open after errors for interactive review (--tui-open-on-error)
+    ErrorPaused,
 }
 
 /// Controls rendering behavior independent of view content.
@@ -314,6 +318,7 @@ impl ActivityModel {
             config,
             expected_builds: None,
             expected_downloads: None,
+            activities_with_errors: HashSet::new(),
         }
     }
 
@@ -678,10 +683,14 @@ impl ActivityModel {
         // First, get the activity info we need
         let (variant, success, cached, duration) = {
             if let Some(activity) = self.activities.get(&id) {
-                let success = matches!(
+                let mut success = matches!(
                     outcome,
                     ActivityOutcome::Success | ActivityOutcome::Cached | ActivityOutcome::Skipped
                 );
+                // Override success if this activity received error messages
+                if success && self.activities_with_errors.contains(&id) {
+                    success = false;
+                }
                 let cached = matches!(outcome, ActivityOutcome::Cached);
                 let duration = activity.start_time.elapsed();
                 (activity.variant.clone(), success, cached, duration)
@@ -857,8 +866,28 @@ impl ActivityModel {
     fn handle_message(&mut self, msg: Message) {
         self.add_log_message(msg.clone());
 
-        // Only create activity for messages with a parent
-        if msg.parent.is_some() {
+        // Track activities that received error messages
+        if msg.level == ActivityLevel::Error {
+            if let Some(parent_id) = msg.parent {
+                self.activities_with_errors.insert(parent_id);
+            }
+
+            // Also try to find a matching build activity by derivation path
+            // Nix error messages like "cannot build '/nix/store/...drv'" reference the derivation
+            if let Some(drv_path) = extract_derivation_path_from_error(&msg.text)
+                && let Some(build_id) = self.find_build_by_derivation(&drv_path)
+            {
+                self.activities_with_errors.insert(build_id);
+            }
+        }
+
+        // Only create activity for messages with a parent.
+        // Skip Error/Warn messages from the activity tree - they are already in message_log
+        // and will be shown in the final error summary.
+        if msg.parent.is_some()
+            && msg.level != ActivityLevel::Error
+            && msg.level != ActivityLevel::Warn
+        {
             let id = msg.id;
             let level = msg.level;
             let has_details = msg.details.is_some();
@@ -1112,6 +1141,32 @@ impl ActivityModel {
             .collect()
     }
 
+    /// Check if any errors occurred during the session.
+    pub fn has_errors(&self) -> bool {
+        !self.activities_with_errors.is_empty()
+            || self
+                .message_log
+                .iter()
+                .any(|m| m.level == ActivityLevel::Error)
+            || self
+                .activities
+                .values()
+                .any(|a| matches!(a.state, NixActivityState::Completed { success: false, .. }))
+    }
+
+    /// Find a build activity by its derivation path.
+    fn find_build_by_derivation(&self, drv_path: &str) -> Option<u64> {
+        self.activities.iter().find_map(|(&id, activity)| {
+            if matches!(activity.variant, ActivityVariant::Build(_))
+                && activity.detail.as_deref() == Some(drv_path)
+            {
+                Some(id)
+            } else {
+                None
+            }
+        })
+    }
+
     pub fn get_total_duration(&self) -> Option<std::time::Duration> {
         let earliest_start = self.activities.values().map(|a| a.start_time).min()?;
         Some(Instant::now().duration_since(earliest_start))
@@ -1169,10 +1224,18 @@ impl ActivityModel {
             return (all_children, total_count, 0);
         }
 
-        // Partition into active (including queued) and completed
-        let (active, completed): (Vec<_>, Vec<_>) = all_children
-            .into_iter()
-            .partition(|a| matches!(a.state, NixActivityState::Queued | NixActivityState::Active));
+        // Partition into active (including queued), failed completed, and successful completed
+        let mut active: Vec<&Activity> = Vec::new();
+        let mut failed: Vec<&Activity> = Vec::new();
+        let mut completed: Vec<&Activity> = Vec::new();
+
+        for a in all_children {
+            match &a.state {
+                NixActivityState::Queued | NixActivityState::Active => active.push(a),
+                NixActivityState::Completed { success: false, .. } => failed.push(a),
+                NixActivityState::Completed { .. } => completed.push(a),
+            }
+        }
 
         // Sort completed by completion time (most recent first)
         let mut completed_with_time: Vec<_> = completed
@@ -1192,10 +1255,15 @@ impl ActivityModel {
                     now.duration_since(*completed_at) < limit.linger_duration
                 });
 
-        // Build result: prioritize active, then lingering, then older
+        // Build result: failed items always visible, then active, then lingering, then older
         let mut result: Vec<&Activity> = Vec::new();
 
-        // Add all active items first (they always show)
+        // Failed items always stay visible regardless of limits
+        for a in &failed {
+            result.push(a);
+        }
+
+        // Add all active items (they always show)
         for a in &active {
             if result.len() >= limit.max_lines {
                 break;
@@ -1371,6 +1439,25 @@ pub struct ActivitySummary {
     pub running_tasks: usize,
     pub completed_tasks: usize,
     pub failed_tasks: usize,
+}
+
+/// Extract a derivation path from a Nix error message.
+///
+/// Nix error messages often reference derivations, e.g.:
+/// - "error: cannot build derivation '/nix/store/...-foo.drv': ..."
+/// - "error: builder for '/nix/store/...-foo.drv' failed ..."
+fn extract_derivation_path_from_error(text: &str) -> Option<String> {
+    // Look for '/nix/store/...drv' in the text
+    let start = text.find("'/nix/store/")?;
+    let path_start = start + 1; // skip the opening quote
+    let rest = &text[path_start..];
+    let end = rest.find('\'')?;
+    let path = &rest[..end];
+    if path.ends_with(".drv") {
+        Some(path.to_string())
+    } else {
+        None
+    }
 }
 
 /// Format an EvalOp as a display string for logging.

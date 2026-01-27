@@ -3,6 +3,5 @@ source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
 ⠋ Building shell
-  • warning: deprecated option 'services.foo' used
 
-                                            ↑↓ nav
+           ↑↓ nav
