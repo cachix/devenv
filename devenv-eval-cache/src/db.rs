@@ -434,6 +434,105 @@ pub async fn get_envs_by_eval_id(
     Ok(envs)
 }
 
+// =============================================================================
+// Resource Spec Database Functions
+// =============================================================================
+
+/// Row type for resource specs.
+#[derive(Clone, Debug)]
+pub struct ResourceSpecRow {
+    pub type_id: String,
+    pub spec: String,
+}
+
+impl sqlx::FromRow<'_, SqliteRow> for ResourceSpecRow {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        let type_id: String = row.get("type_id");
+        let spec: String = row.get("spec");
+        Ok(Self { type_id, spec })
+    }
+}
+
+/// Get resource specs for a cached eval by eval ID.
+pub async fn get_resource_specs_by_eval_id<'a, A>(
+    conn: A,
+    eval_id: i64,
+) -> Result<Vec<ResourceSpecRow>, sqlx::Error>
+where
+    A: Acquire<'a, Database = Sqlite>,
+{
+    let mut conn = conn.acquire().await?;
+
+    let specs = sqlx::query_as(
+        r#"
+            SELECT type_id, spec
+            FROM eval_resource_spec
+            WHERE cached_eval_id = ?
+        "#,
+    )
+    .bind(eval_id)
+    .fetch_all(&mut *conn)
+    .await?;
+
+    Ok(specs)
+}
+
+/// Insert resource specs for a cached eval.
+pub async fn insert_resource_specs<'a, A>(
+    conn: A,
+    eval_id: i64,
+    specs: &[crate::resource_manager::ResourceSpec],
+) -> Result<(), sqlx::Error>
+where
+    A: Acquire<'a, Database = Sqlite>,
+{
+    let mut conn = conn.acquire().await?;
+
+    for spec in specs {
+        let spec_json =
+            serde_json::to_string(&spec.data).map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+        sqlx::query(
+            r#"
+            INSERT INTO eval_resource_spec (cached_eval_id, type_id, spec)
+            VALUES (?, ?, ?)
+            ON CONFLICT (cached_eval_id, type_id) DO UPDATE
+            SET spec = excluded.spec,
+                updated_at = strftime('%s', 'now')
+            "#,
+        )
+        .bind(eval_id)
+        .bind(spec.type_id.clone())
+        .bind(spec_json)
+        .execute(&mut *conn)
+        .await?;
+    }
+
+    Ok(())
+}
+
+/// Delete resource specs for a cached eval.
+pub async fn delete_resource_specs_by_eval_id<'a, A>(
+    conn: A,
+    eval_id: i64,
+) -> Result<(), sqlx::Error>
+where
+    A: Acquire<'a, Database = Sqlite>,
+{
+    let mut conn = conn.acquire().await?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM eval_resource_spec
+        WHERE cached_eval_id = ?
+        "#,
+    )
+    .bind(eval_id)
+    .execute(&mut *conn)
+    .await?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use devenv_cache_core::compute_string_hash;

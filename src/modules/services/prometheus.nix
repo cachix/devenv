@@ -3,6 +3,10 @@
 let
   cfg = config.services.prometheus;
 
+  # Port allocation
+  basePort = cfg.port;
+  allocatedPort = config.processes.prometheus.ports.main.value;
+
   configFile = pkgs.writeText "prometheus.yml" (lib.generators.toYAML { } (
     {
       global = cfg.globalConfig;
@@ -25,7 +29,7 @@ let
     "--config.file=${cfg.configFile}"
     "--storage.tsdb.path=${cfg.storage.path}"
     "--storage.tsdb.retention.time=${cfg.storage.retentionTime}"
-    "--web.listen-address=:${toString cfg.port}"
+    "--web.listen-address=:${toString allocatedPort}"
   ]
   ++ lib.optional cfg.experimentalFeatures.enableExemplars "--enable-feature=exemplar-storage"
   ++ lib.optional cfg.experimentalFeatures.enableTracing "--enable-feature=tracing"
@@ -61,7 +65,7 @@ in
     port = lib.mkOption {
       type = lib.types.port;
       default = 9090;
-      description = "Port for Prometheus web interface";
+      description = "Port for Prometheus web interface.";
     };
 
     globalConfig = lib.mkOption {
@@ -158,13 +162,14 @@ in
     ];
 
     processes.prometheus = {
+      ports.main.allocate = basePort;
       exec = "exec ${cfg.package}/bin/prometheus ${prometheusArgs}";
 
       process-compose = {
         readiness_probe = {
           http_get = {
             host = "127.0.0.1";
-            port = cfg.port;
+            port = allocatedPort;
             path = "/-/ready";
           };
           initial_delay_seconds = 2;

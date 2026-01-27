@@ -11,12 +11,14 @@ use crate::anyhow_ext::AnyhowToMiette;
 use crate::build_environment::BuildEnvironment as RustBuildEnvironment;
 
 use async_trait::async_trait;
+use cstr::cstr;
 use include_dir::{Dir, include_dir};
 use tokio_shutdown::Shutdown;
 
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
 use devenv_cache_core::compute_string_hash;
 use devenv_core::GlobalOptions;
+use devenv_core::PortAllocator;
 use devenv_core::cachix::{CachixCacheInfo, CachixConfig, CachixManager};
 use devenv_core::config::Config;
 use devenv_core::nix_args::NixArgs;
@@ -25,10 +27,11 @@ use devenv_core::nix_backend::{
 };
 use devenv_core::nix_log_bridge::{EvalActivityGuard, NixLogBridge};
 use devenv_eval_cache::{
-    CacheError, CachedEval, CachingConfig, CachingEvalService, CachingEvalState,
+    CacheError, CachedEval, CachingConfig, CachingEvalService, CachingEvalState, ResourceManager,
 };
 use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use nix_bindings_expr::eval_state::{EvalState, EvalStateBuilder, gc_register_my_thread};
+use nix_bindings_expr::primop::{PrimOp, PrimOpMeta};
 use nix_bindings_expr::to_json::value_to_json;
 use nix_bindings_expr::{EvalCache, SearchParams, SearchResult, search};
 use nix_bindings_fetchers::FetchersSettings;
@@ -129,8 +132,14 @@ pub struct NixRustBackend {
     cachix_daemon: Arc<tokio::sync::Mutex<Option<crate::cachix_daemon::StreamingCachixDaemon>>>,
 
     // Cached import expression: (import /path/to/default.nix { ... args ... })
-    // Set once in assemble() and used directly in evaluations
+    // Set once in assemble(). Kept for potential future use (e.g., debugging).
+    #[allow(dead_code)]
     cached_import_expr: Arc<OnceCell<String>>,
+
+    // Pre-serialized NixArgs for Value-based evaluation with primop injection.
+    // Set once in assemble(), used by eval_import_with_primops() to build
+    // the args attrset and merge it with the primops attrset.
+    cached_args_nix_eval: Arc<OnceCell<String>>,
 
     // GC collection guard - drops BEFORE gc_registration to ensure GC runs while thread is still registered
     _gc_guard: GcCollectionGuard,
@@ -144,6 +153,10 @@ pub struct NixRustBackend {
     // Shutdown coordinator - stored so we can trigger shutdown in Drop
     // This ensures cleanup tasks are signaled to exit when the backend is dropped
     shutdown: Arc<Shutdown>,
+
+    // Port allocator for managing automatic port allocation during evaluation
+    // Shared with eval cache for resource replay on cache hits
+    port_allocator: Arc<PortAllocator>,
 }
 
 // SAFETY: This is unsafe and relies on several assumptions about the Nix C++ library:
@@ -216,6 +229,7 @@ impl NixRustBackend {
     /// * `shutdown` - Shutdown coordinator for graceful cleanup of cachix daemon
     /// * `eval_cache_pool` - Optional eval cache database pool from framework layer
     /// * `store` - Optional custom Nix store path (for testing with restricted permissions)
+    /// * `port_allocator` - Port allocator for managing automatic port allocation during evaluation
     pub fn new(
         paths: DevenvPaths,
         config: Config,
@@ -224,6 +238,7 @@ impl NixRustBackend {
         shutdown: Arc<Shutdown>,
         eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
         store: Option<std::path::PathBuf>,
+        port_allocator: Arc<PortAllocator>,
     ) -> Result<Self> {
         // Initialize Nix libexpr - uses Once internally so safe to call multiple times.
         // This may already have been called by worker threads via gc_register_current_thread().
@@ -421,9 +436,11 @@ impl NixRustBackend {
             cachix_manager,
             cachix_daemon: cachix_daemon.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
+            cached_args_nix_eval: Arc::new(OnceCell::new()),
             _gc_guard: GcCollectionGuard,
             _gc_registration: gc_registration,
             shutdown: shutdown.clone(),
+            port_allocator,
         };
 
         Ok(backend)
@@ -490,6 +507,100 @@ impl NixRustBackend {
     /// Get absolute path to a file in the bootstrap directory
     pub fn bootstrap_file(&self, relative_path: &str) -> PathBuf {
         self.bootstrap_path.join(relative_path)
+    }
+
+    /// Evaluate `import default.nix args` with primops injected.
+    ///
+    /// This creates the `allocatePort` primop as a Nix Value and merges it into
+    /// the args attrset before calling the import function. This ensures Nix modules
+    /// can call `primops.allocatePort` to allocate ports during evaluation.
+    ///
+    /// The approach:
+    /// 1. Evaluate `import /path/to/default.nix` to get the function
+    /// 2. Evaluate the serialized args string to get the base args attrset
+    /// 3. Create the `allocatePort` primop using PrimOp::new
+    /// 4. Build `{ primops = { allocatePort = <primop>; }; }` as a Value
+    /// 5. Merge: `baseArgs // { primops = ...; }`
+    /// 6. Apply: `(import default.nix) mergedArgs`
+    fn eval_import_with_primops(
+        &self,
+        eval_state: &mut EvalState,
+    ) -> Result<nix_bindings_expr::value::Value> {
+        let import_path = self.bootstrap_file("default.nix");
+        let args_nix = self
+            .cached_args_nix_eval
+            .get()
+            .expect("assemble() must be called first");
+        let base = self.paths.root.to_str().unwrap();
+
+        // 1. Get the import function
+        let import_fn = eval_state
+            .eval_from_string(&format!("import {}", import_path.display()), base)
+            .to_miette()
+            .wrap_err("Failed to evaluate import expression")?;
+
+        // 2. Evaluate the serialized args to get the base attrset
+        let base_args = eval_state
+            .eval_from_string(args_nix, base)
+            .to_miette()
+            .wrap_err("Failed to evaluate NixArgs")?;
+
+        // 3. Create the allocatePort primop: processName -> portName -> basePort -> allocatedPort
+        let port_allocator = self.port_allocator.clone();
+        let primop = PrimOp::new(
+            eval_state,
+            PrimOpMeta {
+                name: cstr!("allocatePort"),
+                doc: cstr!("Allocate a free port starting from base"),
+                args: [cstr!("processName"), cstr!("portName"), cstr!("basePort")],
+            },
+            Box::new(move |es, [process_name, port_name, base_port]| {
+                let process = es.require_string(process_name)?;
+                let port_name_str = es.require_string(port_name)?;
+                let base_raw = es.require_int(base_port)?;
+                let base = u16::try_from(base_raw).map_err(|_| {
+                    anyhow::anyhow!("basePort must be between 0 and 65535, got {}", base_raw)
+                })?;
+                let allocated = port_allocator
+                    .allocate(&process, &port_name_str, base)
+                    .map_err(|e| anyhow::anyhow!("{}", e))?;
+                es.new_value_int(allocated as i64)
+            }),
+        )
+        .to_miette()
+        .wrap_err("Failed to create allocatePort primop")?;
+
+        // 4. Build primops attrset: { allocatePort = <primop>; }
+        let primop_value = eval_state
+            .new_value_primop(primop)
+            .to_miette()
+            .wrap_err("Failed to create primop value")?;
+        let primops_attrset = eval_state
+            .new_value_attrs(vec![("allocatePort".to_string(), primop_value)])
+            .to_miette()
+            .wrap_err("Failed to create primops attrset")?;
+
+        // 5. Build override: { primops = { allocatePort = <primop>; }; }
+        let override_attrs = eval_state
+            .new_value_attrs(vec![("primops".to_string(), primops_attrset)])
+            .to_miette()
+            .wrap_err("Failed to create override attrset")?;
+
+        // 6. Merge base args with primops override: baseArgs // { primops = ...; }
+        let merge_fn = eval_state
+            .eval_from_string("a: b: a // b", "<primop-injection>")
+            .to_miette()
+            .wrap_err("Failed to create merge function")?;
+        let final_args = eval_state
+            .call_multi(&merge_fn, &[base_args, override_attrs])
+            .to_miette()
+            .wrap_err("Failed to merge args with primops")?;
+
+        // 7. Apply: (import default.nix) finalArgs
+        eval_state
+            .call(import_fn, final_args)
+            .to_miette()
+            .wrap_err("Failed to evaluate devenv configuration")
     }
 
     /// Apply GlobalOptions settings to the Nix environment
@@ -610,12 +721,7 @@ impl NixRustBackend {
             caching_state
                 .cached_eval()
                 .eval(&cache_key, &activity, || async {
-                    self.eval_attr_uncached(
-                        self.cached_import_expr.get().unwrap(),
-                        "config.cachix",
-                        "config.cachix",
-                        &activity,
-                    )
+                    self.eval_attr_uncached("config.cachix", "config.cachix", &activity)
                 })
                 .await
         }
@@ -891,6 +997,10 @@ impl NixBackend for NixRustBackend {
             );
 
             self.cached_import_expr.set(import_expr).ok();
+            self.cached_args_nix_eval.set(args_nix_eval).ok();
+
+            // Create resource manager for port allocation tracking across cache hits
+            let resource_manager = Arc::new(ResourceManager::new(self.port_allocator.clone()));
 
             // Create CachedEval wrapper
             let cached_eval = if let Some(ref pool_cell) = self.eval_cache_pool {
@@ -906,6 +1016,7 @@ impl NixBackend for NixRustBackend {
                     let service = CachingEvalService::with_config(pool.clone(), config.clone());
                     tracing::debug!(?config, "Eval caching enabled from framework pool");
                     CachedEval::with_cache(service, self.nix_log_bridge.clone(), config)
+                        .with_resource_manager(resource_manager)
                 } else {
                     tracing::debug!("Eval caching disabled (pool not ready)");
                     CachedEval::without_cache(self.nix_log_bridge.clone())
@@ -942,12 +1053,6 @@ impl NixBackend for NixRustBackend {
 
         // Note: Lock file validation is done in assemble(), which must be called first
 
-        let import_expr = self
-            .cached_import_expr
-            .get()
-            .expect("assemble() must be called first")
-            .to_string();
-
         let caching_state = self
             .caching_eval_state
             .get()
@@ -958,51 +1063,69 @@ impl NixBackend for NixRustBackend {
 
         // Try to get cached paths and verify they still exist
         // Note: dev_env requires explicit path validation because store paths can be GC'd
-        let cached_paths: Option<CachedShellPaths> =
-            if let Some(service) = caching_state.cached_eval().service() {
-                match service.get_cached(&cache_key).await {
-                    Ok(Some(cached)) => {
-                        match serde_json::from_str::<CachedShellPaths>(&cached.json_output) {
-                            Ok(paths) => {
-                                // Verify both paths still exist (may have been garbage collected)
-                                let drv_exists = std::path::Path::new(&paths.drv_path).exists();
-                                let out_exists = std::path::Path::new(&paths.out_path).exists();
-                                if drv_exists && out_exists {
-                                    tracing::debug!(
-                                        drv_path = %paths.drv_path,
-                                        out_path = %paths.out_path,
-                                        "Eval cache hit for shell"
-                                    );
-                                    Some(paths)
-                                } else {
-                                    tracing::debug!(
-                                        drv_path = %paths.drv_path,
-                                        out_path = %paths.out_path,
-                                        drv_exists = drv_exists,
-                                        out_exists = out_exists,
-                                        "Cached paths no longer exist (garbage collected?)"
-                                    );
-                                    None
+        let cached_paths: Option<CachedShellPaths> = if let Some(service) =
+            caching_state.cached_eval().service()
+        {
+            match service.get_cached(&cache_key).await {
+                Ok(Some(cached)) => {
+                    match serde_json::from_str::<CachedShellPaths>(&cached.json_output) {
+                        Ok(paths) => {
+                            // Verify both paths still exist (may have been garbage collected)
+                            let drv_exists = std::path::Path::new(&paths.drv_path).exists();
+                            let out_exists = std::path::Path::new(&paths.out_path).exists();
+                            if drv_exists && out_exists {
+                                // Replay resource allocations (ports) for this cached eval
+                                match caching_state
+                                    .cached_eval()
+                                    .try_replay_resources(cached.eval_id)
+                                    .await
+                                {
+                                    Ok(()) => {
+                                        tracing::debug!(
+                                            drv_path = %paths.drv_path,
+                                            out_path = %paths.out_path,
+                                            "Eval cache hit for shell"
+                                        );
+                                        Some(paths)
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            error = %e,
+                                            "Resource replay failed for shell cache hit, re-evaluating"
+                                        );
+                                        caching_state.cached_eval().clear_resources();
+                                        None
+                                    }
                                 }
-                            }
-                            Err(e) => {
-                                tracing::warn!(error = %e, "Failed to parse cached shell paths");
+                            } else {
+                                tracing::debug!(
+                                    drv_path = %paths.drv_path,
+                                    out_path = %paths.out_path,
+                                    drv_exists = drv_exists,
+                                    out_exists = out_exists,
+                                    "Cached paths no longer exist (garbage collected?)"
+                                );
                                 None
                             }
                         }
-                    }
-                    Ok(None) => {
-                        tracing::trace!("Eval cache miss for shell");
-                        None
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "Error checking eval cache for shell");
-                        None
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Failed to parse cached shell paths");
+                            None
+                        }
                     }
                 }
-            } else {
-                None
-            };
+                Ok(None) => {
+                    tracing::trace!("Eval cache miss for shell");
+                    None
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Error checking eval cache for shell");
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
         let activity = Activity::evaluate("Building shell")
             .level(ActivityLevel::Info)
@@ -1014,12 +1137,11 @@ impl NixBackend for NixRustBackend {
             (paths.drv_path, paths.out_path, paths.env_path, true)
         } else {
             // Cache miss or invalid paths - do full evaluation
-            let import_expr = import_expr.clone();
             let result = async {
                 caching_state
                     .cached_eval()
                     .eval_typed::<CachedShellPaths, _, _>(&cache_key, &activity, || async {
-                        self.build_shell_uncached(&import_expr, &activity)
+                        self.build_shell_uncached(&activity)
                     })
                     .await
             }
@@ -1128,17 +1250,8 @@ impl NixBackend for NixRustBackend {
                 .to_miette()
                 .wrap_err("Debugger REPL failed")?
         } else {
-            // No pending debugger - run a simple REPL with devenv environment
-            let import_expr = self
-                .cached_import_expr
-                .get()
-                .expect("assemble() must be called first")
-                .to_string();
-
-            let devenv_attrs = eval_state
-                .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-                .to_miette()
-                .wrap_err("Failed to import default.nix for REPL")?;
+            // Load default.nix with primops into the REPL scope
+            let devenv_attrs = self.eval_import_with_primops(&mut eval_state)?;
 
             // Create a ValMap to inject variables into the REPL scope
             let mut env = nix_cmd::ValMap::new()
@@ -1192,12 +1305,6 @@ impl NixBackend for NixRustBackend {
         }
 
         // Note: Lock file validation is done in assemble(), which must be called first
-
-        let import_expr = self
-            .cached_import_expr
-            .get()
-            .expect("assemble() must be called first")
-            .to_string();
 
         let caching_state = self
             .caching_eval_state
@@ -1264,13 +1371,12 @@ impl NixBackend for NixRustBackend {
                 (path, true)
             } else {
                 // Cache miss or invalid path - do full build
-                let import_expr = import_expr.clone();
                 let attr_path = attr_path.to_string();
                 let (path, _) = async {
                     caching_state
                         .cached_eval()
                         .eval_typed::<String, _, _>(&cache_key, &activity, || async {
-                            self.build_attr_uncached(&import_expr, &attr_path, &activity)
+                            self.build_attr_uncached(&attr_path, &activity)
                         })
                         .await
                 }
@@ -1330,12 +1436,6 @@ impl NixBackend for NixRustBackend {
         // Evaluates attributes from default.nix with transparent caching
         // Note: Lock file validation is done in assemble(), which must be called first
 
-        let import_expr = self
-            .cached_import_expr
-            .get()
-            .expect("assemble() must be called first")
-            .to_string();
-
         let caching_state = self
             .caching_eval_state
             .get()
@@ -1352,7 +1452,6 @@ impl NixBackend for NixRustBackend {
                 .level(ActivityLevel::Info)
                 .start();
 
-            let import_expr = import_expr.clone();
             let attr_path_owned = attr_path.to_string();
             let clean_path_owned = clean_path.to_string();
 
@@ -1360,12 +1459,7 @@ impl NixBackend for NixRustBackend {
                 caching_state
                     .cached_eval()
                     .eval(&cache_key, &activity, || async {
-                        self.eval_attr_uncached(
-                            &import_expr,
-                            &attr_path_owned,
-                            &clean_path_owned,
-                            &activity,
-                        )
+                        self.eval_attr_uncached(&attr_path_owned, &clean_path_owned, &activity)
                     })
                     .await
             }
@@ -1543,17 +1637,8 @@ impl NixBackend for NixRustBackend {
             .start();
         let mut eval_state = self.eval_session(&activity)?;
 
-        // Import default.nix to get the configured pkgs with overlays and settings
-        let import_expr = self
-            .cached_import_expr
-            .get()
-            .expect("assemble() must be called first")
-            .to_string();
-
-        let devenv = eval_state
-            .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        // Import default.nix with primops to get the configured pkgs
+        let devenv = self.eval_import_with_primops(&mut eval_state)?;
 
         // Extract the pkgs attribute from the devenv output
         let pkgs = eval_state
@@ -1806,20 +1891,11 @@ impl NixRustBackend {
     /// Evaluate a single attribute without caching.
     ///
     /// This is the pure evaluation logic extracted for use with transparent caching.
-    fn eval_attr_uncached(
-        &self,
-        import_expr: &str,
-        attr_path: &str,
-        clean_path: &str,
-        activity: &Activity,
-    ) -> Result<String> {
+    fn eval_attr_uncached(&self, attr_path: &str, clean_path: &str, activity: &Activity) -> Result<String> {
         let mut eval_state = self.eval_session(activity)?;
 
-        // Import default.nix to get the attribute set
-        let root_attrs = eval_state
-            .eval_from_string(import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        // Import default.nix with primops to get the attribute set
+        let root_attrs = self.eval_import_with_primops(&mut eval_state)?;
 
         // Navigate to the attribute using the Nix API
         let value = eval_state
@@ -1849,17 +1925,10 @@ impl NixRustBackend {
     /// Build shell derivation without caching.
     ///
     /// This is the pure build logic extracted for use with transparent caching.
-    fn build_shell_uncached(
-        &self,
-        import_expr: &str,
-        activity: &Activity,
-    ) -> Result<CachedShellPaths> {
+    fn build_shell_uncached(&self, activity: &Activity) -> Result<CachedShellPaths> {
         let mut eval_state = self.eval_session(activity)?;
 
-        let devenv = eval_state
-            .eval_from_string(import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let devenv = self.eval_import_with_primops(&mut eval_state)?;
 
         // Get the shell derivation from devenv.shell
         let shell_drv = eval_state
@@ -1936,18 +2005,10 @@ impl NixRustBackend {
     /// Build a single attribute without caching.
     ///
     /// This is the pure build logic extracted for use with transparent caching.
-    fn build_attr_uncached(
-        &self,
-        import_expr: &str,
-        attr_path: &str,
-        activity: &Activity,
-    ) -> Result<String> {
+    fn build_attr_uncached(&self, attr_path: &str, activity: &Activity) -> Result<String> {
         let mut eval_state = self.eval_session(activity)?;
 
-        let root_attrs = eval_state
-            .eval_from_string(import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let root_attrs = self.eval_import_with_primops(&mut eval_state)?;
 
         // Navigate to the attribute and force evaluation
         let value = eval_state

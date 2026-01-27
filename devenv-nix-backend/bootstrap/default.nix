@@ -30,6 +30,8 @@ args@{
   devenv_config ? { }
 , # Pre-merged nixpkgs configuration (passed from Rust, used by LSP)
   nixpkgs_config ? { }
+, # Primops attrset injected at eval time (e.g., { allocatePort = <primop>; })
+  primops ? { }
 }:
 
 let

@@ -4,6 +4,9 @@ let
   cfg = config.services.meilisearch;
   types = lib.types;
 
+  # Port allocation
+  basePort = cfg.listenPort;
+  allocatedPort = config.processes.meilisearch.ports.main.value;
 in
 {
   options.services.meilisearch = {
@@ -75,7 +78,7 @@ in
     packages = [ cfg.package ];
 
     env.MEILI_DB_PATH = config.env.DEVENV_STATE + "/meilisearch";
-    env.MEILI_HTTP_ADDR = "${cfg.listenAddress}:${toString cfg.listenPort}";
+    env.MEILI_HTTP_ADDR = "${cfg.listenAddress}:${toString allocatedPort}";
     env.MEILI_NO_ANALYTICS = lib.boolToString cfg.noAnalytics;
     env.MEILI_ENV = cfg.environment;
     env.MEILI_DUMP_DIR = config.env.MEILI_DB_PATH + "/dumps";
@@ -83,6 +86,7 @@ in
     env.MEILI_MAX_INDEX_SIZE = cfg.maxIndexSize;
 
     processes.meilisearch = {
+      ports.main.allocate = basePort;
       exec = "exec ${cfg.package}/bin/meilisearch";
     };
   };

@@ -7,6 +7,45 @@ let
 
   stateDir = config.env.DEVENV_STATE + "/kafka/connect";
 
+  # Port allocation helpers
+  # Parse listener string like "http://localhost:8083" to extract port
+  parseListenerPort = listener:
+    let
+      # Remove protocol prefix (e.g., "http://")
+      withoutProtocol = lib.last (lib.splitString "://" listener);
+      # Get the port part after ":"
+      parts = lib.splitString ":" withoutProtocol;
+    in
+    lib.toInt (lib.last parts);
+
+  # Parse listener to get host and protocol
+  parseListenerHost = listener:
+    let
+      withoutProtocol = lib.last (lib.splitString "://" listener);
+      parts = lib.splitString ":" withoutProtocol;
+    in
+    lib.head parts;
+
+  parseListenerProtocol = listener:
+    lib.head (lib.splitString "://" listener);
+
+  # Rebuild listener with new port
+  rebuildListener = listener: newPort:
+    let
+      protocol = parseListenerProtocol listener;
+      host = parseListenerHost listener;
+    in
+    "${protocol}://${host}:${toString newPort}";
+
+  # Base port: from listeners if configured, otherwise default 8083
+  basePort =
+    if cfg.settings."listeners" != null && cfg.settings."listeners" != [ ]
+    then parseListenerPort (lib.head cfg.settings."listeners")
+    else 8083;
+
+  # Allocated port
+  allocatedPort = config.processes.kafka-connect.ports.main.value;
+
   mkPropertyString =
     let
       render = {
@@ -176,7 +215,11 @@ in
       '';
     in
     (lib.mkIf cfg.enable (lib.mkIf kafkaCfg.enable {
+      # Set listeners with allocated port if not explicitly configured
+      services.kafka.connect.settings."listeners" = lib.mkDefault [ "http://localhost:${toString allocatedPort}" ];
+
       processes.kafka-connect = {
+        ports.main.allocate = basePort;
         exec = "${startKafkaConnect}/bin/start-kafka-connect";
 
         process-compose = {
@@ -184,7 +227,7 @@ in
             initial_delay_seconds = 2;
             http_get = {
               path = "/connectors";
-              port = 8083;
+              port = allocatedPort;
             };
           };
 

@@ -7,6 +7,10 @@ let
   cfg = config.services.postgres;
   inherit (lib) types;
 
+  # Port allocation
+  basePort = cfg.port;
+  allocatedPort = config.processes.postgres.ports.main.value;
+
   q = lib.escapeShellArg;
 
   runtimeDir = "${config.env.DEVENV_RUNTIME}/postgres";
@@ -169,7 +173,7 @@ let
       OLDPGHOST="$PGHOST"
       PGHOST=${q runtimeDir}
 
-      pg_ctl -D "$PGDATA" -w start -o "-c unix_socket_directories=${runtimeDir} -c listen_addresses= -p ${toString cfg.port}"
+      pg_ctl -D "$PGDATA" -w start -o "-c unix_socket_directories=${runtimeDir} -c listen_addresses= -p ${toString allocatedPort}"
       ${setupInitialDatabases}
 
       ${runInitialScript}
@@ -411,15 +415,16 @@ in
       in
       lib.mkDefault host;
     # Required for init scripts.
-    env.PGPORT = cfg.port;
+    env.PGPORT = allocatedPort;
 
     services.postgres.settings = {
       listen_addresses = cfg.listen_addresses;
-      port = cfg.port;
+      port = allocatedPort;
       unix_socket_directories = lib.mkDefault runtimeDir;
     };
 
     processes.postgres = {
+      ports.main.allocate = basePort;
       exec = "${startScript}/bin/start-postgres";
 
       process-compose = {
