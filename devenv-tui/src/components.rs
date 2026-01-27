@@ -64,6 +64,8 @@ pub fn StatusIndicator(
 
 /// Build logs viewport height for collapsed preview (press 'e' to expand to fullscreen)
 pub const LOG_VIEWPORT_COLLAPSED: usize = 10;
+/// Reduced viewport height for tasks with showOutput=true (expands to full when selected)
+pub const LOG_VIEWPORT_SHOW_OUTPUT: usize = 3;
 
 /// Color constants for operations using ANSI grayscale (232-255)
 pub const COLOR_ACTIVE: Color = Color::AnsiValue(255); // Bright white for top-level active
@@ -679,6 +681,7 @@ fn shorten_store_path_aggressive(path: &str) -> String {
 pub struct ExpandedContentComponent<'a> {
     pub lines: Option<&'a VecDeque<String>>,
     pub empty_message: &'a str,
+    pub max_lines: usize,
 }
 
 impl<'a> ExpandedContentComponent<'a> {
@@ -686,7 +689,13 @@ impl<'a> ExpandedContentComponent<'a> {
         Self {
             lines,
             empty_message: "  → no content",
+            max_lines: LOG_VIEWPORT_COLLAPSED,
         }
+    }
+
+    pub fn with_max_lines(mut self, max_lines: usize) -> Self {
+        self.max_lines = max_lines;
+        self
     }
 
     pub fn with_empty_message(mut self, message: &'a str) -> Self {
@@ -699,12 +708,7 @@ impl<'a> ExpandedContentComponent<'a> {
             && !lines.is_empty()
         {
             // Take the last N lines that fit in collapsed viewport
-            let visible_lines: Vec<_> = lines
-                .iter()
-                .rev()
-                .take(LOG_VIEWPORT_COLLAPSED)
-                .rev()
-                .collect();
+            let visible_lines: Vec<_> = lines.iter().rev().take(self.max_lines).rev().collect();
 
             if !visible_lines.is_empty() {
                 let actual_height = visible_lines.len();
@@ -744,7 +748,7 @@ impl<'a> ExpandedContentComponent<'a> {
         if let Some(lines) = &self.lines
             && !lines.is_empty()
         {
-            let visible_count = lines.len().min(LOG_VIEWPORT_COLLAPSED);
+            let visible_count = lines.len().min(self.max_lines);
             if visible_count > 0 {
                 return visible_count;
             }

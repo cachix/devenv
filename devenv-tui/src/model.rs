@@ -1297,7 +1297,12 @@ impl ActivityModel {
                 if (task_data.show_output || task_failed)
                     && let Some(logs) = self.get_build_logs(display_activity.activity.id)
                 {
-                    let visible_count = logs.len().min(10);
+                    let max_lines = if task_data.show_output && !task_failed && !is_selected {
+                        3 // LOG_VIEWPORT_SHOW_OUTPUT
+                    } else {
+                        10 // LOG_VIEWPORT_COLLAPSED
+                    };
+                    let visible_count = logs.len().min(max_lines);
                     total_height += visible_count.max(1);
                 }
             }

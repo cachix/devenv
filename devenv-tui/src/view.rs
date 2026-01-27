@@ -1,5 +1,5 @@
 use crate::{
-    components::{LOG_VIEWPORT_COLLAPSED, format_elapsed_time, *},
+    components::{LOG_VIEWPORT_COLLAPSED, LOG_VIEWPORT_SHOW_OUTPUT, format_elapsed_time, *},
     model::{
         Activity, ActivityModel, ActivitySummary, ActivityVariant, NixActivityState, RenderContext,
         TaskDisplayStatus, TerminalSize, UiState,
@@ -309,9 +309,12 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 } else {
                     "  → waiting for output..."
                 };
-                return ExpandedContentComponent::new(logs.as_deref())
-                    .with_empty_message(empty_message)
-                    .render_with_main_line(main_line);
+                let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_empty_message(empty_message);
+                if task_data.show_output && !task_failed && !is_selected {
+                    component = component.with_max_lines(LOG_VIEWPORT_SHOW_OUTPUT);
+                }
+                return component.render_with_main_line(main_line);
             }
 
             return main_line;
