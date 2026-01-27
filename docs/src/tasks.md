@@ -139,7 +139,7 @@ When a task is skipped due to no file changes, any previous outputs from that ta
 
 Tasks support passing inputs and produce outputs, both as JSON objects:
 
-- `$DEVENV_TASK_INPUT`: JSON object of  `tasks."myapp:mytask".input`.
+- `$DEVENV_TASK_INPUT`: JSON object of `tasks."myapp:mytask".input`.
 - `$DEVENV_TASKS_OUTPUTS`: JSON object with dependent tasks as keys and their outputs as values.
 - `$DEVENV_TASK_OUTPUT_FILE`: a writable file with tasks' outputs in JSON.
 
@@ -161,6 +161,26 @@ Tasks support passing inputs and produce outputs, both as JSON objects:
   };
 }
 ```
+
+### Passing inputs from the CLI
+
+!!! tip "New in version 2.0"
+
+You can override or add inputs when running tasks from the command line using `--input` and `--input-json`:
+
+```shell-session
+$ devenv tasks run myapp:mytask --input value=42 --input name=hello
+```
+
+Values are automatically parsed as JSON when valid, otherwise treated as strings. For example, `--input count=3` sets a number, `--input flag=true` sets a boolean, and `--input name=hello` sets a string.
+
+You can also pass a full JSON object:
+
+```shell-session
+$ devenv tasks run myapp:mytask --input-json '{"value": 42, "name": "hello"}'
+```
+
+Both flags can be combined. `--input-json` is applied first, then individual `--input` values are merged on top (CLI wins on conflict with Nix-defined inputs).
 
 ## Processes as tasks
 
