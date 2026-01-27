@@ -1,6 +1,7 @@
 args@{
   # Devenv input variables
   version
+, is_development_version ? false
 , system
 , # The project root (location of devenv.nix)
   devenv_root
