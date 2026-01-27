@@ -38,6 +38,7 @@ impl TestNixArgs {
     ) -> NixArgs<'a> {
         NixArgs {
             version: "1.0.0",
+            is_development_version: false,
             system: get_current_system(),
             devenv_root: &paths.root,
             skip_local_src: false,

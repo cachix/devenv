@@ -1648,6 +1648,7 @@ impl Devenv {
         let nixpkgs_config = config.nixpkgs_config(&self.global_options.system);
         let args = NixArgs {
             version: crate_version!(),
+            is_development_version: crate::is_development_version(),
             system: &self.global_options.system,
             devenv_root: &self.devenv_root,
             skip_local_src: self.global_options.from.is_some(),

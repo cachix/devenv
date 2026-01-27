@@ -23,6 +23,7 @@ rec {
   # This is the full-featured version used by default.nix
   mkDevenvForSystem =
     { version
+    , is_development_version ? false
     , system
     , devenv_root
     , git_root ? null
@@ -126,10 +127,15 @@ rec {
           {
             config.devenv = lib.mkMerge [
               {
-                cliVersion = version;
                 root = devenv_root;
                 dotfile = devenv_dotfile;
               }
+              (if builtins.hasAttr "cli" options.devenv then {
+                cli.version = version;
+                cli.isDevelopment = is_development_version;
+              } else {
+                cliVersion = version;
+              })
               (lib.optionalAttrs (builtins.hasAttr "tmpdir" options.devenv) {
                 tmpdir = devenv_tmpdir;
               })

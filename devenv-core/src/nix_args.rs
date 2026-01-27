@@ -268,6 +268,9 @@ pub struct NixArgs<'a> {
     /// The devenv CLI version (e.g., "1.10.1")
     pub version: &'a str,
 
+    /// Whether this is a development build (not from a release tag)
+    pub is_development_version: bool,
+
     /// The system string (e.g., "x86_64-linux", "aarch64-darwin")
     pub system: &'a str,
 
@@ -367,6 +370,7 @@ mod tests {
         let cli_options = CliOptionsConfig::default();
         let args = NixArgs {
             version,
+            is_development_version: false,
             system,
             devenv_root: &root,
             skip_local_src: false,
@@ -470,6 +474,7 @@ mod tests {
 
         let args = NixArgs {
             version,
+            is_development_version: false,
             system,
             devenv_root: &root,
             skip_local_src: false,

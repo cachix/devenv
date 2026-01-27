@@ -2,7 +2,8 @@
 { lib
 , callPackage
 , cargoProfile ? "release"
-,
+, gitRev ? ""
+, isRelease ? false
 }:
 
 let
@@ -59,6 +60,8 @@ in
         version
         cargoLock
         cargoProfile
+        gitRev
+        isRelease
         ;
     };
 

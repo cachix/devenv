@@ -81,6 +81,9 @@ snix-build = { workspace = true, optional = true }
 nix-compat = { workspace = true, optional = true }
 nix-compat-derive = { workspace = true, optional = true }
 
+[build-dependencies]
+vergen-gitcl = "1.0"
+
 [dev-dependencies]
 devenv-nix-backend-macros.workspace = true
 
