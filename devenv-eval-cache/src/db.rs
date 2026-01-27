@@ -445,60 +445,65 @@ pub struct ResourceSpecRow {
     pub spec: String,
 }
 
-impl ResourceSpecRow {
-    fn from_row(row: &Row) -> Result<Self, turso::Error> {
-        let type_id: String = row.get(0)?;
-        let spec: String = row.get(1)?;
+impl sqlx::FromRow<'_, SqliteRow> for ResourceSpecRow {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        let type_id: String = row.get("type_id");
+        let spec: String = row.get("spec");
         Ok(Self { type_id, spec })
     }
 }
 
 /// Get resource specs for a cached eval by eval ID.
-pub async fn get_resource_specs_by_eval_id(
-    conn: &Connection,
+pub async fn get_resource_specs_by_eval_id<'a, A>(
+    conn: A,
     eval_id: i64,
-) -> Result<Vec<ResourceSpecRow>, CacheError> {
-    let mut stmt = conn
-        .prepare(
-            r#"
+) -> Result<Vec<ResourceSpecRow>, sqlx::Error>
+where
+    A: Acquire<'a, Database = Sqlite>,
+{
+    let mut conn = conn.acquire().await?;
+
+    let specs = sqlx::query_as(
+        r#"
             SELECT type_id, spec
             FROM eval_resource_spec
             WHERE cached_eval_id = ?
         "#,
-        )
-        .await?;
-
-    let mut rows = stmt.query(turso::params![eval_id]).await?;
-    let mut specs = Vec::new();
-
-    while let Some(row) = rows.next().await? {
-        specs.push(ResourceSpecRow::from_row(&row)?);
-    }
+    )
+    .bind(eval_id)
+    .fetch_all(&mut *conn)
+    .await?;
 
     Ok(specs)
 }
 
 /// Insert resource specs for a cached eval.
-pub async fn insert_resource_specs(
-    conn: &Connection,
+pub async fn insert_resource_specs<'a, A>(
+    conn: A,
     eval_id: i64,
     specs: &[crate::resource_manager::ResourceSpec],
-) -> Result<(), CacheError> {
-    let insert_spec = r#"
-        INSERT INTO eval_resource_spec (cached_eval_id, type_id, spec)
-        VALUES (?, ?, ?)
-        ON CONFLICT (cached_eval_id, type_id) DO UPDATE
-        SET spec = excluded.spec,
-            updated_at = strftime('%s', 'now')
-    "#;
+) -> Result<(), sqlx::Error>
+where
+    A: Acquire<'a, Database = Sqlite>,
+{
+    let mut conn = conn.acquire().await?;
 
     for spec in specs {
-        let spec_json = serde_json::to_string(&spec.data)
-            .map_err(|e| CacheError::initialization(e.to_string()))?;
-        conn.execute(
-            insert_spec,
-            turso::params![eval_id, spec.type_id.clone(), spec_json],
+        let spec_json =
+            serde_json::to_string(&spec.data).map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+        sqlx::query(
+            r#"
+            INSERT INTO eval_resource_spec (cached_eval_id, type_id, spec)
+            VALUES (?, ?, ?)
+            ON CONFLICT (cached_eval_id, type_id) DO UPDATE
+            SET spec = excluded.spec,
+                updated_at = strftime('%s', 'now')
+            "#,
         )
+        .bind(eval_id)
+        .bind(spec.type_id.clone())
+        .bind(spec_json)
+        .execute(&mut *conn)
         .await?;
     }
 
@@ -506,17 +511,23 @@ pub async fn insert_resource_specs(
 }
 
 /// Delete resource specs for a cached eval.
-pub async fn delete_resource_specs_by_eval_id(
-    conn: &Connection,
+pub async fn delete_resource_specs_by_eval_id<'a, A>(
+    conn: A,
     eval_id: i64,
-) -> Result<(), CacheError> {
-    conn.execute(
+) -> Result<(), sqlx::Error>
+where
+    A: Acquire<'a, Database = Sqlite>,
+{
+    let mut conn = conn.acquire().await?;
+
+    sqlx::query(
         r#"
         DELETE FROM eval_resource_spec
         WHERE cached_eval_id = ?
         "#,
-        turso::params![eval_id],
     )
+    .bind(eval_id)
+    .execute(&mut *conn)
     .await?;
 
     Ok(())
