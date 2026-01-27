@@ -391,7 +391,7 @@ impl CachedEval {
             // No caching configured - just evaluate directly
             let result = eval_fn()
                 .await
-                .map_err(|e| CacheError::Eval(e.to_string()))?;
+                .map_err(|e| CacheError::Eval(format!("{e:#}")))?;
             return Ok((result, false));
         };
 
@@ -416,7 +416,7 @@ impl CachedEval {
 
         let result = eval_fn()
             .await
-            .map_err(|e| CacheError::Eval(e.to_string()))?;
+            .map_err(|e| CacheError::Eval(format!("{e:#}")))?;
 
         // Stop collecting and store result
         self.log_bridge.clear_observers();
@@ -461,7 +461,7 @@ impl CachedEval {
             // No caching configured - just evaluate directly
             let result = eval_fn()
                 .await
-                .map_err(|e| CacheError::Eval(e.to_string()))?;
+                .map_err(|e| CacheError::Eval(format!("{e:#}")))?;
             return Ok((result, false));
         };
 
@@ -487,7 +487,7 @@ impl CachedEval {
 
         let result = eval_fn()
             .await
-            .map_err(|e| CacheError::Eval(e.to_string()))?;
+            .map_err(|e| CacheError::Eval(format!("{e:#}")))?;
 
         // Stop collecting and store result
         self.log_bridge.clear_observers();
