@@ -2920,6 +2920,22 @@ anything
 
 
 
+## devenv.cliVersion
+
+
+
+Alias of ` devenv.cli.version `.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
+
+
+
 ## devenv.debug
 
 
@@ -5386,8 +5402,6 @@ string
 
 ## git-hooks.hooks.black.settings.flags
 
-
-
 Flags passed to black. See all available [here](https://black.readthedocs.io/en/stable/usage_and_configuration/the_basics.html\#command-line-options).
 
 
@@ -5411,6 +5425,8 @@ string
 
 
 ## git-hooks.hooks.cabal2nix
+
+
 
 cabal2nix hook
 
@@ -7438,8 +7454,6 @@ string
 
 ## git-hooks.hooks.hledger-fmt
 
-
-
 hledger-fmt hook
 
 
@@ -7474,6 +7488,8 @@ boolean
 
 
 ## git-hooks.hooks.hledger-fmt.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
