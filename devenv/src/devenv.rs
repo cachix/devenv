@@ -184,6 +184,27 @@ pub struct Devenv {
     shutdown: Arc<tokio_shutdown::Shutdown>,
 }
 
+/// Sanitize profile name to be filesystem-safe
+fn sanitize_profile_name(name: &str) -> String {
+    name.chars()
+        .map(|c| match c {
+            '/' | '\\' | ' ' | '\0' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            c => c,
+        })
+        .collect()
+}
+
+/// Compute the profile directory suffix for state isolation
+fn compute_profile_dir_suffix(profiles: &[String]) -> Option<String> {
+    if profiles.is_empty() {
+        None
+    } else {
+        let mut sorted: Vec<String> = profiles.iter().map(|p| sanitize_profile_name(p)).collect();
+        sorted.sort();
+        Some(format!("profiles/{}", sorted.join("-")))
+    }
+}
+
 impl Devenv {
     pub async fn new(options: DevenvOptions) -> Self {
         let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv");
@@ -197,10 +218,21 @@ impl Devenv {
             .devenv_root
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
-        let devenv_dotfile = options
+
+        // Get global_options early to access profiles for state directory isolation
+        let global_options = options.global_options.unwrap_or_default();
+
+        // Compute profile-aware dotfile path for state isolation
+        let base_devenv_dotfile = options
             .devenv_dotfile
             .map(|p| p.to_path_buf())
             .unwrap_or(devenv_root.join(".devenv"));
+        let devenv_dotfile =
+            if let Some(suffix) = compute_profile_dir_suffix(&global_options.profile) {
+                base_devenv_dotfile.join(suffix)
+            } else {
+                base_devenv_dotfile
+            };
         let devenv_dot_gc = devenv_dotfile.join("gc");
 
         // TMPDIR for build artifacts - should NOT use XDG_RUNTIME_DIR as that's
@@ -224,8 +256,6 @@ impl Devenv {
             }));
         let devenv_runtime =
             devenv_runtime_base.join(format!("devenv-{}", &devenv_state_hash[..7]));
-
-        let global_options = options.global_options.unwrap_or_default();
 
         xdg_dirs
             .create_data_directory(Path::new("devenv"))

@@ -190,6 +190,10 @@ pub enum Commands {
     #[clap(hide = true)]
     GenerateJSONSchema,
 
+    /// Print computed paths (dotfile, gc, etc.) for shell integration
+    #[clap(hide = true)]
+    PrintPaths,
+
     #[command(about = "Launch Model Context Protocol server for AI assistants")]
     Mcp {
         #[arg(

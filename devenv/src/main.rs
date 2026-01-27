@@ -578,6 +578,16 @@ async fn run_devenv_inner(devenv: &mut Devenv, command: Commands) -> Result<Comm
                 .wrap_err("Failed to generate JSON schema")?;
             CommandResult::Done
         }
+        Commands::PrintPaths => {
+            let paths = devenv.paths();
+            let output = format!(
+                "DEVENV_DOTFILE=\"{}\"\nDEVENV_ROOT=\"{}\"\nDEVENV_GC=\"{}\"",
+                paths.dotfile.display(),
+                paths.root.display(),
+                paths.dot_gc.display()
+            );
+            CommandResult::Print(output)
+        }
         Commands::Mcp { http } => {
             let config = devenv.config.read().await.clone();
             devenv::mcp::run_mcp_server(config, http.map(|p| p.unwrap_or(8080))).await?;
