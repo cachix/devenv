@@ -884,6 +884,8 @@ impl Devenv {
         roots: Vec<String>,
         run_mode: devenv_tasks::RunMode,
         show_output: bool,
+        cli_inputs: Vec<String>,
+        input_json: Option<String>,
     ) -> Result<String> {
         self.assemble(false).await?;
         if roots.is_empty() {
@@ -907,6 +909,19 @@ impl Devenv {
         if show_output {
             for task in &mut tasks {
                 task.show_output = true;
+            }
+        }
+
+        // Parse and merge CLI inputs into root task configs
+        let cli_input = parse_cli_task_inputs(&cli_inputs, input_json.as_deref())?;
+        if !cli_input.is_empty() {
+            for task in &mut tasks {
+                if roots
+                    .iter()
+                    .any(|root| task.name == *root || task.name.starts_with(&format!("{root}:")))
+                {
+                    merge_task_input(task, &cli_input)?;
+                }
             }
         }
 
@@ -1896,6 +1911,66 @@ async fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     (to_gc, removed_symlinks)
 }
 
+/// Parse CLI `--input key=value` and `--input-json '{...}'` into a JSON object map.
+///
+/// The `--input-json` value (if any) is used as the base, then each `--input key=value`
+/// is layered on top. Values are parsed as JSON if valid, otherwise treated as strings.
+fn parse_cli_task_inputs(
+    inputs: &[String],
+    input_json: Option<&str>,
+) -> Result<serde_json::Map<String, serde_json::Value>> {
+    let mut map: serde_json::Map<String, serde_json::Value> = if let Some(json_str) = input_json {
+        let value: serde_json::Value = serde_json::from_str(json_str)
+            .into_diagnostic()
+            .wrap_err("--input-json must be valid JSON")?;
+        match value {
+            serde_json::Value::Object(m) => m,
+            _ => bail!("--input-json must be a JSON object"),
+        }
+    } else {
+        serde_json::Map::new()
+    };
+
+    for entry in inputs {
+        let (key, raw_value) = entry
+            .split_once('=')
+            .ok_or_else(|| miette!("--input must be KEY=VALUE, got: {entry}"))?;
+        if key.is_empty() {
+            bail!("--input key must not be empty, got: {entry}");
+        }
+        let value = match serde_json::from_str::<serde_json::Value>(raw_value) {
+            Ok(v) => v,
+            Err(_) => serde_json::Value::String(raw_value.to_string()),
+        };
+        map.insert(key.to_string(), value);
+    }
+
+    Ok(map)
+}
+
+/// Merge CLI inputs into a task config's `input` field (shallow merge, CLI wins).
+fn merge_task_input(
+    task: &mut tasks::TaskConfig,
+    cli_input: &serde_json::Map<String, serde_json::Value>,
+) -> Result<()> {
+    let existing = task
+        .input
+        .get_or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+
+    match existing {
+        serde_json::Value::Object(obj) => {
+            for (k, v) in cli_input {
+                obj.insert(k.clone(), v.clone());
+            }
+            Ok(())
+        }
+        _ => bail!(
+            "Task '{}' has a non-object input; cannot merge CLI inputs",
+            task.name
+        ),
+    }
+}
+
 fn format_tasks_tree(tasks: &Vec<tasks::TaskConfig>) -> String {
     let mut output = String::new();
 
@@ -2185,5 +2260,121 @@ mod tests {
             let task = test_tasks.iter().find(|t| t.name == task_name).unwrap();
             assert_eq!(task.after, expected_deps);
         }
+    }
+
+    #[test]
+    fn test_parse_cli_task_inputs_empty() {
+        let result = parse_cli_task_inputs(&[], None).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_cli_task_inputs_key_value_string() {
+        let inputs = vec!["name=hello".to_string()];
+        let result = parse_cli_task_inputs(&inputs, None).unwrap();
+        assert_eq!(
+            result.get("name").unwrap(),
+            &serde_json::Value::String("hello".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_cli_task_inputs_key_value_json() {
+        let inputs = vec!["count=3".to_string(), "flag=true".to_string()];
+        let result = parse_cli_task_inputs(&inputs, None).unwrap();
+        assert_eq!(result.get("count").unwrap(), &serde_json::json!(3));
+        assert_eq!(result.get("flag").unwrap(), &serde_json::json!(true));
+    }
+
+    #[test]
+    fn test_parse_cli_task_inputs_json_base() {
+        let result = parse_cli_task_inputs(&[], Some(r#"{"a":1,"b":"two"}"#)).unwrap();
+        assert_eq!(result.get("a").unwrap(), &serde_json::json!(1));
+        assert_eq!(
+            result.get("b").unwrap(),
+            &serde_json::Value::String("two".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_cli_task_inputs_json_override() {
+        let inputs = vec!["a=99".to_string()];
+        let result = parse_cli_task_inputs(&inputs, Some(r#"{"a":1,"b":"two"}"#)).unwrap();
+        assert_eq!(result.get("a").unwrap(), &serde_json::json!(99));
+        assert_eq!(
+            result.get("b").unwrap(),
+            &serde_json::Value::String("two".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_cli_task_inputs_invalid_format() {
+        let inputs = vec!["no_equals_sign".to_string()];
+        assert!(parse_cli_task_inputs(&inputs, None).is_err());
+    }
+
+    #[test]
+    fn test_parse_cli_task_inputs_empty_key() {
+        let inputs = vec!["=value".to_string()];
+        assert!(parse_cli_task_inputs(&inputs, None).is_err());
+    }
+
+    #[test]
+    fn test_parse_cli_task_inputs_invalid_json_base() {
+        assert!(parse_cli_task_inputs(&[], Some("not json")).is_err());
+    }
+
+    #[test]
+    fn test_parse_cli_task_inputs_json_not_object() {
+        assert!(parse_cli_task_inputs(&[], Some("[1,2,3]")).is_err());
+    }
+
+    #[test]
+    fn test_merge_task_input_into_none() {
+        let mut task = tasks::TaskConfig {
+            name: "test".to_string(),
+            r#type: Default::default(),
+            after: vec![],
+            before: vec![],
+            command: None,
+            status: None,
+            exec_if_modified: vec![],
+            input: None,
+            cwd: None,
+            show_output: false,
+        };
+        let mut cli = serde_json::Map::new();
+        cli.insert("key".to_string(), serde_json::json!("value"));
+
+        merge_task_input(&mut task, &cli).unwrap();
+
+        let obj = task.input.unwrap();
+        assert_eq!(obj.get("key").unwrap(), &serde_json::json!("value"));
+    }
+
+    #[test]
+    fn test_merge_task_input_shallow_merge() {
+        let mut task = tasks::TaskConfig {
+            name: "test".to_string(),
+            r#type: Default::default(),
+            after: vec![],
+            before: vec![],
+            command: None,
+            status: None,
+            exec_if_modified: vec![],
+            input: Some(serde_json::json!({"existing": 1, "override_me": "old"})),
+            cwd: None,
+            show_output: false,
+        };
+        let mut cli = serde_json::Map::new();
+        cli.insert("override_me".to_string(), serde_json::json!("new"));
+        cli.insert("added".to_string(), serde_json::json!(42));
+
+        merge_task_input(&mut task, &cli).unwrap();
+
+        let obj = task.input.unwrap();
+        assert_eq!(obj.get("existing").unwrap(), &serde_json::json!(1));
+        assert_eq!(obj.get("override_me").unwrap(), &serde_json::json!("new"));
+        assert_eq!(obj.get("added").unwrap(), &serde_json::json!(42));
     }
 }

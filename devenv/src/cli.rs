@@ -246,6 +246,20 @@ pub enum TasksCommand {
             help = "Show task output for all tasks (equivalent to --verbose for tasks)"
         )]
         show_output: bool,
+
+        #[arg(
+            long = "input",
+            value_name = "KEY=VALUE",
+            help = "Set a task input value (repeatable, value parsed as JSON if valid, otherwise string)"
+        )]
+        input: Vec<String>,
+
+        #[arg(
+            long = "input-json",
+            value_name = "JSON",
+            help = "Set task inputs from a JSON object string"
+        )]
+        input_json: Option<String>,
     },
     #[command(about = "List all available tasks.")]
     List {},

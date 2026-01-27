@@ -444,8 +444,12 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
                 tasks,
                 mode,
                 show_output,
+                input,
+                input_json,
             } => {
-                let output = devenv.tasks_run(tasks, mode, show_output).await?;
+                let output = devenv
+                    .tasks_run(tasks, mode, show_output, input, input_json)
+                    .await?;
                 CommandResult::Print(format!("{output}\n"))
             }
             TasksCommand::List {} => {

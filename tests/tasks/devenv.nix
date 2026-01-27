@@ -78,6 +78,17 @@
       package = pkgs.python3;
     };
 
+    # Test: CLI input override
+    "test:input" = {
+      exec = ''
+        echo "$DEVENV_TASK_INPUT" > "$DEVENV_ROOT/input-result.json"
+      '';
+      input = {
+        greeting = "hello";
+        count = 1;
+      };
+    };
+
     "test:with-output" = {
       exec = ''
         echo "VISIBLE_OUTPUT_MARKER"

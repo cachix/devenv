@@ -4,7 +4,7 @@ set -xe
 
 # Cleanup function
 cleanup() {
-  rm -f test-basic.txt cwd-test.txt python-output.txt should-not-exist.txt
+  rm -f test-basic.txt cwd-test.txt python-output.txt should-not-exist.txt input-result.json
 }
 
 trap cleanup EXIT
@@ -91,6 +91,61 @@ if ! echo "$OUTPUT" | grep -q "HIDDEN_OUTPUT_MARKER"; then
   exit 1
 fi
 echo "✓ --show-output flag displays output"
+
+# Test: Nix-defined task input is passed via DEVENV_TASK_INPUT
+devenv tasks run test:input
+INPUT=$(cat input-result.json)
+if ! echo "$INPUT" | grep -q '"greeting":"hello"'; then
+  echo "FAIL: Expected input to contain greeting=hello"
+  echo "Got: $INPUT"
+  exit 1
+fi
+if ! echo "$INPUT" | grep -q '"count":1'; then
+  echo "FAIL: Expected input to contain count=1"
+  echo "Got: $INPUT"
+  exit 1
+fi
+echo "✓ Nix-defined task input works"
+
+# Test: --input flag overrides existing input
+devenv tasks run test:input --input count=5
+INPUT=$(cat input-result.json)
+if ! echo "$INPUT" | grep -q '"count":5'; then
+  echo "FAIL: Expected --input to override count to 5"
+  echo "Got: $INPUT"
+  exit 1
+fi
+if ! echo "$INPUT" | grep -q '"greeting":"hello"'; then
+  echo "FAIL: Expected greeting to remain after --input override"
+  echo "Got: $INPUT"
+  exit 1
+fi
+echo "✓ --input flag overrides existing input"
+
+# Test: --input flag adds new keys
+devenv tasks run test:input --input extra=new
+INPUT=$(cat input-result.json)
+if ! echo "$INPUT" | grep -q '"extra":"new"'; then
+  echo "FAIL: Expected --input to add extra=new"
+  echo "Got: $INPUT"
+  exit 1
+fi
+echo "✓ --input flag adds new keys"
+
+# Test: --input-json flag overrides input
+devenv tasks run test:input --input-json '{"count":99,"added":true}'
+INPUT=$(cat input-result.json)
+if ! echo "$INPUT" | grep -q '"count":99'; then
+  echo "FAIL: Expected --input-json to set count=99"
+  echo "Got: $INPUT"
+  exit 1
+fi
+if ! echo "$INPUT" | grep -q '"added":true'; then
+  echo "FAIL: Expected --input-json to add added=true"
+  echo "Got: $INPUT"
+  exit 1
+fi
+echo "✓ --input-json flag works"
 
 echo ""
 echo "All task tests passed!"
