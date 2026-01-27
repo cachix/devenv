@@ -168,6 +168,14 @@ fn create_log_callback(
         // Convert level to Verbosity
         let verbosity = level.try_into().unwrap_or(Verbosity::Info);
 
+        // Store error-level messages to be printed after TUI exits.
+        // This ensures Nix evaluation errors are displayed cleanly
+        // before the REPL, not mixed with TUI output.
+        if level == 0 {
+            // Level 0 = Error
+            bridge.store_pre_repl_error(msg.to_string());
+        }
+
         let log = InternalLog::Msg {
             msg: msg.to_string(),
             raw_msg: None,

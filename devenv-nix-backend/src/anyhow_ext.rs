@@ -5,6 +5,7 @@ pub trait AnyhowToMiette<T> {
 
 impl<T> AnyhowToMiette<T> for anyhow::Result<T> {
     fn to_miette(self) -> miette::Result<T> {
-        self.map_err(|e| miette::miette!("{e}"))
+        // Use {e:#} to show the full error chain including underlying causes
+        self.map_err(|e| miette::miette!("{e:#}"))
     }
 }

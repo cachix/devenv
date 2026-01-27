@@ -55,6 +55,8 @@ pub struct NixLogBridge {
     eval_state: Mutex<EvalActivityState>,
     /// Observers for file/env operations during eval (used by caching systems)
     observers: Mutex<Vec<Arc<dyn OpObserver>>>,
+    /// Error messages to be printed after TUI exits, before entering REPL
+    pre_repl_errors: Mutex<Vec<String>>,
 }
 
 /// Information about an active Nix activity
@@ -88,7 +90,31 @@ impl NixLogBridge {
                 current_eval_id: None,
             }),
             observers: Mutex::new(Vec::new()),
+            pre_repl_errors: Mutex::new(Vec::new()),
         })
+    }
+
+    /// Store an error message to be printed before entering REPL.
+    ///
+    /// Error-level log messages are stored here during evaluation and printed
+    /// after the TUI exits (before entering the REPL). This ensures errors are
+    /// visible to the user even when the TUI was capturing output.
+    pub fn store_pre_repl_error(&self, msg: String) {
+        if let Ok(mut errors) = self.pre_repl_errors.lock() {
+            errors.push(msg);
+        }
+    }
+
+    /// Take all stored pre-REPL errors, clearing the internal storage.
+    ///
+    /// Returns the error messages that were stored during evaluation.
+    /// These should be printed before entering the REPL.
+    pub fn take_pre_repl_errors(&self) -> Vec<String> {
+        if let Ok(mut errors) = self.pre_repl_errors.lock() {
+            std::mem::take(&mut *errors)
+        } else {
+            Vec::new()
+        }
     }
 
     /// Add an observer to receive operation notifications during evaluation.
