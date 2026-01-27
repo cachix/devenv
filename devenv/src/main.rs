@@ -167,6 +167,9 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Channel to signal TUI when backend is fully done (including cleanup)
     let (backend_done_tx, backend_done_rx) = tokio::sync::oneshot::channel();
 
+    // Extract TUI config before moving cli into devenv thread
+    let tui_open_on_error = cli.global_options.tui_open_on_error;
+
     // Devenv on background thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
     let devenv_thread = std::thread::spawn(move || {
@@ -190,6 +193,7 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Runs until backend signals completion, then drains remaining events
     let _ = devenv_tui::TuiApp::new(activity_rx, shutdown)
         .filter_level(filter_level)
+        .open_on_error(tui_open_on_error)
         .run(backend_done_rx)
         .await;
 

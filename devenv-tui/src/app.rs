@@ -34,6 +34,8 @@ pub struct TuiConfig {
     pub max_fps: u64,
     /// Minimum activity level to display (activities below this level are filtered out)
     pub filter_level: ActivityLevel,
+    /// Whether to keep the TUI open when errors occur (opt-in)
+    pub open_on_error: bool,
 }
 
 impl Default for TuiConfig {
@@ -45,6 +47,7 @@ impl Default for TuiConfig {
             log_viewport_collapsed: 10,
             max_fps: 30,
             filter_level: ActivityLevel::Info,
+            open_on_error: false,
         }
     }
 }
@@ -97,6 +100,12 @@ impl TuiApp {
     /// Activities below this level will be filtered out.
     pub fn filter_level(mut self, level: ActivityLevel) -> Self {
         self.config.filter_level = level;
+        self
+    }
+
+    /// Set whether to keep the TUI open on error for interactive review.
+    pub fn open_on_error(mut self, open: bool) -> Self {
+        self.config.open_on_error = open;
         self
     }
 
@@ -207,6 +216,37 @@ impl TuiApp {
             }
         }
 
+        // If open_on_error is set and there are errors, enter ErrorPaused mode
+        // This keeps the TUI open for interactive review until the user exits
+        let error_paused = if config.open_on_error && shutdown.last_signal().is_none() {
+            let has_errors = activity_model
+                .read()
+                .map(|m| m.has_errors())
+                .unwrap_or(false);
+            if has_errors {
+                if let Ok(mut ui) = ui_state.write() {
+                    ui.view_mode = ViewMode::ErrorPaused;
+                }
+                // Create a new shutdown for the error-paused loop
+                let pause_shutdown = Arc::new(Shutdown::new());
+                // Run the TUI in ErrorPaused mode until user presses q/Enter/Esc
+                let _ = run_view(
+                    activity_model.clone(),
+                    ui_state.clone(),
+                    notify.clone(),
+                    pause_shutdown,
+                    config.clone(),
+                    &mut pre_expand_height,
+                )
+                .await;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
         // Final render pass to ensure all drained events are displayed
         // This replaces the old is_done() check that triggered shutdown AFTER rendering
         //
@@ -300,6 +340,17 @@ impl TuiApp {
                             }
                             let _ = execute!(stderr, ResetColor);
                         }
+
+                        // Print tip about --tui-open-on-error if not already using it
+                        // and we didn't just come from error-paused mode
+                        if !config.open_on_error && !error_paused {
+                            eprintln!();
+                            let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(245))); // Dim gray
+                            eprintln!(
+                                "Tip: use --tui-open-on-error to review errors interactively"
+                            );
+                            let _ = execute!(stderr, ResetColor);
+                        }
                     }
                 }
             }
@@ -370,11 +421,22 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 && key_event.kind != KeyEventKind::Release
             {
                 debug!("Key event: {:?}", key_event);
+
+                // Check if we're in ErrorPaused mode
+                let is_error_paused = ui_state
+                    .read()
+                    .map(|ui| matches!(ui.view_mode, ViewMode::ErrorPaused))
+                    .unwrap_or(false);
+
                 match key_event.code {
                     KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                         // Set signal so Nix backend knows to interrupt operations
                         shutdown.set_last_signal(Signal::SIGINT);
                         shutdown.shutdown();
+                    }
+                    // In ErrorPaused mode: q, Enter, Esc all exit
+                    KeyCode::Char('q') | KeyCode::Enter if is_error_paused => {
+                        should_exit.set(true);
                     }
                     KeyCode::Char('e') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                         if let Ok(mut ui) = ui_state.write()
@@ -403,7 +465,9 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         }
                     }
                     KeyCode::Esc => {
-                        if let Ok(mut ui) = ui_state.write() {
+                        if is_error_paused {
+                            should_exit.set(true);
+                        } else if let Ok(mut ui) = ui_state.write() {
                             ui.selected_activity = None;
                         }
                     }
@@ -451,6 +515,38 @@ async fn run_view(
 
     match view_mode {
         ViewMode::Main => {
+            if *pre_expand_height > 0 {
+                let mut stderr = io::stderr();
+                let _ = execute!(
+                    stderr,
+                    cursor::MoveToPreviousLine(*pre_expand_height),
+                    terminal::Clear(terminal::ClearType::FromCursorDown)
+                );
+                *pre_expand_height = 0;
+            }
+
+            let mut element = element! {
+                ContextProvider(value: Context::owned(config.clone())) {
+                    ContextProvider(value: Context::owned(shutdown.clone())) {
+                        ContextProvider(value: Context::owned(notify.clone())) {
+                            ContextProvider(value: Context::owned(activity_model.clone())) {
+                                ContextProvider(value: Context::owned(ui_state.clone())) {
+                                    MainView
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            element
+                .render_loop()
+                .output(Output::Stderr)
+                .ignore_ctrl_c()
+                .await
+        }
+        ViewMode::ErrorPaused => {
+            // Same as Main view but stays open for error review
             if *pre_expand_height > 0 {
                 let mut stderr = io::stderr();
                 let _ = execute!(

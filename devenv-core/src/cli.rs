@@ -118,6 +118,14 @@ pub struct GlobalOptions {
     #[arg(
         long,
         global = true,
+        env = "DEVENV_TUI_OPEN_ON_ERROR",
+        help = "Keep the TUI open on error for interactive review."
+    )]
+    pub tui_open_on_error: bool,
+
+    #[arg(
+        long,
+        global = true,
         help = "Deprecated: use --trace-format instead.",
         value_enum,
         hide = true
@@ -284,6 +292,7 @@ impl Default for GlobalOptions {
             quiet: false,
             tui: true,
             no_tui: false,
+            tui_open_on_error: false,
             log_format: None,
             trace_format: TraceFormat::default(),
             trace_output: None,

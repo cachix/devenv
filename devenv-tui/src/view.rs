@@ -109,6 +109,8 @@ pub fn view(
     // Show summary (nav bar) only in normal render context
     let show_summary = render_context == RenderContext::Normal;
 
+    let is_paused = matches!(ui_state.view_mode, crate::model::ViewMode::ErrorPaused);
+
     let summary_view = element! {
         ContextProvider(value: Context::owned(SummaryViewContext {
             summary: summary.clone(),
@@ -116,6 +118,7 @@ pub fn view(
             showing_logs: selected_logs.is_some(),
             can_go_up,
             can_go_down,
+            is_paused,
         })) {
             SummaryView
         }
@@ -671,6 +674,7 @@ struct SummaryViewContext {
     showing_logs: bool,
     can_go_up: bool,
     can_go_down: bool,
+    is_paused: bool,
 }
 
 /// Summary view component that adapts to terminal width
@@ -684,6 +688,7 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         showing_logs,
         can_go_up,
         can_go_down,
+        is_paused,
     } = &*ctx;
 
     build_summary_view_impl(
@@ -692,6 +697,7 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         *showing_logs,
         *can_go_up,
         *can_go_down,
+        *is_paused,
         terminal_width,
     )
 }
@@ -703,6 +709,7 @@ fn build_summary_view_impl(
     showing_logs: bool,
     can_go_up: bool,
     can_go_down: bool,
+    is_paused: bool,
     terminal_width: u16,
 ) -> AnyElement<'static> {
     let mut children = vec![];
@@ -882,7 +889,22 @@ fn build_summary_view_impl(
         COLOR_HIERARCHY
     };
 
-    if has_selection {
+    if is_paused {
+        // Error paused mode: show exit instructions
+        help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
+        help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
+        if !use_symbols {
+            help_children.push(element!(Text(content: " navigate • ")).into_any());
+        } else {
+            help_children.push(element!(Text(content: " • ")).into_any());
+        }
+        help_children.push(element!(Text(content: "q", color: COLOR_INTERACTIVE)).into_any());
+        help_children.push(element!(Text(content: "/")).into_any());
+        help_children.push(element!(Text(content: "Enter", color: COLOR_INTERACTIVE)).into_any());
+        help_children.push(element!(Text(content: "/")).into_any());
+        help_children.push(element!(Text(content: "Esc", color: COLOR_INTERACTIVE)).into_any());
+        help_children.push(element!(Text(content: " exit")).into_any());
+    } else if has_selection {
         // Show full navigation when something is selected
         help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
         help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
