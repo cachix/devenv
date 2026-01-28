@@ -102,6 +102,7 @@ PROMPT_COMMAND="__devenv_reload_hook;${{PROMPT_COMMAND}}"
 
             // Create rcfile that will be sourced by the final interactive bash.
             // This sets up the environment and hot-reload hook.
+            // The __DEVENV_SHELL_READY__ marker signals that initialization is complete.
             let rcfile_content = format!(
                 r#"# Source the devenv environment
 source "{env_script_path}"
@@ -120,6 +121,9 @@ unset _DEVENV_PATH
 
 # Hot-reload hook (prepend to existing PROMPT_COMMAND)
 {reload_hook}
+
+# Signal that shell initialization is complete (for PTY task runner)
+echo "__DEVENV_SHELL_READY__"
 "#,
                 env_script_path = env_script_path.to_string_lossy(),
                 reload_hook = reload_hook,

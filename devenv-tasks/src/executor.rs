@@ -313,11 +313,18 @@ impl TaskExecutor for PtyExecutor {
         // Create response channel
         let (response_tx, response_rx) = tokio::sync::oneshot::channel();
 
+        // Build env with DEVENV_TASK_OUTPUT_FILE (same as SubprocessExecutor)
+        let mut env = ctx.env.clone();
+        env.insert(
+            "DEVENV_TASK_OUTPUT_FILE".to_string(),
+            ctx.output_file_path.to_string_lossy().to_string(),
+        );
+
         // Build the request
         let request = devenv_reload::PtyTaskRequest {
             id,
             command: ctx.command.to_string(),
-            env: ctx.env.clone(),
+            env,
             cwd: ctx.cwd.map(|s| s.to_string()),
             response_tx,
         };
@@ -336,17 +343,27 @@ impl TaskExecutor for PtyExecutor {
         tokio::select! {
             result = response_rx => {
                 match result {
-                    Ok(pty_result) => ExecutionResult {
-                        success: pty_result.success,
-                        stdout_lines: pty_result.stdout_lines,
-                        stderr_lines: pty_result.stderr_lines,
-                        error: pty_result.error,
+                    Ok(pty_result) => {
+                        tracing::trace!(
+                            "PTY task result: success={}, error={:?}",
+                            pty_result.success,
+                            pty_result.error
+                        );
+                        ExecutionResult {
+                            success: pty_result.success,
+                            stdout_lines: pty_result.stdout_lines,
+                            stderr_lines: pty_result.stderr_lines,
+                            error: pty_result.error,
+                        }
                     },
-                    Err(_) => ExecutionResult {
-                        success: false,
-                        stdout_lines: Vec::new(),
-                        stderr_lines: Vec::new(),
-                        error: Some("PTY runner dropped response channel".to_string()),
+                    Err(e) => {
+                        tracing::error!("PTY runner dropped response channel: {}", e);
+                        ExecutionResult {
+                            success: false,
+                            stdout_lines: Vec::new(),
+                            stderr_lines: Vec::new(),
+                            error: Some("PTY runner dropped response channel".to_string()),
+                        }
                     },
                 }
             }

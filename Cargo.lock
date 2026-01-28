@@ -1621,6 +1621,7 @@ dependencies = [
  "once_cell",
  "portable-pty",
  "rand 0.8.5",
+ "regex",
  "serde",
  "serde_json",
  "term_size",

@@ -71,6 +71,8 @@ url = { workspace = true }
 # Random number generation
 rand = { workspace = true }
 
+# Regex for ANSI stripping
+regex = { workspace = true }
 
 # Terminal UI components
 console = { workspace = true }

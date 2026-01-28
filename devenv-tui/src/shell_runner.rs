@@ -12,10 +12,26 @@ use crossterm::{
 };
 use devenv_reload::{PtyTaskRequest, PtyTaskResult, ShellCommand, ShellEvent};
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use regex::Regex;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
+
+/// Strip ANSI escape sequences from a string.
+/// Used for marker detection in PTY output.
+fn strip_ansi_codes(s: &str) -> String {
+    // Match ANSI escape sequences:
+    // - CSI sequences: ESC [ followed by parameters (digits, semicolons, ?, >) ending with a letter
+    //   Example: \x1b[?2004l (bracketed paste mode), \x1b[0m (reset), \x1b[1;32m (color)
+    // - OSC sequences: ESC ] ... BEL
+    // - Character set selection: ESC ( or ESC ) followed by character
+    static ANSI_RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let re = ANSI_RE.get_or_init(|| {
+        Regex::new(r"\x1b\[[0-9;?>=]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[()][0-9A-Z]").unwrap()
+    });
+    re.replace_all(s, "").to_string()
+}
 use tokio::sync::mpsc;
 
 #[derive(Debug, Error)]
@@ -26,35 +42,6 @@ pub enum ShellRunnerError {
     Io(#[from] std::io::Error),
     #[error("Channel closed")]
     ChannelClosed,
-}
-
-/// Strip ANSI escape codes from a string.
-/// Used for marker detection to handle terminal formatting.
-fn strip_ansi_codes(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut chars = s.chars().peekable();
-
-    while let Some(c) = chars.next() {
-        if c == '\x1b' {
-            // ESC sequence - skip until we find the terminator
-            if chars.peek() == Some(&'[') {
-                chars.next(); // consume '['
-                // CSI sequence: skip until we hit a letter (0x40-0x7E) or ~
-                while let Some(&next) = chars.peek() {
-                    chars.next();
-                    if next.is_ascii_alphabetic() || next == '~' {
-                        break;
-                    }
-                }
-            }
-        } else if c == '\r' {
-            // Skip carriage returns
-        } else {
-            result.push(c);
-        }
-    }
-
-    result
 }
 
 /// Internal events for the shell runner event loop.
@@ -266,10 +253,64 @@ impl ShellRunner {
         pty: &Arc<Mutex<Pty>>,
         task_rx: &mut mpsc::Receiver<PtyTaskRequest>,
     ) -> Result<(), ShellRunnerError> {
+        tracing::trace!("run_tasks_in_pty: waiting for shell to be ready");
+
+        // Wait for shell initialization to complete (signaled by __DEVENV_SHELL_READY__ marker)
+        let mut init_buffer = String::new();
+        loop {
+            let pty_clone = Arc::clone(pty);
+            let read_result = tokio::task::spawn_blocking(move || {
+                let mut buf = [0u8; 4096];
+                let mut pty_guard = pty_clone.lock().unwrap();
+                match pty_guard.read(&mut buf) {
+                    Ok(n) => Ok((buf, n)),
+                    Err(e) => Err(e),
+                }
+            })
+            .await;
+
+            let (buf, n) = match read_result {
+                Ok(Ok((buf, n))) => (buf, n),
+                Ok(Err(e)) => {
+                    tracing::error!("run_tasks_in_pty: PTY read error during init: {}", e);
+                    return Err(ShellRunnerError::Io(e));
+                }
+                Err(e) => {
+                    tracing::error!("run_tasks_in_pty: spawn_blocking failed during init: {}", e);
+                    return Err(ShellRunnerError::Pty(format!(
+                        "spawn_blocking failed: {}",
+                        e
+                    )));
+                }
+            };
+
+            if n == 0 {
+                tracing::error!("run_tasks_in_pty: PTY closed before shell ready");
+                return Err(ShellRunnerError::Pty(
+                    "PTY closed before shell ready".to_string(),
+                ));
+            }
+
+            init_buffer.push_str(&String::from_utf8_lossy(&buf[..n]));
+            tracing::trace!("run_tasks_in_pty: init buffer: {:?}", init_buffer);
+
+            if init_buffer.contains("__DEVENV_SHELL_READY__") {
+                tracing::trace!("run_tasks_in_pty: shell is ready");
+                break;
+            }
+        }
+
+        tracing::trace!("run_tasks_in_pty: waiting for task requests");
+
         // Buffer for reading PTY output
         let mut output_buffer = String::new();
 
         while let Some(request) = task_rx.recv().await {
+            tracing::trace!(
+                "run_tasks_in_pty: received task request id={}, cmd={}",
+                request.id,
+                request.command
+            );
             let id = request.id;
             let start_marker = format!("__DEVENV_TASK_START_{id}__");
             let end_marker_prefix = format!("__DEVENV_TASK_END_{id}_");
@@ -301,6 +342,7 @@ impl ShellRunner {
             let full_cmd = format!("{}\n", cmd_parts.join("; "));
 
             // Write command to PTY
+            tracing::trace!("run_tasks_in_pty: writing command to PTY:\n{}", full_cmd);
             {
                 let mut pty_guard = pty.lock().unwrap();
                 pty_guard.write_all(full_cmd.as_bytes())?;
@@ -314,39 +356,61 @@ impl ShellRunner {
             let mut exit_code: Option<i32> = None;
 
             'read_loop: loop {
-                // Read from PTY with a small buffer
-                let mut buf = [0u8; 4096];
-                let n = {
-                    let mut pty_guard = pty.lock().unwrap();
+                // Read from PTY using spawn_blocking to avoid blocking the async runtime
+                let pty_clone = Arc::clone(pty);
+                let read_result = tokio::task::spawn_blocking(move || {
+                    let mut buf = [0u8; 4096];
+                    let mut pty_guard = pty_clone.lock().unwrap();
                     match pty_guard.read(&mut buf) {
-                        Ok(n) => n,
-                        Err(e) => {
-                            error_msg = Some(format!("PTY read error: {e}"));
-                            break 'read_loop;
-                        }
+                        Ok(n) => Ok((buf, n)),
+                        Err(e) => Err(e),
+                    }
+                })
+                .await;
+
+                let (buf, n) = match read_result {
+                    Ok(Ok((buf, n))) => (buf, n),
+                    Ok(Err(e)) => {
+                        error_msg = Some(format!("PTY read error: {e}"));
+                        break 'read_loop;
+                    }
+                    Err(e) => {
+                        error_msg = Some(format!("spawn_blocking failed: {e}"));
+                        break 'read_loop;
                     }
                 };
 
                 if n == 0 {
                     // PTY closed unexpectedly
+                    tracing::trace!("run_tasks_in_pty: PTY returned 0 bytes (closed)");
                     error_msg = Some("PTY closed unexpectedly".to_string());
                     break 'read_loop;
                 }
 
-                output_buffer.push_str(&String::from_utf8_lossy(&buf[..n]));
+                let chunk = String::from_utf8_lossy(&buf[..n]);
+                tracing::trace!("run_tasks_in_pty: read {} bytes: {:?}", n, chunk);
+
+                output_buffer.push_str(&chunk);
 
                 // Process complete lines
                 while let Some(newline_pos) = output_buffer.find('\n') {
                     let line = output_buffer[..newline_pos].to_string();
                     output_buffer = output_buffer[newline_pos + 1..].to_string();
+                    // Strip ANSI codes and trim whitespace for marker detection
+                    // ANSI codes can appear around markers due to terminal control sequences
+                    let clean = strip_ansi_codes(&line);
+                    let trimmed = clean.trim();
 
-                    // Strip ANSI escape codes and trim whitespace for marker detection
-                    // This handles terminal echo and prompt formatting
-                    let clean_line = strip_ansi_codes(&line);
-                    let trimmed = clean_line.trim();
+                    // Trace log for debugging marker detection
+                    tracing::trace!(
+                        "run_tasks_in_pty: line (started={}): {:?}",
+                        started,
+                        trimmed
+                    );
 
                     // Check for start marker - must be exact match (not contained in echoed command)
                     if !started && trimmed == start_marker {
+                        tracing::trace!("run_tasks_in_pty: found start marker");
                         started = true;
                         continue;
                     }
@@ -358,6 +422,10 @@ impl ShellRunner {
                             .strip_prefix(&end_marker_prefix)
                             .and_then(|s| s.strip_suffix("__"))
                             .and_then(|s| s.parse::<i32>().ok());
+                        tracing::trace!(
+                            "run_tasks_in_pty: found end marker, exit_code={:?}",
+                            exit_code
+                        );
                         break 'read_loop;
                     }
 
@@ -387,10 +455,17 @@ impl ShellRunner {
                 success,
                 stdout_lines,
                 stderr_lines: Vec::new(),
-                error,
+                error: error.clone(),
             };
+            tracing::trace!(
+                "run_tasks_in_pty: sending result success={}, error={:?}",
+                success,
+                error
+            );
             let _ = request.response_tx.send(result);
         }
+
+        tracing::trace!("run_tasks_in_pty: task channel closed, exiting");
 
         Ok(())
     }

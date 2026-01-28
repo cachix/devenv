@@ -745,6 +745,15 @@ async fn run_reload_shell(
     let eval_cache_pool = devenv.eval_cache_pool().cloned();
     let shell_cache_key = devenv.shell_cache_key();
 
+    // For command mode, run tasks with subprocess executor BEFORE spawning PTY.
+    // The PTY will immediately exec the command and exit, so we can't use PTY tasks.
+    // For interactive mode, tasks run inside the PTY via PtyExecutor.
+    let use_pty_tasks = cmd.is_none();
+    if !use_pty_tasks {
+        // Run enterShell tasks with subprocess executor (like --no-reload mode)
+        let _ = devenv.run_enter_shell_tasks().await?;
+    }
+
     // Create reload config - watch files will be populated from eval cache
     // during the first build by DevenvShellBuilder
     let reload_config = ReloadConfig::new(vec![]);
@@ -785,45 +794,52 @@ async fn run_reload_shell(
     let (command_tx, command_rx) = mpsc::channel(16);
     let (event_tx, event_rx) = mpsc::channel(16);
 
-    // Create task channel for PTY-based task execution
-    // Tasks will be sent through this channel and executed inside the PTY
-    let (task_tx, task_rx) = mpsc::channel::<PtyTaskRequest>(16);
-
-    // Create PTY ready signal - task runner waits for this before sending tasks
-    // This prevents deadlock where task runner blocks waiting for response before PTY exists
-    let (pty_ready_tx, pty_ready_rx) = tokio::sync::oneshot::channel();
-
     // Spawn coordinator in background task
     let coordinator_handle = tokio::spawn(async move {
         ShellCoordinator::run(reload_config, builder, command_tx, event_rx).await
     });
 
-    // Spawn task runner on a separate thread with its own runtime
-    // This is needed because devenv's async code has non-Send futures (due to Nix bindings)
-    let task_handle = std::thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to create task runner runtime");
+    // For interactive mode, run tasks inside the PTY via PtyExecutor
+    // For command mode, tasks were already run above with subprocess executor
+    let (task_rx, pty_ready_tx, task_handle) = if use_pty_tasks {
+        // Create task channel for PTY-based task execution
+        let (task_tx, task_rx) = mpsc::channel::<PtyTaskRequest>(16);
 
-        rt.block_on(async move {
-            // Wait for PTY to be ready before sending tasks
-            // This prevents deadlock: task runner would block on response, but PTY isn't processing yet
-            if pty_ready_rx.await.is_err() {
-                return Err(miette::miette!("PTY ready signal failed"));
-            }
+        // Create PTY ready signal - task runner waits for this before sending tasks
+        let (pty_ready_tx, pty_ready_rx) = tokio::sync::oneshot::channel();
 
-            let executor = Arc::new(PtyExecutor::new(task_tx));
-            let devenv = devenv_for_tasks.lock().await;
-            let result = devenv.run_enter_shell_tasks_with_executor(executor).await;
-            // Executor is dropped when devenv lock is released, closing the channel
-            drop(devenv);
-            result
-        })
-    });
+        // Spawn task runner on a separate thread with its own runtime
+        // This is needed because devenv's async code has non-Send futures (due to Nix bindings)
+        let task_handle = std::thread::spawn(move || {
+            // Register with Boehm GC - required because the task runner calls
+            // Nix FFI operations (assemble, capture_shell_environment, load_tasks)
+            let _ = devenv_nix_backend::gc_register_current_thread();
+
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("Failed to create task runner runtime");
+
+            rt.block_on(async move {
+                // Wait for PTY to be ready before sending tasks
+                if pty_ready_rx.await.is_err() {
+                    return Err(miette::miette!("PTY ready signal failed"));
+                }
+
+                let executor = Arc::new(PtyExecutor::new(task_tx));
+                let devenv = devenv_for_tasks.lock().await;
+                let result = devenv.run_enter_shell_tasks_with_executor(executor).await;
+                drop(devenv);
+                result
+            })
+        });
+
+        (Some(task_rx), Some(pty_ready_tx), Some(task_handle))
+    } else {
+        (None, None, None)
+    };
 
     // Run shell runner on current thread (owns terminal)
-    // ShellRunner will: spawn PTY, signal ready, process tasks from channel, then go interactive
     let shell_runner = ShellRunner::new().with_status_line(is_interactive);
     let runner_result = shell_runner
         .run(
@@ -831,14 +847,15 @@ async fn run_reload_shell(
             event_tx,
             backend_done_tx,
             terminal_ready_rx,
-            Some(task_rx),
-            Some(pty_ready_tx),
+            task_rx,
+            pty_ready_tx,
         )
         .await;
 
-    // Wait for task runner and coordinator to finish
-    let task_result = task_handle.join();
-    if let Ok(Err(e)) = task_result {
+    // Wait for task runner (if any) and coordinator to finish
+    if let Some(handle) = task_handle
+        && let Ok(Err(e)) = handle.join()
+    {
         tracing::warn!("enterShell tasks failed: {}", e);
     }
     let _ = coordinator_handle.await;
