@@ -335,6 +335,12 @@ pub struct NixArgs<'a> {
     /// This is computed by Config::nixpkgs_config() in Rust to avoid
     /// duplicating the merging logic in Nix (bootstrapLib.nix).
     pub nixpkgs_config: NixpkgsConfig,
+
+    /// Content fingerprint of the lock file computed from all inputs' narHashes.
+    /// This is used for eval-cache invalidation when local inputs change.
+    /// Unlike the serialized lock file, this includes narHashes for path inputs
+    /// which are normally stripped when writing to disk.
+    pub lock_fingerprint: &'a str,
 }
 
 #[cfg(test)]
@@ -368,6 +374,7 @@ mod tests {
         let test_config = Config::default();
         let nixpkgs_config = test_config.nixpkgs_config(system);
         let cli_options = CliOptionsConfig::default();
+        let lock_fingerprint = "abc123";
         let args = NixArgs {
             version,
             is_development_version: false,
@@ -389,6 +396,7 @@ mod tests {
             secretspec: None,          // None value
             devenv_config: &test_config,
             nixpkgs_config,
+            lock_fingerprint,
         };
 
         let serialized = ser_nix::to_string(&args).expect("Failed to serialize NixArgs");
@@ -493,6 +501,7 @@ mod tests {
             secretspec: None,
             devenv_config: &test_config,
             nixpkgs_config,
+            lock_fingerprint: "",
         };
 
         let serialized = ser_nix::to_string(&args).expect("Failed to serialize NixArgs");

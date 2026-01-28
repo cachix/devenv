@@ -4,6 +4,7 @@ use nix_bindings_fetchers::FetchersSettings;
 use nix_bindings_flake::{
     FlakeInput, FlakeInputs, FlakeReference, FlakeReferenceParseFlags, FlakeSettings, LockFile,
 };
+use nix_bindings_store::store::Store;
 use std::path::Path;
 use std::sync::Once;
 
@@ -221,4 +222,40 @@ pub fn write_lock_file(lock_file: &LockFile, output_path: &Path) -> Result<()> {
     std::fs::write(output_path, &lock_json)
         .with_context(|| format!("Failed to write lock file to {}", output_path.display()))?;
     Ok(())
+}
+
+/// Compute a content fingerprint from all locked inputs' fingerprints.
+///
+/// This iterates over all locked nodes and combines their fingerprints into
+/// a single hash. The fingerprint for each input varies by type:
+/// - git/github/mercurial: the revision hash
+/// - tarball/path: the narHash in SRI format
+///
+/// Returns a hex-encoded BLAKE3 hash of the combined fingerprints.
+/// If no lock file exists or no inputs have fingerprints, returns the hash of an empty string.
+pub fn compute_lock_fingerprint(lock_file: Option<&LockFile>, store: &Store) -> Result<String> {
+    let mut parts: Vec<String> = Vec::new();
+
+    if let Some(lock) = lock_file {
+        let mut iter = lock.inputs_iterator()?;
+
+        // The iterator starts pointing at the first element
+        loop {
+            let attr_path = iter.attr_path()?;
+            if let Some(fingerprint) = iter.fingerprint(store)? {
+                tracing::debug!("attr_path: {}, fingerprint: {}", attr_path, fingerprint);
+                parts.push(format!("{}={}", attr_path, fingerprint));
+            }
+            if !iter.next() {
+                break;
+            }
+        }
+    }
+
+    // Sort for deterministic output
+    parts.sort();
+
+    let combined = parts.join(";");
+    let hash = blake3::hash(combined.as_bytes());
+    Ok(hash.to_hex().to_string())
 }

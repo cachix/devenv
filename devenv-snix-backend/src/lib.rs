@@ -122,6 +122,11 @@ impl SnixBackend {
 
 #[async_trait(?Send)]
 impl NixBackend for SnixBackend {
+    async fn lock_fingerprint(&self) -> Result<String> {
+        // Return empty fingerprint for now - snix backend is not yet fully implemented
+        Ok(String::new())
+    }
+
     async fn assemble(&self, _args: &NixArgs<'_>) -> Result<()> {
         Ok(())
     }

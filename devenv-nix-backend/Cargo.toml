@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+blake3.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
 miette.workspace = true

@@ -1698,6 +1698,10 @@ impl Devenv {
         // Parse CLI options into structured format with typed values
         let cli_options = CliOptionsConfig(parse_cli_options(&self.global_options.option)?);
 
+        // Compute lock fingerprint for eval-cache invalidation
+        // This includes narHashes from local path inputs that aren't stored in devenv.lock
+        let lock_fingerprint = self.nix.lock_fingerprint().await?;
+
         // Create the Nix arguments struct
         let nixpkgs_config = config.nixpkgs_config(&self.global_options.system);
         let args = NixArgs {
@@ -1721,6 +1725,7 @@ impl Devenv {
             secretspec: secretspec_data.as_ref(),
             devenv_config: &config,
             nixpkgs_config,
+            lock_fingerprint: &lock_fingerprint,
         };
 
         // Serialize NixArgs for caching and return

@@ -874,6 +874,16 @@ impl NixRustBackend {
 
 #[async_trait(?Send)]
 impl NixBackend for NixRustBackend {
+    async fn lock_fingerprint(&self) -> Result<String> {
+        let lock_file_path = self.paths.root.join("devenv.lock");
+        let lock_file = crate::load_lock_file(&self.fetchers_settings, &lock_file_path)
+            .to_miette()
+            .wrap_err("Failed to load lock file for fingerprint computation")?;
+        crate::compute_lock_fingerprint(lock_file.as_ref(), &self.store)
+            .to_miette()
+            .wrap_err("Failed to compute lock fingerprint")
+    }
+
     async fn assemble(&self, args: &NixArgs<'_>) -> Result<()> {
         // Initialize caching eval state if not already set
         if self.caching_eval_state.get().is_none() {

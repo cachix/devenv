@@ -57,6 +57,7 @@ impl TestNixArgs {
             secretspec: None,
             devenv_config: config,
             nixpkgs_config,
+            lock_fingerprint: "",
         }
     }
 }
