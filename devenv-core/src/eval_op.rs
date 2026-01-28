@@ -49,8 +49,9 @@ impl From<EvalOp> for devenv_activity::EvalOp {
 }
 
 // Regex patterns for parsing operations from log messages
-static EVALUATED_FILE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new("^evaluating file '(?P<source>.*)'$").expect("invalid regex"));
+static EVALUATED_FILE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new("^evaluating file '(?P<source>.*)'( \\(cached\\))?$").expect("invalid regex")
+});
 static COPIED_SOURCE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new("^copied source '(?P<source>.*)' -> '(?P<target>.*)'$").expect("invalid regex")
 });
@@ -169,6 +170,18 @@ mod tests {
     #[test]
     fn test_evaluated_file() {
         let log = create_log("evaluating file '/path/to/file'");
+        let op = EvalOp::from_internal_log(&log);
+        assert_eq!(
+            op,
+            Some(EvalOp::EvaluatedFile {
+                source: PathBuf::from("/path/to/file"),
+            })
+        );
+    }
+
+    #[test]
+    fn test_evaluated_file_cached() {
+        let log = create_log("evaluating file '/path/to/file' (cached)");
         let op = EvalOp::from_internal_log(&log);
         assert_eq!(
             op,
