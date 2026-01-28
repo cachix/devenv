@@ -126,6 +126,7 @@ fn main() -> Result<()> {
         &cli.command,
         Some(Commands::Mcp { http: None }) // stdio mode needs legacy CLI (stderr output)
             | Some(Commands::Lsp { .. }) // LSP needs direct stdout for protocol/config output
+            | Some(Commands::PrintPaths) // print output directly, no TUI needed
     );
 
     if cli.global_options.use_tracing_mode() {
