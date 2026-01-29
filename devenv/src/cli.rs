@@ -203,9 +203,7 @@ pub enum Commands {
         http: Option<Option<u16>>,
     },
 
-    #[command(
-        about = "Start the nixd language server for devenv.nix. https://devenv.sh/editor-support/"
-    )]
+    #[command(about = "Start the nixd language server for devenv.nix.")]
     Lsp {
         #[arg(long, help = "Print nixd configuration and exit")]
         print_config: bool,
