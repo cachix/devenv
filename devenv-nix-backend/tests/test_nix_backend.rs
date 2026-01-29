@@ -1266,35 +1266,22 @@ async fn test_backend_with_nix_debugger_enabled() {
 /// Odd number of override elements are silently ignored (chunks_exact(2) behavior)
 #[nix_test]
 async fn test_update_with_invalid_override_input() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
+    let yaml = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+"#;
 
     let mut global_options = GlobalOptions::default();
     // Odd number of elements - should be pairs
     // chunks_exact(2) will ignore the remainder, so this is safe
     global_options.override_input = vec!["nixpkgs".to_string()];
 
-    let backend = NixRustBackend::new(
-        paths.clone(),
-        config.clone(),
-        global_options,
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-        None,
-        None,
-    )
-    .expect("Failed to create backend");
-    backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(
-            &paths,
-            &config,
-            config.nixpkgs_config(get_current_system()),
-        ))
-        .await
-        .expect("Failed to assemble");
+    let (_temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, global_options);
 
-    // Update should succeed - malformed override is ignored
+    // Update should succeed - malformed override is ignored (no assemble needed for update-only tests)
     let result = backend.update(&None).await;
     assert!(
         result.is_ok(),
@@ -1565,30 +1552,17 @@ async fn test_build_gc_root_already_exists() {
 /// Test update() when lock file already exists - should update in place
 #[nix_test]
 async fn test_update_lock_file_already_exists() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
+    let yaml = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+"#;
 
-    let backend = NixRustBackend::new(
-        paths.clone(),
-        config.clone(),
-        GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-        None,
-        None,
-    )
-    .expect("Failed to create backend");
-    backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(
-            &paths,
-            &config,
-            config.nixpkgs_config(get_current_system()),
-        ))
-        .await
-        .expect("Failed to assemble");
+    let (_temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, GlobalOptions::default());
 
-    // Create initial lock
+    // Create initial lock (no assemble needed for update-only tests)
     backend
         .update(&None)
         .await
@@ -2525,13 +2499,11 @@ async fn test_backend_reuse_across_operations() {
 /// Test update with many inputs - verify all inputs are successfully locked
 #[nix_test]
 async fn test_update_with_many_inputs() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let _temp_dir = TempDir::new().expect("Failed to create temp dir");
-
-    let yaml_content = r#"
-inputs:
+    let yaml_content = r#"inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixos-24.05
+  git-hooks:
+    url: github:cachix/git-hooks.nix
   devenv:
     url: github:cachix/devenv/v1.0
   rust-overlay:
@@ -2541,32 +2513,11 @@ inputs:
   flake-utils:
     url: github:numtide/flake-utils
 "#;
-    std::fs::write(get_repo_root().join("devenv.yaml"), yaml_content)
-        .expect("Failed to write devenv.yaml");
 
-    let paths = create_test_paths_in(get_repo_root().as_path());
-    let config = load_config(get_repo_root().as_path());
+    let (_temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml_content, None, GlobalOptions::default());
 
-    let backend = NixRustBackend::new(
-        paths.clone(),
-        config.clone(),
-        GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-        None,
-        None,
-    )
-    .expect("Failed to create backend");
-    backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(
-            &paths,
-            &config,
-            config.nixpkgs_config(get_current_system()),
-        ))
-        .await
-        .expect("Failed to assemble");
-
-    // Update with 5 inputs
+    // Update with 6 inputs (no assemble needed for update-only tests)
     let result = backend.update(&None).await;
     assert!(
         result.is_ok(),
@@ -2578,7 +2529,7 @@ inputs:
     let lock_path = backend.paths.root.join("devenv.lock");
     assert!(lock_path.exists(), "Lock file should be created");
 
-    // Parse lock file to verify all 5 inputs are locked
+    // Parse lock file to verify all 6 inputs are locked
     let lock_content = std::fs::read_to_string(&lock_path).expect("Failed to read lock file");
     let lock_json: serde_json::Value =
         serde_json::from_str(&lock_content).expect("Lock file should be valid JSON");
@@ -2588,9 +2539,10 @@ inputs:
         .get("nodes")
         .expect("Lock file should have 'nodes' field");
 
-    // Verify all 5 inputs are present in the lock file
+    // Verify all 6 inputs are present in the lock file
     let expected_inputs = vec![
         "nixpkgs",
+        "git-hooks",
         "devenv",
         "rust-overlay",
         "systems",
@@ -2608,13 +2560,11 @@ inputs:
 /// Test update with nested input follows - verify "follows" references work
 #[nix_test]
 async fn test_update_with_nested_input_follows() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let _temp_dir = TempDir::new().expect("Failed to create temp dir");
-
-    let yaml_content = r#"
-inputs:
+    let yaml_content = r#"inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixos-24.05
+  git-hooks:
+    url: github:cachix/git-hooks.nix
   systems:
     url: github:nix-systems/default
   flake-utils:
@@ -2623,32 +2573,11 @@ inputs:
       systems:
         follows: /systems
 "#;
-    std::fs::write(get_repo_root().join("devenv.yaml"), yaml_content)
-        .expect("Failed to write devenv.yaml");
 
-    let paths = create_test_paths_in(get_repo_root().as_path());
-    let config = load_config(get_repo_root().as_path());
+    let (_temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml_content, None, GlobalOptions::default());
 
-    let backend = NixRustBackend::new(
-        paths.clone(),
-        config.clone(),
-        GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-        None,
-        None,
-    )
-    .expect("Failed to create backend");
-    backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(
-            &paths,
-            &config,
-            config.nixpkgs_config(get_current_system()),
-        ))
-        .await
-        .expect("Failed to assemble");
-
-    // Update with "follows" references
+    // Update with "follows" references (no assemble needed for update-only tests)
     let result = backend.update(&None).await;
     assert!(
         result.is_ok(),
