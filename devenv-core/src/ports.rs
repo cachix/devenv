@@ -10,6 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::net::TcpListener;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -97,6 +98,10 @@ pub struct PortAllocator {
     ports: Mutex<HashMap<(String, String), PortEntry>>,
     /// When true, fail if the requested port is in use instead of finding the next available.
     strict: AtomicBool,
+    /// When true, allow replay to accept ports already in use (skip binding).
+    allow_in_use: AtomicBool,
+    /// When false, return the base port without reserving or caching.
+    enabled: AtomicBool,
 }
 
 impl PortAllocator {
@@ -105,6 +110,8 @@ impl PortAllocator {
             host: DEFAULT_HOST.to_string(),
             ports: Mutex::new(HashMap::new()),
             strict: AtomicBool::new(false),
+            allow_in_use: AtomicBool::new(false),
+            enabled: AtomicBool::new(false),
         }
     }
 
@@ -122,6 +129,31 @@ impl PortAllocator {
         self.strict.load(Ordering::SeqCst)
     }
 
+    /// Allow replay to accept ports already in use (skip binding).
+    ///
+    /// This is intended for scenarios where processes are already running and
+    /// an eval cache hit should reuse the previously allocated ports.
+    pub fn set_allow_in_use(&self, allow: bool) {
+        self.allow_in_use.store(allow, Ordering::SeqCst);
+    }
+
+    /// Check if replay should accept ports already in use.
+    pub fn allow_in_use(&self) -> bool {
+        self.allow_in_use.load(Ordering::SeqCst)
+    }
+
+    /// Enable or disable port allocation.
+    ///
+    /// When disabled, `allocate()` returns the base port without reserving it.
+    pub fn set_enabled(&self, enabled: bool) {
+        self.enabled.store(enabled, Ordering::SeqCst);
+    }
+
+    /// Check if port allocation is enabled.
+    pub fn is_enabled(&self) -> bool {
+        self.enabled.load(Ordering::SeqCst)
+    }
+
     /// Allocate a port for a process, with caching by (process_name, port_name).
     ///
     /// If this (process_name, port_name) pair was already allocated, returns the
@@ -131,6 +163,10 @@ impl PortAllocator {
     ///
     /// In strict mode, only tries the base port and fails with process info if unavailable.
     pub fn allocate(&self, process_name: &str, port_name: &str, base: u16) -> Result<u16, String> {
+        if !self.enabled.load(Ordering::SeqCst) {
+            return Ok(base);
+        }
+
         let mut ports = self.ports.lock().map_err(|e| e.to_string())?;
         let key = (process_name.to_string(), port_name.to_string());
 
@@ -284,7 +320,22 @@ impl PortAllocator {
                 );
                 Ok(port)
             }
-            Err(_) => {
+            Err(e) => {
+                if self.allow_in_use.load(Ordering::SeqCst) && e.kind() == ErrorKind::AddrInUse {
+                    tracing::debug!(
+                        "Port {} is in use, accepting due to allow_in_use replay mode",
+                        port
+                    );
+                    ports.insert(
+                        key,
+                        PortEntry {
+                            port,
+                            base: port,
+                            listener: None,
+                        },
+                    );
+                    return Ok(port);
+                }
                 let info = get_process_using_port(port);
                 Err(format!("Port {} unavailable{}", port, info))
             }
@@ -299,6 +350,7 @@ impl PortAllocator {
             ports.clear();
         }
     }
+
 }
 
 impl ReplayableResource for PortAllocator {
@@ -384,6 +436,7 @@ mod tests {
     #[test]
     fn test_port_allocator_basic() {
         let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
         let port = allocator.allocate("server", "http", 49152).unwrap();
         assert!(port >= 49152);
     }
@@ -391,6 +444,7 @@ mod tests {
     #[test]
     fn test_port_allocator_skips_already_allocated() {
         let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
 
         // Allocate first port for server1
         let port1 = allocator.allocate("server1", "http", 49200).unwrap();
@@ -404,6 +458,7 @@ mod tests {
     #[test]
     fn test_port_allocator_caching() {
         let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
 
         // First allocation
         let port1 = allocator.allocate("server1", "http", 49200).unwrap();
@@ -426,6 +481,7 @@ mod tests {
     #[test]
     fn test_port_allocator_take_reservations() {
         let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
 
         let port1 = allocator.allocate("server1", "http", 49300).unwrap();
         let port2 = allocator.allocate("server2", "http", 49400).unwrap();
@@ -445,6 +501,7 @@ mod tests {
     #[test]
     fn test_port_released_after_drop() {
         let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
         let port = allocator.allocate("server", "http", 49500).unwrap();
 
         // Port should be held
@@ -461,6 +518,7 @@ mod tests {
     #[test]
     fn test_snapshot_and_replay() {
         let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
 
         // Allocate some ports
         let port1 = allocator.allocate("server1", "http", 49600).unwrap();
@@ -494,6 +552,7 @@ mod tests {
     #[test]
     fn test_allocate_exact_success() {
         let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
 
         // First, find an available port
         let port = allocator.allocate("server", "http", 49800).unwrap();
@@ -508,6 +567,7 @@ mod tests {
     #[test]
     fn test_allocate_exact_idempotent() {
         let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
 
         let port = allocator.allocate("server", "http", 49850).unwrap();
 
@@ -519,6 +579,7 @@ mod tests {
     #[test]
     fn test_allocate_exact_conflict() {
         let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
 
         let port = allocator.allocate("server", "http", 49900).unwrap();
 
@@ -532,6 +593,7 @@ mod tests {
     #[test]
     fn test_clear() {
         let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
 
         allocator.allocate("server1", "http", 49950).unwrap();
         allocator.allocate("server2", "grpc", 49960).unwrap();
@@ -545,10 +607,11 @@ mod tests {
     #[test]
     fn test_replay_failure_when_port_in_use() {
         // Allocate a port externally
-        let external = TcpListener::bind(format!("{}:49970", DEFAULT_HOST)).unwrap();
+        let external = TcpListener::bind(format!("{}:0", DEFAULT_HOST)).unwrap();
         let external_port = external.local_addr().unwrap().port();
 
         let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
         let spec = PortSpec {
             allocations: vec![PortAllocation {
                 process_name: "server".to_string(),
@@ -564,4 +627,20 @@ mod tests {
 
         drop(external);
     }
+
+    #[test]
+    fn test_allocate_exact_accepts_in_use_when_allowed() {
+        let external = TcpListener::bind(format!("{}:0", DEFAULT_HOST)).unwrap();
+        let port = external.local_addr().unwrap().port();
+
+        let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
+        allocator.set_allow_in_use(true);
+
+        let exact = allocator.allocate_exact("server", "http", port).unwrap();
+        assert_eq!(exact, port);
+
+        drop(external);
+    }
+
 }

@@ -120,6 +120,7 @@ mod tests {
     #[test]
     fn test_snapshot_with_ports() {
         let allocator = Arc::new(PortAllocator::new());
+        allocator.set_enabled(true);
         allocator.allocate("server", "http", 50000).unwrap();
 
         let manager = ResourceManager::new(allocator);
@@ -132,6 +133,7 @@ mod tests {
     #[test]
     fn test_replay_success() {
         let allocator = Arc::new(PortAllocator::new());
+        allocator.set_enabled(true);
         let port = allocator.allocate("server", "http", 50100).unwrap();
 
         let manager = ResourceManager::new(allocator.clone());
@@ -169,6 +171,7 @@ mod tests {
     #[test]
     fn test_clear_all() {
         let allocator = Arc::new(PortAllocator::new());
+        allocator.set_enabled(true);
         allocator.allocate("server", "http", 50200).unwrap();
 
         let manager = ResourceManager::new(allocator);
