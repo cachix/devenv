@@ -161,6 +161,15 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
         ActivityLevel::Info
     };
 
+    // In reload shell mode, backend_done is just a handoff signal; don't trigger global shutdown.
+    let shutdown_on_backend_done = !matches!(
+        &cli.command,
+        Some(Commands::Shell {
+            no_reload: false,
+            ..
+        })
+    );
+
     // Shutdown coordination
     // Signal handlers catch external signals (SIGINT from `kill`, SIGTERM, etc.)
     // TUI also handles Ctrl+C as keyboard event and sets last_signal manually
@@ -196,8 +205,12 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     });
 
     // TUI on main thread (owns terminal)
-    let tui_app = devenv_tui::TuiApp::new(activity_rx, shutdown.clone()).filter_level(filter_level);
-    let _ = tui_app.run(backend_done_rx).await;
+    // Runs until backend signals completion, then drains remaining events
+    let _ = devenv_tui::TuiApp::new(activity_rx, shutdown)
+        .filter_level(filter_level)
+        .shutdown_on_backend_done(shutdown_on_backend_done)
+        .run(backend_done_rx)
+        .await;
 
     // Restore terminal to normal state (disable raw mode, show cursor)
     devenv_tui::app::restore_terminal();

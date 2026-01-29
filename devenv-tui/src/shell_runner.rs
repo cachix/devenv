@@ -126,15 +126,24 @@ impl Drop for RawModeGuard {
 }
 
 /// PTY wrapper for easier management.
+///
+/// Reader and writer are protected by separate locks to avoid blocking
+/// input writes while a blocking read is in progress.
 struct Pty {
-    master: Box<dyn portable_pty::MasterPty + Send>,
-    child: Box<dyn portable_pty::Child + Send + Sync>,
-    reader: Box<dyn Read + Send>,
-    writer: Box<dyn Write + Send>,
+    master: Mutex<Box<dyn portable_pty::MasterPty + Send>>,
+    child: Mutex<Box<dyn portable_pty::Child + Send + Sync>>,
+    reader: Mutex<Box<dyn Read + Send>>,
+    writer: Mutex<Box<dyn Write + Send>>,
 }
 
 impl Pty {
     fn spawn(cmd: CommandBuilder, size: PtySize) -> Result<Self, ShellRunnerError> {
+        // DEBUG: log the command being spawned
+        let _ = std::fs::write("/tmp/devenv-pty-spawn.txt", format!(
+            "Pty::spawn called\nargv={:?}\n",
+            cmd.get_argv()
+        ));
+
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(size)
@@ -155,40 +164,46 @@ impl Pty {
             .map_err(|e| ShellRunnerError::Pty(e.to_string()))?;
 
         Ok(Self {
-            master: pair.master,
-            child,
-            reader,
-            writer,
+            master: Mutex::new(pair.master),
+            child: Mutex::new(child),
+            reader: Mutex::new(reader),
+            writer: Mutex::new(writer),
         })
     }
 
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.reader.read(buf)
+    fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        let mut reader = self.reader.lock().unwrap();
+        reader.read(buf)
     }
 
-    fn write_all(&mut self, data: &[u8]) -> io::Result<()> {
-        self.writer.write_all(data)
+    fn write_all(&self, data: &[u8]) -> io::Result<()> {
+        let mut writer = self.writer.lock().unwrap();
+        writer.write_all(data)
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        self.writer.flush()
+    fn flush(&self) -> io::Result<()> {
+        let mut writer = self.writer.lock().unwrap();
+        writer.flush()
     }
 
     fn resize(&self, size: PtySize) -> Result<(), ShellRunnerError> {
-        self.master
+        let master = self.master.lock().unwrap();
+        master
             .resize(size)
             .map_err(|e| ShellRunnerError::Pty(e.to_string()))
     }
 
     #[allow(dead_code)]
-    fn try_wait(&mut self) -> Result<Option<portable_pty::ExitStatus>, ShellRunnerError> {
-        self.child
+    fn try_wait(&self) -> Result<Option<portable_pty::ExitStatus>, ShellRunnerError> {
+        let mut child = self.child.lock().unwrap();
+        child
             .try_wait()
             .map_err(|e| ShellRunnerError::Pty(e.to_string()))
     }
 
-    fn kill(&mut self) -> Result<(), ShellRunnerError> {
-        self.child
+    fn kill(&self) -> Result<(), ShellRunnerError> {
+        let mut child = self.child.lock().unwrap();
+        child
             .kill()
             .map_err(|e| ShellRunnerError::Pty(e.to_string()))
     }
@@ -250,8 +265,9 @@ impl ShellRunner {
     /// Tasks are processed until the channel is closed.
     async fn run_tasks_in_pty(
         &mut self,
-        pty: &Arc<Mutex<Pty>>,
+        pty: &Arc<Pty>,
         task_rx: &mut mpsc::Receiver<PtyTaskRequest>,
+        vt: &mut Vt,
     ) -> Result<(), ShellRunnerError> {
         tracing::trace!("run_tasks_in_pty: waiting for shell to be ready");
 
@@ -261,8 +277,7 @@ impl ShellRunner {
             let pty_clone = Arc::clone(pty);
             let read_result = tokio::task::spawn_blocking(move || {
                 let mut buf = [0u8; 4096];
-                let mut pty_guard = pty_clone.lock().unwrap();
-                match pty_guard.read(&mut buf) {
+                match pty_clone.read(&mut buf) {
                     Ok(n) => Ok((buf, n)),
                     Err(e) => Err(e),
                 }
@@ -291,7 +306,9 @@ impl ShellRunner {
                 ));
             }
 
-            init_buffer.push_str(&String::from_utf8_lossy(&buf[..n]));
+            let chunk = String::from_utf8_lossy(&buf[..n]);
+            vt.feed_str(&chunk);
+            init_buffer.push_str(&chunk);
             tracing::trace!("run_tasks_in_pty: init buffer: {:?}", init_buffer);
 
             if init_buffer.contains("__DEVENV_SHELL_READY__") {
@@ -343,11 +360,8 @@ impl ShellRunner {
 
             // Write command to PTY
             tracing::trace!("run_tasks_in_pty: writing command to PTY:\n{}", full_cmd);
-            {
-                let mut pty_guard = pty.lock().unwrap();
-                pty_guard.write_all(full_cmd.as_bytes())?;
-                pty_guard.flush()?;
-            }
+            pty.write_all(full_cmd.as_bytes())?;
+            pty.flush()?;
 
             // Read PTY output until we see the end marker
             let mut stdout_lines = Vec::new();
@@ -360,8 +374,7 @@ impl ShellRunner {
                 let pty_clone = Arc::clone(pty);
                 let read_result = tokio::task::spawn_blocking(move || {
                     let mut buf = [0u8; 4096];
-                    let mut pty_guard = pty_clone.lock().unwrap();
-                    match pty_guard.read(&mut buf) {
+                    match pty_clone.read(&mut buf) {
                         Ok(n) => Ok((buf, n)),
                         Err(e) => Err(e),
                     }
@@ -388,6 +401,7 @@ impl ShellRunner {
                 }
 
                 let chunk = String::from_utf8_lossy(&buf[..n]);
+                vt.feed_str(&chunk);
                 tracing::trace!("run_tasks_in_pty: read {} bytes: {:?}", n, chunk);
 
                 output_buffer.push_str(&chunk);
@@ -511,7 +525,8 @@ impl ShellRunner {
 
         // Spawn PTY early so tasks can run in it (before TUI exits)
         // Hot-reload hook is included in the shell script (see devenv.rs prepare_shell)
-        let pty = Arc::new(Mutex::new(Pty::spawn(initial_cmd, self.size)?));
+        let pty = Arc::new(Pty::spawn(initial_cmd, self.size)?);
+        let mut vt = Vt::new(self.size.cols as usize, self.size.rows as usize);
 
         // Signal that PTY is ready for tasks (unblocks task runner)
         if let Some(tx) = pty_ready_tx {
@@ -520,24 +535,39 @@ impl ShellRunner {
 
         // Run any tasks in the PTY (TUI still active, showing progress)
         if let Some(mut task_rx) = task_rx {
-            self.run_tasks_in_pty(&pty, &mut task_rx).await?;
+            self.run_tasks_in_pty(&pty, &mut task_rx, &mut vt).await?;
         }
 
         // Signal TUI that initial build is complete and we're ready for terminal
+        tracing::trace!("shell_runner: sending backend_done_tx");
         let _ = backend_done_tx.send(());
 
         // Wait for TUI to release terminal (if running with TUI)
         if let Some(rx) = terminal_ready_rx {
+            tracing::trace!("shell_runner: waiting for terminal_ready_rx");
             let _ = rx.await;
+            tracing::trace!("shell_runner: terminal_ready_rx received");
         }
 
         // Enter raw mode
+        tracing::trace!("shell_runner: entering raw mode");
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            let fd = io::stdin().as_raw_fd();
+            let is_tty = unsafe { libc::isatty(fd) } == 1;
+            tracing::trace!("shell_runner: stdin isatty={}", is_tty);
+        }
         let _raw_guard = RawModeGuard::new()?;
+        tracing::trace!("shell_runner: raw mode active");
 
         // Note: We intentionally don't use alternate screen to preserve shell history
 
-        // Set up terminal state tracking
-        let mut vt = Vt::new(self.size.cols as usize, self.size.rows as usize);
+        // Nudge the shell to render a fresh prompt after terminal handoff.
+        if self.show_status_line {
+            pty.write_all(b"\n")?;
+            pty.flush()?;
+        }
 
         // Set up event channel
         let (event_tx_internal, mut event_rx_internal) = mpsc::channel::<Event>(100);
@@ -547,10 +577,15 @@ impl ShellRunner {
         std::thread::spawn(move || {
             let mut stdin = io::stdin();
             let mut buf = [0u8; 1024];
+            let mut logged_first = false;
             loop {
                 match stdin.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
+                        if !logged_first {
+                            tracing::trace!("shell_runner: stdin read {} bytes (first)", n);
+                            logged_first = true;
+                        }
                         if stdin_tx
                             .blocking_send(Event::Stdin(buf[..n].to_vec()))
                             .is_err()
@@ -558,7 +593,10 @@ impl ShellRunner {
                             break;
                         }
                     }
-                    Err(_) => break,
+                    Err(e) => {
+                        tracing::warn!("shell_runner: stdin read error: {}", e);
+                        break;
+                    }
                 }
             }
         });
@@ -568,17 +606,21 @@ impl ShellRunner {
         let pty_reader = pty.clone();
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
+            let mut logged_first = false;
             loop {
-                let result = {
-                    let mut pty = pty_reader.lock().unwrap();
-                    pty.read(&mut buf)
-                };
+                let result = pty_reader.read(&mut buf);
                 match result {
                     Ok(0) => {
+                        let status = pty_reader.try_wait().ok().flatten();
+                        tracing::warn!("PTY read returned 0 bytes (closed). status={:?}", status);
                         let _ = pty_tx.blocking_send(Event::PtyExit);
                         break;
                     }
                     Ok(n) => {
+                        if !logged_first {
+                            tracing::trace!("shell_runner: PTY read {} bytes (first)", n);
+                            logged_first = true;
+                        }
                         if pty_tx
                             .blocking_send(Event::PtyOutput(buf[..n].to_vec()))
                             .is_err()
@@ -586,7 +628,9 @@ impl ShellRunner {
                             break;
                         }
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        let status = pty_reader.try_wait().ok().flatten();
+                        tracing::warn!("PTY read error: {}. status={:?}", e, status);
                         let _ = pty_tx.blocking_send(Event::PtyExit);
                         break;
                     }
@@ -605,15 +649,13 @@ impl ShellRunner {
         });
 
         // Main event loop
+        tracing::trace!("shell_runner: starting event loop");
         let result = self
             .event_loop(&pty, &mut vt, &mut event_rx_internal, &event_tx)
             .await;
 
         // Clean up
-        {
-            let mut pty_guard = pty.lock().unwrap();
-            let _ = pty_guard.kill();
-        }
+        let _ = pty.kill();
 
         // Notify coordinator that shell exited
         let _ = event_tx.send(ShellEvent::Exited).await;
@@ -624,7 +666,7 @@ impl ShellRunner {
     /// Main event loop handling stdin, PTY output, and coordinator commands.
     async fn event_loop(
         &mut self,
-        pty: &Arc<Mutex<Pty>>,
+        pty: &Arc<Pty>,
         vt: &mut Vt,
         event_rx: &mut mpsc::Receiver<Event>,
         coordinator_tx: &mpsc::Sender<ShellEvent>,
@@ -635,9 +677,8 @@ impl ShellRunner {
             match event {
                 Event::Stdin(data) => {
                     // Write to PTY
-                    let mut pty_guard = pty.lock().unwrap();
-                    pty_guard.write_all(&data)?;
-                    pty_guard.flush()?;
+                    pty.write_all(&data)?;
+                    pty.flush()?;
                 }
 
                 Event::PtyOutput(data) => {
@@ -711,8 +752,7 @@ impl ShellRunner {
             let new_size = get_terminal_size();
             if new_size.cols != self.size.cols || new_size.rows != self.size.rows {
                 self.size = new_size;
-                let pty_guard = pty.lock().unwrap();
-                let _ = pty_guard.resize(self.size);
+                let _ = pty.resize(self.size);
                 let _ = coordinator_tx
                     .send(ShellEvent::Resize {
                         cols: self.size.cols,

@@ -12,7 +12,7 @@ use devenv_activity::{ActivityEvent, ActivityLevel};
 use iocraft::prelude::*;
 use std::io::{self, Write};
 use std::sync::{Arc, RwLock};
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::{Notify, mpsc, watch};
 use tokio_shutdown::{Shutdown, Signal};
 use tracing::debug;
 
@@ -54,6 +54,7 @@ pub struct TuiApp {
     config: TuiConfig,
     activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
     shutdown: Arc<Shutdown>,
+    shutdown_on_backend_done: bool,
 }
 
 impl TuiApp {
@@ -66,6 +67,7 @@ impl TuiApp {
             config: TuiConfig::default(),
             activity_rx,
             shutdown,
+            shutdown_on_backend_done: true,
         }
     }
 
@@ -100,10 +102,18 @@ impl TuiApp {
         self
     }
 
+    /// Control whether backend completion should trigger global shutdown.
+    /// Disable for shell reload handoff where the backend must keep running.
+    pub fn shutdown_on_backend_done(mut self, enabled: bool) -> Self {
+        self.shutdown_on_backend_done = enabled;
+        self
+    }
+
     /// Run the TUI application until the backend completes.
     ///
-    /// The `backend_done` receiver signals when the backend has fully completed
-    /// (including cleanup). The TUI will drain any remaining events and then exit.
+    /// The `backend_done` receiver signals when the backend has completed its
+    /// initial phase (or fully completed). The TUI will drain any remaining
+    /// events and then exit.
     pub async fn run(
         self,
         backend_done: tokio::sync::oneshot::Receiver<()>,
@@ -112,6 +122,8 @@ impl TuiApp {
         let activity_model = Arc::new(RwLock::new(ActivityModel::with_config(config.clone())));
         let notify = Arc::new(Notify::new());
         let shutdown = self.shutdown;
+        let shutdown_on_backend_done = self.shutdown_on_backend_done;
+        let (exit_tx, mut exit_rx) = watch::channel(false);
 
         // Spawn event processor with batching for performance
         // This only writes to ActivityModel, never touches UiState
@@ -123,6 +135,7 @@ impl TuiApp {
             let event_batch_size = config.event_batch_size;
             let mut activity_rx = self.activity_rx;
             let mut backend_done = backend_done;
+            let exit_tx = exit_tx.clone();
             async move {
                 let mut batch = Vec::with_capacity(event_batch_size);
 
@@ -131,6 +144,10 @@ impl TuiApp {
                         event = activity_rx.recv() => {
                             let Some(event) = event else {
                                 // Channel closed unexpectedly
+                                let _ = exit_tx.send(true);
+                                if shutdown_on_backend_done {
+                                    shutdown.shutdown();
+                                }
                                 break;
                             };
 
@@ -166,15 +183,14 @@ impl TuiApp {
                                 notify.notify_waiters();
                             }
 
+                            let _ = exit_tx.send(true);
+                            if shutdown_on_backend_done {
+                                shutdown.shutdown();
+                            }
                             break;
                         }
                     }
                 }
-
-                // Signal completion (idempotent - no-op if Ctrl+C already triggered).
-                // Model writes above are visible to the final render because the RwLock
-                // is released before this call.
-                shutdown.shutdown();
             }
         });
 
@@ -191,6 +207,12 @@ impl TuiApp {
             tokio::select! {
                 _ = shutdown.wait_for_shutdown() => {
                     break;
+                }
+
+                changed = exit_rx.changed() => {
+                    if changed.is_err() || *exit_rx.borrow() {
+                        break;
+                    }
                 }
 
                 _ = run_view(
