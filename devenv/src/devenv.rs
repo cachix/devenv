@@ -25,7 +25,7 @@ use similar::{ChangeTag, TextDiff};
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
 use std::sync::{
@@ -35,6 +35,7 @@ use std::sync::{
 use tasks::{Tasks, TasksUi};
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::net::UnixStream;
 use tokio::process;
 use tokio::sync::{OnceCell, RwLock, Semaphore};
 use tracing::{Instrument, debug, info, instrument, trace, warn};
@@ -354,6 +355,39 @@ impl Devenv {
 
     pub fn processes_pid(&self) -> PathBuf {
         self.devenv_dotfile.join("processes.pid")
+    }
+
+    async fn processes_running(&self) -> bool {
+        if self.processes_pid().exists() {
+            if let Ok(pid_str) = fs::read_to_string(self.processes_pid()).await {
+                if let Ok(pid) = pid_str.trim().parse::<i32>() {
+                    match signal::kill(Pid::from_raw(pid), None) {
+                        Ok(_) => return true,
+                        Err(nix::errno::Errno::EPERM) => return true,
+                        Err(nix::errno::Errno::ESRCH) => {}
+                        Err(_) => {}
+                    }
+                }
+            }
+        }
+
+        let socket_path = self.devenv_runtime.join("pc.sock");
+        let Ok(meta) = fs::metadata(&socket_path).await else {
+            return false;
+        };
+        if !meta.file_type().is_socket() {
+            return false;
+        }
+
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(200),
+            UnixStream::connect(&socket_path),
+        )
+        .await
+        {
+            Ok(Ok(_)) => true,
+            _ => false,
+        }
     }
 
     pub fn paths(&self) -> DevenvPaths {
@@ -1282,6 +1316,7 @@ impl Devenv {
     ) -> Result<RunMode> {
         // Set strict port mode before assemble (which triggers port allocation)
         self.port_allocator.set_strict(options.strict_ports);
+        self.port_allocator.set_enabled(true);
 
         self.assemble(false).await?;
         if !self.has_processes().await? {
@@ -1523,6 +1558,9 @@ impl Devenv {
     /// Assemble the devenv environment and return the serialized NixArgs string.
     /// The returned string can be used with `import bootstrap/default.nix <args>`.
     pub async fn assemble(&self, is_testing: bool) -> Result<String> {
+        let processes_running = self.processes_running().await;
+        self.port_allocator.set_allow_in_use(processes_running);
+
         if self.assembled.load(Ordering::Acquire) {
             return Ok(self
                 .nix_args_string

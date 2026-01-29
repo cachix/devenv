@@ -545,6 +545,13 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to evaluate NixArgs")?;
 
+        if !self.port_allocator.is_enabled() {
+            return eval_state
+                .call(import_fn, base_args)
+                .to_miette()
+                .wrap_err("Failed to evaluate devenv configuration");
+        }
+
         // 3. Create the allocatePort primop: processName -> portName -> basePort -> allocatedPort
         let port_allocator = self.port_allocator.clone();
         let primop = PrimOp::new(
@@ -996,6 +1003,11 @@ impl NixBackend for NixRustBackend {
             let default_nix_path = self.bootstrap_file("default.nix");
 
             let args_nix = ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string());
+            let cache_key_args = format!(
+                "{}:port_allocation={}",
+                args_nix,
+                self.port_allocator.is_enabled()
+            );
 
             // Unquote special Nix expressions that should be evaluated
             let args_nix_eval =
@@ -1038,7 +1050,7 @@ impl NixBackend for NixRustBackend {
 
             // Create unified CachingEvalState wrapper
             let caching_eval_state =
-                CachingEvalState::new(self.eval_state.clone(), cached_eval, args_nix);
+                CachingEvalState::new(self.eval_state.clone(), cached_eval, cache_key_args);
             self.caching_eval_state.set(caching_eval_state).ok();
         }
 
