@@ -122,7 +122,7 @@ impl TaskExecutor for SubprocessExecutor {
                     success: false,
                     stdout_lines: Vec::new(),
                     stderr_lines: Vec::new(),
-                    error: Some(format!("Failed to spawn command: {e}")),
+                    error: Some(format!("Failed to spawn command for {}: {e}", ctx.command)),
                 };
             }
         };
@@ -283,7 +283,7 @@ pub fn default_executor() -> &'static SubprocessExecutor {
 /// in the same environment as the interactive shell.
 pub struct PtyExecutor {
     /// Channel to send task execution requests
-    command_tx: tokio::sync::mpsc::Sender<devenv_reload::PtyTaskRequest>,
+    command_tx: tokio::sync::mpsc::Sender<devenv_shell::PtyTaskRequest>,
 }
 
 impl PtyExecutor {
@@ -291,7 +291,7 @@ impl PtyExecutor {
     ///
     /// The channel should be connected to a PTY runner that handles
     /// the actual command injection and output capture.
-    pub fn new(command_tx: tokio::sync::mpsc::Sender<devenv_reload::PtyTaskRequest>) -> Self {
+    pub fn new(command_tx: tokio::sync::mpsc::Sender<devenv_shell::PtyTaskRequest>) -> Self {
         Self { command_tx }
     }
 }
@@ -321,7 +321,7 @@ impl TaskExecutor for PtyExecutor {
         );
 
         // Build the request
-        let request = devenv_reload::PtyTaskRequest {
+        let request = devenv_shell::PtyTaskRequest {
             id,
             command: ctx.command.to_string(),
             env,

@@ -7,7 +7,7 @@
 //! inputs that were tracked during Nix evaluation. This ensures we always watch
 //! the files from the current evaluation, not stale data from previous sessions.
 
-use crate::Devenv;
+use crate::{Devenv, util};
 use devenv_reload::{BuildContext, BuildError, CommandBuilder, ShellBuilder};
 use std::sync::Arc;
 use tokio::runtime::Handle;
@@ -70,6 +70,16 @@ impl DevenvShellBuilder {
 
 impl ShellBuilder for DevenvShellBuilder {
     fn build(&self, ctx: &BuildContext) -> Result<CommandBuilder, BuildError> {
+        // DEBUG: trace execution
+        let _ = std::fs::write(
+            "/tmp/devenv-build-trace.txt",
+            format!(
+                "build() called\ncmd.is_none()={}\nbash_path={}\n",
+                self.cmd.is_none(),
+                self.bash_path
+            ),
+        );
+
         // For interactive shell, use pre-computed env script.
         // NOTE: We use pre-computed values because get_dev_environment has #[activity]
         // which needs TUI, but TUI waits for this build() to complete = deadlock.
@@ -82,17 +92,38 @@ impl ShellBuilder for DevenvShellBuilder {
             std::fs::write(&env_script_path, &self.initial_env_script)
                 .map_err(|e| BuildError::new(format!("Failed to write env script: {}", e)))?;
 
-            // Build hot-reload hook
+            // Build hot-reload hook that runs AFTER direnv (append to PROMPT_COMMAND).
+            // This ensures devenv's PATH is restored even if direnv modifies it.
+            // Reload is manual via a keybinding to avoid interfering with prompt behavior.
             let reload_hook = if let Some(ref reload_file) = ctx.reload_file {
                 format!(
                     r#"
-__devenv_reload_hook() {{
+__devenv_reload_apply() {{
+    # Source new environment if a reload is pending
     if [ -f "{0}" ]; then
         source "{0}"
         rm -f "{0}"
+        # Update saved PATH with new devenv environment
+        _DEVENV_PATH="$PATH"
     fi
 }}
-PROMPT_COMMAND="__devenv_reload_hook;${{PROMPT_COMMAND}}"
+
+__devenv_restore_path() {{
+    # Restore devenv PATH (in case direnv or other tools modified it)
+    export PATH="$_DEVENV_PATH"
+}}
+
+__devenv_reload_hook() {{
+    __devenv_restore_path
+}}
+
+if [[ $- == *i* ]] && command -v bind >/dev/null 2>&1; then
+    __devenv_reload_keybind="${{DEVENV_RELOAD_KEYBIND:-\\e\\C-r}}"
+    bind -x "\"${{__devenv_reload_keybind}}\":__devenv_reload_apply"
+fi
+
+# Append hook so it runs AFTER direnv's _direnv_hook
+PROMPT_COMMAND="${{PROMPT_COMMAND:+$PROMPT_COMMAND;}}__devenv_reload_hook"
 "#,
                     reload_file.to_string_lossy()
                 )
@@ -117,9 +148,9 @@ fi
 
 # Restore devenv PATH after ~/.bashrc may have modified it
 export PATH="$_DEVENV_PATH"
-unset _DEVENV_PATH
+# Note: _DEVENV_PATH is kept set for the reload hook to restore PATH after direnv
 
-# Hot-reload hook (prepend to existing PROMPT_COMMAND)
+# Hot-reload hook (appended to PROMPT_COMMAND so it runs after direnv)
 {reload_hook}
 
 # Signal that shell initialization is complete (for PTY task runner)
@@ -133,10 +164,14 @@ echo "__DEVENV_SHELL_READY__"
             std::fs::write(&rcfile_path, &rcfile_content)
                 .map_err(|e| BuildError::new(format!("Failed to write rcfile: {}", e)))?;
 
-            // Run bash with --rcfile to source our init script
             let mut cmd_builder = CommandBuilder::new(bash);
-            cmd_builder.arg("--rcfile");
+            for arg in util::BASH_INTERACTIVE_ARGS_PREFIX {
+                cmd_builder.arg(arg);
+            }
             cmd_builder.arg(rcfile_path.to_string_lossy().as_ref());
+            for arg in util::BASH_INTERACTIVE_ARGS_SUFFIX {
+                cmd_builder.arg(arg);
+            }
 
             // Set working directory
             cmd_builder.cwd(&ctx.cwd);
@@ -153,6 +188,16 @@ echo "__DEVENV_SHELL_READY__"
             self.handle.block_on(async {
                 self.add_watch_paths_from_cache(ctx).await;
             });
+
+            // DEBUG: log the command we're returning
+            let _ = std::fs::write(
+                "/tmp/devenv-cmd-trace.txt",
+                format!(
+                    "Returning CommandBuilder:\nprogram={:?}\nrcfile={}\n",
+                    bash,
+                    rcfile_path.display()
+                ),
+            );
 
             return Ok(cmd_builder);
         }

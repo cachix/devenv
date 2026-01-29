@@ -1518,12 +1518,11 @@ dependencies = [
  "anyhow",
  "avt",
  "blake3",
- "libc",
+ "devenv-shell",
  "notify 8.2.0",
  "notify-debouncer-mini",
  "portable-pty",
  "tempfile",
- "term_size",
  "thiserror 2.0.17",
  "tokio",
  "tokio-test",
@@ -1543,6 +1542,23 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-shutdown",
+]
+
+[[package]]
+name = "devenv-shell"
+version = "2.0.0"
+dependencies = [
+ "avt",
+ "crossterm 0.28.1",
+ "libc",
+ "portable-pty",
+ "regex",
+ "tempfile",
+ "term_size",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-test",
+ "tracing",
 ]
 
 [[package]]
@@ -1575,7 +1591,7 @@ dependencies = [
  "console 0.16.2",
  "devenv-activity",
  "devenv-cache-core",
- "devenv-reload",
+ "devenv-shell",
  "glob",
  "miette",
  "nix 0.30.1",
@@ -1602,7 +1618,6 @@ version = "2.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "avt",
  "chrono",
  "clap",
  "console 0.16.2",
@@ -1610,21 +1625,18 @@ dependencies = [
  "devenv-activity",
  "devenv-cache-core",
  "devenv-eval-cache",
- "devenv-reload",
+ "devenv-shell",
  "futures",
  "human-repr",
  "indexmap 2.12.1",
  "insta",
  "iocraft",
- "libc",
  "miette",
  "once_cell",
- "portable-pty",
  "rand 0.8.5",
  "regex",
  "serde",
  "serde_json",
- "term_size",
  "thiserror 2.0.17",
  "tokio",
  "tokio-shutdown",

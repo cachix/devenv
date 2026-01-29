@@ -15,7 +15,7 @@ fn test_pty_spawn_echo_command() {
     cmd.arg("-c");
     cmd.arg("echo 'hello world'");
 
-    let mut pty = Pty::spawn(cmd, DEFAULT_SIZE).expect("should spawn");
+    let pty = Pty::spawn(cmd, DEFAULT_SIZE).expect("should spawn");
 
     let mut buf = [0u8; 1024];
     let mut output = Vec::new();
@@ -48,7 +48,7 @@ fn test_pty_spawn_shell_and_exit() {
     cmd.arg("-c");
     cmd.arg("exit 0");
 
-    let mut pty = Pty::spawn(cmd, DEFAULT_SIZE).expect("should spawn");
+    let pty = Pty::spawn(cmd, DEFAULT_SIZE).expect("should spawn");
 
     let deadline = std::time::Instant::now() + Duration::from_secs(2);
     while std::time::Instant::now() < deadline {
@@ -65,7 +65,7 @@ fn test_pty_spawn_shell_and_exit() {
 fn test_pty_write_to_stdin() {
     let cmd = CommandBuilder::new("cat");
 
-    let mut pty = Pty::spawn(cmd, DEFAULT_SIZE).expect("should spawn");
+    let pty = Pty::spawn(cmd, DEFAULT_SIZE).expect("should spawn");
 
     pty.write_all(b"test input\n")
         .expect("write should succeed");
@@ -103,7 +103,7 @@ fn test_pty_kill() {
     let mut cmd = CommandBuilder::new("sleep");
     cmd.arg("60");
 
-    let mut pty = Pty::spawn(cmd, DEFAULT_SIZE).expect("should spawn");
+    let pty = Pty::spawn(cmd, DEFAULT_SIZE).expect("should spawn");
 
     // Verify process is running
     assert!(pty.try_wait().unwrap().is_none());
@@ -149,7 +149,7 @@ fn test_pty_spawn_nonexistent_command() {
 fn test_pty_interactive_session() {
     let cmd = CommandBuilder::new("sh");
 
-    let mut pty = Pty::spawn(cmd, DEFAULT_SIZE).expect("should spawn");
+    let pty = Pty::spawn(cmd, DEFAULT_SIZE).expect("should spawn");
 
     // Send a command
     pty.write_all(b"echo $((1+1))\n").expect("write");

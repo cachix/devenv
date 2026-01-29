@@ -27,6 +27,7 @@ let
           ./devenv-nix-backend-macros
           ./devenv-reload
           ./devenv-run-tests
+          ./devenv-shell
           ./devenv-tasks
           ./devenv-tui
           ./nix-conf-parser

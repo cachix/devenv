@@ -6,79 +6,20 @@
 use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
 use crate::watcher::FileWatcher;
-use portable_pty::CommandBuilder;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
+
+// Re-export protocol types from devenv-shell
+pub use devenv_shell::{PtyTaskRequest, PtyTaskResult, ShellCommand, ShellEvent};
 
 /// Compute blake3 hash of file contents.
 /// Returns None if the file cannot be read.
 fn hash_file(path: &Path) -> Option<blake3::Hash> {
     let content = std::fs::read(path).ok()?;
     Some(blake3::hash(&content))
-}
-
-/// Commands sent from coordinator to TUI for PTY management.
-#[derive(Debug)]
-pub enum ShellCommand {
-    /// Spawn the initial shell with this command.
-    Spawn {
-        command: CommandBuilder,
-        watch_files: Vec<PathBuf>,
-    },
-    /// File changed, build started. Show "Building..." status.
-    Building { changed_files: Vec<PathBuf> },
-    /// Environment rebuild completed successfully.
-    /// The new environment has been written to $DEVENV_STATE/pending-env.sh
-    /// and will be picked up by the shell's PROMPT_COMMAND hook.
-    ReloadReady { changed_files: Vec<PathBuf> },
-    /// Build failed, keep current shell.
-    BuildFailed {
-        changed_files: Vec<PathBuf>,
-        error: String,
-    },
-    /// Coordinator is shutting down.
-    Shutdown,
-}
-
-/// Events sent from TUI to coordinator.
-#[derive(Debug)]
-pub enum ShellEvent {
-    /// Shell process exited.
-    Exited,
-    /// Terminal was resized.
-    Resize { cols: u16, rows: u16 },
-}
-
-/// Request to execute a task command in the PTY.
-///
-/// Used by PtyExecutor to run tasks inside the shell environment.
-pub struct PtyTaskRequest {
-    /// Unique ID for this task execution.
-    pub id: u64,
-    /// The command to execute (path to script).
-    pub command: String,
-    /// Environment variables to set before execution.
-    pub env: BTreeMap<String, String>,
-    /// Working directory (optional).
-    pub cwd: Option<String>,
-    /// Channel to send result back.
-    pub response_tx: oneshot::Sender<PtyTaskResult>,
-}
-
-/// Result of executing a task in the PTY.
-#[derive(Debug)]
-pub struct PtyTaskResult {
-    /// Whether the task succeeded (exit code 0).
-    pub success: bool,
-    /// Captured stdout lines with timestamps.
-    pub stdout_lines: Vec<(std::time::Instant, String)>,
-    /// Captured stderr lines with timestamps.
-    pub stderr_lines: Vec<(std::time::Instant, String)>,
-    /// Error message if the task failed.
-    pub error: Option<String>,
 }
 
 #[derive(Debug, Error)]

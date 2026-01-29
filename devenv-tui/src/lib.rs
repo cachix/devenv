@@ -4,7 +4,6 @@ use std::time::Duration;
 use tokio::sync::Notify;
 
 pub mod model_events;
-pub mod shell_runner;
 pub mod tracing_interface;
 
 // UI modules
@@ -21,7 +20,19 @@ pub use model::{
     UiState, ViewMode,
 };
 pub use model_events::UiEvent;
-pub use shell_runner::{ShellRunner, ShellRunnerError};
+
+// Re-export shell session types from devenv-shell
+pub use devenv_shell::{
+    // Protocol types
+    PtyTaskRequest,
+    PtyTaskResult,
+    SessionConfig,
+    SessionError,
+    ShellCommand,
+    ShellEvent,
+    ShellSession,
+    TuiHandoff,
+};
 
 /// Runs a loop that waits for notifications and triggers redraws at a throttled rate.
 ///

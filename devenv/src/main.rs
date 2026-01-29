@@ -179,7 +179,7 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Channel to signal TUI when backend is fully done (including cleanup)
     let (backend_done_tx, backend_done_rx) = tokio::sync::oneshot::channel();
 
-    // Channel for terminal handoff: signals ShellRunner when TUI has released the terminal
+    // Channel for terminal handoff: signals ShellSession when TUI has released the terminal
     let (terminal_ready_tx, terminal_ready_rx) = tokio::sync::oneshot::channel();
 
     // Devenv on background thread (own runtime with GC-registered workers)
@@ -724,14 +724,14 @@ fn build_rev() -> Option<String> {
 /// This function manages a shell session that automatically reloads
 /// when configuration files change. Uses the inverted architecture where:
 /// - ShellCoordinator handles file watching and build coordination
-/// - ShellRunner owns the PTY and handles terminal I/O
+/// - ShellSession owns the PTY and handles terminal I/O
 ///
 /// Tasks are executed inside the PTY via PtyExecutor, allowing them to
 /// run in the same shell environment as the interactive session.
 ///
 /// Terminal handoff:
 /// - `backend_done_tx`: Signals TUI to exit (sent after initial build completes)
-/// - `terminal_ready_rx`: Waits for TUI cleanup before ShellRunner takes terminal
+/// - `terminal_ready_rx`: Waits for TUI cleanup before ShellSession takes terminal
 async fn run_reload_shell(
     devenv: &Devenv,
     cmd: Option<String>,
@@ -740,9 +740,9 @@ async fn run_reload_shell(
     backend_done_tx: tokio::sync::oneshot::Sender<()>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<()>>,
 ) -> Result<()> {
-    use devenv_reload::{Config as ReloadConfig, PtyTaskRequest, ShellCoordinator};
+    use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
     use devenv_tasks::PtyExecutor;
-    use devenv_tui::ShellRunner;
+    use devenv_tui::{PtyTaskRequest, ShellSession, TuiHandoff};
     use tokio::sync::mpsc;
 
     let config = devenv.config.read().await.clone();
@@ -852,18 +852,30 @@ async fn run_reload_shell(
         (None, None, None)
     };
 
-    // Run shell runner on current thread (owns terminal)
-    let shell_runner = ShellRunner::new().with_status_line(is_interactive);
-    let runner_result = shell_runner
-        .run(
-            command_rx,
-            event_tx,
+    // Create TUI handoff configuration
+    // If no terminal_ready_rx (no TUI), create a dummy channel that immediately completes
+    let handoff = if let Some(terminal_ready_rx) = terminal_ready_rx {
+        Some(TuiHandoff {
             backend_done_tx,
             terminal_ready_rx,
             task_rx,
             pty_ready_tx,
-        )
-        .await;
+        })
+    } else {
+        // No TUI - create dummy channel that completes immediately
+        let (dummy_tx, dummy_rx) = tokio::sync::oneshot::channel();
+        let _ = dummy_tx.send(()); // Immediately signal ready
+        Some(TuiHandoff {
+            backend_done_tx,
+            terminal_ready_rx: dummy_rx,
+            task_rx,
+            pty_ready_tx,
+        })
+    };
+
+    // Run shell session on current thread (owns terminal)
+    let shell_session = ShellSession::with_defaults().with_status_line(is_interactive);
+    let session_result = shell_session.run(command_rx, event_tx, handoff).await;
 
     // Wait for task runner (if any) and coordinator to finish
     if let Some(handle) = task_handle
@@ -873,5 +885,5 @@ async fn run_reload_shell(
     }
     let _ = coordinator_handle.await;
 
-    runner_result.map_err(|e| miette::miette!("Shell runner error: {}", e))
+    session_result.map_err(|e| miette::miette!("Shell session error: {}", e))
 }

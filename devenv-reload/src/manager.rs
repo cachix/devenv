@@ -1,8 +1,8 @@
 use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
-use crate::pty::{get_terminal_size, Pty};
 use crate::watcher::FileWatcher;
 use avt::Vt;
+use devenv_shell::{get_terminal_size, Pty, PtyError, RawModeGuard};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
@@ -24,7 +24,7 @@ pub enum ManagerMessage {
 #[derive(Debug, Error)]
 pub enum ManagerError {
     #[error("failed to spawn shell: {0}")]
-    Spawn(#[source] crate::pty::PtyError),
+    Spawn(#[source] PtyError),
     #[error("build failed: {0}")]
     Build(#[source] crate::builder::BuildError),
     #[error("watcher error: {0}")]
@@ -113,7 +113,7 @@ impl ShellManager {
             let mut buf = [0u8; 4096];
             loop {
                 let result = {
-                    let mut pty = pty_reader.lock().unwrap();
+                    let pty = pty_reader.lock().unwrap();
                     pty.read(&mut buf)
                 };
                 match result {
@@ -157,7 +157,7 @@ impl ShellManager {
         while let Some(event) = event_rx.recv().await {
             match event {
                 Event::Stdin(data) => {
-                    let mut pty_guard = pty.lock().unwrap();
+                    let pty_guard = pty.lock().unwrap();
                     let _ = pty_guard.write_all(&data);
                     let _ = pty_guard.flush();
                 }
@@ -231,7 +231,7 @@ impl ShellManager {
                                     vt = Vt::new(new_size.cols as usize, new_size.rows as usize);
 
                                     {
-                                        let mut pty_guard = pty.lock().unwrap();
+                                        let pty_guard = pty.lock().unwrap();
                                         let _ = pty_guard.write_all(state.as_bytes());
                                         let _ = pty_guard.flush();
                                     }
@@ -258,58 +258,6 @@ impl ShellManager {
         }
 
         Ok(())
-    }
-}
-
-/// RAII guard for raw terminal mode
-struct RawModeGuard {
-    #[cfg(unix)]
-    original: Option<libc::termios>,
-}
-
-impl RawModeGuard {
-    fn new() -> io::Result<Self> {
-        #[cfg(unix)]
-        {
-            use std::os::unix::io::AsRawFd;
-            let fd = io::stdin().as_raw_fd();
-
-            // Skip raw mode if stdin is not a terminal (e.g., in CI or tests)
-            if unsafe { libc::isatty(fd) } == 0 {
-                return Ok(Self { original: None });
-            }
-
-            let mut termios: libc::termios = unsafe { std::mem::zeroed() };
-            if unsafe { libc::tcgetattr(fd, &mut termios) } != 0 {
-                return Err(io::Error::last_os_error());
-            }
-            let original = termios;
-
-            unsafe { libc::cfmakeraw(&mut termios) };
-            if unsafe { libc::tcsetattr(fd, libc::TCSANOW, &termios) } != 0 {
-                return Err(io::Error::last_os_error());
-            }
-
-            Ok(Self {
-                original: Some(original),
-            })
-        }
-
-        #[cfg(not(unix))]
-        Ok(Self {})
-    }
-}
-
-impl Drop for RawModeGuard {
-    fn drop(&mut self) {
-        #[cfg(unix)]
-        {
-            if let Some(ref original) = self.original {
-                use std::os::unix::io::AsRawFd;
-                let fd = io::stdin().as_raw_fd();
-                unsafe { libc::tcsetattr(fd, libc::TCSANOW, original) };
-            }
-        }
     }
 }
 

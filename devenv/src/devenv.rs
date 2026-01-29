@@ -586,15 +586,9 @@ impl Devenv {
                 shell_cmd.arg(&script_path);
             }
             None => {
-                // Use --noprofile to skip login shell files, --rcfile to source our script,
-                // and -i to force interactive mode. Note: -i must come AFTER --rcfile because
-                // bash parses long options first, then short options.
-                shell_cmd.args([
-                    "--noprofile",
-                    "--rcfile",
-                    &script_path.to_string_lossy(),
-                    "-i",
-                ]);
+                shell_cmd.args(util::BASH_INTERACTIVE_ARGS_PREFIX);
+                shell_cmd.arg(&script_path);
+                shell_cmd.args(util::BASH_INTERACTIVE_ARGS_SUFFIX);
             }
         }
 
