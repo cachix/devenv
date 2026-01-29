@@ -1021,25 +1021,29 @@ async fn test_build_with_syntax_error_in_nix() {
 
     let (temp_dir, _cwd_guard, backend, paths, config) =
         setup_isolated_test_env(yaml, Some(broken_nix), GlobalOptions::default());
-    backend
+
+    // Use fixture lock file
+    copy_fixture_lock(temp_dir.path());
+
+    // Error can occur during assemble() (if cachix config is evaluated early)
+    // or during eval(). Either way, we should get a clear syntax error message.
+    let assemble_result = backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
             &config,
             config.nixpkgs_config(get_current_system()),
         ))
-        .await
-        .expect("Failed to assemble");
+        .await;
 
-    // Use fixture lock file for eval
-    copy_fixture_lock(temp_dir.path());
-
-    // Try to eval - should fail with syntax error
-    let result = backend.eval(&["shell"]).await;
-
-    assert!(result.is_err(), "Eval should fail with syntax error");
-
-    let error = result.unwrap_err();
-    let error_msg = format!("{:?}", error);
+    let error_msg = if let Err(e) = assemble_result {
+        // Error caught during assemble - this is fine, errors should be caught early
+        format!("{:?}", e)
+    } else {
+        // Assemble succeeded, error should happen during eval
+        let result = backend.eval(&["shell"]).await;
+        assert!(result.is_err(), "Eval should fail with syntax error");
+        format!("{:?}", result.unwrap_err())
+    };
 
     // Error message should indicate a syntax or evaluation error
     assert!(
@@ -1049,6 +1053,73 @@ async fn test_build_with_syntax_error_in_nix() {
     );
 
     // Clean up temp dir
+    drop(temp_dir);
+}
+
+/// Test that evaluation errors include detailed Nix error messages
+///
+/// When Nix evaluation fails, the error message should include the actual
+/// Nix error (e.g., "undefined variable 'nonexistent_var'"), not just a
+/// generic wrapper message like "Failed to import default.nix".
+///
+/// This tests the error enrichment feature that combines Nix logger output
+/// with the exception to provide helpful error messages.
+#[nix_test]
+async fn test_eval_error_includes_nix_details() {
+    let yaml = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+"#;
+
+    // Create devenv.nix that references an undefined variable
+    // This will produce a clear Nix error: "undefined variable 'nonexistent_var_xyz'"
+    let broken_nix = r#"{ pkgs, ... }: {
+  packages = [ nonexistent_var_xyz ];
+}"#;
+
+    let (temp_dir, _cwd_guard, backend, paths, config) =
+        setup_isolated_test_env(yaml, Some(broken_nix), GlobalOptions::default());
+
+    // Use fixture lock file
+    copy_fixture_lock(temp_dir.path());
+
+    // Try to assemble or eval - error can occur at either stage
+    let assemble_result = backend
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config(get_current_system()),
+        ))
+        .await;
+
+    let error_msg = if let Err(e) = assemble_result {
+        format!("{:?}", e)
+    } else {
+        let result = backend.eval(&["packages"]).await;
+        assert!(result.is_err(), "Eval should fail with undefined variable");
+        format!("{:?}", result.unwrap_err())
+    };
+
+    // The error message MUST include the specific Nix error details.
+    // This verifies the error enrichment is working - we should see the
+    // actual variable name from the Nix error, not just a generic message.
+    assert!(
+        error_msg.contains("nonexistent_var_xyz"),
+        "Error should include the undefined variable name from Nix error.\n\
+         This indicates error enrichment is working.\n\
+         Got: {}",
+        error_msg
+    );
+
+    // Also verify it contains "undefined" to confirm it's the right error type
+    assert!(
+        error_msg.to_lowercase().contains("undefined"),
+        "Error should mention 'undefined' variable.\nGot: {}",
+        error_msg
+    );
+
     drop(temp_dir);
 }
 

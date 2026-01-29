@@ -117,6 +117,19 @@ impl NixLogBridge {
         }
     }
 
+    /// Peek at stored pre-REPL errors without clearing.
+    ///
+    /// Returns a clone of the error messages. Use this when you need to
+    /// include errors in an error message but want to keep them available
+    /// for later (e.g., for the debugger).
+    pub fn peek_pre_repl_errors(&self) -> Vec<String> {
+        if let Ok(errors) = self.pre_repl_errors.lock() {
+            errors.clone()
+        } else {
+            Vec::new()
+        }
+    }
+
     /// Add an observer to receive operation notifications during evaluation.
     ///
     /// Observers are notified of file/env operations (EvalOp) as they are parsed

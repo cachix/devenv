@@ -1550,16 +1550,16 @@ impl NixBackend for NixRustBackend {
             .expect("assemble() must be called first")
             .to_string();
 
-        let devenv = eval_state
-            .eval_from_string(&import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let devenv = self.enriched(
+            eval_state.eval_from_string(&import_expr, self.paths.root.to_str().unwrap()),
+            "Failed to evaluate devenv configuration",
+        )?;
 
         // Extract the pkgs attribute from the devenv output
-        let pkgs = eval_state
-            .require_attrs_select(&devenv, "pkgs")
-            .to_miette()
-            .wrap_err("Failed to get pkgs attribute from devenv")?;
+        let pkgs = self.enriched(
+            eval_state.require_attrs_select(&devenv, "pkgs"),
+            "Failed to get pkgs attribute from devenv configuration",
+        )?;
 
         // Create EvalCache for efficient lazy traversal with optional SQLite caching
         let cache = EvalCache::new(&mut eval_state, &pkgs, None)
@@ -1803,6 +1803,34 @@ impl NixRustBackend {
         ref_str.to_string()
     }
 
+    /// Convert an FFI result to miette and enrich with any captured Nix error messages.
+    ///
+    /// This combines `.to_miette()` and error enrichment in one call, reducing boilerplate
+    /// at call sites. When Nix evaluation fails, the detailed error (e.g., "failed to fetch
+    /// input 'nixpkgs'") is often logged separately from the exception. This method combines
+    /// the exception with any captured error logs to provide more helpful error messages.
+    ///
+    /// Uses `peek_pre_repl_errors()` so errors remain available for the debugger if needed.
+    fn enriched<T>(&self, result: anyhow::Result<T>, context: impl AsRef<str>) -> Result<T> {
+        result
+            .to_miette()
+            .map_err(|e| self.enrich_eval_error(e, context.as_ref()))
+    }
+
+    /// Enrich an existing miette error with any Nix error messages captured during evaluation.
+    fn enrich_eval_error(&self, err: miette::Error, context: &str) -> miette::Error {
+        let nix_errors = self.nix_log_bridge.peek_pre_repl_errors();
+
+        if nix_errors.is_empty() {
+            return err.wrap_err(context.to_string());
+        }
+
+        // Include the full last error which contains the complete Nix error with stack trace.
+        // Wrap the original error to preserve the error chain.
+        let nix_details = nix_errors.last().unwrap();
+        err.wrap_err(format!("{}: {}", context, nix_details))
+    }
+
     /// Evaluate a single attribute without caching.
     ///
     /// This is the pure evaluation logic extracted for use with transparent caching.
@@ -1816,30 +1844,31 @@ impl NixRustBackend {
         let mut eval_state = self.eval_session(activity)?;
 
         // Import default.nix to get the attribute set
-        let root_attrs = eval_state
-            .eval_from_string(import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let root_attrs = self.enriched(
+            eval_state.eval_from_string(import_expr, self.paths.root.to_str().unwrap()),
+            "Failed to evaluate devenv configuration",
+        )?;
 
         // Navigate to the attribute using the Nix API
-        let value = eval_state
-            .require_attrs_select(&root_attrs, clean_path)
-            .to_miette()
-            .wrap_err(format!(
-                "Failed to get attribute '{}' from default.nix",
+        let value = self.enriched(
+            eval_state.require_attrs_select(&root_attrs, clean_path),
+            format!(
+                "Failed to get attribute '{}' from devenv configuration",
                 attr_path
-            ))?;
+            ),
+        )?;
 
         // Force evaluation
-        eval_state
-            .force(&value)
-            .to_miette()
-            .wrap_err("Failed to force evaluation")?;
+        self.enriched(
+            eval_state.force(&value),
+            format!("Failed to force evaluation of '{}'", attr_path),
+        )?;
 
         // Convert to JSON string
-        let json_value = value_to_json(&mut eval_state, &value)
-            .to_miette()
-            .wrap_err(format!("Failed to convert {} to JSON", attr_path))?;
+        let json_value = self.enriched(
+            value_to_json(&mut eval_state, &value),
+            format!("Failed to convert '{}' to JSON", attr_path),
+        )?;
 
         serde_json::to_string(&json_value)
             .into_diagnostic()
@@ -1856,45 +1885,45 @@ impl NixRustBackend {
     ) -> Result<CachedShellPaths> {
         let mut eval_state = self.eval_session(activity)?;
 
-        let devenv = eval_state
-            .eval_from_string(import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let devenv = self.enriched(
+            eval_state.eval_from_string(import_expr, self.paths.root.to_str().unwrap()),
+            "Failed to evaluate devenv configuration",
+        )?;
 
         // Get the shell derivation from devenv.shell
-        let shell_drv = eval_state
-            .require_attrs_select(&devenv, "shell")
-            .to_miette()
-            .wrap_err("Failed to get shell attribute from devenv")?;
+        let shell_drv = self.enriched(
+            eval_state.require_attrs_select(&devenv, "shell"),
+            "Failed to get shell attribute from devenv",
+        )?;
 
         // Force evaluation to ensure the derivation is fully evaluated
-        eval_state
-            .force(&shell_drv)
-            .to_miette()
-            .wrap_err("Failed to force evaluation of shell derivation")?;
+        self.enriched(
+            eval_state.force(&shell_drv),
+            "Failed to force evaluation of shell derivation",
+        )?;
 
         // Get drvPath
-        let drv_path_value = eval_state
-            .require_attrs_select(&shell_drv, "drvPath")
-            .to_miette()
-            .wrap_err("Failed to get drvPath from shell derivation")?;
+        let drv_path_value = self.enriched(
+            eval_state.require_attrs_select(&shell_drv, "drvPath"),
+            "Failed to get drvPath from shell derivation",
+        )?;
 
-        let drv_path = eval_state
-            .require_string(&drv_path_value)
-            .to_miette()
-            .wrap_err("Failed to extract drvPath as string")?;
+        let drv_path = self.enriched(
+            eval_state.require_string(&drv_path_value),
+            "Failed to extract drvPath as string",
+        )?;
 
         // Get outPath for building - it has string context
-        let out_path_value = eval_state
-            .require_attrs_select(&shell_drv, "outPath")
-            .to_miette()
-            .wrap_err("Failed to get outPath from shell derivation")?;
+        let out_path_value = self.enriched(
+            eval_state.require_attrs_select(&shell_drv, "outPath"),
+            "Failed to get outPath from shell derivation",
+        )?;
 
         // Build the derivation to get the output path
-        let realized = eval_state
-            .realise_string(&out_path_value, false)
-            .to_miette()
-            .wrap_err("Failed to realize shell derivation")?;
+        let realized = self.enriched(
+            eval_state.realise_string(&out_path_value, false),
+            "Failed to realize shell derivation",
+        )?;
 
         let store_path = realized
             .paths
@@ -1944,41 +1973,39 @@ impl NixRustBackend {
     ) -> Result<String> {
         let mut eval_state = self.eval_session(activity)?;
 
-        let root_attrs = eval_state
-            .eval_from_string(import_expr, self.paths.root.to_str().unwrap())
-            .to_miette()
-            .wrap_err("Failed to import default.nix")?;
+        let root_attrs = self.enriched(
+            eval_state.eval_from_string(import_expr, self.paths.root.to_str().unwrap()),
+            "Failed to evaluate devenv configuration",
+        )?;
 
         // Navigate to the attribute and force evaluation
-        let value = eval_state
-            .require_attrs_select(&root_attrs, attr_path)
-            .to_miette()
-            .wrap_err(format!(
-                "Failed to get attribute '{}' from default.nix",
+        let value = self.enriched(
+            eval_state.require_attrs_select(&root_attrs, attr_path),
+            format!(
+                "Failed to get attribute '{}' from devenv configuration",
                 attr_path
-            ))?;
+            ),
+        )?;
 
-        eval_state
-            .force(&value)
-            .to_miette()
-            .wrap_err(format!("Failed to evaluate attribute: {}", attr_path))?;
+        self.enriched(
+            eval_state.force(&value),
+            format!("Failed to evaluate attribute: {}", attr_path),
+        )?;
 
         // If it's a derivation (attrs with .outPath), get the outPath
         // Otherwise use the value as-is (might be a string already)
-        let build_value = eval_state
-            .require_attrs_select_opt(&value, "outPath")
-            .to_miette()
-            .wrap_err(format!(
-                "Failed to check for outPath in attribute: {}",
-                attr_path
-            ))?
+        let build_value = self
+            .enriched(
+                eval_state.require_attrs_select_opt(&value, "outPath"),
+                format!("Failed to check for outPath in attribute: {}", attr_path),
+            )?
             .unwrap_or_else(|| value.clone());
 
         // Realize the value, which triggers the actual build
-        let realized = eval_state
-            .realise_string(&build_value, false)
-            .to_miette()
-            .wrap_err(format!("Failed to build attribute: {}", attr_path))?;
+        let realized = self.enriched(
+            eval_state.realise_string(&build_value, false),
+            format!("Failed to build attribute: {}", attr_path),
+        )?;
 
         let store_path = realized
             .paths
