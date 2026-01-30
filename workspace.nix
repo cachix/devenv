@@ -1,10 +1,10 @@
 # Tooling to build the workspace crates
-{
-  lib,
-  callPackage,
-  cargoProfile ? "release",
-  gitRev ? "",
-  isRelease ? false,
+{ lib
+, callPackage
+, cargoProfile ? "release"
+, gitRev ? ""
+, isRelease ? false
+,
 }:
 
 let
