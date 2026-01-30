@@ -217,11 +217,7 @@ impl TuiApp {
             let ui = ui_state.read().unwrap();
             if let Ok(model_guard) = activity_model.read() {
                 // Clear the previous inline render output (which had the summary line)
-                let lines_to_clear = model_guard.calculate_rendered_height(
-                    ui.selected_activity,
-                    ui.terminal_size.height,
-                    true,
-                );
+                let lines_to_clear = ui.last_render_height;
 
                 if lines_to_clear > 0 {
                     let mut stderr = io::stderr();
@@ -424,15 +420,26 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
     // Render the view - read activity model briefly, UI state separately
     let ui = ui_state.read().unwrap();
-    let rendered = if let Ok(model_guard) = activity_model.read() {
-        element! {
+    let (rendered, last_render_height) = if let Ok(model_guard) = activity_model.read() {
+        let mut measure = element! {
             View(width: terminal_width) {
                 #(vec![view(&model_guard, &ui, RenderContext::Normal).into()])
             }
-        }
+        };
+        let height = measure.render(Some(terminal_width as usize)).height() as u16;
+        let rendered = element! {
+            View(width: terminal_width) {
+                #(vec![view(&model_guard, &ui, RenderContext::Normal).into()])
+            }
+        };
+        (rendered, height)
     } else {
-        element!(View(width: terminal_width))
+        (element!(View(width: terminal_width)), 0)
     };
+    drop(ui);
+    if let Ok(mut ui) = ui_state.write() {
+        ui.last_render_height = last_render_height;
+    }
 
     rendered
 }
@@ -489,7 +496,13 @@ async fn run_view(
             *pre_expand_height = {
                 let ui = ui_state.read().unwrap();
                 let model = activity_model.read().unwrap();
-                model.calculate_rendered_height(ui.selected_activity, ui.terminal_size.height, true)
+                let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
+                let mut normal_view = element! {
+                    View(width: terminal_width) {
+                        #(vec![view(&model, &ui, RenderContext::Normal).into()])
+                    }
+                };
+                normal_view.render(Some(terminal_width as usize)).height() as u16
             };
 
             let mut element = element! {

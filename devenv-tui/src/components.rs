@@ -135,7 +135,7 @@ impl HierarchyPrefixComponent {
         vec![
             element!(Text(content: total_indent)).into_any(),
             element!(View(margin_right: 1) {
-                Text(content: "⎿", color: COLOR_HIERARCHY)
+                Text(content: "└", color: COLOR_HIERARCHY)
             })
             .into_any(),
         ]

@@ -1,5 +1,4 @@
 use crate::app::TuiConfig;
-use crate::components::{LOG_VIEWPORT_COLLAPSED, LOG_VIEWPORT_FAILED, LOG_VIEWPORT_SHOW_OUTPUT};
 use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
     ExpectedCategory, Fetch, FetchKind, Message, Operation, SetExpected, Task,
@@ -151,6 +150,7 @@ pub struct UiState {
     pub view_options: ViewOptions,
     pub terminal_size: TerminalSize,
     pub view_mode: ViewMode,
+    pub last_render_height: u16,
 }
 
 impl UiState {
@@ -174,6 +174,7 @@ impl UiState {
             },
             terminal_size: TerminalSize { width, height },
             view_mode: ViewMode::Main,
+            last_render_height: 0,
         }
     }
 
@@ -1257,113 +1258,6 @@ impl ActivityModel {
                     && a.level <= filter_level
             })
             .count()
-    }
-
-    /// Calculate the height that the TUI will render.
-    /// This is the canonical height calculation - view.rs should call this method.
-    ///
-    /// When `show_summary` is false (e.g., final render), the summary line is excluded.
-    pub fn calculate_rendered_height(
-        &self,
-        selected_activity: Option<u64>,
-        terminal_height: u16,
-        show_summary: bool,
-    ) -> u16 {
-        let activities = self.get_display_activities();
-
-        let mut total_height: usize = 0;
-
-        for display_activity in activities.iter() {
-            total_height += 1; // Base height for activity
-
-            let is_selected = selected_activity.is_some_and(|id| {
-                display_activity.activity.id == id && display_activity.activity.id != 0
-            });
-
-            // Add extra line for downloads with progress
-            if let ActivityVariant::Download(ref download_data) = display_activity.activity.variant
-            {
-                if download_data.size_current.is_some() && download_data.size_total.is_some() {
-                    total_height += 1;
-                } else if let Some(progress) = &display_activity.activity.progress
-                    && progress.total.unwrap_or(0) > 0
-                {
-                    total_height += 1;
-                }
-            }
-
-            // Build and evaluation activities show logs when selected
-            if is_selected
-                && (matches!(display_activity.activity.variant, ActivityVariant::Build(_))
-                    || matches!(
-                        display_activity.activity.variant,
-                        ActivityVariant::Evaluating(_)
-                    ))
-                && let Some(logs) = self.get_build_logs(display_activity.activity.id)
-            {
-                let visible_count = logs.len().min(LOG_VIEWPORT_COLLAPSED);
-                total_height += visible_count.max(1);
-            }
-
-            // Devenv activities show logs when selected or failed
-            if matches!(display_activity.activity.variant, ActivityVariant::Devenv)
-                && let Some(logs) = self.get_build_logs(display_activity.activity.id)
-            {
-                let devenv_failed = matches!(
-                    display_activity.activity.state,
-                    NixActivityState::Completed { success: false, .. }
-                );
-                if is_selected || devenv_failed {
-                    let max_lines = if devenv_failed {
-                        LOG_VIEWPORT_FAILED
-                    } else {
-                        LOG_VIEWPORT_COLLAPSED
-                    };
-                    let visible_count = logs.len().min(max_lines);
-                    total_height += visible_count.max(1);
-                }
-            }
-
-            // Task activities with show_output=true or failed show logs
-            if let ActivityVariant::Task(ref task_data) = display_activity.activity.variant {
-                let task_failed = matches!(
-                    display_activity.activity.state,
-                    NixActivityState::Completed { success: false, .. }
-                );
-                if (task_data.show_output || task_failed)
-                    && let Some(logs) = self.get_build_logs(display_activity.activity.id)
-                {
-                    let max_lines = if task_failed {
-                        LOG_VIEWPORT_FAILED
-                    } else if task_data.show_output && !is_selected {
-                        LOG_VIEWPORT_SHOW_OUTPUT
-                    } else {
-                        LOG_VIEWPORT_COLLAPSED
-                    };
-                    let visible_count = logs.len().min(max_lines);
-                    total_height += visible_count.max(1);
-                }
-            }
-
-            // Message activities with details
-            if let ActivityVariant::Message(ref msg_data) = display_activity.activity.variant
-                && msg_data.details.is_some()
-                && let Some(logs) = self.get_build_logs(display_activity.activity.id)
-            {
-                let visible_count = logs.len().min(LOG_VIEWPORT_FAILED);
-                total_height += visible_count;
-            }
-        }
-
-        // Total: activities (+ blank line + summary line if shown)
-        let calculated = if show_summary {
-            (total_height + 2) as u16
-        } else {
-            total_height as u16
-        };
-
-        // Clamp to terminal height
-        calculated.min(terminal_height)
     }
 }
 

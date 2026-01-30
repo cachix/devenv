@@ -131,10 +131,6 @@ pub fn view(
     }
     .into_any();
 
-    // Calculate height using model's canonical method (includes summary line and terminal clamping)
-    let total_height =
-        model.calculate_rendered_height(selected_id, terminal_size.height, show_summary) as u32;
-
     let mut children = vec![];
 
     // Task activities are now included in the regular activity list
@@ -158,6 +154,8 @@ pub fn view(
             element! {
                 View(
                     height: 1,
+                    flex_shrink: 0.0,
+                    margin_top: 1,
                     padding_left: 1,
                     padding_right: 1
                 ) {
@@ -170,7 +168,7 @@ pub fn view(
 
     element! {
         ContextProvider(value: Context::owned(terminal_size)) {
-            View(flex_direction: FlexDirection::Column, height: total_height, width: 100pct) {
+            View(flex_direction: FlexDirection::Column, max_height: terminal_size.height as u32, width: 100pct) {
                 #(children)
             }
         }
