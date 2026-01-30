@@ -1120,6 +1120,8 @@ impl Devenv {
             vec!["devenv:enterShell".to_string()],
             devenv_tasks::RunMode::All,
             false, // TUI handles display
+            vec![],
+            None,
         )
         .await
     }

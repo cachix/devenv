@@ -235,6 +235,68 @@ impl TaskState {
         Output(output)
     }
 
+    /// Process DEVENV_EXPORT lines from task stdout and merge into output file.
+    ///
+    /// Format: DEVENV_EXPORT:<base64-var>=<base64-value>
+    /// This allows tasks to export env vars without needing the devenv-tasks binary.
+    async fn process_exports(
+        stdout_lines: &[(std::time::Instant, String)],
+        outputs_file: &tempfile::NamedTempFile,
+    ) {
+        use base64::Engine;
+        use std::io::Write;
+
+        let mut exports: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+
+        for (_, line) in stdout_lines {
+            if let Some(rest) = line.strip_prefix("DEVENV_EXPORT:") {
+                if let Some((var_b64, val_b64)) = rest.split_once('=') {
+                    let engine = base64::engine::general_purpose::STANDARD;
+                    if let (Ok(var_bytes), Ok(val_bytes)) =
+                        (engine.decode(var_b64), engine.decode(val_b64))
+                    {
+                        if let (Ok(var), Ok(val)) =
+                            (String::from_utf8(var_bytes), String::from_utf8(val_bytes))
+                        {
+                            exports.insert(var, serde_json::Value::String(val));
+                        }
+                    }
+                }
+            }
+        }
+
+        if exports.is_empty() {
+            return;
+        }
+
+        // Read existing output file content
+        let mut output: serde_json::Value = std::fs::read_to_string(outputs_file.path())
+            .ok()
+            .and_then(|content| serde_json::from_str(&content).ok())
+            .unwrap_or_else(|| serde_json::json!({}));
+
+        // Ensure devenv.env structure exists
+        if !output.get("devenv").is_some() {
+            output["devenv"] = serde_json::json!({});
+        }
+        if !output["devenv"].get("env").is_some() {
+            output["devenv"]["env"] = serde_json::json!({});
+        }
+
+        // Merge exports into devenv.env
+        if let Some(env_obj) = output["devenv"]["env"].as_object_mut() {
+            for (k, v) in exports {
+                env_obj.insert(k, v);
+            }
+        }
+
+        // Write back to file
+        if let Ok(content) = serde_json::to_string_pretty(&output) {
+            let _ = std::fs::File::create(outputs_file.path())
+                .and_then(|mut f| f.write_all(content.as_bytes()));
+        }
+    }
+
     /// Run this task with a pre-assigned activity ID.
     /// The Task::Hierarchy event has already been emitted; this emits Task::Start.
     pub async fn run(
@@ -405,6 +467,9 @@ impl TaskState {
         // Execute using the provided executor
         let callback = ActivityCallback::new(task_activity);
         let result = executor.execute(ctx, &callback, cancellation).await;
+
+        // Process any DEVENV_EXPORT lines from stdout and merge into output file
+        Self::process_exports(&result.stdout_lines, &outputs_file).await;
 
         // Only update file states on success - failed tasks should not be cached
         if result.success {

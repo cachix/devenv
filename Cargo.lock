@@ -1588,6 +1588,7 @@ name = "devenv-tasks"
 version = "2.0.0"
 dependencies = [
  "async-trait",
+ "base64",
  "blake3",
  "clap",
  "console 0.16.2",

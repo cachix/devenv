@@ -23,6 +23,12 @@ pub use terminal::{RawModeGuard, is_tty};
 // Status line
 pub use status_line::{StatusLine, StatusState};
 
+// Shared UI constants (used by devenv-tui)
+pub use status_line::{
+    CHECKMARK, COLOR_ACTIVE, COLOR_ACTIVE_NESTED, COLOR_COMPLETED, COLOR_FAILED, COLOR_HIERARCHY,
+    COLOR_INFO, COLOR_INTERACTIVE, COLOR_SECONDARY, SPINNER_FRAMES, SPINNER_INTERVAL_MS, XMARK,
+};
+
 // Task execution
 pub use task_runner::{PtyTaskRunner, TaskRunnerError, strip_ansi_codes};
 

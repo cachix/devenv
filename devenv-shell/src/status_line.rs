@@ -2,23 +2,50 @@
 //!
 //! Provides a status bar at the bottom of the terminal showing build status,
 //! reload readiness, and error messages. Uses iocraft for component-based rendering.
+//!
+//! Also exports shared UI constants used by both devenv-shell and devenv-tui.
 
 use crossterm::{cursor, execute, terminal};
 use iocraft::prelude::*;
 use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::Instant;
 
-/// Color constants matching devenv-tui styling
-const COLOR_ACTIVE: Color = Color::AnsiValue(255); // Bright white
-const COLOR_COMPLETED: Color = Color::Rgb {
+// ============================================================================
+// Shared UI constants - used by both devenv-shell and devenv-tui
+// ============================================================================
+
+/// Bright white for active/in-progress items
+pub const COLOR_ACTIVE: Color = Color::AnsiValue(255);
+/// Dimmer white for nested active items
+pub const COLOR_ACTIVE_NESTED: Color = Color::AnsiValue(246);
+/// Gray for secondary text (cached, phases, etc.)
+pub const COLOR_SECONDARY: Color = Color::AnsiValue(242);
+/// Gray for tree lines and elapsed time
+pub const COLOR_HIERARCHY: Color = Color::AnsiValue(242);
+/// Sage green for success checkmarks
+pub const COLOR_COMPLETED: Color = Color::Rgb {
     r: 112,
     g: 138,
     b: 88,
-}; // Sage green
-const COLOR_FAILED: Color = Color::AnsiValue(160); // Red
-const COLOR_SECONDARY: Color = Color::AnsiValue(242); // Gray
+};
+/// Red for failed items
+pub const COLOR_FAILED: Color = Color::AnsiValue(160);
+/// Blue for info indicators
+pub const COLOR_INFO: Color = Color::AnsiValue(39);
+/// Gold for selected/interactive items
+pub const COLOR_INTERACTIVE: Color = Color::AnsiValue(220);
+
+/// Spinner animation frames (braille dots pattern)
+pub const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+/// Spinner animation interval in milliseconds
+pub const SPINNER_INTERVAL_MS: u64 = 80;
+
+/// Success checkmark character
+pub const CHECKMARK: &str = "✓";
+/// Failure X character
+pub const XMARK: &str = "✗";
 
 /// Current status state.
 #[derive(Debug, Clone, Default)]
@@ -40,7 +67,7 @@ impl StatusState {
     pub fn new() -> Self {
         Self {
             keybind: std::env::var("DEVENV_RELOAD_KEYBIND")
-                .unwrap_or_else(|_| "Alt-Ctrl-R".to_string()),
+                .unwrap_or_else(|_| "Ctrl-Alt-R".to_string()),
             ..Default::default()
         }
     }
@@ -118,36 +145,14 @@ fn format_changed_files(changed_files: &[PathBuf]) -> String {
     }
 }
 
-/// Spinner component for status line.
-const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const SPINNER_INTERVAL_MS: u64 = 80;
-
-#[derive(Default, Props)]
-struct SpinnerProps {
-    color: Option<Color>,
-}
-
-#[component]
-fn Spinner(mut hooks: Hooks, props: &SpinnerProps) -> impl Into<AnyElement<'static>> {
-    let mut frame = hooks.use_state(|| 0usize);
-    let color = props.color.unwrap_or(COLOR_ACTIVE);
-
-    hooks.use_future(async move {
-        loop {
-            tokio::time::sleep(Duration::from_millis(SPINNER_INTERVAL_MS)).await;
-            frame.set((frame.get() + 1) % SPINNER_FRAMES.len());
-        }
-    });
-
-    element! {
-        Text(content: SPINNER_FRAMES[frame.get()], color: color)
-    }
-}
-
 /// Status line manager using iocraft for rendering.
 pub struct StatusLine {
     state: StatusState,
     enabled: bool,
+    /// Current spinner frame index (animated manually since we don't use iocraft runtime)
+    spinner_frame: usize,
+    /// Last time the spinner frame was updated
+    last_spinner_update: Instant,
 }
 
 impl StatusLine {
@@ -156,12 +161,28 @@ impl StatusLine {
         Self {
             state: StatusState::new(),
             enabled: true,
+            spinner_frame: 0,
+            last_spinner_update: Instant::now(),
         }
     }
 
     /// Create with default settings (for backwards compatibility).
     pub fn with_defaults() -> Self {
         Self::new()
+    }
+
+    /// Advance spinner animation if enough time has passed.
+    fn update_spinner(&mut self) {
+        let elapsed = self.last_spinner_update.elapsed().as_millis() as u64;
+        if elapsed >= SPINNER_INTERVAL_MS {
+            self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
+            self.last_spinner_update = Instant::now();
+        }
+    }
+
+    /// Get the current spinner character.
+    fn spinner_char(&self) -> &'static str {
+        SPINNER_FRAMES[self.spinner_frame]
     }
 
     /// Enable or disable the status line.
@@ -185,10 +206,13 @@ impl StatusLine {
     }
 
     /// Draw the status line at the bottom of the terminal.
-    pub fn draw(&self, stdout: &mut impl Write, rows: u16, cols: u16) -> io::Result<()> {
+    pub fn draw(&mut self, stdout: &mut impl Write, rows: u16, cols: u16) -> io::Result<()> {
         if !self.enabled {
             return Ok(());
         }
+
+        // Update spinner animation
+        self.update_spinner();
 
         // Save cursor position
         execute!(stdout, cursor::SavePosition)?;
@@ -221,6 +245,7 @@ impl StatusLine {
 
         if self.state.building {
             // Building state: spinner + "Reloading" + files
+            let spinner = self.spinner_char().to_string();
             let text = if files_str.is_empty() {
                 "Reloading...".to_string()
             } else {
@@ -230,7 +255,7 @@ impl StatusLine {
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, background_color: Color::AnsiValue(24)) {
                     View(margin_left: 1, margin_right: 1) {
-                        Spinner(color: COLOR_ACTIVE)
+                        Text(content: spinner, color: COLOR_ACTIVE)
                     }
                     View(flex_grow: 1.0, overflow: Overflow::Hidden) {
                         Text(content: text, color: COLOR_ACTIVE)
@@ -249,7 +274,7 @@ impl StatusLine {
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, background_color: Color::AnsiValue(22)) {
                     View(margin_left: 1, margin_right: 1) {
-                        Text(content: "✓", color: COLOR_COMPLETED)
+                        Text(content: CHECKMARK, color: COLOR_COMPLETED)
                     }
                     View(flex_grow: 1.0, overflow: Overflow::Hidden) {
                         Text(content: text, color: COLOR_COMPLETED)
@@ -268,7 +293,7 @@ impl StatusLine {
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, background_color: Color::AnsiValue(52)) {
                     View(margin_left: 1, margin_right: 1) {
-                        Text(content: "✗", color: COLOR_FAILED)
+                        Text(content: XMARK, color: COLOR_FAILED)
                     }
                     View(flex_grow: 1.0, overflow: Overflow::Hidden) {
                         Text(content: text, color: COLOR_FAILED)
