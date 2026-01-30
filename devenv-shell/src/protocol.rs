@@ -27,6 +27,8 @@ pub enum ShellCommand {
         changed_files: Vec<PathBuf>,
         error: String,
     },
+    /// User applied the reload (pressed keybind). Clear status line.
+    ReloadApplied,
     /// Coordinator is shutting down.
     Shutdown,
 }

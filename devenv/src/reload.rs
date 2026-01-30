@@ -291,6 +291,9 @@ echo "__DEVENV_SHELL_READY__"
         rt.block_on(async move {
             let devenv = devenv.lock().await;
 
+            // Invalidate cached state to force re-evaluation on file changes
+            devenv.invalidate_for_reload();
+
             // Get the bash environment script (like direnv's print-dev-env)
             let env_script = devenv
                 .print_dev_env(false)

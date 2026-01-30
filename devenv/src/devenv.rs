@@ -510,6 +510,14 @@ impl Devenv {
         Ok(())
     }
 
+    /// Invalidate cached state for hot-reload.
+    ///
+    /// This clears evaluation caches to force re-evaluation when files change.
+    /// Must be called before `print_dev_env()` during hot-reload to pick up changes.
+    pub fn invalidate_for_reload(&self) {
+        self.nix.invalidate();
+    }
+
     pub async fn print_dev_env(&self, json: bool) -> Result<String> {
         let env = self.get_dev_environment(json).await?;
         Ok(String::from_utf8(env.output).expect("Failed to convert env to utf-8"))

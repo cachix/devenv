@@ -66,6 +66,7 @@
     pkgs.watchexec
     pkgs.openssl
     pkgs.sqlx-cli
+    pkgs.tig
     pkgs.process-compose
     pkgs.cargo-outdated # Find outdated crates
     pkgs.cargo-machete # Find unused crates

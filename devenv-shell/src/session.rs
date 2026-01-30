@@ -5,13 +5,14 @@
 
 use crate::protocol::{PtyTaskRequest, ShellCommand, ShellEvent};
 use crate::pty::{Pty, PtyError, get_terminal_size};
-use crate::status_line::StatusLine;
+use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
 use crate::task_runner::PtyTaskRunner;
 use crate::terminal::RawModeGuard;
 use avt::Vt;
 use portable_pty::PtySize;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
@@ -272,8 +273,29 @@ impl ShellSession {
         coordinator_tx: &mpsc::Sender<ShellEvent>,
     ) -> Result<(), SessionError> {
         let mut stdout = io::stdout();
+        let spinner_interval = Duration::from_millis(SPINNER_INTERVAL_MS);
 
-        while let Some(event) = event_rx.recv().await {
+        loop {
+            // Use select! to handle both events and spinner animation
+            let event = if self.status_line.state().building {
+                // When building, use a timeout to animate the spinner
+                tokio::select! {
+                    event = event_rx.recv() => event,
+                    _ = tokio::time::sleep(spinner_interval) => {
+                        // Redraw status line to animate spinner
+                        self.status_line.draw(&mut stdout, self.size.rows, self.size.cols)?;
+                        continue;
+                    }
+                }
+            } else {
+                // When not building, just wait for events
+                event_rx.recv().await
+            };
+
+            let Some(event) = event else {
+                break;
+            };
+
             match event {
                 Event::Stdin(data) => {
                     pty.write_all(&data)?;
@@ -344,6 +366,12 @@ impl ShellSession {
                 self.status_line
                     .state_mut()
                     .set_build_failed(changed_files, error);
+                self.status_line
+                    .draw(stdout, self.size.rows, self.size.cols)?;
+            }
+
+            ShellCommand::ReloadApplied => {
+                self.status_line.state_mut().clear();
                 self.status_line
                     .draw(stdout, self.size.rows, self.size.cols)?;
             }

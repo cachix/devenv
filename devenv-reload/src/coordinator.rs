@@ -43,6 +43,8 @@ enum Event {
         /// The activity tracking this reload (dropped to complete it)
         activity: Activity,
     },
+    /// Reload file was deleted (user applied the reload)
+    ReloadFileDeleted,
     Tui(ShellEvent),
 }
 
@@ -132,10 +134,36 @@ impl ShellCoordinator {
         let mut pending_changes: Vec<PathBuf> = Vec::new();
         // Track file content hashes to detect actual changes
         let mut file_hashes: HashMap<PathBuf, blake3::Hash> = HashMap::new();
+        // Track if reload is ready (waiting for user to apply)
+        let mut reload_ready = false;
+        // Interval for checking if reload file was deleted (user applied reload)
+        let mut reload_check_interval =
+            tokio::time::interval(std::time::Duration::from_millis(100));
+        reload_check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        while let Some(event) = internal_rx.recv().await {
+        loop {
+            // Use select! to handle both events and reload file checks
+            let event = tokio::select! {
+                event = internal_rx.recv() => {
+                    match event {
+                        Some(e) => e,
+                        None => break,
+                    }
+                }
+                _ = reload_check_interval.tick(), if reload_ready => {
+                    // Check if reload file was deleted (user applied reload)
+                    if !reload_file.exists() {
+                        Event::ReloadFileDeleted
+                    } else {
+                        continue;
+                    }
+                }
+            };
+
             match event {
                 Event::FileChange(path) => {
+                    // No longer in ready state when new file changes come in
+                    reload_ready = false;
                     // Check if file content actually changed by comparing hashes
                     let new_hash = match hash_file(&path) {
                         Some(h) => h,
@@ -227,9 +255,12 @@ impl ShellCoordinator {
                         .collect();
 
                     let cmd = match &result {
-                        Ok(()) => ShellCommand::ReloadReady {
-                            changed_files: files,
-                        },
+                        Ok(()) => {
+                            reload_ready = true;
+                            ShellCommand::ReloadReady {
+                                changed_files: files,
+                            }
+                        }
                         Err(e) => {
                             activity.fail();
                             ShellCommand::BuildFailed {
@@ -243,6 +274,14 @@ impl ShellCoordinator {
 
                     if command_tx.send(cmd).await.is_err() {
                         // TUI disconnected
+                        break;
+                    }
+                }
+
+                Event::ReloadFileDeleted => {
+                    // User applied the reload (pressed keybind), clear status line
+                    reload_ready = false;
+                    if command_tx.send(ShellCommand::ReloadApplied).await.is_err() {
                         break;
                     }
                 }

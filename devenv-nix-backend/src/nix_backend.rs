@@ -47,6 +47,7 @@ use once_cell::sync::OnceCell;
 use ser_nix;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -123,6 +124,10 @@ pub struct NixRustBackend {
     // Unified caching wrapper combining EvalState + CachedEval (initialized in assemble())
     // Provides cache_key() for key generation and uncached() for explicit bypass
     caching_eval_state: OnceCell<CachingEvalState<Arc<Mutex<EvalState>>>>,
+
+    // Flag to force cache bypass on next operation (for hot-reload)
+    // Set by invalidate(), checked and cleared by dev_env()
+    cache_invalidated: AtomicBool,
 
     // Cachix manager for handling binary cache configuration
     cachix_manager: Arc<CachixManager>,
@@ -433,6 +438,7 @@ impl NixRustBackend {
             nix_log_bridge: log_bridge,
             eval_cache_pool,
             caching_eval_state: OnceCell::new(),
+            cache_invalidated: AtomicBool::new(false),
             cachix_manager,
             cachix_daemon: cachix_daemon.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
@@ -1100,11 +1106,18 @@ impl NixBackend for NixRustBackend {
         // Create cache key for shell paths
         let cache_key = caching_state.cache_key("shell");
 
+        // Check if cache was invalidated (for hot-reload)
+        let cache_invalidated = self.cache_invalidated.swap(false, Ordering::AcqRel);
+        if cache_invalidated {
+            tracing::debug!("Cache bypassed due to invalidation (hot-reload)");
+        }
+
         // Try to get cached paths and verify they still exist
         // Note: dev_env requires explicit path validation because store paths can be GC'd
-        let cached_paths: Option<CachedShellPaths> = if let Some(service) =
-            caching_state.cached_eval().service()
-        {
+        let cached_paths: Option<CachedShellPaths> = if cache_invalidated {
+            // Skip cache lookup entirely when invalidated
+            None
+        } else if let Some(service) = caching_state.cached_eval().service() {
             match service.get_cached(&cache_key).await {
                 Ok(Some(cached)) => {
                     match serde_json::from_str::<CachedShellPaths>(&cached.json_output) {
@@ -1853,6 +1866,12 @@ impl NixBackend for NixRustBackend {
                 "Unable to determine trust status for Nix store (store type may not support trust queries)"
             )),
         }
+    }
+
+    fn invalidate(&self) {
+        // Set the invalidation flag so the next dev_env() call bypasses cache
+        self.cache_invalidated.store(true, Ordering::Release);
+        tracing::debug!("Cache invalidated for hot-reload");
     }
 }
 

@@ -244,12 +244,12 @@ impl StatusLine {
         let files_str = format_changed_files(&self.state.changed_files);
 
         if self.state.building {
-            // Building state: spinner + "Reloading" + files
+            // Building state: spinner + reloading message
             let spinner = self.spinner_char().to_string();
             let text = if files_str.is_empty() {
-                "Reloading...".to_string()
+                "devenv shell reloading...".to_string()
             } else {
-                format!("Reloading... {}", files_str)
+                format!("devenv shell reloading: {}...", files_str)
             };
 
             element! {
@@ -264,11 +264,17 @@ impl StatusLine {
             }
             .into_any()
         } else if self.state.reload_ready {
-            // Ready state: checkmark + "Ready" + files + keybind hint
+            // Ready state: checkmark + ready message + keybind hint
             let text = if files_str.is_empty() {
-                format!("Ready (press {})", self.state.keybind)
+                format!(
+                    "devenv shell ready (press {} to reload)",
+                    self.state.keybind
+                )
             } else {
-                format!("Ready: {} (press {})", files_str, self.state.keybind)
+                format!(
+                    "devenv shell ready: {} (press {} to reload)",
+                    files_str, self.state.keybind
+                )
             };
 
             element! {
@@ -283,11 +289,11 @@ impl StatusLine {
             }
             .into_any()
         } else if let Some(ref error) = self.state.error {
-            // Failed state: X + error message
+            // Failed state: X + failed message
             let text = if files_str.is_empty() {
-                format!("Build failed: {}", error)
+                format!("devenv shell reload failed: {}", error)
             } else {
-                format!("Build failed ({}): {}", files_str, error)
+                format!("devenv shell reload failed ({}): {}", files_str, error)
             };
 
             element! {
