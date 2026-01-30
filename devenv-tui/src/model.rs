@@ -1355,11 +1355,11 @@ impl ActivityModel {
             }
         }
 
-        // Total: activities + blank line (+ summary line if shown)
+        // Total: activities (+ blank line + summary line if shown)
         let calculated = if show_summary {
             (total_height + 2) as u16
         } else {
-            (total_height + 1) as u16
+            total_height as u16
         };
 
         // Clamp to terminal height
