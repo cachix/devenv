@@ -396,6 +396,10 @@ impl Config {
                     .split_once('?')
                     .map_or((full_path_str, ""), |(p, q)| (p, q));
 
+                // Check if this was an absolute path (starts with / after stripping path: prefix)
+                // path:///foo and path:/foo are both absolute paths
+                let was_absolute = path_str.starts_with('/');
+
                 // Use the tracked source directory for this input, or fall back to base_path
                 let source_dir = input_source_dirs
                     .get(name)
@@ -409,15 +413,30 @@ impl Config {
                     } else {
                         format!("?{}", query_params)
                     };
-                    let new_url = if had_prefix {
-                        let stripped = rel_to_base.strip_prefix("./").unwrap_or(&rel_to_base);
-                        // Use "." for current directory when strip_prefix results in empty string
-                        let path_part = if stripped.is_empty() { "." } else { stripped };
-                        format!("path:{}{}", path_part, query_suffix)
+
+                    // If the original path was absolute and the result would escape the base
+                    // directory (starts with ../), preserve the absolute path instead.
+                    // This is necessary for lazy-trees mode in Nix, which can't access
+                    // paths outside the flake root via relative paths.
+                    let is_outside_base = rel_to_base.starts_with("../");
+                    if was_absolute && is_outside_base {
+                        // Preserve the absolute path - canonicalize it first
+                        if let Ok(canonical) = resolved.canonicalize() {
+                            let new_url = format!("path:{}{}", canonical.display(), query_suffix);
+                            input.url = Some(new_url);
+                        }
+                        // If canonicalization fails, leave the URL unchanged
                     } else {
-                        format!("{}{}", rel_to_base, query_suffix)
-                    };
-                    input.url = Some(new_url);
+                        let new_url = if had_prefix {
+                            let stripped = rel_to_base.strip_prefix("./").unwrap_or(&rel_to_base);
+                            // Use "." for current directory when strip_prefix results in empty string
+                            let path_part = if stripped.is_empty() { "." } else { stripped };
+                            format!("path:{}{}", path_part, query_suffix)
+                        } else {
+                            format!("{}{}", rel_to_base, query_suffix)
+                        };
+                        input.url = Some(new_url);
+                    }
                 }
             }
         }
@@ -1075,6 +1094,63 @@ inputs:
             sub_input.url,
             Some("path:subproject".to_string()),
             "sub-local should be normalized to path:subproject relative to base path"
+        );
+    }
+
+    #[test]
+    fn absolute_path_outside_project_preserved() {
+        // Test that absolute paths pointing outside the project directory
+        // are preserved as absolute paths (not converted to relative paths).
+        // This is necessary for lazy-trees mode in Nix.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let base_path = temp_dir.path();
+
+        // Create the project directory
+        let project_dir = base_path.join("project");
+        std::fs::create_dir(&project_dir).expect("Failed to create project dir");
+
+        // Create an external directory (sibling, not inside project)
+        let external_dir = base_path.join("external");
+        std::fs::create_dir(&external_dir).expect("Failed to create external dir");
+
+        // Get the absolute path to the external directory
+        let external_abs = external_dir
+            .canonicalize()
+            .expect("Failed to canonicalize external dir");
+
+        // Config with an absolute path to the external directory
+        let config_content = format!(
+            r#"
+inputs:
+  external-input:
+    url: path:{}
+    flake: false
+"#,
+            external_abs.display()
+        );
+        std::fs::write(project_dir.join("devenv.yaml"), &config_content)
+            .expect("Failed to write config");
+
+        // Load the config
+        let config = Config::load_from(&project_dir).expect("Failed to load config");
+
+        // The absolute path should be preserved (not converted to "../external")
+        let input = config
+            .inputs
+            .get("external-input")
+            .expect("external-input not found");
+        let url = input.url.as_ref().expect("URL should be set");
+
+        // Should still be an absolute path, not a relative one
+        assert!(
+            url.starts_with("path:/"),
+            "Absolute path outside project should be preserved as absolute, got: {}",
+            url
+        );
+        assert!(
+            !url.contains("../"),
+            "Should not be converted to relative path with ../, got: {}",
+            url
         );
     }
 }
