@@ -6,6 +6,7 @@ license = "MIT"
 description = "Shell session manager with hot-reload capability"
 
 [dependencies]
+devenv-activity = { path = "../devenv-activity" }
 devenv-shell = { path = "../devenv-shell" }
 portable-pty = "0.9"
 avt = "0.14"

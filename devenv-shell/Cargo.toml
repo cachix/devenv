@@ -13,6 +13,7 @@ portable-pty = "0.9"
 
 # Terminal handling
 crossterm = { workspace = true }
+iocraft = { workspace = true }
 term_size = "0.3"
 
 # Terminal state tracking

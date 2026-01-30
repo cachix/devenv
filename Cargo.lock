@@ -1518,6 +1518,7 @@ dependencies = [
  "anyhow",
  "avt",
  "blake3",
+ "devenv-activity",
  "devenv-shell",
  "notify 8.2.0",
  "notify-debouncer-mini",
@@ -1550,6 +1551,7 @@ version = "2.0.0"
 dependencies = [
  "avt",
  "crossterm 0.28.1",
+ "iocraft",
  "libc",
  "portable-pty",
  "regex",

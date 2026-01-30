@@ -1,63 +1,90 @@
 //! Status line rendering for shell sessions.
 //!
 //! Provides a status bar at the bottom of the terminal showing build status,
-//! reload readiness, and error messages.
+//! reload readiness, and error messages. Uses iocraft for component-based rendering.
 
-use crossterm::{
-    cursor, execute,
-    style::{Color, Print, SetBackgroundColor, SetForegroundColor},
-    terminal::{self, ClearType},
-};
+use crossterm::{cursor, execute, terminal};
+use iocraft::prelude::*;
 use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::time::Duration;
+
+/// Color constants matching devenv-tui styling
+const COLOR_ACTIVE: Color = Color::AnsiValue(255); // Bright white
+const COLOR_COMPLETED: Color = Color::Rgb {
+    r: 112,
+    g: 138,
+    b: 88,
+}; // Sage green
+const COLOR_FAILED: Color = Color::AnsiValue(160); // Red
+const COLOR_SECONDARY: Color = Color::AnsiValue(242); // Gray
 
 /// Current status state.
 #[derive(Debug, Clone, Default)]
 pub struct StatusState {
-    /// Current status message.
-    pub message: Option<String>,
     /// Files that changed (shown during build/reload).
     pub changed_files: Vec<PathBuf>,
     /// Whether a build is in progress (evaluating nix).
     pub building: bool,
-    /// Whether a reload is in progress (applying env to shell).
-    pub reloading: bool,
+    /// Whether a reload is ready (waiting for user).
+    pub reload_ready: bool,
+    /// Error message if build failed.
+    pub error: Option<String>,
+    /// Keybind hint for reload.
+    keybind: String,
 }
 
 impl StatusState {
     /// Create a new empty status state.
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            keybind: std::env::var("DEVENV_RELOAD_KEYBIND")
+                .unwrap_or_else(|_| "Alt-Ctrl-R".to_string()),
+            ..Default::default()
+        }
     }
 
     /// Update state for building status.
     pub fn set_building(&mut self, changed_files: Vec<PathBuf>) {
         self.building = true;
-        self.reloading = false;
+        self.reload_ready = false;
         self.changed_files = changed_files;
-        self.message = None;
+        self.error = None;
     }
 
     /// Update state for reload ready.
-    pub fn set_reload_ready(&mut self, changed_files: Vec<PathBuf>, keybind_hint: &str) {
+    pub fn set_reload_ready(&mut self, changed_files: Vec<PathBuf>, _keybind_hint: &str) {
         self.building = false;
-        self.reloading = false;
-        let files_str = format_changed_files(&changed_files);
-        self.message = Some(format!("Ready: {} (press {})", files_str, keybind_hint));
+        self.reload_ready = true;
+        self.changed_files = changed_files;
+        self.error = None;
     }
 
     /// Update state for build failed.
     pub fn set_build_failed(&mut self, changed_files: Vec<PathBuf>, error: String) {
         self.building = false;
-        self.reloading = false;
-        let files_str = format_changed_files(&changed_files);
-        self.message = Some(format!("Build failed ({}): {}", files_str, error));
+        self.reload_ready = false;
+        self.changed_files = changed_files;
+        self.error = Some(error);
     }
 
-    /// Set a custom message.
-    pub fn set_message(&mut self, message: String) {
-        self.message = Some(message);
+    /// Set a custom message (for backwards compatibility).
+    pub fn set_message(&mut self, _message: String) {
+        // No-op for now, state is tracked via building/reload_ready/error
+    }
+
+    /// Clear the status.
+    pub fn clear(&mut self) {
+        self.building = false;
+        self.reload_ready = false;
+        self.changed_files.clear();
+        self.error = None;
+    }
+
+    /// Check if there's any status to display.
+    pub fn has_status(&self) -> bool {
+        self.building || self.reload_ready || self.error.is_some()
     }
 }
 
@@ -78,92 +105,63 @@ fn format_changed_files(changed_files: &[PathBuf]) -> String {
                 None
             }
         })
-        .take(3)
         .collect();
-    files.join(", ")
-}
 
-/// Trait for customizing status line rendering.
-pub trait StatusRenderer: Send {
-    /// Render the status line content.
-    /// Returns (text, background_color).
-    fn render(&self, state: &StatusState, width: u16) -> (String, Color);
-}
-
-/// Default status renderer with devenv styling.
-pub struct DefaultStatusRenderer {
-    #[allow(dead_code)]
-    reload_keybind: String,
-}
-
-impl DefaultStatusRenderer {
-    /// Create a new default renderer.
-    pub fn new() -> Self {
-        let reload_keybind =
-            std::env::var("DEVENV_RELOAD_KEYBIND").unwrap_or_else(|_| "Alt-Ctrl-R".to_string());
-        Self { reload_keybind }
+    if files.is_empty() {
+        return String::new();
     }
 
-    /// Create with a specific keybind hint.
-    pub fn with_keybind(keybind: String) -> Self {
-        Self {
-            reload_keybind: keybind,
+    if files.len() <= 3 {
+        files.join(", ")
+    } else {
+        format!("{}, +{} more", files[..3].join(", "), files.len() - 3)
+    }
+}
+
+/// Spinner component for status line.
+const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const SPINNER_INTERVAL_MS: u64 = 80;
+
+#[derive(Default, Props)]
+struct SpinnerProps {
+    color: Option<Color>,
+}
+
+#[component]
+fn Spinner(mut hooks: Hooks, props: &SpinnerProps) -> impl Into<AnyElement<'static>> {
+    let mut frame = hooks.use_state(|| 0usize);
+    let color = props.color.unwrap_or(COLOR_ACTIVE);
+
+    hooks.use_future(async move {
+        loop {
+            tokio::time::sleep(Duration::from_millis(SPINNER_INTERVAL_MS)).await;
+            frame.set((frame.get() + 1) % SPINNER_FRAMES.len());
         }
+    });
+
+    element! {
+        Text(content: SPINNER_FRAMES[frame.get()], color: color)
     }
 }
 
-impl Default for DefaultStatusRenderer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl StatusRenderer for DefaultStatusRenderer {
-    fn render(&self, state: &StatusState, _width: u16) -> (String, Color) {
-        if state.building {
-            // Building environment (Nix evaluation in progress)
-            let files = format_changed_files(&state.changed_files);
-            (format!(" Building... [{}]", files), Color::Blue)
-        } else if state.reloading {
-            // Applying environment to shell
-            let files = format_changed_files(&state.changed_files);
-            (format!(" Reloading... [{}]", files), Color::Yellow)
-        } else if let Some(ref msg) = state.message {
-            // Check if message indicates success or failure
-            let color = if msg.starts_with("Ready:") {
-                Color::Green
-            } else if msg.contains("failed") {
-                Color::Red
-            } else {
-                Color::DarkGrey
-            };
-            (format!(" {}", msg), color)
-        } else {
-            (" devenv shell (--reload)".to_string(), Color::DarkGrey)
-        }
-    }
-}
-
-/// Status line manager.
+/// Status line manager using iocraft for rendering.
 pub struct StatusLine {
-    renderer: Box<dyn StatusRenderer>,
     state: StatusState,
     enabled: bool,
 }
 
 impl StatusLine {
-    /// Create a new status line with a custom renderer.
-    pub fn new(renderer: Box<dyn StatusRenderer>) -> Self {
+    /// Create a new status line.
+    pub fn new() -> Self {
         Self {
-            renderer,
             state: StatusState::new(),
             enabled: true,
         }
     }
 
-    /// Create with default renderer.
+    /// Create with default settings (for backwards compatibility).
     pub fn with_defaults() -> Self {
-        Self::new(Box::new(DefaultStatusRenderer::new()))
+        Self::new()
     }
 
     /// Enable or disable the status line.
@@ -192,8 +190,6 @@ impl StatusLine {
             return Ok(());
         }
 
-        let (status_text, bg_color) = self.renderer.render(&self.state, cols);
-
         // Save cursor position
         execute!(stdout, cursor::SavePosition)?;
 
@@ -202,17 +198,15 @@ impl StatusLine {
         execute!(stdout, cursor::MoveTo(0, status_row))?;
 
         // Clear the line
-        execute!(stdout, terminal::Clear(ClearType::CurrentLine))?;
+        execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
 
-        // Draw status with colors
-        execute!(
-            stdout,
-            SetBackgroundColor(bg_color),
-            SetForegroundColor(Color::White),
-            Print(format!("{:<width$}", status_text, width = cols as usize)),
-            SetBackgroundColor(Color::Reset),
-            SetForegroundColor(Color::Reset)
-        )?;
+        // Build and render the element
+        let mut element = self.build_element(cols);
+
+        // Render to string and write
+        let output = element.to_string();
+        let truncated: String = output.chars().take(cols as usize).collect();
+        write!(stdout, "{}", truncated)?;
 
         // Restore cursor position
         execute!(stdout, cursor::RestorePosition)?;
@@ -220,11 +214,85 @@ impl StatusLine {
 
         Ok(())
     }
+
+    /// Build the status line element.
+    fn build_element(&self, width: u16) -> AnyElement<'static> {
+        let files_str = format_changed_files(&self.state.changed_files);
+
+        if self.state.building {
+            // Building state: spinner + "Reloading" + files
+            let text = if files_str.is_empty() {
+                "Reloading...".to_string()
+            } else {
+                format!("Reloading... {}", files_str)
+            };
+
+            element! {
+                View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, background_color: Color::AnsiValue(24)) {
+                    View(margin_left: 1, margin_right: 1) {
+                        Spinner(color: COLOR_ACTIVE)
+                    }
+                    View(flex_grow: 1.0, overflow: Overflow::Hidden) {
+                        Text(content: text, color: COLOR_ACTIVE)
+                    }
+                }
+            }
+            .into_any()
+        } else if self.state.reload_ready {
+            // Ready state: checkmark + "Ready" + files + keybind hint
+            let text = if files_str.is_empty() {
+                format!("Ready (press {})", self.state.keybind)
+            } else {
+                format!("Ready: {} (press {})", files_str, self.state.keybind)
+            };
+
+            element! {
+                View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, background_color: Color::AnsiValue(22)) {
+                    View(margin_left: 1, margin_right: 1) {
+                        Text(content: "✓", color: COLOR_COMPLETED)
+                    }
+                    View(flex_grow: 1.0, overflow: Overflow::Hidden) {
+                        Text(content: text, color: COLOR_COMPLETED)
+                    }
+                }
+            }
+            .into_any()
+        } else if let Some(ref error) = self.state.error {
+            // Failed state: X + error message
+            let text = if files_str.is_empty() {
+                format!("Build failed: {}", error)
+            } else {
+                format!("Build failed ({}): {}", files_str, error)
+            };
+
+            element! {
+                View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, background_color: Color::AnsiValue(52)) {
+                    View(margin_left: 1, margin_right: 1) {
+                        Text(content: "✗", color: COLOR_FAILED)
+                    }
+                    View(flex_grow: 1.0, overflow: Overflow::Hidden) {
+                        Text(content: text, color: COLOR_FAILED)
+                    }
+                }
+            }
+            .into_any()
+        } else {
+            // Idle state: hint text
+            element! {
+                View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, background_color: Color::AnsiValue(236)) {
+                    View(margin_left: 1, flex_grow: 1.0, overflow: Overflow::Hidden) {
+                        Text(content: "devenv shell (--reload)", color: COLOR_SECONDARY)
+                    }
+                }
+            }
+            .into_any()
+        }
+    }
 }
 
 impl Default for StatusLine {
     fn default() -> Self {
-        Self::with_defaults()
+        Self::new()
     }
 }
 
@@ -237,7 +305,7 @@ mod tests {
         let mut state = StatusState::new();
         state.set_building(vec![PathBuf::from("devenv.nix")]);
         assert!(state.building);
-        assert!(!state.reloading);
+        assert!(!state.reload_ready);
         assert_eq!(state.changed_files.len(), 1);
     }
 
@@ -246,8 +314,24 @@ mod tests {
         let mut state = StatusState::new();
         state.set_reload_ready(vec![PathBuf::from("devenv.nix")], "Alt-Ctrl-R");
         assert!(!state.building);
-        assert!(state.message.is_some());
-        assert!(state.message.as_ref().unwrap().contains("Ready:"));
+        assert!(state.reload_ready);
+    }
+
+    #[test]
+    fn test_status_state_build_failed() {
+        let mut state = StatusState::new();
+        state.set_build_failed(
+            vec![PathBuf::from("devenv.nix")],
+            "syntax error".to_string(),
+        );
+        assert!(!state.building);
+        assert!(!state.reload_ready);
+        assert!(state.error.is_some());
+    }
+
+    #[test]
+    fn test_format_changed_files_empty() {
+        assert_eq!(format_changed_files(&[]), "");
     }
 
     #[test]
@@ -258,27 +342,40 @@ mod tests {
             PathBuf::from("/c/other.nix"),
         ];
         let result = format_changed_files(&files);
-        // Should deduplicate devenv.nix
         assert!(result.contains("devenv.nix"));
         assert!(result.contains("other.nix"));
+        // Should only have one devenv.nix
+        assert_eq!(result.matches("devenv.nix").count(), 1);
     }
 
     #[test]
-    fn test_default_renderer() {
-        let renderer = DefaultStatusRenderer::new();
-        let state = StatusState::new();
-        let (text, color) = renderer.render(&state, 80);
-        assert!(text.contains("devenv shell"));
-        assert_eq!(color, Color::DarkGrey);
+    fn test_format_changed_files_limits() {
+        let files = vec![
+            PathBuf::from("a.nix"),
+            PathBuf::from("b.nix"),
+            PathBuf::from("c.nix"),
+            PathBuf::from("d.nix"),
+        ];
+        let result = format_changed_files(&files);
+        assert!(result.contains("+1 more"));
     }
 
     #[test]
-    fn test_default_renderer_building() {
-        let renderer = DefaultStatusRenderer::new();
-        let mut state = StatusState::new();
-        state.set_building(vec![PathBuf::from("test.nix")]);
-        let (text, color) = renderer.render(&state, 80);
-        assert!(text.contains("Building"));
-        assert_eq!(color, Color::Blue);
+    fn test_status_line_state_transitions() {
+        let mut sl = StatusLine::new();
+
+        assert!(!sl.state().has_status());
+
+        sl.state_mut().set_building(vec![PathBuf::from("test.nix")]);
+        assert!(sl.state().has_status());
+        assert!(sl.state().building);
+
+        sl.state_mut()
+            .set_reload_ready(vec![PathBuf::from("test.nix")], "Alt-Ctrl-R");
+        assert!(sl.state().has_status());
+        assert!(sl.state().reload_ready);
+
+        sl.state_mut().clear();
+        assert!(!sl.state().has_status());
     }
 }

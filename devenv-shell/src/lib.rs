@@ -21,7 +21,7 @@ pub use pty::{Pty, PtyError, get_terminal_size};
 pub use terminal::{RawModeGuard, is_tty};
 
 // Status line
-pub use status_line::{DefaultStatusRenderer, StatusLine, StatusRenderer, StatusState};
+pub use status_line::{StatusLine, StatusState};
 
 // Task execution
 pub use task_runner::{PtyTaskRunner, TaskRunnerError, strip_ansi_codes};

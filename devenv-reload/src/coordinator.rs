@@ -6,6 +6,7 @@
 use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
 use crate::watcher::FileWatcher;
+use devenv_activity::Activity;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -37,7 +38,11 @@ pub enum CoordinatorError {
 enum Event {
     FileChange(PathBuf),
     /// Reload build completed (env written to file)
-    ReloadBuildComplete(Result<(), crate::builder::BuildError>),
+    ReloadBuildComplete {
+        result: Result<(), crate::builder::BuildError>,
+        /// The activity tracking this reload (dropped to complete it)
+        activity: Activity,
+    },
     Tui(ShellEvent),
 }
 
@@ -171,9 +176,18 @@ impl ShellCoordinator {
                         .collect();
                     let _ = command_tx
                         .send(ShellCommand::Building {
-                            changed_files: relative_files,
+                            changed_files: relative_files.clone(),
                         })
                         .await;
+
+                    // Create activity for tracking the reload in the TUI
+                    let files_display: Vec<String> = relative_files
+                        .iter()
+                        .map(|p| p.display().to_string())
+                        .collect();
+                    let activity = Activity::operation("Reloading shell")
+                        .detail(files_display.join(", "))
+                        .start();
 
                     let ctx = BuildContext {
                         cwd: cwd.clone(),
@@ -196,12 +210,14 @@ impl ShellCoordinator {
                                         e
                                     )))
                                 });
-                        let _ = build_tx.send(Event::ReloadBuildComplete(result)).await;
+                        let _ = build_tx
+                            .send(Event::ReloadBuildComplete { result, activity })
+                            .await;
                     });
                     current_build = Some(handle.abort_handle());
                 }
 
-                Event::ReloadBuildComplete(result) => {
+                Event::ReloadBuildComplete { result, activity } => {
                     current_build = None;
 
                     // Collect changed files as relative paths
@@ -210,15 +226,20 @@ impl ShellCoordinator {
                         .map(|p| p.strip_prefix(&cwd).map(|p| p.to_path_buf()).unwrap_or(p))
                         .collect();
 
-                    let cmd = match result {
+                    let cmd = match &result {
                         Ok(()) => ShellCommand::ReloadReady {
                             changed_files: files,
                         },
-                        Err(e) => ShellCommand::BuildFailed {
-                            changed_files: files,
-                            error: e.to_string(),
-                        },
+                        Err(e) => {
+                            activity.fail();
+                            ShellCommand::BuildFailed {
+                                changed_files: files,
+                                error: e.to_string(),
+                            }
+                        }
                     };
+                    // Activity completes on drop (success by default, or failed if marked)
+                    drop(activity);
 
                     if command_tx.send(cmd).await.is_err() {
                         // TUI disconnected
