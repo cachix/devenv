@@ -3,7 +3,7 @@ use crate::config::TaskConfig;
 use crate::task_cache::{TaskCache, expand_glob_patterns};
 use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
-use devenv_processes::{NativeProcessManager, ProcessConfig};
+use devenv_processes::{ListenKind, NativeProcessManager, ProcessConfig};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use nix::sys::signal::{self as nix_signal, Signal};
 use nix::unistd::Pid;
@@ -243,8 +243,11 @@ impl TaskState {
         config.env = merged_env;
 
         // Check if we need to wait for readiness (notify enabled or has listen sockets)
-        let requires_ready_wait =
-            config.notify.as_ref().map_or(false, |n| n.enable) || !config.listen.is_empty();
+        let requires_ready_wait = config.notify.as_ref().map_or(false, |n| n.enable)
+            || config
+                .listen
+                .iter()
+                .any(|spec| spec.kind == ListenKind::Tcp);
 
         // Start the process via the manager (which tracks it for shutdown)
         manager.start_command(&config, parent_id).await?;
@@ -252,8 +255,7 @@ impl TaskState {
         // Wait for ready signal if notify is enabled or has listen sockets
         if requires_ready_wait {
             tracing::info!("Waiting for process {} to signal ready...", self.task.name);
-            let ready_notify = manager.get_ready_notify(&config.name).await?;
-            ready_notify.notified().await;
+            manager.wait_ready(&config.name).await?;
             tracing::info!("Process {} signaled ready", self.task.name);
         }
 

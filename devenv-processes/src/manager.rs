@@ -60,8 +60,8 @@ pub struct JobHandle {
     pub output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
     /// Notify socket for systemd-style notifications (owned here to keep alive)
     pub notify_socket: Option<Arc<NotifySocket>>,
-    /// Notifier for when process becomes ready (signaled via READY=1 or TCP probe)
-    pub ready_notify: Arc<tokio::sync::Notify>,
+    /// Ready state for signaling when process becomes ready (READY=1 or TCP probe)
+    pub ready_state: tokio::sync::watch::Sender<bool>,
 }
 
 /// Native process manager using watchexec-supervisor
@@ -202,8 +202,8 @@ impl NativeProcessManager {
         let stdout_tailer = Self::spawn_file_tailer(stdout_log, activity.clone(), false);
         let stderr_tailer = Self::spawn_file_tailer(stderr_log, activity.clone(), true);
 
-        // Create ready notifier for signaling when process becomes ready
-        let ready_notify = Arc::new(tokio::sync::Notify::new());
+        // Create ready state for signaling when process becomes ready
+        let (ready_state, _ready_rx) = tokio::sync::watch::channel(false);
 
         // Spawn supervision task
         let supervisor_task = self.spawn_supervisor(
@@ -211,7 +211,7 @@ impl NativeProcessManager {
             job.clone(),
             activity.clone(),
             notify_socket.clone(),
-            ready_notify.clone(),
+            ready_state.clone(),
         );
 
         // Store the job handle
@@ -225,7 +225,7 @@ impl NativeProcessManager {
                 activity,
                 output_readers: Some((stdout_tailer, stderr_tailer)),
                 notify_socket,
-                ready_notify,
+                ready_state,
             },
         );
 
@@ -308,7 +308,7 @@ impl NativeProcessManager {
         job: Arc<Job>,
         activity: Activity,
         notify_socket: Option<Arc<NotifySocket>>,
-        ready_notify: Arc<tokio::sync::Notify>,
+        ready_state: tokio::sync::watch::Sender<bool>,
     ) -> JoinHandle<()> {
         let shutdown = self.shutdown.clone();
         let name = config.name.clone();
@@ -364,7 +364,7 @@ impl NativeProcessManager {
                                 info!("TCP probe succeeded for {} at {}", probe_name, address);
                                 probe_activity.log("TCP probe succeeded - process ready");
                                 probe_activity.set_status(ProcessStatus::Ready);
-                                ready_notify.notify_waiters();
+                                let _ = ready_state.send(true);
                                 break;
                             }
                             Err(_) => {
@@ -503,7 +503,7 @@ impl NativeProcessManager {
                                         // Signal waiting tasks that process is ready
                                         if !ready_signaled {
                                             ready_signaled = true;
-                                            ready_notify.notify_waiters();
+                                            let _ = ready_state.send(true);
                                         }
                                         // Start watchdog timer now if configured
                                         if let Some(timeout) = watchdog_timeout {
@@ -886,15 +886,28 @@ impl NativeProcessManager {
         jobs.keys().cloned().collect()
     }
 
-    /// Get the ready notifier for a process
-    ///
-    /// Returns an Arc<Notify> that will be signaled when the process becomes ready
-    /// (either via READY=1 notification or TCP probe).
-    pub async fn get_ready_notify(&self, name: &str) -> Result<Arc<tokio::sync::Notify>> {
-        let jobs = self.jobs.read().await;
-        jobs.get(name)
-            .map(|h| h.ready_notify.clone())
-            .ok_or_else(|| miette::miette!("Process {} not found", name))
+    /// Wait for a process to become ready, avoiding missed early readiness signals.
+    pub async fn wait_ready(&self, name: &str) -> Result<()> {
+        let ready_state = {
+            let jobs = self.jobs.read().await;
+            let handle = jobs
+                .get(name)
+                .ok_or_else(|| miette::miette!("Process {} not found", name))?;
+            handle.ready_state.clone()
+        };
+
+        let mut ready_rx = ready_state.subscribe();
+        if *ready_rx.borrow() {
+            return Ok(());
+        }
+
+        while ready_rx.changed().await.is_ok() {
+            if *ready_rx.borrow() {
+                return Ok(());
+            }
+        }
+
+        bail!("Process {} ready state channel closed", name);
     }
 
     /// Run the manager event loop (keeps processes alive)
@@ -1164,10 +1177,6 @@ impl ProcessManager for NativeProcessManager {
             PidStatus::NotFound | PidStatus::StaleRemoved => {}
         }
 
-        // Start requested processes
-        self.start_processes(&options.processes, &options.env)
-            .await?;
-
         if options.detach {
             use daemonize::{Daemonize, Outcome};
 
@@ -1176,6 +1185,8 @@ impl ProcessManager for NativeProcessManager {
             // Clone data needed in the daemon before daemonizing
             let state_dir = self.state_dir.clone();
             let process_configs = self.process_configs.blocking_read().clone();
+            let process_names = options.processes.clone();
+            let env = options.env.clone();
 
             // Configure and start the daemon (execute() keeps parent alive)
             let daemonize = Daemonize::new().pid_file(&manager_pid_file);
@@ -1211,6 +1222,7 @@ impl ProcessManager for NativeProcessManager {
                     let result = runtime.block_on(async {
                         let manager =
                             Arc::new(NativeProcessManager::new(state_dir, process_configs)?);
+                        manager.start_processes(&process_names, &env).await?;
                         manager.run().await
                     });
 
@@ -1230,6 +1242,10 @@ impl ProcessManager for NativeProcessManager {
                 }
             }
         } else {
+            // Start requested processes
+            self.start_processes(&options.processes, &options.env)
+                .await?;
+
             // Foreground mode - run the event loop
             info!("All processes started. Press Ctrl+C to stop.");
 

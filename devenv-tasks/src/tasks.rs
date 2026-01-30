@@ -7,7 +7,7 @@ use crate::types::{
     TasksStatus, VerbosityLevel,
 };
 use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
-use devenv_processes::NativeProcessManager;
+use devenv_processes::{ListenKind, NativeProcessManager};
 use petgraph::algo::{has_path_connecting, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{EdgeRef, Reversed};
@@ -288,15 +288,13 @@ impl Tasks {
                             .as_ref()
                             .and_then(|p| p.notify.as_ref())
                             .map_or(false, |n| n.enable);
-                        let has_listen = dep_task
-                            .task
-                            .process
-                            .as_ref()
-                            .map_or(false, |p| !p.listen.is_empty());
+                        let has_listen = dep_task.task.process.as_ref().map_or(false, |p| {
+                            p.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
+                        });
                         if !has_notify && !has_listen {
                             validation_errors.push(format!(
-                                "Task '{}' depends on '{}@ready' but process has no notify.enable or listen config. \
-                                 Add notify.enable = true or configure listen sockets for the process.",
+                                "Task '{}' depends on '{}@ready' but process has no notify.enable or TCP listen config. \
+                                 Add notify.enable = true or configure a TCP listen socket for the process.",
                                 task_state.task.name, dep_spec.name
                             ));
                         }
@@ -343,15 +341,13 @@ impl Tasks {
                             .as_ref()
                             .and_then(|p| p.notify.as_ref())
                             .map_or(false, |n| n.enable);
-                        let has_listen = task_state
-                            .task
-                            .process
-                            .as_ref()
-                            .map_or(false, |p| !p.listen.is_empty());
+                        let has_listen = task_state.task.process.as_ref().map_or(false, |p| {
+                            p.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
+                        });
                         if !has_notify && !has_listen {
                             validation_errors.push(format!(
-                                "Process '{}' has tasks depending on it via @ready but has no notify.enable or listen config. \
-                                 Add notify.enable = true or configure listen sockets for the process.",
+                                "Process '{}' has tasks depending on it via @ready but has no notify.enable or TCP listen config. \
+                                 Add notify.enable = true or configure a TCP listen socket for the process.",
                                 task_state.task.name
                             ));
                         }

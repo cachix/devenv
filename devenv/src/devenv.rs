@@ -410,7 +410,9 @@ impl Devenv {
     }
 
     pub fn native_manager_pid_file(&self) -> PathBuf {
-        self.devenv_dotfile.join("native-manager.pid")
+        processes::get_process_runtime_dir(&self.devenv_runtime)
+            .map(|dir| dir.join("native-manager.pid"))
+            .unwrap_or_else(|_| self.devenv_dotfile.join("native-manager.pid"))
     }
 
     pub fn init(&self, target: &Option<PathBuf>) -> Result<()> {
@@ -1356,6 +1358,48 @@ impl Devenv {
         if implementation == "native" {
             info!("Using native process manager with task-based dependency ordering");
 
+            let is_detach_child = std::env::var_os("DEVENV_NATIVE_DETACH_CHILD").is_some();
+            if options.detach && !is_detach_child {
+                let exe = std::env::current_exe().into_diagnostic()?;
+                let mut args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+                let has_no_tui = args.iter().any(|arg| arg == "--no-tui");
+                if !has_no_tui {
+                    args.push(std::ffi::OsString::from("--no-tui"));
+                }
+
+                let mut cmd = std::process::Command::new(exe);
+                cmd.args(args)
+                    .env("DEVENV_NATIVE_DETACH_CHILD", "1")
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null());
+                #[cfg(unix)]
+                {
+                    use nix::libc;
+                    use std::os::unix::process::CommandExt;
+                    cmd.pre_exec(|| {
+                        if unsafe { libc::setsid() } == -1 {
+                            return Err(std::io::Error::last_os_error());
+                        }
+                        Ok(())
+                    });
+                }
+
+                let child = cmd.spawn().into_diagnostic()?;
+                if let Some(pid) = child.id() {
+                    info!(
+                        "Native process manager started in background (PID: {})",
+                        pid
+                    );
+                }
+                info!("Stop with: devenv processes down");
+                return Ok(RunMode::Detached);
+            }
+
+            if is_detach_child {
+                options.detach = false;
+            }
+
             // Load task configurations from Nix
             let gc_root = self.devenv_dot_gc.join("task-config");
             let paths = self
@@ -1425,11 +1469,19 @@ impl Devenv {
 
             // For foreground mode, run the event loop
             if !options.detach {
-                tasks_runner
+                let pid_file = tasks_runner.process_manager.manager_pid_file();
+                processes::write_pid(&pid_file, std::process::id())
+                    .await
+                    .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
+
+                let result = tasks_runner
                     .process_manager
                     .run_foreground()
                     .await
-                    .map_err(|e| miette!("Process manager error: {}", e))?;
+                    .map_err(|e| miette!("Process manager error: {}", e));
+
+                let _ = tokio::fs::remove_file(&pid_file).await;
+                result?;
             }
 
             return Ok(RunMode::Detached);
