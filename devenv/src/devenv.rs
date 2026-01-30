@@ -1377,21 +1377,24 @@ impl Devenv {
                 {
                     use nix::libc;
                     use std::os::unix::process::CommandExt;
-                    cmd.pre_exec(|| {
-                        if unsafe { libc::setsid() } == -1 {
-                            return Err(std::io::Error::last_os_error());
-                        }
-                        Ok(())
-                    });
+                    // SAFETY: setsid() creates a new session, detaching from terminal.
+                    // This is safe as it only affects the child process after fork.
+                    unsafe {
+                        cmd.pre_exec(|| {
+                            if libc::setsid() == -1 {
+                                return Err(std::io::Error::last_os_error());
+                            }
+                            Ok(())
+                        });
+                    }
                 }
 
                 let child = cmd.spawn().into_diagnostic()?;
-                if let Some(pid) = child.id() {
-                    info!(
-                        "Native process manager started in background (PID: {})",
-                        pid
-                    );
-                }
+                let pid = child.id();
+                info!(
+                    "Native process manager started in background (PID: {})",
+                    pid
+                );
                 info!("Stop with: devenv processes down");
                 return Ok(RunMode::Detached);
             }

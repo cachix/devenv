@@ -353,7 +353,7 @@ impl NativeProcessManager {
 
             // Spawn TCP probe task if needed
             let _tcp_probe_task = if let Some(address) = tcp_probe_address {
-                let ready_notify = ready_notify.clone();
+                let ready_state = ready_state.clone();
                 let probe_name = name.clone();
                 let probe_activity = activity.clone();
                 Some(tokio::spawn(async move {
@@ -862,7 +862,7 @@ impl NativeProcessManager {
                 handle.job.clone(),
                 handle.activity.clone(),
                 handle.notify_socket.clone(),
-                handle.ready_notify.clone(),
+                handle.ready_state.clone(),
             );
         } else {
             // Supervisor is still running - just restart the job.
