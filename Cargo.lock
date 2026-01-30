@@ -4090,7 +4090,7 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "itertools 0.14.0",
  "log",
  "multimap",
@@ -4149,7 +4149,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07b8bf115b70a7aa5af1fd5d6e9418492e9ccb6e4785e858c938e28d132a884b"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "prost",
  "prost-build",
  "prost-types",
@@ -5076,8 +5076,9 @@ checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 
 [[package]]
 name = "ser_nix"
-version = "0.1.2"
-source = "git+https://github.com/cachix/ser_nix?branch=support-paths#15b61a91d16ba39ceb3b82fb9906d564bb889e47"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75f6ece1f0e898c9b1abde12f14007e0a77e8bb8936547a32eb9854a2500e053"
 dependencies = [
  "serde",
 ]
