@@ -54,6 +54,7 @@ struct TaskUiState {
 /// Display status for a task
 #[derive(Clone, PartialEq)]
 enum TaskDisplayStatus {
+    Queued,
     Running,
     Succeeded,
     Failed,
@@ -130,6 +131,24 @@ impl TasksUi {
 
     fn handle_task_event(&mut self, event: TaskEvent) -> Result<(), Error> {
         match event {
+            TaskEvent::Queued {
+                id,
+                name,
+                show_output,
+                is_process,
+                ..
+            } => {
+                self.task_states.insert(
+                    id,
+                    TaskUiState {
+                        name: name.clone(),
+                        status: TaskDisplayStatus::Queued,
+                        start_time: Instant::now(),
+                        show_output,
+                        is_process,
+                    },
+                );
+            }
             TaskEvent::Start {
                 id,
                 name,

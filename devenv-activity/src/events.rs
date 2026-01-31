@@ -209,6 +209,25 @@ pub enum Evaluate {
 #[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Task {
+    /// Task is queued, waiting to start
+    Queued {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        parent: Option<u64>,
+        /// Additional parents for displaying task under multiple dependents in TUI
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        additional_parents: Vec<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+        #[serde(default)]
+        show_output: bool,
+        /// Whether this is a long-running process task (always shows output)
+        #[serde(default)]
+        is_process: bool,
+        timestamp: Timestamp,
+    },
     Start {
         #[serde(alias = "activity_id")]
         id: u64,

@@ -399,6 +399,48 @@ impl Tasks {
                 .parent(None)
                 .start(),
         );
+
+        // Pre-create activities for ALL tasks so dependencies nest under their dependents in the TUI.
+        // Process in REVERSE topological order so dependents are created before their dependencies.
+        //
+        // Graph edge direction: Incoming = dependencies (must complete first),
+        //                       Outgoing = dependents (tasks that depend on this one)
+        let mut pre_created_activities: HashMap<NodeIndex, Activity> = HashMap::new();
+        for &index in self.tasks_order.iter().rev() {
+            let task_state = self.graph[index].read().await;
+            let is_root_task = self.roots.contains(&index);
+
+            // Collect all dependent activity IDs (already created due to reverse order)
+            let dependent_activity_ids: Vec<u64> = self
+                .graph
+                .neighbors_directed(index, petgraph::Direction::Outgoing)
+                .filter_map(|dep_index| pre_created_activities.get(&dep_index).map(|a| a.id()))
+                .collect();
+
+            // Determine TUI parent and additional parents:
+            // - Root tasks → parent is orchestration, no additional parents
+            // - Non-root → first dependent is primary parent, rest are additional parents
+            let (parent_activity_id, additional_parents) = if is_root_task {
+                (Some(orchestration_activity.id()), Vec::new())
+            } else if dependent_activity_ids.is_empty() {
+                // No dependents found (shouldn't happen for non-root), fallback to orchestration
+                (Some(orchestration_activity.id()), Vec::new())
+            } else {
+                let mut iter = dependent_activity_ids.into_iter();
+                let primary = iter.next();
+                let additional: Vec<u64> = iter.collect();
+                (primary, additional)
+            };
+
+            let activity = Activity::task(&task_state.task.name)
+                .show_output(task_state.task.show_output)
+                .is_process(task_state.task.r#type == crate::types::TaskType::Process)
+                .parent(parent_activity_id)
+                .additional_parents(additional_parents)
+                .queue();
+            pre_created_activities.insert(index, activity);
+        }
+
         let total_tasks = self.tasks_order.len() as u64;
         let completed_tasks = Arc::new(std::sync::atomic::AtomicU64::new(0));
 
@@ -460,12 +502,6 @@ impl Tasks {
                 }
             }
 
-            let (task_name, show_output) = {
-                let task_state = task_state.read().await;
-                // TODO: remove clone
-                (task_state.task.name.clone(), task_state.task.show_output)
-            };
-
             if cancelled || dependency_failed {
                 let task_completed = if cancelled {
                     TaskCompleted::Cancelled(None)
@@ -473,11 +509,11 @@ impl Tasks {
                     TaskCompleted::DependencyFailed
                 };
 
-                // Create a task activity for the skipped/cancelled task, parented to orchestration
-                let skip_activity = Activity::task(&task_name)
-                    .show_output(show_output)
-                    .parent(Some(orchestration_activity.id()))
-                    .start();
+                // Use pre-created activity (all tasks have one)
+                let skip_activity = pre_created_activities
+                    .remove(index)
+                    .expect("All tasks should have pre-created activities");
+
                 if cancelled {
                     skip_activity.cancel();
                 } else {
@@ -508,7 +544,7 @@ impl Tasks {
                 task_state.status = TaskStatus::Running(now);
             };
 
-            // The task activity is created inside TaskState::run() and manages its own lifecycle
+            // The task activity is queued above; TaskState::run() marks it active and manages its lifecycle
             self.notify_ui.notify_one();
 
             // TODO: consider Arc-ing self at this point
@@ -521,6 +557,9 @@ impl Tasks {
             let shutdown_clone = Arc::clone(&self.shutdown);
             let orchestration_activity_clone = Arc::clone(&orchestration_activity);
             let completed_tasks_clone = Arc::clone(&completed_tasks);
+            let task_activity = pre_created_activities
+                .remove(index)
+                .expect("all tasks have pre-created activities");
 
             running_tasks.spawn(move || {
                 // Clone for use inside the async block; the original is borrowed by in_activity
@@ -534,7 +573,13 @@ impl Tasks {
                         match task_state_clone
                             .read()
                             .await
-                            .run(now, &outputs, &cache, shutdown_clone.cancellation_token())
+                            .run(
+                                now,
+                                &outputs,
+                                &cache,
+                                shutdown_clone.cancellation_token(),
+                                task_activity,
+                            )
                             .await
                         {
                             Ok(result) => result,

@@ -172,19 +172,21 @@ impl TaskState {
         Output(output)
     }
 
+    /// Run this task with a pre-created (queued) activity.
     pub async fn run(
         &self,
         now: Instant,
         outputs: &BTreeMap<String, serde_json::Value>,
         cache: &TaskCache,
         cancellation: CancellationToken,
+        task_activity: Activity,
     ) -> Result<TaskCompleted> {
-        // Create a Task activity for tracking this task's lifecycle.
-        // All child activities created within scope() will have this as their parent.
-        let task_activity = Activity::task(&self.task.name)
-            .show_output(self.task.show_output)
-            .is_process(self.task.r#type == crate::types::TaskType::Process)
-            .start();
+        // Transition the queued activity to active execution
+        task_activity.begin_execution(
+            self.task.name.clone(),
+            self.task.show_output,
+            self.task.r#type == crate::types::TaskType::Process,
+        );
 
         // Run the entire task within the activity's scope for proper parent-child nesting
         self.run_inner(now, outputs, cache, cancellation, &task_activity)

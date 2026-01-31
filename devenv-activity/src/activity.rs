@@ -192,6 +192,24 @@ impl Activity {
         }
     }
 
+    /// Transition a queued task to active execution (sends Start event for already-created activity).
+    pub fn begin_execution(&self, name: impl Into<String>, show_output: bool, is_process: bool) {
+        if !matches!(self.activity_type, ActivityType::Task) {
+            return;
+        }
+
+        let _guard = self.span.enter();
+        send_activity_event(ActivityEvent::Task(Task::Start {
+            id: self.id,
+            name: name.into(),
+            parent: None, // Parent was already set during queue
+            detail: None,
+            show_output,
+            is_process,
+            timestamp: Timestamp::now(),
+        }));
+    }
+
     /// Update progress (for Build, Task, and Operation activities)
     ///
     /// For Operation activities, an optional detail string can be provided to show

@@ -1167,3 +1167,85 @@ fn test_devenv_failed_shows_logs() {
     let output = render_to_string(&model, &ui_state);
     assert_tui_snapshot!(output);
 }
+
+/// Test that a task with additional_parents appears under multiple parents.
+#[test]
+fn test_task_additional_parents() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Create two parent tasks (like test:unit and test:integration)
+    let parent1_event = ActivityEvent::Task(Task::Queued {
+        id: 1,
+        name: "test:unit".to_string(),
+        parent: None,
+        additional_parents: vec![],
+        detail: None,
+        show_output: false,
+        is_process: false,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(parent1_event);
+
+    let parent2_event = ActivityEvent::Task(Task::Queued {
+        id: 2,
+        name: "test:integration".to_string(),
+        parent: None,
+        additional_parents: vec![],
+        detail: None,
+        show_output: false,
+        is_process: false,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(parent2_event);
+
+    // Create a shared dependency with primary parent 1 and additional parent 2
+    let shared_event = ActivityEvent::Task(Task::Queued {
+        id: 3,
+        name: "build".to_string(),
+        parent: Some(1),
+        additional_parents: vec![2],
+        detail: None,
+        show_output: false,
+        is_process: false,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(shared_event);
+
+    // Start all tasks
+    let start1 = ActivityEvent::Task(Task::Start {
+        id: 1,
+        name: "test:unit".to_string(),
+        parent: None,
+        detail: None,
+        show_output: false,
+        is_process: false,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(start1);
+
+    let start2 = ActivityEvent::Task(Task::Start {
+        id: 2,
+        name: "test:integration".to_string(),
+        parent: None,
+        detail: None,
+        show_output: false,
+        is_process: false,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(start2);
+
+    let start3 = ActivityEvent::Task(Task::Start {
+        id: 3,
+        name: "build".to_string(),
+        parent: Some(1),
+        detail: None,
+        show_output: false,
+        is_process: false,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(start3);
+
+    let output = render_to_string(&model, &ui_state);
+    // The "build" task should appear under both test:unit and test:integration
+    assert_tui_snapshot!(output);
+}
