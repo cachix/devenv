@@ -36,3 +36,6 @@ assert_file script.sh <<EOF
 #!/bin/bash
 echo hello
 EOF
+
+# Verify state tracking
+test -f .devenv/state/files.json
