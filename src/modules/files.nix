@@ -79,20 +79,21 @@ let
       };
   });
   createFileScript = filename: fileOption: ''
-    mkdir -p "${dirOf filename}"
-    if [ -L "${filename}" ]
-    then
+    if [ -L "${filename}" ]; then
       # Only update symlink if target changed (same content = same store path)
       if [ "$(readlink "${filename}")" != "${fileOption.file}" ]; then
         echo "Updating ${filename}"
         ln -sf ${fileOption.file} "${filename}"
       fi
-    elif [ -f "${filename}" ]
-    then
+    elif [ -f "${filename}" ]; then
       echo "Conflicting file ${filename}" >&2
+      exit 1
+    elif [ -e "${filename}" ]; then
+      echo "Conflicting non-file ${filename}" >&2
       exit 1
     else
       echo "Creating ${filename}"
+      mkdir -p "${dirOf filename}"
       ln -s ${fileOption.file} "${filename}"
     fi
   '';
