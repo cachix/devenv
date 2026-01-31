@@ -435,13 +435,17 @@ impl TaskState {
                         Ok(status) => {
                             if !status.success() {
                                 cmd_activity.fail();
-                            }
-
-                            // Update the file states to capture any changes the task made,
-                            // regardless of whether the task succeeded or failed
-                            let expanded_paths = expand_glob_patterns(&self.task.exec_if_modified);
-                            for path in expanded_paths {
-                                cache.update_file_state(&self.task.name, &path).await?;
+                            } else {
+                                // Only update file states on success - failed tasks should not be cached
+                                // Include command path in the files to update, matching check_files_modified
+                                let mut files_to_update = self.task.exec_if_modified.clone();
+                                if let Some(cmd) = &self.task.command {
+                                    files_to_update.push(cmd.clone());
+                                }
+                                let expanded_paths = expand_glob_patterns(&files_to_update);
+                                for path in expanded_paths {
+                                    cache.update_file_state(&self.task.name, &path).await?;
+                                }
                             }
 
                             exit_status = Some(status);

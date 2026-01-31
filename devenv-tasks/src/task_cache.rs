@@ -230,13 +230,13 @@ impl TaskCache {
         // Fetch the existing file info
         let file_info = self.fetch_file_info(task_name, path).await?;
 
-        // If file not in database, consider it modified
+        // If file not in database, consider it modified (first run)
         if file_info.is_none() {
             debug!(
                 "File {} not found in cache for task {} - considering it modified (first time)",
                 path, task_name
             );
-            self.update_file_state(task_name, path).await?;
+            // Don't update file state here - only update after successful task completion
             return Ok(true);
         }
 
@@ -280,19 +280,18 @@ impl TaskCache {
                         stored_hash,
                         current_hash
                     );
-                    // Update the file state using the already loaded instance
-                    self.update_file_state_with_file(task_name, &current_file)
-                        .await?;
+                    // Don't update file state here - only update after successful task completion
                     return Ok(true);
                 }
 
-                // If only timestamp changed but hash didn't, update the timestamp without considering it modified
+                // If only timestamp changed but hash didn't, we can update the timestamp
+                // since it doesn't affect caching logic (content hash is the same)
                 if current_modified_time > stored_modified_time {
                     debug!(
                         "File {} timestamp changed for task {} but content is the same (time: {} -> {})",
                         path, task_name, stored_modified_time, current_modified_time
                     );
-                    // Update using the current file instance we already have
+                    // Update timestamp only - this is safe since content hash didn't change
                     self.update_file_state_with_file(task_name, &current_file)
                         .await?;
                 }
@@ -356,7 +355,10 @@ mod tests {
                 .unwrap()
         );
 
-        // Second check should consider it unmodified
+        // Store file state in cache
+        cache.update_file_state(task_name, &path_str).await.unwrap();
+
+        // File now in cache, unchanged
         assert!(
             !cache
                 .check_modified_files(task_name, &[path_str.clone()])
@@ -389,6 +391,9 @@ mod tests {
                 .await
                 .unwrap()
         );
+
+        // Store file state in cache
+        cache.update_file_state(task_name, &path_str).await.unwrap();
 
         // Another check should see it as unmodified again
         assert!(
@@ -437,6 +442,16 @@ mod tests {
                 .unwrap()
         );
 
+        // Store file state in caches
+        cache
+            .update_file_state(task_name, file1_path.to_str().unwrap())
+            .await
+            .unwrap();
+        cache
+            .update_file_state(task_name, file2_path.to_str().unwrap())
+            .await
+            .unwrap();
+
         // Second check should consider them unmodified
         assert!(
             !cache
@@ -463,6 +478,12 @@ mod tests {
                 .unwrap()
         );
 
+        // Store file state in cache
+        cache
+            .update_file_state(task_name, file1_path.to_str().unwrap())
+            .await
+            .unwrap();
+
         // Test with multiple patterns
         let pattern2 = format!("{}/*.log", test_temp_dir.path().to_str().unwrap());
         let patterns = vec![pattern.clone(), pattern2];
@@ -474,6 +495,12 @@ mod tests {
                 .await
                 .unwrap()
         );
+
+        // Store file state in cache
+        cache
+            .update_file_state(task_name, file3_path.to_str().unwrap())
+            .await
+            .unwrap();
 
         // Second check should consider all files unmodified
         assert!(
@@ -523,6 +550,12 @@ mod tests {
                 .unwrap()
         );
 
+        // Store file state in cache
+        cache
+            .update_file_state(task_name, &dir_path_str)
+            .await
+            .unwrap();
+
         // Second check should consider it unmodified
         assert!(
             !cache
@@ -551,6 +584,12 @@ mod tests {
                 .unwrap()
         );
 
+        // Store file state in cache
+        cache
+            .update_file_state(task_name, &dir_path_str)
+            .await
+            .unwrap();
+
         // Second check should consider it unmodified
         assert!(
             !cache
@@ -578,6 +617,12 @@ mod tests {
                 .unwrap()
         );
 
+        // Store file state in cache
+        cache
+            .update_file_state(task_name, &dir_path_str)
+            .await
+            .unwrap();
+
         // Create a subdirectory and set its mtime
         let subdir_path = dir_path.join("subdir");
         tokio::fs::create_dir(&subdir_path).await.unwrap();
@@ -600,6 +645,12 @@ mod tests {
                 .unwrap()
         );
 
+        // Store file state in cache
+        cache
+            .update_file_state(task_name, &dir_path_str)
+            .await
+            .unwrap();
+
         // Add a file in the subdirectory
         let subdir_file_path = subdir_path.join("nested_file.txt");
         {
@@ -620,7 +671,13 @@ mod tests {
                 .unwrap()
         );
 
-        // After the final check, it should be unmodified again
+        // Store file state in cache
+        cache
+            .update_file_state(task_name, &dir_path_str)
+            .await
+            .unwrap();
+
+        // After update, it should be unmodified
         assert!(
             !cache
                 .check_modified_files(task_name, &[dir_path_str.clone()])
@@ -644,7 +701,13 @@ mod tests {
                 .unwrap()
         );
 
-        // Second check should consider it unmodified
+        // Store file state in cache
+        cache
+            .update_file_state(task_name, &dir_path_str)
+            .await
+            .unwrap();
+
+        // After update, it should be unmodified
         assert!(
             !cache
                 .check_modified_files(task_name, &[dir_path_str.clone()])
@@ -672,6 +735,12 @@ mod tests {
                 .unwrap()
         );
 
+        // Store file state in cache
+        cache
+            .update_file_state(task_name, &dir_path_str)
+            .await
+            .unwrap();
+
         // Update the deep file
         {
             let mut file = tokio::fs::OpenOptions::new()
@@ -695,6 +764,12 @@ mod tests {
                 .unwrap()
         );
 
+        // Store file state in cache
+        cache
+            .update_file_state(task_name, &dir_path_str)
+            .await
+            .unwrap();
+
         // Remove a deep file
         tokio::fs::remove_file(&deep_file_path).await.unwrap();
 
@@ -705,6 +780,12 @@ mod tests {
                 .await
                 .unwrap()
         );
+
+        // Store file state in cache
+        cache
+            .update_file_state(task_name, &dir_path_str)
+            .await
+            .unwrap();
 
         // Remove a deep directory
         tokio::fs::remove_dir(&deep_dir3).await.unwrap();
@@ -717,7 +798,13 @@ mod tests {
                 .unwrap()
         );
 
-        // After the final check, it should be unmodified again
+        // Store file state in cache
+        cache
+            .update_file_state(task_name, &dir_path_str)
+            .await
+            .unwrap();
+
+        // After update, it should be unmodified
         assert!(
             !cache
                 .check_modified_files(task_name, &[dir_path_str])

@@ -1147,7 +1147,7 @@ echo "Task completed and modified the file"
 }
 
 #[tokio::test]
-async fn test_file_state_updated_on_failed_task() -> Result<(), Error> {
+async fn test_failed_task_not_cached() -> Result<(), Error> {
     // Create a unique tempdir for this test
     let temp_dir = TempDir::new().unwrap();
     let db_path = temp_dir.path().join("tasks-update-fail.db");
@@ -1169,16 +1169,13 @@ async fn test_file_state_updated_on_failed_task() -> Result<(), Error> {
             .as_millis()
     );
 
-    // Create a script that modifies the file but exits with an error
-    let modify_script = create_script(&format!(
+    // Create a script that exits with an error
+    let fail_script = create_script(
         r#"#!/bin/sh
-echo "Task is running and will modify the file, then fail"
-echo "modified by failing task" > {}
-echo "Task modified the file but will now fail"
+echo "Task is running but will fail"
 exit 1
 "#,
-        &file_path_str.replace("\\", "\\\\") // Escape backslashes for Windows paths
-    ))?;
+    )?;
 
     let config = Config::try_from(json!({
         "roots": [task_name],
@@ -1186,7 +1183,7 @@ exit 1
         "tasks": [
             {
                 "name": task_name,
-                "command": modify_script.to_str().unwrap(),
+                "command": fail_script.to_str().unwrap(),
                 "exec_if_modified": [file_path_str]
             }
         ]
@@ -1196,14 +1193,8 @@ exit 1
     // Connect to the database directly to check hash values
     let cache = crate::task_cache::TaskCache::with_db_path(db_path.clone()).await?;
 
-    // Get the initial hash of the file
-    let initial_hash = {
-        let tracked_file = devenv_cache_core::file::TrackedFile::new(&test_file_path)?;
-        tracked_file.content_hash.clone()
-    };
-
-    // Create and run the tasks
-    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+    // Create and run the tasks - first run
+    let tasks = Tasks::builder(config.clone(), VerbosityLevel::Verbose, Shutdown::new())
         .with_db_path(db_path.clone())
         .build()
         .await?;
@@ -1214,49 +1205,144 @@ exit 1
     match status {
         TaskStatus::Completed(TaskCompleted::Failed(_, _)) => {
             // Expected case - task should fail
-            println!("Task correctly failed as expected");
         }
         other => {
-            panic!("Expected Failed status, got: {other:?}");
+            panic!("Expected Failed status on first run, got: {other:?}");
         }
     }
-
-    // Check the modified file content
-    let modified_content = fs::read_to_string(&test_file_path).await?;
-    assert_eq!(
-        modified_content.trim(),
-        "modified by failing task",
-        "File should be modified by the task even though it failed"
-    );
-
-    // Calculate the new hash after task ran
-    let current_hash = {
-        let tracked_file = devenv_cache_core::file::TrackedFile::new(&test_file_path)?;
-        tracked_file.content_hash.clone()
-    };
-
-    // Verify the hashes are different
-    assert_ne!(
-        initial_hash, current_hash,
-        "File content hash should change after task modifies it"
-    );
 
     // Fetch the stored file info from the database
     let file_info = cache.fetch_file_info(&task_name, &file_path_str).await?;
 
-    // Verify the database has the updated hash
+    // Verify the database does NOT have the file info for failed tasks
     assert!(
-        file_info.is_some(),
-        "File info should be stored in database even for failed tasks"
+        file_info.is_none(),
+        "File info should NOT be stored in database for failed tasks"
     );
-    if let Some(row) = file_info {
-        let stored_hash: Option<String> = row.get("content_hash");
-        assert_eq!(
-            stored_hash.unwrap_or_default(),
-            current_hash.clone().unwrap_or_default(),
-            "Database should have the updated hash after task execution, even for failed tasks"
-        );
+
+    // Run the task again - it should run again (not be cached) since it failed
+    let tasks2 = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
+    tasks2.run().await;
+
+    // Check that the task ran again and failed again (not cached)
+    let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
+    match status2 {
+        TaskStatus::Completed(TaskCompleted::Failed(_, _)) => {
+            // Expected case - task should fail again, not be cached
+        }
+        TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_))) => {
+            panic!("Failed task should NOT be cached on second run");
+        }
+        other => {
+            panic!("Expected Failed status on second run, got: {other:?}");
+        }
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_failed_task_cached_after_fix() -> Result<(), Error> {
+    // Tests the recovery scenario: task fails -> user fixes it -> task succeeds -> cached
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks-recovery.db");
+
+    // Create a test file to monitor
+    let test_dir = TempDir::new().unwrap();
+    let test_file_path = test_dir.path().join("test_file.txt");
+    fs::write(&test_file_path, "initial content").await?;
+    let file_path_str = test_file_path.to_str().unwrap().to_string();
+
+    let task_name = format!(
+        "recovery:task_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
+
+    // Create a failing script
+    let fail_script = create_script(
+        r#"#!/bin/sh
+echo "Task failing"
+exit 1
+"#,
+    )?;
+
+    let config_fail = Config::try_from(json!({
+        "roots": [task_name],
+        "run_mode": "all",
+        "tasks": [{
+            "name": task_name,
+            "command": fail_script.to_str().unwrap(),
+            "exec_if_modified": [file_path_str]
+        }]
+    }))
+    .unwrap();
+
+    // First run: task fails
+    let tasks1 = Tasks::builder(config_fail, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
+    tasks1.run().await;
+
+    let status1 = &tasks1.graph[tasks1.tasks_order[0]].read().await.status;
+    assert_matches!(status1, TaskStatus::Completed(TaskCompleted::Failed(_, _)));
+
+    // Create a succeeding script (simulating user fix)
+    let success_script = create_script(
+        r#"#!/bin/sh
+echo "Task succeeding"
+exit 0
+"#,
+    )?;
+
+    let config_success = Config::try_from(json!({
+        "roots": [task_name],
+        "run_mode": "all",
+        "tasks": [{
+            "name": task_name,
+            "command": success_script.to_str().unwrap(),
+            "exec_if_modified": [file_path_str]
+        }]
+    }))
+    .unwrap();
+
+    // Second run: task succeeds (after "fix")
+    let tasks2 = Tasks::builder(
+        config_success.clone(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path.clone())
+    .build()
+    .await?;
+    tasks2.run().await;
+
+    let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
+    assert_matches!(
+        status2,
+        TaskStatus::Completed(TaskCompleted::Success(..)),
+        "Task should succeed after fix"
+    );
+
+    // Third run: task should be cached
+    let tasks3 = Tasks::builder(config_success, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
+    tasks3.run().await;
+
+    let status3 = &tasks3.graph[tasks3.tasks_order[0]].read().await.status;
+    assert_matches!(
+        status3,
+        TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_))),
+        "Task should be cached after successful run"
+    );
 
     Ok(())
 }
