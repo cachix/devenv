@@ -127,6 +127,7 @@ rec {
             {
               _module.args.pkgs = evalPkgs.appendOverlays (config.overlays or [ ]);
               _module.args.secretspec = secretspec;
+              _module.args.devenvPrimops = primops;
             }
           )
           (inputs.devenv.modules + /top-level.nix)

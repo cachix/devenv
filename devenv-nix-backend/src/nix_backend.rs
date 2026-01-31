@@ -545,47 +545,54 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to evaluate NixArgs")?;
 
-        if !self.port_allocator.is_enabled() {
-            return eval_state
-                .call(import_fn, base_args)
+        // 3. Build primops attrset based on whether port allocation is enabled
+        // When disabled, we still need to pass primops = {} for module compatibility
+        tracing::debug!(
+            "eval_import_with_primops: is_enabled={}, is_strict={}",
+            self.port_allocator.is_enabled(),
+            self.port_allocator.is_strict()
+        );
+        let primops_attrset = if self.port_allocator.is_enabled() {
+            // Create the allocatePort primop: processName -> portName -> basePort -> allocatedPort
+            let port_allocator = self.port_allocator.clone();
+            let primop = PrimOp::new(
+                eval_state,
+                PrimOpMeta {
+                    name: cstr!("allocatePort"),
+                    doc: cstr!("Allocate a free port starting from base"),
+                    args: [cstr!("processName"), cstr!("portName"), cstr!("basePort")],
+                },
+                Box::new(move |es, [process_name, port_name, base_port]| {
+                    let process = es.require_string(process_name)?;
+                    let port_name_str = es.require_string(port_name)?;
+                    let base_raw = es.require_int(base_port)?;
+                    let base = u16::try_from(base_raw).map_err(|_| {
+                        anyhow::anyhow!("basePort must be between 0 and 65535, got {}", base_raw)
+                    })?;
+                    let allocated = port_allocator
+                        .allocate(&process, &port_name_str, base)
+                        .map_err(|e| anyhow::anyhow!("{}", e))?;
+                    es.new_value_int(allocated as i64)
+                }),
+            )
+            .to_miette()
+            .wrap_err("Failed to create allocatePort primop")?;
+
+            let primop_value = eval_state
+                .new_value_primop(primop)
                 .to_miette()
-                .wrap_err("Failed to evaluate devenv configuration");
-        }
-
-        // 3. Create the allocatePort primop: processName -> portName -> basePort -> allocatedPort
-        let port_allocator = self.port_allocator.clone();
-        let primop = PrimOp::new(
-            eval_state,
-            PrimOpMeta {
-                name: cstr!("allocatePort"),
-                doc: cstr!("Allocate a free port starting from base"),
-                args: [cstr!("processName"), cstr!("portName"), cstr!("basePort")],
-            },
-            Box::new(move |es, [process_name, port_name, base_port]| {
-                let process = es.require_string(process_name)?;
-                let port_name_str = es.require_string(port_name)?;
-                let base_raw = es.require_int(base_port)?;
-                let base = u16::try_from(base_raw).map_err(|_| {
-                    anyhow::anyhow!("basePort must be between 0 and 65535, got {}", base_raw)
-                })?;
-                let allocated = port_allocator
-                    .allocate(&process, &port_name_str, base)
-                    .map_err(|e| anyhow::anyhow!("{}", e))?;
-                es.new_value_int(allocated as i64)
-            }),
-        )
-        .to_miette()
-        .wrap_err("Failed to create allocatePort primop")?;
-
-        // 4. Build primops attrset: { allocatePort = <primop>; }
-        let primop_value = eval_state
-            .new_value_primop(primop)
-            .to_miette()
-            .wrap_err("Failed to create primop value")?;
-        let primops_attrset = eval_state
-            .new_value_attrs(vec![("allocatePort".to_string(), primop_value)])
-            .to_miette()
-            .wrap_err("Failed to create primops attrset")?;
+                .wrap_err("Failed to create primop value")?;
+            eval_state
+                .new_value_attrs(vec![("allocatePort".to_string(), primop_value)])
+                .to_miette()
+                .wrap_err("Failed to create primops attrset")?
+        } else {
+            // Empty primops attrset when port allocation is disabled
+            eval_state
+                .new_value_attrs(vec![])
+                .to_miette()
+                .wrap_err("Failed to create empty primops attrset")?
+        };
 
         // 5. Build override: { primops = { allocatePort = <primop>; }; }
         let override_attrs = eval_state
@@ -604,6 +611,7 @@ impl NixRustBackend {
             .wrap_err("Failed to merge args with primops")?;
 
         // 7. Apply: (import default.nix) finalArgs
+        tracing::debug!("eval_import_with_primops: calling import function with merged args");
         eval_state
             .call(import_fn, final_args)
             .to_miette()
@@ -1974,10 +1982,14 @@ impl NixRustBackend {
         )?;
 
         // Convert to JSON string
-        let json_value = self.enriched(
-            value_to_json(&mut eval_state, &value),
-            format!("Failed to convert '{}' to JSON", attr_path),
-        )?;
+        let json_value = match value_to_json(&mut eval_state, &value) {
+            Ok(v) => v,
+            Err(e) => {
+                // Log the full error to help debug port allocation errors
+                tracing::error!(error = %e, "Failed to convert {} to JSON", attr_path);
+                return Err(miette::miette!("{}", e));
+            }
+        };
 
         serde_json::to_string(&json_value)
             .into_diagnostic()

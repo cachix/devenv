@@ -1,10 +1,14 @@
-{ config, options, lib, pkgs, primops ? { }, ... }:
+{ config, options, lib, pkgs, ... }:
 let
   types = lib.types;
 
+  # Get primops from _module.args (set via specialArgs in bootstrapLib.nix)
+  # Use default empty attrset if not available (e.g., when evaluated without devenv CLI)
+  devenvPrimops = config._module.args.devenvPrimops or { };
+
   # Capture primop for use in submodule (specialArgs don't propagate to types.submodule)
   # Signature: allocatePort processName portName basePort
-  allocatePort = primops.allocatePort or (_proc: _port: base: base);
+  allocatePort = devenvPrimops.allocatePort or (_proc: _port: base: base);
 
   # Port type factory - needs process name for stable cache key
   mkPortType = processName: types.submodule ({ config, name, ... }: {
