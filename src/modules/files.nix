@@ -79,12 +79,14 @@ let
       };
   });
   createFileScript = filename: fileOption: ''
-    echo "Creating ${filename}"
     mkdir -p "${dirOf filename}"
     if [ -L "${filename}" ]
     then
-      echo "Overwriting ${filename}"
-      ln -sf ${fileOption.file} "${filename}"
+      # Only update symlink if target changed (same content = same store path)
+      if [ "$(readlink "${filename}")" != "${fileOption.file}" ]; then
+        echo "Updating ${filename}"
+        ln -sf ${fileOption.file} "${filename}"
+      fi
     elif [ -f "${filename}" ]
     then
       echo "Conflicting file ${filename}" >&2

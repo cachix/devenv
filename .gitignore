@@ -27,3 +27,4 @@ node_modules/
 **/.claude/settings.local.json
 .claude
 .mcp.json
+.devcontainer.json
