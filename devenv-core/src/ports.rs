@@ -321,7 +321,23 @@ impl PortAllocator {
                 Ok(port)
             }
             Err(e) => {
-                if self.allow_in_use.load(Ordering::SeqCst) && e.kind() == ErrorKind::AddrInUse {
+                let strict = self.strict.load(Ordering::SeqCst);
+                let allow_in_use = self.allow_in_use.load(Ordering::SeqCst);
+
+                // In strict mode, always fail if port is in use - even during replay
+                // The user explicitly wants to validate that ports are available
+                if strict && e.kind() == ErrorKind::AddrInUse {
+                    let info = get_process_using_port(port);
+                    return Err(format!(
+                        "Port {} is already in use{}. \
+                         Use --strict-ports=false to auto-allocate an available port.",
+                        port, info
+                    ));
+                }
+
+                // In non-strict mode with allow_in_use, accept ports that are in use
+                // (for cache replay when processes are already running)
+                if allow_in_use && e.kind() == ErrorKind::AddrInUse {
                     tracing::debug!(
                         "Port {} is in use, accepting due to allow_in_use replay mode",
                         port
@@ -350,7 +366,6 @@ impl PortAllocator {
             ports.clear();
         }
     }
-
 }
 
 impl ReplayableResource for PortAllocator {
@@ -643,4 +658,24 @@ mod tests {
         drop(external);
     }
 
+    #[test]
+    fn test_allocate_exact_strict_overrides_allow_in_use() {
+        // Allocate a port externally to simulate a running process
+        let external = TcpListener::bind(format!("{}:0", DEFAULT_HOST)).unwrap();
+        let port = external.local_addr().unwrap().port();
+
+        let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
+        allocator.set_allow_in_use(true); // Processes are running
+        allocator.set_strict(true); // User passed --strict-ports
+
+        // Even with allow_in_use=true, strict mode should fail
+        let err = allocator
+            .allocate_exact("server", "http", port)
+            .unwrap_err();
+        assert!(err.contains("already in use"));
+        assert!(err.contains("--strict-ports=false"));
+
+        drop(external);
+    }
 }

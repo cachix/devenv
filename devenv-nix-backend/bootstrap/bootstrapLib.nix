@@ -123,6 +123,7 @@ rec {
           {
             _module.args.pkgs = evalPkgs.appendOverlays (config.overlays or [ ]);
             _module.args.secretspec = secretspec;
+            _module.args.devenvPrimops = primops;
           }
         )
         (inputs.devenv.modules + /top-level.nix)
@@ -186,7 +187,7 @@ rec {
       # Phase 1: Base evaluation to extract profile definitions
       baseProject = lib.evalModules {
         specialArgs = inputs // {
-          inherit inputs secretspec primops;
+          inherit inputs secretspec;
         };
         modules = mkCommonModules pkgsBootstrap;
       };
@@ -443,7 +444,7 @@ rec {
           evalPkgs = mkPkgsForSystem evalSystem;
           evalProject = lib.evalModules {
             specialArgs = inputs // {
-              inherit inputs secretspec primops;
+              inherit inputs secretspec;
             };
             modules = mkCommonModules evalPkgs;
           };
