@@ -308,13 +308,9 @@ impl StatusLine {
             }
             .into_any()
         } else {
-            // Idle state: hint text
+            // Idle state: show nothing
             element! {
-                View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, background_color: Color::AnsiValue(236)) {
-                    View(margin_left: 1, flex_grow: 1.0, overflow: Overflow::Hidden) {
-                        Text(content: "devenv shell (--reload)", color: COLOR_SECONDARY)
-                    }
-                }
+                View(width: width as u32, height: 1)
             }
             .into_any()
         }

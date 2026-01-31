@@ -1,4 +1,5 @@
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
@@ -22,11 +23,18 @@ pub struct FileChangeEvent {
 #[derive(Clone)]
 pub struct WatcherHandle {
     watcher: Arc<Mutex<RecommendedWatcher>>,
+    watched_paths: Arc<Mutex<HashSet<PathBuf>>>,
 }
 
 impl WatcherHandle {
     /// Add a new path to watch
     pub fn watch(&self, path: &Path) -> Result<(), WatcherError> {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+
+        // Track this path for filtering
+        self.watched_paths.lock().unwrap().insert(canonical);
+
+        // Tell notify to watch it
         let mut watcher = self.watcher.lock().unwrap();
         watcher
             .watch(path, RecursiveMode::NonRecursive)
@@ -37,6 +45,7 @@ impl WatcherHandle {
 /// Async file watcher with debouncing
 pub struct FileWatcher {
     watcher: Arc<Mutex<RecommendedWatcher>>,
+    watched_paths: Arc<Mutex<HashSet<PathBuf>>>,
     receiver: mpsc::Receiver<FileChangeEvent>,
 }
 
@@ -45,11 +54,20 @@ impl FileWatcher {
     pub fn new(paths: &[PathBuf]) -> Result<Self, WatcherError> {
         let (tx, rx) = mpsc::channel(100);
 
+        // Track watched paths for filtering (inotify watches directories, not files)
+        let watched_paths = Arc::new(Mutex::new(HashSet::new()));
+        let watched_paths_clone = watched_paths.clone();
+
         let watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
             if let Ok(event) = res {
                 if event.kind.is_modify() || event.kind.is_create() {
+                    let watched = watched_paths_clone.lock().unwrap();
                     for path in event.paths {
-                        let _ = tx.blocking_send(FileChangeEvent { path });
+                        // Canonicalize to match stored paths
+                        let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+                        if watched.contains(&canonical) {
+                            let _ = tx.blocking_send(FileChangeEvent { path: canonical });
+                        }
                     }
                 }
             }
@@ -57,7 +75,11 @@ impl FileWatcher {
 
         let watcher = Arc::new(Mutex::new(watcher));
 
+        // Add initial paths
         for path in paths {
+            let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+            watched_paths.lock().unwrap().insert(canonical);
+
             watcher
                 .lock()
                 .unwrap()
@@ -67,6 +89,7 @@ impl FileWatcher {
 
         Ok(Self {
             watcher,
+            watched_paths,
             receiver: rx,
         })
     }
@@ -75,6 +98,7 @@ impl FileWatcher {
     pub fn handle(&self) -> WatcherHandle {
         WatcherHandle {
             watcher: self.watcher.clone(),
+            watched_paths: self.watched_paths.clone(),
         }
     }
 
