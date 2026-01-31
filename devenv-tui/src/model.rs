@@ -565,6 +565,18 @@ impl ActivityModel {
             Operation::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
             }
+            Operation::Progress {
+                id,
+                done,
+                expected,
+                detail,
+                ..
+            } => {
+                self.handle_item_progress(id, done, expected);
+                if let Some(activity) = self.activities.get_mut(&id) {
+                    activity.detail = detail;
+                }
+            }
             Operation::Log {
                 id, line, is_error, ..
             } => {

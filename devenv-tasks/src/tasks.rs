@@ -486,7 +486,7 @@ impl Tasks {
 
                 // Update orchestration progress
                 let done = completed_tasks.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-                orchestration_activity.progress(done, total_tasks);
+                orchestration_activity.progress(done, total_tasks, None);
 
                 self.notify_finished.notify_one();
                 self.notify_ui.notify_one();
@@ -612,7 +612,7 @@ impl Tasks {
                     let done = completed_tasks_clone
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                         + 1;
-                    orchestration_activity_inner.progress(done, total_tasks);
+                    orchestration_activity_inner.progress(done, total_tasks, None);
 
                     notify_finished_clone.notify_one();
                     notify_ui_clone.notify_one();

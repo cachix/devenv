@@ -192,8 +192,11 @@ impl Activity {
         }
     }
 
-    /// Update progress (for Build and Task activities)
-    pub fn progress(&self, done: u64, expected: u64) {
+    /// Update progress (for Build, Task, and Operation activities)
+    ///
+    /// For Operation activities, an optional detail string can be provided to show
+    /// what is currently being processed (e.g., the current file or path name).
+    pub fn progress(&self, done: u64, expected: u64, detail: Option<&str>) {
         let _guard = self.span.enter();
         let event = match self.activity_type {
             ActivityType::Build => ActivityEvent::Build(Build::Progress {
@@ -212,6 +215,13 @@ impl Activity {
                 // For fetch, use progress_bytes instead
                 return;
             }
+            ActivityType::Operation => ActivityEvent::Operation(Operation::Progress {
+                id: self.id,
+                done,
+                expected,
+                detail: detail.map(String::from),
+                timestamp: Timestamp::now(),
+            }),
             _ => return,
         };
         send_activity_event(event);

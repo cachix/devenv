@@ -482,9 +482,25 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         ActivityVariant::Devenv => {
             let prefix = build_activity_prefix(*depth, *completed);
 
-            // Show line count as suffix when active with logs
+            // Build suffix: progress info, detail, or line count
             let suffix = if completed.is_some() {
                 None
+            } else if let Some(ref progress) = activity.progress {
+                // Show progress with optional detail
+                let progress_text = match (progress.current, progress.total) {
+                    (Some(current), Some(total)) if total > 0 => {
+                        format!("{}/{}", current, total)
+                    }
+                    _ => String::new(),
+                };
+                match (&activity.detail, progress_text.is_empty()) {
+                    (Some(detail), false) => Some(format!("{} → {}", progress_text, detail)),
+                    (Some(detail), true) => Some(format!("→ {}", detail)),
+                    (None, false) => Some(progress_text),
+                    (None, true) => None,
+                }
+            } else if let Some(ref detail) = activity.detail {
+                Some(format!("→ {}", detail))
             } else if *log_line_count > 0 {
                 Some(format!("{} lines", log_line_count))
             } else {

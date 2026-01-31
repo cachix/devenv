@@ -299,6 +299,15 @@ pub enum Operation {
         outcome: ActivityOutcome,
         timestamp: Timestamp,
     },
+    Progress {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        done: u64,
+        expected: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+        timestamp: Timestamp,
+    },
     Log {
         #[serde(alias = "activity_id")]
         id: u64,

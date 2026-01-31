@@ -473,7 +473,7 @@ impl NixLogBridge {
                         && let Ok(activities) = self.active_activities.lock()
                         && let Some(activity_info) = activities.get(&activity_id)
                     {
-                        activity_info.activity.progress(*done, *expected);
+                        activity_info.activity.progress(*done, *expected, None);
                     }
                 } else if fields.len() >= 2 {
                     // Fallback to download progress format for backward compatibility

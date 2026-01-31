@@ -1640,12 +1640,18 @@ impl NixBackend for NixRustBackend {
         let activity = Activity::operation("Deleting store paths").start();
 
         for (i, path) in paths.iter().enumerate() {
-            activity.progress(i as u64, total_paths);
-
             let path_str = match path.to_str() {
                 Some(s) => s,
                 None => continue,
             };
+
+            // Extract just the name from store path for display
+            let path_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(path_str);
+
+            activity.progress(i as u64, total_paths, Some(path_name));
 
             let store_path = match store.parse_store_path(path_str).to_miette() {
                 Ok(sp) => sp,
@@ -1670,7 +1676,7 @@ impl NixBackend for NixRustBackend {
             }
         }
 
-        activity.progress(total_paths, total_paths);
+        activity.progress(total_paths, total_paths, None);
 
         Ok((total_deleted, total_bytes_freed))
     }
