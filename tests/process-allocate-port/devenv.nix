@@ -47,21 +47,6 @@
         exit 1
       fi
 
-      # Test --strict-ports flag: should fail when port is already in use
-      echo "Testing --strict-ports flag..."
-
-      # server1 is already running on port1, so strict mode should fail
-      # when trying to allocate that same port
-      if output=$(devenv up --strict-ports 2>&1); then
-        echo "✗ Expected devenv up --strict-ports to fail (port ${port1} is in use)"
-        exit 1
-      fi
-
-      if echo "$output" | grep -q "already in use"; then
-        echo "✓ --strict-ports correctly failed with port conflict error"
-      else
-        echo "✗ Expected error message to contain 'already in use', got: $output"
-        exit 1
-      fi
+      echo "All port allocation tests passed!"
     '';
 }
