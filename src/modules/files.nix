@@ -14,6 +14,10 @@ let
       type = types.str;
       generate = filename: text: pkgs.writeText filename text;
     };
+    source = {
+      type = types.path;
+      generate = filename: path: path;
+    };
   };
 
   # State tracking for cleanup
