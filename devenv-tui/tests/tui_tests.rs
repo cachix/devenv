@@ -1119,3 +1119,51 @@ fn test_error_message_without_details() {
     let output = render_to_string(&model, &ui_state);
     assert_tui_snapshot!(output);
 }
+
+/// Test that failed devenv operations show logs automatically (not just when selected).
+#[test]
+fn test_devenv_failed_shows_logs() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Start a devenv operation
+    let start_event = ActivityEvent::Operation(Operation::Start {
+        id: 1,
+        name: "devenv shell".to_string(),
+        parent: None,
+        detail: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(start_event);
+
+    // Send log events - these should be visible because the operation fails
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Log {
+        id: 1,
+        line: "Running enterShell hook...".to_string(),
+        is_error: false,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Log {
+        id: 1,
+        line: "error: command 'foo' not found".to_string(),
+        is_error: true,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Log {
+        id: 1,
+        line: "hint: did you mean 'bar'?".to_string(),
+        is_error: true,
+        timestamp: Timestamp::now(),
+    }));
+
+    // Complete with failure
+    let complete_event = ActivityEvent::Operation(Operation::Complete {
+        id: 1,
+        outcome: ActivityOutcome::Failed,
+        timestamp: Timestamp::now(),
+    });
+    model.apply_activity_event(complete_event);
+
+    let output = render_to_string(&model, &ui_state);
+    assert_tui_snapshot!(output);
+}

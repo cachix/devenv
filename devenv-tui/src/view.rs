@@ -1,5 +1,5 @@
 use crate::{
-    components::{LOG_VIEWPORT_COLLAPSED, LOG_VIEWPORT_SHOW_OUTPUT, format_elapsed_time, *},
+    components::{LOG_VIEWPORT_FAILED, LOG_VIEWPORT_SHOW_OUTPUT, format_elapsed_time, *},
     model::{
         Activity, ActivityModel, ActivitySummary, ActivityVariant, NixActivityState, RenderContext,
         TaskDisplayStatus, TerminalSize, UiState,
@@ -54,9 +54,18 @@ pub fn view(
                 NixActivityState::Completed { success: false, .. }
             )
         );
+        let devenv_failed = matches!(
+            (&activity.variant, &activity.state),
+            (
+                ActivityVariant::Devenv,
+                NixActivityState::Completed { success: false, .. }
+            )
+        );
         let activity_logs = if let ActivityVariant::Task(ref task_data) = activity.variant
             && (task_data.show_output || task_failed)
         {
+            model.get_build_logs(activity.id).cloned()
+        } else if devenv_failed {
             model.get_build_logs(activity.id).cloned()
         } else if let ActivityVariant::Message(ref msg_data) = activity.variant
             && msg_data.details.is_some()
@@ -331,7 +340,9 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 };
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_empty_message(empty_message);
-                if task_data.show_output && !task_failed && !is_selected {
+                if task_failed {
+                    component = component.with_max_lines(LOG_VIEWPORT_FAILED);
+                } else if task_data.show_output && !is_selected {
                     component = component.with_max_lines(LOG_VIEWPORT_SHOW_OUTPUT);
                 }
                 return component.render_with_main_line(main_line);
@@ -482,8 +493,9 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         ActivityVariant::Devenv => {
             let prefix = build_activity_prefix(*depth, *completed);
 
-            // Build suffix: progress info, detail, or line count
-            let suffix = if completed.is_some() {
+            // Show line count as suffix when active or failed with logs
+            let suffix = if *completed == Some(true) {
+                // Success - no suffix needed
                 None
             } else if let Some(ref progress) = activity.progress {
                 // Show progress with optional detail
@@ -502,6 +514,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             } else if let Some(ref detail) = activity.detail {
                 Some(format!("→ {}", detail))
             } else if *log_line_count > 0 {
+                // In progress or failed with logs - show line count
                 Some(format!("{} lines", log_line_count))
             } else {
                 None
@@ -513,11 +526,15 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .with_selection(*is_selected)
                 .render(terminal_width, *depth, prefix);
 
-            // Show logs when selected
-            if *is_selected && logs.is_some() {
-                return ExpandedContentComponent::new(logs.as_deref())
-                    .with_empty_message("  → no output yet")
-                    .render_with_main_line(main_line);
+            // Show logs when selected or when failed
+            let failed = *completed == Some(false);
+            if (failed || *is_selected) && logs.is_some() {
+                let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_empty_message("  → no output yet");
+                if failed {
+                    component = component.with_max_lines(LOG_VIEWPORT_FAILED);
+                }
+                return component.render_with_main_line(main_line);
             }
 
             return main_line;
@@ -559,7 +576,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     let visible_lines: Vec<_> = detail_lines
                         .iter()
                         .rev()
-                        .take(LOG_VIEWPORT_COLLAPSED)
+                        .take(LOG_VIEWPORT_FAILED)
                         .collect::<Vec<_>>()
                         .into_iter()
                         .rev()

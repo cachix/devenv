@@ -1,4 +1,5 @@
 use crate::app::TuiConfig;
+use crate::components::{LOG_VIEWPORT_COLLAPSED, LOG_VIEWPORT_FAILED, LOG_VIEWPORT_SHOW_OUTPUT};
 use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
     ExpectedCategory, Fetch, FetchKind, Message, Operation, SetExpected, Task,
@@ -1291,18 +1292,36 @@ impl ActivityModel {
                 }
             }
 
-            // Build, evaluation, and devenv activities show logs when selected
+            // Build and evaluation activities show logs when selected
             if is_selected
                 && (matches!(display_activity.activity.variant, ActivityVariant::Build(_))
                     || matches!(
                         display_activity.activity.variant,
                         ActivityVariant::Evaluating(_)
-                    )
-                    || matches!(display_activity.activity.variant, ActivityVariant::Devenv))
+                    ))
                 && let Some(logs) = self.get_build_logs(display_activity.activity.id)
             {
-                let visible_count = logs.len().min(10); // LOG_VIEWPORT_COLLAPSED = 10
+                let visible_count = logs.len().min(LOG_VIEWPORT_COLLAPSED);
                 total_height += visible_count.max(1);
+            }
+
+            // Devenv activities show logs when selected or failed
+            if matches!(display_activity.activity.variant, ActivityVariant::Devenv)
+                && let Some(logs) = self.get_build_logs(display_activity.activity.id)
+            {
+                let devenv_failed = matches!(
+                    display_activity.activity.state,
+                    NixActivityState::Completed { success: false, .. }
+                );
+                if is_selected || devenv_failed {
+                    let max_lines = if devenv_failed {
+                        LOG_VIEWPORT_FAILED
+                    } else {
+                        LOG_VIEWPORT_COLLAPSED
+                    };
+                    let visible_count = logs.len().min(max_lines);
+                    total_height += visible_count.max(1);
+                }
             }
 
             // Task activities with show_output=true or failed show logs
@@ -1314,10 +1333,12 @@ impl ActivityModel {
                 if (task_data.show_output || task_failed)
                     && let Some(logs) = self.get_build_logs(display_activity.activity.id)
                 {
-                    let max_lines = if task_data.show_output && !task_failed && !is_selected {
-                        3 // LOG_VIEWPORT_SHOW_OUTPUT
+                    let max_lines = if task_failed {
+                        LOG_VIEWPORT_FAILED
+                    } else if task_data.show_output && !is_selected {
+                        LOG_VIEWPORT_SHOW_OUTPUT
                     } else {
-                        10 // LOG_VIEWPORT_COLLAPSED
+                        LOG_VIEWPORT_COLLAPSED
                     };
                     let visible_count = logs.len().min(max_lines);
                     total_height += visible_count.max(1);
@@ -1329,7 +1350,7 @@ impl ActivityModel {
                 && msg_data.details.is_some()
                 && let Some(logs) = self.get_build_logs(display_activity.activity.id)
             {
-                let visible_count = logs.len().min(10);
+                let visible_count = logs.len().min(LOG_VIEWPORT_FAILED);
                 total_height += visible_count;
             }
         }

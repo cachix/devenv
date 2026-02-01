@@ -177,14 +177,14 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
                 _ = shutdown_clone.wait_for_shutdown() => DevenvOutput::done(),
             };
 
+            // Signal TUI that backend is fully done soon enough
+            let _ = backend_done_tx.send(());
+
             // Trigger shutdown to start cleanup (if not already triggered by signal)
             shutdown_clone.shutdown();
 
             // Wait for cleanup to complete (e.g., Nix interrupt, cachix finalization)
             shutdown_clone.wait_for_shutdown_complete().await;
-
-            // Signal TUI that backend is fully done
-            let _ = backend_done_tx.send(());
 
             output
         })

@@ -116,7 +116,7 @@ impl TuiApp {
         // Spawn event processor with batching for performance
         // This only writes to ActivityModel, never touches UiState
         // When backend_done fires, it drains remaining events and signals shutdown
-        tokio::spawn({
+        let event_processor_handle = tokio::spawn({
             let activity_model = activity_model.clone();
             let notify = notify.clone();
             let shutdown = shutdown.clone();
@@ -190,9 +190,6 @@ impl TuiApp {
         loop {
             tokio::select! {
                 _ = shutdown.wait_for_shutdown() => {
-                    // Shutdown triggered - but we need to wait for event processor to finish draining
-                    // If this was Ctrl+C, event processor will see backend_done after backend cleanup
-                    // If this was normal completion, event processor already drained and called shutdown
                     break;
                 }
 
@@ -206,6 +203,10 @@ impl TuiApp {
                 ) => { }
             }
         }
+
+        // Wait for event processor to finish draining events before final render.
+        // This ensures all activity completion events are processed and visible.
+        let _ = event_processor_handle.await;
 
         // Final render pass to ensure all drained events are displayed
         // This replaces the old is_done() check that triggered shutdown AFTER rendering
@@ -256,6 +257,7 @@ impl TuiApp {
                         .collect();
 
                     let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
+
                     let mut element = element! {
                         View(width: terminal_width) {
                             #(vec![view(&model_guard, &ui, RenderContext::Final).into()])

@@ -64,6 +64,8 @@ pub fn StatusIndicator(
 
 /// Build logs viewport height for collapsed preview (press 'e' to expand to fullscreen)
 pub const LOG_VIEWPORT_COLLAPSED: usize = 10;
+/// Viewport height for failed activities (show more context on failure)
+pub const LOG_VIEWPORT_FAILED: usize = 20;
 /// Reduced viewport height for tasks with showOutput=true (expands to full when selected)
 pub const LOG_VIEWPORT_SHOW_OUTPUT: usize = 3;
 

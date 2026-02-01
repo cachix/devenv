@@ -616,6 +616,10 @@ impl Devenv {
 
         let status = child.wait().await.into_diagnostic()?;
 
+        if !status.success() {
+            activity.fail();
+        }
+
         Ok(Output {
             status,
             stdout: stdout_bytes,

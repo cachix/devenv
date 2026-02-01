@@ -1,0 +1,10 @@
+---
+source: devenv-tui/tests/tui_tests.rs
+expression: output
+---
+✗ devenv shell 3 lines       0ms
+  Running enterShell hook...
+  error: command 'foo' not found
+  hint: did you mean 'bar'?
+
+                          ↑↓ nav
