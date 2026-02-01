@@ -3004,6 +3004,404 @@ async fn test_run_mode_all_excludes_unrelated_entry_points() -> Result<(), Error
     Ok(())
 }
 
+/// Test that @complete dependency does NOT propagate failure (soft dependency)
+#[tokio::test]
+async fn test_complete_dependency_no_failure_propagation() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    // Create a failing task
+    let failing_script = create_script("#!/bin/sh\necho 'Failing task' && exit 1")?;
+    // Create a succeeding task that depends on the failing one with @complete
+    let success_script = create_script("#!/bin/sh\necho 'Success task ran'")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["soft:dependent"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "soft:failing",
+                    "command": failing_script.to_str().unwrap()
+                },
+                {
+                    "name": "soft:dependent",
+                    "after": ["soft:failing@complete"],
+                    "command": success_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+
+    // The failing task should have failed
+    let failing_status = task_statuses
+        .iter()
+        .find(|(name, _)| name == "soft:failing")
+        .map(|(_, status)| status);
+    assert_matches!(
+        failing_status,
+        Some(TaskStatus::Completed(TaskCompleted::Failed(_, _)))
+    );
+
+    // The dependent task should have succeeded (not marked as DependencyFailed)
+    let dependent_status = task_statuses
+        .iter()
+        .find(|(name, _)| name == "soft:dependent")
+        .map(|(_, status)| status);
+    assert_matches!(
+        dependent_status,
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+
+    Ok(())
+}
+
+/// Test that @ready dependency DOES propagate failure (explicit suffix)
+#[tokio::test]
+async fn test_ready_dependency_failure_propagation() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    // Create a failing task
+    let failing_script = create_script("#!/bin/sh\necho 'Failing task' && exit 1")?;
+    // Create a task that depends on the failing one with @ready
+    let success_script = create_script("#!/bin/sh\necho 'This should not run'")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["ready:dependent"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "ready:failing",
+                    "command": failing_script.to_str().unwrap()
+                },
+                {
+                    "name": "ready:dependent",
+                    "after": ["ready:failing@ready"],
+                    "command": success_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+
+    // The failing task should have failed
+    let failing_status = task_statuses
+        .iter()
+        .find(|(name, _)| name == "ready:failing")
+        .map(|(_, status)| status);
+    assert_matches!(
+        failing_status,
+        Some(TaskStatus::Completed(TaskCompleted::Failed(_, _)))
+    );
+
+    // The dependent task should be marked as DependencyFailed
+    let dependent_status = task_statuses
+        .iter()
+        .find(|(name, _)| name == "ready:dependent")
+        .map(|(_, status)| status);
+    assert_matches!(
+        dependent_status,
+        Some(TaskStatus::Completed(TaskCompleted::DependencyFailed))
+    );
+
+    Ok(())
+}
+
+/// Test mixed dependencies: one @complete (soft) and one @ready (hard)
+#[tokio::test]
+async fn test_mixed_dependencies() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    // Create scripts
+    let failing_script = create_script("#!/bin/sh\necho 'Failing task' && exit 1")?;
+    let success_script = create_script("#!/bin/sh\necho 'Success task'")?;
+    let dependent_script = create_script("#!/bin/sh\necho 'Dependent task'")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["mixed:dependent"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "mixed:failing",
+                    "command": failing_script.to_str().unwrap()
+                },
+                {
+                    "name": "mixed:success",
+                    "command": success_script.to_str().unwrap()
+                },
+                {
+                    "name": "mixed:dependent",
+                    "after": ["mixed:failing@complete", "mixed:success@ready"],
+                    "command": dependent_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+
+    // The failing task should have failed
+    let failing_status = task_statuses
+        .iter()
+        .find(|(name, _)| name == "mixed:failing")
+        .map(|(_, status)| status);
+    assert_matches!(
+        failing_status,
+        Some(TaskStatus::Completed(TaskCompleted::Failed(_, _)))
+    );
+
+    // The success task should have succeeded
+    let success_status = task_statuses
+        .iter()
+        .find(|(name, _)| name == "mixed:success")
+        .map(|(_, status)| status);
+    assert_matches!(
+        success_status,
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+
+    // The dependent task should succeed because:
+    // - mixed:failing is a soft dependency (@complete) so its failure doesn't propagate
+    // - mixed:success is a hard dependency (@ready) and it succeeded
+    let dependent_status = task_statuses
+        .iter()
+        .find(|(name, _)| name == "mixed:dependent")
+        .map(|(_, status)| status);
+    assert_matches!(
+        dependent_status,
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+
+    Ok(())
+}
+
+/// Test mixed dependencies where hard dependency fails
+#[tokio::test]
+async fn test_mixed_dependencies_hard_failure() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    // Create scripts - both dependencies fail
+    let failing_soft_script = create_script("#!/bin/sh\necho 'Soft failing' && exit 1")?;
+    let failing_hard_script = create_script("#!/bin/sh\necho 'Hard failing' && exit 1")?;
+    let dependent_script = create_script("#!/bin/sh\necho 'Dependent task'")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["mixed2:dependent"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "mixed2:soft-fail",
+                    "command": failing_soft_script.to_str().unwrap()
+                },
+                {
+                    "name": "mixed2:hard-fail",
+                    "command": failing_hard_script.to_str().unwrap()
+                },
+                {
+                    "name": "mixed2:dependent",
+                    "after": ["mixed2:soft-fail@complete", "mixed2:hard-fail@ready"],
+                    "command": dependent_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+
+    // The dependent task should fail because hard dependency failed
+    let dependent_status = task_statuses
+        .iter()
+        .find(|(name, _)| name == "mixed2:dependent")
+        .map(|(_, status)| status);
+    assert_matches!(
+        dependent_status,
+        Some(TaskStatus::Completed(TaskCompleted::DependencyFailed))
+    );
+
+    Ok(())
+}
+
+/// Test that `before` with @complete suffix does NOT propagate failure
+#[tokio::test]
+async fn test_before_complete_dependency_no_failure_propagation() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    // Create a failing task that declares it runs before another task with @complete
+    let failing_script = create_script("#!/bin/sh\necho 'Failing task' && exit 1")?;
+    // Create the main task that will be run
+    let main_script = create_script("#!/bin/sh\necho 'Main task ran'")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["before:main"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "before:failing",
+                    "before": ["before:main@complete"],
+                    "command": failing_script.to_str().unwrap()
+                },
+                {
+                    "name": "before:main",
+                    "command": main_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+
+    // The failing task should have failed
+    let failing_status = task_statuses
+        .iter()
+        .find(|(name, _)| name == "before:failing")
+        .map(|(_, status)| status);
+    assert_matches!(
+        failing_status,
+        Some(TaskStatus::Completed(TaskCompleted::Failed(_, _)))
+    );
+
+    // The main task should have succeeded (not marked as DependencyFailed)
+    // because the dependency was soft (@complete)
+    let main_status = task_statuses
+        .iter()
+        .find(|(name, _)| name == "before:main")
+        .map(|(_, status)| status);
+    assert_matches!(
+        main_status,
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+
+    Ok(())
+}
+
+/// Test chained soft dependencies: A (fails) --@complete--> B --@complete--> C
+/// C should still run even though A failed
+#[tokio::test]
+async fn test_chained_soft_dependencies() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let failing_script = create_script("#!/bin/sh\necho 'Task A failing' && exit 1")?;
+    let middle_script = create_script("#!/bin/sh\necho 'Task B running'")?;
+    let final_script = create_script("#!/bin/sh\necho 'Task C running'")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["chain:c"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "chain:a",
+                    "command": failing_script.to_str().unwrap()
+                },
+                {
+                    "name": "chain:b",
+                    "after": ["chain:a@complete"],
+                    "command": middle_script.to_str().unwrap()
+                },
+                {
+                    "name": "chain:c",
+                    "after": ["chain:b@complete"],
+                    "command": final_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+
+    // Task A should have failed
+    let a_status = task_statuses
+        .iter()
+        .find(|(name, _)| name == "chain:a")
+        .map(|(_, status)| status);
+    assert_matches!(
+        a_status,
+        Some(TaskStatus::Completed(TaskCompleted::Failed(_, _)))
+    );
+
+    // Task B should have succeeded (soft dependency on A)
+    let b_status = task_statuses
+        .iter()
+        .find(|(name, _)| name == "chain:b")
+        .map(|(_, status)| status);
+    assert_matches!(
+        b_status,
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+
+    // Task C should have succeeded (soft dependency on B)
+    let c_status = task_statuses
+        .iter()
+        .find(|(name, _)| name == "chain:c")
+        .map(|(_, status)| status);
+    assert_matches!(
+        c_status,
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+
+    Ok(())
+}
+
 fn create_script(script: &str) -> std::io::Result<tempfile::TempPath> {
     let mut temp_file = tempfile::Builder::new()
         .prefix("script")

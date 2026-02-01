@@ -139,6 +139,13 @@ let
               List of tasks that must complete before this task runs.
 
               Here's a helpful mnemonic to remember: This task runs *after* these tasks.
+
+              You can append a suffix to control dependency behavior:
+              - `task` or `task@ready` - wait for task to succeed (default, fails if dependency fails)
+              - `task@complete` - wait for task to finish (soft dependency, does NOT propagate failure)
+
+              Example: `after = [ "pnpm:install@complete" ];` allows this task to run
+              even if pnpm:install fails.
             '';
             default = [ ];
           };
@@ -148,6 +155,10 @@ let
               List of tasks that depend on this task completing first.
 
               Here's a helpful mnemonic to remember: This task runs *before* these tasks.
+
+              You can append a suffix to control dependency behavior:
+              - `task` or `task@ready` - the dependent waits for this task to succeed (default)
+              - `task@complete` - the dependent waits for this task to finish (soft dependency)
             '';
             default = [ ];
           };

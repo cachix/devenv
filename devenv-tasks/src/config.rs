@@ -67,6 +67,14 @@ impl TryFrom<serde_json::Value> for Config {
 /// Returns an error if the suffix is invalid or '@' appears in the middle of the name
 pub fn parse_dependency(dep: &str) -> Result<DependencySpec, Error> {
     if let Some((name, suffix)) = dep.rsplit_once('@') {
+        // Validate that name is not empty
+        if name.is_empty() {
+            return Err(Error::InvalidDependency(format!(
+                "Invalid dependency '{}': task name cannot be empty",
+                dep
+            )));
+        }
+
         // Validate that name doesn't contain '@' (only one '@' allowed at the end)
         if name.contains('@') {
             return Err(Error::InvalidDependency(format!(
@@ -145,6 +153,18 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("multiple '@' characters")
+        );
+    }
+
+    #[test]
+    fn test_parse_dependency_empty_name() {
+        let result = parse_dependency("@complete");
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("task name cannot be empty")
         );
     }
 

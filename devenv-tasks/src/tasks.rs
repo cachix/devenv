@@ -416,13 +416,18 @@ impl Tasks {
                 'dependency_check: loop {
                     let mut dependencies_completed = true;
 
-                    for dep_index in self
+                    for edge in self
                         .graph
-                        .neighbors_directed(*index, petgraph::Direction::Incoming)
+                        .edges_directed(*index, petgraph::Direction::Incoming)
                     {
+                        let dep_index = edge.source();
+                        let dep_kind = edge.weight();
+
                         match &self.graph[dep_index].read().await.status {
                             TaskStatus::Completed(completed) => {
-                                if completed.has_failed() {
+                                // Only propagate failure for Ready/Succeeded dependencies
+                                // Complete dependencies just wait for the task to finish (soft dependency)
+                                if *dep_kind != DependencyKind::Complete && completed.has_failed() {
                                     dependency_failed = true;
                                     break 'dependency_check;
                                 }
