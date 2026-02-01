@@ -3277,6 +3277,27 @@ null or JSON value
 
 
 
+## files.\<name>.source
+
+
+
+source contents
+
+
+
+*Type:*
+null or absolute path
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
+
+
+
 ## files.\<name>.text
 
 
@@ -5360,8 +5381,6 @@ submodule
 
 ## git-hooks.hooks.black.enable
 
-
-
 Whether to enable this pre-commit hook.
 
 
@@ -5401,6 +5420,8 @@ string
 
 
 ## git-hooks.hooks.black.settings.flags
+
+
 
 Flags passed to black. See all available [here](https://black.readthedocs.io/en/stable/usage_and_configuration/the_basics.html\#command-line-options).
 
@@ -7433,8 +7454,6 @@ string
 
 ## git-hooks.hooks.headache.settings.header-file
 
-
-
 Path to the header file.
 
 
@@ -7453,6 +7472,8 @@ string
 
 
 ## git-hooks.hooks.hledger-fmt
+
+
 
 hledger-fmt hook
 
