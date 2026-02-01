@@ -53,21 +53,22 @@ pub use tracing_subscriber::Registry;
 pub use activity::{Activity, ActivityType};
 pub use events::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
-    ExpectedCategory, Fetch, FetchKind, Message, Operation, SetExpected, Task,
+    ExpectedCategory, Fetch, FetchKind, Message, Operation, SetExpected, Task, TaskInfo,
 };
 pub use timestamp::Timestamp;
 
 // Builders
 pub use builders::{
     BuildBuilder, CommandBuilder, EvaluateBuilder, FetchBuilder, OperationBuilder, TaskBuilder,
+    next_id,
 };
 
 // Functions
 pub use handle::{ActivityHandle, init};
 pub use serde_valuable::SerdeValue;
 pub use stack::{
-    current_activity_id, current_activity_level, log_to_evaluate, message, message_with_details,
-    op_to_evaluate, set_expected,
+    current_activity_id, current_activity_level, emit_task_hierarchy, log_to_evaluate, log_to_task,
+    message, message_with_details, op_to_evaluate, set_expected,
 };
 
 // Trait

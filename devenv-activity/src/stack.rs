@@ -153,3 +153,38 @@ pub fn op_to_evaluate(id: u64, op: crate::events::EvalOp) {
         timestamp: Timestamp::now(),
     }));
 }
+
+/// Emit a task hierarchy event describing all tasks and their parent-child relationships.
+///
+/// This should be called once before task execution begins. The edges represent
+/// parent-child relationships where a task appears under its dependents in the TUI
+/// (i.e., the tasks that depend on it).
+///
+/// # Arguments
+/// * `tasks` - All tasks with their metadata
+/// * `edges` - Parent-child relationships as (parent_id, child_id) pairs
+pub fn emit_task_hierarchy(tasks: Vec<crate::events::TaskInfo>, edges: Vec<(u64, u64)>) {
+    use crate::events::Task;
+
+    send_activity_event(ActivityEvent::Task(Task::Hierarchy {
+        tasks,
+        edges,
+        timestamp: Timestamp::now(),
+    }));
+}
+
+/// Log a line to a Task activity by ID.
+///
+/// Use this when you have the activity ID but not the Activity object,
+/// such as when logging from task execution where the Activity lifecycle
+/// is managed by the calling code.
+pub fn log_to_task(id: u64, line: impl Into<String>, is_error: bool) {
+    use crate::events::Task;
+
+    send_activity_event(ActivityEvent::Task(Task::Log {
+        id,
+        line: line.into(),
+        is_error,
+        timestamp: Timestamp::now(),
+    }));
+}

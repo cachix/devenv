@@ -498,68 +498,61 @@ impl ActivityModel {
 
     fn handle_task_event(&mut self, event: Task) {
         match event {
-            Task::Queued {
-                id,
-                name,
-                parent,
-                additional_parents,
-                detail,
-                show_output,
-                ..
-            } => {
-                let variant = ActivityVariant::Task(TaskActivity {
-                    status: TaskDisplayStatus::Pending,
-                    duration: None,
-                    show_output,
-                    last_log_line: None,
-                });
-                self.create_activity_with_options(
-                    id,
-                    name,
-                    parent,
-                    detail,
-                    variant,
-                    ActivityLevel::Info,
-                    NixActivityState::Queued,
-                );
-                // Store additional parents for displaying under multiple dependents
-                if !additional_parents.is_empty() {
-                    self.additional_parents.insert(id, additional_parents);
+            Task::Hierarchy { tasks, edges, .. } => {
+                // Build parent relationships from edges first
+                // edges are (parent_id, child_id) pairs
+                // First edge for a child is the primary parent, rest are additional parents
+                let mut primary_parents: HashMap<u64, u64> = HashMap::new();
+                let mut additional: HashMap<u64, Vec<u64>> = HashMap::new();
+
+                for (parent_id, child_id) in edges {
+                    if primary_parents.contains_key(&child_id) {
+                        // Already has primary parent, add as additional
+                        additional.entry(child_id).or_default().push(parent_id);
+                    } else {
+                        // First edge - set as primary parent
+                        primary_parents.insert(child_id, parent_id);
+                    }
+                }
+
+                // Create all task activities upfront in Queued state
+                // Use parent from edges if available
+                for task_info in tasks {
+                    let variant = ActivityVariant::Task(TaskActivity {
+                        status: TaskDisplayStatus::Pending,
+                        duration: None,
+                        show_output: task_info.show_output,
+                        last_log_line: None,
+                    });
+                    let parent = primary_parents.get(&task_info.id).copied();
+                    self.create_activity_with_options(
+                        task_info.id,
+                        task_info.name,
+                        parent,
+                        None,
+                        variant,
+                        ActivityLevel::Info,
+                        NixActivityState::Queued,
+                    );
+                }
+
+                // Store additional parents
+                for (child_id, parents) in additional {
+                    if !parents.is_empty() {
+                        self.additional_parents.insert(child_id, parents);
+                    }
                 }
             }
-            Task::Start {
-                id,
-                name,
-                parent,
-                detail,
-                show_output,
-                ..
-            } => {
+            Task::Start { id, .. } => {
+                // Transition task from Queued to Active
                 if let Some(activity) = self.activities.get_mut(&id) {
                     activity.state = NixActivityState::Active;
                     activity.start_time = Instant::now();
                     activity.completed_at = None;
-                    if let Some(parent_id) = parent {
-                        if activity.parent_id.is_none() {
-                            activity.parent_id = Some(parent_id);
-                        }
-                    }
-                    if let Some(detail) = detail.as_ref() {
-                        activity.detail = Some(detail.clone());
-                    }
                     if let ActivityVariant::Task(task) = &mut activity.variant {
                         task.status = TaskDisplayStatus::Running;
                         task.duration = None;
-                        task.show_output = show_output;
                     }
-                } else {
-                    let variant = ActivityVariant::Task(TaskActivity {
-                        status: TaskDisplayStatus::Running,
-                        duration: None,
-                        show_output,
-                        last_log_line: None,
-                    });
-                    self.create_activity(id, name, parent, detail, variant, ActivityLevel::Info);
                 }
             }
             Task::Complete { id, outcome, .. } => {

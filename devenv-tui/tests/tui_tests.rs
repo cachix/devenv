@@ -20,7 +20,7 @@ macro_rules! assert_tui_snapshot {
 
 use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Evaluate, Fetch, FetchKind, Message,
-    Operation, Task, Timestamp,
+    Operation, Task, TaskInfo, Timestamp,
 };
 use devenv_tui::{ActivityModel, RenderContext, UiState, view::view};
 use iocraft::prelude::*;
@@ -38,6 +38,48 @@ fn new_test_model() -> (ActivityModel, UiState) {
     let mut ui_state = UiState::new();
     ui_state.set_terminal_size(TEST_WIDTH, TEST_HEIGHT);
     (model, ui_state)
+}
+
+/// Helper to create a task hierarchy event for a single task
+fn task_hierarchy_single(
+    id: u64,
+    name: &str,
+    parent: Option<u64>,
+    show_output: bool,
+    is_process: bool,
+) -> ActivityEvent {
+    let edges = if let Some(p) = parent {
+        vec![(p, id)]
+    } else {
+        vec![]
+    };
+    ActivityEvent::Task(Task::Hierarchy {
+        tasks: vec![TaskInfo {
+            id,
+            name: name.to_string(),
+            show_output,
+            is_process,
+        }],
+        edges,
+        timestamp: Timestamp::now(),
+    })
+}
+
+/// Helper to create a task hierarchy event for multiple tasks
+fn task_hierarchy_multi(tasks: Vec<TaskInfo>, edges: Vec<(u64, u64)>) -> ActivityEvent {
+    ActivityEvent::Task(Task::Hierarchy {
+        tasks,
+        edges,
+        timestamp: Timestamp::now(),
+    })
+}
+
+/// Helper to create a task start event
+fn task_start(id: u64) -> ActivityEvent {
+    ActivityEvent::Task(Task::Start {
+        id,
+        timestamp: Timestamp::now(),
+    })
 }
 
 /// Test that an empty model renders correctly.
@@ -109,17 +151,15 @@ fn test_download_with_progress() {
 fn test_task_running() {
     let (mut model, ui_state) = new_test_model();
 
-    let event = ActivityEvent::Task(Task::Start {
-        id: 1,
-        name: "Running tests".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-
-    model.apply_activity_event(event);
+    // First emit hierarchy, then start
+    model.apply_activity_event(task_hierarchy_single(
+        1,
+        "Running tests",
+        None,
+        false,
+        false,
+    ));
+    model.apply_activity_event(task_start(1));
 
     let output = render_to_string(&model, &ui_state);
     assert_tui_snapshot!(output);
@@ -160,21 +200,18 @@ fn test_multiple_activities() {
         timestamp: Timestamp::now(),
     });
 
-    let task_event = ActivityEvent::Task(Task::Start {
-        id: 3,
-        name: "Running setup".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-
     model.apply_activity_event(build_event);
     model.apply_activity_event(build_phase_event);
     model.apply_activity_event(download_event);
     model.apply_activity_event(download_progress_event);
-    model.apply_activity_event(task_event);
+    model.apply_activity_event(task_hierarchy_single(
+        3,
+        "Running setup",
+        None,
+        false,
+        false,
+    ));
+    model.apply_activity_event(task_start(3));
 
     let output = render_to_string(&model, &ui_state);
     assert_tui_snapshot!(output);
@@ -185,17 +222,14 @@ fn test_multiple_activities() {
 fn test_task_success() {
     let (mut model, ui_state) = new_test_model();
 
-    let start_event = ActivityEvent::Task(Task::Start {
-        id: 1,
-        name: "Build completed".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-
-    model.apply_activity_event(start_event);
+    model.apply_activity_event(task_hierarchy_single(
+        1,
+        "Build completed",
+        None,
+        false,
+        false,
+    ));
+    model.apply_activity_event(task_start(1));
 
     let complete_event = ActivityEvent::Task(Task::Complete {
         id: 1,
@@ -214,17 +248,8 @@ fn test_task_success() {
 fn test_task_failed() {
     let (mut model, ui_state) = new_test_model();
 
-    let start_event = ActivityEvent::Task(Task::Start {
-        id: 1,
-        name: "Tests failed".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-
-    model.apply_activity_event(start_event);
+    model.apply_activity_event(task_hierarchy_single(1, "Tests failed", None, false, false));
+    model.apply_activity_event(task_start(1));
 
     let complete_event = ActivityEvent::Task(Task::Complete {
         id: 1,
@@ -243,16 +268,14 @@ fn test_task_failed() {
 fn test_task_failed_shows_logs() {
     let (mut model, ui_state) = new_test_model();
 
-    let start_event = ActivityEvent::Task(Task::Start {
-        id: 1,
-        name: "test:failing-task".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(start_event);
+    model.apply_activity_event(task_hierarchy_single(
+        1,
+        "test:failing-task",
+        None,
+        false,
+        false,
+    ));
+    model.apply_activity_event(task_start(1));
 
     // Send log events - these should be visible because the task fails
     model.apply_activity_event(ActivityEvent::Task(Task::Log {
@@ -290,16 +313,14 @@ fn test_task_failed_shows_logs() {
 fn test_task_show_output_true() {
     let (mut model, ui_state) = new_test_model();
 
-    let start_event = ActivityEvent::Task(Task::Start {
-        id: 1,
-        name: "test:with-output".to_string(),
-        parent: None,
-        detail: None,
-        show_output: true,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(start_event);
+    model.apply_activity_event(task_hierarchy_single(
+        1,
+        "test:with-output",
+        None,
+        true,
+        false,
+    ));
+    model.apply_activity_event(task_start(1));
 
     // Send log events
     model.apply_activity_event(ActivityEvent::Task(Task::Log {
@@ -324,16 +345,14 @@ fn test_task_show_output_true() {
 fn test_task_show_output_false() {
     let (mut model, ui_state) = new_test_model();
 
-    let start_event = ActivityEvent::Task(Task::Start {
-        id: 1,
-        name: "test:without-output".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(start_event);
+    model.apply_activity_event(task_hierarchy_single(
+        1,
+        "test:without-output",
+        None,
+        false,
+        false,
+    ));
+    model.apply_activity_event(task_start(1));
 
     // Send log events - these should be filtered out
     model.apply_activity_event(ActivityEvent::Task(Task::Log {
@@ -822,15 +841,14 @@ fn test_many_concurrent_activities() {
                 }));
             }
             2 => {
-                model.apply_activity_event(ActivityEvent::Task(Task::Start {
-                    id: i as u64 + 1,
-                    name: format!("task-{}", i),
-                    parent: None,
-                    detail: None,
-                    show_output: false,
-                    is_process: false,
-                    timestamp: Timestamp::now(),
-                }));
+                model.apply_activity_event(task_hierarchy_single(
+                    i as u64 + 1,
+                    &format!("task-{}", i),
+                    None,
+                    false,
+                    false,
+                ));
+                model.apply_activity_event(task_start(i as u64 + 1));
             }
             _ => {
                 model.apply_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
@@ -1173,77 +1191,41 @@ fn test_devenv_failed_shows_logs() {
 fn test_task_additional_parents() {
     let (mut model, ui_state) = new_test_model();
 
-    // Create two parent tasks (like test:unit and test:integration)
-    let parent1_event = ActivityEvent::Task(Task::Queued {
-        id: 1,
-        name: "test:unit".to_string(),
-        parent: None,
-        additional_parents: vec![],
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(parent1_event);
-
-    let parent2_event = ActivityEvent::Task(Task::Queued {
-        id: 2,
-        name: "test:integration".to_string(),
-        parent: None,
-        additional_parents: vec![],
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(parent2_event);
-
-    // Create a shared dependency with primary parent 1 and additional parent 2
-    let shared_event = ActivityEvent::Task(Task::Queued {
-        id: 3,
-        name: "build".to_string(),
-        parent: Some(1),
-        additional_parents: vec![2],
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(shared_event);
+    // Emit hierarchy: two parent tasks and a shared dependency
+    // The "build" task (id=3) has primary parent 1 (test:unit) and additional parent 2 (test:integration)
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "test:unit".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "test:integration".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 3,
+                name: "build".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![
+            // build appears under both test:unit (primary) and test:integration (additional)
+            (1, 3), // test:unit -> build
+            (2, 3), // test:integration -> build
+        ],
+    );
+    model.apply_activity_event(hierarchy);
 
     // Start all tasks
-    let start1 = ActivityEvent::Task(Task::Start {
-        id: 1,
-        name: "test:unit".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(start1);
-
-    let start2 = ActivityEvent::Task(Task::Start {
-        id: 2,
-        name: "test:integration".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(start2);
-
-    let start3 = ActivityEvent::Task(Task::Start {
-        id: 3,
-        name: "build".to_string(),
-        parent: Some(1),
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(start3);
+    model.apply_activity_event(task_start(1));
+    model.apply_activity_event(task_start(2));
+    model.apply_activity_event(task_start(3));
 
     let output = render_to_string(&model, &ui_state);
     // The "build" task should appear under both test:unit and test:integration

@@ -6,7 +6,7 @@ use crate::types::{
     DependencyKind, Output, Outputs, Skipped, TaskCompleted, TaskFailure, TaskStatus, TasksStatus,
     VerbosityLevel,
 };
-use devenv_activity::{Activity, ActivityInstrument};
+use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
@@ -400,46 +400,69 @@ impl Tasks {
                 .start(),
         );
 
-        // Pre-create activities for ALL tasks so dependencies nest under their dependents in the TUI.
-        // Process in REVERSE topological order so dependents are created before their dependencies.
-        //
-        // Graph edge direction: Incoming = dependencies (must complete first),
-        //                       Outgoing = dependents (tasks that depend on this one)
-        let mut pre_created_activities: HashMap<NodeIndex, Activity> = HashMap::new();
-        for &index in self.tasks_order.iter().rev() {
+        // Assign activity IDs upfront for all tasks
+        let mut task_ids: HashMap<NodeIndex, u64> = HashMap::new();
+        for &index in &self.tasks_order {
+            task_ids.insert(index, next_id());
+        }
+
+        // Build TaskInfo for all tasks and collect edges for the hierarchy
+        let mut task_infos: Vec<TaskInfo> = Vec::new();
+        let mut edges: Vec<(u64, u64)> = Vec::new();
+
+        for &index in &self.tasks_order {
             let task_state = self.graph[index].read().await;
+            let task_id = task_ids[&index];
             let is_root_task = self.roots.contains(&index);
 
-            // Collect all dependent activity IDs (already created due to reverse order)
-            let dependent_activity_ids: Vec<u64> = self
-                .graph
-                .neighbors_directed(index, petgraph::Direction::Outgoing)
-                .filter_map(|dep_index| pre_created_activities.get(&dep_index).map(|a| a.id()))
-                .collect();
+            task_infos.push(TaskInfo {
+                id: task_id,
+                name: task_state.task.name.clone(),
+                show_output: task_state.task.show_output,
+                is_process: task_state.task.r#type == crate::types::TaskType::Process,
+            });
 
-            // Determine TUI parent and additional parents:
-            // - Root tasks → parent is orchestration, no additional parents
-            // - Non-root → first dependent is primary parent, rest are additional parents
-            let (parent_activity_id, additional_parents) = if is_root_task {
-                (Some(orchestration_activity.id()), Vec::new())
-            } else if dependent_activity_ids.is_empty() {
-                // No dependents found (shouldn't happen for non-root), fallback to orchestration
-                (Some(orchestration_activity.id()), Vec::new())
+            // Build edges: a task appears under its most immediate dependent
+            // For root tasks, parent is orchestration
+            if is_root_task {
+                edges.push((orchestration_activity.id(), task_id));
             } else {
-                let mut iter = dependent_activity_ids.into_iter();
-                let primary = iter.next();
-                let additional: Vec<u64> = iter.collect();
-                (primary, additional)
-            };
+                // Non-root tasks: find the "most immediate" dependent
+                // A dependent D1 is "covered" by D2 if D2 transitively depends on D1
+                // We only create edges from uncovered dependents to avoid duplication
+                let dependents: Vec<NodeIndex> = self
+                    .graph
+                    .neighbors_directed(index, petgraph::Direction::Outgoing)
+                    .filter(|dep_index| task_ids.contains_key(dep_index))
+                    .collect();
 
-            let activity = Activity::task(&task_state.task.name)
-                .show_output(task_state.task.show_output)
-                .is_process(task_state.task.r#type == crate::types::TaskType::Process)
-                .parent(parent_activity_id)
-                .additional_parents(additional_parents)
-                .queue();
-            pre_created_activities.insert(index, activity);
+                let uncovered_dependents: Vec<NodeIndex> = dependents
+                    .iter()
+                    .filter(|&&d1| {
+                        // D1 is uncovered if it doesn't transitively depend on any other dependent D2
+                        // If D1 depends on D2, then D1 can reach the task through D2, making D1 redundant
+                        !dependents
+                            .iter()
+                            .any(|&d2| d1 != d2 && is_reachable(&self.graph, d1, d2))
+                    })
+                    .copied()
+                    .collect();
+
+                for dependent_index in uncovered_dependents {
+                    if let Some(&dependent_id) = task_ids.get(&dependent_index) {
+                        edges.push((dependent_id, task_id));
+                    }
+                }
+
+                // If no dependents found, fallback to orchestration
+                if dependents.is_empty() {
+                    edges.push((orchestration_activity.id(), task_id));
+                }
+            }
         }
+
+        // Emit hierarchy once upfront
+        emit_task_hierarchy(task_infos, edges);
 
         let total_tasks = self.tasks_order.len() as u64;
         let completed_tasks = Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -449,6 +472,7 @@ impl Tasks {
 
         for index in &self.tasks_order {
             let task_state = &self.graph[*index];
+            let task_activity_id = task_ids[index];
 
             let mut cancelled = self.shutdown.is_cancelled();
             let mut dependency_failed = false;
@@ -509,10 +533,8 @@ impl Tasks {
                     TaskCompleted::DependencyFailed
                 };
 
-                // Use pre-created activity (all tasks have one)
-                let skip_activity = pre_created_activities
-                    .remove(index)
-                    .expect("All tasks should have pre-created activities");
+                // Create a minimal activity just to emit the completion event
+                let skip_activity = Activity::task("").id(task_activity_id).parent(None).start();
 
                 if cancelled {
                     skip_activity.cancel();
@@ -544,7 +566,7 @@ impl Tasks {
                 task_state.status = TaskStatus::Running(now);
             };
 
-            // The task activity is queued above; TaskState::run() marks it active and manages its lifecycle
+            // Notify UI that task is starting
             self.notify_ui.notify_one();
 
             // TODO: consider Arc-ing self at this point
@@ -557,9 +579,6 @@ impl Tasks {
             let shutdown_clone = Arc::clone(&self.shutdown);
             let orchestration_activity_clone = Arc::clone(&orchestration_activity);
             let completed_tasks_clone = Arc::clone(&completed_tasks);
-            let task_activity = pre_created_activities
-                .remove(index)
-                .expect("all tasks have pre-created activities");
 
             running_tasks.spawn(move || {
                 // Clone for use inside the async block; the original is borrowed by in_activity
@@ -578,7 +597,7 @@ impl Tasks {
                                 &outputs,
                                 &cache,
                                 shutdown_clone.cancellation_token(),
-                                task_activity,
+                                task_activity_id,
                             )
                             .await
                         {
@@ -688,4 +707,35 @@ impl Tasks {
 
         Outputs(Arc::try_unwrap(outputs).unwrap().into_inner())
     }
+}
+
+/// Check if `target` is reachable from `start` by following outgoing edges.
+/// Used to determine if one dependent transitively depends on another.
+fn is_reachable<N, E>(graph: &DiGraph<N, E>, start: NodeIndex, target: NodeIndex) -> bool {
+    use std::collections::VecDeque;
+
+    if start == target {
+        return false; // A node doesn't "reach" itself for our purposes
+    }
+
+    let mut visited = HashSet::new();
+    let mut queue = VecDeque::new();
+
+    // Start from the outgoing neighbors of `start` (tasks that `start` depends on)
+    for neighbor in graph.neighbors_directed(start, petgraph::Direction::Incoming) {
+        queue.push_back(neighbor);
+    }
+
+    while let Some(node) = queue.pop_front() {
+        if node == target {
+            return true;
+        }
+        if visited.insert(node) {
+            for neighbor in graph.neighbors_directed(node, petgraph::Direction::Incoming) {
+                queue.push_back(neighbor);
+            }
+        }
+    }
+
+    false
 }

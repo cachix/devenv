@@ -131,48 +131,40 @@ impl TasksUi {
 
     fn handle_task_event(&mut self, event: TaskEvent) -> Result<(), Error> {
         match event {
-            TaskEvent::Queued {
-                id,
-                name,
-                show_output,
-                is_process,
-                ..
-            } => {
-                self.task_states.insert(
-                    id,
-                    TaskUiState {
-                        name: name.clone(),
-                        status: TaskDisplayStatus::Queued,
-                        start_time: Instant::now(),
-                        show_output,
-                        is_process,
-                    },
-                );
+            TaskEvent::Hierarchy { tasks, .. } => {
+                // Register all tasks upfront in Queued state
+                for task_info in tasks {
+                    self.task_states.insert(
+                        task_info.id,
+                        TaskUiState {
+                            name: task_info.name,
+                            status: TaskDisplayStatus::Queued,
+                            start_time: Instant::now(),
+                            show_output: task_info.show_output,
+                            is_process: task_info.is_process,
+                        },
+                    );
+                }
             }
-            TaskEvent::Start {
-                id,
-                name,
-                show_output,
-                is_process,
-                ..
-            } => {
-                self.task_states.insert(
-                    id,
-                    TaskUiState {
-                        name: name.clone(),
-                        status: TaskDisplayStatus::Running,
-                        start_time: Instant::now(),
-                        show_output,
-                        is_process,
-                    },
-                );
+            TaskEvent::Start { id, .. } => {
+                // Transition from Queued to Running
+                // Extract name first to avoid borrow checker issues
+                let name = if let Some(state) = self.task_states.get_mut(&id) {
+                    state.status = TaskDisplayStatus::Running;
+                    state.start_time = Instant::now();
+                    Some(state.name.clone())
+                } else {
+                    None
+                };
 
-                if self.verbosity != VerbosityLevel::Quiet {
-                    self.console_write_stderr(&format!(
-                        "{:17} {}",
-                        console::style("Running").blue().bold(),
-                        console::style(&name).bold()
-                    ));
+                if let Some(name) = name {
+                    if self.verbosity != VerbosityLevel::Quiet {
+                        self.console_write_stderr(&format!(
+                            "{:17} {}",
+                            console::style("Running").blue().bold(),
+                            console::style(&name).bold()
+                        ));
+                    }
                 }
             }
             TaskEvent::Complete { id, outcome, .. } => {

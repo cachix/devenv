@@ -15,7 +15,7 @@ static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// Generate a new activity ID.
 /// Uses high bit to distinguish from Nix-generated IDs.
-pub(crate) fn next_id() -> u64 {
+pub fn next_id() -> u64 {
     ID_COUNTER.fetch_add(1, Ordering::Relaxed) | (1 << 63)
 }
 
@@ -241,13 +241,11 @@ impl EvaluateBuilder {
 
 /// Builder for Task activities
 pub struct TaskBuilder {
+    #[allow(dead_code)]
     name: String,
-    detail: Option<String>,
-    show_output: bool,
-    is_process: bool,
     id: Option<u64>,
+    #[allow(dead_code)]
     parent: Option<Option<u64>>,
-    additional_parents: Vec<u64>,
     level: Option<ActivityLevel>,
 }
 
@@ -255,29 +253,10 @@ impl TaskBuilder {
     pub(crate) fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            detail: None,
-            show_output: false,
-            is_process: false,
             id: None,
             parent: None,
-            additional_parents: Vec::new(),
             level: None,
         }
-    }
-
-    pub fn detail(mut self, detail: impl Into<String>) -> Self {
-        self.detail = Some(detail.into());
-        self
-    }
-
-    pub fn show_output(mut self, show_output: bool) -> Self {
-        self.show_output = show_output;
-        self
-    }
-
-    pub fn is_process(mut self, is_process: bool) -> Self {
-        self.is_process = is_process;
-        self
     }
 
     pub fn id(mut self, id: u64) -> Self {
@@ -290,29 +269,13 @@ impl TaskBuilder {
         self
     }
 
-    /// Set additional parents for displaying task under multiple dependents in TUI.
-    pub fn additional_parents(mut self, parents: Vec<u64>) -> Self {
-        self.additional_parents = parents;
-        self
-    }
-
     pub fn level(mut self, level: ActivityLevel) -> Self {
         self.level = Some(level);
         self
     }
 
     pub fn start(self) -> Activity {
-        self.start_with_event(TaskEventKind::Start)
-    }
-
-    /// Queue a task (waiting to start).
-    pub fn queue(self) -> Activity {
-        self.start_with_event(TaskEventKind::Queued)
-    }
-
-    fn start_with_event(self, event: TaskEventKind) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(current_activity_id);
         // Inherit level from parent if not explicitly set
         let level = self
             .level
@@ -321,38 +284,13 @@ impl TaskBuilder {
 
         let span = create_span(id, level);
 
-        let task_event = match event {
-            TaskEventKind::Queued => Task::Queued {
-                id,
-                name: self.name.clone(),
-                parent,
-                additional_parents: self.additional_parents,
-                detail: self.detail,
-                show_output: self.show_output,
-                is_process: self.is_process,
-                timestamp: Timestamp::now(),
-            },
-            TaskEventKind::Start => Task::Start {
-                id,
-                name: self.name.clone(),
-                parent,
-                detail: self.detail,
-                show_output: self.show_output,
-                is_process: self.is_process,
-                timestamp: Timestamp::now(),
-            },
-        };
-
-        send_activity_event(ActivityEvent::Task(task_event));
+        send_activity_event(ActivityEvent::Task(Task::Start {
+            id,
+            timestamp: Timestamp::now(),
+        }));
 
         Activity::new(span, id, ActivityType::Task, level)
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum TaskEventKind {
-    Queued,
-    Start,
 }
 
 /// Builder for Command activities
