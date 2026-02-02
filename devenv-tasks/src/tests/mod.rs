@@ -1395,6 +1395,110 @@ async fn test_nonexistent_script() -> Result<(), Error> {
 }
 
 #[tokio::test]
+async fn test_nonexistent_cwd() -> Result<(), Error> {
+    // Create a unique tempdir for this test
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let script = create_basic_script("cwd_test")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["myapp:task_1"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "myapp:task_1",
+                    "command": script.to_str().unwrap(),
+                    "cwd": "/path/to/nonexistent/directory"
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path.clone())
+    .build()
+    .await?;
+
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+    let task_statuses = task_statuses.as_slice();
+    assert_matches!(
+        &task_statuses,
+        [(
+            task_1,
+            TaskStatus::Completed(TaskCompleted::Failed(
+                _,
+                crate::types::TaskFailure {
+                    stdout: _,
+                    stderr: _,
+                    error
+                }
+            ))
+        )] if error.contains("Working directory for task 'myapp:task_1' does not exist: /path/to/nonexistent/directory") && task_1 == "myapp:task_1"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_cwd_is_file() -> Result<(), Error> {
+    // Create a unique tempdir for this test
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let script = create_basic_script("cwd_file_test")?;
+
+    // Create a file to use as cwd (should fail because it's not a directory)
+    let file_path = temp_dir.path().join("not_a_dir.txt");
+    std::fs::write(&file_path, "hello").unwrap();
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["myapp:task_1"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "myapp:task_1",
+                    "command": script.to_str().unwrap(),
+                    "cwd": file_path.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path.clone())
+    .build()
+    .await?;
+
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+    let task_statuses = task_statuses.as_slice();
+    assert_matches!(
+        &task_statuses,
+        [(
+            task_1,
+            TaskStatus::Completed(TaskCompleted::Failed(
+                _,
+                crate::types::TaskFailure {
+                    stdout: _,
+                    stderr: _,
+                    error
+                }
+            ))
+        )] if error.contains("Working directory for task 'myapp:task_1' is not a directory:") && task_1 == "myapp:task_1"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_status_without_command() -> Result<(), Error> {
     // Create a unique tempdir for this test
     let temp_dir = TempDir::new().unwrap();

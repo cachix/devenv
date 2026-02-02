@@ -577,7 +577,7 @@ impl Tasks {
                                     TaskFailure {
                                         stdout: Vec::new(),
                                         stderr: Vec::new(),
-                                        error: format!("Task failed: {e}"),
+                                        error: format!("Task failed: {e:#}"),
                                     },
                                 )
                             }
