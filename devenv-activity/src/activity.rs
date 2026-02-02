@@ -70,8 +70,13 @@ impl Activity {
     }
 
     /// Create a builder for a Task activity
-    pub fn task(name: impl Into<String>) -> TaskBuilder {
-        TaskBuilder::new(name)
+    pub fn task() -> TaskBuilder {
+        TaskBuilder::new()
+    }
+
+    /// Create and start a Task activity with a pre-assigned ID.
+    pub fn task_with_id(id: u64) -> Activity {
+        Activity::task().id(id).start()
     }
 
     /// Create a builder for a Command activity
@@ -105,10 +110,10 @@ impl Activity {
     ///
     /// # Example
     /// ```ignore
-    /// let activity = Activity::task("parent").start();
+    /// let activity = Activity::task().start();
     /// activity.with_new_scope_sync(|| {
     ///     // This child will have `activity` as its parent and inherit its level
-    ///     let child = Activity::task("child").start();
+    ///     let child = Activity::task().start();
     /// });
     /// ```
     pub fn with_new_scope_sync<F, T>(&self, f: F) -> T

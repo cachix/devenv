@@ -119,6 +119,10 @@ in
       ci = [ cfg.run ];
       # Add the packages for any enabled hooks at the end to avoid overriding the language-defined packages.
       packages = lib.mkAfter ([ packageBin ] ++ (cfg.enabledPackages or [ ]));
+      env.PREK_HOME = "${config.devenv.state}/prek";
+      enterShell = lib.mkAfter ''
+        mkdir -p "$PREK_HOME"
+      '';
 
       tasks = {
         "devenv:git-hooks:install" = {

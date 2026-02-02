@@ -1,0 +1,9 @@
+---
+source: devenv-tui/tests/tui_tests.rs
+assertion_line: 1342
+expression: output
+---
+✗ test:dependent failed 0ms
+  ⎿ ✗ test:dep failed   0ms
+
+ 0 of 2 tasks        ↑↓ nav

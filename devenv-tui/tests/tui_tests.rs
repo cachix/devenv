@@ -20,7 +20,7 @@ macro_rules! assert_tui_snapshot {
 
 use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Evaluate, Fetch, FetchKind, Message,
-    Operation, Task, Timestamp,
+    Operation, Task, TaskInfo, Timestamp,
 };
 use devenv_tui::{ActivityModel, RenderContext, UiState, view::view};
 use iocraft::prelude::*;
@@ -38,6 +38,48 @@ fn new_test_model() -> (ActivityModel, UiState) {
     let mut ui_state = UiState::new();
     ui_state.set_terminal_size(TEST_WIDTH, TEST_HEIGHT);
     (model, ui_state)
+}
+
+/// Helper to create a task hierarchy event for a single task
+fn task_hierarchy_single(
+    id: u64,
+    name: &str,
+    parent: Option<u64>,
+    show_output: bool,
+    is_process: bool,
+) -> ActivityEvent {
+    let edges = if let Some(p) = parent {
+        vec![(p, id)]
+    } else {
+        vec![]
+    };
+    ActivityEvent::Task(Task::Hierarchy {
+        tasks: vec![TaskInfo {
+            id,
+            name: name.to_string(),
+            show_output,
+            is_process,
+        }],
+        edges,
+        timestamp: Timestamp::now(),
+    })
+}
+
+/// Helper to create a task hierarchy event for multiple tasks
+fn task_hierarchy_multi(tasks: Vec<TaskInfo>, edges: Vec<(u64, u64)>) -> ActivityEvent {
+    ActivityEvent::Task(Task::Hierarchy {
+        tasks,
+        edges,
+        timestamp: Timestamp::now(),
+    })
+}
+
+/// Helper to create a task start event
+fn task_start(id: u64) -> ActivityEvent {
+    ActivityEvent::Task(Task::Start {
+        id,
+        timestamp: Timestamp::now(),
+    })
 }
 
 /// Test that an empty model renders correctly.
@@ -109,17 +151,15 @@ fn test_download_with_progress() {
 fn test_task_running() {
     let (mut model, ui_state) = new_test_model();
 
-    let event = ActivityEvent::Task(Task::Start {
-        id: 1,
-        name: "Running tests".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-
-    model.apply_activity_event(event);
+    // First emit hierarchy, then start
+    model.apply_activity_event(task_hierarchy_single(
+        1,
+        "Running tests",
+        None,
+        false,
+        false,
+    ));
+    model.apply_activity_event(task_start(1));
 
     let output = render_to_string(&model, &ui_state);
     assert_tui_snapshot!(output);
@@ -160,21 +200,18 @@ fn test_multiple_activities() {
         timestamp: Timestamp::now(),
     });
 
-    let task_event = ActivityEvent::Task(Task::Start {
-        id: 3,
-        name: "Running setup".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-
     model.apply_activity_event(build_event);
     model.apply_activity_event(build_phase_event);
     model.apply_activity_event(download_event);
     model.apply_activity_event(download_progress_event);
-    model.apply_activity_event(task_event);
+    model.apply_activity_event(task_hierarchy_single(
+        3,
+        "Running setup",
+        None,
+        false,
+        false,
+    ));
+    model.apply_activity_event(task_start(3));
 
     let output = render_to_string(&model, &ui_state);
     assert_tui_snapshot!(output);
@@ -185,17 +222,14 @@ fn test_multiple_activities() {
 fn test_task_success() {
     let (mut model, ui_state) = new_test_model();
 
-    let start_event = ActivityEvent::Task(Task::Start {
-        id: 1,
-        name: "Build completed".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-
-    model.apply_activity_event(start_event);
+    model.apply_activity_event(task_hierarchy_single(
+        1,
+        "Build completed",
+        None,
+        false,
+        false,
+    ));
+    model.apply_activity_event(task_start(1));
 
     let complete_event = ActivityEvent::Task(Task::Complete {
         id: 1,
@@ -214,17 +248,8 @@ fn test_task_success() {
 fn test_task_failed() {
     let (mut model, ui_state) = new_test_model();
 
-    let start_event = ActivityEvent::Task(Task::Start {
-        id: 1,
-        name: "Tests failed".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-
-    model.apply_activity_event(start_event);
+    model.apply_activity_event(task_hierarchy_single(1, "Tests failed", None, false, false));
+    model.apply_activity_event(task_start(1));
 
     let complete_event = ActivityEvent::Task(Task::Complete {
         id: 1,
@@ -243,16 +268,14 @@ fn test_task_failed() {
 fn test_task_failed_shows_logs() {
     let (mut model, ui_state) = new_test_model();
 
-    let start_event = ActivityEvent::Task(Task::Start {
-        id: 1,
-        name: "test:failing-task".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(start_event);
+    model.apply_activity_event(task_hierarchy_single(
+        1,
+        "test:failing-task",
+        None,
+        false,
+        false,
+    ));
+    model.apply_activity_event(task_start(1));
 
     // Send log events - these should be visible because the task fails
     model.apply_activity_event(ActivityEvent::Task(Task::Log {
@@ -290,16 +313,14 @@ fn test_task_failed_shows_logs() {
 fn test_task_show_output_true() {
     let (mut model, ui_state) = new_test_model();
 
-    let start_event = ActivityEvent::Task(Task::Start {
-        id: 1,
-        name: "test:with-output".to_string(),
-        parent: None,
-        detail: None,
-        show_output: true,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(start_event);
+    model.apply_activity_event(task_hierarchy_single(
+        1,
+        "test:with-output",
+        None,
+        true,
+        false,
+    ));
+    model.apply_activity_event(task_start(1));
 
     // Send log events
     model.apply_activity_event(ActivityEvent::Task(Task::Log {
@@ -324,16 +345,14 @@ fn test_task_show_output_true() {
 fn test_task_show_output_false() {
     let (mut model, ui_state) = new_test_model();
 
-    let start_event = ActivityEvent::Task(Task::Start {
-        id: 1,
-        name: "test:without-output".to_string(),
-        parent: None,
-        detail: None,
-        show_output: false,
-        is_process: false,
-        timestamp: Timestamp::now(),
-    });
-    model.apply_activity_event(start_event);
+    model.apply_activity_event(task_hierarchy_single(
+        1,
+        "test:without-output",
+        None,
+        false,
+        false,
+    ));
+    model.apply_activity_event(task_start(1));
 
     // Send log events - these should be filtered out
     model.apply_activity_event(ActivityEvent::Task(Task::Log {
@@ -822,15 +841,14 @@ fn test_many_concurrent_activities() {
                 }));
             }
             2 => {
-                model.apply_activity_event(ActivityEvent::Task(Task::Start {
-                    id: i as u64 + 1,
-                    name: format!("task-{}", i),
-                    parent: None,
-                    detail: None,
-                    show_output: false,
-                    is_process: false,
-                    timestamp: Timestamp::now(),
-                }));
+                model.apply_activity_event(task_hierarchy_single(
+                    i as u64 + 1,
+                    &format!("task-{}", i),
+                    None,
+                    false,
+                    false,
+                ));
+                model.apply_activity_event(task_start(i as u64 + 1));
             }
             _ => {
                 model.apply_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
@@ -1165,5 +1183,385 @@ fn test_devenv_failed_shows_logs() {
     model.apply_activity_event(complete_event);
 
     let output = render_to_string(&model, &ui_state);
+    assert_tui_snapshot!(output);
+}
+
+/// Test that a task with additional_parents appears under multiple parents.
+#[test]
+fn test_task_additional_parents() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Emit hierarchy: two parent tasks and a shared dependency
+    // The "build" task (id=3) has primary parent 1 (test:unit) and additional parent 2 (test:integration)
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "test:unit".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "test:integration".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 3,
+                name: "build".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![
+            // build appears under both test:unit (primary) and test:integration (additional)
+            (1, 3), // test:unit -> build
+            (2, 3), // test:integration -> build
+        ],
+    );
+    model.apply_activity_event(hierarchy);
+
+    // Start all tasks
+    model.apply_activity_event(task_start(1));
+    model.apply_activity_event(task_start(2));
+    model.apply_activity_event(task_start(3));
+
+    let output = render_to_string(&model, &ui_state);
+    // The "build" task should appear under both test:unit and test:integration
+    assert_tui_snapshot!(output);
+}
+
+#[test]
+fn test_selectable_ids_dedup_for_multi_parent_tasks() {
+    let (mut model, mut ui_state) = new_test_model();
+
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "parent:a".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "parent:b".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 3,
+                name: "shared".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![
+            (1, 3), // parent:a -> shared (primary)
+            (2, 3), // parent:b -> shared (additional)
+        ],
+    );
+    model.apply_activity_event(hierarchy);
+
+    // Add logs so tasks 1 and 3 are selectable.
+    model.apply_activity_event(ActivityEvent::Task(Task::Log {
+        id: 1,
+        line: "log-1".to_string(),
+        is_error: false,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Task(Task::Log {
+        id: 3,
+        line: "log-3".to_string(),
+        is_error: false,
+        timestamp: Timestamp::now(),
+    }));
+
+    let selectable = model.get_selectable_activity_ids();
+    assert_eq!(selectable, vec![1, 3]);
+
+    ui_state.select_next_activity(&selectable);
+    assert_eq!(ui_state.selected_activity, Some(1));
+
+    ui_state.select_next_activity(&selectable);
+    assert_eq!(ui_state.selected_activity, Some(3));
+
+    ui_state.select_next_activity(&selectable);
+    assert_eq!(ui_state.selected_activity, Some(3));
+
+    ui_state.select_previous_activity(&selectable);
+    assert_eq!(ui_state.selected_activity, Some(1));
+}
+
+/// Test that tasks in Queued state (hierarchy emitted but not started) render correctly.
+#[test]
+fn test_task_queued_state() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Emit hierarchy for three tasks but only start one
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "test:first".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "test:second".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 3,
+                name: "test:third".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![],
+    );
+    model.apply_activity_event(hierarchy);
+
+    // Only start the first task - others remain in Queued state
+    model.apply_activity_event(task_start(1));
+
+    let output = render_to_string(&model, &ui_state);
+    // First task should show as running, others should show as pending/queued
+    assert_tui_snapshot!(output);
+}
+
+/// Test that a task that completes without ever starting (skipped) shows correctly.
+#[test]
+fn test_task_skipped_never_started() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Emit hierarchy
+    model.apply_activity_event(task_hierarchy_single(
+        1,
+        "test:skipped-task",
+        None,
+        false,
+        false,
+    ));
+
+    // Complete with Skipped without ever calling task_start
+    // This simulates a task that was skipped due to caching or no command
+    model.apply_activity_event(ActivityEvent::Task(Task::Complete {
+        id: 1,
+        outcome: ActivityOutcome::Skipped,
+        timestamp: Timestamp::now(),
+    }));
+
+    let output = render_to_string(&model, &ui_state);
+    // Task should show as skipped with zero duration
+    assert_tui_snapshot!(output);
+}
+
+/// Test that a task cancelled due to dependency failure shows correctly.
+#[test]
+fn test_task_dependency_failed_never_started() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Emit hierarchy with dependency relationship
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "test:dep".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "test:dependent".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![(2, 1)], // test:dependent depends on test:dep
+    );
+    model.apply_activity_event(hierarchy);
+
+    // Start and fail the dependency
+    model.apply_activity_event(task_start(1));
+    model.apply_activity_event(ActivityEvent::Task(Task::Complete {
+        id: 1,
+        outcome: ActivityOutcome::Failed,
+        timestamp: Timestamp::now(),
+    }));
+
+    // The dependent task never starts, just gets DependencyFailed
+    model.apply_activity_event(ActivityEvent::Task(Task::Complete {
+        id: 2,
+        outcome: ActivityOutcome::DependencyFailed,
+        timestamp: Timestamp::now(),
+    }));
+
+    let output = render_to_string(&model, &ui_state);
+    assert_tui_snapshot!(output);
+}
+
+/// Test task hierarchy with 3+ levels of nesting.
+#[test]
+fn test_task_deep_nesting() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Create a deep hierarchy: root -> level1 -> level2 -> level3
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "test:root".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "test:level1".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 3,
+                name: "test:level2".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 4,
+                name: "test:level3".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![
+            (1, 2), // root -> level1
+            (2, 3), // level1 -> level2
+            (3, 4), // level2 -> level3
+        ],
+    );
+    model.apply_activity_event(hierarchy);
+
+    // Start all tasks
+    model.apply_activity_event(task_start(1));
+    model.apply_activity_event(task_start(2));
+    model.apply_activity_event(task_start(3));
+    model.apply_activity_event(task_start(4));
+
+    let output = render_to_string(&model, &ui_state);
+    // Should show proper indentation for each nesting level
+    assert_tui_snapshot!(output);
+}
+
+/// Test multiple tasks under the same parent render in consistent order.
+#[test]
+fn test_task_multiple_under_same_parent() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Create a parent with multiple children
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "test:parent".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "test:child-a".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 3,
+                name: "test:child-b".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 4,
+                name: "test:child-c".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![
+            (1, 2), // parent -> child-a
+            (1, 3), // parent -> child-b
+            (1, 4), // parent -> child-c
+        ],
+    );
+    model.apply_activity_event(hierarchy);
+
+    // Start parent and all children
+    model.apply_activity_event(task_start(1));
+    model.apply_activity_event(task_start(2));
+    model.apply_activity_event(task_start(3));
+    model.apply_activity_event(task_start(4));
+
+    let output = render_to_string(&model, &ui_state);
+    // Children should appear under parent in consistent order
+    assert_tui_snapshot!(output);
+}
+
+/// Test diamond dependency pattern where a shared dependency appears under multiple parents.
+#[test]
+fn test_task_diamond_dependency() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Diamond pattern:
+    //     root
+    //    /    \
+    //   A      B
+    //    \    /
+    //     shared
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "test:root".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "test:branch-a".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 3,
+                name: "test:branch-b".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 4,
+                name: "test:shared".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![
+            (1, 2), // root -> branch-a
+            (1, 3), // root -> branch-b
+            (2, 4), // branch-a -> shared (primary parent)
+            (3, 4), // branch-b -> shared (additional parent)
+        ],
+    );
+    model.apply_activity_event(hierarchy);
+
+    // Start all tasks
+    model.apply_activity_event(task_start(1));
+    model.apply_activity_event(task_start(2));
+    model.apply_activity_event(task_start(3));
+    model.apply_activity_event(task_start(4));
+
+    let output = render_to_string(&model, &ui_state);
+    // Shared task should appear under both branch-a and branch-b
     assert_tui_snapshot!(output);
 }

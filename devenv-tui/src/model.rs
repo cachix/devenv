@@ -3,7 +3,7 @@ use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
     ExpectedCategory, Fetch, FetchKind, Message, Operation, SetExpected, Task,
 };
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -42,6 +42,8 @@ pub struct ActivityModel {
     expected_builds: Option<u64>,
     /// Expected download count announced by Nix (via SetExpected events)
     expected_downloads: Option<u64>,
+    /// Additional parents for activities (for displaying under multiple parents in TUI)
+    additional_parents: HashMap<u64, Vec<u64>>,
 }
 
 impl Default for ActivityModel {
@@ -316,6 +318,7 @@ impl ActivityModel {
             config,
             expected_builds: None,
             expected_downloads: None,
+            additional_parents: HashMap::new(),
         }
     }
 
@@ -496,21 +499,62 @@ impl ActivityModel {
 
     fn handle_task_event(&mut self, event: Task) {
         match event {
-            Task::Start {
-                id,
-                name,
-                parent,
-                detail,
-                show_output,
-                ..
-            } => {
-                let variant = ActivityVariant::Task(TaskActivity {
-                    status: TaskDisplayStatus::Running,
-                    duration: None,
-                    show_output,
-                    last_log_line: None,
-                });
-                self.create_activity(id, name, parent, detail, variant, ActivityLevel::Info);
+            Task::Hierarchy { tasks, edges, .. } => {
+                // Build parent relationships from edges first
+                // edges are (parent_id, child_id) pairs
+                // First edge for a child is the primary parent, rest are additional parents
+                let mut primary_parents: HashMap<u64, u64> = HashMap::new();
+                let mut additional: HashMap<u64, Vec<u64>> = HashMap::new();
+
+                for (parent_id, child_id) in edges {
+                    if primary_parents.contains_key(&child_id) {
+                        // Already has primary parent, add as additional
+                        additional.entry(child_id).or_default().push(parent_id);
+                    } else {
+                        // First edge - set as primary parent
+                        primary_parents.insert(child_id, parent_id);
+                    }
+                }
+
+                // Create all task activities upfront in Queued state
+                // Use parent from edges if available
+                for task_info in tasks {
+                    let variant = ActivityVariant::Task(TaskActivity {
+                        status: TaskDisplayStatus::Pending,
+                        duration: None,
+                        show_output: task_info.show_output,
+                        last_log_line: None,
+                    });
+                    let parent = primary_parents.get(&task_info.id).copied();
+                    self.create_activity_with_options(
+                        task_info.id,
+                        task_info.name,
+                        parent,
+                        None,
+                        variant,
+                        ActivityLevel::Info,
+                        NixActivityState::Queued,
+                    );
+                }
+
+                // Store additional parents
+                for (child_id, parents) in additional {
+                    if !parents.is_empty() {
+                        self.additional_parents.insert(child_id, parents);
+                    }
+                }
+            }
+            Task::Start { id, .. } => {
+                // Transition task from Queued to Active
+                if let Some(activity) = self.activities.get_mut(&id) {
+                    activity.state = NixActivityState::Active;
+                    activity.start_time = Instant::now();
+                    activity.completed_at = None;
+                    if let ActivityVariant::Task(task) = &mut activity.variant {
+                        task.status = TaskDisplayStatus::Running;
+                        task.duration = None;
+                    }
+                }
             }
             Task::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
@@ -697,7 +741,11 @@ impl ActivityModel {
                     ActivityOutcome::Success | ActivityOutcome::Cached | ActivityOutcome::Skipped
                 );
                 let cached = matches!(outcome, ActivityOutcome::Cached);
-                let duration = activity.start_time.elapsed();
+                let duration = if matches!(&activity.state, NixActivityState::Queued) {
+                    Duration::ZERO
+                } else {
+                    activity.start_time.elapsed()
+                };
                 (activity.variant.clone(), success, cached, duration)
             } else {
                 return;
@@ -928,6 +976,7 @@ impl ActivityModel {
     }
 
     pub fn get_selectable_activity_ids(&self) -> Vec<u64> {
+        let mut seen = HashSet::new();
         self.get_display_activities()
             .into_iter()
             .filter(|da| {
@@ -935,7 +984,10 @@ impl ActivityModel {
                     .get(&da.activity.id)
                     .is_some_and(|logs| !logs.is_empty())
             })
-            .map(|da| da.activity.id)
+            .filter_map(|da| {
+                let id = da.activity.id;
+                seen.insert(id).then_some(id)
+            })
             .collect()
     }
 
@@ -948,10 +1000,12 @@ impl ActivityModel {
         limit: &ChildActivityLimit,
     ) -> Vec<DisplayActivity> {
         let mut activities = Vec::new();
-        let mut processed = std::collections::HashSet::new();
+        // Track (activity_id, parent_id) pairs to allow same activity under multiple parents
+        let mut processed: std::collections::HashSet<(u64, Option<u64>)> =
+            std::collections::HashSet::new();
 
         for &root_id in &self.root_activities {
-            self.add_display_activity(&mut activities, root_id, 0, &mut processed, limit);
+            self.add_display_activity(&mut activities, root_id, None, 0, &mut processed, limit);
         }
 
         activities
@@ -961,11 +1015,13 @@ impl ActivityModel {
         &self,
         activities: &mut Vec<DisplayActivity>,
         activity_id: u64,
+        parent_id: Option<u64>,
         depth: usize,
-        processed: &mut std::collections::HashSet<u64>,
+        processed: &mut std::collections::HashSet<(u64, Option<u64>)>,
         limit: &ChildActivityLimit,
     ) {
-        if !processed.insert(activity_id) {
+        // Track (activity_id, parent_id) to allow same activity under different parents
+        if !processed.insert((activity_id, parent_id)) {
             return;
         }
 
@@ -996,7 +1052,14 @@ impl ActivityModel {
             // so we can find visible descendants (e.g., Info messages under Debug parents).
             let child_depth = if activity_visible { depth + 1 } else { depth };
             for child in all_children {
-                self.add_display_activity(activities, child.id, child_depth, processed, limit);
+                self.add_display_activity(
+                    activities,
+                    child.id,
+                    Some(activity_id),
+                    child_depth,
+                    processed,
+                    limit,
+                );
             }
         }
     }
@@ -1163,13 +1226,22 @@ impl ActivityModel {
             .get(&parent_id)
             .is_some_and(|a| matches!(a.variant, ActivityVariant::Task(_)));
 
-        // Get all children of this parent, excluding UserOperation
+        // Get all children of this parent (including additional parents), excluding UserOperation
         let mut all_children: Vec<_> = self
             .activities
             .values()
             .filter(|a| {
-                a.parent_id == Some(parent_id)
-                    && !matches!(a.variant, ActivityVariant::UserOperation)
+                if matches!(a.variant, ActivityVariant::UserOperation) {
+                    return false;
+                }
+                // Check primary parent
+                if a.parent_id == Some(parent_id) {
+                    return true;
+                }
+                // Check additional parents
+                self.additional_parents
+                    .get(&a.id)
+                    .is_some_and(|parents| parents.contains(&parent_id))
             })
             .collect();
 

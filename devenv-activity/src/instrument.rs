@@ -19,7 +19,7 @@ use crate::stack::{ACTIVITY_STACK, get_current_stack};
 /// let activity = Activity::operation("Building").start();
 /// async {
 ///     // Nested activities will have `activity` as their parent
-///     let child = Activity::task("child").start();
+///     let child = Activity::task().start();
 /// }
 /// .in_activity(&activity)
 /// .await;

@@ -205,23 +205,34 @@ pub enum Evaluate {
     },
 }
 
+/// Information about a task in the hierarchy
+#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+pub struct TaskInfo {
+    pub id: u64,
+    pub name: String,
+    #[serde(default)]
+    pub show_output: bool,
+    #[serde(default)]
+    pub is_process: bool,
+}
+
 /// Task activity events - has Progress, Log
 #[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Task {
+    /// Emit task hierarchy once upfront before execution
+    Hierarchy {
+        /// All tasks with their metadata
+        tasks: Vec<TaskInfo>,
+        /// Edges representing parent-child relationships: (parent_id, child_id)
+        /// A task appears under its dependents (i.e., tasks that depend on it)
+        edges: Vec<(u64, u64)>,
+        timestamp: Timestamp,
+    },
+    /// Task execution has started
     Start {
         #[serde(alias = "activity_id")]
         id: u64,
-        name: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        parent: Option<u64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        detail: Option<String>,
-        #[serde(default)]
-        show_output: bool,
-        /// Whether this is a long-running process task (always shows output)
-        #[serde(default)]
-        is_process: bool,
         timestamp: Timestamp,
     },
     Complete {

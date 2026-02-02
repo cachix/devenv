@@ -172,19 +172,18 @@ impl TaskState {
         Output(output)
     }
 
+    /// Run this task with a pre-assigned activity ID.
+    /// The Task::Hierarchy event has already been emitted; this emits Task::Start.
     pub async fn run(
         &self,
         now: Instant,
         outputs: &BTreeMap<String, serde_json::Value>,
         cache: &TaskCache,
         cancellation: CancellationToken,
+        activity_id: u64,
     ) -> Result<TaskCompleted> {
-        // Create a Task activity for tracking this task's lifecycle.
-        // All child activities created within scope() will have this as their parent.
-        let task_activity = Activity::task(&self.task.name)
-            .show_output(self.task.show_output)
-            .is_process(self.task.r#type == crate::types::TaskType::Process)
-            .start();
+        // Create the Activity with the pre-assigned ID - this emits Task::Start
+        let task_activity = Activity::task_with_id(activity_id);
 
         // Run the entire task within the activity's scope for proper parent-child nesting
         self.run_inner(now, outputs, cache, cancellation, &task_activity)

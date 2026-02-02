@@ -1,0 +1,10 @@
+---
+source: devenv-tui/tests/tui_tests.rs
+assertion_line: 1271
+expression: output
+---
+⠋ test:first
+⠋ test:second pending
+⠋ test:third pending
+
+ 0 of 3 task    ↑↓ nav
