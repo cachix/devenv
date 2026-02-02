@@ -19,6 +19,7 @@
   languages.gawk.enable = true;
   languages.gleam.enable = true;
   languages.go.enable = true;
+  languages.hare.enable = true;
   languages.haskell.enable = true;
   languages.helm.enable = true;
   languages.idris.enable = true;
