@@ -3142,7 +3142,7 @@ async fn test_complete_dependency_no_failure_propagation() -> Result<(), Error> 
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
 
@@ -3204,7 +3204,7 @@ async fn test_ready_dependency_failure_propagation() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
 
@@ -3270,7 +3270,7 @@ async fn test_mixed_dependencies() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
 
@@ -3348,7 +3348,7 @@ async fn test_mixed_dependencies_hard_failure() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
 
@@ -3400,7 +3400,7 @@ async fn test_before_complete_dependency_no_failure_propagation() -> Result<(), 
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
 
@@ -3468,7 +3468,7 @@ async fn test_chained_soft_dependencies() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
 

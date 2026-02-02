@@ -117,11 +117,14 @@ let
               cwd = config.cwd;
               show_output = config.showOutput;
               process = {
+                use_sudo = config.use_sudo;
+                pseudo_terminal = config.pseudo_terminal;
                 restart = config.restart;
                 max_restarts = config.max_restarts;
                 listen = config.listen;
                 watch = config.watch;
                 notify = config.notify;
+                watchdog = config.watchdog;
               };
             };
             description = "Internal configuration for the task.";
@@ -181,6 +184,26 @@ let
             description = "Working directory to run the task in. If not specified, the current working directory will be used.";
           };
 
+          use_sudo = lib.mkOption {
+            type = types.bool;
+            default = false;
+            description = ''
+              Run this process task with sudo/elevated privileges.
+
+              Only used when type = "process".
+            '';
+          };
+
+          pseudo_terminal = lib.mkOption {
+            type = types.bool;
+            default = false;
+            description = ''
+              Run this process task in a pseudo-terminal (PTY).
+
+              Only used when type = "process".
+            '';
+          };
+
           # Process-specific configuration (only used when type = "process")
           restart = lib.mkOption {
             type = types.enum [ "never" "always" "on_failure" ];
@@ -226,6 +249,35 @@ let
                 mode = 384; # 0o600
               }
             ];
+          };
+
+          watchdog = lib.mkOption {
+            type = types.nullOr (types.submodule {
+              options = {
+                usec = lib.mkOption {
+                  type = types.int;
+                  description = "Watchdog interval in microseconds";
+                };
+
+                require_ready = lib.mkOption {
+                  type = types.bool;
+                  default = true;
+                  description = "Require READY=1 notification before enforcing watchdog";
+                };
+              };
+            });
+            default = null;
+            description = ''
+              Systemd watchdog configuration.
+
+              Only used when type = "process".
+            '';
+            example = lib.literalExpression ''
+              {
+                usec = 30000000; # 30 seconds
+                require_ready = true;
+              }
+            '';
           };
 
           watch = lib.mkOption {

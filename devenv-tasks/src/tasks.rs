@@ -710,6 +710,12 @@ impl Tasks {
                         notify_ui_clone.notify_one();
                     }
                 }
+
+                // Update orchestration progress once the process is started or failed.
+                let done =
+                    completed_tasks.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                orchestration_activity.progress(done, total_tasks, None);
+
                 continue;
             }
 

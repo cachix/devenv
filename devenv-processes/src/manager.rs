@@ -121,6 +121,13 @@ impl NativeProcessManager {
     ) -> Result<Arc<Job>> {
         debug!("Starting command '{}': {}", config.name, config.exec);
 
+        if config.pseudo_terminal {
+            bail!(
+                "Process '{}' requested pseudo_terminal, but the native process manager does not support PTY yet",
+                config.name
+            );
+        }
+
         // Store config for restart support
         {
             let mut configs = self.process_configs.write().await;

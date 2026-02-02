@@ -62,6 +62,26 @@ let
         description = "Working directory to run the process in. If not specified, the current working directory will be used.";
       };
 
+      use_sudo = lib.mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Run this process with sudo/elevated privileges.
+
+          Only used when using native process manager.
+        '';
+      };
+
+      pseudo_terminal = lib.mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Run this process in a pseudo-terminal (PTY).
+
+          Only used when using native process manager.
+        '';
+      };
+
       restart = lib.mkOption {
         type = types.enum [ "never" "always" "on_failure" ];
         default = "on_failure";
@@ -106,6 +126,35 @@ let
             mode = 384; # 0o600
           }
         ];
+      };
+
+      watchdog = lib.mkOption {
+        type = types.nullOr (types.submodule {
+          options = {
+            usec = lib.mkOption {
+              type = types.int;
+              description = "Watchdog interval in microseconds";
+            };
+
+            require_ready = lib.mkOption {
+              type = types.bool;
+              default = true;
+              description = "Require READY=1 notification before enforcing watchdog";
+            };
+          };
+        });
+        default = null;
+        description = ''
+          Systemd watchdog configuration.
+
+          Only used when using native process manager.
+        '';
+        example = lib.literalExpression ''
+          {
+            usec = 30000000; # 30 seconds
+            require_ready = true;
+          }
+        '';
       };
 
       after = lib.mkOption {
@@ -379,11 +428,14 @@ in
             # Always show output for process tasks so process-compose can capture it
             showOutput = true;
             # Process-specific configuration
+            use_sudo = process.use_sudo;
+            pseudo_terminal = process.pseudo_terminal;
             restart = process.restart;
             max_restarts = process.max_restarts;
             listen = process.listen;
             watch = process.watch;
             notify = process.notify;
+            watchdog = process.watchdog;
           };
         })
         config.processes;
@@ -391,7 +443,7 @@ in
       # Provide the devenv-tasks command for each process so process managers can use it
       # to support before/after task dependencies
       process.taskCommandsBase = lib.mapAttrs
-        (name: _: "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all devenv:processes:${name}")
+        (name: _: "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} devenv:processes:${name}")
         config.processes;
 
       # With exec prefix for proper signal handling (derived from base)
