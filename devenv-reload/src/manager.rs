@@ -6,7 +6,7 @@ use devenv_shell::{get_terminal_size, Pty, PtyError, RawModeGuard};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use thiserror::Error;
 use tokio::sync::mpsc;
 
@@ -35,8 +35,8 @@ pub enum ManagerError {
 
 enum Event {
     Stdin(Vec<u8>),
-    PtyOutput(Vec<u8>),
-    PtyExit,
+    PtyOutput(u64, Vec<u8>),
+    PtyExit(u64),
     FileChange(std::path::PathBuf),
     BuildComplete(Result<portable_pty::CommandBuilder, crate::builder::BuildError>),
 }
@@ -73,9 +73,9 @@ impl ShellManager {
         let cmd = builder.build(&ctx).map_err(ManagerError::Build)?;
 
         let size = get_terminal_size();
-        let pty = Arc::new(Mutex::new(
-            Pty::spawn(cmd, size).map_err(ManagerError::Spawn)?,
-        ));
+        let initial_pty = Arc::new(Pty::spawn(cmd, size).map_err(ManagerError::Spawn)?);
+        let pty = Arc::new(RwLock::new(initial_pty.clone()));
+        let mut pty_generation: u64 = 0;
 
         // Set up terminal state tracking
         let mut vt = Vt::new(size.cols as usize, size.rows as usize);
@@ -108,34 +108,33 @@ impl ShellManager {
 
         // Spawn PTY reader thread
         let pty_tx = event_tx.clone();
-        let pty_reader = pty.clone();
-        std::thread::spawn(move || {
-            let mut buf = [0u8; 4096];
-            loop {
-                let result = {
-                    let pty = pty_reader.lock().unwrap();
-                    pty.read(&mut buf)
-                };
-                match result {
-                    Ok(0) => {
-                        let _ = pty_tx.blocking_send(Event::PtyExit);
-                        break;
-                    }
-                    Ok(n) => {
-                        if pty_tx
-                            .blocking_send(Event::PtyOutput(buf[..n].to_vec()))
-                            .is_err()
-                        {
+        let spawn_pty_reader = |pty: Arc<Pty>, generation: u64, pty_tx: mpsc::Sender<Event>| {
+            std::thread::spawn(move || {
+                let mut buf = [0u8; 4096];
+                loop {
+                    let result = pty.read(&mut buf);
+                    match result {
+                        Ok(0) => {
+                            let _ = pty_tx.blocking_send(Event::PtyExit(generation));
+                            break;
+                        }
+                        Ok(n) => {
+                            if pty_tx
+                                .blocking_send(Event::PtyOutput(generation, buf[..n].to_vec()))
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                        Err(_) => {
+                            let _ = pty_tx.blocking_send(Event::PtyExit(generation));
                             break;
                         }
                     }
-                    Err(_) => {
-                        let _ = pty_tx.blocking_send(Event::PtyExit);
-                        break;
-                    }
                 }
-            }
-        });
+            });
+        };
+        spawn_pty_reader(initial_pty.clone(), pty_generation, pty_tx);
 
         // Spawn file watcher forwarder
         let watch_tx = event_tx.clone();
@@ -157,19 +156,24 @@ impl ShellManager {
         while let Some(event) = event_rx.recv().await {
             match event {
                 Event::Stdin(data) => {
-                    let pty_guard = pty.lock().unwrap();
-                    let _ = pty_guard.write_all(&data);
-                    let _ = pty_guard.flush();
+                    let current_pty = pty.read().unwrap().clone();
+                    let _ = current_pty.write_all(&data);
+                    let _ = current_pty.flush();
                 }
 
-                Event::PtyOutput(data) => {
+                Event::PtyOutput(generation, data) => {
+                    if generation != pty_generation {
+                        continue;
+                    }
                     vt.feed_str(&String::from_utf8_lossy(&data));
                     stdout.write_all(&data)?;
                     stdout.flush()?;
                 }
 
-                Event::PtyExit => {
-                    break;
+                Event::PtyExit(generation) => {
+                    if generation == pty_generation {
+                        break;
+                    }
                 }
 
                 Event::FileChange(path) => {
@@ -222,19 +226,22 @@ impl ShellManager {
 
                             match Pty::spawn(cmd, new_size) {
                                 Ok(new_pty) => {
-                                    {
-                                        let mut pty_guard = pty.lock().unwrap();
-                                        let _ = pty_guard.kill();
-                                        *pty_guard = new_pty;
-                                    }
+                                    let new_pty = Arc::new(new_pty);
+                                    let old_pty = {
+                                        let mut pty_guard = pty.write().unwrap();
+                                        let old = pty_guard.clone();
+                                        *pty_guard = new_pty.clone();
+                                        old
+                                    };
+                                    let _ = old_pty.kill();
+
+                                    pty_generation = pty_generation.wrapping_add(1);
+                                    spawn_pty_reader(new_pty.clone(), pty_generation, event_tx.clone());
 
                                     vt = Vt::new(new_size.cols as usize, new_size.rows as usize);
 
-                                    {
-                                        let pty_guard = pty.lock().unwrap();
-                                        let _ = pty_guard.write_all(state.as_bytes());
-                                        let _ = pty_guard.flush();
-                                    }
+                                    let _ = new_pty.write_all(state.as_bytes());
+                                    let _ = new_pty.flush();
 
                                     let _ = messages.try_send(ManagerMessage::Reloaded { files });
                                 }

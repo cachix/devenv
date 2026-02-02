@@ -55,6 +55,22 @@ pub enum CacheError {
     Serialization(#[from] serde_json::Error),
 }
 
+struct ObserverClearGuard {
+    bridge: Arc<NixLogBridge>,
+}
+
+impl ObserverClearGuard {
+    fn new(bridge: Arc<NixLogBridge>) -> Self {
+        Self { bridge }
+    }
+}
+
+impl Drop for ObserverClearGuard {
+    fn drop(&mut self) {
+        self.bridge.clear_observers();
+    }
+}
+
 /// Service for caching eval results.
 ///
 /// This service provides transparent caching for Nix evaluation operations.
@@ -532,13 +548,13 @@ impl CachedEval {
         // Cache miss (or resource replay failed) - collect inputs during evaluation
         let collector = EvalInputCollector::start();
         self.log_bridge.add_observer(collector.clone());
+        let _observer_guard = ObserverClearGuard::new(self.log_bridge.clone());
 
-        let result = eval_fn()
-            .await
-            .map_err(|e| CacheError::Eval(format!("{e:#}")))?;
+        let result = eval_fn().await;
+        drop(_observer_guard);
+        let result = result.map_err(|e| CacheError::Eval(format!("{e:#}")))?;
 
         // Stop collecting and store result
-        self.log_bridge.clear_observers();
         let ops = collector.take_ops();
         let inputs = ops_to_inputs(ops, &self.config);
 
@@ -628,13 +644,13 @@ impl CachedEval {
         // Cache miss (or resource replay failed) - collect inputs during evaluation
         let collector = EvalInputCollector::start();
         self.log_bridge.add_observer(collector.clone());
+        let _observer_guard = ObserverClearGuard::new(self.log_bridge.clone());
 
-        let result = eval_fn()
-            .await
-            .map_err(|e| CacheError::Eval(format!("{e:#}")))?;
+        let result = eval_fn().await;
+        drop(_observer_guard);
+        let result = result.map_err(|e| CacheError::Eval(format!("{e:#}")))?;
 
         // Stop collecting and store result
-        self.log_bridge.clear_observers();
         let ops = collector.take_ops();
         let inputs = ops_to_inputs(ops, &self.config);
 
