@@ -1012,9 +1012,10 @@ impl NixBackend for NixRustBackend {
 
             let args_nix = ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string());
             let cache_key_args = format!(
-                "{}:port_allocation={}",
+                "{}:port_allocation={}:strict_ports={}",
                 args_nix,
-                self.port_allocator.is_enabled()
+                self.port_allocator.is_enabled(),
+                self.port_allocator.is_strict()
             );
 
             // Unquote special Nix expressions that should be evaluated

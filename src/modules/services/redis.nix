@@ -84,7 +84,9 @@ in
     };
 
     processes.redis = {
-      ports.main.allocate = basePort;
+      ports = lib.mkIf (cfg.port != 0) {
+        main.allocate = basePort;
+      };
       exec = "${startScript}/bin/start-redis";
 
       process-compose = {

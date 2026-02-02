@@ -7,20 +7,18 @@ with lib; let
   cfg = config.services.mysql;
   isMariaDB = getName cfg.package == getName pkgs.mariadb;
 
-  # Port allocation: only allocate if mysqld.port is configured
+  # Port allocation
   hasPort = hasAttrByPath [ "mysqld" "port" ] cfg.settings;
   basePort = if hasPort then cfg.settings.mysqld.port else 3306;
   allocatedPort = config.processes.mysql.ports.main.value;
 
-  # Override settings with allocated port if configured
+  # Always inject the allocated port so mysqld listens on the same port we reserved.
   settingsWithPort =
-    if hasPort then
-      cfg.settings // {
-        mysqld = cfg.settings.mysqld // {
-          port = allocatedPort;
-        };
-      }
-    else cfg.settings;
+    cfg.settings // {
+      mysqld = (cfg.settings.mysqld or { }) // {
+        port = allocatedPort;
+      };
+    };
 
   format = pkgs.formats.ini { listsAsDuplicateKeys = true; };
   configFile = format.generate "my.cnf" settingsWithPort;
@@ -312,15 +310,12 @@ in
       cfg.package
     ];
 
-    env =
-      {
-        MYSQL_HOME = config.env.DEVENV_STATE + "/mysql";
-        MYSQL_UNIX_PORT = config.env.DEVENV_RUNTIME + "/mysql.sock";
-        MYSQLX_UNIX_PORT = config.env.DEVENV_RUNTIME + "/mysqlx.sock";
-      }
-      // (optionalAttrs hasPort {
-        MYSQL_TCP_PORT = toString allocatedPort;
-      });
+    env = {
+      MYSQL_HOME = config.env.DEVENV_STATE + "/mysql";
+      MYSQL_UNIX_PORT = config.env.DEVENV_RUNTIME + "/mysql.sock";
+      MYSQLX_UNIX_PORT = config.env.DEVENV_RUNTIME + "/mysqlx.sock";
+      MYSQL_TCP_PORT = toString allocatedPort;
+    };
 
     scripts.mysql.exec = ''
       ${mysqlWrapped}/bin/mysql "$@"
