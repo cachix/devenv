@@ -7,9 +7,9 @@ use crate::types::{
     VerbosityLevel,
 };
 use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
-use petgraph::algo::toposort;
+use petgraph::algo::{has_path_connecting, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
-use petgraph::visit::EdgeRef;
+use petgraph::visit::{EdgeRef, Reversed};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
@@ -409,8 +409,6 @@ impl Tasks {
         // Build TaskInfo for all tasks and collect edges for the hierarchy
         let mut task_infos: Vec<TaskInfo> = Vec::new();
         let mut edges: Vec<(u64, u64)> = Vec::new();
-        // Cache for reachability queries to avoid redundant BFS traversals
-        let mut reachability_cache: HashMap<(NodeIndex, NodeIndex), bool> = HashMap::new();
 
         for &index in &self.tasks_order {
             let task_state = self.graph[index].read().await;
@@ -443,8 +441,9 @@ impl Tasks {
                     .filter(|&&d1| {
                         // D1 is uncovered if it doesn't transitively depend on any other dependent D2
                         // If D1 depends on D2, then D2 already "covers" the path to this task
+                        // Reversed follows incoming edges (dependencies) instead of outgoing
                         !dependents.iter().any(|&d2| {
-                            d1 != d2 && is_reachable(&self.graph, d1, d2, &mut reachability_cache)
+                            d1 != d2 && has_path_connecting(&Reversed(&self.graph), d1, d2, None)
                         })
                     })
                     .copied()
@@ -710,49 +709,4 @@ impl Tasks {
 
         Outputs(Arc::try_unwrap(outputs).unwrap().into_inner())
     }
-}
-
-/// Check if `start` transitively depends on `target`.
-///
-/// In our graph, incoming edges point to dependencies (A <- B means A depends on B).
-/// This function follows the dependency chain from `start` to see if `target` is reachable.
-fn is_reachable<N, E>(
-    graph: &DiGraph<N, E>,
-    start: NodeIndex,
-    target: NodeIndex,
-    cache: &mut HashMap<(NodeIndex, NodeIndex), bool>,
-) -> bool {
-    use std::collections::VecDeque;
-
-    if start == target {
-        return false; // A node doesn't "depend on" itself for our purposes
-    }
-
-    // Check cache first
-    if let Some(&result) = cache.get(&(start, target)) {
-        return result;
-    }
-
-    let mut visited = HashSet::new();
-    let mut queue = VecDeque::new();
-
-    // Follow incoming edges (dependencies of `start`)
-    for neighbor in graph.neighbors_directed(start, petgraph::Direction::Incoming) {
-        queue.push_back(neighbor);
-    }
-
-    while let Some(node) = queue.pop_front() {
-        if node == target {
-            cache.insert((start, target), true);
-            return true;
-        }
-        if visited.insert(node) {
-            for neighbor in graph.neighbors_directed(node, petgraph::Direction::Incoming) {
-                queue.push_back(neighbor);
-            }
-        }
-    }
-
-    cache.insert((start, target), false);
-    false
 }
