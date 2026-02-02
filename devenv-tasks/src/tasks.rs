@@ -534,7 +534,7 @@ impl Tasks {
                 };
 
                 // Create a minimal activity just to emit the completion event
-                let skip_activity = Activity::task("").id(task_activity_id).parent(None).start();
+                let skip_activity = Activity::task_with_id(task_activity_id);
 
                 if cancelled {
                     skip_activity.cancel();

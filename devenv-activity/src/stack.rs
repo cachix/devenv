@@ -18,13 +18,13 @@
 //! ```rust,ignore
 //! use devenv_activity::{Activity, ActivityInstrument};
 //!
-//! let activity = Arc::new(Activity::task("parent").start());
+//! let activity = Arc::new(Activity::task().start());
 //! let activity_clone = Arc::clone(&activity);
 //!
 //! tokio::spawn(move || {
 //!     async move {
 //!         // Activities created here will have `activity` as their parent
-//!         let child = Activity::task("child").start();
+//!         let child = Activity::task().start();
 //!     }.in_activity(&activity_clone)
 //! });
 //! ```

@@ -183,10 +183,7 @@ impl TaskState {
         activity_id: u64,
     ) -> Result<TaskCompleted> {
         // Create the Activity with the pre-assigned ID - this emits Task::Start
-        let task_activity = Activity::task(&self.task.name)
-            .id(activity_id)
-            .parent(None) // Parent relationship is already defined in the Hierarchy event
-            .start();
+        let task_activity = Activity::task_with_id(activity_id);
 
         // Run the entire task within the activity's scope for proper parent-child nesting
         self.run_inner(now, outputs, cache, cancellation, &task_activity)

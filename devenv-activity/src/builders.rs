@@ -241,31 +241,20 @@ impl EvaluateBuilder {
 
 /// Builder for Task activities
 pub struct TaskBuilder {
-    #[allow(dead_code)]
-    name: String,
     id: Option<u64>,
-    #[allow(dead_code)]
-    parent: Option<Option<u64>>,
     level: Option<ActivityLevel>,
 }
 
 impl TaskBuilder {
-    pub(crate) fn new(name: impl Into<String>) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            name: name.into(),
             id: None,
-            parent: None,
             level: None,
         }
     }
 
     pub fn id(mut self, id: u64) -> Self {
         self.id = Some(id);
-        self
-    }
-
-    pub fn parent(mut self, parent: Option<u64>) -> Self {
-        self.parent = Some(parent);
         self
     }
 

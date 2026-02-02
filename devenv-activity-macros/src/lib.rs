@@ -238,7 +238,7 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
                         .start()
                 },
                 "task" => quote! {
-                    devenv_activity::Activity::task(#name)
+                    devenv_activity::Activity::task()
                         .level(#level_enum)
                         .start()
                 },
