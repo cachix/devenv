@@ -4,7 +4,7 @@ use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
     ExpectedCategory, Fetch, FetchKind, Message, Operation, SetExpected, Task,
 };
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -975,6 +975,7 @@ impl ActivityModel {
     }
 
     pub fn get_selectable_activity_ids(&self) -> Vec<u64> {
+        let mut seen = HashSet::new();
         self.get_display_activities()
             .into_iter()
             .filter(|da| {
@@ -982,7 +983,10 @@ impl ActivityModel {
                     .get(&da.activity.id)
                     .is_some_and(|logs| !logs.is_empty())
             })
-            .map(|da| da.activity.id)
+            .filter_map(|da| {
+                let id = da.activity.id;
+                seen.insert(id).then_some(id)
+            })
             .collect()
     }
 

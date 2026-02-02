@@ -1231,3 +1231,65 @@ fn test_task_additional_parents() {
     // The "build" task should appear under both test:unit and test:integration
     assert_tui_snapshot!(output);
 }
+
+#[test]
+fn test_selectable_ids_dedup_for_multi_parent_tasks() {
+    let (mut model, mut ui_state) = new_test_model();
+
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "parent:a".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "parent:b".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 3,
+                name: "shared".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![
+            (1, 3), // parent:a -> shared (primary)
+            (2, 3), // parent:b -> shared (additional)
+        ],
+    );
+    model.apply_activity_event(hierarchy);
+
+    // Add logs so tasks 1 and 3 are selectable.
+    model.apply_activity_event(ActivityEvent::Task(Task::Log {
+        id: 1,
+        line: "log-1".to_string(),
+        is_error: false,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Task(Task::Log {
+        id: 3,
+        line: "log-3".to_string(),
+        is_error: false,
+        timestamp: Timestamp::now(),
+    }));
+
+    let selectable = model.get_selectable_activity_ids();
+    assert_eq!(selectable, vec![1, 3]);
+
+    ui_state.select_next_activity(&selectable);
+    assert_eq!(ui_state.selected_activity, Some(1));
+
+    ui_state.select_next_activity(&selectable);
+    assert_eq!(ui_state.selected_activity, Some(3));
+
+    ui_state.select_next_activity(&selectable);
+    assert_eq!(ui_state.selected_activity, Some(3));
+
+    ui_state.select_previous_activity(&selectable);
+    assert_eq!(ui_state.selected_activity, Some(1));
+}
