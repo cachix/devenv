@@ -409,6 +409,8 @@ impl Tasks {
         // Build TaskInfo for all tasks and collect edges for the hierarchy
         let mut task_infos: Vec<TaskInfo> = Vec::new();
         let mut edges: Vec<(u64, u64)> = Vec::new();
+        // Cache for reachability queries to avoid redundant BFS traversals
+        let mut reachability_cache: HashMap<(NodeIndex, NodeIndex), bool> = HashMap::new();
 
         for &index in &self.tasks_order {
             let task_state = self.graph[index].read().await;
@@ -428,7 +430,7 @@ impl Tasks {
                 edges.push((orchestration_activity.id(), task_id));
             } else {
                 // Non-root tasks: find the "most immediate" dependent
-                // A dependent D1 is "covered" by D2 if D2 transitively depends on D1
+                // A dependent D1 is "covered" by D2 if D1 transitively depends on D2
                 // We only create edges from uncovered dependents to avoid duplication
                 let dependents: Vec<NodeIndex> = self
                     .graph
@@ -440,22 +442,23 @@ impl Tasks {
                     .iter()
                     .filter(|&&d1| {
                         // D1 is uncovered if it doesn't transitively depend on any other dependent D2
-                        // If D1 depends on D2, then D1 can reach the task through D2, making D1 redundant
-                        !dependents
-                            .iter()
-                            .any(|&d2| d1 != d2 && is_reachable(&self.graph, d1, d2))
+                        // If D1 depends on D2, then D2 already "covers" the path to this task
+                        !dependents.iter().any(|&d2| {
+                            d1 != d2 && is_reachable(&self.graph, d1, d2, &mut reachability_cache)
+                        })
                     })
                     .copied()
                     .collect();
 
-                for dependent_index in uncovered_dependents {
-                    if let Some(&dependent_id) = task_ids.get(&dependent_index) {
+                for dependent_index in &uncovered_dependents {
+                    if let Some(&dependent_id) = task_ids.get(dependent_index) {
                         edges.push((dependent_id, task_id));
                     }
                 }
 
-                // If no dependents found, fallback to orchestration
-                if dependents.is_empty() {
+                // Fallback to orchestration if no edges were added
+                // (either no dependents, or all dependents were filtered out)
+                if uncovered_dependents.is_empty() {
                     edges.push((orchestration_activity.id(), task_id));
                 }
             }
@@ -709,25 +712,38 @@ impl Tasks {
     }
 }
 
-/// Check if `target` is reachable from `start` by following outgoing edges.
-/// Used to determine if one dependent transitively depends on another.
-fn is_reachable<N, E>(graph: &DiGraph<N, E>, start: NodeIndex, target: NodeIndex) -> bool {
+/// Check if `start` transitively depends on `target`.
+///
+/// In our graph, incoming edges point to dependencies (A <- B means A depends on B).
+/// This function follows the dependency chain from `start` to see if `target` is reachable.
+fn is_reachable<N, E>(
+    graph: &DiGraph<N, E>,
+    start: NodeIndex,
+    target: NodeIndex,
+    cache: &mut HashMap<(NodeIndex, NodeIndex), bool>,
+) -> bool {
     use std::collections::VecDeque;
 
     if start == target {
-        return false; // A node doesn't "reach" itself for our purposes
+        return false; // A node doesn't "depend on" itself for our purposes
+    }
+
+    // Check cache first
+    if let Some(&result) = cache.get(&(start, target)) {
+        return result;
     }
 
     let mut visited = HashSet::new();
     let mut queue = VecDeque::new();
 
-    // Start from the outgoing neighbors of `start` (tasks that `start` depends on)
+    // Follow incoming edges (dependencies of `start`)
     for neighbor in graph.neighbors_directed(start, petgraph::Direction::Incoming) {
         queue.push_back(neighbor);
     }
 
     while let Some(node) = queue.pop_front() {
         if node == target {
+            cache.insert((start, target), true);
             return true;
         }
         if visited.insert(node) {
@@ -737,5 +753,6 @@ fn is_reachable<N, E>(graph: &DiGraph<N, E>, start: NodeIndex, target: NodeIndex
         }
     }
 
+    cache.insert((start, target), false);
     false
 }
