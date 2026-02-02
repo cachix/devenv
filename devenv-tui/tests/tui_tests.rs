@@ -1293,3 +1293,275 @@ fn test_selectable_ids_dedup_for_multi_parent_tasks() {
     ui_state.select_previous_activity(&selectable);
     assert_eq!(ui_state.selected_activity, Some(1));
 }
+
+/// Test that tasks in Queued state (hierarchy emitted but not started) render correctly.
+#[test]
+fn test_task_queued_state() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Emit hierarchy for three tasks but only start one
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "test:first".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "test:second".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 3,
+                name: "test:third".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![],
+    );
+    model.apply_activity_event(hierarchy);
+
+    // Only start the first task - others remain in Queued state
+    model.apply_activity_event(task_start(1));
+
+    let output = render_to_string(&model, &ui_state);
+    // First task should show as running, others should show as pending/queued
+    assert_tui_snapshot!(output);
+}
+
+/// Test that a task that completes without ever starting (skipped) shows correctly.
+#[test]
+fn test_task_skipped_never_started() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Emit hierarchy
+    model.apply_activity_event(task_hierarchy_single(
+        1,
+        "test:skipped-task",
+        None,
+        false,
+        false,
+    ));
+
+    // Complete with Skipped without ever calling task_start
+    // This simulates a task that was skipped due to caching or no command
+    model.apply_activity_event(ActivityEvent::Task(Task::Complete {
+        id: 1,
+        outcome: ActivityOutcome::Skipped,
+        timestamp: Timestamp::now(),
+    }));
+
+    let output = render_to_string(&model, &ui_state);
+    // Task should show as skipped with zero duration
+    assert_tui_snapshot!(output);
+}
+
+/// Test that a task cancelled due to dependency failure shows correctly.
+#[test]
+fn test_task_dependency_failed_never_started() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Emit hierarchy with dependency relationship
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "test:dep".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "test:dependent".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![(2, 1)], // test:dependent depends on test:dep
+    );
+    model.apply_activity_event(hierarchy);
+
+    // Start and fail the dependency
+    model.apply_activity_event(task_start(1));
+    model.apply_activity_event(ActivityEvent::Task(Task::Complete {
+        id: 1,
+        outcome: ActivityOutcome::Failed,
+        timestamp: Timestamp::now(),
+    }));
+
+    // The dependent task never starts, just gets DependencyFailed
+    model.apply_activity_event(ActivityEvent::Task(Task::Complete {
+        id: 2,
+        outcome: ActivityOutcome::DependencyFailed,
+        timestamp: Timestamp::now(),
+    }));
+
+    let output = render_to_string(&model, &ui_state);
+    assert_tui_snapshot!(output);
+}
+
+/// Test task hierarchy with 3+ levels of nesting.
+#[test]
+fn test_task_deep_nesting() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Create a deep hierarchy: root -> level1 -> level2 -> level3
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "test:root".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "test:level1".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 3,
+                name: "test:level2".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 4,
+                name: "test:level3".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![
+            (1, 2), // root -> level1
+            (2, 3), // level1 -> level2
+            (3, 4), // level2 -> level3
+        ],
+    );
+    model.apply_activity_event(hierarchy);
+
+    // Start all tasks
+    model.apply_activity_event(task_start(1));
+    model.apply_activity_event(task_start(2));
+    model.apply_activity_event(task_start(3));
+    model.apply_activity_event(task_start(4));
+
+    let output = render_to_string(&model, &ui_state);
+    // Should show proper indentation for each nesting level
+    assert_tui_snapshot!(output);
+}
+
+/// Test multiple tasks under the same parent render in consistent order.
+#[test]
+fn test_task_multiple_under_same_parent() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Create a parent with multiple children
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "test:parent".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "test:child-a".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 3,
+                name: "test:child-b".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 4,
+                name: "test:child-c".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![
+            (1, 2), // parent -> child-a
+            (1, 3), // parent -> child-b
+            (1, 4), // parent -> child-c
+        ],
+    );
+    model.apply_activity_event(hierarchy);
+
+    // Start parent and all children
+    model.apply_activity_event(task_start(1));
+    model.apply_activity_event(task_start(2));
+    model.apply_activity_event(task_start(3));
+    model.apply_activity_event(task_start(4));
+
+    let output = render_to_string(&model, &ui_state);
+    // Children should appear under parent in consistent order
+    assert_tui_snapshot!(output);
+}
+
+/// Test diamond dependency pattern where a shared dependency appears under multiple parents.
+#[test]
+fn test_task_diamond_dependency() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Diamond pattern:
+    //     root
+    //    /    \
+    //   A      B
+    //    \    /
+    //     shared
+    let hierarchy = task_hierarchy_multi(
+        vec![
+            TaskInfo {
+                id: 1,
+                name: "test:root".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 2,
+                name: "test:branch-a".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 3,
+                name: "test:branch-b".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+            TaskInfo {
+                id: 4,
+                name: "test:shared".to_string(),
+                show_output: false,
+                is_process: false,
+            },
+        ],
+        vec![
+            (1, 2), // root -> branch-a
+            (1, 3), // root -> branch-b
+            (2, 4), // branch-a -> shared (primary parent)
+            (3, 4), // branch-b -> shared (additional parent)
+        ],
+    );
+    model.apply_activity_event(hierarchy);
+
+    // Start all tasks
+    model.apply_activity_event(task_start(1));
+    model.apply_activity_event(task_start(2));
+    model.apply_activity_event(task_start(3));
+    model.apply_activity_event(task_start(4));
+
+    let output = render_to_string(&model, &ui_state);
+    // Shared task should appear under both branch-a and branch-b
+    assert_tui_snapshot!(output);
+}

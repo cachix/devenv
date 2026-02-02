@@ -406,14 +406,11 @@ impl Tasks {
             task_ids.insert(index, next_id());
         }
 
-        // Build TaskInfo for all tasks and collect edges for the hierarchy
+        // Build TaskInfo for all tasks
         let mut task_infos: Vec<TaskInfo> = Vec::new();
-        let mut edges: Vec<(u64, u64)> = Vec::new();
-
         for &index in &self.tasks_order {
             let task_state = self.graph[index].read().await;
             let task_id = task_ids[&index];
-            let is_root_task = self.roots.contains(&index);
 
             task_infos.push(TaskInfo {
                 id: task_id,
@@ -421,47 +418,16 @@ impl Tasks {
                 show_output: task_state.task.show_output,
                 is_process: task_state.task.r#type == crate::types::TaskType::Process,
             });
-
-            // Build edges: a task appears under its most immediate dependent
-            // For root tasks, parent is orchestration
-            if is_root_task {
-                edges.push((orchestration_activity.id(), task_id));
-            } else {
-                // Non-root tasks: find the "most immediate" dependent
-                // A dependent D1 is "covered" by D2 if D1 transitively depends on D2
-                // We only create edges from uncovered dependents to avoid duplication
-                let dependents: Vec<NodeIndex> = self
-                    .graph
-                    .neighbors_directed(index, petgraph::Direction::Outgoing)
-                    .filter(|dep_index| task_ids.contains_key(dep_index))
-                    .collect();
-
-                let uncovered_dependents: Vec<NodeIndex> = dependents
-                    .iter()
-                    .filter(|&&d1| {
-                        // D1 is uncovered if it doesn't transitively depend on any other dependent D2
-                        // If D1 depends on D2, then D2 already "covers" the path to this task
-                        // Reversed follows incoming edges (dependencies) instead of outgoing
-                        !dependents.iter().any(|&d2| {
-                            d1 != d2 && has_path_connecting(&Reversed(&self.graph), d1, d2, None)
-                        })
-                    })
-                    .copied()
-                    .collect();
-
-                for dependent_index in &uncovered_dependents {
-                    if let Some(&dependent_id) = task_ids.get(dependent_index) {
-                        edges.push((dependent_id, task_id));
-                    }
-                }
-
-                // Fallback to orchestration if no edges were added
-                // (either no dependents, or all dependents were filtered out)
-                if uncovered_dependents.is_empty() {
-                    edges.push((orchestration_activity.id(), task_id));
-                }
-            }
         }
+
+        // Compute hierarchy edges using the extracted function
+        let edges = compute_hierarchy_edges(
+            &self.graph,
+            &self.tasks_order,
+            &self.roots,
+            &task_ids,
+            orchestration_activity.id(),
+        );
 
         // Emit hierarchy once upfront
         emit_task_hierarchy(task_infos, edges);
@@ -708,5 +674,259 @@ impl Tasks {
         self.notify_ui.notify_one();
 
         Outputs(Arc::try_unwrap(outputs).unwrap().into_inner())
+    }
+}
+
+/// Compute the hierarchy edges for displaying tasks in the TUI.
+///
+/// For each task, this finds its "uncovered" dependents - the most immediate
+/// tasks that depend on it. A dependent D1 is "covered" by D2 if D1 transitively
+/// depends on D2. We only create edges from uncovered dependents to avoid
+/// showing a task under a parent that will also show it through a child.
+///
+/// # Arguments
+/// * `graph` - The task dependency graph (edges point from dependency to dependent)
+/// * `tasks_order` - The topological order of tasks to process
+/// * `roots` - The slice of root task indices
+/// * `task_ids` - Mapping from node index to activity ID
+/// * `orchestration_id` - The ID of the orchestration activity (fallback parent)
+///
+/// # Returns
+/// A vector of (parent_id, child_id) edges for the TUI hierarchy
+pub fn compute_hierarchy_edges<N, E>(
+    graph: &DiGraph<N, E>,
+    tasks_order: &[NodeIndex],
+    roots: &[NodeIndex],
+    task_ids: &HashMap<NodeIndex, u64>,
+    orchestration_id: u64,
+) -> Vec<(u64, u64)> {
+    let mut edges = Vec::new();
+
+    for &index in tasks_order {
+        let Some(&task_id) = task_ids.get(&index) else {
+            continue;
+        };
+        let is_root_task = roots.contains(&index);
+
+        if is_root_task {
+            edges.push((orchestration_id, task_id));
+        } else {
+            // Find dependents (tasks that depend on this task)
+            let dependents: Vec<NodeIndex> = graph
+                .neighbors_directed(index, petgraph::Direction::Outgoing)
+                .filter(|dep_index| task_ids.contains_key(dep_index))
+                .collect();
+
+            // Filter to uncovered dependents only
+            let uncovered_dependents: Vec<NodeIndex> = dependents
+                .iter()
+                .filter(|&&d1| {
+                    // D1 is uncovered if it doesn't transitively depend on any other dependent D2
+                    !dependents
+                        .iter()
+                        .any(|&d2| d1 != d2 && has_path_connecting(&Reversed(graph), d1, d2, None))
+                })
+                .copied()
+                .collect();
+
+            for dependent_index in &uncovered_dependents {
+                if let Some(&dependent_id) = task_ids.get(dependent_index) {
+                    edges.push((dependent_id, task_id));
+                }
+            }
+
+            // Fallback to orchestration if no uncovered dependents
+            if uncovered_dependents.is_empty() {
+                edges.push((orchestration_id, task_id));
+            }
+        }
+    }
+
+    edges
+}
+
+#[cfg(test)]
+mod hierarchy_tests {
+    use super::*;
+    use petgraph::graph::DiGraph;
+
+    /// Helper to create a simple graph and compute hierarchy edges.
+    /// Returns (edges, task_ids) where task_ids maps node indices to their IDs.
+    fn setup_test(
+        nodes: usize,
+        graph_edges: &[(usize, usize)],
+        roots: &[usize],
+        tasks_order: &[usize],
+    ) -> (Vec<(u64, u64)>, HashMap<NodeIndex, u64>) {
+        let mut graph: DiGraph<&str, ()> = DiGraph::new();
+        let node_indices: Vec<_> = (0..nodes).map(|_| graph.add_node("task")).collect();
+
+        for &(from, to) in graph_edges {
+            // Edge from dependency to dependent (from is dependency of to)
+            graph.add_edge(node_indices[from], node_indices[to], ());
+        }
+
+        let roots_vec: Vec<_> = roots.iter().map(|&i| node_indices[i]).collect();
+        let order: Vec<_> = tasks_order.iter().map(|&i| node_indices[i]).collect();
+        let task_ids: HashMap<_, _> = node_indices
+            .iter()
+            .enumerate()
+            .map(|(i, &idx)| (idx, (i + 1) as u64))
+            .collect();
+
+        let orchestration_id = 100;
+        let edges =
+            compute_hierarchy_edges(&graph, &order, &roots_vec, &task_ids, orchestration_id);
+        (edges, task_ids)
+    }
+
+    #[test]
+    fn test_single_root_task() {
+        // Single root task should appear under orchestration
+        let (edges, _) = setup_test(1, &[], &[0], &[0]);
+        assert_eq!(edges, vec![(100, 1)]); // orchestration -> task1
+    }
+
+    #[test]
+    fn test_linear_chain() {
+        // Linear chain: task0 -> task1 -> task2 (task0 is dependency of task1, etc.)
+        // task2 is root, task1 depends on task0
+        // Expected hierarchy:
+        //   orchestration -> task2
+        //   task2 -> task1
+        //   task1 -> task0
+        let (edges, _) = setup_test(
+            3,
+            &[(0, 1), (1, 2)], // task0 <- task1 <- task2
+            &[2],              // task2 is root
+            &[0, 1, 2],        // topological order
+        );
+
+        assert!(edges.contains(&(100, 3))); // orchestration -> task2 (id=3)
+        assert!(edges.contains(&(3, 2))); // task2 -> task1
+        assert!(edges.contains(&(2, 1))); // task1 -> task0
+        assert_eq!(edges.len(), 3);
+    }
+
+    #[test]
+    fn test_diamond_dependency() {
+        // Diamond pattern:
+        //     task3 (root)
+        //    /    \
+        // task1   task2
+        //    \    /
+        //     task0 (shared dependency)
+        //
+        // task0 should appear under BOTH task1 and task2
+        let (edges, _) = setup_test(
+            4,
+            &[
+                (0, 1), // task0 <- task1
+                (0, 2), // task0 <- task2
+                (1, 3), // task1 <- task3
+                (2, 3), // task2 <- task3
+            ],
+            &[3],          // task3 is root
+            &[0, 1, 2, 3], // topological order
+        );
+
+        // task3 under orchestration
+        assert!(edges.contains(&(100, 4))); // orchestration -> task3 (id=4)
+        // task1, task2 under task3
+        assert!(edges.contains(&(4, 2))); // task3 -> task1
+        assert!(edges.contains(&(4, 3))); // task3 -> task2
+        // task0 under both task1 and task2 (diamond)
+        assert!(edges.contains(&(2, 1))); // task1 -> task0
+        assert!(edges.contains(&(3, 1))); // task2 -> task0
+        assert_eq!(edges.len(), 5);
+    }
+
+    #[test]
+    fn test_transitive_dependency_not_duplicated() {
+        // Chain where D1 depends on D2 which depends on task0
+        //   task2 (root)
+        //     |
+        //   task1
+        //     |
+        //   task0
+        //
+        // task0 should only appear under task1, not task2
+        // (task2 reaches task0 through task1, so task1 "covers" the path)
+        let (edges, _) = setup_test(3, &[(0, 1), (1, 2)], &[2], &[0, 1, 2]);
+
+        // task0 should only appear under task1, not task2
+        assert!(edges.contains(&(2, 1))); // task1 -> task0
+        assert!(!edges.iter().any(|&(p, c)| p == 3 && c == 1)); // task2 should NOT have edge to task0
+    }
+
+    #[test]
+    fn test_multiple_roots() {
+        // Two independent roots
+        // task0 -> task1 (root)
+        // task2 -> task3 (root)
+        let (edges, _) = setup_test(4, &[(0, 1), (2, 3)], &[1, 3], &[0, 2, 1, 3]);
+
+        // Both roots under orchestration
+        assert!(edges.contains(&(100, 2))); // orchestration -> task1
+        assert!(edges.contains(&(100, 4))); // orchestration -> task3
+        // Dependencies under their roots
+        assert!(edges.contains(&(2, 1))); // task1 -> task0
+        assert!(edges.contains(&(4, 3))); // task3 -> task2
+        assert_eq!(edges.len(), 4);
+    }
+
+    #[test]
+    fn test_task_with_no_dependents_falls_back() {
+        // A non-root task with no dependents in the task order
+        // This can happen if the dependent is filtered out
+        // task0 has no outgoing edges in the filtered graph
+        let (edges, _) = setup_test(
+            2,
+            &[],     // no edges
+            &[1],    // only task1 is root
+            &[0, 1], // task0 is not a root but has no dependents
+        );
+
+        // Both should be under orchestration
+        assert!(edges.contains(&(100, 1))); // orchestration -> task0
+        assert!(edges.contains(&(100, 2))); // orchestration -> task1
+        assert_eq!(edges.len(), 2);
+    }
+
+    #[test]
+    fn test_complex_dag() {
+        // More complex DAG:
+        //       task4 (root)
+        //      /  |  \
+        //   task1 task2 task3
+        //      \  |  /
+        //       task0
+        //
+        // task0 should appear under all three middle tasks
+        let (edges, _) = setup_test(
+            5,
+            &[
+                (0, 1), // task0 <- task1
+                (0, 2), // task0 <- task2
+                (0, 3), // task0 <- task3
+                (1, 4), // task1 <- task4
+                (2, 4), // task2 <- task4
+                (3, 4), // task3 <- task4
+            ],
+            &[4],
+            &[0, 1, 2, 3, 4],
+        );
+
+        // Root under orchestration
+        assert!(edges.contains(&(100, 5))); // orchestration -> task4
+        // Middle layer under root
+        assert!(edges.contains(&(5, 2))); // task4 -> task1
+        assert!(edges.contains(&(5, 3))); // task4 -> task2
+        assert!(edges.contains(&(5, 4))); // task4 -> task3
+        // task0 under all three middle tasks
+        assert!(edges.contains(&(2, 1))); // task1 -> task0
+        assert!(edges.contains(&(3, 1))); // task2 -> task0
+        assert!(edges.contains(&(4, 1))); // task3 -> task0
+        assert_eq!(edges.len(), 7);
     }
 }
