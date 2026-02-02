@@ -15054,6 +15054,32 @@ null or string
 
 
 
+## languages.hare.enable
+
+
+
+Whether to enable tools for Hare development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/hare.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/hare.nix)
+
+
+
 ## languages.haskell.enable
 
 
