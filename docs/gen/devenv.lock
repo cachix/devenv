@@ -3,12 +3,12 @@
     "devenv": {
       "locked": {
         "dir": "src/modules",
-        "path": "../../",
+        "path": "../..",
         "type": "path"
       },
       "original": {
         "dir": "src/modules",
-        "path": "../../",
+        "path": "../..",
         "type": "path"
       },
       "parent": []
@@ -89,9 +89,6 @@
         "devenv": "devenv",
         "git-hooks": "git-hooks",
         "nixpkgs": "nixpkgs",
-        "pre-commit-hooks": [
-          "git-hooks"
-        ],
         "treefmt-nix": "treefmt-nix"
       }
     },
