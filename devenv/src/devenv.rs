@@ -13,6 +13,7 @@ use devenv_core::{
     config::{Config, NixBackendType},
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
     nix_backend::{DevenvPaths, NixBackend, Options},
+    ports::PortAllocator,
 };
 use include_dir::{Dir, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
@@ -24,7 +25,7 @@ use similar::{ChangeTag, TextDiff};
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
 use std::sync::{
@@ -34,6 +35,7 @@ use std::sync::{
 use tasks::{Tasks, TasksUi};
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::net::UnixStream;
 use tokio::process;
 use tokio::sync::{OnceCell, RwLock, Semaphore};
 use tracing::{Instrument, debug, info, instrument, trace, warn};
@@ -106,6 +108,8 @@ pub struct ProcessOptions<'a> {
     pub detach: bool,
     /// Whether the process should be logged to a file.
     pub log_to_file: bool,
+    /// When true, fail if a port is in use instead of auto-allocating the next available.
+    pub strict_ports: bool,
 }
 
 /// A shell command ready to be executed.
@@ -175,6 +179,9 @@ pub struct Devenv {
 
     // Cached serialized NixArgs from assemble
     nix_args_string: Arc<OnceCell<String>>,
+
+    // Port allocator shared with NixBackend for holding port reservations
+    port_allocator: Arc<PortAllocator>,
 
     // TODO: make private.
     // Pass as an arg or have a setter.
@@ -289,6 +296,9 @@ impl Devenv {
         // Create eval-cache pool (framework layer concern, used by backends)
         let eval_cache_pool = Arc::new(OnceCell::new());
 
+        // Create port allocator shared with backend for holding port reservations
+        let port_allocator = Arc::new(PortAllocator::new());
+
         let nix: Box<dyn NixBackend> = match backend_type {
             NixBackendType::Nix => Box::new(
                 devenv_nix_backend::nix_backend::NixRustBackend::new(
@@ -299,6 +309,7 @@ impl Devenv {
                     options.shutdown.clone(),
                     Some(eval_cache_pool.clone()),
                     None,
+                    port_allocator.clone(),
                 )
                 .expect("Failed to initialize Nix backend"),
             ),
@@ -332,6 +343,7 @@ impl Devenv {
             eval_cache_pool,
             secretspec_resolved,
             nix_args_string: Arc::new(OnceCell::new()),
+            port_allocator,
             container_name: None,
             shutdown: options.shutdown,
         }
@@ -343,6 +355,39 @@ impl Devenv {
 
     pub fn processes_pid(&self) -> PathBuf {
         self.devenv_dotfile.join("processes.pid")
+    }
+
+    async fn processes_running(&self) -> bool {
+        if self.processes_pid().exists() {
+            if let Ok(pid_str) = fs::read_to_string(self.processes_pid()).await {
+                if let Ok(pid) = pid_str.trim().parse::<i32>() {
+                    match signal::kill(Pid::from_raw(pid), None) {
+                        Ok(_) => return true,
+                        Err(nix::errno::Errno::EPERM) => return true,
+                        Err(nix::errno::Errno::ESRCH) => {}
+                        Err(_) => {}
+                    }
+                }
+            }
+        }
+
+        let socket_path = self.devenv_runtime.join("pc.sock");
+        let Ok(meta) = fs::metadata(&socket_path).await else {
+            return false;
+        };
+        if !meta.file_type().is_socket() {
+            return false;
+        }
+
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(200),
+            UnixStream::connect(&socket_path),
+        )
+        .await
+        {
+            Ok(Ok(_)) => true,
+            _ => false,
+        }
     }
 
     pub fn paths(&self) -> DevenvPaths {
@@ -1122,6 +1167,7 @@ impl Devenv {
                 envs: None,
                 detach: true,
                 log_to_file: false,
+                strict_ports: false,
             };
             // up() with detach returns RunMode::Detached, not Exec
             self.up(vec![], &options).await?;
@@ -1268,6 +1314,10 @@ impl Devenv {
         processes: Vec<String>,
         options: &'a ProcessOptions<'a>,
     ) -> Result<RunMode> {
+        // Set strict port mode before assemble (which triggers port allocation)
+        self.port_allocator.set_strict(options.strict_ports);
+        self.port_allocator.set_enabled(true);
+
         self.assemble(false).await?;
         if !self.has_processes().await? {
             message(
@@ -1328,6 +1378,11 @@ impl Devenv {
                 self.prepare_shell(&Some(processes_script.to_string_lossy().to_string()), &[])
                     .await?
             };
+
+            // Release port reservations just before spawning processes.
+            // Ports were held during Nix evaluation to prevent race conditions.
+            // Dropping the guard releases the TcpListeners so processes can bind.
+            drop(self.port_allocator.take_reservations());
 
             if options.detach {
                 // Check if processes are already running
@@ -1503,6 +1558,9 @@ impl Devenv {
     /// Assemble the devenv environment and return the serialized NixArgs string.
     /// The returned string can be used with `import bootstrap/default.nix <args>`.
     pub async fn assemble(&self, is_testing: bool) -> Result<String> {
+        let processes_running = self.processes_running().await;
+        self.port_allocator.set_allow_in_use(processes_running);
+
         if self.assembled.load(Ordering::Acquire) {
             return Ok(self
                 .nix_args_string
@@ -1741,7 +1799,7 @@ impl Devenv {
         // Cache the serialized args
         self.nix_args_string
             .set(nix_args_str.clone())
-            .map_err(|_| miette!("nix_args_string already set"))?;
+            .expect("nix_args_string should only be set once");
 
         self.assembled.store(true, Ordering::Release);
         Ok(nix_args_str)

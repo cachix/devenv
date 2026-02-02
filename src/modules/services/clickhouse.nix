@@ -3,6 +3,12 @@
 let
   cfg = config.services.clickhouse;
   types = lib.types;
+
+  # Port allocation
+  basePort = cfg.port;
+  baseHttpPort = cfg.httpPort;
+  allocatedPort = config.processes.clickhouse-server.ports.main.value;
+  allocatedHttpPort = config.processes.clickhouse-server.ports.http.value;
 in
 {
   options.services.clickhouse = {
@@ -16,14 +22,14 @@ in
     };
 
     port = lib.mkOption {
-      type = types.int;
-      description = "Which port to run clickhouse on";
+      type = types.port;
+      description = "Which port to run clickhouse on.";
       default = 9000;
     };
 
     httpPort = lib.mkOption {
-      type = types.int;
-      description = "Which http port to run clickhouse on";
+      type = types.port;
+      description = "Which http port to run clickhouse on.";
       default = 8123;
     };
 
@@ -39,8 +45,8 @@ in
       logger:
         level: warning
         console: 1
-      tcp_port: ${toString cfg.port}
-      http_port: ${toString cfg.httpPort}
+      tcp_port: ${toString allocatedPort}
+      http_port: ${toString allocatedHttpPort}
       default_profile: default
       default_database: default
       path: ${config.env.DEVENV_STATE}/clickhouse
@@ -52,11 +58,13 @@ in
           path: ${cfg.package}/etc//clickhouse-server/users.xml
     '';
     processes.clickhouse-server = {
+      ports.main.allocate = basePort;
+      ports.http.allocate = baseHttpPort;
       exec = "exec clickhouse-server --config-file=${pkgs.writeText "clickhouse-config.yaml" cfg.config}";
 
       process-compose = {
         readiness_probe = {
-          exec.command = "${cfg.package}/bin/clickhouse-client --port ${toString cfg.port} -q 'SELECT 1'";
+          exec.command = "${cfg.package}/bin/clickhouse-client --port ${toString allocatedPort} -q 'SELECT 1'";
           initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 4;

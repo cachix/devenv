@@ -21,6 +21,14 @@ let
     listOf
     attrsOf
     ;
+
+  # Port allocation
+  baseHttpPort = cfg.settings.http-port;
+  baseHttpsPort = cfg.settings.https-port;
+  baseManagementPort = cfg.settings.http-management-port or 9000;
+  allocatedHttpPort = config.processes.keycloak.ports.http.value;
+  allocatedHttpsPort = config.processes.keycloak.ports.https.value;
+  allocatedManagementPort = config.processes.keycloak.ports.management.value;
 in
 {
   options.services.keycloak = {
@@ -427,7 +435,7 @@ in
       );
 
       keycloak-health = pkgs.writeShellScriptBin "keycloak-health" ''
-        ${pkgs.curl}/bin/curl -k --head -fsS "https://localhost:${toString cfg.settings.http-management-port}${lib.removeSuffix "/" cfg.settings.http-management-relative-path}/health/ready"
+        ${pkgs.curl}/bin/curl -k --head -fsS "https://localhost:${toString allocatedManagementPort}${lib.removeSuffix "/" cfg.settings.http-management-relative-path}/health/ready"
       '';
     in
     mkIf cfg.enable {
@@ -449,8 +457,12 @@ in
           db = cfg.database.type;
 
           health-enabled = true;
-          http-management-port = 9000;
+          http-management-port = allocatedManagementPort;
           http-management-relative-path = "/";
+
+          # Override ports with allocated values
+          http-port = allocatedHttpPort;
+          https-port = allocatedHttpsPort;
 
           log-console-level = "info";
           log-level = "info";
@@ -475,7 +487,6 @@ in
 
       processes.keycloak =
         let
-
           keycloak-start = pkgs.writeShellScriptBin "keycloak-start" ''
             set -euo pipefail
             mkdir -p "$KC_HOME_DIR"
@@ -500,9 +511,11 @@ in
             echo "Start keycloak:"
             exec ${keycloakBuild}/bin/kc.sh start --optimized --import-realm
           '';
-
         in
         {
+          ports.http.allocate = baseHttpPort;
+          ports.https.allocate = baseHttpsPort;
+          ports.management.allocate = baseManagementPort;
           exec = "${keycloak-start}/bin/keycloak-start";
 
           process-compose = {

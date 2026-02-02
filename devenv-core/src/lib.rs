@@ -11,6 +11,8 @@ pub mod internal_log;
 pub mod nix_args;
 pub mod nix_backend;
 pub mod nix_log_bridge;
+pub mod ports;
+pub mod resource;
 
 pub use cachix::{CachixCacheInfo, CachixManager, CachixPaths};
 pub use cli::{GlobalOptions, NixBuildDefaults, TraceFormat, default_system};
@@ -21,3 +23,5 @@ pub use nix_args::{CliOptionsConfig, NixArgs, SecretspecData};
 pub use nix_backend::{
     DevEnvOutput, DevenvPaths, NixBackend, Options, PackageSearchResult, SearchResults,
 };
+pub use ports::{PortAllocation, PortAllocator, PortSpec};
+pub use resource::{ReplayError, ReplayableResource};

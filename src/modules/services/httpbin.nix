@@ -5,8 +5,20 @@ let
 
   qs = lib.escapeShellArgs;
 
+  # Port allocation: extract port from first bind address or use default
+  parsePort = addr: lib.toInt (lib.last (lib.splitString ":" addr));
+  parseHost = addr: lib.head (lib.splitString ":" addr);
+
+  firstBind = lib.head cfg.bind;
+  basePort = parsePort firstBind;
+  allocatedPort = config.processes.httpbin.ports.main.value;
+  host = parseHost firstBind;
+
+  # Rebuild bind addresses with allocated port for first address
+  allocatedBinds = [ "${host}:${toString allocatedPort}" ] ++ (lib.tail cfg.bind);
+
   python = pkgs.python3.withPackages (ps: with ps; [ httpbin gunicorn gevent ]);
-  binds = lib.concatMap (addr: [ "-b" addr ]) cfg.bind;
+  binds = lib.concatMap (addr: [ "-b" addr ]) allocatedBinds;
 in
 {
   options.services.httpbin = {
@@ -26,6 +38,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    processes.httpbin.ports.main.allocate = basePort;
     processes.httpbin.exec = "exec ${python}/bin/gunicorn httpbin:app -k gevent ${qs binds} ${qs cfg.extraArgs}";
   };
 }

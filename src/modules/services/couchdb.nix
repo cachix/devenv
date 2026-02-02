@@ -8,8 +8,19 @@ let
   cfg = config.services.couchdb;
   opts = options.services.couchdb;
 
+  # Port allocation
+  basePort = cfg.settings.chttpd.port;
+  allocatedPort = config.processes.couchdb.ports.main.value;
+
+  # Override settings with allocated port
+  settingsWithPort = cfg.settings // {
+    chttpd = cfg.settings.chttpd // {
+      port = allocatedPort;
+    };
+  };
+
   settingsFormat = pkgs.formats.ini { };
-  configFile = settingsFormat.generate "couchdb.ini" cfg.settings;
+  configFile = settingsFormat.generate "couchdb.ini" settingsWithPort;
 
   startScript = pkgs.writeShellScriptBin "start-couchdb" ''
     set -euo pipefail
@@ -154,6 +165,7 @@ in
       };
     };
     env.ERL_FLAGS = "-couch_ini ${cfg.package}/etc/default.ini ${configFile} '${cfg.baseDir}/couchdb.ini'";
+    processes.couchdb.ports.main.allocate = basePort;
     processes.couchdb.exec = "${startScript}/bin/start-couchdb";
   };
 }

@@ -6,6 +6,15 @@ let
   cfg = config.services.varnish;
   cfgFile = pkgs.writeText "varnish.vcl" cfg.vcl;
   workingDir = "${config.env.DEVENV_STATE}/varnish";
+
+  # Port allocation: extract port from listen address or use default
+  parsePort = addr: lib.toInt (lib.last (lib.splitString ":" addr));
+  parseHost = addr: lib.head (lib.splitString ":" addr);
+
+  basePort = parsePort cfg.listen;
+  allocatedPort = config.processes.varnish.ports.main.value;
+  host = parseHost cfg.listen;
+  listenAddr = "${host}:${toString allocatedPort}";
 in
 {
   options.services.varnish = {
@@ -54,7 +63,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    processes.varnish.exec = "exec ${cfg.package}/bin/varnishd -n ${workingDir} -F -f ${cfgFile} -s malloc,${toString cfg.memorySize} -a ${cfg.listen} ${lib.optionalString (cfg.extraModules != []) " -p vmod_path='${lib.makeSearchPathOutput "lib" "lib/varnish/vmods" ([cfg.package] ++ cfg.extraModules)}' -r vmod_path"}";
+    processes.varnish.ports.main.allocate = basePort;
+    processes.varnish.exec = "exec ${cfg.package}/bin/varnishd -n ${workingDir} -F -f ${cfgFile} -s malloc,${toString cfg.memorySize} -a ${listenAddr} ${lib.optionalString (cfg.extraModules != []) " -p vmod_path='${lib.makeSearchPathOutput "lib" "lib/varnish/vmods" ([cfg.package] ++ cfg.extraModules)}' -r vmod_path"}";
 
     scripts.varnishadm.exec = "exec ${cfg.package}/bin/varnishadm -n ${workingDir} $@";
     scripts.varnishtop.exec = "exec ${cfg.package}/bin/varnishtop -n ${workingDir} $@";

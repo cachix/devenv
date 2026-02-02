@@ -2,6 +2,7 @@ pub mod caching_eval;
 pub mod db;
 pub mod eval_inputs;
 pub mod ffi_cache;
+pub mod resource_manager;
 
 pub use devenv_core::eval_op::{EvalOp, OpObserver};
 pub use devenv_core::internal_log;
@@ -16,3 +17,4 @@ pub use caching_eval::{
     UncachedEvalState, UncachedReason,
 };
 pub use ffi_cache::{CachingConfig, EvalCacheKey, EvalInputCollector, ops_to_inputs};
+pub use resource_manager::{ResourceManager, ResourceSpec};

@@ -5,13 +5,22 @@ let
 
   types = lib.types;
 
+  # Port allocation: extract port from address or use default
+  parsePort = addr: lib.toInt (lib.last (lib.splitString ":" addr));
+  parseHost = addr: lib.head (lib.splitString ":" addr);
+
+  basePort = parsePort cfg.address;
+  allocatedPort = config.processes.vault.ports.main.value;
+  host = parseHost cfg.address;
+  listenAddr = "${host}:${toString allocatedPort}";
+
   configFile = pkgs.writeText "config.hcl" ''
     storage "file" {
       path = "${config.env.DEVENV_STATE}/vault-data"
     }
 
     listener "tcp" {
-      address     = "${cfg.address}"
+      address     = "${listenAddr}"
       tls_disable = "true"
     }
 
@@ -116,9 +125,10 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    env.VAULT_API_ADDR = "http://${cfg.address}";
-    env.VAULT_ADDR = "http://${cfg.address}";
+    env.VAULT_API_ADDR = "http://${listenAddr}";
+    env.VAULT_ADDR = "http://${listenAddr}";
     scripts.vault.exec = "exec ${cfg.package}/bin/vault $@";
+    processes.vault.ports.main.allocate = basePort;
     processes.vault.exec = "exec ${cfg.package}/bin/vault server -config=${configFile}";
     processes.vault-configure.exec = "${configureScript}/bin/configure-vault";
   };

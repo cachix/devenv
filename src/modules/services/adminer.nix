@@ -3,6 +3,15 @@
 let
   cfg = config.services.adminer;
   types = lib.types;
+
+  # Port allocation: extract port from listen address or use default
+  parsePort = addr: lib.toInt (lib.last (lib.splitString ":" addr));
+  parseHost = addr: lib.head (lib.splitString ":" addr);
+
+  basePort = parsePort cfg.listen;
+  allocatedPort = config.processes.adminer.ports.main.value;
+  host = parseHost cfg.listen;
+  listenAddr = "${host}:${toString allocatedPort}";
 in
 {
   imports = [
@@ -27,6 +36,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    processes.adminer.exec = "exec ${config.languages.php.package}/bin/php ${lib.optionalString config.services.mysql.enable "-dmysqli.default_socket=${config.env.MYSQL_UNIX_PORT}"} -S ${cfg.listen} -t ${cfg.package} ${cfg.package}/adminer.php";
+    processes.adminer.ports.main.allocate = basePort;
+    processes.adminer.exec = "exec ${config.languages.php.package}/bin/php ${lib.optionalString config.services.mysql.enable "-dmysqli.default_socket=${config.env.MYSQL_UNIX_PORT}"} -S ${listenAddr} -t ${cfg.package} ${cfg.package}/adminer.php";
   };
 }

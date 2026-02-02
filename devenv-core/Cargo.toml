@@ -19,6 +19,8 @@ clap.workspace = true
 miette.workspace = true
 num_enum.workspace = true
 thiserror.workspace = true
+
+netstat2.workspace = true
 once_cell.workspace = true
 schemars.workspace = true
 schematic.workspace = true
