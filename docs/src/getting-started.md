@@ -13,14 +13,14 @@
 === "macOS"
 
     ```
-    curl -L https://github.com/NixOS/experimental-nix-installer/releases/download/0.27.0/nix-installer.sh | sh -s -- install
+    curl -sSfL https://artifacts.nixos.org/nix-installer | sh -s -- install
     ```
 
-    !!! note "Experimental installer"
-        We recommend using the above experimental installer.
+    !!! note "Nix installer"
+        We recommend using the above installer.
         It can handle OS upgrades and has better support for Apple silicon.
 
-        If you'd like to stick with the official release installer, use:
+        If you'd like to stick with the classic installer, use:
         ```
         sh <(curl -L https://nixos.org/nix/install)
         ```
