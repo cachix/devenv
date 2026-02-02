@@ -120,9 +120,6 @@ in
       # Add the packages for any enabled hooks at the end to avoid overriding the language-defined packages.
       packages = lib.mkAfter ([ packageBin ] ++ (cfg.enabledPackages or [ ]));
 
-      # Use the files API to manage the pre-commit config file
-      files.${cfg.configPath}.source = cfg.configFile;
-
       tasks = {
         "devenv:git-hooks:install" = {
           # The config file is managed by the files API.
@@ -138,6 +135,11 @@ in
           before = [ "devenv:enterTest" ];
         };
       };
+    })
+
+    # Use the files API to manage the pre-commit config file
+    (lib.mkIf (cfg.enable && git-hooks != null) {
+      files.${cfg.configPath}.source = cfg.configFile;
     })
   ];
 }
