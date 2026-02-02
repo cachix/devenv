@@ -43,28 +43,6 @@ Control how processes restart when they exit:
 }
 ```
 
-## Process Types
-
-- `foreground` (default) - long-running process that restarts based on policy
-- `oneshot` - run-to-completion task that executes once
-
-```nix title="devenv.nix"
-{
-  processes = {
-    migrate = {
-      exec = "diesel migration run";
-      type = "oneshot";
-    };
-
-    server = {
-      exec = "cargo run --release";
-      type = "foreground";
-      after = [ "devenv:processes:migrate@complete" ];
-    };
-  };
-}
-```
-
 ## Dependencies
 
 Processes can depend on other processes using `after` and `before`:
@@ -82,7 +60,7 @@ Processes can depend on other processes using `after` and `before`:
 }
 ```
 
-Use `@complete` suffix to wait for oneshot processes to finish, or `@ready` (default) for readiness.
+Use `@complete` to wait for a process to stop (soft dependency), or `@ready` (default) for readiness.
 
 ## File Watching
 

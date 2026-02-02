@@ -62,19 +62,6 @@ let
         description = "Working directory to run the process in. If not specified, the current working directory will be used.";
       };
 
-      # Native process manager configuration (devenv-tasks)
-      type = lib.mkOption {
-        type = types.enum [ "foreground" "oneshot" ];
-        default = "foreground";
-        description = ''
-          Process type:
-          - foreground: Standard process that runs continuously, can restart based on policy
-          - oneshot: Run-to-completion task that executes once and never restarts
-
-          Only used when using native process manager.
-        '';
-      };
-
       restart = lib.mkOption {
         type = types.enum [ "never" "always" "on_failure" ];
         default = "on_failure";
@@ -85,7 +72,6 @@ let
           - on_failure: Restart only on failure (non-zero exit code)
 
           Only used when using native process manager.
-          Ignored when process_type is "oneshot".
         '';
       };
 
