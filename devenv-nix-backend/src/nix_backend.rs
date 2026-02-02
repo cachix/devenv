@@ -736,29 +736,37 @@ impl NixRustBackend {
             .to_str()
             .ok_or_else(|| miette!("Source path contains invalid UTF-8"))?;
 
-        // Create a locker in Check mode to validate without modifying
+        // Create a locker in Virtual mode so unlocked local inputs don't fail validation.
+        // We compare the computed lock against the existing one to detect drift.
         let locker = InputsLocker::new(flake_settings)
             .with_inputs(flake_inputs)
             .source_path(source_path_str)
             .old_lock_file(&old_lock)
-            .mode(LockMode::Check)
+            .mode(LockMode::Virtual)
             .use_registries(true);
 
-        // Get eval state for locking operation
-        let lock_result = {
-            let activity = Activity::evaluate("Validating lock")
-                .level(ActivityLevel::Debug)
-                .start();
-            let eval_state = self.eval_session(&activity)?;
+        let activity = Activity::evaluate("Validating lock")
+            .level(ActivityLevel::Debug)
+            .start();
 
-            // Check if locks are in sync
+        let lock_result = {
+            let eval_state = self.eval_session(&activity)?;
             locker.lock(fetch_settings, &eval_state)
         };
 
-        // Now check the result after the guard is dropped
-        if lock_result.is_err() {
-            // Locks are out of sync - refresh locks
-            return self.update(&None).await;
+        drop(activity);
+
+        match lock_result {
+            Ok(new_lock) => {
+                if new_lock.has_changes(&old_lock).to_miette()? {
+                    tracing::debug!("Lock validation found changes, updating lock");
+                    return self.update(&None).await;
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Lock validation failed: {e}, updating lock");
+                return self.update(&None).await;
+            }
         }
 
         Ok(())
