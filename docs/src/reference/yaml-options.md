@@ -74,7 +74,7 @@ We'll list the most common examples below.
 - `github:NixOS/nixpkgs/master`
 - `github:NixOS/nixpkgs?rev=238b18d7b2c8239f676358634bfb32693d3706f3`
 - `github:org/repo?dir=subdir`
-- `github:org/repo?tag=v1.0.0`
+- `github:org/repo?ref=v1.0.0`
 
 #### GitLab
 
