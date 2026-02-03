@@ -136,6 +136,8 @@ impl ShellCoordinator {
         let mut file_hashes: HashMap<PathBuf, blake3::Hash> = HashMap::new();
         // Track if reload is ready (waiting for user to apply)
         let mut reload_ready = false;
+        // Track if file watching is paused
+        let mut paused = false;
         // Interval for checking if reload file was deleted (user applied reload)
         let mut reload_check_interval =
             tokio::time::interval(std::time::Duration::from_millis(100));
@@ -162,6 +164,11 @@ impl ShellCoordinator {
 
             match event {
                 Event::FileChange(path) => {
+                    // Ignore file changes when paused
+                    if paused {
+                        tracing::debug!("File watching paused, ignoring change: {:?}", path);
+                        continue;
+                    }
                     // No longer in ready state when new file changes come in
                     reload_ready = false;
                     // Check if file content actually changed by comparing hashes
@@ -294,6 +301,17 @@ impl ShellCoordinator {
                 Event::Tui(ShellEvent::Resize { .. }) => {
                     // Resize is handled by TUI directly on the PTY
                     // We might use this for future features
+                }
+
+                Event::Tui(ShellEvent::TogglePause) => {
+                    paused = !paused;
+                    tracing::debug!(
+                        "File watching {}",
+                        if paused { "paused" } else { "resumed" }
+                    );
+                    let _ = command_tx
+                        .send(ShellCommand::WatchingPaused { paused })
+                        .await;
                 }
             }
         }

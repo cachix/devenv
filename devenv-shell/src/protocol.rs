@@ -29,6 +29,8 @@ pub enum ShellCommand {
     },
     /// User applied the reload (pressed keybind). Clear status line.
     ReloadApplied,
+    /// File watching paused/resumed.
+    WatchingPaused { paused: bool },
     /// Coordinator is shutting down.
     Shutdown,
 }
@@ -40,6 +42,8 @@ pub enum ShellEvent {
     Exited,
     /// Terminal was resized.
     Resize { cols: u16, rows: u16 },
+    /// User pressed Ctrl-Alt-D to toggle file watching.
+    TogglePause,
 }
 
 /// Request to execute a task command in the PTY.

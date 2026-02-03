@@ -58,18 +58,14 @@ pub struct StatusState {
     pub reload_ready: bool,
     /// Error message if build failed.
     pub error: Option<String>,
-    /// Keybind hint for reload.
-    keybind: String,
+    /// Whether file watching is paused.
+    pub paused: bool,
 }
 
 impl StatusState {
     /// Create a new empty status state.
     pub fn new() -> Self {
-        Self {
-            keybind: std::env::var("DEVENV_RELOAD_KEYBIND")
-                .unwrap_or_else(|_| "Ctrl-Alt-R".to_string()),
-            ..Default::default()
-        }
+        Self::default()
     }
 
     /// Update state for building status.
@@ -81,7 +77,7 @@ impl StatusState {
     }
 
     /// Update state for reload ready.
-    pub fn set_reload_ready(&mut self, changed_files: Vec<PathBuf>, _keybind_hint: &str) {
+    pub fn set_reload_ready(&mut self, changed_files: Vec<PathBuf>) {
         self.building = false;
         self.reload_ready = true;
         self.changed_files = changed_files;
@@ -109,14 +105,19 @@ impl StatusState {
         self.error = None;
     }
 
+    /// Set paused state.
+    pub fn set_paused(&mut self, paused: bool) {
+        self.paused = paused;
+    }
+
     /// Check if there's any status to display.
     pub fn has_status(&self) -> bool {
-        self.building || self.reload_ready || self.error.is_some()
+        self.building || self.reload_ready || self.error.is_some() || self.paused
     }
 }
 
-/// Format changed files for display, deduplicating and limiting to 3.
-fn format_changed_files(changed_files: &[PathBuf]) -> String {
+/// Format changed files for display, deduplicating and adapting to available space.
+fn format_changed_files(changed_files: &[PathBuf], max_len: usize) -> String {
     let mut seen = HashSet::new();
     let files: Vec<_> = changed_files
         .iter()
@@ -138,11 +139,30 @@ fn format_changed_files(changed_files: &[PathBuf]) -> String {
         return String::new();
     }
 
-    if files.len() <= 3 {
-        files.join(", ")
-    } else {
-        format!("{}, +{} more", files[..3].join(", "), files.len() - 3)
+    // Try showing progressively fewer files until it fits
+    for limit in (1..=3.min(files.len())).rev() {
+        let shown: Vec<_> = files.iter().take(limit).cloned().collect();
+        let remaining = files.len() - limit;
+        let result = if remaining > 0 {
+            format!("{} +{}", shown.join(", "), remaining)
+        } else {
+            shown.join(", ")
+        };
+        if result.len() <= max_len {
+            return result;
+        }
     }
+
+    // Last resort: just show count
+    if files.len() == 1 {
+        let name = &files[0];
+        if name.len() <= max_len {
+            return name.clone();
+        }
+        // Truncate single filename
+        return format!("{}…", &name[..max_len.saturating_sub(1)]);
+    }
+    format!("{} files", files.len())
 }
 
 /// Status line manager using iocraft for rendering.
@@ -241,7 +261,16 @@ impl StatusLine {
 
     /// Build the status line element.
     fn build_element(&self, width: u16) -> AnyElement<'static> {
-        let files_str = format_changed_files(&self.state.changed_files);
+        // Use short keybind notation for narrow terminals
+        let use_short = width < 60;
+        let keybind = if use_short { "^⌥r" } else { "Ctrl-Alt-R" };
+        // Calculate space for files: width - prefix - keybind - margins
+        // "devenv shell ready: " = 20, keybind + " reload" = 17/10, margins ~6
+        let keybind_len = keybind.len() + 7; // " reload"
+        let prefix_len = 23; // "devenv shell reloading: " or similar
+        let margins = 6;
+        let files_max_len = (width as usize).saturating_sub(prefix_len + keybind_len + margins);
+        let files_str = format_changed_files(&self.state.changed_files, files_max_len);
 
         if self.state.building {
             // Building state: spinner + reloading message
@@ -264,26 +293,25 @@ impl StatusLine {
             }
             .into_any()
         } else if self.state.reload_ready {
-            // Ready state: checkmark + ready message + keybind hint
+            // Ready state: checkmark + ready message on left, keybind hint on right
             let text = if files_str.is_empty() {
-                format!(
-                    "devenv shell ready (press {} to reload)",
-                    self.state.keybind
-                )
+                "devenv shell ready".to_string()
             } else {
-                format!(
-                    "devenv shell ready: {} (press {} to reload)",
-                    files_str, self.state.keybind
-                )
+                format!("devenv shell ready: {}", files_str)
             };
+            let keybind = keybind.to_string();
 
             element! {
-                View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, background_color: Color::AnsiValue(22)) {
-                    View(margin_left: 1, margin_right: 1) {
-                        Text(content: CHECKMARK, color: COLOR_COMPLETED)
-                    }
-                    View(flex_grow: 1.0, overflow: Overflow::Hidden) {
+                View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, background_color: Color::AnsiValue(22)) {
+                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                        View(margin_left: 1, margin_right: 1) {
+                            Text(content: CHECKMARK, color: COLOR_COMPLETED)
+                        }
                         Text(content: text, color: COLOR_COMPLETED)
+                    }
+                    View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2, margin_right: 1) {
+                        Text(content: keybind, color: COLOR_SECONDARY)
+                        Text(content: " reload", color: COLOR_ACTIVE)
                     }
                 }
             }
@@ -303,6 +331,25 @@ impl StatusLine {
                     }
                     View(flex_grow: 1.0, overflow: Overflow::Hidden) {
                         Text(content: text, color: COLOR_FAILED)
+                    }
+                }
+            }
+            .into_any()
+        } else if self.state.paused {
+            // Paused state: show paused message with resume hint
+            let pause_keybind = if use_short { "^⌥d" } else { "Ctrl-Alt-D" };
+
+            element! {
+                View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, background_color: Color::AnsiValue(236)) {
+                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                        View(margin_left: 1, margin_right: 1) {
+                            Text(content: "⏸", color: COLOR_SECONDARY)
+                        }
+                        Text(content: "devenv shell watching paused", color: COLOR_SECONDARY)
+                    }
+                    View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2, margin_right: 1) {
+                        Text(content: pause_keybind.to_string(), color: COLOR_SECONDARY)
+                        Text(content: " resume", color: COLOR_ACTIVE)
                     }
                 }
             }
@@ -339,7 +386,7 @@ mod tests {
     #[test]
     fn test_status_state_reload_ready() {
         let mut state = StatusState::new();
-        state.set_reload_ready(vec![PathBuf::from("devenv.nix")], "Alt-Ctrl-R");
+        state.set_reload_ready(vec![PathBuf::from("devenv.nix")]);
         assert!(!state.building);
         assert!(state.reload_ready);
     }
@@ -358,7 +405,7 @@ mod tests {
 
     #[test]
     fn test_format_changed_files_empty() {
-        assert_eq!(format_changed_files(&[]), "");
+        assert_eq!(format_changed_files(&[], 100), "");
     }
 
     #[test]
@@ -368,7 +415,7 @@ mod tests {
             PathBuf::from("/b/devenv.nix"),
             PathBuf::from("/c/other.nix"),
         ];
-        let result = format_changed_files(&files);
+        let result = format_changed_files(&files, 100);
         assert!(result.contains("devenv.nix"));
         assert!(result.contains("other.nix"));
         // Should only have one devenv.nix
@@ -383,8 +430,27 @@ mod tests {
             PathBuf::from("c.nix"),
             PathBuf::from("d.nix"),
         ];
-        let result = format_changed_files(&files);
-        assert!(result.contains("+1 more"));
+        let result = format_changed_files(&files, 100);
+        assert!(result.contains("+1"));
+    }
+
+    #[test]
+    fn test_format_changed_files_shortens() {
+        let files = vec![
+            PathBuf::from("devenv.nix"),
+            PathBuf::from("shell.nix"),
+            PathBuf::from("flake.nix"),
+        ];
+        // With plenty of space, show all
+        let wide = format_changed_files(&files, 100);
+        assert!(wide.contains("devenv.nix"));
+        assert!(wide.contains("shell.nix"));
+        assert!(wide.contains("flake.nix"));
+
+        // With limited space, show fewer
+        let narrow = format_changed_files(&files, 20);
+        assert!(narrow.contains("devenv.nix"));
+        assert!(narrow.contains("+2"));
     }
 
     #[test]
@@ -398,7 +464,7 @@ mod tests {
         assert!(sl.state().building);
 
         sl.state_mut()
-            .set_reload_ready(vec![PathBuf::from("test.nix")], "Alt-Ctrl-R");
+            .set_reload_ready(vec![PathBuf::from("test.nix")]);
         assert!(sl.state().has_status());
         assert!(sl.state().reload_ready);
 

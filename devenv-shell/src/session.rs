@@ -16,6 +16,19 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
+/// Set terminal scroll region (DECSTBM). Rows are 1-indexed.
+/// This restricts scrolling to the specified region, leaving other rows fixed.
+fn set_scroll_region(stdout: &mut impl Write, top: u16, bottom: u16) -> io::Result<()> {
+    write!(stdout, "\x1b[{};{}r", top, bottom)?;
+    stdout.flush()
+}
+
+/// Reset scroll region to full terminal.
+fn reset_scroll_region(stdout: &mut impl Write) -> io::Result<()> {
+    write!(stdout, "\x1b[r")?;
+    stdout.flush()
+}
+
 #[derive(Debug, Error)]
 pub enum SessionError {
     #[error("PTY error: {0}")]
@@ -94,6 +107,28 @@ impl ShellSession {
         }
     }
 
+    /// Get the PTY size, reserving 1 row for status line if enabled.
+    fn pty_size(&self) -> PtySize {
+        if self.config.show_status_line {
+            PtySize {
+                rows: self.size.rows.saturating_sub(1).max(1),
+                cols: self.size.cols,
+                ..self.size
+            }
+        } else {
+            self.size
+        }
+    }
+
+    /// Set up scroll region to reserve bottom row for status line.
+    fn setup_scroll_region(&self, stdout: &mut impl Write) -> io::Result<()> {
+        if self.config.show_status_line && self.size.rows > 1 {
+            set_scroll_region(stdout, 1, self.size.rows - 1)
+        } else {
+            Ok(())
+        }
+    }
+
     /// Create a new shell session with default configuration.
     pub fn with_defaults() -> Self {
         Self::new(SessionConfig::default())
@@ -147,8 +182,10 @@ impl ShellSession {
         };
 
         // Spawn PTY early so tasks can run in it (before TUI exits)
-        let pty = Arc::new(Pty::spawn(initial_cmd, self.size)?);
-        let mut vt = Vt::new(self.size.cols as usize, self.size.rows as usize);
+        // Reserve 1 row for status line if enabled
+        let pty_size = self.pty_size();
+        let pty = Arc::new(Pty::spawn(initial_cmd, pty_size)?);
+        let mut vt = Vt::new(pty_size.cols as usize, pty_size.rows as usize);
 
         // Handle TUI handoff if present
         if let Some(mut handoff) = handoff {
@@ -177,6 +214,13 @@ impl ShellSession {
         tracing::trace!("session: entering raw mode");
         let _raw_guard = RawModeGuard::new()?;
         tracing::trace!("session: raw mode active");
+
+        let mut stdout = io::stdout();
+
+        // Set up scroll region to reserve bottom row for status line
+        if self.config.show_status_line {
+            self.setup_scroll_region(&mut stdout)?;
+        }
 
         // Nudge the shell to render a fresh prompt after terminal handoff
         if self.config.show_status_line {
@@ -255,7 +299,10 @@ impl ShellSession {
             .event_loop(&pty, &mut vt, &mut event_rx_internal, &event_tx)
             .await;
 
-        // Clean up
+        // Clean up - reset scroll region before exiting
+        if self.config.show_status_line {
+            let _ = reset_scroll_region(&mut stdout);
+        }
         let _ = pty.kill();
 
         // Notify coordinator that shell exited
@@ -298,6 +345,11 @@ impl ShellSession {
 
             match event {
                 Event::Stdin(data) => {
+                    // Check for Ctrl-Alt-D (ESC + Ctrl-D = 0x1b 0x04) to toggle pause
+                    if data.len() == 2 && data[0] == 0x1b && data[1] == 0x04 {
+                        let _ = coordinator_tx.send(ShellEvent::TogglePause).await;
+                        continue;
+                    }
                     pty.write_all(&data)?;
                     pty.flush()?;
                 }
@@ -323,7 +375,10 @@ impl ShellSession {
             let new_size = get_terminal_size();
             if new_size.cols != self.size.cols || new_size.rows != self.size.rows {
                 self.size = new_size;
-                let _ = pty.resize(self.size);
+                // Resize PTY (reserving row for status line if enabled)
+                let _ = pty.resize(self.pty_size());
+                // Update scroll region
+                let _ = self.setup_scroll_region(&mut stdout);
                 let _ = coordinator_tx
                     .send(ShellEvent::Resize {
                         cols: self.size.cols,
@@ -344,11 +399,7 @@ impl ShellSession {
     ) -> Result<(), SessionError> {
         match cmd {
             ShellCommand::ReloadReady { changed_files } => {
-                let keybind = std::env::var("DEVENV_RELOAD_KEYBIND")
-                    .unwrap_or_else(|_| "Alt-Ctrl-R".to_string());
-                self.status_line
-                    .state_mut()
-                    .set_reload_ready(changed_files, &keybind);
+                self.status_line.state_mut().set_reload_ready(changed_files);
                 self.status_line
                     .draw(stdout, self.size.rows, self.size.cols)?;
             }
@@ -372,6 +423,12 @@ impl ShellSession {
 
             ShellCommand::ReloadApplied => {
                 self.status_line.state_mut().clear();
+                self.status_line
+                    .draw(stdout, self.size.rows, self.size.cols)?;
+            }
+
+            ShellCommand::WatchingPaused { paused } => {
+                self.status_line.state_mut().set_paused(paused);
                 self.status_line
                     .draw(stdout, self.size.rows, self.size.cols)?;
             }

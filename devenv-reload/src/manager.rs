@@ -236,7 +236,11 @@ impl ShellManager {
                                     let _ = old_pty.kill();
 
                                     pty_generation = pty_generation.wrapping_add(1);
-                                    spawn_pty_reader(new_pty.clone(), pty_generation, event_tx.clone());
+                                    spawn_pty_reader(
+                                        new_pty.clone(),
+                                        pty_generation,
+                                        event_tx.clone(),
+                                    );
 
                                     vt = Vt::new(new_size.cols as usize, new_size.rows as usize);
 
