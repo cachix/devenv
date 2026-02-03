@@ -1,6 +1,12 @@
 inputs:
+  # Use the local development modules
+  devenv:
+    url: git+file:../../?dir=src/modules
+
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
+
+  # Add all optional modules
 
   git-hooks:
     url: github:cachix/git-hooks.nix
@@ -14,6 +20,3 @@ inputs:
       nixpkgs:
         follows: nixpkgs
 
-  # Use the local development modules
-  devenv:
-    url: path:../../?dir=src/modules
