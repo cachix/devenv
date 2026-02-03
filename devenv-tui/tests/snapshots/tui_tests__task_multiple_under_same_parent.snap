@@ -1,11 +1,10 @@
 ---
 source: devenv-tui/tests/tui_tests.rs
-assertion_line: 1446
 expression: output
 ---
 ⠋ test:parent
-  ⎿ ⠋ test:child-a
-  ⎿ ⠋ test:child-b
-  ⎿ ⠋ test:child-c
+  └ ⠋ test:child-a
+  └ ⠋ test:child-b
+  └ ⠋ test:child-c
 
  0 of 4 tas    ↑↓ nav

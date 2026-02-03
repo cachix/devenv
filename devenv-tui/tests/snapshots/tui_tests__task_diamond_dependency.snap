@@ -1,12 +1,11 @@
 ---
 source: devenv-tui/tests/tui_tests.rs
-assertion_line: 1504
 expression: output
 ---
 ⠋ test:root
-  ⎿ ⠋ test:branch-a
-    ⎿ ⠋ test:shared
-  ⎿ ⠋ test:branch-b
-    ⎿ ⠋ test:shared
+  └ ⠋ test:branch-a
+    └ ⠋ test:shared
+  └ ⠋ test:branch-b
+    └ ⠋ test:shared
 
  0 of 4 tas    ↑↓ nav
