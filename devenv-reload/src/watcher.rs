@@ -40,6 +40,11 @@ impl WatcherHandle {
             .watch(path, RecursiveMode::NonRecursive)
             .map_err(|e| WatcherError::Watch(path.to_path_buf(), e))
     }
+
+    /// Get all currently watched paths
+    pub fn watched_paths(&self) -> Vec<PathBuf> {
+        self.watched_paths.lock().unwrap().iter().cloned().collect()
+    }
 }
 
 /// Async file watcher with debouncing

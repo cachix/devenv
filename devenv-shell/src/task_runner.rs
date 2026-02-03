@@ -138,7 +138,9 @@ impl PtyTaskRunner {
         cmd_parts.push(format!("echo '{end_marker_prefix}'$?'__'"));
 
         // Join with semicolons and add newline
-        let full_cmd = format!("{}\n", cmd_parts.join("; "));
+        // Prefix with space to prevent command from being saved to shell history
+        // (bash/zsh ignore space-prefixed commands when HISTCONTROL includes ignorespace)
+        let full_cmd = format!(" {}\n", cmd_parts.join("; "));
 
         // Write command to PTY
         tracing::trace!("execute: writing command to PTY:\n{}", full_cmd);
@@ -375,7 +377,8 @@ impl PtyTaskRunner {
         cmd_parts.push(request.command.clone());
         cmd_parts.push(format!("echo '{end_marker_prefix}'$?'__'"));
 
-        let full_cmd = format!("{}\n", cmd_parts.join("; "));
+        // Prefix with space to prevent command from being saved to shell history
+        let full_cmd = format!(" {}\n", cmd_parts.join("; "));
 
         tracing::trace!("execute_with_vt: writing command to PTY:\n{}", full_cmd);
         if let Err(e) = self.pty.write_all(full_cmd.as_bytes()) {

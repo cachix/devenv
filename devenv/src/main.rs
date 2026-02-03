@@ -755,6 +755,11 @@ async fn run_reload_shell(
     // Get eval cache info from original devenv (after print_dev_env set it up)
     let eval_cache_pool = devenv.eval_cache_pool().cloned();
     let shell_cache_key = devenv.shell_cache_key();
+    tracing::debug!(
+        "Reload setup: eval_cache_pool={}, shell_cache_key={}",
+        eval_cache_pool.is_some(),
+        shell_cache_key.is_some()
+    );
 
     // For command mode, run tasks with subprocess executor BEFORE spawning PTY.
     // The PTY will immediately exec the command and exit, so we can't use PTY tasks.

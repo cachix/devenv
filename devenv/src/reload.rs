@@ -70,16 +70,6 @@ impl DevenvShellBuilder {
 
 impl ShellBuilder for DevenvShellBuilder {
     fn build(&self, ctx: &BuildContext) -> Result<CommandBuilder, BuildError> {
-        // DEBUG: trace execution
-        let _ = std::fs::write(
-            "/tmp/devenv-build-trace.txt",
-            format!(
-                "build() called\ncmd.is_none()={}\nbash_path={}\n",
-                self.cmd.is_none(),
-                self.bash_path
-            ),
-        );
-
         // For interactive shell, use pre-computed env script.
         // NOTE: We use pre-computed values because get_dev_environment has #[activity]
         // which needs TUI, but TUI waits for this build() to complete = deadlock.
@@ -188,16 +178,6 @@ echo "__DEVENV_SHELL_READY__"
             self.handle.block_on(async {
                 self.add_watch_paths_from_cache(ctx).await;
             });
-
-            // DEBUG: log the command we're returning
-            let _ = std::fs::write(
-                "/tmp/devenv-cmd-trace.txt",
-                format!(
-                    "Returning CommandBuilder:\nprogram={:?}\nrcfile={}\n",
-                    bash,
-                    rcfile_path.display()
-                ),
-            );
 
             return Ok(cmd_builder);
         }
@@ -335,19 +315,48 @@ impl DevenvShellBuilder {
     /// This watches exactly the files that were inputs to shell evaluation.
     /// Uses stored pool and cache key since the devenv instance may not have them set.
     async fn add_watch_paths_from_cache(&self, ctx: &BuildContext) {
-        if let (Some(pool), Some(cache_key)) = (&self.eval_cache_pool, &self.shell_cache_key) {
+        let Some(pool) = &self.eval_cache_pool else {
+            tracing::debug!("No eval cache pool available");
+            return;
+        };
+
+        // First try: get files by specific shell cache key
+        if let Some(cache_key) = &self.shell_cache_key {
+            tracing::debug!(
+                "Looking up file inputs for key_hash: {}",
+                cache_key.key_hash
+            );
             match devenv_eval_cache::get_file_inputs_by_key_hash(pool, &cache_key.key_hash).await {
-                Ok(inputs) => {
+                Ok(inputs) if !inputs.is_empty() => {
+                    tracing::debug!("Found {} file inputs for shell key", inputs.len());
                     for input in inputs {
-                        // Only watch files that exist and are not in /nix/store (immutable)
                         if input.path.exists() && !input.path.starts_with("/nix/store") {
                             let _ = ctx.watcher.watch(&input.path);
                         }
                     }
+                    return;
+                }
+                Ok(_) => {
+                    tracing::debug!("No file inputs found for shell key, trying all tracked files");
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to query eval cache for shell inputs: {}", e);
+                    tracing::warn!("Failed to query by key_hash: {}", e);
                 }
+            }
+        }
+
+        // Fallback: get all tracked files from any evaluation
+        match devenv_eval_cache::get_all_tracked_file_paths(pool).await {
+            Ok(paths) => {
+                tracing::debug!("Found {} total tracked files in eval cache", paths.len());
+                for path in paths {
+                    if path.exists() && !path.starts_with("/nix/store") {
+                        let _ = ctx.watcher.watch(&path);
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to query all tracked files: {}", e);
             }
         }
     }

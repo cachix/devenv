@@ -433,10 +433,21 @@ impl Devenv {
     ///
     /// This returns the same key that was used to cache the shell evaluation,
     /// which can be used to look up the file inputs that the shell depends on.
+    ///
+    /// The cache key must match the backend's format which includes port allocation info:
+    /// `{nix_args}:port_allocation={enabled}:strict_ports={strict}:shell`
     pub fn shell_cache_key(&self) -> Option<devenv_eval_cache::EvalCacheKey> {
         let nix_args_str = self.nix_args_string.get()?;
-        Some(devenv_eval_cache::EvalCacheKey::from_nix_args_str(
+        // The backend uses cache_key_args = format!("{}:port_allocation={}:strict_ports={}", args_nix, is_enabled, is_strict)
+        // We must match this format for the cache key lookup to work
+        let cache_key_args = format!(
+            "{}:port_allocation={}:strict_ports={}",
             nix_args_str,
+            self.port_allocator.is_enabled(),
+            self.port_allocator.is_strict()
+        );
+        Some(devenv_eval_cache::EvalCacheKey::from_nix_args_str(
+            &cache_key_args,
             "shell",
         ))
     }

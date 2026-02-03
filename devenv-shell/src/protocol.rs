@@ -16,6 +16,8 @@ pub enum ShellCommand {
         command: CommandBuilder,
         watch_files: Vec<PathBuf>,
     },
+    /// Update the list of watched files (sent after initial build populates the watcher).
+    WatchedFiles { files: Vec<PathBuf> },
     /// File changed, build started. Show "Building..." status.
     Building { changed_files: Vec<PathBuf> },
     /// Environment rebuild completed successfully.
@@ -31,6 +33,8 @@ pub enum ShellCommand {
     ReloadApplied,
     /// File watching paused/resumed.
     WatchingPaused { paused: bool },
+    /// Print list of watched files.
+    PrintWatchedFiles { files: Vec<PathBuf> },
     /// Coordinator is shutting down.
     Shutdown,
 }
@@ -44,6 +48,8 @@ pub enum ShellEvent {
     Resize { cols: u16, rows: u16 },
     /// User pressed Ctrl-Alt-D to toggle file watching.
     TogglePause,
+    /// User pressed Ctrl-Alt-W to list watched files.
+    ListWatchedFiles,
 }
 
 /// Request to execute a task command in the PTY.

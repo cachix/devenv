@@ -106,6 +106,14 @@ impl ShellCoordinator {
             .await
             .map_err(|_| CoordinatorError::ChannelClosed)?;
 
+        // Send the actual watched files (populated by builder during build)
+        let watched = watcher_handle.watched_paths();
+        if !watched.is_empty() {
+            let _ = command_tx
+                .send(ShellCommand::WatchedFiles { files: watched })
+                .await;
+        }
+
         let (event_tx, mut internal_rx) = mpsc::channel::<Event>(100);
 
         // Forward file watcher events
@@ -311,6 +319,13 @@ impl ShellCoordinator {
                     );
                     let _ = command_tx
                         .send(ShellCommand::WatchingPaused { paused })
+                        .await;
+                }
+
+                Event::Tui(ShellEvent::ListWatchedFiles) => {
+                    let files = watcher_handle.watched_paths();
+                    let _ = command_tx
+                        .send(ShellCommand::PrintWatchedFiles { files })
                         .await;
                 }
             }

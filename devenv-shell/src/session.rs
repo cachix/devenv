@@ -9,6 +9,8 @@ use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
 use crate::task_runner::PtyTaskRunner;
 use crate::terminal::RawModeGuard;
 use avt::Vt;
+use crossterm::{cursor, execute, terminal};
+use iocraft::ElementExt;
 use portable_pty::PtySize;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
@@ -27,6 +29,42 @@ fn set_scroll_region(stdout: &mut impl Write, top: u16, bottom: u16) -> io::Resu
 fn reset_scroll_region(stdout: &mut impl Write) -> io::Result<()> {
     write!(stdout, "\x1b[r")?;
     stdout.flush()
+}
+
+/// Check if data contains terminal clear/reset sequences.
+/// This detects: \x1b[2J (clear screen), \x1b[3J (clear scrollback), \x1bc (reset terminal)
+fn contains_clear_sequence(data: &[u8]) -> bool {
+    // Look for escape sequences that clear the terminal
+    let mut i = 0;
+    while i < data.len() {
+        if data[i] == 0x1b {
+            // ESC character
+            if i + 1 < data.len() {
+                match data[i + 1] {
+                    b'c' => return true, // ESC c = reset terminal
+                    b'[' => {
+                        // CSI sequence - look for 2J, 3J, or H followed by 2J
+                        let mut j = i + 2;
+                        while j < data.len() && (data[j].is_ascii_digit() || data[j] == b';') {
+                            j += 1;
+                        }
+                        if j < data.len() {
+                            // Check for clear screen sequences
+                            if data[j] == b'J' && j > i + 2 {
+                                let param = &data[i + 2..j];
+                                if param == b"2" || param == b"3" {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        i += 1;
+    }
+    false
 }
 
 #[derive(Debug, Error)]
@@ -350,6 +388,11 @@ impl ShellSession {
                         let _ = coordinator_tx.send(ShellEvent::TogglePause).await;
                         continue;
                     }
+                    // Check for Ctrl-Alt-W (ESC + Ctrl-W = 0x1b 0x17) to list watched files
+                    if data.len() == 2 && data[0] == 0x1b && data[1] == 0x17 {
+                        let _ = coordinator_tx.send(ShellEvent::ListWatchedFiles).await;
+                        continue;
+                    }
                     pty.write_all(&data)?;
                     pty.flush()?;
                 }
@@ -360,6 +403,16 @@ impl ShellSession {
                     // Write to stdout
                     stdout.write_all(&data)?;
                     stdout.flush()?;
+
+                    // Check for terminal clear sequences and redraw status line
+                    // Common sequences: \x1b[2J (clear), \x1b[3J (clear scrollback), \x1bc (reset)
+                    if self.config.show_status_line && contains_clear_sequence(&data) {
+                        // Re-establish scroll region and redraw status line
+                        let _ = self.setup_scroll_region(&mut stdout);
+                        let _ = self
+                            .status_line
+                            .draw(&mut stdout, self.size.rows, self.size.cols);
+                    }
                 }
 
                 Event::PtyExit => {
@@ -427,10 +480,29 @@ impl ShellSession {
                     .draw(stdout, self.size.rows, self.size.cols)?;
             }
 
+            ShellCommand::WatchedFiles { files } => {
+                self.status_line.state_mut().set_watched_files(files);
+                self.status_line
+                    .draw(stdout, self.size.rows, self.size.cols)?;
+            }
+
             ShellCommand::WatchingPaused { paused } => {
                 self.status_line.state_mut().set_paused(paused);
                 self.status_line
                     .draw(stdout, self.size.rows, self.size.cols)?;
+            }
+
+            ShellCommand::PrintWatchedFiles { files } => {
+                // Print watched files list
+                writeln!(
+                    stdout,
+                    "\r\n\x1b[1mWatched files ({}):\x1b[0m\r",
+                    files.len()
+                )?;
+                for file in &files {
+                    writeln!(stdout, "  {}\r", file.display())?;
+                }
+                stdout.flush()?;
             }
 
             ShellCommand::Shutdown => {
