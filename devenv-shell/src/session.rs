@@ -254,6 +254,11 @@ impl ShellSession {
 
         let mut stdout = io::stdout();
 
+        // Refresh terminal size (may have changed since session was created)
+        self.size = get_terminal_size();
+        // Resize PTY to match current terminal size (minus status line row)
+        let _ = pty.resize(self.pty_size());
+
         // Set up scroll region to reserve bottom row for status line
         if self.config.show_status_line {
             self.setup_scroll_region(&mut stdout)?;
