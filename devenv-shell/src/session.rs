@@ -10,7 +10,6 @@ use crate::task_runner::PtyTaskRunner;
 use crate::terminal::RawModeGuard;
 use avt::Vt;
 use crossterm::{cursor, execute, terminal};
-use iocraft::ElementExt;
 use portable_pty::PtySize;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
@@ -258,13 +257,18 @@ impl ShellSession {
         // Set up scroll region to reserve bottom row for status line
         if self.config.show_status_line {
             self.setup_scroll_region(&mut stdout)?;
+            // Move cursor to top-left of scroll region and clear the screen within it
+            // This ensures the prompt appears at the top after TUI handoff
+            execute!(stdout, cursor::MoveTo(0, 0))?;
+            execute!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown))?;
+            // Draw status line first so it's visible immediately
+            self.status_line
+                .draw(&mut stdout, self.size.rows, self.size.cols)?;
         }
 
-        // Nudge the shell to render a fresh prompt after terminal handoff
-        if self.config.show_status_line {
-            pty.write_all(b"\n")?;
-            pty.flush()?;
-        }
+        // Send Ctrl-L to shell to redraw prompt cleanly
+        pty.write_all(b"\x0c")?;
+        pty.flush()?;
 
         // Set up event channel
         let (event_tx_internal, mut event_rx_internal) = mpsc::channel::<Event>(100);

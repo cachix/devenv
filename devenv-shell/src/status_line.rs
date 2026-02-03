@@ -298,12 +298,8 @@ impl StatusLine {
         // Save cursor position
         execute!(stdout, cursor::SavePosition)?;
 
-        // Move to the last row
-        // Note: rows is the terminal height. 0-indexed last row would be rows-1.
-        // But we use 'rows' directly here because the scroll region reserves rows-1
-        // for the content area, leaving row 'rows' (technically out-of-bounds) for status.
-        // Most terminals clamp this to the actual last row.
-        execute!(stdout, cursor::MoveTo(0, rows))?;
+        // Move to the last row (0-indexed, so rows-1)
+        execute!(stdout, cursor::MoveTo(0, rows.saturating_sub(1)))?;
 
         // Clear the line
         execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
