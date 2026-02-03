@@ -1,11 +1,10 @@
 ---
 source: devenv-tui/tests/tui_tests.rs
-assertion_line: 1394
 expression: output
 ---
 ⠋ test:root
-  ⎿ ⠋ test:level1
-    ⎿ ⠋ test:level2
-      ⎿ ⠋ test:level3
+  └ ⠋ test:level1
+    └ ⠋ test:level2
+      └ ⠋ test:level3
 
  0 of 4 task    ↑↓ nav

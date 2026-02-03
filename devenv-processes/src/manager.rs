@@ -959,31 +959,28 @@ impl NativeProcessManager {
     }
 
     /// Run the manager event loop in foreground (non-Arc version)
-    pub async fn run_foreground(&self) -> Result<()> {
-        use futures::stream::StreamExt;
-        use signal_hook::consts::signal::*;
-        use signal_hook_tokio::Signals;
-
+    ///
+    /// The cancellation token allows integration with external shutdown coordination
+    /// (e.g., the main app shutdown). When the token is cancelled, all processes are stopped.
+    ///
+    /// Note: This method relies on the cancellation token for shutdown signals.
+    /// Signal handling (SIGINT/SIGTERM) is done by tokio-shutdown in the main app,
+    /// which cancels the token when a signal is received.
+    pub async fn run_foreground(
+        &self,
+        cancellation_token: tokio_util::sync::CancellationToken,
+    ) -> Result<()> {
         info!("Manager event loop started (foreground)");
 
         // Take the command receiver from the struct
         let mut command_rx = self.command_rx.lock().await.take();
 
-        // Set up signal handling for graceful shutdown
-        let signals = Signals::new([SIGTERM, SIGINT]).into_diagnostic()?;
-        let mut signals = signals.fuse();
-
         loop {
             tokio::select! {
-                Some(signal) = signals.next() => {
-                    match signal {
-                        SIGTERM | SIGINT => {
-                            info!("Received shutdown signal, stopping all processes");
-                            self.stop_all().await?;
-                            break;
-                        }
-                        _ => {}
-                    }
+                _ = cancellation_token.cancelled() => {
+                    info!("Shutdown requested, stopping all processes");
+                    self.stop_all().await?;
+                    break;
                 }
                 Some(cmd) = async {
                     match command_rx.as_mut() {
@@ -1259,8 +1256,11 @@ impl ProcessManager for NativeProcessManager {
             // Save PID for tracking
             pid::write_pid(&self.manager_pid_file(), std::process::id()).await?;
 
-            // Run the event loop (handles signals internally via signal-hook)
-            let result = self.run_foreground().await;
+            // Run the event loop (shutdown via cancellation token from tokio-shutdown)
+            let token = options
+                .cancellation_token
+                .unwrap_or_else(tokio_util::sync::CancellationToken::new);
+            let result = self.run_foreground(token).await;
 
             // Clean up PID file
             let _ = tokio::fs::remove_file(&self.manager_pid_file()).await;

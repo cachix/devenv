@@ -176,10 +176,9 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     let shutdown_clone = shutdown.clone();
     let devenv_thread = std::thread::spawn(move || {
         build_gc_runtime().block_on(async {
-            let output = tokio::select! {
-                output = run_devenv(cli, shutdown_clone.clone(), Some(command_rx)) => output,
-                _ = shutdown_clone.wait_for_shutdown() => DevenvOutput::done(),
-            };
+            // Don't race with shutdown - let run_devenv handle shutdown via cancellation token
+            // This ensures process cleanup happens before the future is dropped
+            let output = run_devenv(cli, shutdown_clone.clone(), Some(command_rx)).await;
 
             // Signal TUI that backend is fully done soon enough
             let _ = backend_done_tx.send(());
@@ -241,10 +240,8 @@ fn run_with_legacy_cli(cli: Cli) -> Result<()> {
         let level = cli.get_log_level();
         devenv_tracing::init_cli_tracing(level, cli.global_options.trace_output.as_ref());
 
-        tokio::select! {
-            output = run_devenv(cli, shutdown.clone(), None) => output,
-            _ = shutdown.wait_for_shutdown() => DevenvOutput::done(),
-        }
+        // Don't race with shutdown - let run_devenv handle shutdown via cancellation token
+        run_devenv(cli, shutdown.clone(), None).await
     });
 
     match devenv_output.try_launch_debugger() {
@@ -265,10 +262,8 @@ fn run_with_tracing(cli: Cli) -> Result<()> {
             cli.global_options.trace_output.as_ref(),
         );
 
-        tokio::select! {
-            output = run_devenv(cli, shutdown.clone(), None) => output,
-            _ = shutdown.wait_for_shutdown() => DevenvOutput::done(),
-        }
+        // Don't race with shutdown - let run_devenv handle shutdown via cancellation token
+        run_devenv(cli, shutdown.clone(), None).await
     });
 
     match devenv_output.try_launch_debugger() {

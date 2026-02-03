@@ -2,6 +2,6 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Downloading large-file.tar.gz from example.com [42MB]
+⠋ Downloading  large-file.tar.gz from example.com [42MB]
 
- 0 of 1 downloads                                 ↑↓ nav
+ 0 of 1 downloads                                  ↑↓ nav

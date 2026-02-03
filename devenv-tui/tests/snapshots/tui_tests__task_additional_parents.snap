@@ -3,8 +3,8 @@ source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
 ⠋ test:unit
-  ⎿ ⠋ build
+  └ ⠋ build
 ⠋ test:integration
-  ⎿ ⠋ build
+  └ ⠋ build
 
  0 of 3 tas    ↑↓ nav

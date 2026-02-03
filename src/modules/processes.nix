@@ -312,8 +312,8 @@ in
       implementation = lib.mkOption {
         type = types.enum supportedImplementations;
         description = "The process manager to use when running processes with ``devenv up``.";
-        default = "process-compose";
-        example = "overmind";
+        default = "native";
+        example = "process-compose";
       };
 
       before = lib.mkOption {

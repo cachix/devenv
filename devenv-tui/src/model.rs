@@ -528,6 +528,11 @@ impl ActivityModel {
                 // Create all task activities upfront in Queued state
                 // Use parent from edges if available
                 for task_info in tasks {
+                    // Skip process tasks - they create Process activities instead
+                    if task_info.is_process {
+                        continue;
+                    }
+
                     let variant = ActivityVariant::Task(TaskActivity {
                         status: TaskDisplayStatus::Pending,
                         duration: None,

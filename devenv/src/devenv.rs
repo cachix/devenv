@@ -1481,7 +1481,7 @@ impl Devenv {
 
                 let result = tasks_runner
                     .process_manager
-                    .run_foreground()
+                    .run_foreground(self.shutdown.cancellation_token())
                     .await
                     .map_err(|e| miette!("Process manager error: {}", e));
 
@@ -1520,6 +1520,7 @@ impl Devenv {
             detach: options.detach,
             log_to_file: options.log_to_file,
             env: envs,
+            cancellation_token: Some(self.shutdown.cancellation_token()),
         };
 
         manager.start(start_options).await?;

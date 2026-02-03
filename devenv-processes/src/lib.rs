@@ -57,6 +57,8 @@ pub struct StartOptions {
     pub log_to_file: bool,
     /// Environment variables to pass to processes
     pub env: HashMap<String, String>,
+    /// Cancellation token for graceful shutdown coordination
+    pub cancellation_token: Option<tokio_util::sync::CancellationToken>,
 }
 
 /// Common interface for process managers

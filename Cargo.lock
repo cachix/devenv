@@ -1563,6 +1563,7 @@ dependencies = [
  "socket2 0.5.10",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tracing",
  "watchexec",
  "watchexec-filterer-globset",

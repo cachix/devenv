@@ -21,6 +21,7 @@ signal-hook-tokio.workspace = true
 socket2.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 tracing.workspace = true
 watchexec.workspace = true
 watchexec-filterer-globset.workspace = true
