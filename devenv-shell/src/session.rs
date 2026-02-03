@@ -254,25 +254,72 @@ impl ShellSession {
 
         let mut stdout = io::stdout();
 
-        // First reset any existing scroll region (TUI might have set one)
-        // This must happen BEFORE querying terminal size, as some terminals
-        // report scroll region size instead of actual terminal size
-        reset_scroll_region(&mut stdout)?;
+        // Reset terminal state from TUI: scroll region and origin mode
+        write!(stdout, "\x1b[r\x1b[?6l")?;
+        stdout.flush()?;
 
-        // Get fresh terminal size using crossterm (most accurate after TUI handoff)
-        if let Ok((cols, rows)) = terminal::size() {
+        // Query actual terminal size by moving cursor to bottom-right and reading position
+        // This is more reliable than terminal::size() which can return wrong values
+        write!(stdout, "\x1b[999;999H\x1b[6n")?;
+        stdout.flush()?;
+
+        // Read cursor position response: ESC [ rows ; cols R
+        // We need to read from stdin in raw mode
+        let mut response = Vec::new();
+        let mut stdin = io::stdin();
+        let mut buf = [0u8; 1];
+        loop {
+            if stdin.read(&mut buf).is_ok() && buf[0] != 0 {
+                response.push(buf[0]);
+                if buf[0] == b'R' {
+                    break;
+                }
+            }
+            if response.len() > 20 {
+                break; // Safety limit
+            }
+        }
+
+        // Parse response: ESC [ rows ; cols R
+        if let Some(pos) = response.iter().position(|&b| b == b'[').and_then(|start| {
+            let s = String::from_utf8_lossy(&response[start + 1..response.len() - 1]);
+            let parts: Vec<&str> = s.split(';').collect();
+            if parts.len() == 2 {
+                Some((
+                    parts[0].parse::<u16>().unwrap_or(24),
+                    parts[1].parse::<u16>().unwrap_or(80),
+                ))
+            } else {
+                None
+            }
+        }) {
             self.size = PtySize {
-                rows,
-                cols,
+                rows: pos.0,
+                cols: pos.1,
                 pixel_width: 0,
                 pixel_height: 0,
             };
+            tracing::debug!(
+                "session: actual terminal size (via cursor query): {}x{}",
+                self.size.cols,
+                self.size.rows
+            );
+        } else {
+            // Fallback to crossterm
+            if let Ok((cols, rows)) = terminal::size() {
+                self.size = PtySize {
+                    rows,
+                    cols,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                };
+            }
+            tracing::debug!(
+                "session: terminal size (fallback): {}x{}",
+                self.size.cols,
+                self.size.rows
+            );
         }
-        tracing::debug!(
-            "session: terminal size after TUI handoff: {}x{}",
-            self.size.cols,
-            self.size.rows
-        );
         // Resize PTY to match current terminal size (minus status line row)
         let _ = pty.resize(self.pty_size());
 
