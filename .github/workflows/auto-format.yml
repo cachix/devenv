@@ -22,7 +22,7 @@ jobs:
           name: devenv
 
       - name: Install devenv
-        run: nix profile install . -L --accept-flake-config
+        run: nix profile install github:cachix/devenv/latest -L --accept-flake-config
 
       - name: Run formatters
         run: devenv shell -- prek run -a || true
