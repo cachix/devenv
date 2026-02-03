@@ -56,7 +56,7 @@ pub async fn run(devenv: &Devenv, print_config: bool) -> Result<()> {
     );
 
     let mut options = HashMap::new();
-    options.insert("nixos".to_string(), OptionEntry { expr: options_expr });
+    options.insert("devenv".to_string(), OptionEntry { expr: options_expr });
 
     let config = NixdConfig {
         nixd: NixdSettings {
