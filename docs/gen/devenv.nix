@@ -77,6 +77,7 @@ let
       optionsDoc = pkgs.nixosOptionsDoc (
         {
           options = filterOptions filterGitHooks (builtins.removeAttrs opts [ "_module" ]);
+          warningsAreErrors = true;
           transformOptions = opt: (opt // { declarations = map rewriteSource opt.declarations; });
         }
         // docOpts
