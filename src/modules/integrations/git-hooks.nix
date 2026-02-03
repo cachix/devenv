@@ -126,10 +126,43 @@ in
 
       tasks = {
         "devenv:git-hooks:install" = {
-          # The config file is managed by the files API.
-          # installationScript also creates the symlink, but it will be a no-op
-          # since the files API already created it pointing to the same target.
-          exec = cfg.installationScript;
+          # The config file is managed by the files API (see files.${cfg.configPath} below).
+          # We write a custom install script here instead of using cfg.installationScript
+          # because the upstream script skips installation when the config symlink exists,
+          # but with the files API the symlink is created before this task runs.
+          exec =
+            let
+              executable = lib.getExe packageBin;
+              git = lib.getExe cfg.gitPackage;
+              configPath = cfg.configPath;
+              installStages = cfg.installStages;
+            in
+            ''
+              if ! ${git} rev-parse --git-dir &> /dev/null; then
+                echo 1>&2 "WARNING: git-hooks.nix: .git not found; skipping hook installation."
+                exit 0
+              fi
+
+              # Install hooks for configured stages
+              if [ -z "${lib.concatStringsSep " " installStages}" ]; then
+                # Default: install pre-commit hook
+                ${executable} install -c ${configPath}
+              else
+                for stage in ${lib.concatStringsSep " " installStages}; do
+                  case $stage in
+                    manual)
+                      # Skip manual stage - it's not a git hook
+                      ;;
+                    commit|merge-commit|push)
+                      ${executable} install -c ${configPath} -t "pre-$stage"
+                      ;;
+                    *)
+                      ${executable} install -c ${configPath} -t "$stage"
+                      ;;
+                  esac
+                done
+              fi
+            '';
           after = [ "devenv:files" ];
           before = [ "devenv:enterShell" ];
         };
