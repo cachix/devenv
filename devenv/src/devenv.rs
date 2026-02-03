@@ -15,6 +15,8 @@ use devenv_core::{
 };
 use include_dir::{Dir, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
+use nix::sys::signal;
+use nix::unistd::Pid;
 use once_cell::sync::Lazy;
 use secrecy::ExposeSecret;
 use serde::Deserialize;

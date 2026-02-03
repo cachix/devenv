@@ -696,8 +696,11 @@ impl Tasks {
                     }
                     Err(e) => {
                         // Failed to start process
-                        error!("Failed to start process task {}: {}", task_name, e);
                         let mut task_state = task_state_clone.write().await;
+                        error!(
+                            "Failed to start process task {}: {}",
+                            task_state.task.name, e
+                        );
                         task_state.status = TaskStatus::Completed(TaskCompleted::Failed(
                             std::time::Duration::ZERO,
                             TaskFailure {
@@ -712,8 +715,7 @@ impl Tasks {
                 }
 
                 // Update orchestration progress once the process is started or failed.
-                let done =
-                    completed_tasks.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                let done = completed_tasks.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
                 orchestration_activity.progress(done, total_tasks, None);
 
                 continue;
