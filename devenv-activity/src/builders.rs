@@ -350,6 +350,7 @@ impl CommandBuilder {
 pub struct ProcessBuilder {
     name: String,
     command: Option<String>,
+    ports: Vec<String>,
     id: Option<u64>,
     parent: Option<Option<u64>>,
     level: ActivityLevel,
@@ -360,6 +361,7 @@ impl ProcessBuilder {
         Self {
             name: name.into(),
             command: None,
+            ports: Vec::new(),
             id: None,
             parent: None,
             level: ActivityLevel::default(),
@@ -368,6 +370,11 @@ impl ProcessBuilder {
 
     pub fn command(mut self, cmd: impl Into<String>) -> Self {
         self.command = Some(cmd.into());
+        self
+    }
+
+    pub fn ports(mut self, ports: Vec<String>) -> Self {
+        self.ports = ports;
         self
     }
 
@@ -397,6 +404,7 @@ impl ProcessBuilder {
             name: self.name.clone(),
             parent,
             command: self.command,
+            ports: self.ports,
             level: self.level,
             timestamp: Timestamp::now(),
         }));

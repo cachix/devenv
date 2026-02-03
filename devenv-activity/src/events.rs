@@ -302,6 +302,9 @@ pub enum Process {
         /// The command being executed
         #[serde(skip_serializing_if = "Option::is_none")]
         command: Option<String>,
+        /// Ports this process listens on (e.g., ["http:8080", "admin:9000"])
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        ports: Vec<String>,
         #[serde(default)]
         level: ActivityLevel,
         timestamp: Timestamp,

@@ -134,8 +134,24 @@ impl NativeProcessManager {
             configs.insert(config.name.clone(), config.clone());
         }
 
+        // Extract ports from listen config
+        let ports: Vec<String> = config
+            .listen
+            .iter()
+            .filter_map(|spec| {
+                // Extract port from address like "127.0.0.1:8080" -> "name:8080"
+                spec.address.as_ref().and_then(|addr| {
+                    addr.rsplit(':')
+                        .next()
+                        .map(|port| format!("{}:{}", spec.name, port))
+                })
+            })
+            .collect();
+
         // Create activity for tracking this process
-        let mut builder = Activity::process(&config.name).command(&config.exec);
+        let mut builder = Activity::process(&config.name)
+            .command(&config.exec)
+            .ports(ports);
         if let Some(pid) = parent_id {
             builder = builder.parent(Some(pid));
         }

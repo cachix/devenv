@@ -537,12 +537,35 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             return main_line;
         }
         ActivityVariant::Process(process_data) => {
-            let status_text = match process_data.status {
-                ProcessStatus::Running => Some("running"),
-                ProcessStatus::Ready => Some("ready"),
-                ProcessStatus::Restarting => Some("restarting"),
-                ProcessStatus::Stopped => Some("stopped"),
+            // Build status text with optional ports
+            let status_str = match process_data.status {
+                ProcessStatus::Running => "running",
+                ProcessStatus::Ready => "ready",
+                ProcessStatus::Restarting => "restarting",
+                ProcessStatus::Stopped => "stopped",
             };
+
+            // Format ports: extract just the port numbers for brevity
+            let ports_suffix = if !process_data.ports.is_empty() {
+                let port_list: Vec<String> = process_data
+                    .ports
+                    .iter()
+                    .filter_map(|spec| {
+                        // spec is like "http:8080" or just "8080"
+                        // Extract the port number (last part after colon)
+                        spec.rsplit(':').next().map(|p| format!(":{}", p))
+                    })
+                    .collect();
+                if port_list.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {}", port_list.join(", "))
+                }
+            } else {
+                String::new()
+            };
+
+            let status_text = Some(format!("{}{}", status_str, ports_suffix));
 
             // For selected process activities, show expandable logs
             if *is_selected && logs.is_some() {
@@ -550,7 +573,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
                 let main_line =
                     ActivityTextComponent::new("".to_string(), activity.name.clone(), elapsed_str)
-                        .with_suffix(status_text.map(String::from))
+                        .with_suffix(status_text.clone())
                         .with_selection(*is_selected)
                         .render(terminal_width, *depth, prefix);
 
@@ -578,7 +601,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let prefix = build_activity_prefix(*depth, *completed);
 
             return ActivityTextComponent::new("".to_string(), activity.name.clone(), elapsed_str)
-                .with_suffix(status_text.map(String::from))
+                .with_suffix(status_text)
                 .with_selection(*is_selected)
                 .render(terminal_width, *depth, prefix);
         }

@@ -103,6 +103,7 @@ pub struct MessageActivity {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProcessActivity {
     pub status: ProcessStatus,
+    pub ports: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -616,11 +617,13 @@ impl ActivityModel {
                 name,
                 parent,
                 command,
+                ports,
                 level,
                 ..
             } => {
                 let variant = ActivityVariant::Process(ProcessActivity {
                     status: ProcessStatus::Running,
+                    ports,
                 });
                 self.create_activity(id, name, parent, command, variant, level);
             }
