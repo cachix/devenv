@@ -23,6 +23,7 @@ let
         type = types.port;
         readOnly = true;
         description = "Resolved port value (allocated by devenv)";
+        defaultText = lib.literalMD "Allocated port based on `allocate`";
         # Pass process name and port name for stable caching across evaluations
         default = allocatePort processName name config.allocate;
       };
