@@ -496,20 +496,18 @@ impl ShellSession {
                 }
             }
 
-            // Check for terminal resize
-            let new_size = get_terminal_size();
-            if new_size.cols != self.size.cols || new_size.rows != self.size.rows {
-                self.size = new_size;
-                // Resize PTY (reserving row for status line if enabled)
-                let _ = pty.resize(self.pty_size());
-                // Update scroll region
-                let _ = self.setup_scroll_region(&mut stdout);
-                let _ = coordinator_tx
-                    .send(ShellEvent::Resize {
-                        cols: self.size.cols,
-                        rows: self.size.rows,
-                    })
-                    .await;
+            // Check for terminal resize - only update cols, not rows (rows is unreliable)
+            if let Ok((cols, _rows)) = terminal::size() {
+                if cols != self.size.cols {
+                    self.size.cols = cols;
+                    // Don't update rows or scroll region - the initial cursor query gave us correct values
+                    let _ = coordinator_tx
+                        .send(ShellEvent::Resize {
+                            cols: self.size.cols,
+                            rows: self.size.rows,
+                        })
+                        .await;
+                }
             }
         }
 
