@@ -254,19 +254,35 @@ impl ShellSession {
 
         let mut stdout = io::stdout();
 
-        // Refresh terminal size (may have changed since session was created)
-        self.size = get_terminal_size();
+        // First reset any existing scroll region (TUI might have set one)
+        // This must happen BEFORE querying terminal size, as some terminals
+        // report scroll region size instead of actual terminal size
+        reset_scroll_region(&mut stdout)?;
+
+        // Get fresh terminal size using crossterm (most accurate after TUI handoff)
+        if let Ok((cols, rows)) = terminal::size() {
+            self.size = PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            };
+        }
+        tracing::debug!(
+            "session: terminal size after TUI handoff: {}x{}",
+            self.size.cols,
+            self.size.rows
+        );
         // Resize PTY to match current terminal size (minus status line row)
         let _ = pty.resize(self.pty_size());
 
         // Set up scroll region to reserve bottom row for status line
         if self.config.show_status_line {
             self.setup_scroll_region(&mut stdout)?;
-            // Move cursor to top-left of scroll region and clear the screen within it
-            // This ensures the prompt appears at the top after TUI handoff
+            // Move cursor to top-left and clear the scroll region
             execute!(stdout, cursor::MoveTo(0, 0))?;
             execute!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown))?;
-            // Draw status line first so it's visible immediately
+            // Draw status line at absolute bottom
             self.status_line
                 .draw(&mut stdout, self.size.rows, self.size.cols)?;
         }

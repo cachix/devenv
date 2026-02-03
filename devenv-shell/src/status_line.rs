@@ -298,8 +298,9 @@ impl StatusLine {
         // Save cursor position
         execute!(stdout, cursor::SavePosition)?;
 
-        // Move to the last row (0-indexed, so rows-1)
-        execute!(stdout, cursor::MoveTo(0, rows.saturating_sub(1)))?;
+        // Reset origin mode (DECOM) to ensure absolute cursor positioning,
+        // then move to last row using large number (terminals clamp to actual last row)
+        write!(stdout, "\x1b[?6l\x1b[999;1H")?;
 
         // Clear the line
         execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
