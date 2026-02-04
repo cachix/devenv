@@ -263,17 +263,43 @@ impl PtyTaskRunner {
         });
     }
 
+    /// Disable PROMPT_COMMAND to avoid ~100ms+ overhead per task from prompt hooks.
+    fn disable_prompt_command(&self) -> Result<(), TaskRunnerError> {
+        self.pty
+            .write_all(b" __devenv_saved_pc=\"$PROMPT_COMMAND\"; PROMPT_COMMAND=\n")
+            .map_err(|e| {
+                TaskRunnerError::Pty(format!("Failed to disable PROMPT_COMMAND: {}", e))
+            })?;
+        self.pty
+            .flush()
+            .map_err(|e| TaskRunnerError::Pty(format!("Failed to flush PTY: {}", e)))
+    }
+
+    /// Restore PROMPT_COMMAND after task batch completes.
+    fn restore_prompt_command(&self) -> Result<(), TaskRunnerError> {
+        self.pty
+            .write_all(b" PROMPT_COMMAND=\"$__devenv_saved_pc\"\n")
+            .map_err(|e| {
+                TaskRunnerError::Pty(format!("Failed to restore PROMPT_COMMAND: {}", e))
+            })?;
+        self.pty
+            .flush()
+            .map_err(|e| TaskRunnerError::Pty(format!("Failed to flush PTY: {}", e)))
+    }
+
     /// Run task loop, processing requests until channel closes.
     pub async fn run_loop(
         &self,
         task_rx: &mut mpsc::Receiver<PtyTaskRequest>,
     ) -> Result<(), TaskRunnerError> {
         tracing::trace!("run_loop: waiting for task requests");
+        self.disable_prompt_command()?;
 
         while let Some(request) = task_rx.recv().await {
             self.execute(request).await;
         }
 
+        self.restore_prompt_command()?;
         tracing::trace!("run_loop: task channel closed, exiting");
         Ok(())
     }
@@ -292,11 +318,13 @@ impl PtyTaskRunner {
         self.wait_for_shell_ready_with_vt(vt).await?;
 
         tracing::trace!("run_with_vt: waiting for task requests");
+        self.disable_prompt_command()?;
 
         while let Some(request) = task_rx.recv().await {
             self.execute_with_vt(request, vt).await;
         }
 
+        self.restore_prompt_command()?;
         tracing::trace!("run_with_vt: task channel closed, exiting");
         Ok(())
     }

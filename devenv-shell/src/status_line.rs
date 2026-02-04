@@ -287,7 +287,7 @@ impl StatusLine {
     }
 
     /// Draw the status line at the bottom of the terminal.
-    pub fn draw(&mut self, stdout: &mut impl Write, rows: u16, cols: u16) -> io::Result<()> {
+    pub fn draw(&mut self, stdout: &mut impl Write, cols: u16) -> io::Result<()> {
         if !self.enabled {
             return Ok(());
         }

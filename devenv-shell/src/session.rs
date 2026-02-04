@@ -330,8 +330,7 @@ impl ShellSession {
             execute!(stdout, cursor::MoveTo(0, 0))?;
             execute!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown))?;
             // Draw status line at absolute bottom
-            self.status_line
-                .draw(&mut stdout, self.size.rows, self.size.cols)?;
+            self.status_line.draw(&mut stdout, self.size.cols)?;
         }
 
         // Send Ctrl-L to shell to redraw prompt cleanly
@@ -431,6 +430,7 @@ impl ShellSession {
     ) -> Result<(), SessionError> {
         let mut stdout = io::stdout();
         let spinner_interval = Duration::from_millis(SPINNER_INTERVAL_MS);
+        let mut last_resize_check = std::time::Instant::now();
 
         loop {
             // Use select! to handle both events and spinner animation
@@ -440,7 +440,7 @@ impl ShellSession {
                     event = event_rx.recv() => event,
                     _ = tokio::time::sleep(spinner_interval) => {
                         // Redraw status line to animate spinner
-                        self.status_line.draw(&mut stdout, self.size.rows, self.size.cols)?;
+                        self.status_line.draw(&mut stdout, self.size.cols)?;
                         continue;
                     }
                 }
@@ -470,20 +470,17 @@ impl ShellSession {
                 }
 
                 Event::PtyOutput(data) => {
-                    // Feed to VT for state tracking
-                    vt.feed_str(&String::from_utf8_lossy(&data));
-                    // Write to stdout
+                    // Write to stdout immediately
                     stdout.write_all(&data)?;
                     stdout.flush()?;
 
+                    // Feed to VT for state tracking (used during reload)
+                    vt.feed_str(&String::from_utf8_lossy(&data));
+
                     // Check for terminal clear sequences and redraw status line
-                    // Common sequences: \x1b[2J (clear), \x1b[3J (clear scrollback), \x1bc (reset)
                     if self.config.show_status_line && contains_clear_sequence(&data) {
-                        // Re-establish scroll region and redraw status line
                         let _ = self.setup_scroll_region(&mut stdout);
-                        let _ = self
-                            .status_line
-                            .draw(&mut stdout, self.size.rows, self.size.cols);
+                        let _ = self.status_line.draw(&mut stdout, self.size.cols);
                     }
                 }
 
@@ -496,17 +493,19 @@ impl ShellSession {
                 }
             }
 
-            // Check for terminal resize - only update cols, not rows (rows is unreliable)
-            if let Ok((cols, _rows)) = terminal::size() {
-                if cols != self.size.cols {
-                    self.size.cols = cols;
-                    // Don't update rows or scroll region - the initial cursor query gave us correct values
-                    let _ = coordinator_tx
-                        .send(ShellEvent::Resize {
-                            cols: self.size.cols,
-                            rows: self.size.rows,
-                        })
-                        .await;
+            // Check for terminal resize periodically (not on every event)
+            if last_resize_check.elapsed() > Duration::from_millis(500) {
+                last_resize_check = std::time::Instant::now();
+                if let Ok((cols, _rows)) = terminal::size() {
+                    if cols != self.size.cols {
+                        self.size.cols = cols;
+                        let _ = coordinator_tx
+                            .send(ShellEvent::Resize {
+                                cols: self.size.cols,
+                                rows: self.size.rows,
+                            })
+                            .await;
+                    }
                 }
             }
         }
@@ -523,14 +522,12 @@ impl ShellSession {
         match cmd {
             ShellCommand::ReloadReady { changed_files } => {
                 self.status_line.state_mut().set_reload_ready(changed_files);
-                self.status_line
-                    .draw(stdout, self.size.rows, self.size.cols)?;
+                self.status_line.draw(stdout, self.size.cols)?;
             }
 
             ShellCommand::Building { changed_files } => {
                 self.status_line.state_mut().set_building(changed_files);
-                self.status_line
-                    .draw(stdout, self.size.rows, self.size.cols)?;
+                self.status_line.draw(stdout, self.size.cols)?;
             }
 
             ShellCommand::BuildFailed {
@@ -540,26 +537,22 @@ impl ShellSession {
                 self.status_line
                     .state_mut()
                     .set_build_failed(changed_files, error);
-                self.status_line
-                    .draw(stdout, self.size.rows, self.size.cols)?;
+                self.status_line.draw(stdout, self.size.cols)?;
             }
 
             ShellCommand::ReloadApplied => {
                 self.status_line.state_mut().clear();
-                self.status_line
-                    .draw(stdout, self.size.rows, self.size.cols)?;
+                self.status_line.draw(stdout, self.size.cols)?;
             }
 
             ShellCommand::WatchedFiles { files } => {
                 self.status_line.state_mut().set_watched_files(files);
-                self.status_line
-                    .draw(stdout, self.size.rows, self.size.cols)?;
+                self.status_line.draw(stdout, self.size.cols)?;
             }
 
             ShellCommand::WatchingPaused { paused } => {
                 self.status_line.state_mut().set_paused(paused);
-                self.status_line
-                    .draw(stdout, self.size.rows, self.size.cols)?;
+                self.status_line.draw(stdout, self.size.cols)?;
             }
 
             ShellCommand::PrintWatchedFiles { files } => {

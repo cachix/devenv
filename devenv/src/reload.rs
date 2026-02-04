@@ -112,8 +112,10 @@ if [[ $- == *i* ]] && command -v bind >/dev/null 2>&1; then
     bind -x "\"${{__devenv_reload_keybind}}\":__devenv_reload_apply"
 fi
 
-# Append hook so it runs AFTER direnv's _direnv_hook
-PROMPT_COMMAND="${{PROMPT_COMMAND:+$PROMPT_COMMAND;}}__devenv_reload_hook"
+# Append hook so it runs AFTER direnv's _direnv_hook (only if not already added)
+if [[ "$PROMPT_COMMAND" != *"__devenv_reload_hook"* ]]; then
+    PROMPT_COMMAND="${{PROMPT_COMMAND:+$PROMPT_COMMAND;}}__devenv_reload_hook"
+fi
 "#,
                     reload_file.to_string_lossy()
                 )
