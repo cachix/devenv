@@ -195,8 +195,12 @@ pub fn create_flake_inputs(
     // Convert each devenv input to a FlakeInput
     for (name, input) in config.inputs.iter() {
         let mut flake_input = if let Some(url) = &input.url {
-            let (flake_ref, _fragment) =
-                FlakeReference::parse_with_fragment(fetch_settings, flake_settings, &parse_flags, url)?;
+            let (flake_ref, _fragment) = FlakeReference::parse_with_fragment(
+                fetch_settings,
+                flake_settings,
+                &parse_flags,
+                url,
+            )?;
             FlakeInput::new(&flake_ref, input.flake)?
         } else if let Some(follows_target) = &input.follows {
             // Top-level input has only follows - use follows target as placeholder reference

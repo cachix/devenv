@@ -129,7 +129,7 @@ pub struct GlobalOptions {
         long,
         global = true,
         env = "DEVENV_TRACE_OUTPUT",
-        help = "Enable tracing and set the output destination: stdout, stderr, or file:<path>. Tracing is disabled by default.",
+        help = "Enable tracing and set the output destination: stdout, stderr, or file:<path>. Tracing is disabled by default."
     )]
     pub trace_output: Option<TraceOutput>,
 
