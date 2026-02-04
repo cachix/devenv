@@ -197,6 +197,11 @@ in
     devenv-generate-individual-docs = generateIndividualDocs;
   };
 
+  scripts."devenv-build" = {
+    description = "Run devenv build, handling JSON output for devenv 2.0.0+";
+    exec = ./scripts/devenv-build.sh;
+  };
+
   scripts."devenv-generate-doc-options" = {
     description = "Generate option docs";
     exec = ./scripts/generate-doc-options.sh;
