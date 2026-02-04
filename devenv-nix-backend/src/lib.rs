@@ -70,52 +70,38 @@ unsafe extern "C" fn fixup_boehm_stack_pointer(
     sp_ptr: *mut *mut std::os::raw::c_void,
     pthread_id: *mut std::os::raw::c_void,
 ) {
+    use libc::{
+        pthread_attr_destroy, pthread_attr_getstack, pthread_getattr_np, pthread_attr_t, pthread_t,
+    };
     use std::os::raw::c_void;
 
-    // pthread types and functions from glibc — linked transitively through Nix.
-    unsafe extern "C" {
-        fn pthread_getattr_np(
-            thread: libc_pthread_t,
-            attr: *mut PthreadAttr,
-        ) -> std::os::raw::c_int;
-        fn pthread_attr_getstack(
-            attr: *const PthreadAttr,
-            stackaddr: *mut *mut c_void,
-            stacksize: *mut usize,
-        ) -> std::os::raw::c_int;
-        fn pthread_attr_destroy(attr: *mut PthreadAttr) -> std::os::raw::c_int;
-    }
-
-    // pthread_t is c_ulong on Linux.
-    type libc_pthread_t = std::os::raw::c_ulong;
-
-    // pthread_attr_t is 56 bytes on x86_64, 64 on aarch64. Use 64 to cover both.
-    #[repr(C)]
-    struct PthreadAttr {
-        _data: [u8; 64],
+    if pthread_id.is_null() {
+        return;
     }
 
     let sp = *sp_ptr;
-    let thread = pthread_id as libc_pthread_t;
+    let thread = pthread_id as pthread_t;
 
-    let mut attr = std::mem::MaybeUninit::<PthreadAttr>::zeroed().assume_init();
+    let mut attr = std::mem::MaybeUninit::<pthread_attr_t>::uninit();
 
-    if pthread_getattr_np(thread, &mut attr) != 0 {
+    if pthread_getattr_np(thread, attr.as_mut_ptr()) != 0 {
         return;
     }
 
     let mut stack_addr: *mut c_void = std::ptr::null_mut();
-    let mut stack_size: usize = 0;
+    let mut stack_size: libc::size_t = 0;
+
+    let mut attr = attr.assume_init();
 
     if pthread_attr_getstack(&attr, &mut stack_addr, &mut stack_size) != 0 {
-        pthread_attr_destroy(&mut attr);
+        let _ = pthread_attr_destroy(&mut attr);
         return;
     }
 
-    pthread_attr_destroy(&mut attr);
+    let _ = pthread_attr_destroy(&mut attr);
 
     // stack_addr is the lowest address; stack grows down from stack_addr + stack_size.
-    let stack_base = (stack_addr as *const u8).add(stack_size) as *mut c_void;
+    let stack_base = (stack_addr as *const u8).add(stack_size as usize) as *mut c_void;
 
     if sp >= stack_base || sp < stack_addr {
         // sp is outside the OS thread stack (inside a coroutine).
