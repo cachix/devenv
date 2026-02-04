@@ -134,8 +134,8 @@ impl NativeProcessManager {
             configs.insert(config.name.clone(), config.clone());
         }
 
-        // Extract ports from listen config
-        let ports: Vec<String> = config
+        // Extract ports from listen config and allocated ports
+        let mut ports: Vec<String> = config
             .listen
             .iter()
             .filter_map(|spec| {
@@ -147,6 +147,14 @@ impl NativeProcessManager {
                 })
             })
             .collect();
+        // Add allocated ports not already covered by listen specs
+        let listen_names: std::collections::HashSet<&str> =
+            config.listen.iter().map(|s| s.name.as_str()).collect();
+        for (name, port) in &config.ports {
+            if !listen_names.contains(name.as_str()) {
+                ports.push(format!("{}:{}", name, port));
+            }
+        }
 
         // Create activity for tracking this process
         let mut builder = Activity::process(&config.name)

@@ -433,6 +433,7 @@ in
             restart = process.restart;
             max_restarts = process.max_restarts;
             listen = process.listen;
+            ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
             watch = process.watch;
             notify = process.notify;
             watchdog = process.watchdog;

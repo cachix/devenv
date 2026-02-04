@@ -122,6 +122,7 @@ let
                 restart = config.restart;
                 max_restarts = config.max_restarts;
                 listen = config.listen;
+                ports = config.ports;
                 watch = config.watch;
                 notify = config.notify;
                 watchdog = config.watchdog;
@@ -223,6 +224,17 @@ let
             default = 5;
             description = ''
               Maximum number of restart attempts. null means unlimited restarts.
+
+              Only used when type = "process".
+            '';
+          };
+
+          ports = lib.mkOption {
+            type = types.attrsOf types.port;
+            default = { };
+            description = ''
+              Allocated ports for this process (name -> port number).
+              Populated automatically from process port allocation.
 
               Only used when type = "process".
             '';

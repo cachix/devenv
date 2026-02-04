@@ -146,6 +146,9 @@ pub struct ProcessConfig {
     pub pseudo_terminal: bool,
     #[serde(default)]
     pub listen: Vec<ListenSpec>,
+    /// Allocated ports for display (e.g., {"http": 8080, "admin": 9000})
+    #[serde(default)]
+    pub ports: HashMap<String, u16>,
     #[serde(default)]
     pub restart: RestartPolicy,
     #[serde(default)]

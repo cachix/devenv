@@ -207,7 +207,7 @@ in
           let
             native = cfg.processConfig.${name};
           in
-          removeAttrs process [ "process-compose" ] // {
+          removeAttrs process [ "process-compose" "ports" ] // {
             inherit name;
             inherit (native) use_sudo pseudo_terminal watchdog notify;
             listen = map
@@ -215,6 +215,7 @@ in
                 path = if spec.path != null then toString spec.path else null;
               })
               native.listen;
+            ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
             watch = native.watch // {
               paths = map toString native.watch.paths;
             };
