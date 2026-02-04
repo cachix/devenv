@@ -9490,6 +9490,8 @@ string
 
 ## git-hooks.hooks.php-cs-fixer.settings.binPath
 
+
+
 PHP-CS-Fixer binary path.
 
 
