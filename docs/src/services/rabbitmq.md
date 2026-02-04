@@ -176,7 +176,7 @@ boolean
 
 
 
-On which port to run the management plugin
+On which port to run the management plugin\.
 
 
 

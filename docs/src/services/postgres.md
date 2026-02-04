@@ -92,6 +92,7 @@ The available extensions are:
  - age
  - anonymizer
  - apache_datasketches
+ - callPackage
  - citus
  - cstore_fdw
  - h3-pg
@@ -104,6 +105,7 @@ The available extensions are:
  - pg-gvm
  - pg-semver
  - pg_auto_failover
+ - pg_background
  - pg_bigm
  - pg_byteamagic
  - pg_cron
@@ -146,6 +148,7 @@ The available extensions are:
  - plr
  - pltcl
  - plv8
+ - pointcloud
  - postgis
  - repmgr
  - rum

@@ -70,12 +70,12 @@ strings concatenated with “\\n”
 
 
 
-Which http port to run clickhouse on
+Which http port to run clickhouse on\.
 
 
 
 *Type:*
-signed integer
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
 
 
 
@@ -91,12 +91,12 @@ signed integer
 
 
 
-Which port to run clickhouse on
+Which port to run clickhouse on\.
 
 
 
 *Type:*
-signed integer
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
 
 
 

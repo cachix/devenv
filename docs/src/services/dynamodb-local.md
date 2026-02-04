@@ -54,7 +54,7 @@ package
 
 
 
-Listen address for the Dynamodb-local\.
+Listen port for DynamoDB Local\.
 
 
 

@@ -390,7 +390,6 @@ Access monitoring at http://host:port/varz
 
 
 Port to listen on for client connections\.
-Default NATS client port is 4222\.
 
 
 

@@ -240,7 +240,7 @@ Elasticsearch port to listen for HTTP traffic\.
 
 
 *Type:*
-signed integer
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
 
 
 
@@ -282,7 +282,7 @@ Elasticsearch port for the node to node communication\.
 
 
 *Type:*
-signed integer
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
 
 
 

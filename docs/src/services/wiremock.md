@@ -136,7 +136,7 @@ The port number for the HTTP server to listen on\.
 
 
 *Type:*
-signed integer
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
 
 
 

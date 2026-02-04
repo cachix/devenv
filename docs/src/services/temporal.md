@@ -307,7 +307,7 @@ Port for the Web UI\.
 
 
 *Default:*
-[` services.temporal.port `](\#servicestemporalport) + 1000
+` 8233 `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/temporal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)

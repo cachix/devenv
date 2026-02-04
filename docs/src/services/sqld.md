@@ -54,12 +54,12 @@ list of string
 
 
 
-Port number to listen on
+Port number to listen on\.
 
 
 
 *Type:*
-signed integer
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
 
 
 
