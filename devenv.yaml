@@ -16,6 +16,9 @@ inputs:
       nixpkgs:
         follows: nixpkgs
 
+  pre-commit-hooks:
+    follows: git-hooks
+
   rust-overlay:
     url: github:oxalica/rust-overlay
     inputs:
