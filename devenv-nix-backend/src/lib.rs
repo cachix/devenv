@@ -194,16 +194,23 @@ pub fn create_flake_inputs(
 
     // Convert each devenv input to a FlakeInput
     for (name, input) in config.inputs.iter() {
-        // Skip inputs without a URL (e.g., those with only "follows")
-        let url = match &input.url {
-            Some(url) => url,
-            None => continue,
+        let mut flake_input = if let Some(url) = &input.url {
+            let (flake_ref, _fragment) =
+                FlakeReference::parse_with_fragment(fetch_settings, flake_settings, &parse_flags, url)?;
+            FlakeInput::new(&flake_ref, input.flake)?
+        } else if let Some(follows_target) = &input.follows {
+            // Top-level input has only follows - use follows target as placeholder reference
+            // (the reference gets cleared internally by set_follows)
+            let (placeholder_ref, _) = FlakeReference::parse_with_fragment(
+                fetch_settings,
+                flake_settings,
+                &parse_flags,
+                follows_target,
+            )?;
+            FlakeInput::new(&placeholder_ref, true)?
+        } else {
+            continue;
         };
-
-        let (flake_ref, _fragment) =
-            FlakeReference::parse_with_fragment(fetch_settings, flake_settings, &parse_flags, url)?;
-
-        let mut flake_input = FlakeInput::new(&flake_ref, input.flake)?;
 
         // Set follows relationship before adding to collection
         // (C API does not support modifying inputs after they're added)
