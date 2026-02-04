@@ -57,4 +57,4 @@ jobs:
       # that is not thread-safe when multiple EvalStates are used concurrently
       - name: Run integration tests
         run: |
-          TOKIO_WORKER_THREADS=1 ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo nextest run --all-features -j 1
+          DEVENV_GC_SP_CORRECTOR=0 ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo nextest run --all-features -j 1

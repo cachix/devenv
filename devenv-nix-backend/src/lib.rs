@@ -54,6 +54,12 @@ pub fn nix_init() {
 fn install_gc_sp_corrector() {
     #[cfg(target_os = "linux")]
     {
+        if let Some(value) = std::env::var_os("DEVENV_GC_SP_CORRECTOR") {
+            let value = value.to_string_lossy();
+            if matches!(value.as_ref(), "0" | "false" | "off") {
+                return;
+            }
+        }
         unsafe {
             nix_bindings_bindgen_raw::GC_set_sp_corrector(Some(fixup_boehm_stack_pointer));
         }
