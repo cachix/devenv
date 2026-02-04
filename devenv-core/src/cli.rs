@@ -128,21 +128,20 @@ pub struct GlobalOptions {
     #[arg(
         long,
         global = true,
-        env = "DEVENV_TRACE_FORMAT",
-        help = "Configure the output format of traces.",
-        default_value_t,
-        value_enum
+        env = "DEVENV_TRACE_OUTPUT",
+        help = "Enable tracing and set the output destination: stdout, stderr, or file:<path>. Tracing is disabled by default.",
     )]
-    pub trace_format: TraceFormat,
+    pub trace_output: Option<TraceOutput>,
 
     #[arg(
         long,
         global = true,
-        env = "DEVENV_TRACE_OUTPUT",
-        help = "Where to export traces (stdout, stderr, or file path).",
-        hide = true
+        env = "DEVENV_TRACE_FORMAT",
+        help = "Set the trace output format. Only takes effect when tracing is enabled via --trace-output.",
+        default_value_t,
+        value_enum
     )]
-    pub trace_output: Option<TraceOutput>,
+    pub trace_format: TraceFormat,
 
     #[arg(short = 'j', long,
         global = true,
