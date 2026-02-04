@@ -331,7 +331,7 @@ in
             type = types.nullOr types.str;
             default = null;
             description = ''
-              Username of owner of the database (if null, the default $USER is used).
+              Username of owner of the database (if null, the default $USER is used, only takes effect if `pass` is not `null`).
             '';
           };
           pass = lib.mkOption {
@@ -380,7 +380,8 @@ in
         SQL expressions separated by a semi-colon.
         Use `initialScript` for server-wide setup, such as creating roles or configuring
         global settings. For database-specific initialization, use `initialSQL` within
-        `initialDatabases`.
+        `initialDatabases`. `initialScript` is executed after the `initialDatabases`
+        setup is done.
       '';
       example = lib.literalExpression ''
         CREATE ROLE postgres SUPERUSER;
