@@ -1,14 +1,17 @@
-{ inputs
-, pkgs
-, lib
-, config
-, options
-, ...
+{
+  inputs,
+  pkgs,
+  lib,
+  config,
+  options,
+  ...
 }:
 {
   env = {
     # The path to the eval cache database (for migrations)
     DATABASE_URL = "sqlite:.devenv/nix-eval-cache.db";
+
+    LIBSQLITE3_SYS_USE_PKG_CONFIG = "1";
 
     RUST_LOG = "devenv=debug";
     RUST_LOG_SPAN_EVENTS = "full";
@@ -65,6 +68,7 @@
     pkgs.tesh
     pkgs.watchexec
     pkgs.openssl
+    pkgs.sqlite
     pkgs.sqlx-cli
     pkgs.process-compose
     pkgs.cargo-outdated # Find outdated crates

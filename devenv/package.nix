@@ -1,25 +1,27 @@
-{ src
-, version
-, cargoLock
-, cargoProfile ? "release"
-, gitRev ? ""
-, isRelease ? false
-, lib
-, stdenv
-, makeBinaryWrapper
-, installShellFiles
-, rustPlatform
-, cachix
-, nixd
-, gitMinimal
-, openssl
-, dbus
-, protobuf
-, pkg-config
-, glibcLocalesUtf8
-, nix
-, llvmPackages
-, boehmgc
+{
+  src,
+  version,
+  cargoLock,
+  cargoProfile ? "release",
+  gitRev ? "",
+  isRelease ? false,
+  lib,
+  stdenv,
+  makeBinaryWrapper,
+  installShellFiles,
+  rustPlatform,
+  cachix,
+  nixd,
+  gitMinimal,
+  openssl,
+  dbus,
+  protobuf,
+  pkg-config,
+  glibcLocalesUtf8,
+  nix,
+  llvmPackages,
+  boehmgc,
+  sqlite,
 }:
 
 rustPlatform.buildRustPackage {
@@ -30,6 +32,7 @@ rustPlatform.buildRustPackage {
   DEVENV_GIT_REV = gitRev;
   DEVENV_IS_RELEASE = if isRelease then "1" else "";
   VERGEN_IDEMPOTENT = "1";
+  LIBSQLITE3_SYS_USE_PKG_CONFIG = "1";
 
   cargoBuildFlags = [ "-p devenv -p devenv-run-tests" ];
   buildType = cargoProfile;
@@ -44,6 +47,7 @@ rustPlatform.buildRustPackage {
 
   buildInputs = [
     openssl
+    sqlite
     nix.libs.nix-expr-c
     nix.libs.nix-store-c
     nix.libs.nix-util-c
@@ -85,7 +89,11 @@ rustPlatform.buildRustPackage {
   '';
 
   # Skip devenv-nix-backend tests in sandbox due to store permission restrictions
-  cargoTestFlags = [ "--workspace" "--exclude" "devenv-nix-backend" ];
+  cargoTestFlags = [
+    "--workspace"
+    "--exclude"
+    "devenv-nix-backend"
+  ];
 
   postInstall =
     let
