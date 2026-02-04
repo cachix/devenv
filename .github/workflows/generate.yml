@@ -29,7 +29,8 @@ jobs:
 
       - name: Generate doc options
         working-directory: docs/gen
-        run: devenv shell devenv-generate-doc-options
+        # TODO: remove the dirty lock flag once 2.0 is released
+        run: devenv shell devenv-generate-doc-options --nix-option allow-dirty-locks true
 
       - uses: EndBug/add-and-commit@v9
         if: ${{ github.event_name == 'push' }}
@@ -41,9 +42,9 @@ jobs:
       - name: Generate docs
         working-directory: docs/gen
         run: |
-          devenv shell devenv-generate-docs
-          devenv shell devenv-verify-individual-docs
-          devenv shell devenv-generate-individual-docs
+          devenv shell devenv-generate-docs --nix-option allow-dirty-locks true
+          devenv shell devenv-verify-individual-docs --nix-option allow-dirty-locks true
+          devenv shell devenv-generate-individual-docs --nix-option allow-dirty-locks true
 
       - uses: EndBug/add-and-commit@v9
         if: ${{ github.event_name == 'push' }}
