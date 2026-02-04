@@ -66,6 +66,8 @@ pub fn view(
             model.get_build_logs(activity.id).cloned()
         } else if devenv_failed {
             model.get_build_logs(activity.id).cloned()
+        } else if matches!(activity.variant, ActivityVariant::Process(_)) {
+            model.get_build_logs(activity.id).cloned()
         } else if let ActivityVariant::Message(ref msg_data) = activity.variant
             && msg_data.details.is_some()
         {
@@ -567,28 +569,32 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             let status_text = Some(format!("{}{}", status_str, ports_suffix));
 
-            // For selected process activities, show expandable logs
-            if *is_selected && logs.is_some() {
-                let prefix = build_activity_prefix(*depth, *completed);
+            let prefix = build_activity_prefix(*depth, *completed);
 
-                let main_line =
-                    ActivityTextComponent::new("".to_string(), activity.name.clone(), elapsed_str)
-                        .with_suffix(status_text.clone())
-                        .with_selection(*is_selected)
-                        .render(terminal_width, *depth, prefix);
+            let main_line =
+                ActivityTextComponent::new("".to_string(), activity.name.clone(), elapsed_str)
+                    .with_suffix(status_text)
+                    .with_selection(*is_selected)
+                    .render(terminal_width, *depth, prefix);
 
-                // Create multi-line element with log list
-                let mut elements = vec![main_line];
-
-                // Add log list (collapsed preview, press 'e' to expand)
-                let logs_component = ExpandedContentComponent::new(logs.as_deref())
+            // Show logs: always show LOG_VIEWPORT_SHOW_OUTPUT lines,
+            // expand when selected, show more when failed
+            let process_failed = *completed == Some(false);
+            if logs.is_some() {
+                let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_depth(*depth)
                     .with_empty_message("→ no output yet (press 'e' to expand)");
-                let log_elements = logs_component.render();
+                if process_failed {
+                    component = component.with_max_lines(LOG_VIEWPORT_FAILED);
+                } else if !is_selected {
+                    component = component.with_max_lines(LOG_VIEWPORT_SHOW_OUTPUT);
+                }
+
+                let mut elements = vec![main_line];
+                let log_elements = component.render();
                 elements.extend(log_elements);
 
-                // Calculate total height
-                let log_viewport_height = logs_component.calculate_height();
+                let log_viewport_height = component.calculate_height();
                 let total_height = (1 + log_viewport_height).min(50) as u32;
                 return element! {
                     View(height: total_height, flex_direction: FlexDirection::Column) {
@@ -598,12 +604,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .into_any();
             }
 
-            let prefix = build_activity_prefix(*depth, *completed);
-
-            return ActivityTextComponent::new("".to_string(), activity.name.clone(), elapsed_str)
-                .with_suffix(status_text)
-                .with_selection(*is_selected)
-                .render(terminal_width, *depth, prefix);
+            return main_line;
         }
         ActivityVariant::Message(msg_data) => {
             // Determine icon and color based on message level
