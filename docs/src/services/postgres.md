@@ -395,7 +395,7 @@ null or absolute path
 
 
 
-Username of owner of the database (if null, the default $USER is used)\.
+Username of owner of the database (if null, the default $USER is used, only takes effect if ` pass ` is not ` null `)\.
 
 
 
@@ -420,7 +420,8 @@ Initial SQL commands to run during database initialization\. This can be multipl
 SQL expressions separated by a semi-colon\.
 Use ` initialScript ` for server-wide setup, such as creating roles or configuring
 global settings\. For database-specific initialization, use ` initialSQL ` within
-` initialDatabases `\.
+` initialDatabases `\. ` initialScript ` is executed after the ` initialDatabases `
+setup is done\.
 
 
 
