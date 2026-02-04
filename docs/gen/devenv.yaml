@@ -1,7 +1,7 @@
 inputs:
   # Use the local development modules
   devenv:
-    url: git+file:../../?dir=src/modules
+    url: ../../?dir=src/modules
 
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
