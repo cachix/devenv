@@ -10,6 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "cargo:rustc-env=TARGET_OS={}",
         std::env::var("CARGO_CFG_TARGET_OS").unwrap()
     );
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     // Rerun if init directory changes
     println!("cargo:rerun-if-changed=init");
 
@@ -40,6 +41,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-env-changed=DEVENV_IS_RELEASE");
     if let Ok(val) = std::env::var("DEVENV_IS_RELEASE") {
         println!("cargo:rustc-env=DEVENV_IS_RELEASE={val}");
+    }
+
+    if target_os == "linux" {
+        let out_dir = std::env::var("OUT_DIR")?;
+        let map_path = std::path::Path::new(&out_dir).join("hide-sqlite.map");
+        std::fs::write(&map_path, "{\n  local: sqlite3*;\n};\n")?;
+        println!(
+            "cargo:rustc-link-arg=-Wl,--version-script={}",
+            map_path.display()
+        );
     }
 
     Ok(())

@@ -1481,6 +1481,7 @@ dependencies = [
  "devenv-eval-cache",
  "devenv-nix-backend-macros",
  "include_dir",
+ "libc",
  "miette",
  "nix-bindings-bindgen-raw",
  "nix-bindings-expr",
