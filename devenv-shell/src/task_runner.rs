@@ -137,10 +137,10 @@ impl PtyTaskRunner {
         // Echo end marker with exit code
         cmd_parts.push(format!("echo '{end_marker_prefix}'$?'__'"));
 
-        // Join with semicolons and add newline
-        // Prefix with space to prevent command from being saved to shell history
-        // (bash/zsh ignore space-prefixed commands when HISTCONTROL includes ignorespace)
-        let full_cmd = format!(" {}\n", cmd_parts.join("; "));
+        // Join with semicolons and add newline.
+        // History is disabled during task execution (set +o history in rcfile),
+        // so these commands won't appear in user's shell history.
+        let full_cmd = format!("{}\n", cmd_parts.join("; "));
 
         // Write command to PTY
         tracing::trace!("execute: writing command to PTY:\n{}", full_cmd);
@@ -264,9 +264,10 @@ impl PtyTaskRunner {
     }
 
     /// Disable PROMPT_COMMAND to avoid ~100ms+ overhead per task from prompt hooks.
+    /// History is already disabled from shell init, so we just save/clear PROMPT_COMMAND.
     fn disable_prompt_command(&self) -> Result<(), TaskRunnerError> {
         self.pty
-            .write_all(b" __devenv_saved_pc=\"$PROMPT_COMMAND\"; PROMPT_COMMAND=\n")
+            .write_all(b"__devenv_saved_pc=\"$PROMPT_COMMAND\"; PROMPT_COMMAND=\n")
             .map_err(|e| {
                 TaskRunnerError::Pty(format!("Failed to disable PROMPT_COMMAND: {}", e))
             })?;
@@ -275,10 +276,10 @@ impl PtyTaskRunner {
             .map_err(|e| TaskRunnerError::Pty(format!("Failed to flush PTY: {}", e)))
     }
 
-    /// Restore PROMPT_COMMAND after task batch completes.
+    /// Restore PROMPT_COMMAND and re-enable history when handing control to user.
     fn restore_prompt_command(&self) -> Result<(), TaskRunnerError> {
         self.pty
-            .write_all(b" PROMPT_COMMAND=\"$__devenv_saved_pc\"\n")
+            .write_all(b"PROMPT_COMMAND=\"$__devenv_saved_pc\"; set -o history\n")
             .map_err(|e| {
                 TaskRunnerError::Pty(format!("Failed to restore PROMPT_COMMAND: {}", e))
             })?;
@@ -325,8 +326,53 @@ impl PtyTaskRunner {
         }
 
         self.restore_prompt_command()?;
+
+        // Drain any pending PTY output into VT so it doesn't leak to stdout later.
+        // Give the shell time to render its prompt (starship can be slow).
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        self.drain_pty_to_vt(vt).await;
+        // Drain again in case more output came
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        self.drain_pty_to_vt(vt).await;
+
         tracing::trace!("run_with_vt: task channel closed, exiting");
         Ok(())
+    }
+
+    /// Drain any pending PTY output into VT without blocking.
+    async fn drain_pty_to_vt(&self, vt: &mut avt::Vt) {
+        // Use a short timeout to avoid blocking if there's no data
+        let pty_clone = Arc::clone(&self.pty);
+        let drain_result = tokio::time::timeout(
+            tokio::time::Duration::from_millis(100),
+            tokio::task::spawn_blocking(move || {
+                let mut buf = [0u8; 4096];
+                let mut total = 0;
+                // Try to read available data (non-blocking would be ideal but we use timeout)
+                loop {
+                    match pty_clone.read(&mut buf) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            total += n;
+                            // Return what we read
+                            return Ok::<_, std::io::Error>((buf, n));
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                        Err(_) => break,
+                    }
+                }
+                Ok((buf, total))
+            }),
+        )
+        .await;
+
+        if let Ok(Ok(Ok((buf, n)))) = drain_result {
+            if n > 0 {
+                let chunk = String::from_utf8_lossy(&buf[..n]);
+                vt.feed_str(&chunk);
+                tracing::trace!("drain_pty_to_vt: drained {} bytes", n);
+            }
+        }
     }
 
     /// Wait for shell ready while feeding VT.

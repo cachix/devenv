@@ -180,7 +180,8 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     let (backend_done_tx, backend_done_rx) = tokio::sync::oneshot::channel();
 
     // Channel for terminal handoff: signals ShellSession when TUI has released the terminal
-    let (terminal_ready_tx, terminal_ready_rx) = tokio::sync::oneshot::channel();
+    // Passes the TUI's final render height for cursor positioning
+    let (terminal_ready_tx, terminal_ready_rx) = tokio::sync::oneshot::channel::<u16>();
 
     // Devenv on background thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
@@ -204,17 +205,18 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
 
     // TUI on main thread (owns terminal)
     // Runs until backend signals completion, then drains remaining events
-    let _ = devenv_tui::TuiApp::new(activity_rx, shutdown)
+    let tui_render_height = devenv_tui::TuiApp::new(activity_rx, shutdown)
         .filter_level(filter_level)
         .shutdown_on_backend_done(shutdown_on_backend_done)
         .run(backend_done_rx)
-        .await;
+        .await
+        .unwrap_or(0);
 
     // Restore terminal to normal state (disable raw mode, show cursor)
     devenv_tui::app::restore_terminal();
 
-    // Signal backend that terminal is now available for shell
-    let _ = terminal_ready_tx.send(());
+    // Signal backend that terminal is now available for shell, passing render height
+    let _ = terminal_ready_tx.send(tui_render_height);
 
     let Ok(devenv_output) = devenv_thread.join() else {
         bail!("devenv thread panicked");
@@ -344,7 +346,7 @@ async fn run_devenv(
     cli: Cli,
     shutdown: Arc<Shutdown>,
     backend_done_tx: tokio::sync::oneshot::Sender<()>,
-    terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<()>>,
+    terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
 ) -> DevenvOutput {
     // Command is guaranteed to exist (Version/Direnvrc handled in main)
     let command = cli.command.clone().expect("Command should exist");
@@ -472,7 +474,7 @@ async fn run_devenv_inner(
     command: Commands,
     shutdown: Arc<Shutdown>,
     backend_done_tx: tokio::sync::oneshot::Sender<()>,
-    terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<()>>,
+    terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
 ) -> Result<CommandResult> {
     // Wrap in Option so shell commands can consume it, others send at end
     let mut backend_done_tx = Some(backend_done_tx);
@@ -729,14 +731,14 @@ fn build_rev() -> Option<String> {
 ///
 /// Terminal handoff:
 /// - `backend_done_tx`: Signals TUI to exit (sent after initial build completes)
-/// - `terminal_ready_rx`: Waits for TUI cleanup before ShellSession takes terminal
+/// - `terminal_ready_rx`: Waits for TUI cleanup before ShellSession takes terminal (receives render height)
 async fn run_reload_shell(
     devenv: &Devenv,
     cmd: Option<String>,
     args: Vec<String>,
     shutdown: Arc<Shutdown>,
     backend_done_tx: tokio::sync::oneshot::Sender<()>,
-    terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<()>>,
+    terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
 ) -> Result<()> {
     use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
     use devenv_tasks::PtyExecutor;
@@ -865,9 +867,9 @@ async fn run_reload_shell(
             pty_ready_tx,
         })
     } else {
-        // No TUI - create dummy channel that completes immediately
-        let (dummy_tx, dummy_rx) = tokio::sync::oneshot::channel();
-        let _ = dummy_tx.send(()); // Immediately signal ready
+        // No TUI - create dummy channel that completes immediately with 0 height
+        let (dummy_tx, dummy_rx) = tokio::sync::oneshot::channel::<u16>();
+        let _ = dummy_tx.send(0); // Immediately signal ready with no render height
         Some(TuiHandoff {
             backend_done_tx,
             terminal_ready_rx: dummy_rx,

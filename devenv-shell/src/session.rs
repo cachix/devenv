@@ -87,8 +87,8 @@ pub enum SessionError {
 pub struct TuiHandoff {
     /// Signal when backend work is done (TUI can exit).
     pub backend_done_tx: oneshot::Sender<()>,
-    /// Wait for TUI to release terminal.
-    pub terminal_ready_rx: oneshot::Receiver<()>,
+    /// Wait for TUI to release terminal. Receives the TUI's final render height.
+    pub terminal_ready_rx: oneshot::Receiver<u16>,
     /// Optional channel to receive task execution requests.
     pub task_rx: Option<mpsc::Receiver<PtyTaskRequest>>,
     /// Optional channel to signal PTY is ready for tasks.
@@ -254,17 +254,11 @@ impl ShellSession {
 
         let mut stdout = io::stdout();
 
-        // Reset terminal state from TUI: scroll region and origin mode
-        write!(stdout, "\x1b[r\x1b[?6l")?;
+        // Query cursor position FIRST before any terminal resets.
+        // This tells us where TUI left the cursor after its final render.
+        write!(stdout, "\x1b[6n")?;
         stdout.flush()?;
 
-        // Query actual terminal size by moving cursor to bottom-right and reading position
-        // This is more reliable than terminal::size() which can return wrong values
-        write!(stdout, "\x1b[999;999H\x1b[6n")?;
-        stdout.flush()?;
-
-        // Read cursor position response: ESC [ rows ; cols R
-        // We need to read from stdin in raw mode
         let mut response = Vec::new();
         let mut stdin = io::stdin();
         let mut buf = [0u8; 1];
@@ -276,65 +270,57 @@ impl ShellSession {
                 }
             }
             if response.len() > 20 {
-                break; // Safety limit
+                break;
             }
         }
 
-        // Parse response: ESC [ rows ; cols R
-        if let Some(pos) = response.iter().position(|&b| b == b'[').and_then(|start| {
-            let s = String::from_utf8_lossy(&response[start + 1..response.len() - 1]);
-            let parts: Vec<&str> = s.split(';').collect();
-            if parts.len() == 2 {
-                Some((
-                    parts[0].parse::<u16>().unwrap_or(24),
-                    parts[1].parse::<u16>().unwrap_or(80),
-                ))
-            } else {
-                None
-            }
-        }) {
+        // Parse cursor row from response: ESC [ row ; col R
+        let cursor_row = response
+            .iter()
+            .position(|&b| b == b'[')
+            .and_then(|start| {
+                let s =
+                    String::from_utf8_lossy(&response[start + 1..response.len().saturating_sub(1)]);
+                s.split(';').next()?.parse::<u16>().ok()
+            })
+            .unwrap_or(1);
+        tracing::debug!("session: cursor position after TUI: row {}", cursor_row);
+
+        // Reset terminal state from TUI: scroll region and origin mode
+        write!(stdout, "\x1b[r\x1b[?6l")?;
+        stdout.flush()?;
+
+        // Get terminal size without moving cursor (preserves TUI cursor position)
+        if let Ok((cols, rows)) = terminal::size() {
             self.size = PtySize {
-                rows: pos.0,
-                cols: pos.1,
+                rows,
+                cols,
                 pixel_width: 0,
                 pixel_height: 0,
             };
-            tracing::debug!(
-                "session: actual terminal size (via cursor query): {}x{}",
-                self.size.cols,
-                self.size.rows
-            );
-        } else {
-            // Fallback to crossterm
-            if let Ok((cols, rows)) = terminal::size() {
-                self.size = PtySize {
-                    rows,
-                    cols,
-                    pixel_width: 0,
-                    pixel_height: 0,
-                };
-            }
-            tracing::debug!(
-                "session: terminal size (fallback): {}x{}",
-                self.size.cols,
-                self.size.rows
-            );
         }
+        tracing::debug!(
+            "session: terminal size: {}x{}",
+            self.size.cols,
+            self.size.rows
+        );
         // Resize PTY to match current terminal size (minus status line row)
         let _ = pty.resize(self.pty_size());
 
         // Set up scroll region to reserve bottom row for status line
         if self.config.show_status_line {
             self.setup_scroll_region(&mut stdout)?;
-            // Move cursor to top-left and clear the scroll region
-            execute!(stdout, cursor::MoveTo(0, 0))?;
-            execute!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown))?;
-            // Draw status line at absolute bottom
+            // Draw status line at absolute bottom (preserves TUI output above)
             self.status_line.draw(&mut stdout, self.size.cols)?;
         }
 
-        // Send Ctrl-L to shell to redraw prompt cleanly
-        pty.write_all(b"\x0c")?;
+        // Position cursor where TUI left it (queried above).
+        // cursor_row is 1-based from terminal, MoveTo uses 0-based.
+        execute!(stdout, cursor::MoveTo(0, cursor_row.saturating_sub(1)))?;
+        stdout.flush()?;
+
+        // Send newline to trigger shell prompt display
+        pty.write_all(b"\n")?;
         pty.flush()?;
 
         // Set up event channel

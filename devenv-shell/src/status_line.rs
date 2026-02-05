@@ -295,31 +295,24 @@ impl StatusLine {
         // Update spinner animation
         self.update_spinner();
 
-        // Save cursor position
-        execute!(stdout, cursor::SavePosition)?;
-
-        // Reset origin mode (DECOM) to ensure absolute cursor positioning,
-        // then move to last row using large number (terminals clamp to actual last row)
-        write!(stdout, "\x1b[?6l\x1b[999;1H")?;
-
-        // Clear the line
-        execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
-
-        // Build and render the element with ANSI colors
+        // Build the status line content first (before any cursor movement)
         let mut element = self.build_element(cols);
         let canvas = element.render(Some(cols as usize));
-
-        // Write only the first line to avoid extra rows
-        let mut buffer = Vec::new();
-        canvas.write_ansi(&mut buffer)?;
-        // Find first newline and truncate there (keep only first line)
-        if let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
-            buffer.truncate(pos);
+        let mut content = Vec::new();
+        canvas.write_ansi(&mut content)?;
+        // Truncate at first newline to keep only first line
+        if let Some(pos) = content.iter().position(|&b| b == b'\n') {
+            content.truncate(pos);
         }
-        stdout.write_all(&buffer)?;
 
-        // Restore cursor position
-        execute!(stdout, cursor::RestorePosition)?;
+        // Write everything in one batch to minimize flicker:
+        // 1. Hide cursor + save position
+        // 2. Move to status line + clear + write content
+        // 3. Restore position + show cursor
+        // Using raw escape sequences to avoid multiple flushes from execute! macro
+        write!(stdout, "\x1b[?25l\x1b7\x1b[?6l\x1b[999;1H\x1b[2K")?;
+        stdout.write_all(&content)?;
+        write!(stdout, "\x1b8\x1b[?25h")?;
         stdout.flush()?;
 
         Ok(())

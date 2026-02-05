@@ -127,7 +127,11 @@ fi
             // This sets up the environment and hot-reload hook.
             // The __DEVENV_SHELL_READY__ marker signals that initialization is complete.
             let rcfile_content = format!(
-                r#"# Source the devenv environment
+                r#"# Disable history during init so devenv internal commands don't pollute history.
+# The task runner will re-enable it when handing control to the user.
+set +o history
+
+# Source the devenv environment
 source "{env_script_path}"
 
 # Save PATH before ~/.bashrc potentially modifies it
