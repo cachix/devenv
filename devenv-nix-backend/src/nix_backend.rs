@@ -245,13 +245,6 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to register thread with Nix garbage collector")?;
 
-        // Force GC collection at the start of backend creation to ensure any garbage
-        // from a previous backend is fully collected before we start initializing.
-        // This helps prevent heap corruption when creating multiple backends in sequence.
-        unsafe {
-            nix_bindings_bindgen_raw::GC_gcollect();
-        }
-
         // Set experimental features after init() to ensure they're properly configured
         settings::set("experimental-features", "flakes nix-command")
             .to_miette()
