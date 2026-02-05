@@ -54,5 +54,8 @@ jobs:
           nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv-tasks-fast-build
 
       - name: Run integration tests
+        env:
+          RUST_BACKTRACE: 1
+          RUSTFLAGS: "-C debuginfo=2 --cfg tracing_unstable"
         run: |
-          RUST_BACKTRACE=1 RUSTFLAGS='-C debuginfo=2 --cfg tracing_unstable' ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo nextest run --all-features
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo nextest run --all-features -j 1

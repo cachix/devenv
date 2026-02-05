@@ -68,11 +68,11 @@ pub fn nix_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #[test]
         #fn_vis fn #fn_name() {
             devenv_nix_backend::nix_init();
-            tokio::runtime::Builder::new_multi_thread()
+            tokio::runtime::Builder::new_current_thread()
                 .enable_all()
-                .on_thread_start(|| {
-                    let _ = devenv_nix_backend::gc_register_current_thread();
-                })
+                // .on_thread_start(|| {
+                //     let _ = devenv_nix_backend::gc_register_current_thread();
+                // })
                 .build()
                 .expect("Failed to create test runtime")
                 .block_on(async #fn_block)
