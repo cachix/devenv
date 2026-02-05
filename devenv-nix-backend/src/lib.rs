@@ -30,15 +30,6 @@ pub fn nix_init() {
     NIX_INIT.call_once(|| {
         nix_bindings_expr::eval_state::init().expect("Failed to initialize Nix expression library");
         install_gc_sp_corrector();
-
-        // Disable Boehm GC completely on Linux to work around heap corruption.
-        // The GC doesn't scan boost coroutine fiber stacks (used by Nix's
-        // sourceToSink/sinkToSource for store I/O), causing it to collect
-        // live objects and corrupt the heap.
-        #[cfg(target_os = "linux")]
-        unsafe {
-            nix_bindings_bindgen_raw::GC_disable();
-        }
     });
 }
 
@@ -86,7 +77,7 @@ unsafe extern "C" fn fixup_boehm_stack_pointer(
     pthread_id: *mut std::os::raw::c_void,
 ) {
     use libc::{
-        pthread_attr_destroy, pthread_attr_getstack, pthread_getattr_np, pthread_attr_t, pthread_t,
+        pthread_attr_destroy, pthread_attr_getstack, pthread_attr_t, pthread_getattr_np, pthread_t,
     };
     use std::os::raw::c_void;
 
