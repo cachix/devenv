@@ -677,6 +677,120 @@ impl Tasks {
     }
 }
 
+/// Compute the hierarchy edges for displaying tasks from task configurations.
+///
+/// This builds a graph from the task configs and computes the display hierarchy,
+/// returning edges as (parent_name, child_name) pairs where root tasks have None
+/// as parent.
+///
+/// # Arguments
+/// * `tasks` - The task configurations to process
+///
+/// # Returns
+/// A vector of (Option<parent_name>, child_name) edges for display
+pub fn compute_display_hierarchy(tasks: &[crate::TaskConfig]) -> Vec<(Option<String>, String)> {
+    use crate::config::parse_dependency;
+
+    if tasks.is_empty() {
+        return Vec::new();
+    }
+
+    // Build a graph from task configs
+    let mut graph: DiGraph<String, ()> = DiGraph::new();
+    let mut name_to_index: HashMap<String, NodeIndex> = HashMap::new();
+
+    // Add all tasks as nodes
+    for task in tasks {
+        let index = graph.add_node(task.name.clone());
+        name_to_index.insert(task.name.clone(), index);
+    }
+
+    // Add edges for dependencies
+    for task in tasks {
+        let Some(&task_index) = name_to_index.get(&task.name) else {
+            continue;
+        };
+
+        // Handle "after" dependencies (task runs after these)
+        for dep_name in &task.after {
+            if let Ok(dep_spec) = parse_dependency(dep_name)
+                && let Some(&dep_index) = name_to_index.get(&dep_spec.name)
+            {
+                // Edge from dependency to dependent (dep -> task)
+                graph.add_edge(dep_index, task_index, ());
+            }
+        }
+
+        // Handle "before" dependencies (task runs before these)
+        for before_name in &task.before {
+            if let Ok(dep_spec) = parse_dependency(before_name)
+                && let Some(&before_index) = name_to_index.get(&dep_spec.name)
+            {
+                // Edge from task to the one that runs after (task -> before)
+                graph.add_edge(task_index, before_index, ());
+            }
+        }
+    }
+
+    // Find roots (tasks with no dependents - nothing runs after them)
+    let roots: Vec<NodeIndex> = graph
+        .node_indices()
+        .filter(|&index| {
+            graph
+                .neighbors_directed(index, petgraph::Direction::Outgoing)
+                .next()
+                .is_none()
+        })
+        .collect();
+
+    // Get topological order (or just iterate if there are cycles)
+    let tasks_order: Vec<NodeIndex> = toposort(&graph, None).unwrap_or_else(|_| {
+        // If there's a cycle, just use all nodes in arbitrary order
+        graph.node_indices().collect()
+    });
+
+    // Compute hierarchy edges using the same algorithm as compute_hierarchy_edges
+    let mut edges = Vec::new();
+
+    for &index in &tasks_order {
+        let task_name = graph[index].clone();
+        let is_root_task = roots.contains(&index);
+
+        if is_root_task {
+            edges.push((None, task_name));
+        } else {
+            // Find dependents (tasks that depend on this task, i.e., run after it)
+            let dependents: Vec<NodeIndex> = graph
+                .neighbors_directed(index, petgraph::Direction::Outgoing)
+                .collect();
+
+            // Filter to uncovered dependents only
+            let uncovered_dependents: Vec<NodeIndex> = dependents
+                .iter()
+                .filter(|&&d1| {
+                    // D1 is uncovered if it doesn't transitively depend on any other dependent D2
+                    !dependents
+                        .iter()
+                        .any(|&d2| d1 != d2 && has_path_connecting(&Reversed(&graph), d1, d2, None))
+                })
+                .copied()
+                .collect();
+
+            if uncovered_dependents.is_empty() {
+                // Fallback to root if no uncovered dependents
+                edges.push((None, task_name));
+            } else {
+                for dependent_index in uncovered_dependents {
+                    let parent_name = graph[dependent_index].clone();
+                    edges.push((Some(parent_name), task_name.clone()));
+                }
+            }
+        }
+    }
+
+    edges
+}
+
 /// Compute the hierarchy edges for displaying tasks in the TUI.
 ///
 /// For each task, this finds its "uncovered" dependents - the most immediate

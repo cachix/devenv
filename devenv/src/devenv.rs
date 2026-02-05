@@ -2070,142 +2070,111 @@ fn merge_task_input(
 }
 
 fn format_tasks_tree(tasks: &Vec<tasks::TaskConfig>) -> String {
+    use std::fmt::Write;
+
     let mut output = String::new();
 
-    // Build dependency information
-    let mut task_deps: HashMap<String, Vec<String>> = HashMap::new();
-    let mut task_dependents: HashMap<String, Vec<String>> = HashMap::new();
-    let task_names: HashSet<String> = tasks.iter().map(|t| t.name.clone()).collect();
-    let mut task_configs: HashMap<String, &tasks::TaskConfig> = HashMap::new();
+    // Build task config lookup for extra info
+    let task_configs: HashMap<&str, &tasks::TaskConfig> =
+        tasks.iter().map(|t| (t.name.as_str(), t)).collect();
 
-    for task in tasks {
-        task_deps.insert(task.name.clone(), task.after.clone());
-        task_configs.insert(task.name.clone(), task);
+    // Get hierarchy edges from the shared function
+    let edges = tasks::compute_display_hierarchy(tasks);
 
-        // Build reverse dependencies (dependents)
-        for dep in &task.after {
-            task_dependents
-                .entry(dep.clone())
-                .or_default()
-                .push(task.name.clone());
-        }
-
-        // Handle "before" dependencies
-        for before in &task.before {
-            task_deps
-                .entry(before.clone())
-                .or_default()
-                .push(task.name.clone());
-            task_dependents
-                .entry(task.name.clone())
-                .or_default()
-                .push(before.clone());
-        }
+    // Build parent -> children mapping
+    let mut children_map: HashMap<Option<&str>, Vec<&str>> = HashMap::new();
+    for (parent, child) in &edges {
+        children_map
+            .entry(parent.as_deref())
+            .or_default()
+            .push(child.as_str());
     }
 
+    // Sort children at each level
+    for children in children_map.values_mut() {
+        children.sort();
+    }
+
+    // Track visited tasks to avoid duplicates
     let mut visited = HashSet::new();
 
-    // Find root tasks (those with no dependencies)
-    let mut roots: Vec<&str> = Vec::new();
-    for task in tasks {
-        let deps = task_deps.get(&task.name).unwrap();
-        if deps.is_empty() || !deps.iter().any(|d| task_names.contains(d)) {
-            roots.push(&task.name);
+    // Recursive function to format a task and its children
+    fn format_task(
+        output: &mut String,
+        task_name: &str,
+        children_map: &HashMap<Option<&str>, Vec<&str>>,
+        task_configs: &HashMap<&str, &tasks::TaskConfig>,
+        visited: &mut HashSet<String>,
+        prefix: &str,
+        is_last: bool,
+    ) {
+        if visited.contains(task_name) {
+            return;
         }
-    }
+        visited.insert(task_name.to_string());
 
-    // If no roots found, use all tasks
-    if roots.is_empty() {
-        roots = tasks.iter().map(|t| t.name.as_str()).collect();
-    }
+        let connector = if is_last { "└── " } else { "├── " };
+        let _ = write!(output, "{prefix}{connector}{task_name}");
 
-    roots.sort();
+        // Add additional info if available
+        if let Some(task) = task_configs.get(task_name) {
+            let mut extra_info = Vec::new();
 
-    // Format all tasks as top-level with their full names
-    for (i, root) in roots.iter().enumerate() {
-        if !visited.contains(*root) {
-            let is_last = i == roots.len() - 1;
-            format_task_tree(
-                &mut output,
-                root,
-                &task_dependents,
-                &task_configs,
-                &mut visited,
-                "",
-                is_last,
+            if task.status.is_some() {
+                extra_info.push("has status check".to_string());
+            }
+
+            if !task.exec_if_modified.is_empty() {
+                let files = task.exec_if_modified.join(", ");
+                extra_info.push(format!("watches: {files}"));
+            }
+
+            if !extra_info.is_empty() {
+                let _ = write!(output, " ({})", extra_info.join(", "));
+            }
+        }
+
+        let _ = writeln!(output);
+
+        // Get children of this task
+        let children = children_map
+            .get(&Some(task_name))
+            .cloned()
+            .unwrap_or_default();
+        let new_prefix = format!("{}{}", prefix, if is_last { "    " } else { "│   " });
+
+        for (i, child) in children.iter().enumerate() {
+            let is_last_child = i == children.len() - 1;
+            format_task(
+                output,
+                child,
+                children_map,
+                task_configs,
+                visited,
+                &new_prefix,
+                is_last_child,
             );
         }
+    }
+
+    // Format root tasks (those with None as parent)
+    let roots = children_map.get(&None).cloned().unwrap_or_default();
+    for (i, root) in roots.iter().enumerate() {
+        let is_last = i == roots.len() - 1;
+        format_task(
+            &mut output,
+            root,
+            &children_map,
+            &task_configs,
+            &mut visited,
+            "",
+            is_last,
+        );
     }
 
     // Remove trailing newline for consistency with other commands
     output.truncate(output.trim_end().len());
     output
-}
-
-fn format_task_tree(
-    output: &mut String,
-    task_name: &str,
-    task_dependents: &HashMap<String, Vec<String>>,
-    task_configs: &HashMap<String, &tasks::TaskConfig>,
-    visited: &mut HashSet<String>,
-    prefix: &str,
-    is_last: bool,
-) {
-    use std::fmt::Write;
-
-    if visited.contains(task_name) {
-        return;
-    }
-    visited.insert(task_name.to_string());
-
-    // Format the current task with tree formatting
-    let connector = if is_last { "└── " } else { "├── " };
-    let _ = write!(output, "{prefix}{connector}{task_name}");
-
-    // Add additional info if available
-    if let Some(task) = task_configs.get(task_name) {
-        let mut extra_info = Vec::new();
-
-        if task.status.is_some() {
-            extra_info.push("has status check".to_string());
-        }
-
-        if !task.exec_if_modified.is_empty() {
-            let files = task.exec_if_modified.join(", ");
-            extra_info.push(format!("watches: {files}"));
-        }
-
-        if !extra_info.is_empty() {
-            let _ = write!(output, " ({})", extra_info.join(", "));
-        }
-    }
-
-    let _ = writeln!(output);
-
-    // Get children (tasks that depend on this task)
-    let children = task_dependents.get(task_name).cloned().unwrap_or_default();
-    let mut children: Vec<_> = children
-        .into_iter()
-        .filter(|t| task_configs.contains_key(t))
-        .collect();
-    children.sort();
-
-    // Determine the new prefix for children
-    let new_prefix = format!("{}{}", prefix, if is_last { "    " } else { "│   " });
-
-    // Format children
-    for (i, child) in children.iter().enumerate() {
-        let is_last_child = i == children.len() - 1;
-        format_task_tree(
-            output,
-            child,
-            task_dependents,
-            task_configs,
-            visited,
-            &new_prefix,
-            is_last_child,
-        );
-    }
 }
 
 #[cfg(test)]
@@ -2309,55 +2278,51 @@ mod tests {
             },
         ];
 
-        // Build the same structures that print_tasks_tree builds
-        let mut task_deps: HashMap<String, Vec<String>> = HashMap::new();
-        let task_names: HashSet<String> = test_tasks.iter().map(|t| t.name.clone()).collect();
+        // Use the shared function to compute hierarchy
+        let edges = tasks::compute_display_hierarchy(&test_tasks);
 
-        for task in &test_tasks {
-            task_deps.insert(task.name.clone(), task.after.clone());
+        // Build parent -> children mapping
+        let mut children_map: HashMap<Option<&str>, Vec<&str>> = HashMap::new();
+        for (parent, child) in &edges {
+            children_map
+                .entry(parent.as_deref())
+                .or_default()
+                .push(child.as_str());
         }
 
-        // Find root tasks (those with no dependencies)
-        let mut roots: Vec<&str> = Vec::new();
-        for task in &test_tasks {
-            let deps = task_deps.get(&task.name).unwrap();
-            if deps.is_empty() || !deps.iter().any(|d| task_names.contains(d)) {
-                roots.push(&task.name);
-            }
-        }
-
+        // Get root tasks (those with None as parent)
+        let mut roots: Vec<&str> = children_map.get(&None).cloned().unwrap_or_default();
         roots.sort();
 
-        // Verify roots are sorted
-        assert_eq!(
-            roots,
-            vec!["cleanup", "devenv:lint", "devenv:typecheck", "myapp:setup"]
-        );
+        // Verify roots are sorted - these are entry points (tasks nothing depends on)
+        assert_eq!(roots, vec!["cleanup", "devenv:test", "myapp:package"]);
 
         // Verify we have roots from different namespaces at the same level
         assert!(roots.iter().any(|t| t.starts_with("devenv:")));
         assert!(roots.iter().any(|t| t.starts_with("myapp:")));
         assert!(roots.iter().any(|t| !t.contains(":")));
 
-        // Verify no namespace headers would be printed
-        // (the old code would print "devenv:", "myapp:", and "(standalone)" headers)
-        // The new code just prints all roots flat with full names
-        assert!(roots.iter().all(|t| {
-            // All roots should be top-level names, not namespace headers
-            !t.is_empty()
-        }));
+        // Verify children are dependencies (tasks the parent depends on)
+        let mut test_children: Vec<&str> = children_map
+            .get(&Some("devenv:test"))
+            .cloned()
+            .unwrap_or_default();
+        test_children.sort();
+        assert_eq!(test_children, vec!["devenv:lint", "devenv:typecheck"]);
 
-        // Verify dependencies are tracked correctly for tree structure
-        let child_deps = vec![
-            ("devenv:test", vec!["devenv:lint", "devenv:typecheck"]),
-            ("myapp:build", vec!["myapp:setup"]),
-            ("myapp:package", vec!["myapp:build"]),
-        ];
+        let mut package_children: Vec<&str> = children_map
+            .get(&Some("myapp:package"))
+            .cloned()
+            .unwrap_or_default();
+        package_children.sort();
+        assert_eq!(package_children, vec!["myapp:build"]);
 
-        for (task_name, expected_deps) in child_deps {
-            let task = test_tasks.iter().find(|t| t.name == task_name).unwrap();
-            assert_eq!(task.after, expected_deps);
-        }
+        let mut build_children: Vec<&str> = children_map
+            .get(&Some("myapp:build"))
+            .cloned()
+            .unwrap_or_default();
+        build_children.sort();
+        assert_eq!(build_children, vec!["myapp:setup"]);
     }
 
     #[test]
