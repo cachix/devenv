@@ -82,6 +82,141 @@ impl ShellBuilder for DevenvShellBuilder {
             std::fs::write(&env_script_path, &self.initial_env_script)
                 .map_err(|e| BuildError::new(format!("Failed to write env script: {}", e)))?;
 
+            // Environment diff helper functions (inspired by direnv).
+            // These are always defined so we can track what devenv changes.
+            // - Before sourcing devenv, we capture the base environment
+            // - After sourcing, we compute a diff (what was added/modified)
+            // - On reload, we reverse the diff (restore base values, unset added vars)
+            // - Then source the new devenv script and compute a new diff
+            // This ensures removed packages/vars are properly cleaned up.
+            let env_diff_helpers = r#"
+# Environment diff helpers (inspired by direnv)
+# Diff is stored in _DEVENV_DIFF env var (not a file) so each shell has its own state
+# Uses gzip+base64 encoding for compact storage
+
+# Variables to ignore in diff (shell internals that change dynamically)
+__devenv_ignored_var() {
+    case "$1" in
+        _*|PWD|OLDPWD|SHLVL|SHELL|SHELLOPTS|BASHOPTS|BASH_*|HISTCMD|HISTFILE)
+            return 0 ;;
+        PS1|PS2|PS3|PS4|PROMPT|PROMPT_COMMAND|PROMPT_DIRTRIM)
+            return 0 ;;
+        COMP_*|READLINE_*|MAILCHECK|COLUMNS|LINES|RANDOM|SECONDS|LINENO|EPOCHSECONDS|EPOCHREALTIME|SRANDOM)
+            return 0 ;;
+        STARSHIP_*|__fish*|DIRENV_*|nix_saved_*)
+            return 0 ;;
+        *)
+            return 1 ;;
+    esac
+}
+
+__devenv_capture_env() {
+    # Capture exported variables using declare -p for proper escaping
+    declare -p -x 2>/dev/null | LC_ALL=C sort
+}
+
+__devenv_serialize_diff() {
+    # Serialize diff (stdin) to base64-encoded gzip
+    gzip -c | base64 -w0
+}
+
+__devenv_deserialize_diff() {
+    # Deserialize diff from base64-encoded gzip to stdout
+    echo "$1" | base64 -d | gzip -d 2>/dev/null
+}
+
+__devenv_compute_diff() {
+    # Compare before ($1) and current env, return diff via _DEVENV_DIFF env var
+    local before_file="$1"
+
+    # Create temp files
+    local after_file diff_content
+    after_file=$(mktemp)
+    diff_content=$(mktemp)
+    __devenv_capture_env > "$after_file"
+
+    # Extract var name from declare -p line
+    __devenv_parse_var() {
+        local line="${1#declare -x }"
+        if [[ "$line" == *=* ]]; then
+            echo "${line%%=*}"
+        else
+            echo "$line"
+        fi
+    }
+
+    # Build associative arrays for before/after
+    local -A before_vars after_vars
+    while IFS= read -r line; do
+        [[ "$line" != declare\ -x\ * ]] && continue
+        local var=$(__devenv_parse_var "$line")
+        [[ -z "$var" ]] && continue
+        __devenv_ignored_var "$var" && continue
+        before_vars["$var"]="$line"
+    done < "$before_file"
+
+    while IFS= read -r line; do
+        [[ "$line" != declare\ -x\ * ]] && continue
+        local var=$(__devenv_parse_var "$line")
+        [[ -z "$var" ]] && continue
+        __devenv_ignored_var "$var" && continue
+        after_vars["$var"]="$line"
+    done < "$after_file"
+
+    # Find PREV entries (vars that were modified or removed)
+    for var in "${!before_vars[@]}"; do
+        if [[ "${after_vars[$var]}" != "${before_vars[$var]}" ]]; then
+            echo "P:${before_vars[$var]}" >> "$diff_content"
+        fi
+    done
+
+    # Find NEXT entries (vars that were added or modified)
+    for var in "${!after_vars[@]}"; do
+        if [[ -z "${before_vars[$var]+x}" ]]; then
+            echo "N:$var" >> "$diff_content"
+        elif [[ "${after_vars[$var]}" != "${before_vars[$var]}" ]]; then
+            echo "N:$var" >> "$diff_content"
+        fi
+    done
+
+    # Serialize and store in env var
+    _DEVENV_DIFF=$(__devenv_serialize_diff < "$diff_content")
+    export _DEVENV_DIFF
+
+    rm -f "$after_file" "$diff_content"
+}
+
+__devenv_apply_reverse_diff() {
+    # Reverse the diff: restore PREV values, unset NEXT-only vars
+    [[ -z "$_DEVENV_DIFF" ]] && return
+
+    local -A prev_vars
+    local diff_content
+    diff_content=$(__devenv_deserialize_diff "$_DEVENV_DIFF")
+
+    # First pass: collect and restore PREV declarations
+    while IFS= read -r line; do
+        if [[ "$line" == P:declare\ * ]]; then
+            local decl="${line#P:}"
+            local var="${decl#declare -x }"
+            var="${var%%=*}"
+            prev_vars["$var"]=1
+            eval "$decl" 2>/dev/null
+        fi
+    done <<< "$diff_content"
+
+    # Second pass: unset NEXT vars that weren't in PREV (added vars)
+    while IFS= read -r line; do
+        if [[ "$line" == N:* ]]; then
+            local var="${line#N:}"
+            if [[ -z "${prev_vars[$var]+x}" ]]; then
+                unset "$var"
+            fi
+        fi
+    done <<< "$diff_content"
+}
+"#;
+
             // Build hot-reload hook that runs AFTER direnv (append to PROMPT_COMMAND).
             // This ensures devenv's PATH is restored even if direnv modifies it.
             // Reload is manual via a keybinding to avoid interfering with prompt behavior.
@@ -91,9 +226,27 @@ impl ShellBuilder for DevenvShellBuilder {
 __devenv_reload_apply() {{
     # Source new environment if a reload is pending
     if [ -f "{0}" ]; then
+        # Reverse previous diff to restore base environment
+        __devenv_apply_reverse_diff
+
+        # Capture env before sourcing new devenv
+        local before_file
+        before_file=$(mktemp)
+        __devenv_capture_env > "$before_file"
+
+        # Source new devenv environment
         source "{0}"
         rm -f "{0}"
-        # Update saved PATH with new devenv environment
+
+        # Append clean system paths (same as initial setup)
+        export PATH="${{PATH:+$PATH:}}$_DEVENV_SYSTEM_PATH"
+        export XDG_DATA_DIRS="${{XDG_DATA_DIRS:+$XDG_DATA_DIRS:}}$_DEVENV_SYSTEM_XDG_DATA_DIRS"
+
+        # Compute and store new diff (in _DEVENV_DIFF env var)
+        __devenv_compute_diff "$before_file"
+        rm -f "$before_file"
+
+        # Update saved PATH for the restore hook
         _DEVENV_PATH="$PATH"
     fi
 }}
@@ -131,8 +284,39 @@ fi
 # The task runner will re-enable it when handing control to the user.
 set +o history
 
+# Environment diff helpers (always defined for tracking)
+{env_diff_helpers}
+
+# Helper to filter out /nix/store paths from a colon-separated list
+__devenv_filter_nix_paths() {{
+    local result=""
+    local IFS=':'
+    for p in $1; do
+        [[ "$p" != /nix/store/* ]] && result="${{result:+$result:}}$p"
+    done
+    echo "$result"
+}}
+
+# Extract clean system paths (filter out /nix/store from inherited env)
+# These are saved once and reused on reload to avoid inheriting pollution
+export _DEVENV_SYSTEM_PATH="$(__devenv_filter_nix_paths "$PATH")"
+export _DEVENV_SYSTEM_XDG_DATA_DIRS="$(__devenv_filter_nix_paths "$XDG_DATA_DIRS")"
+
+# Capture environment BEFORE sourcing devenv (for diff tracking)
+_devenv_before_file=$(mktemp)
+__devenv_capture_env > "$_devenv_before_file"
+
 # Source the devenv environment
 source "{env_script_path}"
+
+# Append clean system paths (preserves system tools without nix pollution)
+export PATH="${{PATH:+$PATH:}}$_DEVENV_SYSTEM_PATH"
+export XDG_DATA_DIRS="${{XDG_DATA_DIRS:+$XDG_DATA_DIRS:}}$_DEVENV_SYSTEM_XDG_DATA_DIRS"
+
+# Compute and store the initial diff in _DEVENV_DIFF env var
+__devenv_compute_diff "$_devenv_before_file"
+rm -f "$_devenv_before_file"
+unset _devenv_before_file
 
 # Save PATH before ~/.bashrc potentially modifies it
 _DEVENV_PATH="$PATH"
@@ -146,12 +330,13 @@ fi
 export PATH="$_DEVENV_PATH"
 # Note: _DEVENV_PATH is kept set for the reload hook to restore PATH after direnv
 
-# Hot-reload hook (appended to PROMPT_COMMAND so it runs after direnv)
+# Hot-reload hook (keybinding and PROMPT_COMMAND integration)
 {reload_hook}
 
 # Signal that shell initialization is complete (for PTY task runner)
 echo "__DEVENV_SHELL_READY__"
 "#,
+                env_diff_helpers = env_diff_helpers,
                 env_script_path = env_script_path.to_string_lossy(),
                 reload_hook = reload_hook,
             );
