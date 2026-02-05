@@ -145,9 +145,6 @@ pub struct NixRustBackend {
     fetchers_settings: FetchersSettings,
     activity_logger: nix_bindings_expr::logger::ActivityLogger,
 
-    // GC collection guard - drops BEFORE gc_registration to ensure GC runs while thread is still registered
-    _gc_guard: GcCollectionGuard,
-
     // GC thread registration guard - must be the last FFI-related field to drop
     #[allow(dead_code)]
     _gc_registration: nix_bindings_expr::eval_state::ThreadRegistrationGuard,
@@ -426,7 +423,6 @@ impl NixRustBackend {
             flake_settings,
             fetchers_settings,
             activity_logger,
-            _gc_guard: GcCollectionGuard,
             _gc_registration: gc_registration,
         };
 
@@ -2174,21 +2170,6 @@ struct CachedShellPaths {
     /// When present and valid, we can skip the expensive FFI call.
     #[serde(default)]
     env_path: Option<String>,
-}
-
-/// Guard that forces GC collection when dropped.
-/// Place this as the LAST field in a struct to ensure GC runs after all other fields are dropped.
-struct GcCollectionGuard;
-
-impl Drop for GcCollectionGuard {
-    fn drop(&mut self) {
-        // Force Boehm GC collection after all FFI resources have been dropped.
-        // This helps ensure GC-managed memory is cleaned up before the next
-        // backend is created, reducing heap fragmentation and potential corruption.
-        unsafe {
-            nix_bindings_bindgen_raw::GC_gcollect();
-        }
-    }
 }
 
 impl Drop for NixRustBackend {
