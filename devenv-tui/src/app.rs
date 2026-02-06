@@ -13,7 +13,7 @@ use devenv_processes::ProcessCommand;
 use iocraft::prelude::*;
 use std::io::{self, Write};
 use std::sync::{Arc, RwLock};
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::{Notify, mpsc, watch};
 use tokio_shutdown::{Shutdown, Signal};
 use tracing::debug;
 
@@ -56,6 +56,7 @@ pub struct TuiApp {
     activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
     shutdown: Arc<Shutdown>,
     command_tx: Option<mpsc::Sender<ProcessCommand>>,
+    shutdown_on_backend_done: bool,
 }
 
 impl TuiApp {
@@ -69,6 +70,7 @@ impl TuiApp {
             activity_rx,
             shutdown,
             command_tx: None,
+            shutdown_on_backend_done: true,
         }
     }
 
@@ -109,19 +111,30 @@ impl TuiApp {
         self
     }
 
+    /// Control whether backend completion should trigger global shutdown.
+    /// Disable for shell reload handoff where the backend must keep running.
+    pub fn shutdown_on_backend_done(mut self, enabled: bool) -> Self {
+        self.shutdown_on_backend_done = enabled;
+        self
+    }
+
     /// Run the TUI application until the backend completes.
     ///
-    /// The `backend_done` receiver signals when the backend has fully completed
-    /// (including cleanup). The TUI will drain any remaining events and then exit.
+    /// The `backend_done` receiver signals when the backend has completed its
+    /// initial phase (or fully completed). The TUI will drain any remaining
+    /// events and then exit.
+    /// Run the TUI and return the final render height (for cursor positioning after handoff).
     pub async fn run(
         self,
         backend_done: tokio::sync::oneshot::Receiver<()>,
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<u16> {
         let config = Arc::new(self.config);
         let activity_model = Arc::new(RwLock::new(ActivityModel::with_config(config.clone())));
         let notify = Arc::new(Notify::new());
         let shutdown = self.shutdown;
         let command_tx = self.command_tx;
+        let shutdown_on_backend_done = self.shutdown_on_backend_done;
+        let (exit_tx, mut exit_rx) = watch::channel(false);
 
         // Spawn event processor with batching for performance
         // This only writes to ActivityModel, never touches UiState
@@ -133,6 +146,7 @@ impl TuiApp {
             let event_batch_size = config.event_batch_size;
             let mut activity_rx = self.activity_rx;
             let mut backend_done = backend_done;
+            let exit_tx = exit_tx.clone();
             async move {
                 let mut batch = Vec::with_capacity(event_batch_size);
 
@@ -141,6 +155,10 @@ impl TuiApp {
                         event = activity_rx.recv() => {
                             let Some(event) = event else {
                                 // Channel closed unexpectedly
+                                let _ = exit_tx.send(true);
+                                if shutdown_on_backend_done {
+                                    shutdown.shutdown();
+                                }
                                 break;
                             };
 
@@ -176,15 +194,14 @@ impl TuiApp {
                                 notify.notify_waiters();
                             }
 
+                            let _ = exit_tx.send(true);
+                            if shutdown_on_backend_done {
+                                shutdown.shutdown();
+                            }
                             break;
                         }
                     }
                 }
-
-                // Signal completion (idempotent - no-op if Ctrl+C already triggered).
-                // Model writes above are visible to the final render because the RwLock
-                // is released before this call.
-                shutdown.shutdown();
             }
         });
 
@@ -201,6 +218,12 @@ impl TuiApp {
             tokio::select! {
                 _ = shutdown.wait_for_shutdown() => {
                     break;
+                }
+
+                changed = exit_rx.changed() => {
+                    if changed.is_err() || *exit_rx.borrow() {
+                        break;
+                    }
                 }
 
                 _ = run_view(
@@ -224,6 +247,7 @@ impl TuiApp {
         //
         // On interrupt (Ctrl+C): clear the output so the user sees a clean terminal
         // On normal completion: clear previous render, then render final state
+        let mut final_render_height: u16 = 0;
         {
             let ui = ui_state.read().unwrap();
             if let Ok(model_guard) = activity_model.read() {
@@ -270,7 +294,9 @@ impl TuiApp {
                             #(vec![view(&model_guard, &ui, RenderContext::Final).into()])
                         }
                     };
-                    element.eprint();
+                    let canvas = element.render(Some(terminal_width as usize));
+                    final_render_height = canvas.height() as u16;
+                    let _ = canvas.write_ansi(io::stderr());
 
                     // Print full error messages in red (not truncated by TUI width)
                     let has_errors = !standalone_errors.is_empty()
@@ -279,12 +305,15 @@ impl TuiApp {
                     if has_errors {
                         let mut stderr = io::stderr();
                         eprintln!();
+                        final_render_height += 1; // for the empty line
 
                         // Print standalone error messages (no parent activity)
                         for (text, details) in standalone_errors {
                             let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
                             eprintln!("{}", text);
+                            final_render_height += 1;
                             if let Some(details) = details {
+                                final_render_height += details.lines().count() as u16;
                                 eprintln!("{}", details);
                             }
                             let _ = execute!(stderr, ResetColor);
@@ -294,7 +323,9 @@ impl TuiApp {
                         for (text, details) in activity_errors {
                             let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
                             eprintln!("{}", text);
+                            final_render_height += 1;
                             if let Some(details) = details {
+                                final_render_height += details.lines().count() as u16;
                                 eprintln!("{}", details);
                             }
                             let _ = execute!(stderr, ResetColor);
@@ -304,8 +335,10 @@ impl TuiApp {
                         for (name, lines) in failed_build_errors {
                             let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
                             eprintln!("Build error: {}", name);
+                            final_render_height += 1;
                             for line in lines {
                                 eprintln!("  {}", line);
+                                final_render_height += 1;
                             }
                             let _ = execute!(stderr, ResetColor);
                         }
@@ -314,7 +347,7 @@ impl TuiApp {
             }
         }
 
-        Ok(())
+        Ok(final_render_height)
     }
 }
 

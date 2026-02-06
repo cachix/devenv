@@ -417,6 +417,49 @@ impl Devenv {
             .unwrap_or_else(|_| self.devenv_dotfile.join("native-manager.pid"))
     }
 
+    /// Get the path to the .devenv/state directory
+    pub fn devenv_state_dir(&self) -> PathBuf {
+        self.devenv_dotfile.join("state")
+    }
+
+    /// Get the eval cache database pool, if initialized.
+    ///
+    /// The pool is initialized lazily during `assemble()` when eval caching is enabled.
+    pub fn eval_cache_pool(&self) -> Option<&SqlitePool> {
+        self.eval_cache_pool.get()
+    }
+
+    /// Get the NixArgs string used for cache key computation.
+    ///
+    /// This is set during `assemble()` and can be used to compute cache keys
+    /// for specific evaluations.
+    pub fn nix_args_string(&self) -> Option<&str> {
+        self.nix_args_string.get().map(|s| s.as_str())
+    }
+
+    /// Get the cache key for shell evaluation.
+    ///
+    /// This returns the same key that was used to cache the shell evaluation,
+    /// which can be used to look up the file inputs that the shell depends on.
+    ///
+    /// The cache key must match the backend's format which includes port allocation info:
+    /// `{nix_args}:port_allocation={enabled}:strict_ports={strict}:shell`
+    pub fn shell_cache_key(&self) -> Option<devenv_eval_cache::EvalCacheKey> {
+        let nix_args_str = self.nix_args_string.get()?;
+        // The backend uses cache_key_args = format!("{}:port_allocation={}:strict_ports={}", args_nix, is_enabled, is_strict)
+        // We must match this format for the cache key lookup to work
+        let cache_key_args = format!(
+            "{}:port_allocation={}:strict_ports={}",
+            nix_args_str,
+            self.port_allocator.is_enabled(),
+            self.port_allocator.is_strict()
+        );
+        Some(devenv_eval_cache::EvalCacheKey::from_nix_args_str(
+            &cache_key_args,
+            "shell",
+        ))
+    }
+
     pub fn init(&self, target: &Option<PathBuf>) -> Result<()> {
         let target = target.clone().unwrap_or_else(|| {
             std::fs::canonicalize(".").expect("Failed to get current directory")
@@ -486,6 +529,14 @@ impl Devenv {
         Ok(())
     }
 
+    /// Invalidate cached state for hot-reload.
+    ///
+    /// This clears evaluation caches to force re-evaluation when files change.
+    /// Must be called before `print_dev_env()` during hot-reload to pick up changes.
+    pub fn invalidate_for_reload(&self) {
+        self.nix.invalidate();
+    }
+
     pub async fn print_dev_env(&self, json: bool) -> Result<String> {
         let env = self.get_dev_environment(json).await?;
         Ok(String::from_utf8(env.output).expect("Failed to convert env to utf-8"))
@@ -509,6 +560,15 @@ impl Devenv {
 
         let mut shell_cmd = process::Command::new(&bash);
 
+        // The Nix output ends with "exec bash" which would start a new shell without
+        // the devenv environment. Strip it for ALL modes - we handle shell execution ourselves.
+        let output_str = String::from_utf8_lossy(&output);
+        let shell_env = output_str
+            .trim_end()
+            .trim_end_matches("exec bash")
+            .trim_end_matches("exec $SHELL")
+            .to_string();
+
         // Load the user's bashrc if it exists and if we're in an interactive shell.
         // Disable alias expansion to avoid breaking the dev shell script.
         let mut script = indoc::formatdoc! {
@@ -521,7 +581,7 @@ impl Devenv {
             {}
             shopt -s expand_aliases
             "#,
-            String::from_utf8_lossy(&output)
+            shell_env
         };
 
         // Add command for non-interactive mode
@@ -553,7 +613,9 @@ impl Devenv {
                 shell_cmd.arg(&script_path);
             }
             None => {
-                shell_cmd.args(["--rcfile", &script_path.to_string_lossy()]);
+                shell_cmd.args(util::BASH_INTERACTIVE_ARGS_PREFIX);
+                shell_cmd.arg(&script_path);
+                shell_cmd.args(util::BASH_INTERACTIVE_ARGS_SUFFIX);
             }
         }
 
@@ -1080,6 +1142,143 @@ impl Devenv {
         }
 
         Ok(format_tasks_tree(&tasks))
+    }
+
+    /// Run enterShell tasks and return their outputs.
+    /// This runs tasks via Rust (not bash hook) to enable TUI progress reporting.
+    /// Task failures are logged as warnings but don't prevent shell entry.
+    pub async fn run_enter_shell_tasks(&self) -> Result<String> {
+        self.assemble(false).await?;
+
+        // Capture the shell environment to ensure tasks run with proper devenv setup
+        let envs = self.capture_shell_environment().await?;
+
+        // Set environment variables in the current process
+        for (key, value) in &envs {
+            unsafe {
+                std::env::set_var(key, value);
+            }
+        }
+
+        let tasks_config = self.load_tasks().await?;
+
+        let verbosity = if self.global_options.quiet {
+            tasks::VerbosityLevel::Quiet
+        } else if self.global_options.verbose {
+            tasks::VerbosityLevel::Verbose
+        } else {
+            tasks::VerbosityLevel::Normal
+        };
+
+        let config = tasks::Config {
+            roots: vec!["devenv:enterShell".to_string()],
+            tasks: tasks_config,
+            run_mode: devenv_tasks::RunMode::All,
+            runtime_dir: self.devenv_runtime.clone(),
+            cache_dir: self.devenv_dotfile.clone(),
+            sudo_context: None,
+            env: Default::default(),
+        };
+
+        let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
+            .build()
+            .await?;
+
+        // In TUI mode, skip TasksUi to avoid corrupting the TUI display
+        // TUI captures activity events directly via the channel initialized in main.rs
+        let outputs = if self.global_options.tui {
+            tasks.run(false).await
+        } else {
+            // Shell mode - initialize activity channel for TasksUi
+            let (activity_rx, activity_handle) = devenv_activity::init();
+            activity_handle.install();
+
+            let tasks = Arc::new(tasks);
+            let tasks_clone = Arc::clone(&tasks);
+
+            // Spawn task runner - UI will detect completion via JoinHandle
+            let run_handle = tokio::spawn(async move { tasks_clone.run(false).await });
+
+            // Run UI - processes events and waits for run_handle
+            let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
+            let (_status, outputs) = ui.run(run_handle).await?;
+            outputs
+        };
+
+        // Note: Task failures are shown in the TUI/UI output, no need to bail here.
+        // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
+
+        Ok(serde_json::to_string(&outputs).expect("parsing of outputs failed"))
+    }
+
+    /// Run enterShell tasks with a custom executor.
+    /// Used for running tasks inside a PTY for hot-reload mode.
+    /// Task failures are logged as warnings but don't prevent shell entry.
+    pub async fn run_enter_shell_tasks_with_executor(
+        &self,
+        executor: Arc<dyn tasks::TaskExecutor>,
+    ) -> Result<String> {
+        self.assemble(false).await?;
+
+        // Capture the shell environment to ensure tasks run with proper devenv setup
+        let envs = self.capture_shell_environment().await?;
+
+        // Set environment variables in the current process
+        for (key, value) in &envs {
+            unsafe {
+                std::env::set_var(key, value);
+            }
+        }
+
+        let tasks_config = self.load_tasks().await?;
+
+        let verbosity = if self.global_options.quiet {
+            tasks::VerbosityLevel::Quiet
+        } else if self.global_options.verbose {
+            tasks::VerbosityLevel::Verbose
+        } else {
+            tasks::VerbosityLevel::Normal
+        };
+
+        let config = tasks::Config {
+            roots: vec!["devenv:enterShell".to_string()],
+            tasks: tasks_config,
+            run_mode: devenv_tasks::RunMode::All,
+            runtime_dir: self.devenv_runtime.clone(),
+            cache_dir: self.devenv_dotfile.clone(),
+            sudo_context: None,
+            env: Default::default(),
+        };
+
+        let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
+            .with_executor(executor)
+            .build()
+            .await?;
+
+        // In TUI mode, run without TasksUi (TUI captures activity events directly)
+        let outputs = tasks.run(false).await;
+
+        // Note: Task failures are shown in the TUI output, no need to bail here.
+        // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
+
+        Ok(serde_json::to_string(&outputs).expect("parsing of outputs failed"))
+    }
+
+    /// Get the shell environment as a map of environment variables.
+    /// This captures the environment after running the devenv shell script.
+    pub async fn get_shell_environment(&self) -> Result<HashMap<String, String>> {
+        self.capture_shell_environment().await
+    }
+
+    /// Get the path to bash.
+    pub async fn get_bash_path(&self) -> Result<String> {
+        match self.nix.get_bash(false).await {
+            Err(e) => {
+                tracing::trace!("Failed to get bash: {}. Rebuilding.", e);
+                Ok(self.nix.get_bash(true).await?)
+            }
+            Ok(bash) => Ok(bash),
+        }
     }
 
     async fn capture_shell_environment(&self) -> Result<HashMap<String, String>> {

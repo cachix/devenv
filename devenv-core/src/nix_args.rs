@@ -55,7 +55,13 @@ impl Serialize for CliValue {
             CliValue::Int(n) => format!("lib.mkForce {}", n),
             CliValue::Float(f) => format!("lib.mkForce {}", f),
             CliValue::Bool(b) => format!("lib.mkForce {}", b),
-            CliValue::Path(p) => format!("lib.mkForce ./{}", p),
+            CliValue::Path(p) => {
+                if p.starts_with('/') || p.starts_with("./") || p.starts_with("../") {
+                    format!("lib.mkForce {}", p)
+                } else {
+                    format!("lib.mkForce ./{}", p)
+                }
+            }
             CliValue::Pkg(name) => format!("lib.mkForce pkgs.{}", name),
             CliValue::PkgList(names) => {
                 let pkgs: Vec<String> = names.iter().map(|n| format!("pkgs.{}", n)).collect();
@@ -568,6 +574,36 @@ mod tests {
         let options = parse_cli_options(&raw).expect("Failed to parse options");
         assert_eq!(options.len(), 1);
         assert_eq!(options[0].path, vec!["languages", "rust", "enable"]);
+    }
+
+    #[test]
+    fn test_cli_value_path_serialization() {
+        let abs = CliValue::Path("/abs/path".to_string());
+        let rel = CliValue::Path("relative/path".to_string());
+        let already = CliValue::Path("./already".to_string());
+        let parent = CliValue::Path("../parent".to_string());
+
+        let abs_ser = ser_nix::to_string(&abs).expect("Failed to serialize abs path");
+        let rel_ser = ser_nix::to_string(&rel).expect("Failed to serialize rel path");
+        let already_ser = ser_nix::to_string(&already).expect("Failed to serialize ./ path");
+        let parent_ser = ser_nix::to_string(&parent).expect("Failed to serialize ../ path");
+
+        assert!(
+            abs_ser.contains("lib.mkForce /abs/path"),
+            "absolute paths should serialize without ./ prefix: {abs_ser}"
+        );
+        assert!(
+            rel_ser.contains("lib.mkForce ./relative/path"),
+            "relative paths should be prefixed with ./: {rel_ser}"
+        );
+        assert!(
+            already_ser.contains("lib.mkForce ./already"),
+            "already-relative paths should be preserved: {already_ser}"
+        );
+        assert!(
+            parent_ser.contains("lib.mkForce ../parent"),
+            "parent-relative paths should be preserved: {parent_ser}"
+        );
     }
 
     #[test]

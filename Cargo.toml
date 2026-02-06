@@ -10,7 +10,9 @@ members = [
   "devenv-nix-backend",
   "devenv-nix-backend-macros",
   "devenv-processes",
+  "devenv-reload",
   "devenv-run-tests",
+  "devenv-shell",
   "devenv-snix-backend",
   "devenv-tasks",
   "devenv-tui",
@@ -39,6 +41,8 @@ devenv-nix-backend = { path = "devenv-nix-backend" }
 devenv-nix-backend-macros = { path = "devenv-nix-backend-macros" }
 devenv-tasks = { path = "devenv-tasks" }
 devenv-tui = { path = "devenv-tui" }
+devenv-reload = { path = "devenv-reload" }
+devenv-shell = { path = "devenv-shell" }
 devenv-cache-core = { path = "devenv-cache-core" }
 nix-conf-parser = { path = "nix-conf-parser" }
 tokio-shutdown = { path = "tokio-shutdown" }

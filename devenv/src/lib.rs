@@ -4,6 +4,7 @@ mod devenv;
 pub mod lsp;
 pub mod mcp;
 pub mod nix_log_bridge;
+pub mod reload;
 pub mod tracing;
 pub use devenv_processes as processes;
 mod util;

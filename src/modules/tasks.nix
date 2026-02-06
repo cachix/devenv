@@ -44,12 +44,24 @@ let
                 if config.binary != null
                 then config.binary == "bash"
                 else config.package.meta.mainProgram or null == "bash";
+              # Output exports in a format the Rust executor can parse
+              # Format: DEVENV_EXPORT:<base64-encoded-var>=<base64-encoded-value>
+              # Base64 encoding handles special characters safely
+              exportVars = vars: ''
+                for _var in ${lib.concatStringsSep " " vars}; do
+                  if [ -n "''${!_var+x}" ]; then
+                    _var_b64=$(printf '%s' "$_var" | base64 -w0)
+                    _val_b64=$(printf '%s' "''${!_var}" | base64 -w0)
+                    echo "DEVENV_EXPORT:$_var_b64=$_val_b64"
+                  fi
+                done
+              '';
             in
             pkgs.writeScript name ''
               #!${binary}
               ${lib.optionalString (!isStatus && isBash) "set -e"}
               ${command}
-              ${lib.optionalString (config.exports != [] && !isStatus) "${inputs.config.task.package}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
+              ${lib.optionalString (config.exports != [] && !isStatus) (exportVars config.exports)}
             '';
       in
       {
@@ -374,9 +386,14 @@ in
       description = "The generated tasks.json file.";
     };
     task.package = lib.mkOption {
-      type = types.package;
+      type = types.nullOr types.package;
       internal = true;
-      default = lib.getBin devenv-tasks;
+      # CLI 2.0+ runs tasks via Rust, so devenv-tasks binary is not needed for shell entry.
+      # However, processes still need the binary for task-based process management.
+      default =
+        if lib.versionAtLeast config.devenv.cliVersion "2.0" && config.processes == { }
+        then null
+        else lib.getBin devenv-tasks;
     };
   };
 
@@ -417,7 +434,9 @@ in
         after = [ "devenv:enterShell" ];
       };
     };
-    enterShell = ''
+    # In devenv 2.0+, Rust runs enterShell tasks before shell spawns (with TUI progress)
+    # So we skip the bash hook to avoid running tasks twice
+    enterShell = lib.mkIf (lib.versionOlder config.devenv.cliVersion "2.0") ''
       if [ -z "''${DEVENV_SKIP_TASKS:-}" ]; then
         ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} || exit $?
         if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
@@ -425,11 +444,13 @@ in
         fi
       fi
     '';
-    enterTest = lib.mkBefore ''
+    # In devenv 2.0+, Rust runs enterTest tasks (with TUI progress)
+    # So we skip the bash hook to avoid running tasks twice
+    enterTest = lib.mkIf (lib.versionOlder config.devenv.cliVersion "2.0") (lib.mkBefore ''
       ${config.task.package}/bin/devenv-tasks run devenv:enterTest --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} || exit $?
       if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
         source "$DEVENV_DOTFILE/load-exports"
       fi
-    '';
+    '');
   };
 }

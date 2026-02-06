@@ -51,6 +51,9 @@ devenv-activity = { path = "../devenv-activity" }
 # Process control
 devenv-processes = { path = "../devenv-processes" }
 
+# Shell session management (provides ShellSession, protocol types)
+devenv-shell = { path = "../devenv-shell" }
+
 # Shared task types
 devenv-cache-core = { path = "../devenv-cache-core" }
 
@@ -67,6 +70,8 @@ url = { workspace = true }
 # Random number generation
 rand = { workspace = true }
 
+# Regex for ANSI stripping
+regex = { workspace = true }
 
 # Terminal UI components
 console = { workspace = true }

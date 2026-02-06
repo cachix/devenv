@@ -1,0 +1,23 @@
+[package]
+name = "devenv-reload"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Shell session manager with hot-reload capability"
+
+[dependencies]
+devenv-activity = { path = "../devenv-activity" }
+devenv-shell = { path = "../devenv-shell" }
+portable-pty = "0.9"
+avt = "0.14"
+notify = "8"
+notify-debouncer-mini = "0.5"
+tokio = { version = "1", features = ["full"] }
+thiserror = "2"
+tracing = "0.1"
+anyhow = "1"
+blake3 = "1"
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3"

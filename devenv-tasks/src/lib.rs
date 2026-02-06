@@ -1,5 +1,6 @@
 mod config;
 mod error;
+pub mod executor;
 mod privileges;
 mod task_cache;
 mod task_state;
@@ -9,6 +10,10 @@ pub mod ui;
 
 pub use config::{Config, RunMode, TaskConfig};
 pub use error::Error;
+pub use executor::{
+    ExecutionContext, ExecutionResult, OutputCallback, PtyExecutor, SubprocessExecutor,
+    TaskExecutor, default_executor,
+};
 pub use privileges::SudoContext;
 pub use tasks::{Tasks, TasksBuilder};
 pub use types::{

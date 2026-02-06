@@ -19,6 +19,7 @@ pub enum ActivityEvent {
     Message(Message),
     /// Aggregate expected counts announcement from Nix
     SetExpected(SetExpected),
+    Shell(Shell),
 }
 
 /// Expected count announcement for aggregate activity tracking.
@@ -393,6 +394,64 @@ pub struct Message {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent: Option<u64>,
     pub timestamp: Timestamp,
+}
+
+/// Shell activity events - interactive shell with hot-reload capability
+#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[serde(tag = "event", rename_all = "lowercase")]
+pub enum Shell {
+    /// Shell session started
+    Start {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        /// Shell command being run (None for interactive)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        command: Option<String>,
+        /// Files being watched for changes
+        watch_files: Vec<String>,
+        timestamp: Timestamp,
+    },
+    /// Shell session ended
+    Complete {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        outcome: ActivityOutcome,
+        timestamp: Timestamp,
+    },
+    /// Output from the shell (PTY output)
+    Output {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        /// Raw bytes from PTY (may contain ANSI escape codes)
+        data: Vec<u8>,
+        timestamp: Timestamp,
+    },
+    /// Shell is reloading due to file changes
+    Reloading {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        /// Files that changed and triggered the reload
+        changed_files: Vec<String>,
+        timestamp: Timestamp,
+    },
+    /// Shell reload completed successfully
+    Reloaded {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        /// Files that were changed
+        changed_files: Vec<String>,
+        timestamp: Timestamp,
+    },
+    /// Shell reload failed
+    ReloadFailed {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        /// Files that triggered the reload
+        changed_files: Vec<String>,
+        /// Error message
+        error: String,
+        timestamp: Timestamp,
+    },
 }
 
 /// Outcome of an activity
