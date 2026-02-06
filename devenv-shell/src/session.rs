@@ -451,6 +451,28 @@ impl ShellSession {
                         let _ = coordinator_tx.send(ShellEvent::ListWatchedFiles).await;
                         continue;
                     }
+                    // Check for Ctrl-Alt-E (ESC + Ctrl-E = 0x1b 0x05) to toggle error
+                    if data.len() == 2 && data[0] == 0x1b && data[1] == 0x05 {
+                        let state = self.status_line.state_mut();
+                        if state.error.is_some() {
+                            state.show_error = !state.show_error;
+                            if state.show_error {
+                                let error = state.error.clone().unwrap();
+                                writeln!(stdout, "\r\n\x1b[1;31mBuild error:\x1b[0m\r")?;
+                                for line in error.lines() {
+                                    writeln!(stdout, "  {}\r", line)?;
+                                }
+                                writeln!(stdout, "\r")?;
+                                stdout.flush()?;
+                            } else {
+                                // Clear screen via Ctrl-L to hide error output
+                                pty.write_all(&[0x0C])?;
+                                pty.flush()?;
+                            }
+                            self.status_line.draw(&mut stdout, self.size.cols)?;
+                        }
+                        continue;
+                    }
                     pty.write_all(&data)?;
                     pty.flush()?;
                 }
