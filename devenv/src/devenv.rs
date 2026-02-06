@@ -1134,19 +1134,71 @@ impl Devenv {
 
     /// Run enterShell tasks and return their outputs.
     /// This runs tasks via Rust (not bash hook) to enable TUI progress reporting.
+    /// Task failures are logged as warnings but don't prevent shell entry.
     pub async fn run_enter_shell_tasks(&self) -> Result<String> {
-        self.tasks_run(
-            vec!["devenv:enterShell".to_string()],
-            devenv_tasks::RunMode::All,
-            false, // TUI handles display
-            vec![],
-            None,
-        )
-        .await
+        self.assemble(false).await?;
+
+        // Capture the shell environment to ensure tasks run with proper devenv setup
+        let envs = self.capture_shell_environment().await?;
+
+        // Set environment variables in the current process
+        for (key, value) in &envs {
+            unsafe {
+                std::env::set_var(key, value);
+            }
+        }
+
+        let tasks_config = self.load_tasks().await?;
+
+        let verbosity = if self.global_options.quiet {
+            tasks::VerbosityLevel::Quiet
+        } else if self.global_options.verbose {
+            tasks::VerbosityLevel::Verbose
+        } else {
+            tasks::VerbosityLevel::Normal
+        };
+
+        let config = tasks::Config {
+            roots: vec!["devenv:enterShell".to_string()],
+            tasks: tasks_config,
+            run_mode: devenv_tasks::RunMode::All,
+            sudo_context: None,
+        };
+
+        let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
+            .build()
+            .await?;
+
+        // In TUI mode, skip TasksUi to avoid corrupting the TUI display
+        // TUI captures activity events directly via the channel initialized in main.rs
+        let outputs = if self.global_options.tui {
+            tasks.run().await
+        } else {
+            // Shell mode - initialize activity channel for TasksUi
+            let (activity_rx, activity_handle) = devenv_activity::init();
+            activity_handle.install();
+
+            let tasks = Arc::new(tasks);
+            let tasks_clone = Arc::clone(&tasks);
+
+            // Spawn task runner - UI will detect completion via JoinHandle
+            let run_handle = tokio::spawn(async move { tasks_clone.run().await });
+
+            // Run UI - processes events and waits for run_handle
+            let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
+            let (_status, outputs) = ui.run(run_handle).await?;
+            outputs
+        };
+
+        // Note: Task failures are shown in the TUI/UI output, no need to bail here.
+        // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
+
+        Ok(serde_json::to_string(&outputs).expect("parsing of outputs failed"))
     }
 
     /// Run enterShell tasks with a custom executor.
     /// Used for running tasks inside a PTY for hot-reload mode.
+    /// Task failures are logged as warnings but don't prevent shell entry.
     pub async fn run_enter_shell_tasks_with_executor(
         &self,
         executor: Arc<dyn tasks::TaskExecutor>,
@@ -1187,11 +1239,9 @@ impl Devenv {
 
         // In TUI mode, run without TasksUi (TUI captures activity events directly)
         let outputs = tasks.run().await;
-        let status = tasks.get_completion_status().await;
 
-        if status.has_failures() {
-            miette::bail!("Some enterShell tasks failed");
-        }
+        // Note: Task failures are shown in the TUI output, no need to bail here.
+        // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
 
         Ok(serde_json::to_string(&outputs).expect("parsing of outputs failed"))
     }
