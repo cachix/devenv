@@ -83,34 +83,20 @@ impl Default for ProjectRoot {
 }
 
 /// FFI-based Nix backend implementation using direct Rust bindings
+///
+/// Field order matters: Rust drops fields in declaration order. FFI fields are
+/// ordered at the end so C++ destructors run in the correct dependency order:
+/// caching_eval_state → eval_state → store → settings → activity_logger → _gc_registration
 pub struct NixRustBackend {
     pub global_options: GlobalOptions,
     pub paths: DevenvPaths,
     pub config: Config,
-
-    // Core Nix FFI components
-    #[allow(dead_code)] // May be needed to keep store connection alive
-    store: Arc<Store>,
-    // EvalState is wrapped in Mutex because Nix evaluation state is not thread-safe.
-    // The C++ nix::EvalState is designed for single-threaded use.
-    eval_state: Arc<Mutex<EvalState>>,
-
-    // Flake and fetchers settings - created once and reused
-    // These must live for the entire duration of the backend
-    #[allow(dead_code)]
-    flake_settings: FlakeSettings,
-    #[allow(dead_code)]
-    fetchers_settings: FetchersSettings,
 
     // Path to extracted bootstrap directory (lives for duration of backend)
     bootstrap_path: PathBuf,
 
     // Path to generated nixpkgs config file (for cache exclusion)
     nixpkgs_config_path: PathBuf,
-
-    // Activity logger that forwards Nix events to tracing
-    // Must be kept alive for the duration of the backend
-    activity_logger: nix_bindings_expr::logger::ActivityLogger,
 
     // Bridge for tracking eval activities dynamically and input collection
     // Used by eval_session() to create/complete eval activities
@@ -120,10 +106,6 @@ pub struct NixRustBackend {
     // Optional eval cache pool from framework layer (shared with other backends)
     // Note: Uses tokio::sync::OnceCell to match the framework layer type
     eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
-
-    // Unified caching wrapper combining EvalState + CachedEval (initialized in assemble())
-    // Provides cache_key() for key generation and uncached() for explicit bypass
-    caching_eval_state: OnceCell<CachingEvalState<Arc<Mutex<EvalState>>>>,
 
     // Flag to force cache bypass on next operation (for hot-reload)
     // Set by invalidate(), checked and cleared by dev_env()
@@ -146,15 +128,6 @@ pub struct NixRustBackend {
     // the args attrset and merge it with the primops attrset.
     cached_args_nix_eval: Arc<OnceCell<String>>,
 
-    // GC collection guard - drops BEFORE gc_registration to ensure GC runs while thread is still registered
-    _gc_guard: GcCollectionGuard,
-
-    // GC thread registration guard - must live as long as the backend
-    // The Boehm GC requires threads to be registered before using GC-allocated memory.
-    // This MUST be the last FFI-related field to drop, after GC collection
-    #[allow(dead_code)]
-    _gc_registration: nix_bindings_expr::eval_state::ThreadRegistrationGuard,
-
     // Shutdown coordinator - stored so we can trigger shutdown in Drop
     // This ensures cleanup tasks are signaled to exit when the backend is dropped
     shutdown: Arc<Shutdown>,
@@ -162,6 +135,32 @@ pub struct NixRustBackend {
     // Port allocator for managing automatic port allocation during evaluation
     // Shared with eval cache for resource replay on cache hits
     port_allocator: Arc<PortAllocator>,
+
+    // Caching wrapper around EvalState (drops first — releases Arc to eval_state)
+    caching_eval_state: OnceCell<CachingEvalState<Arc<Mutex<EvalState>>>>,
+
+    // EvalState (drops after caching wrapper; its C++ destructor may reference the store)
+    eval_state: Arc<Mutex<EvalState>>,
+
+    // Store (EvalState destructor may reference it)
+    #[allow(dead_code)]
+    store: Arc<Store>,
+
+    // Settings (must outlive EvalState)
+    #[allow(dead_code)]
+    flake_settings: FlakeSettings,
+    #[allow(dead_code)]
+    fetchers_settings: FetchersSettings,
+
+    // Activity logger (must outlive EvalState)
+    activity_logger: nix_bindings_expr::logger::ActivityLogger,
+
+    // GC collection guard - drops BEFORE gc_registration to ensure GC runs while thread is still registered
+    _gc_guard: GcCollectionGuard,
+
+    // GC thread registration (must be last FFI field to drop)
+    #[allow(dead_code)]
+    _gc_registration: nix_bindings_expr::eval_state::ThreadRegistrationGuard,
 }
 
 // SAFETY: This is unsafe and relies on several assumptions about the Nix C++ library:
@@ -428,25 +427,25 @@ impl NixRustBackend {
             global_options,
             paths,
             config,
-            store: Arc::new(store),
-            eval_state: Arc::new(Mutex::new(eval_state)),
-            flake_settings,
-            fetchers_settings,
             bootstrap_path,
             nixpkgs_config_path,
-            activity_logger,
             nix_log_bridge: log_bridge,
             eval_cache_pool,
-            caching_eval_state: OnceCell::new(),
             cache_invalidated: AtomicBool::new(false),
             cachix_manager,
             cachix_daemon: cachix_daemon.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
             cached_args_nix_eval: Arc::new(OnceCell::new()),
-            _gc_guard: GcCollectionGuard,
-            _gc_registration: gc_registration,
             shutdown: shutdown.clone(),
             port_allocator,
+            caching_eval_state: OnceCell::new(),
+            eval_state: Arc::new(Mutex::new(eval_state)),
+            store: Arc::new(store),
+            flake_settings,
+            fetchers_settings,
+            activity_logger,
+            _gc_guard: GcCollectionGuard,
+            _gc_registration: gc_registration,
         };
 
         Ok(backend)
