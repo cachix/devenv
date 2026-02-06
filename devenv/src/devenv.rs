@@ -1358,6 +1358,29 @@ impl Devenv {
         Ok(envs)
     }
 
+    /// Extract env vars exported by tasks (e.g., PATH from Python venv)
+    /// from the task outputs JSON and merge them into `envs`.
+    fn merge_task_exports(task_outputs_json: &str, envs: &mut HashMap<String, String>) {
+        if let Ok(outputs) = serde_json::from_str::<
+            std::collections::BTreeMap<String, serde_json::Value>,
+        >(task_outputs_json)
+        {
+            for value in outputs.values() {
+                if let Some(env_obj) = value
+                    .get("devenv")
+                    .and_then(|d| d.get("env"))
+                    .and_then(|e| e.as_object())
+                {
+                    for (env_key, env_value) in env_obj {
+                        if let Some(env_str) = env_value.as_str() {
+                            envs.insert(env_key.clone(), env_str.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     pub async fn test(&self) -> Result<()> {
         self.assemble(true).await?;
 
@@ -1539,12 +1562,22 @@ impl Devenv {
             bail!("No processes defined");
         }
 
+        // Run enterShell tasks first to set up task-exported env vars.
+        // For CLI >= 2.0, tasks like devenv:python:virtualenv don't run in the
+        // bash enterShell hook, so they must be run by Rust before capturing
+        // the environment. Without this, processes won't see venv PATH etc.
+        let task_outputs_json = self.run_enter_shell_tasks().await?;
+
         // Get shell environment (common for both managers)
-        let envs = if let Some(envs) = options.envs {
+        let mut envs = if let Some(envs) = options.envs {
             envs.clone()
         } else {
             self.capture_shell_environment().await?
         };
+
+        // Merge task-exported env vars (e.g., PATH with venv/bin) on top of
+        // the nix shell env. Task exports take precedence.
+        Self::merge_task_exports(&task_outputs_json, &mut envs);
 
         // Check which process manager to use
         let implementation = self

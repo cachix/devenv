@@ -330,7 +330,16 @@ impl TaskState {
 
         for (_, line) in stdout_lines {
             if let Some(rest) = line.strip_prefix("DEVENV_EXPORT:") {
-                if let Some((var_b64, val_b64)) = rest.split_once('=') {
+                // Format: <base64-key>=<base64-value>
+                // Base64 uses '=' for padding, so split_once('=') would split
+                // inside the key's padding. Instead, find the separator '=' at the
+                // first position that's a multiple of 4 (end of a valid base64 string).
+                let split_pos = (4..rest.len())
+                    .step_by(4)
+                    .find(|&i| rest.as_bytes()[i] == b'=');
+                if let Some(pos) = split_pos {
+                    let var_b64 = &rest[..pos];
+                    let val_b64 = &rest[pos + 1..];
                     let engine = base64::engine::general_purpose::STANDARD;
                     if let (Ok(var_bytes), Ok(val_bytes)) =
                         (engine.decode(var_b64), engine.decode(val_b64))
