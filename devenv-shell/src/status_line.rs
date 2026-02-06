@@ -5,7 +5,6 @@
 //!
 //! Also exports shared UI constants used by both devenv-shell and devenv-tui.
 
-use crossterm::{cursor, execute, terminal};
 use iocraft::prelude::*;
 use std::collections::HashSet;
 use std::io::{self, Write};

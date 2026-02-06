@@ -346,31 +346,29 @@ impl PtyTaskRunner {
         let drain_result = tokio::time::timeout(
             tokio::time::Duration::from_millis(100),
             tokio::task::spawn_blocking(move || {
+                let mut data = Vec::new();
                 let mut buf = [0u8; 4096];
-                let mut total = 0;
                 // Try to read available data (non-blocking would be ideal but we use timeout)
                 loop {
                     match pty_clone.read(&mut buf) {
                         Ok(0) => break,
                         Ok(n) => {
-                            total += n;
-                            // Return what we read
-                            return Ok::<_, std::io::Error>((buf, n));
+                            data.extend_from_slice(&buf[..n]);
                         }
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
                         Err(_) => break,
                     }
                 }
-                Ok((buf, total))
+                Ok::<_, std::io::Error>(data)
             }),
         )
         .await;
 
-        if let Ok(Ok(Ok((buf, n)))) = drain_result {
-            if n > 0 {
-                let chunk = String::from_utf8_lossy(&buf[..n]);
+        if let Ok(Ok(Ok(data))) = drain_result {
+            if !data.is_empty() {
+                let chunk = String::from_utf8_lossy(&data);
                 vt.feed_str(&chunk);
-                tracing::trace!("drain_pty_to_vt: drained {} bytes", n);
+                tracing::trace!("drain_pty_to_vt: drained {} bytes", data.len());
             }
         }
     }

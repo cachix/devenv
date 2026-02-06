@@ -318,14 +318,6 @@ enum DebuggerResult {
 }
 
 impl DevenvOutput {
-    /// Create output for shutdown/done state.
-    fn done() -> Self {
-        Self {
-            result: Ok(CommandResult::Done),
-            devenv_for_debugger: None,
-        }
-    }
-
     /// If debugger mode is enabled and we have a devenv instance, launch the REPL.
     fn try_launch_debugger(self) -> DebuggerResult {
         if let Some(devenv) = self.devenv_for_debugger {
