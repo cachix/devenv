@@ -312,7 +312,10 @@ in
       implementation = lib.mkOption {
         type = types.enum supportedImplementations;
         description = "The process manager to use when running processes with ``devenv up``.";
-        default = "native";
+        default =
+          if lib.versionAtLeast config.devenv.cliVersion "2.0"
+          then "native"
+          else "process-compose";
         example = "process-compose";
       };
 
