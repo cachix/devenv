@@ -21,6 +21,7 @@
 , nix
 , llvmPackages
 , boehmgc
+, sqlite
 }:
 
 rustPlatform.buildRustPackage {
@@ -30,6 +31,7 @@ rustPlatform.buildRustPackage {
   RUSTFLAGS = "--cfg tracing_unstable";
   DEVENV_GIT_REV = gitRev;
   DEVENV_IS_RELEASE = if isRelease then "1" else "";
+  LIBSQLITE3_SYS_USE_PKG_CONFIG = "1";
   VERGEN_IDEMPOTENT = "1";
 
   cargoBuildFlags = [ "-p devenv -p devenv-run-tests" ];
@@ -45,6 +47,7 @@ rustPlatform.buildRustPackage {
 
   buildInputs = [
     openssl
+    sqlite
     nix.libs.nix-expr-c
     nix.libs.nix-store-c
     nix.libs.nix-util-c

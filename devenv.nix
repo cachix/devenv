@@ -10,6 +10,9 @@
     # The path to the eval cache database (for migrations)
     DATABASE_URL = "sqlite:.devenv/nix-eval-cache.db";
 
+    # Use sqlite from nixpkgs to match the version used by Nix
+    LIBSQLITE3_SYS_USE_PKG_CONFIG = "1";
+
     RUST_LOG = "devenv=debug";
     RUST_LOG_SPAN_EVENTS = "full";
   };
@@ -65,6 +68,7 @@
     pkgs.tesh
     pkgs.watchexec
     pkgs.openssl
+    pkgs.sqlite
     pkgs.sqlx-cli
     pkgs.tig
     pkgs.process-compose
