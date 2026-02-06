@@ -11,15 +11,27 @@ This feature relies on a separate tool called [direnv](https://direnv.net) (not 
 
 Create an `.envrc` file in your project directory with the following content:
 
-``` bash title=".envrc"
-#!/usr/bin/env bash
+=== "v1.4+"
 
-eval "$(devenv direnvrc)"
+    ``` bash title=".envrc"
+    #!/usr/bin/env bash
 
-# You can pass flags to the devenv command
-# For example: use devenv --impure --option services.postgres.enable:bool true
-use devenv
-```
+    eval "$(devenv direnvrc)"
+
+    # You can pass flags to the devenv command
+    # For example: use devenv --impure --option services.postgres.enable:bool true
+    use devenv
+    ```
+
+=== "v1.3 and older"
+
+    ``` bash title=".envrc"
+    #!/usr/bin/env bash
+
+    source_url "https://raw.githubusercontent.com/cachix/devenv/82c0147677e510b247d8b9165c54f73d32dfd899/direnvrc" "sha256-7u4iDd1nZpxL4tCzmPG0dQgC5V+/44Ba+tHkPob1v2k="
+
+    use devenv
+    ```
 
 This file configures direnv to use devenv for shell activation.
 
