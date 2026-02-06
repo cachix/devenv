@@ -123,7 +123,7 @@ $ devenv init
 
 ## Learn more
 
-- About ``.envrc`` in [Automatic shell activation](automatic-shell-activation.md).
+- About ``.envrc`` in [direnv integration](integrations/direnv.md).
 - About ``devenv.yaml`` in [Inputs](inputs.md) and [Composing using imports](composing-using-imports.md).
 - About ``devenv.nix`` in the **Writing devenv.nix** section, starting with [the basics](basics.md).
 

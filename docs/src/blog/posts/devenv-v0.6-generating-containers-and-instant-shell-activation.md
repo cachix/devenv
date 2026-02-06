@@ -61,7 +61,7 @@ A developer **environment should only be built
 when something changes** and if not, the environment
 can be used **instantly using a cached snapshot**.
 
-With the latest [direnv.net integration](../../automatic-shell-activation.md),
+With the latest [direnv.net integration](../../integrations/direnv.md),
 we've **finally reached that goal** by making caching work properly (it will even watch each of your imports for changes!).
 
 !!! note "Migrating from an older devenv"

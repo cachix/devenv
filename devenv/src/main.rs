@@ -663,6 +663,10 @@ async fn run_devenv_inner(
             let output = devenv.print_dev_env(json).await?;
             CommandResult::Print(output)
         }
+        Commands::DirenvExport => {
+            let output = devenv.print_dev_env(false).await?;
+            CommandResult::Print(output)
+        }
         Commands::GenerateJSONSchema => {
             config::write_json_schema()
                 .await

@@ -1,3 +1,3 @@
-It's best to use [automatic shell activation](../automatic-shell-activation.md) with [direnv extension](https://marketplace.visualstudio.com/items?itemName=mkhl.direnv).
+It's best to use [direnv integration](../integrations/direnv.md) with [direnv extension](https://marketplace.visualstudio.com/items?itemName=mkhl.direnv).
 
 

@@ -1225,7 +1225,7 @@ exit 1
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    tasks2.run().await;
+    tasks2.run(false).await;
 
     // Check that the task ran again and failed again (not cached)
     let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
@@ -1288,7 +1288,7 @@ exit 1
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    tasks1.run().await;
+    tasks1.run(false).await;
 
     let status1 = &tasks1.graph[tasks1.tasks_order[0]].read().await.status;
     assert_matches!(status1, TaskStatus::Completed(TaskCompleted::Failed(_, _)));
@@ -1321,7 +1321,7 @@ exit 0
     .with_db_path(db_path.clone())
     .build()
     .await?;
-    tasks2.run().await;
+    tasks2.run(false).await;
 
     let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
     assert_matches!(
@@ -1335,7 +1335,7 @@ exit 0
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    tasks3.run().await;
+    tasks3.run(false).await;
 
     let status3 = &tasks3.graph[tasks3.tasks_order[0]].read().await.status;
     assert_matches!(
@@ -1422,7 +1422,7 @@ async fn test_nonexistent_cwd() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
     let task_statuses = task_statuses.as_slice();
@@ -1476,7 +1476,7 @@ async fn test_cwd_is_file() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
     let task_statuses = task_statuses.as_slice();

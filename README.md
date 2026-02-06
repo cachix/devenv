@@ -101,7 +101,7 @@ Commands:
   repl       Launch an interactive environment for inspecting the devenv configuration.
   gc         Delete previous shell generations. See https://devenv.sh/garbage-collection
   build      Build any attribute in devenv.nix.
-  direnvrc   Print a direnvrc that adds devenv support to direnv. See https://devenv.sh/automatic-shell-activation.
+  direnvrc   Print a direnvrc that adds devenv support to direnv. See https://devenv.sh/integrations/direnv/.
   version    Print the version of devenv.
   mcp        Launch Model Context Protocol server for AI assistants
   help       Print this message or the help of the given subcommand(s)

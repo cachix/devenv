@@ -1,4 +1,5 @@
 nav:
+  - direnv: direnv.md
   - .env: dotenv.md
   - secretspec: secretspec.md
   - Android: android.md

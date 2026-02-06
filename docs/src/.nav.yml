@@ -27,7 +27,6 @@ nav:
       - Inputs: inputs.md
       - Composing: composing-using-imports.md
     - Overview:
-      - Automatic shell activation: automatic-shell-activation.md
       - Garbage collection: garbage-collection.md
     - Extending: extending.md
     - Guides: guides

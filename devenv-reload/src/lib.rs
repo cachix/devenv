@@ -12,8 +12,8 @@ pub use watcher::WatcherHandle;
 
 // Re-export types from devenv-shell for backwards compatibility
 pub use devenv_shell::{
-    get_terminal_size, CommandBuilder, Pty, PtyError, PtyTaskRequest, PtyTaskResult, ShellCommand,
-    ShellEvent,
+    CommandBuilder, Pty, PtyError, PtyTaskRequest, PtyTaskResult, ShellCommand, ShellEvent,
+    get_terminal_size,
 };
 
 // Expose internal types for integration tests

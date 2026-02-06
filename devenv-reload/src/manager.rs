@@ -2,7 +2,7 @@ use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
 use crate::watcher::FileWatcher;
 use avt::Vt;
-use devenv_shell::{get_terminal_size, Pty, PtyError, RawModeGuard};
+use devenv_shell::{Pty, PtyError, RawModeGuard, get_terminal_size};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;

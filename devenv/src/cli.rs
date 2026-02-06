@@ -83,7 +83,7 @@ impl Cli {
 
 #[derive(Subcommand, Clone)]
 pub enum Commands {
-    #[command(about = "Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.")]
+    #[command(about = "Scaffold devenv.yaml, devenv.nix, and .gitignore.")]
     Init { target: Option<PathBuf> },
 
     #[command(about = "Generate devenv.yaml and devenv.nix using AI")]
@@ -179,8 +179,8 @@ pub enum Commands {
     },
 
     #[command(
-        about = "Print a direnvrc that adds devenv support to direnv. See https://devenv.sh/automatic-shell-activation.",
-        long_about = "Print a direnvrc that adds devenv support to direnv.\n\nExample .envrc:\n\n  eval \"$(devenv direnvrc)\"\n\n  # You can pass flags to the devenv command\n  # For example: use devenv --impure --option services.postgres.enable:bool true\n  use devenv\n\nSee https://devenv.sh/automatic-shell-activation."
+        about = "Print a direnvrc that adds devenv support to direnv. See https://devenv.sh/integrations/direnv/.",
+        long_about = "Print a direnvrc that adds devenv support to direnv.\n\nExample .envrc:\n\n  eval \"$(devenv direnvrc)\"\n\n  # You can pass flags to the devenv command\n  # For example: use devenv --impure --option services.postgres.enable:bool true\n  use devenv\n\nSee https://devenv.sh/integrations/direnv/."
     )]
     Direnvrc,
 
@@ -195,6 +195,9 @@ pub enum Commands {
         #[arg(long)]
         json: bool,
     },
+
+    #[clap(hide = true)]
+    DirenvExport,
 
     #[clap(hide = true)]
     GenerateJSONSchema,

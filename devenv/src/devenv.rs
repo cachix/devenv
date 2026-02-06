@@ -42,10 +42,9 @@ use tracing::{Instrument, debug, info, instrument, trace};
 
 // templates
 // Note: gitignore is stored without the dot to work around include_dir not including dotfiles
-const REQUIRED_FILES: [(&str, &str); 4] = [
+const REQUIRED_FILES: [(&str, &str); 3] = [
     ("devenv.nix", "devenv.nix"),
     ("devenv.yaml", "devenv.yaml"),
-    (".envrc", ".envrc"),
     ("gitignore", ".gitignore"), // source name -> target name
 ];
 const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
@@ -2678,6 +2677,7 @@ mod tests {
             input: None,
             cwd: None,
             show_output: false,
+            process: None,
         };
         let mut cli = serde_json::Map::new();
         cli.insert("key".to_string(), serde_json::json!("value"));
@@ -2701,6 +2701,7 @@ mod tests {
             input: Some(serde_json::json!({"existing": 1, "override_me": "old"})),
             cwd: None,
             show_output: false,
+            process: None,
         };
         let mut cli = serde_json::Map::new();
         cli.insert("override_me".to_string(), serde_json::json!("new"));

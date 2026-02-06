@@ -120,7 +120,7 @@ plugins:
         - extending.md
       Guides:
         - ad-hoc-developer-environments.md
-        - automatic-shell-activation.md
+        - integrations/direnv.md
         - examples.md
         - cloud.md
       Reference:

@@ -29,9 +29,9 @@ Pinned [inputs](inputs.md), making sure your developer environment is reproducib
 
 ### .envrc
 
-[direnv](https://direnv.net) integration logic, auto-generated using `devenv init`.
+[direnv](https://direnv.net) integration logic.
 
-See [automatic shell activation](automatic-shell-activation.md) to set up your shell
+See [direnv integration](integrations/direnv.md) to set up your shell
 to automatically activate the developer environment when you `cd` into it.
 
 ## Environment Variables

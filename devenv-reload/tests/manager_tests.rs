@@ -1,12 +1,12 @@
 mod common;
 
-use common::{create_temp_dir_with_files, modify_file, TestShellBuilder};
+use common::{TestShellBuilder, create_temp_dir_with_files, modify_file};
 use devenv_reload::{
     BuildContext, BuildError, BuildTrigger, CommandBuilder, Config, ManagerError, ManagerMessage,
     ShellBuilder, ShellManager,
 };
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
