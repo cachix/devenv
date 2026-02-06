@@ -155,9 +155,6 @@ pub struct NixRustBackend {
     // Activity logger (must outlive EvalState)
     activity_logger: nix_bindings_expr::logger::ActivityLogger,
 
-    // GC collection guard - drops BEFORE gc_registration to ensure GC runs while thread is still registered
-    _gc_guard: GcCollectionGuard,
-
     // GC thread registration (must be last FFI field to drop)
     #[allow(dead_code)]
     _gc_registration: nix_bindings_expr::eval_state::ThreadRegistrationGuard,
@@ -254,13 +251,6 @@ impl NixRustBackend {
         let gc_registration = gc_register_my_thread()
             .to_miette()
             .wrap_err("Failed to register thread with Nix garbage collector")?;
-
-        // Force GC collection at the start of backend creation to ensure any garbage
-        // from a previous backend is fully collected before we start initializing.
-        // This helps prevent heap corruption when creating multiple backends in sequence.
-        unsafe {
-            nix_bindings_bindgen_raw::GC_gcollect();
-        }
 
         // Set experimental features after init() to ensure they're properly configured
         settings::set("experimental-features", "flakes nix-command")
@@ -444,7 +434,6 @@ impl NixRustBackend {
             flake_settings,
             fetchers_settings,
             activity_logger,
-            _gc_guard: GcCollectionGuard,
             _gc_registration: gc_registration,
         };
 
@@ -2263,21 +2252,6 @@ struct CachedShellPaths {
     /// When present and valid, we can skip the expensive FFI call.
     #[serde(default)]
     env_path: Option<String>,
-}
-
-/// Guard that forces GC collection when dropped.
-/// Place this as the LAST field in a struct to ensure GC runs after all other fields are dropped.
-struct GcCollectionGuard;
-
-impl Drop for GcCollectionGuard {
-    fn drop(&mut self) {
-        // Force Boehm GC collection after all FFI resources have been dropped.
-        // This helps ensure GC-managed memory is cleaned up before the next
-        // backend is created, reducing heap fragmentation and potential corruption.
-        unsafe {
-            nix_bindings_bindgen_raw::GC_gcollect();
-        }
-    }
 }
 
 impl Drop for NixRustBackend {
