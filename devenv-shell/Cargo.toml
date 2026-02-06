@@ -9,7 +9,7 @@ description = "Shell and PTY management for devenv"
 
 [dependencies]
 # PTY management
-portable-pty = "0.9"
+portable-pty = { workspace = true }
 
 # Terminal handling
 crossterm = { workspace = true }
