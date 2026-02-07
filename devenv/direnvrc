@@ -108,6 +108,16 @@ use_devenv() {
   watch_file ".envrc" "$HOME/.direnvrc" "$HOME/.config/direnv/direnvrc"
   watch_file "devenv.nix" "devenv.lock" "devenv.yaml" "devenv.local.nix" "devenv.local.yaml"
 
+  # Keep watching the previous dependency set so edits can recover from failed evals.
+  # DEVENV_DOTFILE is available from the previously-loaded environment.
+  local previous_watches=()
+  if [[ -n "${DEVENV_DOTFILE:-}" ]]; then
+    _devenv_watches "$DEVENV_DOTFILE/input-paths.txt" previous_watches
+  fi
+  if [[ ${#previous_watches[@]} -gt 0 ]]; then
+    watch_file "${previous_watches[@]}"
+  fi
+
   local env
   if ! env=$("${devenv_cmd[@]}" direnv-export); then
     log_error "failed to build the devenv environment. see above."

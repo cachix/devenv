@@ -505,16 +505,6 @@ impl Devenv {
             }
         }
 
-        // check if direnv executable is available
-        let Ok(direnv) = which::which("direnv") else {
-            return Ok(());
-        };
-
-        // run direnv allow
-        let _ = process::Command::new(direnv)
-            .arg("allow")
-            .current_dir(&target)
-            .spawn();
         Ok(())
     }
 
