@@ -1384,20 +1384,38 @@ impl Devenv {
     }
 
     pub async fn test(&self) -> Result<()> {
-        self.assemble(true).await?;
+        // ── Phase 1: Configuring shell ──────────────────────────────
+        // Assemble with testing enabled, build dev environment, cache it.
+        {
+            let phase1 = Activity::operation("Configuring shell")
+                .parent(None)
+                .start();
+            async {
+                self.assemble(true).await?;
+                let dev_env = self.get_dev_environment_inner(false).await?;
+                let _ = self.dev_env_cache.set(dev_env);
+                Ok::<(), miette::Report>(())
+            }
+            .in_activity(&phase1)
+            .await?;
+        }
 
-        // collect tests
+        // ── Phase 2: Building tests ─────────────────────────────────
         let test_script = {
-            let activity = Activity::operation("Building tests").start();
-            let gc_root = self.devenv_dot_gc.join("test");
-            let test_script = self
-                .nix
-                .build(&["devenv.config.test"], None, Some(&gc_root))
-                .in_activity(&activity)
-                .await?;
-            test_script[0].to_string_lossy().to_string()
+            let phase2 = Activity::operation("Building tests").parent(None).start();
+            async {
+                let gc_root = self.devenv_dot_gc.join("test");
+                let test_script = self
+                    .nix
+                    .build(&["devenv.config.test"], None, Some(&gc_root))
+                    .await?;
+                Ok::<String, miette::Report>(test_script[0].to_string_lossy().to_string())
+            }
+            .in_activity(&phase2)
+            .await?
         };
 
+        // ── Phase 3: Starting processes (if needed) ─────────────────
         if self.has_processes().await? {
             let options = ProcessOptions {
                 envs: None,
@@ -1406,15 +1424,16 @@ impl Devenv {
                 strict_ports: false,
                 command_rx: None,
             };
-            // up() with detach returns RunMode::Detached, not Exec
             self.up(vec![], options).await?;
         }
 
-        // Run the test script through the shell, which runs enterShell tasks first
+        // ── Phase 4: Running tests ──────────────────────────────────
+        // prepare_shell will use cached dev_env, avoiding redundant activity wrapping.
         let result = self
             .run_in_shell(test_script, &[], Some("Running tests"))
             .await?;
 
+        // ── Phase 5: Stopping processes ─────────────────────────────
         if self.has_processes().await? {
             self.down().await?;
         }
