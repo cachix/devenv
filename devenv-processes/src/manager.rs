@@ -811,8 +811,8 @@ impl NativeProcessManager {
         if let Some(handle) = jobs.remove(name) {
             debug!("Stopping process: {}", name);
 
-            // Mark activity as cancelled
-            handle.activity.cancel();
+            // Stopping a process intentionally is not a failure
+            handle.activity.reset();
 
             // Abort the supervisor task first to prevent restarts
             handle.supervisor_task.abort();
