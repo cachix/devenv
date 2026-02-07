@@ -168,10 +168,15 @@ impl NixLogBridge {
 
     /// Get the parent activity ID for Nix activities.
     ///
-    /// Returns the current eval activity ID if we're in an eval scope.
+    /// Returns the current eval activity ID if in an eval scope, otherwise
+    /// falls back to the task-local activity stack. This allows downloads
+    /// during `apply_cachix_substituters()` (no eval session) to nest under
+    /// the current phase activity (e.g., "Configuring shell").
     fn get_parent_activity_id(&self) -> Option<u64> {
         let state = self.eval_state.lock().expect("eval_state mutex poisoned");
-        state.current_eval_id
+        state
+            .current_eval_id
+            .or_else(devenv_activity::current_activity_id)
     }
 
     /// Returns a callback that can be used by any log source.

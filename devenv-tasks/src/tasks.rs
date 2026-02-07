@@ -531,6 +531,17 @@ impl Tasks {
                 .start(),
         );
 
+        self.run_internal(orchestration_activity).await
+    }
+
+    /// Run with a caller-provided parent activity instead of creating a new top-level one.
+    /// Used by `up()` Phase 4 to nest process execution under "Running processes".
+    #[instrument(skip(self, parent_activity))]
+    pub async fn run_with_parent_activity(&self, parent_activity: Arc<Activity>) -> Outputs {
+        self.run_internal(parent_activity).await
+    }
+
+    async fn run_internal(&self, orchestration_activity: Arc<Activity>) -> Outputs {
         // Assign activity IDs upfront for all tasks
         let mut task_ids: HashMap<NodeIndex, u64> = HashMap::new();
         for &index in &self.tasks_order {
