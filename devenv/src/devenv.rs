@@ -192,6 +192,9 @@ pub struct Devenv {
     // Pass as an arg or have a setter.
     pub container_name: Option<String>,
 
+    // Native process manager started in-process (for detach mode used by test())
+    native_process_manager: Arc<OnceCell<Arc<processes::NativeProcessManager>>>,
+
     // Shutdown handle for coordinated shutdown
     shutdown: Arc<tokio_shutdown::Shutdown>,
 }
@@ -351,6 +354,7 @@ impl Devenv {
             nix_args_string: Arc::new(OnceCell::new()),
             port_allocator,
             container_name: None,
+            native_process_manager: Arc::new(OnceCell::new()),
             shutdown: options.shutdown,
         }
     }
@@ -1689,51 +1693,6 @@ impl Devenv {
             if impl_result == "native" {
                 info!("Using native process manager with task-based dependency ordering");
 
-                let is_detach_child = std::env::var_os("DEVENV_NATIVE_DETACH_CHILD").is_some();
-                if options.detach && !is_detach_child {
-                    let exe = std::env::current_exe().into_diagnostic()?;
-                    let mut args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
-                    let has_no_tui = args.iter().any(|arg| arg == "--no-tui");
-                    if !has_no_tui {
-                        args.push(std::ffi::OsString::from("--no-tui"));
-                    }
-
-                    let mut cmd = std::process::Command::new(exe);
-                    cmd.args(args)
-                        .env("DEVENV_NATIVE_DETACH_CHILD", "1")
-                        .stdin(Stdio::null())
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null());
-                    #[cfg(unix)]
-                    {
-                        use nix::libc;
-                        use std::os::unix::process::CommandExt;
-                        // SAFETY: setsid() creates a new session, detaching from terminal.
-                        // This is safe as it only affects the child process after fork.
-                        unsafe {
-                            cmd.pre_exec(|| {
-                                if libc::setsid() == -1 {
-                                    return Err(std::io::Error::last_os_error());
-                                }
-                                Ok(())
-                            });
-                        }
-                    }
-
-                    let child = cmd.spawn().into_diagnostic()?;
-                    let pid = child.id();
-                    info!(
-                        "Native process manager started in background (PID: {})",
-                        pid
-                    );
-                    info!("Stop with: devenv processes down");
-                    return Ok(RunMode::Detached);
-                }
-
-                if is_detach_child {
-                    options.detach = false;
-                }
-
                 // Reuse task_configs from Phase 2 for process tasks
                 let roots: Vec<String> = if processes.is_empty() {
                     task_configs
@@ -1801,6 +1760,11 @@ impl Devenv {
 
                     let _ = tokio::fs::remove_file(&pid_file).await;
                     result?;
+                } else {
+                    // Store manager for later stop via down()
+                    let _ = self
+                        .native_process_manager
+                        .set(Arc::clone(&tasks_runner.process_manager));
                 }
 
                 return Ok(RunMode::Detached);
@@ -1844,6 +1808,12 @@ impl Devenv {
     }
 
     pub async fn down(&self) -> Result<()> {
+        // In-process native manager (started by test() or up(detach=true))
+        if let Some(manager) = self.native_process_manager.get() {
+            manager.stop_all().await?;
+            return Ok(());
+        }
+
         // Determine which manager is running and create appropriate instance
         let manager: Box<dyn processes::ProcessManager> = if self.native_manager_pid_file().exists()
         {
