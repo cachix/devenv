@@ -1385,8 +1385,9 @@ impl Devenv {
 
     pub async fn test(&self) -> Result<()> {
         // ── Phase 1: Configuring shell ──────────────────────────────
-        // Assemble with testing enabled, build dev environment, cache it.
-        {
+        // Assemble with testing enabled, build dev environment, cache it,
+        // check for processes, and capture shell env vars for up().
+        let (has_processes, envs) = {
             let phase1 = Activity::operation("Configuring shell")
                 .parent(None)
                 .start();
@@ -1394,11 +1395,17 @@ impl Devenv {
                 self.assemble(true).await?;
                 let dev_env = self.get_dev_environment_inner(false).await?;
                 let _ = self.dev_env_cache.set(dev_env);
-                Ok::<(), miette::Report>(())
+                let has_processes = self.has_processes().await?;
+                let envs = if has_processes {
+                    Some(self.capture_shell_environment().await?)
+                } else {
+                    None
+                };
+                Ok::<(bool, Option<HashMap<String, String>>), miette::Report>((has_processes, envs))
             }
             .in_activity(&phase1)
-            .await?;
-        }
+            .await?
+        };
 
         // ── Phase 2: Building tests ─────────────────────────────────
         let test_script = {
@@ -1416,9 +1423,9 @@ impl Devenv {
         };
 
         // ── Phase 3: Starting processes (if needed) ─────────────────
-        if self.has_processes().await? {
+        if has_processes {
             let options = ProcessOptions {
-                envs: None,
+                envs: envs.as_ref(),
                 detach: true,
                 log_to_file: false,
                 strict_ports: false,
@@ -1434,7 +1441,7 @@ impl Devenv {
             .await?;
 
         // ── Phase 5: Stopping processes ─────────────────────────────
-        if self.has_processes().await? {
+        if has_processes {
             self.down().await?;
         }
 
@@ -1576,7 +1583,17 @@ impl Devenv {
 
         // ── Phase 1: Configuring shell ──────────────────────────────
         // Assemble, check processes, build dev environment, capture shell env vars.
-        let mut envs = {
+        // When called from test(), dev_env_cache is already populated and envs are
+        // passed in, so we skip the activity to avoid a duplicate "Configuring shell".
+        let mut envs = if self.dev_env_cache.get().is_some() && options.envs.is_some() {
+            let envs = options.envs.unwrap().clone();
+            for (key, value) in &envs {
+                unsafe {
+                    std::env::set_var(key, value);
+                }
+            }
+            envs
+        } else {
             let phase1 = Activity::operation("Configuring shell")
                 .parent(None)
                 .start();
