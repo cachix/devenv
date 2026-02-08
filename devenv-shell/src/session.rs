@@ -11,7 +11,7 @@ use crate::terminal::RawModeGuard;
 use avt::Vt;
 use crossterm::{cursor, execute, terminal};
 use portable_pty::PtySize;
-use std::io::{self, Read, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -256,34 +256,46 @@ impl ShellSession {
 
         // Query cursor position FIRST before any terminal resets.
         // This tells us where TUI left the cursor after its final render.
-        write!(stdout, "\x1b[6n")?;
-        stdout.flush()?;
+        // Only query when stdin is a terminal - the response comes via stdin,
+        // so this would hang if stdin is not a TTY (e.g. piped or /dev/null).
+        let cursor_row = if io::stdin().is_terminal() {
+            write!(stdout, "\x1b[6n")?;
+            stdout.flush()?;
 
-        let mut response = Vec::new();
-        let mut stdin = io::stdin();
-        let mut buf = [0u8; 1];
-        loop {
-            if stdin.read(&mut buf).is_ok() && buf[0] != 0 {
-                response.push(buf[0]);
-                if buf[0] == b'R' {
+            let mut response = Vec::new();
+            let mut stdin = io::stdin();
+            let mut buf = [0u8; 1];
+            loop {
+                match stdin.read(&mut buf) {
+                    Ok(0) => break, // EOF
+                    Ok(_) if buf[0] != 0 => {
+                        response.push(buf[0]);
+                        if buf[0] == b'R' {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                    _ => {}
+                }
+                if response.len() > 20 {
                     break;
                 }
             }
-            if response.len() > 20 {
-                break;
-            }
-        }
 
-        // Parse cursor row from response: ESC [ row ; col R
-        let cursor_row = response
-            .iter()
-            .position(|&b| b == b'[')
-            .and_then(|start| {
-                let s =
-                    String::from_utf8_lossy(&response[start + 1..response.len().saturating_sub(1)]);
-                s.split(';').next()?.parse::<u16>().ok()
-            })
-            .unwrap_or(1);
+            // Parse cursor row from response: ESC [ row ; col R
+            response
+                .iter()
+                .position(|&b| b == b'[')
+                .and_then(|start| {
+                    let s = String::from_utf8_lossy(
+                        &response[start + 1..response.len().saturating_sub(1)],
+                    );
+                    s.split(';').next()?.parse::<u16>().ok()
+                })
+                .unwrap_or(1)
+        } else {
+            1
+        };
         tracing::debug!("session: cursor position after TUI: row {}", cursor_row);
 
         // Reset terminal state from TUI: scroll region and origin mode
