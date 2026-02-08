@@ -21479,7 +21479,7 @@ The process manager to use when running processes with ` devenv up `.
 
 
 *Type:*
-one of “hivemind”, “honcho”, “mprocs”, “overmind”, “process-compose”
+one of “hivemind”, “honcho”, “mprocs”, “native”, “overmind”, “process-compose”
 
 
 
@@ -21489,7 +21489,7 @@ one of “hivemind”, “honcho”, “mprocs”, “overmind”, “process-co
 
 
 *Example:*
-` "overmind" `
+` "process-compose" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -21579,6 +21579,418 @@ YAML 1.1 value
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.listen
+
+
+
+Socket activation configuration (systemd-compatible).
+
+The process will receive activated sockets via LISTEN_FDS/LISTEN_PID/LISTEN_FDNAMES
+environment variables, starting at file descriptor 3.
+
+
+
+*Type:*
+list of (submodule)
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  {
+    name = "http";
+    kind = "tcp";
+    address = "127.0.0.1:8080";
+  }
+  {
+    name = "api";
+    kind = "unix_stream";
+    path = "/tmp/api.sock";
+    mode = 384; # 0o600
+  }
+]
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.listen.\*.address
+
+
+
+TCP address (e.g., 127.0.0.1:8080) - required for tcp kind
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.listen.\*.backlog
+
+
+
+Socket listen backlog
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 128 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.listen.\*.kind
+
+
+
+Type of socket
+
+
+
+*Type:*
+one of “tcp”, “unix_stream”
+
+
+
+*Default:*
+` "tcp" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.listen.\*.mode
+
+
+
+Unix socket file permissions (octal, e.g., 0o600)
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.listen.\*.name
+
+
+
+Name of the socket (used in LISTEN_FDNAMES)
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.listen.\*.path
+
+
+
+Unix socket path - required for unix_stream kind
+
+
+
+*Type:*
+null or absolute path
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.notify
+
+
+
+Systemd notify socket configuration.
+
+The process can send READY=1, STATUS=…, etc. via NOTIFY_SOCKET.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.notify.enable
+
+
+
+Enable systemd notify protocol
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.pseudo_terminal
+
+
+
+Run this process in a pseudo-terminal (PTY).
+
+Useful for interactive processes that require terminal capabilities.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.use_sudo
+
+
+
+Run this process with sudo/elevated privileges.
+
+Similar to process-compose’s is_elevated option.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.watch
+
+
+
+File watching configuration
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.watch.extensions
+
+
+
+File extensions to watch
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.watch.ignore
+
+
+
+Glob patterns to ignore
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.watch.paths
+
+
+
+Paths to watch for changes
+
+
+
+*Type:*
+list of absolute path
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.watchdog
+
+
+
+Systemd watchdog configuration.
+
+The process should send WATCHDOG=1 via notify socket periodically.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  usec = 30000000; # 30 seconds
+  require_ready = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.watchdog.require_ready
+
+
+
+Require READY=1 notification before enforcing watchdog
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.watchdog.usec
+
+
+
+Watchdog interval in microseconds
+
+
+
+*Type:*
+signed integer
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
 
 
 
@@ -21781,6 +22193,71 @@ attribute set of (submodule)
 
 
 
+## processes.\<name>.after
+
+
+
+Tasks that must be ready before this process starts.
+Use task names like “devenv:processes:postgres” or “myapp:setup”.
+Supports @ready (default) and @complete suffixes.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "devenv:processes:postgres"
+  "myapp:migrations@complete"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.before
+
+
+
+Tasks that should start after this process is ready.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "devenv:processes:nginx"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
 ## processes.\<name>.cwd
 
 
@@ -21812,6 +22289,247 @@ Bash code to run the process.
 
 *Type:*
 string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.listen
+
+
+
+Socket activation configuration for systemd-style socket passing.
+
+Only used when using native process manager.
+
+
+
+*Type:*
+list of (submodule)
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  {
+    address = "127.0.0.1:8080";
+    kind = "tcp";
+    name = "http";
+  }
+  {
+    kind = "unix_stream";
+    mode = 384;
+    name = "admin";
+    path = "$DEVENV_STATE/admin.sock";
+  }
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.listen.\*.address
+
+
+
+TCP address (e.g., ‘127.0.0.1:8080’). Required for TCP sockets.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.listen.\*.backlog
+
+
+
+Listen backlog size
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` 128 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.listen.\*.kind
+
+
+
+Type of socket (tcp or unix_stream)
+
+
+
+*Type:*
+one of “tcp”, “unix_stream”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.listen.\*.mode
+
+
+
+Unix socket file permissions (e.g., 384 for 0o600). Only for unix_stream.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.listen.\*.name
+
+
+
+Name of the socket (e.g., ‘http’, ‘admin’)
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.listen.\*.path
+
+
+
+Unix socket path. Required for unix_stream sockets.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.max_restarts
+
+
+
+Maximum number of restart attempts. null means unlimited restarts.
+
+Only used when using native process manager.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` 5 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.notify
+
+
+
+Systemd notify protocol configuration for readiness signaling.
+
+Only used when using native process manager.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  enable = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.notify.enable
+
+
+
+Enable systemd notify protocol for readiness signaling.
+When enabled, the process must send READY=1 to the NOTIFY_SOCKET
+before dependent tasks with @ready suffix will be unblocked.
+
+Only used when using native process manager.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -21939,6 +22657,290 @@ YAML 1.1 value
   ];
 }
 ```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.pseudo_terminal
+
+
+
+Run this process in a pseudo-terminal (PTY).
+
+Only used when using native process manager.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.restart
+
+
+
+Process restart policy:
+
+ - never: Never restart the process
+ - always: Always restart when it exits
+ - on_failure: Restart only on failure (non-zero exit code)
+
+Only used when using native process manager.
+
+
+
+*Type:*
+one of “never”, “always”, “on_failure”
+
+
+
+*Default:*
+` "on_failure" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.use_sudo
+
+
+
+Run this process with sudo/elevated privileges.
+
+Only used when using native process manager.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.watch
+
+
+
+File watching configuration for automatic process restarts.
+
+Only used when using native process manager.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  paths = [ ./src ];
+  extensions = [ "rs" "toml" ];
+  ignore = [ "target" ];
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.watch.extensions
+
+
+
+File extensions to watch (e.g., “rs”, “js”, “py”).
+If empty, all file extensions are watched.
+
+Only used when using native process manager.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "rs"
+  "toml"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.watch.ignore
+
+
+
+Glob patterns to ignore (e.g., “.git”, “target”, “\*.log”).
+
+Only used when using native process manager.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "*.log"
+  ".git"
+  "target"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.watch.paths
+
+
+
+Paths to watch for changes (files or directories).
+When files in these paths change, the process will be restarted.
+
+Only used when using native process manager.
+
+
+
+*Type:*
+list of absolute path
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[ ./src ./config.yaml ]
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.watchdog
+
+
+
+Systemd watchdog configuration.
+
+Only used when using native process manager.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  usec = 30000000; # 30 seconds
+  require_ready = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.watchdog.require_ready
+
+
+
+Require READY=1 notification before enforcing watchdog
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.watchdog.usec
+
+
+
+Watchdog interval in microseconds
+
+
+
+*Type:*
+signed integer
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -31367,6 +32369,310 @@ attribute set of anything
 
 
 
+## tasks.\<name>.listen
+
+
+
+Socket activation configuration for systemd-style socket passing.
+
+Only used when type = “process”.
+
+
+
+*Type:*
+list of (submodule)
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  {
+    address = "127.0.0.1:8080";
+    kind = "tcp";
+    name = "http";
+  }
+  {
+    kind = "unix_stream";
+    mode = 384;
+    name = "admin";
+    path = "$DEVENV_STATE/admin.sock";
+  }
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.listen.\*.address
+
+
+
+TCP address (e.g., ‘127.0.0.1:8080’). Required for TCP sockets.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.listen.\*.backlog
+
+
+
+Listen backlog size
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` 128 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.listen.\*.kind
+
+
+
+Type of socket (tcp or unix_stream)
+
+
+
+*Type:*
+one of “tcp”, “unix_stream”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.listen.\*.mode
+
+
+
+Unix socket file permissions (e.g., 384 for 0o600). Only for unix_stream.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.listen.\*.name
+
+
+
+Name of the socket (e.g., ‘http’, ‘admin’)
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.listen.\*.path
+
+
+
+Unix socket path. Required for unix_stream sockets.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.max_restarts
+
+
+
+Maximum number of restart attempts. null means unlimited restarts.
+
+Only used when type = “process”.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` 5 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.notify
+
+
+
+Systemd notify protocol configuration for readiness signaling.
+
+Only used when type = “process”.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.notify.enable
+
+
+
+Enable systemd notify protocol for readiness signaling.
+When enabled, the process must send READY=1 to the NOTIFY_SOCKET
+before dependent tasks with @ready suffix will be unblocked.
+
+Only used when type = “process”.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ports
+
+
+
+Allocated ports for this process (name -> port number).
+Populated automatically from process port allocation.
+
+Only used when type = “process”.
+
+
+
+*Type:*
+attribute set of 16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.pseudo_terminal
+
+
+
+Run this process task in a pseudo-terminal (PTY).
+
+Only used when type = “process”.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.restart
+
+
+
+Process restart policy:
+
+ - never: Never restart the process
+ - always: Always restart when it exits
+ - on_failure: Restart only on failure (non-zero exit code)
+
+Only used when type = “process”.
+
+
+
+*Type:*
+one of “never”, “always”, “on_failure”
+
+
+
+*Default:*
+` "on_failure" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
 ## tasks.\<name>.showOutput
 
 
@@ -31427,6 +32733,195 @@ one of “oneshot”, “process”
 
 *Default:*
 ` "oneshot" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.use_sudo
+
+
+
+Run this process task with sudo/elevated privileges.
+
+Only used when type = “process”.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.watch
+
+
+
+File watching configuration for automatic process restarts.
+
+Only used when type = “process”.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.watch.extensions
+
+
+
+File extensions to watch (e.g., “rs”, “js”, “py”).
+If empty, all file extensions are watched.
+
+Only used when type = “process”.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.watch.ignore
+
+
+
+Glob patterns to ignore (e.g., “.git”, “target”, “\*.log”).
+
+Only used when type = “process”.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.watch.paths
+
+
+
+Paths to watch for changes (files or directories).
+When files in these paths change, the process will be restarted.
+
+Only used when type = “process”.
+
+
+
+*Type:*
+list of absolute path
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.watchdog
+
+
+
+Systemd watchdog configuration.
+
+Only used when type = “process”.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  usec = 30000000; # 30 seconds
+  require_ready = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.watchdog.require_ready
+
+
+
+Require READY=1 notification before enforcing watchdog
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.watchdog.usec
+
+
+
+Watchdog interval in microseconds
+
+
+
+*Type:*
+signed integer
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
