@@ -55,6 +55,7 @@ _nix_import_env() {
   local old_tmpdir=${TMPDIR:-__UNSET__}
   local old_temp=${TEMP:-__UNSET__}
   local old_tempdir=${TEMPDIR:-__UNSET__}
+  local old_path=${PATH:-}
   local old_xdg_data_dirs=${XDG_DATA_DIRS:-}
   eval "$env"
   # `nix print-dev-env` will create a temporary directory and use it as TMPDIR
@@ -71,9 +72,18 @@ _nix_import_env() {
   _nix_export_or_unset TMPDIR "$old_tmpdir"
   _nix_export_or_unset TEMP "$old_temp"
   _nix_export_or_unset TEMPDIR "$old_tempdir"
+  local new_path=${PATH:-}
+  export PATH=
+  local IFS=:
+  for dir in $new_path${old_path:+:}$old_path; do
+    dir="${dir%/}" # remove trailing slashes
+    if [[ :$PATH: = *:$dir:* ]]; then
+      continue # already present, skip
+    fi
+    PATH="$PATH${PATH:+:}$dir"
+  done
   local new_xdg_data_dirs=${XDG_DATA_DIRS:-}
   export XDG_DATA_DIRS=
-  local IFS=:
   for dir in $new_xdg_data_dirs${old_xdg_data_dirs:+:}$old_xdg_data_dirs; do
     dir="${dir%/}" # remove trailing slashes
     if [[ :$XDG_DATA_DIRS: = *:$dir:* ]]; then
