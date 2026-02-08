@@ -53,14 +53,15 @@ pub use tracing_subscriber::Registry;
 pub use activity::{Activity, ActivityType};
 pub use events::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
-    ExpectedCategory, Fetch, FetchKind, Message, Operation, SetExpected, Task, TaskInfo,
+    ExpectedCategory, Fetch, FetchKind, Message, Operation, Process, ProcessStatus, SetExpected,
+    Task, TaskInfo,
 };
 pub use timestamp::Timestamp;
 
 // Builders
 pub use builders::{
-    BuildBuilder, CommandBuilder, EvaluateBuilder, FetchBuilder, OperationBuilder, TaskBuilder,
-    next_id,
+    BuildBuilder, CommandBuilder, EvaluateBuilder, FetchBuilder, OperationBuilder, ProcessBuilder,
+    TaskBuilder, next_id,
 };
 
 // Functions

@@ -7,7 +7,8 @@ use tracing::{Level, Span, span};
 use crate::Timestamp;
 use crate::activity::{Activity, ActivityType};
 use crate::events::{
-    ActivityEvent, ActivityLevel, Build, Command, Evaluate, Fetch, FetchKind, Operation, Task,
+    ActivityEvent, ActivityLevel, Build, Command, Evaluate, Fetch, FetchKind, Operation, Process,
+    Task,
 };
 use crate::stack::{current_activity_id, current_activity_level, send_activity_event};
 
@@ -342,6 +343,73 @@ impl CommandBuilder {
         }));
 
         Activity::new(span, id, ActivityType::Command, level)
+    }
+}
+
+/// Builder for Process activities (long-running managed processes)
+pub struct ProcessBuilder {
+    name: String,
+    command: Option<String>,
+    ports: Vec<String>,
+    id: Option<u64>,
+    parent: Option<Option<u64>>,
+    level: ActivityLevel,
+}
+
+impl ProcessBuilder {
+    pub(crate) fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            command: None,
+            ports: Vec::new(),
+            id: None,
+            parent: None,
+            level: ActivityLevel::default(),
+        }
+    }
+
+    pub fn command(mut self, cmd: impl Into<String>) -> Self {
+        self.command = Some(cmd.into());
+        self
+    }
+
+    pub fn ports(mut self, ports: Vec<String>) -> Self {
+        self.ports = ports;
+        self
+    }
+
+    pub fn id(mut self, id: u64) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    pub fn parent(mut self, parent: Option<u64>) -> Self {
+        self.parent = Some(parent);
+        self
+    }
+
+    pub fn level(mut self, level: ActivityLevel) -> Self {
+        self.level = level;
+        self
+    }
+
+    pub fn start(self) -> Activity {
+        let id = self.id.unwrap_or_else(next_id);
+        let parent = self.parent.unwrap_or_else(current_activity_id);
+
+        let span = create_span(id, self.level);
+
+        send_activity_event(ActivityEvent::Process(Process::Start {
+            id,
+            name: self.name.clone(),
+            parent,
+            command: self.command,
+            ports: self.ports,
+            level: self.level,
+            timestamp: Timestamp::now(),
+        }));
+
+        Activity::new(span, id, ActivityType::Process, self.level)
     }
 }
 

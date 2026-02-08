@@ -51,7 +51,7 @@ in
         The latest version of the direnv integration.
       '';
       internal = true;
-      default = 1;
+      default = 2;
     };
   };
 
@@ -106,7 +106,7 @@ in
                   echo "  eval \"$(devenv direnvrc)\""
                 fi
                 echo ""
-                  echo "If you prefer to continue managing the integration manually, follow the upgrade instructions at https://devenv.sh/automatic-shell-activation/."
+                  echo "If you prefer to continue managing the integration manually, follow the upgrade instructions at https://devenv.sh/integrations/direnv/."
                   echo ""
                   echo "To disable this message:"
                   echo ""

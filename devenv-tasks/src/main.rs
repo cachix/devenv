@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use devenv_processes::get_process_runtime_dir;
 use devenv_tasks::{
     Config, RunMode, SudoContext, TaskConfig, Tasks, TasksUi, VerbosityLevel, is_tty,
 };
@@ -29,6 +30,12 @@ enum Command {
             help = "Path to a JSON file containing task definitions"
         )]
         task_file: Option<PathBuf>,
+
+        #[clap(long, help = "Directory for task cache database")]
+        cache_dir: PathBuf,
+
+        #[clap(long, help = "Runtime directory for process state")]
+        runtime_dir: PathBuf,
     },
     Export {
         #[clap()]
@@ -145,6 +152,8 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             roots,
             mode,
             task_file,
+            cache_dir,
+            runtime_dir,
         } => {
             let mut tasks: Vec<TaskConfig> = fetch_tasks(&task_file)?;
 
@@ -158,11 +167,18 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
                 }
             }
 
+            let runtime_dir = get_process_runtime_dir(&runtime_dir).map_err(|e| {
+                TaskError::Other(format!("Failed to create runtime directory: {}", e))
+            })?;
+
             let config = Config {
                 tasks,
                 roots,
                 run_mode: mode,
+                runtime_dir,
+                cache_dir,
                 sudo_context: sudo_context.clone(),
+                env: std::env::vars().collect(),
             };
 
             let tasks = Tasks::builder(config, verbosity, Arc::clone(&shutdown))
@@ -177,7 +193,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             let tasks_clone = Arc::clone(&tasks);
 
             // Spawn task runner - UI will detect completion via JoinHandle
-            let run_handle = tokio::spawn(async move { tasks_clone.run().await });
+            let run_handle = tokio::spawn(async move { tasks_clone.run(false).await });
 
             // Run UI - processes events and waits for run_handle
             let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);

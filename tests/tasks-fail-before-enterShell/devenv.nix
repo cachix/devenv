@@ -1,7 +1,8 @@
 { pkgs, ... }:
 
 {
-  # Task that should fail before enterShell
+  # Task that fails before enterShell
+  # This tests that task failures don't block shell entry (non-fatal)
   tasks."test:fail-before-shell" = {
     description = "Task that fails intentionally";
     exec = ''
@@ -10,9 +11,4 @@
     '';
     before = [ "devenv:enterShell" ];
   };
-
-  # This should NOT run because the dependency task fails
-  enterShell = ''
-    echo "SHELL_ENTERED" >> /tmp/devenv-test-shell-entered.txt
-  '';
 }

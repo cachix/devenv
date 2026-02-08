@@ -19,13 +19,16 @@ let
           ./devenv
           ./devenv-activity
           ./devenv-activity-macros
-          ./devenv-eval-cache
           ./devenv-cache-core
           ./devenv-core
-          ./devenv-snix-backend
+          ./devenv-eval-cache
           ./devenv-nix-backend
           ./devenv-nix-backend-macros
+          ./devenv-processes
+          ./devenv-reload
           ./devenv-run-tests
+          ./devenv-shell
+          ./devenv-snix-backend
           ./devenv-tasks
           ./devenv-tui
           ./nix-conf-parser

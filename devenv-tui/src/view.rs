@@ -5,7 +5,7 @@ use crate::{
         TaskDisplayStatus, TerminalSize, UiState,
     },
 };
-use devenv_activity::ActivityLevel;
+use devenv_activity::{ActivityLevel, ProcessStatus};
 use human_repr::{HumanCount, HumanDuration};
 use iocraft::Context;
 use iocraft::components::ContextProvider;
@@ -23,7 +23,6 @@ pub fn view(
     let active_activities = model.get_display_activities();
 
     let summary = model.calculate_summary();
-    let has_selection = ui_state.selected_activity.is_some();
     let selected_id = ui_state.selected_activity;
     let terminal_size = ui_state.terminal_size;
 
@@ -66,6 +65,8 @@ pub fn view(
         {
             model.get_build_logs(activity.id).cloned()
         } else if devenv_failed {
+            model.get_build_logs(activity.id).cloned()
+        } else if matches!(activity.variant, ActivityVariant::Process(_)) {
             model.get_build_logs(activity.id).cloned()
         } else if let ActivityVariant::Message(ref msg_data) = activity.variant
             && msg_data.details.is_some()
@@ -121,7 +122,7 @@ pub fn view(
     let summary_view = element! {
         ContextProvider(value: Context::owned(SummaryViewContext {
             summary: summary.clone(),
-            has_selection,
+            selected: selected_activity.cloned(),
             showing_logs: selected_logs.is_some(),
             can_go_up,
             can_go_down,
@@ -537,6 +538,74 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             return main_line;
         }
+        ActivityVariant::Process(process_data) => {
+            // Build status text with optional ports
+            let status_str = match process_data.status {
+                ProcessStatus::Running => "running",
+                ProcessStatus::Ready => "ready",
+                ProcessStatus::Restarting => "restarting",
+                ProcessStatus::Stopped => "stopped",
+            };
+
+            // Format ports: extract just the port numbers for brevity
+            let ports_suffix = if !process_data.ports.is_empty() {
+                let port_list: Vec<String> = process_data
+                    .ports
+                    .iter()
+                    .filter_map(|spec| {
+                        // spec is like "http:8080" or just "8080"
+                        // Extract the port number (last part after colon)
+                        spec.rsplit(':').next().map(|p| format!(":{}", p))
+                    })
+                    .collect();
+                if port_list.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {}", port_list.join(", "))
+                }
+            } else {
+                String::new()
+            };
+
+            let status_text = Some(format!("{}{}", status_str, ports_suffix));
+
+            let prefix = build_activity_prefix(*depth, *completed);
+
+            let main_line =
+                ActivityTextComponent::new("".to_string(), activity.name.clone(), elapsed_str)
+                    .with_suffix(status_text)
+                    .with_selection(*is_selected)
+                    .render(terminal_width, *depth, prefix);
+
+            // Show logs: always show LOG_VIEWPORT_SHOW_OUTPUT lines,
+            // expand when selected, show more when failed
+            let process_failed = *completed == Some(false);
+            if logs.is_some() {
+                let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_depth(*depth)
+                    .with_empty_message("→ no output yet (press 'e' to expand)");
+                if process_failed {
+                    component = component.with_max_lines(LOG_VIEWPORT_FAILED);
+                } else if !is_selected {
+                    component = component.with_max_lines(LOG_VIEWPORT_SHOW_OUTPUT);
+                }
+
+                let mut elements = vec![main_line];
+                let log_elements = component.render();
+                elements.extend(log_elements);
+
+                let log_viewport_height = component.calculate_height();
+                let total_height = (1 + log_viewport_height).min(50) as u32;
+                return element! {
+                    View(height: total_height, flex_direction: FlexDirection::Column) {
+                        #(elements)
+                    }
+                }
+                .into_any();
+            }
+
+            return main_line;
+        }
         ActivityVariant::Message(msg_data) => {
             // Determine icon and color based on message level
             // Following CLI conventions: errors get ✗, others get • (dot)
@@ -698,7 +767,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 #[derive(Clone)]
 struct SummaryViewContext {
     summary: ActivitySummary,
-    has_selection: bool,
+    selected: Option<Activity>,
     showing_logs: bool,
     can_go_up: bool,
     can_go_down: bool,
@@ -711,7 +780,7 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let ctx = hooks.use_context::<SummaryViewContext>();
     let SummaryViewContext {
         summary,
-        has_selection,
+        selected,
         showing_logs,
         can_go_up,
         can_go_down,
@@ -719,7 +788,7 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
     build_summary_view_impl(
         summary,
-        *has_selection,
+        selected.as_ref(),
         *showing_logs,
         *can_go_up,
         *can_go_down,
@@ -730,7 +799,7 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 /// Build the summary view with colored counts
 fn build_summary_view_impl(
     summary: &ActivitySummary,
-    has_selection: bool,
+    selected: Option<&Activity>,
     showing_logs: bool,
     can_go_up: bool,
     can_go_down: bool,
@@ -738,6 +807,11 @@ fn build_summary_view_impl(
 ) -> AnyElement<'static> {
     let mut children = vec![];
     let mut has_content = false;
+
+    // Derive capabilities from selected activity
+    let has_selection = selected.is_some();
+    let is_process =
+        matches!(selected, Some(a) if matches!(a.variant, ActivityVariant::Process(_)));
 
     // Determine display mode based on terminal width
     let use_symbols = terminal_width < 60; // Use unicode symbols for very narrow terminals
@@ -933,6 +1007,14 @@ fn build_summary_view_impl(
             help_children.push(element!(Text(content: " expand • ")).into_any());
         } else {
             help_children.push(element!(Text(content: " expand logs • ")).into_any());
+        }
+        if is_process {
+            help_children.push(element!(Text(content: "^r", color: COLOR_INTERACTIVE)).into_any());
+            if use_short_text {
+                help_children.push(element!(Text(content: " restart • ")).into_any());
+            } else {
+                help_children.push(element!(Text(content: " restart process • ")).into_any());
+            }
         }
         help_children.push(element!(Text(content: "Esc", color: COLOR_INTERACTIVE)).into_any());
         if showing_logs {

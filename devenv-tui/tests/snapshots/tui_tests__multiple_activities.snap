@@ -2,7 +2,7 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Building Building package-a buildPhase
+⠋ Building  Building package-a buildPhase
 ⠋ Downloading Downloading package-b
     ─────────────────────────────────────────────────2.5kB / 5kB at 25kB/s
 ⠋ Running setup

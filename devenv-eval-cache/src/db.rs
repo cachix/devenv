@@ -533,6 +533,56 @@ where
     Ok(())
 }
 
+// =============================================================================
+// File Tracking Functions
+// =============================================================================
+
+/// Get file inputs for a specific evaluation by its cache key hash.
+///
+/// This returns the file inputs that were tracked during the evaluation
+/// identified by the given key_hash. Returns empty vec if no such eval exists.
+pub async fn get_file_inputs_by_key_hash(
+    pool: &SqlitePool,
+    key_hash: &str,
+) -> Result<Vec<FileInputDesc>, sqlx::Error> {
+    // First look up the eval to get its ID
+    let Some(eval_row) = get_eval_by_key_hash(pool, key_hash).await? else {
+        return Ok(Vec::new());
+    };
+
+    // Get the file inputs for this eval
+    let file_rows = get_files_by_eval_id(pool, eval_row.id).await?;
+
+    Ok(file_rows.into_iter().map(FileInputDesc::from).collect())
+}
+
+/// Get all unique file paths that have been tracked by any evaluation.
+///
+/// This returns all files that were read during any Nix evaluation,
+/// useful for determining which files to watch for changes.
+pub async fn get_all_tracked_file_paths(
+    pool: &SqlitePool,
+) -> Result<Vec<std::path::PathBuf>, sqlx::Error> {
+    let rows: Vec<(Vec<u8>,)> = sqlx::query_as(
+        r#"
+            SELECT DISTINCT path
+            FROM file_input
+            WHERE is_directory = FALSE
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .filter_map(|(path_bytes,)| {
+            String::from_utf8(path_bytes)
+                .ok()
+                .map(std::path::PathBuf::from)
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use devenv_cache_core::compute_string_hash;

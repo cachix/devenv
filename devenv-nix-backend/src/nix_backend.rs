@@ -47,6 +47,7 @@ use once_cell::sync::OnceCell;
 use ser_nix;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -123,6 +124,10 @@ pub struct NixRustBackend {
     // Unified caching wrapper combining EvalState + CachedEval (initialized in assemble())
     // Provides cache_key() for key generation and uncached() for explicit bypass
     caching_eval_state: OnceCell<CachingEvalState<Arc<Mutex<EvalState>>>>,
+
+    // Flag to force cache bypass on next operation (for hot-reload)
+    // Set by invalidate(), checked and cleared by dev_env()
+    cache_invalidated: AtomicBool,
 
     // Cachix manager for handling binary cache configuration
     cachix_manager: Arc<CachixManager>,
@@ -433,6 +438,7 @@ impl NixRustBackend {
             nix_log_bridge: log_bridge,
             eval_cache_pool,
             caching_eval_state: OnceCell::new(),
+            cache_invalidated: AtomicBool::new(false),
             cachix_manager,
             cachix_daemon: cachix_daemon.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
@@ -1100,11 +1106,18 @@ impl NixBackend for NixRustBackend {
         // Create cache key for shell paths
         let cache_key = caching_state.cache_key("shell");
 
+        // Check if cache was invalidated (for hot-reload)
+        let cache_invalidated = self.cache_invalidated.swap(false, Ordering::AcqRel);
+        if cache_invalidated {
+            tracing::debug!("Cache bypassed due to invalidation (hot-reload)");
+        }
+
         // Try to get cached paths and verify they still exist
         // Note: dev_env requires explicit path validation because store paths can be GC'd
-        let cached_paths: Option<CachedShellPaths> = if let Some(service) =
-            caching_state.cached_eval().service()
-        {
+        let cached_paths: Option<CachedShellPaths> = if cache_invalidated {
+            // Skip cache lookup entirely when invalidated
+            None
+        } else if let Some(service) = caching_state.cached_eval().service() {
             match service.get_cached(&cache_key).await {
                 Ok(Some(cached)) => {
                     match serde_json::from_str::<CachedShellPaths>(&cached.json_output) {
@@ -1854,10 +1867,74 @@ impl NixBackend for NixRustBackend {
             )),
         }
     }
+
+    fn invalidate(&self) {
+        // Set the invalidation flag so the next dev_env() call bypasses cache
+        self.cache_invalidated.store(true, Ordering::Release);
+
+        // Replace the EvalState to clear C++ fileEvalCache.
+        // The old EvalState caches evalFile() results by path, so reusing it
+        // returns stale ASTs even when files have changed on disk.
+        match self.create_fresh_eval_state() {
+            Ok(new_state) => match self.eval_state.lock() {
+                Ok(mut guard) => {
+                    *guard = new_state;
+                    tracing::debug!("EvalState replaced for hot-reload");
+                }
+                Err(e) => {
+                    tracing::error!("Failed to lock eval state for replacement: {}", e);
+                }
+            },
+            Err(e) => {
+                tracing::error!("Failed to create fresh eval state for reload: {}", e);
+            }
+        }
+    }
 }
 
 // Helper methods for NixRustBackend
 impl NixRustBackend {
+    /// Create a fresh EvalState, clearing all internal caches (e.g. fileEvalCache).
+    /// Used during hot-reload to ensure changed files are re-evaluated.
+    fn create_fresh_eval_state(&self) -> Result<EvalState> {
+        let store = (*self.store).clone();
+        let root_str = self
+            .paths
+            .root
+            .to_str()
+            .ok_or_else(|| miette!("Root path contains invalid UTF-8"))?;
+        let nixpkgs_config_str = self
+            .nixpkgs_config_path
+            .to_str()
+            .ok_or_else(|| miette!("Nixpkgs config path contains invalid UTF-8"))?;
+
+        let builder = EvalStateBuilder::new(store)
+            .to_miette()
+            .wrap_err("Failed to create eval state builder")?
+            .base_directory(root_str)
+            .to_miette()
+            .wrap_err("Failed to set base directory")?
+            .env_override("NIXPKGS_CONFIG", nixpkgs_config_str)
+            .to_miette()
+            .wrap_err("Failed to set NIXPKGS_CONFIG")?
+            .flakes(&self.flake_settings)
+            .to_miette()
+            .wrap_err("Failed to configure flakes")?;
+
+        let mut eval_state = builder
+            .build()
+            .to_miette()
+            .wrap_err("Failed to build eval state")?;
+
+        if self.global_options.nix_debugger {
+            eval_state
+                .enable_debugger()
+                .to_miette()
+                .wrap_err("Failed to enable debugger")?;
+        }
+
+        Ok(eval_state)
+    }
     /// Format lock file inputs as a tree structure
     fn format_lock_inputs(lock_file: &nix_bindings_flake::LockFile) -> Result<String> {
         let mut iter = lock_file

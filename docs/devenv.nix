@@ -49,13 +49,8 @@
       exec = "mkdocs serve";
       cwd = config.git.root + "/docs";
     };
-
-    # Watch files for changes to re-compile the Tailwind CSS
-    tailwind = {
-      exec = "watchexec -e html,css,js devenv-generate-doc-css";
-      cwd = config.git.root + "/docs";
-    };
   };
+  process.manager.implementation = "native";
 
   scripts."devenv-generate-doc-css" = {
     description = "Generate CSS for the docs.";

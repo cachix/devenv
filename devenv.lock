@@ -17,6 +17,7 @@
       "flake": false,
       "locked": {
         "lastModified": 1756414178,
+        "narHash": "sha256-HSfTLezvIpZqu1TAUWfBO77LQRHXEAf8xhVEzT96oc8=",
         "owner": "cachix",
         "repo": "devenv-claude-agents",
         "rev": "4d5c8142461f6132e6aa0458e2a9661c2178db78",
@@ -259,10 +260,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1766025663,
+        "lastModified": 1770088046,
+        "narHash": "sha256-4hfYDnUTvL1qSSZEA4CEThxfz+KlwSFQ30Z9jgDguO0=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "96617c96d4c455770e6664b5e3aad999b677fae6",
+        "rev": "71f9daa4e05e49c434d08627e755495ae222bc34",
         "type": "github"
       },
       "original": {

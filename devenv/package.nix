@@ -17,6 +17,7 @@
 , protobuf
 , pkg-config
 , glibcLocalesUtf8
+, bash
 , nix
 , llvmPackages
 , boehmgc
@@ -75,7 +76,7 @@ rustPlatform.buildRustPackage {
     export PROTO_ROOT="$NIX_BUILD_TOP/cargo-vendor-dir"
   '';
 
-  nativeCheckInputs = [ gitMinimal ];
+  nativeCheckInputs = [ gitMinimal bash ];
   preCheck = ''
     # Initialize git repo for tests that use git-root-relative imports
     pushd $NIX_BUILD_TOP/source
@@ -85,7 +86,8 @@ rustPlatform.buildRustPackage {
   '';
 
   # Skip devenv-nix-backend tests in sandbox due to store permission restrictions
-  cargoTestFlags = [ "--workspace" "--exclude" "devenv-nix-backend" ];
+  # Skip devenv-reload tests in sandbox - requires PTY (devpts) which isn't available
+  cargoTestFlags = [ "--workspace" "--exclude" "devenv-nix-backend" "--exclude" "devenv-reload" ];
 
   postInstall =
     let

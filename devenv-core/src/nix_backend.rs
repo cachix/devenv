@@ -136,4 +136,10 @@ pub trait NixBackend: Send + Sync {
 
     /// Check if the current user is a trusted user of the Nix store
     async fn is_trusted_user(&self) -> Result<bool>;
+
+    /// Invalidate cached state for hot-reload.
+    ///
+    /// This clears any cached evaluation state to force re-evaluation on the next operation.
+    /// Used by hot-reload to ensure file changes are picked up.
+    fn invalidate(&self);
 }

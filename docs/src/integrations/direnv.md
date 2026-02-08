@@ -9,7 +9,7 @@ This feature relies on a separate tool called [direnv](https://direnv.net) (not 
 
 ## Configure shell activation
 
-To enable automatic shell activation, create an `.envrc` file in your project directory with the following content:
+Create an `.envrc` file in your project directory with the following content:
 
 === "v1.4+"
 
@@ -35,7 +35,8 @@ To enable automatic shell activation, create an `.envrc` file in your project di
 
 This file configures direnv to use devenv for shell activation.
 
-`devenv init` will create this file by default when you initialize a new project.
+!!! note
+    `.envrc` is not created by `devenv init`. You need to create it manually.
 
 ## Approving and loading the shell
 

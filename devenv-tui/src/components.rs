@@ -6,9 +6,11 @@ use iocraft::prelude::*;
 use std::collections::VecDeque;
 use std::time::Duration;
 
-/// Spinner animation frames (braille dots pattern)
-const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const SPINNER_INTERVAL_MS: u64 = 80;
+// Import shared UI constants from devenv-shell
+pub use devenv_shell::{
+    CHECKMARK, COLOR_ACTIVE, COLOR_ACTIVE_NESTED, COLOR_COMPLETED, COLOR_FAILED, COLOR_HIERARCHY,
+    COLOR_INFO, COLOR_INTERACTIVE, COLOR_SECONDARY, SPINNER_FRAMES, SPINNER_INTERVAL_MS, XMARK,
+};
 
 /// Self-animating spinner component.
 /// Manages its own animation state and only re-renders itself.
@@ -50,8 +52,8 @@ pub fn StatusIndicator(
     props: &StatusIndicatorProps,
 ) -> impl Into<AnyElement<'static>> {
     match props.completed {
-        Some(true) => element!(Text(content: "✓", color: COLOR_COMPLETED)).into_any(),
-        Some(false) => element!(Text(content: "✗", color: COLOR_FAILED)).into_any(),
+        Some(true) => element!(Text(content: CHECKMARK, color: COLOR_COMPLETED)).into_any(),
+        Some(false) => element!(Text(content: XMARK, color: COLOR_FAILED)).into_any(),
         None => {
             if props.show_spinner {
                 element!(Spinner(color: COLOR_ACTIVE)).into_any()
@@ -68,20 +70,6 @@ pub const LOG_VIEWPORT_COLLAPSED: usize = 10;
 pub const LOG_VIEWPORT_FAILED: usize = 20;
 /// Reduced viewport height for tasks with showOutput=true (expands to full when selected)
 pub const LOG_VIEWPORT_SHOW_OUTPUT: usize = 3;
-
-/// Color constants for operations using ANSI grayscale (232-255)
-pub const COLOR_ACTIVE: Color = Color::AnsiValue(255); // Bright white for top-level active
-pub const COLOR_ACTIVE_NESTED: Color = Color::AnsiValue(246); // Dimmer for nested active
-pub const COLOR_SECONDARY: Color = Color::AnsiValue(242); // Gray for secondary text (cached, phases)
-pub const COLOR_HIERARCHY: Color = Color::AnsiValue(242); // Gray for tree lines/elapsed
-pub const COLOR_COMPLETED: Color = Color::Rgb {
-    r: 112,
-    g: 138,
-    b: 88,
-}; // #708A58 - Sage green for success checkmark
-pub const COLOR_FAILED: Color = Color::AnsiValue(160); // Red for failed
-pub const COLOR_INFO: Color = Color::AnsiValue(39); // Blue for info indicators
-pub const COLOR_INTERACTIVE: Color = Color::AnsiValue(220); // Gold for selected items
 
 /// Format elapsed time for display: ms -> s -> m s -> h m
 /// When `high_resolution` is true, shows ms for sub-second durations.
@@ -224,19 +212,24 @@ impl ActivityTextComponent {
         // Only add action text if action is not empty
         if !self.action.is_empty() {
             // Action word should be capitalized
-            let action_text = format!(
-                "{}{}",
-                self.action
-                    .chars()
-                    .next()
-                    .unwrap_or_default()
-                    .to_uppercase()
-                    .collect::<String>(),
-                &self.action[1..]
-            );
+            let action_text = {
+                let mut chars = self.action.chars();
+                match chars.next() {
+                    Some(first) => {
+                        format!(
+                            "{}{}",
+                            first.to_uppercase().collect::<String>(),
+                            chars.as_str()
+                        )
+                    }
+                    None => String::new(),
+                }
+            };
             final_prefix.push(
-                element!(View(width: action_text.len() as u32, flex_shrink: 0.0) {
-                    Text(content: action_text, color: name_color, weight: Weight::Bold)
+                element!(View(width: (action_text.chars().count() + 1) as u32, flex_shrink: 0.0) {
+                    View(margin_right: 1) {
+                        Text(content: action_text, color: name_color, weight: Weight::Bold)
+                    }
                 })
                 .into_any(),
             );
@@ -684,6 +677,7 @@ pub struct ExpandedContentComponent<'a> {
     pub lines: Option<&'a VecDeque<String>>,
     pub empty_message: &'a str,
     pub max_lines: usize,
+    pub depth: usize,
 }
 
 impl<'a> ExpandedContentComponent<'a> {
@@ -692,6 +686,7 @@ impl<'a> ExpandedContentComponent<'a> {
             lines,
             empty_message: "  → no content",
             max_lines: LOG_VIEWPORT_COLLAPSED,
+            depth: 0,
         }
     }
 
@@ -705,7 +700,15 @@ impl<'a> ExpandedContentComponent<'a> {
         self
     }
 
+    pub fn with_depth(mut self, depth: usize) -> Self {
+        self.depth = depth;
+        self
+    }
+
     pub fn render(&self) -> Vec<AnyElement<'static>> {
+        // Calculate indentation based on depth (2 base + 2 per depth level)
+        let indent = 2 + (self.depth * 2);
+
         if let Some(lines) = &self.lines
             && !lines.is_empty()
         {
@@ -719,7 +722,7 @@ impl<'a> ExpandedContentComponent<'a> {
                 for line in visible_lines {
                     line_elements.push(
                         element! {
-                            View(height: 1, flex_direction: FlexDirection::Row, padding_left: 2, padding_right: 1) {
+                            View(height: 1, flex_direction: FlexDirection::Row, padding_left: indent as u32, padding_right: 1) {
                                 Text(content: line.clone(), color: Color::AnsiValue(245))
                             }
                         }
@@ -738,7 +741,7 @@ impl<'a> ExpandedContentComponent<'a> {
 
         // Fallback: show empty message with minimal height
         vec![element! {
-            View(height: 1, flex_direction: FlexDirection::Column, padding_left: 2, padding_right: 1) {
+            View(height: 1, flex_direction: FlexDirection::Column, padding_left: indent as u32, padding_right: 1) {
                 Text(content: self.empty_message.to_string(), color: Color::AnsiValue(245))
             }
         }

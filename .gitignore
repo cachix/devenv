@@ -20,6 +20,7 @@ result-*
 
 # Rust
 target/
+proptest-regressions/
 
 # JavaScript
 node_modules/

@@ -4,28 +4,19 @@ set -euo pipefail
 # Clean up
 rm -f /tmp/devenv-test-shell-entered.txt
 
-# Try to enter the shell and run "true" (this should fail because of the failing task)
-# Using "-- true" ensures the shell runs the shellHook (which includes tasks) before executing the command
-if devenv shell -- true 2>&1; then
-  # Shell entered successfully - this is the bug!
-  if [ -f /tmp/devenv-test-shell-entered.txt ]; then
-    echo "BUG: Shell entered even though dependency task failed"
-    cat /tmp/devenv-test-shell-entered.txt
-    exit 1
-  else
-    echo "Shell command succeeded but our enterShell didn't run"
-    exit 1
-  fi
+# Run shell with a failing task before enterShell
+# The shell command should succeed (non-fatal task failures)
+# even though the enterShell task itself is marked as dependency-failed
+if devenv shell -- echo "SHELL_COMMAND_RAN" 2>&1; then
+  echo "Shell correctly entered despite task failure"
 else
-  # Shell failed to enter - this is expected
-  if [ -f /tmp/devenv-test-shell-entered.txt ]; then
-    echo "Shell command failed but enterShell still ran"
-    cat /tmp/devenv-test-shell-entered.txt
-    exit 1
-  else
-    echo "Shell correctly failed to enter when dependency task failed"
-  fi
+  echo "ERROR: Shell command failed (task failures should be non-fatal)"
+  exit 1
 fi
+
+# Note: The enterShell script doesn't run because its dependency failed
+# (hard dependency via `before`). But the shell still enters.
+# This test verifies that task failures don't block shell entry.
 
 # Clean up
 rm -f /tmp/devenv-test-shell-entered.txt

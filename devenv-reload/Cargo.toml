@@ -1,0 +1,25 @@
+[package]
+name = "devenv-reload"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Shell session manager with hot-reload capability"
+
+[dependencies]
+devenv-activity = { workspace = true }
+devenv-shell = { workspace = true }
+portable-pty = { workspace = true }
+avt = "0.14"
+notify = "8"
+notify-debouncer-mini = "0.5"
+tokio = { workspace = true, features = ["full"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+blake3 = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = { workspace = true }

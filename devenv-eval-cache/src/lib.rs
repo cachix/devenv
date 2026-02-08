@@ -9,7 +9,7 @@ pub use devenv_core::internal_log;
 pub use devenv_core::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 pub use eval_inputs::{
     EnvInputDesc, FileInputDesc, FileState, Input, check_env_state, check_file_state,
-    truncate_to_seconds,
+    has_file_content_changed, truncate_to_seconds,
 };
 
 pub use caching_eval::{
@@ -18,3 +18,6 @@ pub use caching_eval::{
 };
 pub use ffi_cache::{CachingConfig, EvalCacheKey, EvalInputCollector, ops_to_inputs};
 pub use resource_manager::{ResourceManager, ResourceSpec};
+
+// Re-export database query functions for file tracking
+pub use db::{get_all_tracked_file_paths, get_file_inputs_by_key_hash};

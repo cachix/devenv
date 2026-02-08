@@ -1,6 +1,7 @@
 { pkgs, lib, config, ... }@inputs:
 let
   types = lib.types;
+  listenType = import ./lib/listen.nix { inherit lib; };
 
   # Attempt to evaluate devenv-tasks using the exact nixpkgs used by the root devenv flake.
   # If the locked input is not what we expect, fall back to evaluating with the user's nixpkgs.
@@ -43,12 +44,24 @@ let
                 if config.binary != null
                 then config.binary == "bash"
                 else config.package.meta.mainProgram or null == "bash";
+              # Output exports in a format the Rust executor can parse
+              # Format: DEVENV_EXPORT:<base64-encoded-var>=<base64-encoded-value>
+              # Base64 encoding handles special characters safely
+              exportVars = vars: ''
+                for _var in ${lib.concatStringsSep " " vars}; do
+                  if [ -n "''${!_var+x}" ]; then
+                    _var_b64=$(printf '%s' "$_var" | base64 -w0)
+                    _val_b64=$(printf '%s' "''${!_var}" | base64 -w0)
+                    echo "DEVENV_EXPORT:$_var_b64=$_val_b64"
+                  fi
+                done
+              '';
             in
             pkgs.writeScript name ''
               #!${binary}
               ${lib.optionalString (!isStatus && isBash) "set -e"}
               ${command}
-              ${lib.optionalString (config.exports != [] && !isStatus) "${inputs.config.task.package}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
+              ${lib.optionalString (config.exports != [] && !isStatus) (exportVars config.exports)}
             '';
       in
       {
@@ -115,6 +128,17 @@ let
               exec_if_modified = config.execIfModified;
               cwd = config.cwd;
               show_output = config.showOutput;
+              process = {
+                use_sudo = config.use_sudo;
+                pseudo_terminal = config.pseudo_terminal;
+                restart = config.restart;
+                max_restarts = config.max_restarts;
+                listen = config.listen;
+                ports = config.ports;
+                watch = config.watch;
+                notify = config.notify;
+                watchdog = config.watchdog;
+              };
             };
             description = "Internal configuration for the task.";
           };
@@ -172,6 +196,179 @@ let
             default = null;
             description = "Working directory to run the task in. If not specified, the current working directory will be used.";
           };
+
+          use_sudo = lib.mkOption {
+            type = types.bool;
+            default = false;
+            description = ''
+              Run this process task with sudo/elevated privileges.
+
+              Only used when type = "process".
+            '';
+          };
+
+          pseudo_terminal = lib.mkOption {
+            type = types.bool;
+            default = false;
+            description = ''
+              Run this process task in a pseudo-terminal (PTY).
+
+              Only used when type = "process".
+            '';
+          };
+
+          # Process-specific configuration (only used when type = "process")
+          restart = lib.mkOption {
+            type = types.enum [ "never" "always" "on_failure" ];
+            default = "on_failure";
+            description = ''
+              Process restart policy:
+              - never: Never restart the process
+              - always: Always restart when it exits
+              - on_failure: Restart only on failure (non-zero exit code)
+
+              Only used when type = "process".
+            '';
+          };
+
+          max_restarts = lib.mkOption {
+            type = types.nullOr types.int;
+            default = 5;
+            description = ''
+              Maximum number of restart attempts. null means unlimited restarts.
+
+              Only used when type = "process".
+            '';
+          };
+
+          ports = lib.mkOption {
+            type = types.attrsOf types.port;
+            default = { };
+            description = ''
+              Allocated ports for this process (name -> port number).
+              Populated automatically from process port allocation.
+
+              Only used when type = "process".
+            '';
+          };
+
+          listen = lib.mkOption {
+            type = types.listOf listenType;
+            default = [ ];
+            description = ''
+              Socket activation configuration for systemd-style socket passing.
+
+              Only used when type = "process".
+            '';
+            example = [
+              {
+                name = "http";
+                kind = "tcp";
+                address = "127.0.0.1:8080";
+              }
+              {
+                name = "admin";
+                kind = "unix_stream";
+                path = "$DEVENV_STATE/admin.sock";
+                mode = 384; # 0o600
+              }
+            ];
+          };
+
+          watchdog = lib.mkOption {
+            type = types.nullOr (types.submodule {
+              options = {
+                usec = lib.mkOption {
+                  type = types.int;
+                  description = "Watchdog interval in microseconds";
+                };
+
+                require_ready = lib.mkOption {
+                  type = types.bool;
+                  default = true;
+                  description = "Require READY=1 notification before enforcing watchdog";
+                };
+              };
+            });
+            default = null;
+            description = ''
+              Systemd watchdog configuration.
+
+              Only used when type = "process".
+            '';
+            example = lib.literalExpression ''
+              {
+                usec = 30000000; # 30 seconds
+                require_ready = true;
+              }
+            '';
+          };
+
+          watch = lib.mkOption {
+            type = types.submodule {
+              options = {
+                paths = lib.mkOption {
+                  type = types.listOf types.path;
+                  default = [ ];
+                  description = ''
+                    Paths to watch for changes (files or directories).
+                    When files in these paths change, the process will be restarted.
+
+                    Only used when type = "process".
+                  '';
+                };
+
+                extensions = lib.mkOption {
+                  type = types.listOf types.str;
+                  default = [ ];
+                  description = ''
+                    File extensions to watch (e.g., "rs", "js", "py").
+                    If empty, all file extensions are watched.
+
+                    Only used when type = "process".
+                  '';
+                };
+
+                ignore = lib.mkOption {
+                  type = types.listOf types.str;
+                  default = [ ];
+                  description = ''
+                    Glob patterns to ignore (e.g., ".git", "target", "*.log").
+
+                    Only used when type = "process".
+                  '';
+                };
+              };
+            };
+            default = { };
+            description = ''
+              File watching configuration for automatic process restarts.
+
+              Only used when type = "process".
+            '';
+          };
+
+          notify = lib.mkOption {
+            type = types.submodule {
+              options.enable = lib.mkOption {
+                type = types.bool;
+                default = false;
+                description = ''
+                  Enable systemd notify protocol for readiness signaling.
+                  When enabled, the process must send READY=1 to the NOTIFY_SOCKET
+                  before dependent tasks with @ready suffix will be unblocked.
+
+                  Only used when type = "process".
+                '';
+              };
+            };
+            default = { };
+            description = ''
+              Systemd notify protocol configuration for readiness signaling.
+
+              Only used when type = "process".
+            '';
+          };
         };
       });
   tasksJSON = (lib.mapAttrsToList (name: value: { inherit name; } // value.config) config.tasks);
@@ -189,9 +386,14 @@ in
       description = "The generated tasks.json file.";
     };
     task.package = lib.mkOption {
-      type = types.package;
+      type = types.nullOr types.package;
       internal = true;
-      default = lib.getBin devenv-tasks;
+      # CLI 2.0+ runs tasks via Rust, so devenv-tasks binary is not needed for shell entry.
+      # However, processes still need the binary for task-based process management.
+      default =
+        if lib.versionAtLeast config.devenv.cliVersion "2.0" && config.processes == { }
+        then null
+        else lib.getBin devenv-tasks;
     };
   };
 
@@ -232,19 +434,23 @@ in
         after = [ "devenv:enterShell" ];
       };
     };
-    enterShell = ''
+    # In devenv 2.0+, Rust runs enterShell tasks before shell spawns (with TUI progress)
+    # So we skip the bash hook to avoid running tasks twice
+    enterShell = lib.mkIf (lib.versionOlder config.devenv.cliVersion "2.0") ''
       if [ -z "''${DEVENV_SKIP_TASKS:-}" ]; then
-        ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode all || exit $?
+        ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} || exit $?
         if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
           source "$DEVENV_DOTFILE/load-exports"
         fi
       fi
     '';
-    enterTest = lib.mkBefore ''
-      ${config.task.package}/bin/devenv-tasks run devenv:enterTest --mode all || exit $?
+    # In devenv 2.0+, Rust runs enterTest tasks (with TUI progress)
+    # So we skip the bash hook to avoid running tasks twice
+    enterTest = lib.mkIf (lib.versionOlder config.devenv.cliVersion "2.0") (lib.mkBefore ''
+      ${config.task.package}/bin/devenv-tasks run devenv:enterTest --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} || exit $?
       if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
         source "$DEVENV_DOTFILE/load-exports"
       fi
-    '';
+    '');
   };
 }

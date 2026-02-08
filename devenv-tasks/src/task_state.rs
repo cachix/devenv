@@ -1,20 +1,19 @@
 use crate::SudoContext;
 use crate::config::TaskConfig;
+use crate::executor::{ExecutionContext, OutputCallback, TaskExecutor};
 use crate::task_cache::{TaskCache, expand_glob_patterns};
 use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
+use devenv_processes::{ListenKind, NativeProcessManager, ProcessConfig};
 use miette::{IntoDiagnostic, Result, WrapErr};
-use nix::sys::signal::{self as nix_signal, Signal};
-use nix::unistd::Pid;
 use std::collections::BTreeMap;
 use std::process::Stdio;
+use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
-use tracing::error;
 
 impl std::fmt::Debug for TaskState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -23,6 +22,27 @@ impl std::fmt::Debug for TaskState {
             .field("status", &self.status)
             .field("verbosity", &self.verbosity)
             .finish()
+    }
+}
+
+/// OutputCallback implementation that forwards output to an Activity.
+struct ActivityCallback<'a> {
+    activity: &'a Activity,
+}
+
+impl<'a> ActivityCallback<'a> {
+    fn new(activity: &'a Activity) -> Self {
+        Self { activity }
+    }
+}
+
+impl OutputCallback for ActivityCallback<'_> {
+    fn on_stdout(&self, line: &str) {
+        self.activity.log(line);
+    }
+
+    fn on_stderr(&self, line: &str) {
+        self.activity.error(line);
     }
 }
 
@@ -87,11 +107,69 @@ impl TaskState {
         }
     }
 
+    /// Prepare environment variables for task execution.
+    /// Returns the environment map and a tempfile for task output.
+    fn prepare_env(
+        &self,
+        outputs: &BTreeMap<String, serde_json::Value>,
+    ) -> Result<(BTreeMap<String, String>, tempfile::NamedTempFile)> {
+        let mut env = BTreeMap::new();
+
+        // Set DEVENV_TASK_INPUT
+        if let Some(input) = &self.task.input {
+            let input_json = serde_json::to_string(input)
+                .into_diagnostic()
+                .wrap_err("Failed to serialize task input to JSON")?;
+            env.insert("DEVENV_TASK_INPUT".to_string(), input_json);
+        }
+
+        // Create a temporary file for DEVENV_TASK_OUTPUT_FILE
+        let outputs_file = tempfile::Builder::new()
+            .prefix("devenv_task_output")
+            .suffix(".json")
+            .tempfile()
+            .into_diagnostic()
+            .wrap_err("Failed to create temporary file for task output")?;
+
+        // Set environment variables from task outputs
+        let mut devenv_env = String::new();
+        for (_, value) in outputs.iter() {
+            if let Some(env_obj) = value
+                .get("devenv")
+                .and_then(|d| d.get("env"))
+                .and_then(|e| e.as_object())
+            {
+                for (env_key, env_value) in env_obj {
+                    if let Some(env_str) = env_value.as_str() {
+                        env.insert(env_key.clone(), env_str.to_string());
+                        devenv_env.push_str(&format!(
+                            "export {}={}\n",
+                            env_key,
+                            shell_escape::escape(std::borrow::Cow::Borrowed(env_str))
+                        ));
+                    }
+                }
+            }
+        }
+        // Internal for now
+        env.insert("DEVENV_TASK_ENV".to_string(), devenv_env);
+
+        // Set DEVENV_TASKS_OUTPUTS
+        let outputs_json = serde_json::to_string(outputs)
+            .into_diagnostic()
+            .wrap_err("Failed to serialize task outputs to JSON")?;
+        env.insert("DEVENV_TASKS_OUTPUTS".to_string(), outputs_json);
+
+        Ok((env, outputs_file))
+    }
+
     fn prepare_command(
         &self,
         cmd: &str,
         outputs: &BTreeMap<String, serde_json::Value>,
     ) -> Result<(Command, tempfile::NamedTempFile)> {
+        let (env, outputs_file) = self.prepare_env(outputs)?;
+
         // If we dropped privileges but have sudo context, restore sudo for the task
         let mut command = if let Some(_ctx) = &self.sudo_context {
             // Wrap with sudo to restore elevated privileges
@@ -135,41 +213,13 @@ impl TaskState {
             command.env("DEVENV_TASK_INPUT", input_json);
         }
 
-        // Create a temporary file for DEVENV_TASK_OUTPUT_FILE
-        let outputs_file = tempfile::Builder::new()
-            .prefix("devenv_task_output")
-            .suffix(".json")
-            .tempfile()
-            .into_diagnostic()
-            .wrap_err("Failed to create temporary file for task output")?;
-        command.env("DEVENV_TASK_OUTPUT_FILE", outputs_file.path());
-
-        // Set environment variables from task outputs
-        let mut devenv_env = String::new();
-        for (_, value) in outputs.iter() {
-            if let Some(env) = value.get("devenv").and_then(|d| d.get("env"))
-                && let Some(env_obj) = env.as_object()
-            {
-                for (env_key, env_value) in env_obj {
-                    if let Some(env_str) = env_value.as_str() {
-                        command.env(env_key, env_str);
-                        devenv_env.push_str(&format!(
-                            "export {}={}\n",
-                            env_key,
-                            shell_escape::escape(std::borrow::Cow::Borrowed(env_str))
-                        ));
-                    }
-                }
-            }
+        // Set environment variables
+        for (key, value) in &env {
+            command.env(key, value);
         }
-        // Internal for now
-        command.env("DEVENV_TASK_ENV", devenv_env);
 
-        // Set DEVENV_TASKS_OUTPUTS
-        let outputs_json = serde_json::to_string(outputs)
-            .into_diagnostic()
-            .wrap_err("Failed to serialize task outputs to JSON")?;
-        command.env("DEVENV_TASKS_OUTPUTS", outputs_json);
+        // Set DEVENV_TASK_OUTPUT_FILE
+        command.env("DEVENV_TASK_OUTPUT_FILE", outputs_file.path());
 
         Ok((command, outputs_file))
     }
@@ -187,6 +237,155 @@ impl TaskState {
         Output(output)
     }
 
+    /// Run a process task (long-running)
+    ///
+    /// This spawns a process using NativeProcessManager and immediately returns
+    /// ProcessReady status. The process will stay alive until explicitly stopped
+    /// via the process manager's stop_all().
+    pub async fn run_process(
+        &mut self,
+        manager: &Arc<NativeProcessManager>,
+        parent_id: Option<u64>,
+        env: &std::collections::HashMap<String, String>,
+    ) -> Result<()> {
+        let Some(cmd) = &self.task.command else {
+            return Err(miette::miette!(
+                "Process task {} has no command",
+                self.task.name
+            ));
+        };
+
+        tracing::info!("Starting process task: {}", self.task.name);
+
+        // Use short process name (strip "devenv:processes:" prefix for display)
+        let process_name = self
+            .task
+            .name
+            .strip_prefix("devenv:processes:")
+            .unwrap_or(&self.task.name)
+            .to_string();
+
+        // Build process config, merging task config with process-specific overrides
+        let mut config = if let Some(ref process) = self.task.process {
+            ProcessConfig {
+                name: process_name,
+                exec: cmd.clone(),
+                cwd: self.task.cwd.clone().map(std::path::PathBuf::from),
+                ..process.clone()
+            }
+        } else {
+            ProcessConfig {
+                name: process_name,
+                exec: cmd.clone(),
+                cwd: self.task.cwd.clone().map(std::path::PathBuf::from),
+                restart: devenv_processes::RestartPolicy::OnFailure,
+                max_restarts: Some(5),
+                ..Default::default()
+            }
+        };
+
+        // Merge devenv shell environment into process config
+        // Process-specific env vars take precedence over shell env
+        let mut merged_env = env.clone();
+        merged_env.extend(config.env.clone());
+        config.env = merged_env;
+
+        // Check if we need to wait for readiness (notify enabled or has listen sockets)
+        let requires_ready_wait = config.notify.as_ref().map_or(false, |n| n.enable)
+            || config
+                .listen
+                .iter()
+                .any(|spec| spec.kind == ListenKind::Tcp);
+
+        // Start the process via the manager (which tracks it for shutdown)
+        manager.start_command(&config, parent_id).await?;
+
+        // Wait for ready signal if notify is enabled or has listen sockets
+        if requires_ready_wait {
+            tracing::info!("Waiting for process {} to signal ready...", self.task.name);
+            manager.wait_ready(&config.name).await?;
+            tracing::info!("Process {} signaled ready", self.task.name);
+        }
+
+        // Transition to ProcessReady
+        self.status = TaskStatus::ProcessReady;
+
+        tracing::info!("Process task {} is ready", self.task.name);
+
+        Ok(())
+    }
+
+    /// Process DEVENV_EXPORT lines from task stdout and merge into output file.
+    ///
+    /// Format: DEVENV_EXPORT:<base64-var>=<base64-value>
+    /// This allows tasks to export env vars without needing the devenv-tasks binary.
+    async fn process_exports(
+        stdout_lines: &[(std::time::Instant, String)],
+        outputs_file: &tempfile::NamedTempFile,
+    ) {
+        use base64::Engine;
+        use std::io::Write;
+
+        let mut exports: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+
+        for (_, line) in stdout_lines {
+            if let Some(rest) = line.strip_prefix("DEVENV_EXPORT:") {
+                // Format: <base64-key>=<base64-value>
+                // Base64 uses '=' for padding, so split_once('=') would split
+                // inside the key's padding. Instead, find the separator '=' at the
+                // first position that's a multiple of 4 (end of a valid base64 string).
+                let split_pos = (4..rest.len())
+                    .step_by(4)
+                    .find(|&i| rest.as_bytes()[i] == b'=');
+                if let Some(pos) = split_pos {
+                    let var_b64 = &rest[..pos];
+                    let val_b64 = &rest[pos + 1..];
+                    let engine = base64::engine::general_purpose::STANDARD;
+                    if let (Ok(var_bytes), Ok(val_bytes)) =
+                        (engine.decode(var_b64), engine.decode(val_b64))
+                    {
+                        if let (Ok(var), Ok(val)) =
+                            (String::from_utf8(var_bytes), String::from_utf8(val_bytes))
+                        {
+                            exports.insert(var, serde_json::Value::String(val));
+                        }
+                    }
+                }
+            }
+        }
+
+        if exports.is_empty() {
+            return;
+        }
+
+        // Read existing output file content
+        let mut output: serde_json::Value = std::fs::read_to_string(outputs_file.path())
+            .ok()
+            .and_then(|content| serde_json::from_str(&content).ok())
+            .unwrap_or_else(|| serde_json::json!({}));
+
+        // Ensure devenv.env structure exists
+        if !output.get("devenv").is_some() {
+            output["devenv"] = serde_json::json!({});
+        }
+        if !output["devenv"].get("env").is_some() {
+            output["devenv"]["env"] = serde_json::json!({});
+        }
+
+        // Merge exports into devenv.env
+        if let Some(env_obj) = output["devenv"]["env"].as_object_mut() {
+            for (k, v) in exports {
+                env_obj.insert(k, v);
+            }
+        }
+
+        // Write back to file
+        if let Ok(content) = serde_json::to_string_pretty(&output) {
+            let _ = std::fs::File::create(outputs_file.path())
+                .and_then(|mut f| f.write_all(content.as_bytes()));
+        }
+    }
+
     /// Run this task with a pre-assigned activity ID.
     /// The Task::Hierarchy event has already been emitted; this emits Task::Start.
     pub async fn run(
@@ -196,12 +395,13 @@ impl TaskState {
         cache: &TaskCache,
         cancellation: CancellationToken,
         activity_id: u64,
+        executor: &dyn TaskExecutor,
     ) -> Result<TaskCompleted> {
         // Create the Activity with the pre-assigned ID - this emits Task::Start
         let task_activity = Activity::task_with_id(activity_id);
 
         // Run the entire task within the activity's scope for proper parent-child nesting
-        self.run_inner(now, outputs, cache, cancellation, &task_activity)
+        self.run_inner(now, outputs, cache, cancellation, &task_activity, executor)
             .in_activity(&task_activity)
             .await
     }
@@ -213,6 +413,7 @@ impl TaskState {
         cache: &TaskCache,
         cancellation: CancellationToken,
         task_activity: &Activity,
+        executor: &dyn TaskExecutor,
     ) -> Result<TaskCompleted> {
         tracing::debug!(
             "Running task '{}' with exec_if_modified: {:?}, status: {}",
@@ -338,188 +539,60 @@ impl TaskState {
             .level(ActivityLevel::Debug)
             .start();
 
-        let (mut command, outputs_file) = self
-            .prepare_command(cmd, outputs)
-            .wrap_err("Failed to prepare task command")?;
+        // Prepare environment and output file
+        let (env, outputs_file) = self
+            .prepare_env(outputs)
+            .wrap_err("Failed to prepare task environment")?;
 
-        let result = command
-            .spawn()
-            .into_diagnostic()
-            .wrap_err_with(|| format!("Failed to spawn command for {cmd}"));
-
-        let mut child = match result {
-            Ok(c) => c,
-            Err(err) => {
-                cmd_activity.fail();
-                task_activity.fail();
-                return Ok(TaskCompleted::Failed(
-                    now.elapsed(),
-                    TaskFailure {
-                        stdout: Vec::new(),
-                        stderr: Vec::new(),
-                        error: format!("{err:#}"),
-                    },
-                ));
-            }
+        // Build execution context
+        let ctx = ExecutionContext {
+            command: cmd,
+            cwd: self.task.cwd.as_deref(),
+            env,
+            use_sudo: self.sudo_context.is_some(),
+            output_file_path: outputs_file.path(),
         };
 
-        let stdout = match child.stdout.take() {
-            Some(stdout) => stdout,
-            None => {
-                cmd_activity.fail();
-                task_activity.fail();
-                return Ok(TaskCompleted::Failed(
-                    now.elapsed(),
-                    TaskFailure {
-                        stdout: Vec::new(),
-                        stderr: Vec::new(),
-                        error: "Failed to capture stdout".to_string(),
-                    },
-                ));
+        // Execute using the provided executor
+        let callback = ActivityCallback::new(task_activity);
+        let result = executor.execute(ctx, &callback, cancellation).await;
+
+        // Process any DEVENV_EXPORT lines from stdout and merge into output file
+        Self::process_exports(&result.stdout_lines, &outputs_file).await;
+
+        // Only update file states on success - failed tasks should not be cached
+        if result.success {
+            // Include command path in the files to update, matching check_files_modified
+            let mut files_to_update = self.task.exec_if_modified.clone();
+            if let Some(cmd) = &self.task.command {
+                files_to_update.push(cmd.clone());
             }
-        };
-        let stderr = match child.stderr.take() {
-            Some(stderr) => stderr,
-            None => {
-                cmd_activity.fail();
-                task_activity.fail();
-                return Ok(TaskCompleted::Failed(
-                    now.elapsed(),
-                    TaskFailure {
-                        stdout: Vec::new(),
-                        stderr: Vec::new(),
-                        error: "Failed to capture stderr".to_string(),
-                    },
-                ));
-            }
-        };
-
-        let mut stderr_reader = BufReader::new(stderr).lines();
-        let mut stdout_reader = BufReader::new(stdout).lines();
-
-        let mut stdout_lines = Vec::new();
-        let mut stderr_lines = Vec::new();
-
-        // Track EOF status for stdout and stderr streams
-        let mut stdout_closed = false;
-        let mut stderr_closed = false;
-        let mut exit_status: Option<std::process::ExitStatus> = None;
-
-        loop {
-            // If child has exited and both pipes are closed, we're done
-            if exit_status.is_some() && stdout_closed && stderr_closed {
-                break;
-            }
-
-            tokio::select! {
-                result = stdout_reader.next_line(), if !stdout_closed => {
-                    match result {
-                        Ok(Some(line)) => {
-                            task_activity.log(&line);
-                            stdout_lines.push((std::time::Instant::now(), line));
-                        },
-                        Ok(None) => {
-                            stdout_closed = true;
-                        },
-                        Err(e) => {
-                            error!("Error reading stdout: {}", e);
-                            stderr_lines.push((std::time::Instant::now(), e.to_string()));
-                            stdout_closed = true;
-                        },
-                    }
-                }
-                result = stderr_reader.next_line(), if !stderr_closed => {
-                    match result {
-                        Ok(Some(line)) => {
-                            task_activity.error(&line);
-                            stderr_lines.push((std::time::Instant::now(), line));
-                        },
-                        Ok(None) => {
-                            stderr_closed = true;
-                        },
-                        Err(e) => {
-                            error!("Error reading stderr: {}", e);
-                            stderr_lines.push((std::time::Instant::now(), e.to_string()));
-                            stderr_closed = true;
-                        },
-                    }
-                }
-                result = child.wait(), if exit_status.is_none() => {
-                    match result {
-                        Ok(status) => {
-                            if !status.success() {
-                                cmd_activity.fail();
-                            } else {
-                                // Only update file states on success - failed tasks should not be cached
-                                // Include command path in the files to update, matching check_files_modified
-                                let mut files_to_update = self.task.exec_if_modified.clone();
-                                if let Some(cmd) = &self.task.command {
-                                    files_to_update.push(cmd.clone());
-                                }
-                                let expanded_paths = expand_glob_patterns(&files_to_update);
-                                for path in expanded_paths {
-                                    cache.update_file_state(&self.task.name, &path).await?;
-                                }
-                            }
-
-                            exit_status = Some(status);
-                        },
-                        Err(e) => {
-                            error!("{}> Error waiting for command: {}", self.task.name, e);
-                            cmd_activity.fail();
-                            task_activity.fail();
-                            return Ok(TaskCompleted::Failed(
-                                now.elapsed(),
-                                TaskFailure {
-                                    stdout: stdout_lines,
-                                    stderr: stderr_lines,
-                                    error: format!("Error waiting for command: {e}"),
-                                },
-                            ));
-                        }
-                    }
-                }
-                _ = cancellation.cancelled() => {
-                    eprintln!("Task {} received shutdown signal, terminating child process", self.task.name);
-
-                    // Kill the child process and its process group
-                    if let Some(pid) = child.id() {
-                        // Send SIGTERM to the process group first for graceful shutdown
-                        let _ = nix_signal::killpg(Pid::from_raw(pid as i32), Signal::SIGTERM);
-
-                        tokio::select! {
-                            _ = child.wait() => {
-                                // Process exited gracefully
-                            }
-                            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
-                                // Grace period expired, send SIGKILL
-                                let _ = nix_signal::killpg(Pid::from_raw(pid as i32), Signal::SIGKILL);
-                                let _ = child.wait().await;
-                            }
-                        }
-                    }
-
-                    cmd_activity.cancel();
-                    task_activity.cancel();
-                    return Ok(TaskCompleted::Cancelled(Some(now.elapsed())));
-                }
+            let expanded_paths = expand_glob_patterns(&files_to_update);
+            for path in expanded_paths {
+                cache.update_file_state(&self.task.name, &path).await?;
             }
         }
 
-        let status = exit_status.expect("Loop exited without exit status");
-        if status.success() {
+        if result.error.as_deref() == Some("Task cancelled") {
+            cmd_activity.cancel();
+            task_activity.cancel();
+            return Ok(TaskCompleted::Cancelled(Some(now.elapsed())));
+        }
+
+        if result.success {
             Ok(TaskCompleted::Success(
                 now.elapsed(),
                 Self::get_outputs(&outputs_file).await,
             ))
         } else {
+            cmd_activity.fail();
             task_activity.fail();
             Ok(TaskCompleted::Failed(
                 now.elapsed(),
                 TaskFailure {
-                    stdout: stdout_lines,
-                    stderr: stderr_lines,
-                    error: format!("Task exited with status: {status}"),
+                    stdout: result.stdout_lines,
+                    stderr: result.stderr_lines,
+                    error: result.error.unwrap_or_else(|| "Unknown error".to_string()),
                 },
             ))
         }

@@ -1,0 +1,33 @@
+[package]
+name = "devenv-processes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Native process management for devenv"
+
+[dependencies]
+async-trait.workspace = true
+devenv-activity.workspace = true
+caps.workspace = true
+daemonize.workspace = true
+futures.workspace = true
+miette.workspace = true
+nix.workspace = true
+process-wrap.workspace = true
+serde.workspace = true
+shell-escape.workspace = true
+signal-hook.workspace = true
+signal-hook-tokio.workspace = true
+socket2.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+watchexec.workspace = true
+watchexec-filterer-globset.workspace = true
+watchexec-supervisor.workspace = true
+
+portable-pty.workspace = true
+
+[dev-dependencies]
+sd-notify.workspace = true

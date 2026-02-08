@@ -1,0 +1,39 @@
+[package]
+name = "devenv-shell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Shell and PTY management for devenv"
+
+[dependencies]
+# PTY management
+portable-pty = { workspace = true }
+
+# Terminal handling
+crossterm = { workspace = true }
+iocraft = { workspace = true }
+term_size = "0.3"
+
+# Terminal state tracking
+avt = "0.14"
+
+# Async runtime
+tokio = { workspace = true, features = ["sync", "rt"] }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# ANSI stripping
+regex = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = { workspace = true }

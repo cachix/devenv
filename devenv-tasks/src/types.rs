@@ -37,8 +37,9 @@ pub enum DependencyKind {
 pub struct DependencySpec {
     /// Task name without suffix
     pub name: String,
-    /// Dependency kind (Ready or Complete)
-    pub kind: DependencyKind,
+    /// Dependency kind (Ready or Complete), or None for default behavior
+    /// Default: Ready for process tasks, Complete for oneshot tasks
+    pub kind: Option<DependencyKind>,
 }
 
 /// Verbosity levels for task execution
@@ -209,7 +210,7 @@ impl TaskCompleted {
 pub enum TaskStatus {
     Pending,
     Running(Instant),
-    /// Process task is ready and healthy (not used yet, for future process support)
+    /// Process task is ready and healthy
     ProcessReady,
     Completed(TaskCompleted),
 }

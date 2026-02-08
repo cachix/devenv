@@ -96,11 +96,12 @@ impl FileInputDesc {
     pub fn new(path: PathBuf, fallback_system_time: SystemTime) -> Result<Self, io::Error> {
         let is_directory = path.is_dir();
         let content_hash = if is_directory {
-            let paths = std::fs::read_dir(&path)?
+            let mut paths: Vec<String> = std::fs::read_dir(&path)?
                 .filter_map(Result::ok)
                 .map(|entry| entry.path().to_string_lossy().to_string())
-                .collect::<String>();
-            Some(compute_string_hash(&paths))
+                .collect();
+            paths.sort();
+            Some(compute_string_hash(&paths.join("\n")))
         } else {
             compute_file_hash(&path)
                 .map_err(|e| std::io::Error::other(format!("Failed to compute file hash: {e}")))
@@ -192,11 +193,12 @@ pub fn check_file_state(file: &FileInputDesc) -> io::Result<FileState> {
             return Ok(FileState::Removed);
         }
 
-        let paths = std::fs::read_dir(&file.path)?
+        let mut paths: Vec<String> = std::fs::read_dir(&file.path)?
             .filter_map(Result::ok)
             .map(|entry| entry.path().to_string_lossy().to_string())
-            .collect::<String>();
-        compute_string_hash(&paths)
+            .collect();
+        paths.sort();
+        compute_string_hash(&paths.join("\n"))
     } else {
         compute_file_hash(&file.path)
             .map_err(|e| std::io::Error::other(format!("Failed to compute file hash: {e}")))?
@@ -211,6 +213,24 @@ pub fn check_file_state(file: &FileInputDesc) -> io::Result<FileState> {
             new_hash,
             modified_at,
         })
+    }
+}
+
+/// Check if a file's content has changed (ignoring metadata-only changes).
+///
+/// Returns true if:
+/// - File content has changed (different hash)
+/// - File was removed
+///
+/// Returns false if:
+/// - File is unchanged
+/// - Only metadata changed (e.g., touch without content change)
+/// - Error reading file (conservative: assume unchanged)
+pub fn has_file_content_changed(file: &FileInputDesc) -> bool {
+    match check_file_state(file) {
+        Ok(FileState::Unchanged) | Ok(FileState::MetadataModified { .. }) => false,
+        Ok(FileState::Modified { .. }) | Ok(FileState::Removed) => true,
+        Err(_) => false, // Conservative: treat errors as unchanged
     }
 }
 

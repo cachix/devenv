@@ -2,9 +2,9 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-✓ Building dependency-a                                               0ms
-✗ Building dependency-b                                               0ms
-⠋ Building main-package buildPhase
+✓ Building  dependency-a                                              0ms
+✗ Building  dependency-b                                              0ms
+⠋ Building  main-package buildPhase
 ⠋ Downloading runtime-dep from cache.nixos.org
     ───────────────────────────────────────────────────3MB / 5MB at 30MB/s
 
