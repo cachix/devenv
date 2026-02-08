@@ -49,8 +49,9 @@ let
       "crossterm-0.28.1" = "sha256-EC3HTF/l9E+3DnsLfB6L+SDNmfgWWJOSq8Oo+rQ3dVQ=";
       "nix-compat-0.1.0" = "sha256-dSkomGSFJgTtsxHWsBG8Qy2hqQDuemqDsKRJxvmuZ54=";
       "nix-bindings-bindgen-raw-0.1.0" = "sha256-eGhbWajbNe1Q7+RbqMogtKtlMjDOIsqt+xny8gZ+iFY=";
-      "secretspec-0.6.2" = "sha256-/ynGYawH39n/evLV0zfF/rZ9qX3ikxBzInkSCFbz3P0=";
       "wu-manber-0.1.0" = "sha256-7YIttaQLfFC/32utojh2DyOHVsZiw8ul/z0lvOhAE/4=";
+      "inquire-0.9.3" = "sha256-3A3QH9nuAsfxEoxgYCbEitnlV7mQltZX2vJ3Uv3q6Ys=";
+      "secretspec-0.7.1" = "sha256-ofwxnnWmyf/qnDN2DNbcltm+PiwW/mFnYhUfdzZViLA=";
     };
   };
 in
