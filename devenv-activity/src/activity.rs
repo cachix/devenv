@@ -14,7 +14,7 @@ use crate::events::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind,
     Operation, Process, ProcessStatus, Task,
 };
-use crate::stack::{ACTIVITY_STACK, get_current_stack, send_activity_event};
+use crate::stack::{ACTIVITY_SENDER, ACTIVITY_STACK, get_current_stack, send_activity_event};
 
 /// Activity type for tracking which kind of activity this is
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -289,6 +289,9 @@ impl Activity {
     pub fn log(&self, line: impl Into<String>) {
         let _guard = self.span.enter();
         let line_str = line.into();
+        if ACTIVITY_SENDER.get().is_none() {
+            tracing::info!("{}", line_str);
+        }
         let event = match self.activity_type {
             ActivityType::Build => ActivityEvent::Build(Build::Log {
                 id: self.id,
@@ -334,6 +337,9 @@ impl Activity {
     pub fn error(&self, line: impl Into<String>) {
         let _guard = self.span.enter();
         let line_str = line.into();
+        if ACTIVITY_SENDER.get().is_none() {
+            tracing::warn!("{}", line_str);
+        }
         let event = match self.activity_type {
             ActivityType::Build => ActivityEvent::Build(Build::Log {
                 id: self.id,

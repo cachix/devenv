@@ -133,9 +133,13 @@ pub fn set_expected(category: ExpectedCategory, expected: u64) {
 pub fn log_to_evaluate(id: u64, line: impl Into<String>) {
     use crate::events::Evaluate;
 
+    let line = line.into();
+    if ACTIVITY_SENDER.get().is_none() {
+        tracing::info!("{}", line);
+    }
     send_activity_event(ActivityEvent::Evaluate(Evaluate::Log {
         id,
-        line: line.into(),
+        line,
         timestamp: Timestamp::now(),
     }));
 }
@@ -181,9 +185,17 @@ pub fn emit_task_hierarchy(tasks: Vec<crate::events::TaskInfo>, edges: Vec<(u64,
 pub fn log_to_task(id: u64, line: impl Into<String>, is_error: bool) {
     use crate::events::Task;
 
+    let line = line.into();
+    if ACTIVITY_SENDER.get().is_none() {
+        if is_error {
+            tracing::warn!("{}", line);
+        } else {
+            tracing::info!("{}", line);
+        }
+    }
     send_activity_event(ActivityEvent::Task(Task::Log {
         id,
-        line: line.into(),
+        line,
         is_error,
         timestamp: Timestamp::now(),
     }));
