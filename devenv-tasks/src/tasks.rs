@@ -281,17 +281,6 @@ impl Tasks {
                         }
                     });
 
-                    // Validate: oneshot tasks only support @complete, not @ready
-                    if resolved_kind == DependencyKind::Ready
-                        && dep_task.task.r#type == TaskType::Oneshot
-                    {
-                        validation_errors.push(format!(
-                            "Task '{}' depends on '{}@ready' but oneshot tasks don't support @ready. \
-                             Use @complete instead (or no suffix for default behavior).",
-                            task_state.task.name, dep_spec.name
-                        ));
-                    }
-
                     // Validate @ready dependencies on process tasks require notify/listen
                     if resolved_kind == DependencyKind::Ready
                         && dep_task.task.r#type == TaskType::Process
@@ -333,17 +322,6 @@ impl Tasks {
                             DependencyKind::Complete
                         }
                     });
-
-                    // Validate: oneshot tasks only support @complete, not @ready
-                    if resolved_kind == DependencyKind::Ready
-                        && task_state.task.r#type == TaskType::Oneshot
-                    {
-                        validation_errors.push(format!(
-                            "Task '{}' uses @ready in 'before' but oneshot tasks don't support @ready. \
-                             Use @complete instead (or no suffix for default behavior).",
-                            task_state.task.name
-                        ));
-                    }
 
                     // Validate @ready dependencies - current task must have notify/listen if it's a process
                     if resolved_kind == DependencyKind::Ready

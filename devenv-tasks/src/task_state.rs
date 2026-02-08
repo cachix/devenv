@@ -539,6 +539,25 @@ impl TaskState {
             .level(ActivityLevel::Debug)
             .start();
 
+        // Validate working directory if specified
+        if let Some(cwd) = &self.task.cwd {
+            let cwd_path = std::path::Path::new(cwd);
+            if !cwd_path.exists() {
+                miette::bail!(
+                    "Working directory for task '{}' does not exist: {}",
+                    self.task.name,
+                    cwd
+                );
+            }
+            if !cwd_path.is_dir() {
+                miette::bail!(
+                    "Working directory for task '{}' is not a directory: {}",
+                    self.task.name,
+                    cwd
+                );
+            }
+        }
+
         // Prepare environment and output file
         let (env, outputs_file) = self
             .prepare_env(outputs)
