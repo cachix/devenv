@@ -328,48 +328,77 @@ impl PtyTaskRunner {
         self.restore_prompt_command()?;
 
         // Drain any pending PTY output into VT so it doesn't leak to stdout later.
-        // Give the shell time to render its prompt (starship can be slow).
-        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-        self.drain_pty_to_vt(vt).await;
-        // Drain again in case more output came
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        // Uses a sentinel to deterministically consume all output without leaving
+        // zombie threads that could steal future PTY reads.
         self.drain_pty_to_vt(vt).await;
 
         tracing::trace!("run_with_vt: task channel closed, exiting");
         Ok(())
     }
 
-    /// Drain any pending PTY output into VT without blocking.
+    /// Drain pending PTY output into VT using a sentinel marker.
+    ///
+    /// Sends an echo command with a known sentinel string, then reads from the
+    /// PTY until the sentinel appears. Each read is individually awaited (no
+    /// infinite loop inside spawn_blocking), so no zombie threads are left behind
+    /// that could steal future PTY reads from the session's reader thread.
     async fn drain_pty_to_vt(&self, vt: &mut avt::Vt) {
-        // Use a short timeout to avoid blocking if there's no data
-        let pty_clone = Arc::clone(&self.pty);
-        let drain_result = tokio::time::timeout(
-            tokio::time::Duration::from_millis(100),
-            tokio::task::spawn_blocking(move || {
-                let mut data = Vec::new();
+        let sentinel = "__DEVENV_DRAIN_DONE__";
+        // Send the sentinel echo twice as separate command lines.
+        // Reading until the second match ensures the PROMPT_COMMAND output
+        // between them is consumed, leaving exactly one prompt in the buffer.
+        // Space prefix prevents the commands from appearing in shell history.
+        let cmd = format!(" echo '{sentinel}'\n echo '{sentinel}'\n");
+        if self.pty.write_all(cmd.as_bytes()).is_err() || self.pty.flush().is_err() {
+            tracing::warn!("drain_pty_to_vt: failed to send sentinel command");
+            return;
+        }
+
+        let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(5);
+        let mut buffer = String::new();
+        let mut total_bytes = 0usize;
+
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                tracing::warn!("drain_pty_to_vt: timed out waiting for sentinel");
+                break;
+            }
+
+            let pty_clone = Arc::clone(&self.pty);
+            let handle = tokio::task::spawn_blocking(move || {
                 let mut buf = [0u8; 4096];
-                // Try to read available data (non-blocking would be ideal but we use timeout)
-                loop {
-                    match pty_clone.read(&mut buf) {
-                        Ok(0) => break,
-                        Ok(n) => {
-                            data.extend_from_slice(&buf[..n]);
-                        }
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-                        Err(_) => break,
+                pty_clone.read(&mut buf).map(|n| buf[..n].to_vec())
+            });
+
+            match tokio::time::timeout(remaining, handle).await {
+                Ok(Ok(Ok(data))) if !data.is_empty() => {
+                    let chunk = String::from_utf8_lossy(&data);
+                    vt.feed_str(&chunk);
+                    total_bytes += data.len();
+                    buffer.push_str(&chunk);
+                    // Check for sentinel on its own line (after stripping ANSI codes).
+                    // This avoids matching the terminal echo of the command which
+                    // contains the sentinel as part of: echo '__DEVENV_DRAIN_DONE__'
+                    // We need TWO matches (one per echo command) to consume the
+                    // PROMPT_COMMAND output between them.
+                    let match_count = buffer
+                        .lines()
+                        .filter(|line| strip_ansi_codes(line).trim() == sentinel)
+                        .count();
+                    if match_count >= 2 {
+                        break;
                     }
                 }
-                Ok::<_, std::io::Error>(data)
-            }),
-        )
-        .await;
-
-        if let Ok(Ok(Ok(data))) = drain_result {
-            if !data.is_empty() {
-                let chunk = String::from_utf8_lossy(&data);
-                vt.feed_str(&chunk);
-                tracing::trace!("drain_pty_to_vt: drained {} bytes", data.len());
+                _ => {
+                    tracing::warn!("drain_pty_to_vt: read failed while waiting for sentinel");
+                    break;
+                }
             }
+        }
+
+        if total_bytes > 0 {
+            tracing::trace!("drain_pty_to_vt: drained {} bytes", total_bytes);
         }
     }
 

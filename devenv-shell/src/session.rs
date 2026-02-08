@@ -319,10 +319,6 @@ impl ShellSession {
         execute!(stdout, cursor::MoveTo(0, cursor_row.saturating_sub(1)))?;
         stdout.flush()?;
 
-        // Send newline to trigger shell prompt display
-        pty.write_all(b"\n")?;
-        pty.flush()?;
-
         // Set up event channel
         let (event_tx_internal, mut event_rx_internal) = mpsc::channel::<Event>(100);
 
