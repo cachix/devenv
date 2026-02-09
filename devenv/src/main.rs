@@ -8,7 +8,7 @@ use devenv::{
     tracing as devenv_tracing,
 };
 use devenv_activity::ActivityLevel;
-use devenv_core::config::{self, Config};
+use devenv_core::config::{self, Config, SecretspecConfig};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use std::{process::Command, sync::Arc};
 use tempfile::TempDir;
@@ -398,6 +398,24 @@ async fn run_devenv(
         };
         config.inputs.insert("from".to_string(), from_input);
         config.imports.push("from".to_string());
+    }
+
+    // Apply secretspec CLI overrides
+    if cli.global_options.secretspec_provider.is_some()
+        || cli.global_options.secretspec_profile.is_some()
+    {
+        let secretspec = config.secretspec.get_or_insert(SecretspecConfig {
+            enable: false,
+            profile: None,
+            provider: None,
+        });
+        secretspec.enable = true;
+        if let Some(ref provider) = cli.global_options.secretspec_provider {
+            secretspec.provider = Some(provider.clone());
+        }
+        if let Some(ref profile) = cli.global_options.secretspec_profile {
+            secretspec.profile = Some(profile.clone());
+        }
     }
 
     let mut options = devenv::DevenvOptions {

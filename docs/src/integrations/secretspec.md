@@ -29,7 +29,23 @@ This approach:
 
 ## Configuration (Optional)
 
-If you do need secrets in your devenv environment:
+If you do need secrets in your devenv environment, you can configure via `devenv.yaml` or CLI flags.
+
+### Via CLI flags (devenv 2.0+)
+
+Override the provider and profile directly from the command line:
+
+```bash
+$ devenv --secretspec-provider dotenv --secretspec-profile dev shell
+```
+
+This automatically enables secretspec. You can also use environment variables:
+
+```bash
+$ SECRETSPEC_PROVIDER=dotenv SECRETSPEC_PROFILE=dev devenv shell
+```
+
+### Via devenv.yaml
 
 ```yaml title="devenv.yaml"
 secretspec:
@@ -37,6 +53,8 @@ secretspec:
   provider: keyring  # keyring, dotenv, env, 1password, lastpass
   profile: default   # profile from secretspec.toml
 ```
+
+CLI flags take precedence over `devenv.yaml` values.
 
 Then access in `devenv.nix`:
 
