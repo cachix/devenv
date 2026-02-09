@@ -317,6 +317,7 @@ in
           if lib.versionAtLeast config.devenv.cliVersion "2.0"
           then "native"
           else "process-compose";
+        defaultText = lib.literalMD "`native` for devenv 2.0+, `process-compose` otherwise";
         example = "process-compose";
       };
 
