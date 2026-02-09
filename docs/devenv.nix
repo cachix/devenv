@@ -42,15 +42,13 @@
     };
   };
 
-  # `devenv up` processes to run
   processes = {
-    # Serve the mkdocs documentation website with live reload
     docs = {
+      # Serve the mkdocs documentation website with live reload
       exec = "mkdocs serve";
       cwd = config.git.root + "/docs";
     };
   };
-  process.manager.implementation = "native";
 
   scripts."devenv-generate-doc-css" = {
     description = "Generate CSS for the docs.";
