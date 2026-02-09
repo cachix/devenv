@@ -286,7 +286,7 @@ pub struct GlobalOptions {
         long,
         global = true,
         help = "Source for devenv.nix (flake input reference or path)",
-        long_help = "Source for devenv.nix.\n\nCan be either a filesystem path or a flake input reference.\n\nExamples:\n  --from myinput\n  --from myinput/subdir\n  --from /absolute/path/to/project"
+        long_help = "Source for devenv.nix.\n\nCan be either a filesystem path or a flake input reference.\n\nExamples:\n  --from github:cachix/devenv\n  --from github:cachix/devenv?dir=examples/simple\n  --from /absolute/path/to/project"
     )]
     pub from: Option<String>,
 }
