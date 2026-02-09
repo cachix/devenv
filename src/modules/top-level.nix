@@ -1,4 +1,4 @@
-{ config, pkgs, lib, bootstrapPkgs ? null, ... }:
+{ config, pkgs, lib, bootstrapPkgs ? null, devenvSandbox ? { enable = false; }, ... }:
 let
   types = lib.types;
 
@@ -46,31 +46,87 @@ let
       "sandboxer"
     ];
   };
-  sandboxer-settings = pkgs.writers.writeTOML "sandboxer.toml" {
-    abi = 5;
-    path_beneath = [
-      {
-        allowed_access = [ "abi.read_write" ];
-        parent = [
-          config.devenv.root
-          config.devenv.runtime
-          config.devenv.tmpdir
-          "/proc"
-          "/tmp"
-          "/dev/tty"
-          "/dev/null"
-        ];
-      }
-      {
-        allowed_access = [ "abi.read_execute" ];
-        parent = [
-          "/nix"
-          "/proc/stat"
-        ];
-      }
-    ];
-  };
-  sandbox = lib.optionalString config.devenv.sandbox.enable "${sandboxer}/bin/sandboxer --toml ${sandboxer-settings} --";
+
+  shellHook = pkgs.writeShellScriptBin "shellHook" config.enterShell;
+
+  # Extract store paths from environment variable values
+  # Only include values with proper Nix context (derivations or context strings)
+  # Plain strings without context are ignored - exportReferencesGraph will reject them anyway
+  extractEnvStorePaths = envAttrs:
+    lib.filter
+      (v: v != null)
+      (lib.mapAttrsToList
+        (name: value:
+          if lib.isDerivation value then
+            value
+          else if lib.isString value && builtins.hasContext value then
+            value
+          else
+            null
+        )
+        envAttrs
+      );
+
+  # Compute the closure of all packages that need to be accessible in the sandbox
+  # This creates a derivation that uses exportReferencesGraph to get all dependencies
+  sandboxer-settings =
+    let
+      # Extract store paths from config.env that have Nix context
+      envStorePaths = extractEnvStorePaths config.env;
+
+      # List of root packages whose closure we need
+      closureRoots = lib.flatten [
+        config.packages
+        config.inputsFrom
+        sandboxer
+        config.stdenv
+        shellHook
+        envStorePaths
+      ];
+
+      # Create a derivation that computes the closure and generates the TOML config
+      # We use exportReferencesGraph to get all transitive dependencies
+      # Create a trivial derivation that references all closure roots (handles both files and directories)
+      allRoots = pkgs.writeText "sandbox-closure-roots" (
+        lib.concatStringsSep "\n" (map toString closureRoots)
+      );
+      mkSandboxConfig = pkgs.runCommand "sandboxer-settings.toml"
+        {
+          # exportReferencesGraph writes the closure of allRoots to a file
+          exportReferencesGraph = [ "closure" allRoots ];
+          nativeBuildInputs = [ pkgs.jq ];
+        }
+        ''
+          # Start generating the TOML config
+          cat > $out <<'HEADER'
+          abi = 5
+
+          [[path_beneath]]
+          allowed_access = ["abi.read_write"]
+          parent = [
+            "${config.devenv.root}",
+            "${config.devenv.runtime}",
+            "${config.devenv.tmpdir}",
+            "/proc",
+            "/tmp",
+            "/dev/tty",
+            "/dev/null"
+          ]
+
+          [[path_beneath]]
+          allowed_access = ["abi.read_execute"]
+          parent = [
+            "/proc/stat",
+          HEADER
+
+          # Extract, deduplicate, and format store paths
+          grep '^/nix/store' closure | sort -u | sed 's|^|  "|; s|$|",|' >> $out
+
+          echo "]" >> $out
+        '';
+    in
+    mkSandboxConfig;
+  sandbox = lib.optionalString devenvSandbox.enable "${sandboxer}/bin/sandboxer --toml ${sandboxer-settings} --";
 
   performAssertions =
     let
@@ -295,7 +351,7 @@ in
           };
         };
         readOnly = true;
-        default = config._module.args.devenvSandbox or { enable = false; };
+        default = devenvSandbox;
         description = "Sandbox configuration";
       };
 
@@ -445,7 +501,9 @@ in
         partitionedPkgs = builtins.partition isAppleSDK wrappedPackages;
         buildInputs = partitionedPkgs.right;
         nativeBuildInputs = partitionedPkgs.wrong;
-        wrappedPackages = if config.devenv.sandbox.enable then map wrapBinaries config.packages else config.packages;
+        # Use devenvSandbox directly from module args (bypasses config system, cannot be overridden)
+        wrappedPackages = if devenvSandbox.enable then map wrapBinaries config.packages else config.packages;
+        wrappedInputsFrom = if devenvSandbox.enable then map wrapBinaries config.inputsFrom else config.inputsFrom;
         wrapBinaries =
           pkg:
           pkgs.stdenv.mkDerivation {
@@ -463,11 +521,11 @@ in
                done
             '';
           };
-        shellHook = pkgs.writeShellScriptBin "shellHook" config.enterShell;
       in
       performAssertions (
         (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
-          inherit (config) hardeningDisable inputsFrom name;
+          inherit (config) hardeningDisable name;
+          inputsFrom = wrappedInputsFrom;
           inherit buildInputs nativeBuildInputs;
           shellHook = ''
             ${lib.optionalString config.devenv.debug "set -x"}
