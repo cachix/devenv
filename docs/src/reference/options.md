@@ -21484,7 +21484,7 @@ one of “hivemind”, “honcho”, “mprocs”, “native”, “overmind”,
 
 
 *Default:*
-` "process-compose" `
+` native ` for devenv 2.0+, ` process-compose ` otherwise
 
 
 
