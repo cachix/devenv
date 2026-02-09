@@ -625,7 +625,7 @@ mod tests {
         // List all FDs for diagnostic purposes if test fails
         let mut cmd = Command::new("sh");
         cmd.arg("-c");
-        cmd.arg("ls -la /proc/self/fd/ 2>&1; echo 'LISTEN_FDS='$LISTEN_FDS; test -e /proc/self/fd/3 && test -e /proc/self/fd/4 && echo 'FDs at standard positions'");
+        cmd.arg("ls -la /dev/fd/ 2>&1; echo 'LISTEN_FDS='$LISTEN_FDS; test -e /dev/fd/3 && test -e /dev/fd/4 && echo 'FDs at standard positions'");
         cmd.stdin(std::process::Stdio::null());
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
