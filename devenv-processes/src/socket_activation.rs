@@ -7,7 +7,9 @@ use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
-use crate::config::{CapabilitySet, LinuxCapabilities, ListenKind, ListenSpec};
+#[cfg(target_os = "linux")]
+use crate::config::CapabilitySet;
+use crate::config::{LinuxCapabilities, ListenKind, ListenSpec};
 
 pub const SD_LISTEN_FDS_START: RawFd = 3;
 
@@ -276,28 +278,36 @@ impl CommandWrapper for ProcessSetupWrapper {
 
         // Clone data for the pre_exec closure
         let fds = self.fds.clone();
-        let capabilities = self.capabilities.clone();
 
         // Parse capabilities upfront (before fork) so errors are reported early
-        let parsed_caps: Vec<caps::Capability> = capabilities
-            .add
-            .iter()
-            .map(|name| {
-                // Normalize: add CAP_ prefix if not present
-                let normalized = if name.to_uppercase().starts_with("CAP_") {
-                    name.to_uppercase()
-                } else {
-                    format!("CAP_{}", name.to_uppercase())
-                };
-                normalized.parse::<caps::Capability>()
-            })
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?;
+        #[cfg(target_os = "linux")]
+        let parsed_caps: Vec<caps::Capability> = {
+            let capabilities = &self.capabilities;
+            capabilities
+                .add
+                .iter()
+                .map(|name| {
+                    // Normalize: add CAP_ prefix if not present
+                    let normalized = if name.to_uppercase().starts_with("CAP_") {
+                        name.to_uppercase()
+                    } else {
+                        format!("CAP_{}", name.to_uppercase())
+                    };
+                    normalized.parse::<caps::Capability>()
+                })
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?
+        };
 
-        let cap_sets = if capabilities.sets.is_empty() {
+        // Capabilities are silently ignored on non-Linux platforms
+        #[cfg(not(target_os = "linux"))]
+        let _ = &self.capabilities;
+
+        #[cfg(target_os = "linux")]
+        let cap_sets = if self.capabilities.sets.is_empty() {
             vec![CapabilitySet::Ambient]
         } else {
-            capabilities.sets.clone()
+            self.capabilities.sets.clone()
         };
 
         // Use pre_exec to set up FDs, capabilities, and LISTEN_PID
@@ -368,7 +378,8 @@ impl CommandWrapper for ProcessSetupWrapper {
                     }
                 }
 
-                // === Capabilities Setup ===
+                // === Capabilities Setup (Linux only) ===
+                #[cfg(target_os = "linux")]
                 for cap in &parsed_caps {
                     for set in &cap_sets {
                         let result = match set {
