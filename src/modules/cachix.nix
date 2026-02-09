@@ -33,7 +33,7 @@ in
     cachix.pull = [ "devenv" ]
       ++ (lib.optional (cfg.push != null) config.cachix.push);
 
-    warnings = lib.optionals (!config.devenv.flakesIntegration && lib.versionOlder config.devenv.cliVersion "1.0") [
+    warnings = lib.optionals (!config.devenv.flakesIntegration && config.devenv.cli.version != null && lib.versionOlder config.devenv.cli.version "1.0") [
       ''
         For cachix.push and cachix.pull attributes to have an effect,
         upgrade to devenv 1.0 or later.

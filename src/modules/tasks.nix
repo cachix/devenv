@@ -390,8 +390,9 @@ in
       internal = true;
       # CLI 2.0+ runs tasks via Rust, so devenv-tasks binary is not needed for shell entry.
       # However, processes still need the binary for task-based process management.
+      # When cli.version is null (flakes integration), always use the binary.
       default =
-        if lib.versionAtLeast config.devenv.cliVersion "2.0" && config.processes == { }
+        if config.devenv.cli.version != null && lib.versionAtLeast config.devenv.cli.version "2.0" && config.processes == { }
         then null
         else lib.getBin devenv-tasks;
     };
@@ -434,9 +435,9 @@ in
         after = [ "devenv:enterShell" ];
       };
     };
-    # In devenv 2.0+, Rust runs enterShell tasks before shell spawns (with TUI progress)
-    # So we skip the bash hook to avoid running tasks twice
-    enterShell = lib.mkIf (lib.versionOlder config.devenv.cliVersion "2.0") ''
+    # In devenv 2.0+, Rust runs enterShell tasks before shell spawns (with TUI progress).
+    # When cli.version is null (flakes integration) or pre-2.0, run tasks via bash hook.
+    enterShell = lib.mkIf (config.devenv.cli.version == null || lib.versionOlder config.devenv.cli.version "2.0") ''
       if [ -z "''${DEVENV_SKIP_TASKS:-}" ]; then
         ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} || exit $?
         if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
@@ -444,9 +445,9 @@ in
         fi
       fi
     '';
-    # In devenv 2.0+, Rust runs enterTest tasks (with TUI progress)
-    # So we skip the bash hook to avoid running tasks twice
-    enterTest = lib.mkIf (lib.versionOlder config.devenv.cliVersion "2.0") (lib.mkBefore ''
+    # In devenv 2.0+, Rust runs enterTest tasks (with TUI progress).
+    # When cli.version is null (flakes integration) or pre-2.0, run tasks via bash hook.
+    enterTest = lib.mkIf (config.devenv.cli.version == null || lib.versionOlder config.devenv.cli.version "2.0") (lib.mkBefore ''
       ${config.task.package}/bin/devenv-tasks run devenv:enterTest --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} || exit $?
       if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
         source "$DEVENV_DOTFILE/load-exports"

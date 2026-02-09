@@ -26,7 +26,8 @@ in
     };
     cli = {
       version = lib.mkOption {
-        type = lib.types.str;
+        type = lib.types.nullOr lib.types.str;
+        default = null;
         internal = true;
       };
       isDevelopment = lib.mkOption {
@@ -58,29 +59,35 @@ in
   config = lib.mkIf cfg.warnOnNewVersion {
     enterShell =
       let
-        action = {
-          "0" = "";
-          "1" =
-            if cfg.cli.isDevelopment then ""
-            else ''
-              echo "✨ devenv ${cfg.cli.version} is newer than devenv input (${cfg.latestVersion}) in devenv.lock. Run 'devenv update' to sync." >&2
-            '';
-          "-1" = ''
-            echo "✨ devenv ${cfg.cli.version} is out of date. Please update to ${cfg.latestVersion}: https://devenv.sh/getting-started/#installation" >&2
-          '';
-        };
-        # Normalize versions by stripping trailing .0 to make X.x.0 equivalent to X.X
-        normalizeVersion = v:
-          let
-            stripped = builtins.replaceStrings [ ".0" ] [ "" ] v;
-          in
-          if stripped != v then normalizeVersion stripped else v;
-        normalizedCliVersion = normalizeVersion cfg.cli.version;
-        normalizedLatestVersion = normalizeVersion cfg.latestVersion;
-        versionComparison = builtins.compareVersions normalizedCliVersion normalizedLatestVersion;
+        versionWarning =
+          if cfg.cli.version == null then ""
+          else
+            let
+              action = {
+                "0" = "";
+                "1" =
+                  if cfg.cli.isDevelopment then ""
+                  else ''
+                    echo "✨ devenv ${cfg.cli.version} is newer than devenv input (${cfg.latestVersion}) in devenv.lock. Run 'devenv update' to sync." >&2
+                  '';
+                "-1" = ''
+                  echo "✨ devenv ${cfg.cli.version} is out of date. Please update to ${cfg.latestVersion}: https://devenv.sh/getting-started/#installation" >&2
+                '';
+              };
+              # Normalize versions by stripping trailing .0 to make X.x.0 equivalent to X.X
+              normalizeVersion = v:
+                let
+                  stripped = builtins.replaceStrings [ ".0" ] [ "" ] v;
+                in
+                if stripped != v then normalizeVersion stripped else v;
+              normalizedCliVersion = normalizeVersion cfg.cli.version;
+              normalizedLatestVersion = normalizeVersion cfg.latestVersion;
+              versionComparison = builtins.compareVersions normalizedCliVersion normalizedLatestVersion;
+            in
+            action."${toString versionComparison}";
       in
       ''
-        ${action."${toString versionComparison}"}
+        ${versionWarning}
 
         # Check whether the direnv integration is out of date.
         {

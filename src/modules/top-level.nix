@@ -305,9 +305,9 @@ in
         '';
       }
       {
-        assertion = config.devenv.flakesIntegration || config.overlays == [ ] || lib.versionAtLeast config.devenv.cliVersion "1.4.2";
+        assertion = config.devenv.flakesIntegration || config.overlays == [ ] || (config.devenv.cli.version != null && lib.versionAtLeast config.devenv.cli.version "1.4.2");
         message = ''
-          Using overlays requires devenv 1.4.2 or higher, while your current version is ${config.devenv.cliVersion}.
+          Using overlays requires devenv 1.4.2 or higher, while your current version is ${toString config.devenv.cli.version}.
         '';
       }
     ];

@@ -26,7 +26,7 @@
               then "inputs.${name}.inputs = { ${lib.concatStringsSep "; " (map (i: "${i}.follows = \"${i}\"") follows)}; };"
               else ""}
           ''
-          else if lib.versionAtLeast config.devenv.cliVersion "1.0"
+          else if config.devenv.cli.version != null && lib.versionAtLeast config.devenv.cli.version "1.0"
           then ''
             run the following command:
 

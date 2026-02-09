@@ -314,7 +314,7 @@ in
         type = types.enum supportedImplementations;
         description = "The process manager to use when running processes with ``devenv up``.";
         default =
-          if lib.versionAtLeast config.devenv.cliVersion "2.0"
+          if config.devenv.cli.version != null && lib.versionAtLeast config.devenv.cli.version "2.0"
           then "native"
           else "process-compose";
         defaultText = lib.literalMD "`native` for devenv 2.0+, `process-compose` otherwise";
