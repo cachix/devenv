@@ -2929,7 +2929,7 @@ Alias of ` devenv.cli.version `.
 
 
 *Type:*
-string
+null or string
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
