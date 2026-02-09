@@ -17,5 +17,9 @@ rustPlatform.buildRustPackage {
   cargoBuildFlags = [ "-p devenv-tasks" ];
   buildType = cargoProfile;
 
+  nativeBuildInputs = [
+    rustPlatform.bindgenHook
+  ];
+
   inherit doCheck;
 }
