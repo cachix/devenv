@@ -573,7 +573,7 @@ impl NativeProcessManager {
         };
 
         // Spawn notify forwarder task
-        let notify_forwarder_task = if let Some(socket) = notify_socket.clone() {
+        let notify_forwarder_task = if let Some(socket) = notify_socket.as_ref().map(Arc::clone) {
             let name = config.name.clone();
             let tx = self.notify_tx.clone();
             Some(tokio::spawn(async move {
@@ -607,7 +607,7 @@ impl NativeProcessManager {
         };
 
         // Store the process
-        let job_clone = job.clone();
+        let job_clone = Arc::clone(&job);
         let mut jobs = self.jobs.write().await;
         jobs.insert(
             config.name.clone(),
@@ -908,7 +908,7 @@ impl NativeProcessManager {
         &self,
         cancellation_token: tokio_util::sync::CancellationToken,
     ) -> JoinHandle<Result<()>> {
-        let jobs = self.jobs.clone();
+        let jobs = Arc::clone(&self.jobs);
         let state_dir = self.state_dir.clone();
         let notify_tx = self.notify_tx.clone();
         let notify_rx = self.notify_rx.lock().await.take();
@@ -952,7 +952,7 @@ impl NativeProcessManager {
         let file_watch_rx = self.file_watch_rx.lock().await.take();
 
         Self::event_loop_inner(
-            self.jobs.clone(),
+            Arc::clone(&self.jobs),
             self.state_dir.clone(),
             self.notify_tx.clone(),
             shutdown,
@@ -980,7 +980,10 @@ impl NativeProcessManager {
         {
             let jobs = jobs.read().await;
             for (name, process) in jobs.iter() {
-                exit_watchers.push(Self::make_exit_watcher(name.clone(), process.job.clone()));
+                exit_watchers.push(Self::make_exit_watcher(
+                    name.clone(),
+                    Arc::clone(&process.job),
+                ));
             }
         }
 
@@ -1080,7 +1083,7 @@ impl NativeProcessManager {
                                     }
 
                                 // Respawn notify forwarder if needed
-                                if let Some(socket) = process.notify_socket.clone() {
+                                if let Some(socket) = process.notify_socket.as_ref().map(Arc::clone) {
                                     let fwd_name = name.clone();
                                     let tx = notify_tx.clone();
                                     process.notify_forwarder_task = Some(tokio::spawn(async move {
@@ -1117,7 +1120,7 @@ impl NativeProcessManager {
                                 // Push a new exit watcher
                                 exit_watchers.push(Self::make_exit_watcher(
                                     name.clone(),
-                                    process.job.clone(),
+                                    Arc::clone(&process.job),
                                 ));
                             } else {
                                 warn!("Process {} not found for restart", name);
@@ -1139,12 +1142,12 @@ impl NativeProcessManager {
                                 // Push new exit watcher for the restarted process
                                 exit_watchers.push(Self::make_exit_watcher(
                                     name.clone(),
-                                    process.job.clone(),
+                                    Arc::clone(&process.job),
                                 ));
                                 None // handled
                             } else {
                                 // Extract what we need for Phase 2
-                                let job = process.job.clone();
+                                let job = Arc::clone(&process.job);
                                 Some(job)
                             }
                         } else {
@@ -1187,7 +1190,7 @@ impl NativeProcessManager {
                                             job.start().await;
                                             exit_watchers.push(Self::make_exit_watcher(
                                                 name.clone(),
-                                                process.job.clone(),
+                                                Arc::clone(&process.job),
                                             ));
                                         }
                                         ExitAction::GiveUp => {
