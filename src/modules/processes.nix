@@ -2,6 +2,7 @@
 let
   types = lib.types;
   listenType = import ./lib/listen.nix { inherit lib; };
+  readyType = import ./lib/ready.nix { inherit lib; };
 
   # Get primops from _module.args (set via specialArgs in bootstrapLib.nix)
   # Use default empty attrset if not available (e.g., when evaluated without devenv CLI)
@@ -95,27 +96,29 @@ let
         '';
       };
 
-      restart = lib.mkOption {
-        type = types.enum [ "never" "always" "on_failure" ];
-        default = "on_failure";
-        description = ''
-          Process restart policy:
-          - never: Never restart the process
-          - always: Always restart when it exits
-          - on_failure: Restart only on failure (non-zero exit code)
-
-          Only used when using native process manager.
-        '';
+      ready = lib.mkOption {
+        type = types.nullOr readyType;
+        default = null;
+        description = "How to determine if this process is ready to serve.";
       };
 
-      max_restarts = lib.mkOption {
-        type = types.nullOr types.int;
-        default = 5;
-        description = ''
-          Maximum number of restart attempts. null means unlimited restarts.
-
-          Only used when using native process manager.
-        '';
+      restart = lib.mkOption {
+        type = types.submodule {
+          options = {
+            on = lib.mkOption {
+              type = types.enum [ "never" "always" "on_failure" ];
+              default = "on_failure";
+              description = "When to restart: never, always, or on_failure.";
+            };
+            max = lib.mkOption {
+              type = types.nullOr types.int;
+              default = 5;
+              description = "Maximum restart attempts. null = unlimited.";
+            };
+          };
+        };
+        default = { };
+        description = "Process restart policy.";
       };
 
       listen = lib.mkOption {
@@ -269,32 +272,6 @@ let
         '';
       };
 
-      notify = lib.mkOption {
-        type = types.submodule {
-          options.enable = lib.mkOption {
-            type = types.bool;
-            default = false;
-            description = ''
-              Enable systemd notify protocol for readiness signaling.
-              When enabled, the process must send READY=1 to the NOTIFY_SOCKET
-              before dependent tasks with @ready suffix will be unblocked.
-
-              Only used when using native process manager.
-            '';
-          };
-        };
-        default = { };
-        description = ''
-          Systemd notify protocol configuration for readiness signaling.
-
-          Only used when using native process manager.
-        '';
-        example = lib.literalExpression ''
-          {
-            enable = true;
-          }
-        '';
-      };
     };
   });
 
@@ -452,12 +429,11 @@ in
               # Process-specific configuration
               use_sudo = process.use_sudo;
               pseudo_terminal = process.pseudo_terminal;
+              ready = process.ready;
               restart = process.restart;
-              max_restarts = process.max_restarts;
               listen = process.listen;
               ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
               watch = process.watch;
-              notify = process.notify;
               watchdog = process.watchdog;
             };
           })
