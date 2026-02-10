@@ -80,5 +80,12 @@ in
     packages = [
       cfg.package
     ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+
+    # The zig setup hook sets ZIG_GLOBAL_CACHE_DIR to a build sandbox path
+    # via addEnvHooks, which overwrites env values. Restore env if set, else unset.
+    enterShell =
+      if config.env ? ZIG_GLOBAL_CACHE_DIR
+      then ''export ZIG_GLOBAL_CACHE_DIR="${config.env.ZIG_GLOBAL_CACHE_DIR}"''
+      else ''unset ZIG_GLOBAL_CACHE_DIR'';
   };
 }
