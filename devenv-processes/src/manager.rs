@@ -192,8 +192,9 @@ impl NativeProcessManager {
         }
         let activity = builder.start();
 
-        // Create notify socket if configured
-        let notify_socket = if config.notify.as_ref().is_some_and(|n| n.enable) {
+        // Create notify socket if configured via ready.notify
+        let uses_notify = config.ready.as_ref().map_or(false, |r| r.notify);
+        let notify_socket = if uses_notify {
             let socket = NotifySocket::new(&self.state_dir, &config.name).await?;
             info!(
                 "Created notify socket for {} at {}",
@@ -389,20 +390,25 @@ impl NativeProcessManager {
             .map(|w| w.require_ready)
             .unwrap_or(true);
 
-        // Check if we need TCP probe for readiness (listen sockets without notify)
-        let tcp_probe_address =
-            if !config.listen.is_empty() && config.notify.as_ref().is_none_or(|n| !n.enable) {
-                // Find the first TCP listen socket
-                config.listen.iter().find_map(|spec| {
-                    if spec.kind == crate::config::ListenKind::Tcp {
-                        spec.address.clone()
-                    } else {
-                        None
-                    }
-                })
-            } else {
-                None
-            };
+        // Check if we need TCP probe for readiness (listen sockets without notify or exec probe)
+        let has_notify = config.ready.as_ref().map_or(false, |r| r.notify);
+        let has_exec_probe = config
+            .ready
+            .as_ref()
+            .and_then(|r| r.exec.as_ref())
+            .is_some();
+        let tcp_probe_address = if !config.listen.is_empty() && !has_notify && !has_exec_probe {
+            // Find the first TCP listen socket
+            config.listen.iter().find_map(|spec| {
+                if spec.kind == crate::config::ListenKind::Tcp {
+                    spec.address.clone()
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        };
 
         tokio::spawn(async move {
             let mut restart_count = 0usize;
@@ -438,6 +444,60 @@ impl NativeProcessManager {
                         }
                     }
                 }))
+            } else {
+                None
+            };
+
+            // Spawn exec probe task if configured via ready.exec
+            let _exec_probe_task = if let Some(ref ready) = config.ready {
+                if let Some(ref cmd) = ready.exec {
+                    let cmd = cmd.clone();
+                    let initial_delay = Duration::from_secs(ready.initial_delay);
+                    let period = Duration::from_secs(ready.period);
+                    let timeout_dur = Duration::from_secs(ready.timeout);
+                    let success_threshold = ready.success_threshold;
+                    let ready_tx = ready_state.clone();
+                    let probe_name = name.clone();
+                    let probe_activity = activity.clone();
+
+                    Some(tokio::spawn(async move {
+                        tokio::time::sleep(initial_delay).await;
+                        let mut successes = 0u32;
+                        loop {
+                            let result = tokio::time::timeout(
+                                timeout_dur,
+                                tokio::process::Command::new("sh")
+                                    .arg("-c")
+                                    .arg(&cmd)
+                                    .stdout(std::process::Stdio::null())
+                                    .stderr(std::process::Stdio::null())
+                                    .status(),
+                            )
+                            .await;
+                            match result {
+                                Ok(Ok(status)) if status.success() => {
+                                    successes += 1;
+                                    if successes >= success_threshold {
+                                        info!(
+                                            "Exec probe succeeded for {} after {} check(s)",
+                                            probe_name, successes
+                                        );
+                                        probe_activity.log("Exec probe succeeded - process ready");
+                                        probe_activity.set_status(ProcessStatus::Ready);
+                                        let _ = ready_tx.send(true);
+                                        return;
+                                    }
+                                }
+                                _ => {
+                                    successes = 0;
+                                }
+                            }
+                            tokio::time::sleep(period).await;
+                        }
+                    }))
+                } else {
+                    None
+                }
             } else {
                 None
             };
@@ -620,7 +680,7 @@ impl NativeProcessManager {
                         activity.error("Watchdog timeout - no heartbeat received");
 
                         // Check max restarts limit before restarting
-                        if let Some(max) = config.max_restarts {
+                        if let Some(max) = config.restart.max {
                             if restart_count >= max {
                                 warn!(
                                     "Process {} reached max restarts ({}) after watchdog timeout, giving up",
@@ -648,8 +708,8 @@ impl NativeProcessManager {
                     }
                     _ = job.to_wait() => {
                         // Process ended, check if we should restart
-                        let policy = config.restart;
-                        let max_restarts = config.max_restarts;
+                        let policy = config.restart.on;
+                        let max_restarts = config.restart.max;
                         let process_name = name.clone();
 
                         // Use a channel to get the restart decision from run_async
@@ -1512,7 +1572,10 @@ mod tests {
             name: "test-echo".to_string(),
             exec: "echo".to_string(),
             args: vec!["hello".to_string()],
-            restart: RestartPolicy::Never,
+            restart: crate::config::RestartConfig {
+                on: RestartPolicy::Never,
+                max: Some(5),
+            },
             ..Default::default()
         };
 
