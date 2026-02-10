@@ -40,10 +40,21 @@ let
   gid = "1000";
   homeDir = "/env";
 
-  mkHome = path: (pkgs.runCommand "devenv-container-home" { } ''
-    mkdir -p $out${homeDir}
-    cp -r ${path} $out${homeDir}/
-  '');
+  mkHome = path:
+    let
+      pathStr = toString path;
+      # If the path is not in the Nix store (e.g. a raw filesystem path from
+      # self.outPath), copy it into the store first so it is accessible inside
+      # the build sandbox.
+      resolvedPath =
+        if lib.hasPrefix builtins.storeDir pathStr
+        then path
+        else builtins.path { path = /. + pathStr; name = builtins.baseNameOf pathStr; };
+    in
+    pkgs.runCommand "devenv-container-home" { } ''
+      mkdir -p $out${homeDir}
+      cp -r ${resolvedPath} $out${homeDir}/
+    '';
 
   mkMultiHome = paths: map mkHome paths;
 
