@@ -723,7 +723,7 @@ impl<'a> ExpandedContentComponent<'a> {
                     line_elements.push(
                         element! {
                             View(height: 1, flex_direction: FlexDirection::Row, padding_left: indent as u32, padding_right: 1) {
-                                Text(content: format!("│ {line}"), color: Color::AnsiValue(245))
+                                Text(content: format!("\x1b[0m│ {line}"), color: Color::AnsiValue(245))
                             }
                         }
                         .into_any(),
