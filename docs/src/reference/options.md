@@ -22279,6 +22279,27 @@ null or string
 
 
 
+## processes.\<name>.env
+
+
+
+Environment variables to set for this process.
+
+
+
+*Type:*
+attribute set of string
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
 ## processes.\<name>.exec
 
 
@@ -32279,6 +32300,27 @@ string
 
 *Default:*
 ` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.env
+
+
+
+Environment variables to set for this task.
+
+
+
+*Type:*
+attribute set of string
+
+
+
+*Default:*
+` { } `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
