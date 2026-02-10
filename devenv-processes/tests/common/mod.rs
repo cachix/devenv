@@ -214,6 +214,32 @@ pub async fn wait_for_file_content(path: &Path, expected: &str, timeout: Duratio
     .await
 }
 
+/// Wait for a file to have at least `expected` lines containing `pattern`.
+/// Returns the actual count found (or the count at timeout).
+pub async fn wait_for_line_count(
+    path: &Path,
+    pattern: &str,
+    expected: usize,
+    timeout: Duration,
+) -> usize {
+    let deadline = Instant::now() + timeout;
+    let mut delay = Duration::from_millis(10);
+    let max_delay = Duration::from_millis(500);
+    let mut count = 0;
+
+    while Instant::now() < deadline {
+        if let Ok(content) = tokio::fs::read_to_string(path).await {
+            count = content.lines().filter(|l| l.contains(pattern)).count();
+            if count >= expected {
+                return count;
+            }
+        }
+        tokio::time::sleep(delay).await;
+        delay = (delay * 2).min(max_delay);
+    }
+    count
+}
+
 /// Wait for TCP port to be accepting connections
 pub async fn wait_for_tcp_port(addr: &str, timeout: Duration) -> bool {
     let addr = addr.to_string();
