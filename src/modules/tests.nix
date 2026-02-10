@@ -45,7 +45,7 @@
               # TODO(sander): Update this to use the new wait command once it's available in process-compose
               # Pre-calculate which processes have readiness probes
               readiness_probes='${builtins.toJSON (lib.mapAttrs (name: proc:
-                lib.hasAttrByPath ["process-compose" "readiness_probe"] proc
+                proc.ready != null
               ) config.processes)}'
 
               # Use a simple shell script that handles a single task
