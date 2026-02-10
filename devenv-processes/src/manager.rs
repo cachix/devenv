@@ -1145,8 +1145,7 @@ impl NativeProcessManager {
                             } else {
                                 // Extract what we need for Phase 2
                                 let job = process.job.clone();
-                                let policy = process.config.restart;
-                                Some((job, policy))
+                                Some(job)
                             }
                         } else {
                             // Process was removed (stopped externally), silently ignore
@@ -1154,35 +1153,20 @@ impl NativeProcessManager {
                         }
                     };
 
-                    if let Some((job, policy)) = phase1_result {
-                        // Phase 2: call run_async (no lock held)
+                    if let Some(job) = phase1_result {
+                        // Phase 2: Extract is_failure from exit status (no lock held)
                         let (tx, rx) = tokio::sync::oneshot::channel();
-                        let process_name = name.clone();
 
                         job.run_async(move |ctx| {
-                            let status = if let CommandState::Finished { status, .. } = ctx.current {
-                                Some(*status)
+                            let is_failure = if let CommandState::Finished { status, .. } = ctx.current {
+                                Some(!matches!(status, ProcessEnd::Success))
                             } else {
                                 None
                             };
 
                             Box::new(async move {
-                                if let Some(status) = status {
-                                    let is_failure = !matches!(status, ProcessEnd::Success);
-                                    let should_restart = match policy {
-                                        RestartPolicy::Never => false,
-                                        RestartPolicy::Always => true,
-                                        RestartPolicy::OnFailure => is_failure,
-                                    };
-
-                                    if should_restart {
-                                        debug!(
-                                            "Process {} exited with {:?}, policy: {:?}",
-                                            process_name, status, policy
-                                        );
-                                    }
-
-                                    let _ = tx.send((should_restart, is_failure));
+                                if let Some(is_failure) = is_failure {
+                                    let _ = tx.send(is_failure);
                                 }
                             })
                         }).await;
@@ -1191,8 +1175,7 @@ impl NativeProcessManager {
                         let mut jobs = jobs.write().await;
                         if let Some(process) = jobs.get_mut(&name) {
                             match rx.await {
-                                Ok((true, is_failure)) => {
-                                    // Check max restarts
+                                Ok(is_failure) => {
                                     match process.check_exit_policy(is_failure) {
                                         ExitAction::Restart => {
                                             info!("Restarting process {} (attempt {})", name, process.restart_count);
@@ -1221,10 +1204,6 @@ impl NativeProcessManager {
                                             process.stopped = true;
                                         }
                                     }
-                                }
-                                Ok((false, _)) => {
-                                    debug!("Process {} will not restart", name);
-                                    process.stopped = true;
                                 }
                                 Err(_) => {
                                     debug!("Process {} exit status channel dropped", name);
@@ -1269,7 +1248,6 @@ impl NativeProcessManager {
                         process.activity.log("File change detected, restarting");
                         process.restarting = true;
                         process.file_watch_cooldown = Some(Instant::now() + Duration::from_millis(500));
-                        process.status = process.initial_status();
                         process.job.try_restart_with_signal(
                             Signal::Terminate,
                             Duration::from_secs(2),
