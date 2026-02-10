@@ -606,11 +606,16 @@ impl NativeProcessManager {
                         break;
                     }
                     _ = watch_rx.recv() => {
-                        // File change detected, restart the process
+                        // File change detected, restart the process.
                         info!("File change detected for {}, restarting", name);
                         activity.log("File change detected, restarting");
                         job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
                         tokio::time::sleep(Duration::from_millis(100)).await;
+                        // Drain events that accumulated during stop — the OS often
+                        // delivers multiple events per write (create, modify,
+                        // close-write) and some may arrive after the channel was
+                        // drained by recv(), causing a spurious second restart.
+                        while watch_rx.try_recv().is_ok() {}
                         job.start().await;
                         // Reset watchdog state on restart
                         is_ready = !watchdog_require_ready;
