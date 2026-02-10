@@ -1,8 +1,15 @@
 //! Integration tests for notify socket and watchdog functionality.
+//!
+//! Tests use event-driven assertions (polling) instead of fixed sleeps
+//! where possible. Brief 100ms sleeps after sending notifications are
+//! kept because they just ensure async notification processing completes
+//! before checking "process still alive" — these are not timing-sensitive.
+//! Watchdog ping intervals are inherent to test design (must be spaced
+//! relative to the watchdog timeout).
 
 mod common;
 
-use common::{STARTUP_TIMEOUT, TestContext, wait_for_file_content};
+use common::*;
 use devenv_processes::{NotifyConfig, ProcessConfig, WatchdogConfig};
 use sd_notify::NotifyState;
 use std::os::unix::net::UnixDatagram;
@@ -11,6 +18,7 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(30);
+const RESTART_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Mutex to serialize access to NOTIFY_SOCKET env var across parallel tests
 static NOTIFY_ENV_MUTEX: Mutex<()> = Mutex::new(());
@@ -208,12 +216,17 @@ sleep 3600
         // Stop the process
         manager.stop_all().await.unwrap();
 
-        // Give some time for cleanup
-        tokio::time::sleep(Duration::from_millis(200)).await;
-
-        // Socket should be cleaned up
+        // Poll until socket is cleaned up
+        let path = notify_socket_path.clone();
         assert!(
-            !notify_socket_path.exists(),
+            wait_for_condition(
+                || {
+                    let path = path.clone();
+                    async move { !path.exists() }
+                },
+                STARTUP_TIMEOUT
+            )
+            .await,
             "Notify socket should be cleaned up after stop"
         );
     })
@@ -295,11 +308,10 @@ sleep 3600
         let notify_socket_path = ctx.state_dir.join("notify/ready-test.sock");
         send_notify(&notify_socket_path, &[NotifyState::Ready]);
 
-        // Give manager time to process
+        // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Process should still be running (READY=1 doesn't stop it)
-        // Verify by checking stop_all succeeds (would fail if process already dead)
         manager
             .stop_all()
             .await
@@ -341,11 +353,10 @@ sleep 3600
             &[NotifyState::Status("Loading configuration...")],
         );
 
-        // Give manager time to process
+        // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Process should still be running
-        // Verify by checking stop_all succeeds
         manager
             .stop_all()
             .await
@@ -383,14 +394,15 @@ sleep 3600
 
         let notify_socket_path = ctx.state_dir.join("notify/watchdog-ping.sock");
 
-        // Send watchdog pings every 500ms for 3 seconds (longer than timeout)
+        // Send watchdog pings every 500ms for 3 seconds (longer than timeout).
+        // The 500ms interval is inherent to the test: pings must arrive within
+        // the 2s watchdog window to keep the process alive.
         for _ in 0..6 {
             send_notify(&notify_socket_path, &[NotifyState::Watchdog]);
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
 
         // Process should still be running because we kept pinging
-        // Verify by checking stop_all succeeds
         manager
             .stop_all()
             .await
@@ -434,16 +446,8 @@ sleep 3600
             "Process should start initially"
         );
 
-        // Don't send any watchdog pings - let it timeout and restart
-        // Wait for restart (watchdog timeout + restart time)
-        tokio::time::sleep(Duration::from_secs(3)).await;
-
-        // Check that process was restarted (counter should be >= 2)
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .expect("Should read counter");
-        let count: i32 = content.trim().parse().expect("Should parse counter");
-
+        // Don't send any watchdog pings - poll until restart detected
+        let count = wait_for_counter_value(&counter_file, 2, RESTART_TIMEOUT).await;
         assert!(
             count >= 2,
             "Process should have restarted due to watchdog timeout, count={}",
@@ -490,33 +494,21 @@ sleep 3600
             "Process should start initially"
         );
 
-        // Wait longer than watchdog timeout WITHOUT sending READY=1
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
-        // Process should NOT have restarted because READY=1 was never sent
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .expect("Should read counter");
-        let count: i32 = content.trim().parse().expect("Should parse counter");
-
+        // Wait longer than watchdog timeout WITHOUT sending READY=1.
+        // This is inherently timing-dependent: we must wait long enough to
+        // prove the watchdog did NOT fire. 3x the watchdog timeout is generous.
+        let count = wait_for_counter_value(&counter_file, 2, Duration::from_secs(3)).await;
         assert_eq!(
             count, 1,
             "Process should NOT restart without READY=1 when require_ready=true"
         );
 
-        // Now send READY=1
+        // Now send READY=1 to start watchdog enforcement
         let notify_socket_path = ctx.state_dir.join("notify/watchdog-ready.sock");
         send_notify(&notify_socket_path, &[NotifyState::Ready]);
 
-        // Wait for watchdog to timeout (now it's enforced)
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
-        // Now it should have restarted
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .expect("Should read counter");
-        let count: i32 = content.trim().parse().expect("Should parse counter");
-
+        // Poll until watchdog-triggered restart
+        let count = wait_for_counter_value(&counter_file, 2, RESTART_TIMEOUT).await;
         assert!(
             count >= 2,
             "Process should restart after READY=1 and watchdog timeout, count={}",
@@ -558,7 +550,7 @@ sleep 3600
         let notify_socket_path = ctx.state_dir.join("notify/stopping-test.sock");
         send_notify(&notify_socket_path, &[NotifyState::Stopping]);
 
-        // Give manager time to process
+        // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Process should still be running (STOPPING is informational)
@@ -602,7 +594,7 @@ sleep 3600
         let notify_socket_path = ctx.state_dir.join("notify/reloading-test.sock");
         send_notify(&notify_socket_path, &[NotifyState::Reloading]);
 
-        // Give manager time to process
+        // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Process should still be running (RELOADING is informational)
@@ -647,7 +639,7 @@ sleep 3600
             &[NotifyState::Ready, NotifyState::Status("Fully initialized")],
         );
 
-        // Give manager time to process
+        // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Process should still be running
@@ -696,7 +688,7 @@ sleep 3600
         send_raw_notify(&notify_socket_path, "UNKNOWN=1\n").unwrap(); // Unknown key
         send_raw_notify(&notify_socket_path, "\x00\x01\x02").unwrap(); // Binary garbage
 
-        // Give manager time to process
+        // Brief wait to ensure async notification processing completes
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Process should still be running - invalid messages shouldn't crash anything
@@ -743,24 +735,19 @@ sleep 3600
             "Process should start initially"
         );
 
-        // Let watchdog trigger restarts until max is reached
-        // With 500ms timeout and max 2 restarts, we need ~2-3 seconds
-        tokio::time::sleep(Duration::from_secs(4)).await;
-
-        // Check restart count - should be at most 3 (initial + 2 restarts)
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .expect("Should read counter");
-        let count: i32 = content.trim().parse().expect("Should parse counter");
-
-        assert!(
-            count <= 3,
-            "Process should respect max_restarts=2, but started {} times",
-            count
-        );
+        // Poll until at least one restart
+        let count = wait_for_counter_value(&counter_file, 2, RESTART_TIMEOUT).await;
         assert!(
             count >= 2,
             "Process should have restarted at least once, count={}",
+            count
+        );
+
+        // Wait for restarts to exhaust, then confirm max is respected
+        let count = wait_for_counter_value(&counter_file, 4, Duration::from_secs(5)).await;
+        assert!(
+            count <= 3,
+            "Process should respect max_restarts=2, but started {} times",
             count
         );
 
@@ -807,22 +794,17 @@ sleep 3600
         // Send READY=1 to start watchdog enforcement
         send_notify(&notify_socket_path, &[NotifyState::Ready]);
 
-        // Send a few watchdog pings to keep it alive
+        // Send a few watchdog pings to keep it alive.
+        // The 400ms interval is inherent to the test: pings must arrive
+        // within the 1s watchdog window.
         for _ in 0..3 {
             send_notify(&notify_socket_path, &[NotifyState::Watchdog]);
             tokio::time::sleep(Duration::from_millis(400)).await;
         }
 
-        // Now stop sending pings - simulate a hang
-        // Wait for watchdog timeout + restart
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
-        // Process should have restarted
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .expect("Should read counter");
-        let count: i32 = content.trim().parse().expect("Should parse counter");
-
+        // Now stop sending pings - simulate a hang.
+        // Poll until watchdog-triggered restart.
+        let count = wait_for_counter_value(&counter_file, 2, RESTART_TIMEOUT).await;
         assert!(
             count >= 2,
             "Process should restart after delayed hang, count={}",

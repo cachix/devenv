@@ -1,4 +1,9 @@
 //! Restart policy integration tests for NativeProcessManager.
+//!
+//! All tests use event-driven assertions (polling) instead of fixed sleeps
+//! to avoid timing-dependent flakiness. Negative assertions (should NOT
+//! restart) wait for the process to exit, then poll briefly to confirm
+//! no restart occurred.
 
 mod common;
 
@@ -8,6 +13,7 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(30);
+const RESTART_TIMEOUT: Duration = Duration::from_secs(10);
 
 // ============================================================================
 // Restart Policy Tests
@@ -34,23 +40,13 @@ async fn test_restart_never() {
             .await
             .expect("Failed to start");
 
-        // Wait for process to exit
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        // Wait for initial start
+        let count = wait_for_line_count(&counter_file, "started", 1, STARTUP_TIMEOUT).await;
+        assert_eq!(count, 1, "Process should start once");
 
-        // Check the counter - should only have 1 entry (no restart)
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-        let count = content.lines().count();
+        // Poll to confirm no restart happened
+        let count = wait_for_line_count(&counter_file, "started", 2, Duration::from_secs(2)).await;
         assert_eq!(count, 1, "Process with Never policy should not restart");
-
-        // Wait a bit more to ensure no delayed restart
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-        let count = content.lines().count();
-        assert_eq!(count, 1, "Process should still not have restarted");
     })
     .await
     .expect("Test timed out");
@@ -78,20 +74,16 @@ async fn test_restart_always_on_success() {
             .await
             .expect("Failed to start");
 
-        // Wait for restarts to occur (should restart up to max_restarts times)
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-        let count = content.lines().count();
-
-        // Should have started 1 + max_restarts times (initial + 3 restarts = 4)
+        // Poll until at least 2 starts (proves restart on success)
+        let count = wait_for_line_count(&counter_file, "started", 2, RESTART_TIMEOUT).await;
         assert!(
             count >= 2,
             "Process with Always policy should restart on success, got {} starts",
             count
         );
+
+        // Wait for all restarts to complete (1 initial + 3 restarts = 4)
+        let count = wait_for_line_count(&counter_file, "started", 4, RESTART_TIMEOUT).await;
         assert!(
             count <= 4,
             "Process should respect max_restarts limit, got {} starts",
@@ -126,15 +118,8 @@ async fn test_restart_always_on_failure() {
             .await
             .expect("Failed to start");
 
-        // Wait for restarts
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-        let count = content.lines().count();
-
-        // Should restart even on failure
+        // Poll until restart detected
+        let count = wait_for_line_count(&counter_file, "started", 2, RESTART_TIMEOUT).await;
         assert!(
             count >= 2,
             "Process with Always policy should restart on failure, got {} starts",
@@ -169,15 +154,8 @@ async fn test_restart_on_failure_with_failure() {
             .await
             .expect("Failed to start");
 
-        // Wait for restarts
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-        let count = content.lines().count();
-
-        // Should restart on failure
+        // Poll until restart detected
+        let count = wait_for_line_count(&counter_file, "started", 2, RESTART_TIMEOUT).await;
         assert!(
             count >= 2,
             "Process with OnFailure policy should restart on exit 1, got {} starts",
@@ -212,29 +190,15 @@ async fn test_restart_on_failure_with_success() {
             .await
             .expect("Failed to start");
 
-        // Wait a bit
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        // Wait for initial start
+        let count = wait_for_line_count(&counter_file, "started", 1, STARTUP_TIMEOUT).await;
+        assert_eq!(count, 1, "Process should start once");
 
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-        let count = content.lines().count();
-
-        // Should NOT restart on success
+        // Poll to confirm no restart (OnFailure + exit 0 = no restart)
+        let count = wait_for_line_count(&counter_file, "started", 2, Duration::from_secs(2)).await;
         assert_eq!(
             count, 1,
             "Process with OnFailure policy should NOT restart on exit 0"
-        );
-
-        // Wait more to ensure no delayed restart
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-        assert_eq!(
-            content.lines().count(),
-            1,
-            "Process should still not have restarted"
         );
     })
     .await
@@ -265,29 +229,17 @@ async fn test_max_restarts_limit() {
             .await
             .expect("Failed to start");
 
-        // Wait enough time for all restarts to complete
-        tokio::time::sleep(Duration::from_secs(3)).await;
-
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-        let count = content.lines().count();
-
-        // Should have exactly 1 initial + 3 restarts = 4 starts
+        // Wait for all restarts to complete (1 initial + 3 restarts = 4)
+        let count = wait_for_line_count(&counter_file, "started", 4, RESTART_TIMEOUT).await;
         assert_eq!(
             count, 4,
-            "Process should start exactly {} times (1 initial + {} restarts)",
-            4, 3
+            "Process should start exactly 4 times (1 initial + 3 restarts)"
         );
 
-        // Wait more to ensure no more restarts
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
+        // Confirm no more restarts beyond the limit
+        let count = wait_for_line_count(&counter_file, "started", 5, Duration::from_secs(2)).await;
         assert_eq!(
-            content.lines().count(),
-            4,
+            count, 4,
             "Process should not restart beyond max_restarts limit"
         );
     })
@@ -319,15 +271,8 @@ async fn test_unlimited_restarts() {
             .await
             .expect("Failed to start");
 
-        // Wait for several restarts
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-        let count = content.lines().count();
-
-        // Should have restarted multiple times
+        // Poll until multiple restarts observed
+        let count = wait_for_line_count(&counter_file, "started", 5, RESTART_TIMEOUT).await;
         assert!(
             count >= 5,
             "Process with unlimited restarts should keep restarting, got {} starts",
@@ -338,20 +283,19 @@ async fn test_unlimited_restarts() {
         manager.stop_all().await.expect("Failed to stop");
 
         // Record count after stop
-        let final_content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-        let final_count = final_content.lines().count();
+        let final_count =
+            wait_for_line_count(&counter_file, "started", 1, Duration::from_millis(100)).await;
 
-        // Wait to ensure it stopped
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        let after_stop_content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-
+        // Confirm no more restarts after stop
+        let after_stop = wait_for_line_count(
+            &counter_file,
+            "started",
+            final_count + 1,
+            Duration::from_secs(2),
+        )
+        .await;
         assert_eq!(
-            after_stop_content.lines().count(),
-            final_count,
+            after_stop, final_count,
             "Process should stop restarting after stop_all"
         );
     })
