@@ -26,10 +26,9 @@ tokio-util.workspace = true
 tracing.workspace = true
 sqlx.workspace = true
 blake3.workspace = true
-walkdir.workspace = true
 shell-escape.workspace = true
 base64 = "0.22"
-globset = "0.4"
+ignore = "0.4.23"
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["user", "signal"] }

@@ -7,45 +7,41 @@ use devenv_cache_core::{
     file::TrackedFile,
     time,
 };
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use ignore::overrides::OverrideBuilder;
+use ignore::Match;
+use ignore::WalkBuilder;
 use serde_json::Value;
 use sqlx::Row;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tracing::{debug, warn};
-use walkdir::WalkDir;
 
-/// Build a GlobSet from patterns, optionally stripping a prefix character (e.g., `!` for negation)
-///
-/// Returns None if there are no patterns or if building fails.
-fn build_globset(patterns: &[&str], strip_prefix: Option<char>) -> Option<GlobSet> {
-    if patterns.is_empty() {
-        return None;
+fn normalize_pattern_for_base_dir(pattern: &str, base_dir: &Path) -> String {
+    let (negated, raw_pattern) = match pattern.strip_prefix('!') {
+        Some(rest) => (true, rest),
+        None => (false, pattern),
+    };
+
+    if base_dir == Path::new(".") {
+        return pattern.to_string();
     }
 
-    let mut builder = GlobSetBuilder::new();
-    for pattern in patterns {
-        // Strip the leading character if specified
-        let pattern = match strip_prefix {
-            Some(c) if pattern.starts_with(c) => &pattern[1..],
-            _ => pattern,
-        };
-        match Glob::new(pattern) {
-            Ok(glob) => {
-                builder.add(glob);
-            }
-            Err(e) => {
-                warn!("Invalid glob pattern '{}': {}", pattern, e);
-            }
-        }
-    }
+    let base_dir_str = base_dir.to_string_lossy();
+    let stripped = if let Some(rest) = raw_pattern.strip_prefix(&format!("{}/", base_dir_str)) {
+        rest
+    } else if let Some(rest) = raw_pattern.strip_prefix(&format!("{}\\", base_dir_str)) {
+        rest
+    } else if raw_pattern == base_dir_str {
+        "."
+    } else {
+        raw_pattern
+    };
 
-    match builder.build() {
-        Ok(globset) => Some(globset),
-        Err(e) => {
-            warn!("Failed to build globset: {}", e);
-            None
-        }
+    if negated {
+        format!("!{}", stripped)
+    } else {
+        stripped.to_string()
     }
 }
 
@@ -61,6 +57,20 @@ fn extract_base_dir(pattern: &str) -> &Path {
         .find(|(_, c)| special_chars.contains(c))
         .map(|(i, _)| i)
         .unwrap_or(pattern.len());
+
+    // No glob characters - treat as a literal path and walk from its parent directory
+    if first_special == pattern.len() {
+        let path = Path::new(pattern);
+        if let Some(parent) = path.parent() {
+            if parent.as_os_str().is_empty() {
+                return Path::new(".");
+            }
+
+            return parent;
+        }
+
+        return Path::new(".");
+    }
 
     // Get the substring up to the first special character
     let prefix = &pattern[..first_special];
@@ -98,40 +108,64 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
         .map(|s| s.as_str())
         .partition(|p| p.starts_with('!'));
 
-    // Build globsets for positive and negation patterns
-    let positive_set = match build_globset(&positive_patterns, None) {
-        Some(set) => set,
-        None => return Vec::new(),
-    };
-    let negation_set = build_globset(&negation_patterns, Some('!'));
+    // `exec_if_modified` requires at least one positive pattern.
+    if positive_patterns.is_empty() {
+        return Vec::new();
+    }
 
-    // Collect unique base directories to walk
-    let mut base_dirs: Vec<&Path> = positive_patterns
-        .iter()
-        .map(|p| extract_base_dir(p))
-        .collect();
-    base_dirs.sort();
-    base_dirs.dedup();
+    let mut groups: BTreeMap<PathBuf, Vec<&str>> = BTreeMap::new();
+    for pattern in &positive_patterns {
+        groups
+            .entry(extract_base_dir(pattern).to_path_buf())
+            .or_default()
+            .push(*pattern);
+    }
 
-    // Walk each base directory and collect matching files
     let mut results: Vec<String> = Vec::new();
-    for base_dir in base_dirs {
-        for entry in WalkDir::new(base_dir)
-            .follow_links(true)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
-            let path_str = path.to_string_lossy();
 
-            // Check if path matches any positive pattern
-            if positive_set.is_match(path) {
-                // Check if path matches any negation pattern
-                let excluded = negation_set.as_ref().is_some_and(|ns| ns.is_match(path));
+    for (base_dir, positive_group) in groups {
+        let mut overrides_builder = OverrideBuilder::new(&base_dir);
 
-                if !excluded {
-                    results.push(path_str.into_owned());
-                }
+        for pattern in positive_group {
+            let normalized = normalize_pattern_for_base_dir(pattern, &base_dir);
+            if let Err(e) = overrides_builder.add(&normalized) {
+                warn!("Invalid glob pattern '{}': {}", normalized, e);
+            }
+        }
+
+        for pattern in &negation_patterns {
+            let normalized = normalize_pattern_for_base_dir(pattern, &base_dir);
+            if let Err(e) = overrides_builder.add(&normalized) {
+                warn!("Invalid glob pattern '{}': {}", normalized, e);
+            }
+        }
+
+        let overrides = match overrides_builder.build() {
+            Ok(overrides) => overrides,
+            Err(e) => {
+                warn!("Failed to build ignore overrides: {}", e);
+                continue;
+            }
+        };
+
+        let mut walk_builder = WalkBuilder::new(&base_dir);
+        walk_builder
+            .hidden(false)
+            .ignore(false)
+            .git_ignore(false)
+            .git_global(false)
+            .git_exclude(false)
+            .parents(false)
+            .follow_links(true);
+
+        for entry in walk_builder.build() {
+            let Ok(entry) = entry else {
+                continue;
+            };
+
+            let is_dir = entry.file_type().is_some_and(|ft| ft.is_dir());
+            if matches!(overrides.matched(entry.path(), is_dir), Match::Whitelist(_)) {
+                results.push(entry.path().to_string_lossy().into_owned());
             }
         }
     }
@@ -183,7 +217,7 @@ impl TaskCache {
             return Ok(false);
         }
 
-        // Expand all patterns using glob and collect results
+        // Expand all patterns and collect results
         let expanded_paths = expand_glob_patterns(files);
 
         // Check all files and track if any are modified
@@ -961,33 +995,6 @@ mod tests {
     fn test_expand_glob_patterns_empty() {
         let result = expand_glob_patterns(&[]);
         assert!(result.is_empty());
-    }
-
-    #[test]
-    fn test_build_globset() {
-        // Valid patterns (negation patterns with prefix stripped)
-        let patterns = vec!["!**/node_modules/**", "!**/*.test.ts"];
-        let globset = build_globset(&patterns, Some('!'));
-        assert!(globset.is_some());
-
-        let gs = globset.unwrap();
-        assert!(gs.is_match("/some/path/node_modules/foo/bar.ts"));
-        assert!(gs.is_match("src/file.test.ts"));
-        assert!(!gs.is_match("src/file.ts"));
-
-        // Empty patterns
-        let empty: Vec<&str> = vec![];
-        assert!(build_globset(&empty, None).is_none());
-
-        // Positive patterns (no prefix)
-        let positive = vec!["**/*.ts", "**/*.rs"];
-        let pos_globset = build_globset(&positive, None);
-        assert!(pos_globset.is_some());
-
-        let pgs = pos_globset.unwrap();
-        assert!(pgs.is_match("src/main.ts"));
-        assert!(pgs.is_match("lib/util.rs"));
-        assert!(!pgs.is_match("file.js"));
     }
 
     #[test]
