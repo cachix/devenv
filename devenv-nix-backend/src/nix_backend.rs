@@ -465,7 +465,8 @@ impl NixRustBackend {
         })
     }
 
-    /// Extract embedded bootstrap files to filesystem for Nix to access
+    /// Extract embedded bootstrap files to filesystem for Nix to access.
+    /// Only writes files whose content has changed to preserve mtimes for direnv.
     fn extract_bootstrap_files(dotfile_dir: &Path) -> Result<PathBuf> {
         use std::io::Write;
 
@@ -483,6 +484,13 @@ impl NixRustBackend {
                 std::fs::create_dir_all(parent)
                     .into_diagnostic()
                     .wrap_err("Failed to create parent directories")?;
+            }
+
+            // Skip writing if existing file already has the same content
+            if let Ok(existing) = std::fs::read(&target_path) {
+                if existing == file.contents() {
+                    continue;
+                }
             }
 
             let mut output_file = std::fs::File::create(&target_path)
