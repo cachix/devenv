@@ -371,15 +371,39 @@ impl NativeProcessManager {
             };
 
         tokio::spawn(async move {
+            enum SupervisorStatus {
+                /// Waiting for process to become ready (initial or after restart).
+                WaitingForReady { watchdog_deadline: Option<Instant> },
+                /// Process is ready. Watchdog deadline active if configured.
+                Ready { watchdog_deadline: Option<Instant> },
+                /// We killed the process (watchdog, file watch, or external restart).
+                /// Absorb the next to_wait exit without checking restart policy.
+                Restarting,
+            }
+
+            impl SupervisorStatus {
+                fn watchdog_deadline(&self) -> Option<Instant> {
+                    match self {
+                        Self::Ready { watchdog_deadline }
+                        | Self::WaitingForReady { watchdog_deadline } => *watchdog_deadline,
+                        Self::Restarting => None,
+                    }
+                }
+            }
+
             let mut restart_count = 0usize;
             let mut ready_signaled = false;
 
-            // Watchdog state
-            let mut is_ready = !watchdog_require_ready; // If require_ready is false, start as ready
-            let mut watchdog_deadline: Option<Instant> = if watchdog_timeout.is_some() && is_ready {
-                Some(Instant::now() + watchdog_timeout.unwrap())
+            let new_deadline = || watchdog_timeout.map(|t| Instant::now() + t);
+
+            let mut state = if !watchdog_require_ready {
+                SupervisorStatus::Ready {
+                    watchdog_deadline: new_deadline(),
+                }
             } else {
-                None
+                SupervisorStatus::WaitingForReady {
+                    watchdog_deadline: None,
+                }
             };
 
             // Spawn TCP probe task if needed
@@ -509,13 +533,7 @@ impl NativeProcessManager {
                         job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
                         tokio::time::sleep(Duration::from_millis(100)).await;
                         job.start().await;
-                        // Reset watchdog state on restart
-                        is_ready = !watchdog_require_ready;
-                        watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
-                            Some(Instant::now() + watchdog_timeout.unwrap())
-                        } else {
-                            None
-                        };
+                        state = SupervisorStatus::Restarting;
                     }
                     // Handle notify socket messages
                     result = async {
@@ -531,20 +549,23 @@ impl NativeProcessManager {
                                         info!("Process {} signaled ready", name);
                                         activity.log("Process signaled ready");
                                         activity.set_status(ProcessStatus::Ready);
+                                        restart_count = 0;
                                         // Signal waiting tasks that process is ready
                                         if !ready_signaled {
                                             ready_signaled = true;
                                             let _ = ready_state.send(true);
                                         }
-                                        // Start watchdog timer now if configured
-                                        if let Some(timeout) = watchdog_timeout {
-                                            watchdog_deadline = Some(Instant::now() + timeout);
-                                        }
+                                        state = SupervisorStatus::Ready { watchdog_deadline: new_deadline() };
                                     }
                                     NotifyMessage::Watchdog => {
                                         debug!("Watchdog ping from {}", name);
-                                        if let Some(timeout) = watchdog_timeout {
-                                            watchdog_deadline = Some(Instant::now() + timeout);
+                                        restart_count = 0;
+                                        if let SupervisorStatus::Ready { ref mut watchdog_deadline } = state {
+                                            if let Some(timeout) = watchdog_timeout {
+                                                *watchdog_deadline = Some(Instant::now() + timeout);
+                                            }
+                                        } else {
+                                            debug!("Ignoring watchdog ping from {} (not in Ready state)", name);
                                         }
                                     }
                                     NotifyMessage::Status(status) => {
@@ -568,11 +589,11 @@ impl NativeProcessManager {
                     }
                     // Handle watchdog timeout
                     _ = async {
-                        match watchdog_deadline {
+                        match state.watchdog_deadline() {
                             Some(deadline) => tokio::time::sleep_until(deadline.into()).await,
                             None => std::future::pending().await,
                         }
-                    }, if watchdog_deadline.is_some() => {
+                    }, if state.watchdog_deadline().is_some() => {
                         warn!("Watchdog timeout for process {}", name);
                         activity.error("Watchdog timeout - no heartbeat received");
 
@@ -594,17 +615,20 @@ impl NativeProcessManager {
                         info!("Restarting process {} due to watchdog timeout (attempt {})", name, restart_count);
                         activity.log(format!("Restarting due to watchdog timeout (attempt {})", restart_count));
                         job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
-
-                        // Reset watchdog state for new instance
-                        is_ready = !watchdog_require_ready;
-                        watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
-                            Some(Instant::now() + watchdog_timeout.unwrap())
-                        } else {
-                            None
-                        };
+                        state = SupervisorStatus::Restarting;
                     }
                     _ = job.to_wait() => {
                         // Process ended, check if we should restart
+                        if matches!(state, SupervisorStatus::Restarting) {
+                            debug!("Absorbing stale exit for {} after initiated restart", name);
+                            state = if watchdog_require_ready {
+                                SupervisorStatus::WaitingForReady { watchdog_deadline: None }
+                            } else {
+                                SupervisorStatus::Ready { watchdog_deadline: new_deadline() }
+                            };
+                            continue;
+                        }
+
                         let policy = config.restart;
                         let max_restarts = config.max_restarts;
                         let process_name = name.clone();
@@ -662,12 +686,10 @@ impl NativeProcessManager {
                                 info!("Restarting process {} (attempt {})", name, restart_count);
                                 activity.log(format!("Restarting (attempt {})", restart_count));
                                 job.start().await;
-                                // Reset watchdog state for new instance
-                                is_ready = !watchdog_require_ready;
-                                watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
-                                    Some(Instant::now() + watchdog_timeout.unwrap())
+                                state = if watchdog_require_ready {
+                                    SupervisorStatus::WaitingForReady { watchdog_deadline: None }
                                 } else {
-                                    None
+                                    SupervisorStatus::Ready { watchdog_deadline: new_deadline() }
                                 };
                             }
                             _ => {
@@ -896,12 +918,20 @@ impl NativeProcessManager {
                 handle.ready_state.clone(),
             );
         } else {
-            // Supervisor is still running - just restart the job.
-            // The existing supervisor will continue monitoring with its current restart_count.
+            // Abort supervisor and respawn fresh to reset restart_count
+            // and avoid races with stale exit notifications.
+            handle.supervisor_task.abort();
             handle
                 .job
                 .restart_with_signal(Signal::Terminate, Duration::from_secs(2))
                 .await;
+            handle.supervisor_task = self.spawn_supervisor(
+                config,
+                handle.job.clone(),
+                handle.activity.clone(),
+                handle.notify_socket.clone(),
+                handle.ready_state.clone(),
+            );
         }
 
         // Set status back to running
