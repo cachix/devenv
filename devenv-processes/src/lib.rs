@@ -36,8 +36,8 @@ pub mod supervisor_state;
 
 // Re-export config types at crate root
 pub use config::{
-    ListenKind, ListenSpec, NotifyConfig, ProcessConfig, ProcessType, RestartPolicy,
-    SocketActivationConfig, WatchConfig, WatchdogConfig,
+    HttpGetProbe, HttpProbe, ListenKind, ListenSpec, ProcessConfig, ProcessType, ReadyConfig,
+    RestartConfig, RestartPolicy, SocketActivationConfig, WatchConfig, WatchdogConfig,
 };
 pub use devenv_event_sources::{NotifyMessage, NotifySocket};
 pub use manager::{

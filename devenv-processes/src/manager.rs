@@ -171,8 +171,9 @@ impl NativeProcessManager {
         }
         let activity = builder.start();
 
-        // Create notify socket if configured
-        let notify_socket = if config.notify.as_ref().is_some_and(|n| n.enable) {
+        // Create notify socket if configured via ready.notify
+        let uses_notify = config.ready.as_ref().map_or(false, |r| r.notify);
+        let notify_socket = if uses_notify {
             let socket = NotifySocket::new(&self.state_dir, &config.name).await?;
             info!(
                 "Created notify socket for {} at {}",
@@ -250,7 +251,7 @@ impl NativeProcessManager {
         let (status_tx, status_rx) = tokio::sync::watch::channel(initial_status);
 
         // If no readiness mechanism is configured, mark process as immediately ready
-        let has_notify = config.notify.as_ref().is_some_and(|n| n.enable);
+        let has_notify = config.ready.as_ref().map_or(false, |r| r.notify);
         let has_tcp_probe = !config.listen.is_empty() && !has_notify;
         if !has_notify && !has_tcp_probe {
             let _ = status_tx.send(crate::supervisor_state::JobStatus {
@@ -284,7 +285,626 @@ impl NativeProcessManager {
         );
 
         info!("Command '{}' started", config.name);
-        Ok(job)
+        Ok(job_clone)
+    }
+
+    /// Spawn a task that tails a log file and emits lines to activity
+    fn spawn_file_tailer(path: PathBuf, activity: Activity, is_stderr: bool) -> JoinHandle<()> {
+        use tokio::io::AsyncSeekExt;
+
+        tokio::spawn(async move {
+            // File is already created/truncated by start_command before job starts
+            let file = match tokio::fs::File::open(&path).await {
+                Ok(f) => f,
+                Err(e) => {
+                    debug!("Failed to open log file {}: {}", path.display(), e);
+                    return;
+                }
+            };
+
+            // Track our position in the file to avoid re-reading on EOF
+            let mut position: u64 = 0;
+            let mut reader = BufReader::new(file).lines();
+
+            loop {
+                match reader.next_line().await {
+                    Ok(Some(line)) => {
+                        // Update position: line length + newline byte
+                        position += line.len() as u64 + 1;
+                        if is_stderr {
+                            activity.error(&line);
+                        } else {
+                            activity.log(&line);
+                        }
+                    }
+                    Ok(None) => {
+                        // EOF reached, wait a bit and try again (tail -f behavior)
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+
+                        // Re-open file and seek to last known position
+                        let new_file = match tokio::fs::File::open(&path).await {
+                            Ok(f) => f,
+                            Err(_) => break,
+                        };
+
+                        // Check if file was truncated (e.g., during restart)
+                        // If so, reset position to read from the beginning
+                        let metadata = match new_file.metadata().await {
+                            Ok(m) => m,
+                            Err(_) => break,
+                        };
+                        if metadata.len() < position {
+                            // File was truncated, reset to beginning
+                            position = 0;
+                        }
+
+                        // Seek to where we left off (or beginning if truncated)
+                        let mut new_file = new_file;
+                        if let Err(e) = new_file.seek(std::io::SeekFrom::Start(position)).await {
+                            debug!("Failed to seek in log file {}: {}", path.display(), e);
+                            break;
+                        }
+
+                        reader = BufReader::new(new_file).lines();
+                    }
+                    Err(e) => {
+                        debug!("Error reading log file {}: {}", path.display(), e);
+                        break;
+                    }
+                }
+            }
+        })
+    }
+
+    /// Spawn a supervision task that monitors the job and handles restarts
+    fn spawn_supervisor(
+        &self,
+        config: ProcessConfig,
+        job: Arc<Job>,
+        activity: Activity,
+        notify_socket: Option<Arc<NotifySocket>>,
+        ready_state: tokio::sync::watch::Sender<bool>,
+    ) -> JoinHandle<()> {
+        let shutdown = self.shutdown.clone();
+        let name = config.name.clone();
+
+        // Extract watchdog config
+        let watchdog_timeout = config
+            .watchdog
+            .as_ref()
+            .map(|w| Duration::from_micros(w.usec));
+        let watchdog_require_ready = config
+            .watchdog
+            .as_ref()
+            .map(|w| w.require_ready)
+            .unwrap_or(true);
+
+        // Check if we need TCP probe for readiness (listen sockets or allocated ports, without notify or exec probe)
+        let has_notify = config.ready.as_ref().map_or(false, |r| r.notify);
+        let has_exec_probe = config
+            .ready
+            .as_ref()
+            .and_then(|r| r.exec.as_ref())
+            .is_some();
+        let tcp_probe_address = if !has_notify && !has_exec_probe {
+            // First try listen sockets
+            config
+                .listen
+                .iter()
+                .find_map(|spec| {
+                    if spec.kind == crate::config::ListenKind::Tcp {
+                        spec.address.clone()
+                    } else {
+                        None
+                    }
+                })
+                // Fall back to the first allocated port
+                .or_else(|| {
+                    config
+                        .ports
+                        .values()
+                        .next()
+                        .map(|port| format!("127.0.0.1:{}", port))
+                })
+        } else {
+            None
+        };
+
+        tokio::spawn(async move {
+            let mut restart_count = 0usize;
+            let mut ready_signaled = false;
+
+            // Watchdog state
+            let mut is_ready = !watchdog_require_ready; // If require_ready is false, start as ready
+            let mut watchdog_deadline: Option<Instant> = if watchdog_timeout.is_some() && is_ready {
+                Some(Instant::now() + watchdog_timeout.unwrap())
+            } else {
+                None
+            };
+
+            // Spawn TCP probe task if needed
+            let _tcp_probe_task = if let Some(address) = tcp_probe_address {
+                let ready_state = ready_state.clone();
+                let probe_name = name.clone();
+                let probe_activity = activity.clone();
+                Some(tokio::spawn(async move {
+                    debug!("Starting TCP probe for {} at {}", probe_name, address);
+                    loop {
+                        match tokio::net::TcpStream::connect(&address).await {
+                            Ok(_) => {
+                                info!("TCP probe succeeded for {} at {}", probe_name, address);
+                                probe_activity.log("TCP probe succeeded - process ready");
+                                probe_activity.set_status(ProcessStatus::Ready);
+                                let _ = ready_state.send(true);
+                                break;
+                            }
+                            Err(_) => {
+                                tokio::time::sleep(Duration::from_millis(100)).await;
+                            }
+                        }
+                    }
+                }))
+            } else {
+                None
+            };
+
+            // Spawn exec probe task if configured via ready.exec
+            let _exec_probe_task = if let Some(ref ready) = config.ready {
+                if let Some(ref cmd) = ready.exec {
+                    let cmd = cmd.clone();
+                    let initial_delay = Duration::from_secs(ready.initial_delay);
+                    let period = Duration::from_secs(ready.period);
+                    let timeout_dur = Duration::from_secs(ready.timeout);
+                    let success_threshold = ready.success_threshold;
+                    let ready_tx = ready_state.clone();
+                    let probe_name = name.clone();
+                    let probe_activity = activity.clone();
+
+                    Some(tokio::spawn(async move {
+                        tokio::time::sleep(initial_delay).await;
+                        let mut successes = 0u32;
+                        loop {
+                            let result = tokio::time::timeout(
+                                timeout_dur,
+                                tokio::process::Command::new("sh")
+                                    .arg("-c")
+                                    .arg(&cmd)
+                                    .stdout(std::process::Stdio::null())
+                                    .stderr(std::process::Stdio::null())
+                                    .status(),
+                            )
+                            .await;
+                            match result {
+                                Ok(Ok(status)) if status.success() => {
+                                    successes += 1;
+                                    if successes >= success_threshold {
+                                        info!(
+                                            "Exec probe succeeded for {} after {} check(s)",
+                                            probe_name, successes
+                                        );
+                                        probe_activity.log("Exec probe succeeded - process ready");
+                                        probe_activity.set_status(ProcessStatus::Ready);
+                                        let _ = ready_tx.send(true);
+                                        return;
+                                    }
+                                }
+                                _ => {
+                                    successes = 0;
+                                }
+                            }
+                            tokio::time::sleep(period).await;
+                        }
+                    }))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            // Set up file watcher if watch paths are configured
+            let (watch_tx, mut watch_rx) = mpsc::channel::<()>(1);
+            let _watcher_task = if !config.watch.paths.is_empty() {
+                // Canonicalize watch paths to resolve symlinks. On macOS,
+                // /tmp -> /private/tmp and /var -> /private/var; FSEvents
+                // reports events using resolved paths, so the watched paths
+                // must match for watchexec to attach path tags to events.
+                let paths: Vec<PathBuf> = config
+                    .watch
+                    .paths
+                    .iter()
+                    .map(|p| p.canonicalize().unwrap_or_else(|_| p.clone()))
+                    .collect();
+                let extensions = config.watch.extensions.clone();
+                let ignore = config.watch.ignore.clone();
+                let watch_name = name.clone();
+                let tx = watch_tx.clone();
+
+                Some(tokio::spawn(async move {
+                    // Build ignore patterns for GlobsetFilterer
+                    // Format: (pattern, optional_base_path)
+                    let ignores: Vec<(String, Option<PathBuf>)> = ignore
+                        .iter()
+                        .map(|pattern| {
+                            // Support both "**/pattern" and "pattern" styles
+                            let glob_pattern = if pattern.contains('/') || pattern.starts_with("**")
+                            {
+                                pattern.clone()
+                            } else {
+                                format!("**/{}", pattern)
+                            };
+                            (glob_pattern, None)
+                        })
+                        .collect();
+
+                    // Get origin path (first watch path or current dir)
+                    let origin = paths.first().cloned().unwrap_or_else(|| PathBuf::from("."));
+
+                    // Create the filterer
+                    let filterer = match GlobsetFilterer::new(
+                        &origin,
+                        std::iter::empty::<(String, Option<PathBuf>)>(), // no filters (allow all)
+                        ignores,
+                        std::iter::empty::<PathBuf>(), // no whitelist
+                        std::iter::empty(),            // no ignore files
+                        extensions.iter().map(|e| std::ffi::OsString::from(e)), // extension filter
+                    )
+                    .await
+                    {
+                        Ok(f) => Arc::new(f),
+                        Err(e) => {
+                            warn!("Failed to create filterer for {}: {}", watch_name, e);
+                            return;
+                        }
+                    };
+
+                    let tx = tx;
+                    let wx = match Watchexec::new(move |action| {
+                        // Events are already filtered by the filterer
+                        if action.events.iter().any(|e| e.paths().next().is_some()) {
+                            let _ = tx.try_send(());
+                        }
+                        action
+                    }) {
+                        Ok(wx) => wx,
+                        Err(e) => {
+                            warn!("Failed to create file watcher for {}: {}", watch_name, e);
+                            return;
+                        }
+                    };
+
+                    // Configure paths to watch
+                    wx.config.pathset(paths.iter().map(|p| p.as_path()));
+
+                    // Set the filterer
+                    wx.config.filterer(filterer);
+
+                    let mut watch_info = format!(
+                        "File watcher started for {} watching {:?}",
+                        watch_name, paths
+                    );
+                    if !extensions.is_empty() {
+                        watch_info.push_str(&format!(" (extensions: {:?})", extensions));
+                    }
+                    if !ignore.is_empty() {
+                        watch_info.push_str(&format!(" (ignoring {:?})", ignore));
+                    }
+                    info!("{}", watch_info);
+
+                    if let Err(e) = wx.main().await {
+                        warn!("File watcher for {} stopped: {}", watch_name, e);
+                    }
+                }))
+            } else {
+                None
+            };
+
+            loop {
+                tokio::select! {
+                    _ = shutdown.notified() => {
+                        debug!("Shutdown requested for {}", name);
+                        break;
+                    }
+                    _ = watch_rx.recv() => {
+                        // File change detected, restart the process
+                        info!("File change detected for {}, restarting", name);
+                        activity.log("File change detected, restarting");
+                        job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        job.start().await;
+                        // Reset watchdog state on restart
+                        is_ready = !watchdog_require_ready;
+                        watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
+                            Some(Instant::now() + watchdog_timeout.unwrap())
+                        } else {
+                            None
+                        };
+                    }
+                    // Handle notify socket messages
+                    result = async {
+                        match &notify_socket {
+                            Some(socket) => socket.recv().await,
+                            None => std::future::pending().await,
+                        }
+                    } => {
+                        if let Ok(messages) = result {
+                            for msg in messages {
+                                match msg {
+                                    NotifyMessage::Ready => {
+                                        info!("Process {} signaled ready", name);
+                                        activity.log("Process signaled ready");
+                                        activity.set_status(ProcessStatus::Ready);
+                                        // Signal waiting tasks that process is ready
+                                        if !ready_signaled {
+                                            ready_signaled = true;
+                                            let _ = ready_state.send(true);
+                                        }
+                                        // Start watchdog timer now if configured
+                                        if let Some(timeout) = watchdog_timeout {
+                                            watchdog_deadline = Some(Instant::now() + timeout);
+                                        }
+                                    }
+                                    NotifyMessage::Watchdog => {
+                                        debug!("Watchdog ping from {}", name);
+                                        if let Some(timeout) = watchdog_timeout {
+                                            watchdog_deadline = Some(Instant::now() + timeout);
+                                        }
+                                    }
+                                    NotifyMessage::Status(status) => {
+                                        debug!("Status from {}: {}", name, status);
+                                        activity.log(&format!("Status: {}", status));
+                                    }
+                                    NotifyMessage::Stopping => {
+                                        debug!("Process {} signaled stopping", name);
+                                        activity.log("Process signaled stopping");
+                                    }
+                                    NotifyMessage::Reloading => {
+                                        debug!("Process {} signaled reloading", name);
+                                        activity.log("Process reloading configuration");
+                                    }
+                                    NotifyMessage::Unknown(s) => {
+                                        debug!("Unknown notify message from {}: {}", name, s);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Handle watchdog timeout
+                    _ = async {
+                        match watchdog_deadline {
+                            Some(deadline) => tokio::time::sleep_until(deadline.into()).await,
+                            None => std::future::pending().await,
+                        }
+                    }, if watchdog_deadline.is_some() => {
+                        warn!("Watchdog timeout for process {}", name);
+                        activity.error("Watchdog timeout - no heartbeat received");
+
+                        // Check max restarts limit before restarting
+                        if let Some(max) = config.restart.max {
+                            if restart_count >= max {
+                                warn!(
+                                    "Process {} reached max restarts ({}) after watchdog timeout, giving up",
+                                    name, max
+                                );
+                                activity.error(format!("Max restarts ({}) reached, giving up", max));
+                                activity.fail();
+                                break;
+                            }
+                        }
+
+                        // Restart on watchdog timeout
+                        restart_count += 1;
+                        info!("Restarting process {} due to watchdog timeout (attempt {})", name, restart_count);
+                        activity.log(format!("Restarting due to watchdog timeout (attempt {})", restart_count));
+                        job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+
+                        // Reset watchdog state for new instance
+                        is_ready = !watchdog_require_ready;
+                        watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
+                            Some(Instant::now() + watchdog_timeout.unwrap())
+                        } else {
+                            None
+                        };
+                    }
+                    _ = job.to_wait() => {
+                        // Process ended, check if we should restart
+                        let policy = config.restart.on;
+                        let max_restarts = config.restart.max;
+                        let process_name = name.clone();
+
+                        // Use a channel to get the restart decision from run_async
+                        let (tx, rx) = tokio::sync::oneshot::channel();
+
+                        job.run_async(move |ctx| {
+                            // Extract status before async block (lifetime constraint)
+                            let status = if let CommandState::Finished { status, .. } = ctx.current {
+                                Some(*status)
+                            } else {
+                                None
+                            };
+
+                            Box::new(async move {
+                                if let Some(status) = status {
+                                    let is_failure = !matches!(status, ProcessEnd::Success);
+
+                                    let should_restart = match policy {
+                                        RestartPolicy::Never => false,
+                                        RestartPolicy::Always => true,
+                                        RestartPolicy::OnFailure => is_failure,
+                                    };
+
+                                    if should_restart {
+                                        debug!(
+                                            "Process {} exited with {:?}, policy: {:?}",
+                                            process_name, status, policy
+                                        );
+                                    }
+
+                                    let _ = tx.send(should_restart);
+                                }
+                            })
+                        }).await;
+
+                        // Check restart decision
+                        match rx.await {
+                            Ok(true) => {
+                                // Check max restarts limit
+                                if let Some(max) = max_restarts
+                                    && restart_count >= max
+                                {
+                                    warn!(
+                                        "Process {} reached max restarts ({}), giving up",
+                                        name, max
+                                    );
+                                    activity.error(format!("Max restarts ({}) reached, giving up", max));
+                                    activity.fail();
+                                    break;
+                                }
+
+                                restart_count += 1;
+                                info!("Restarting process {} (attempt {})", name, restart_count);
+                                activity.log(format!("Restarting (attempt {})", restart_count));
+                                job.start().await;
+                                // Reset watchdog state for new instance
+                                is_ready = !watchdog_require_ready;
+                                watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
+                                    Some(Instant::now() + watchdog_timeout.unwrap())
+                                } else {
+                                    None
+                                };
+                            }
+                            _ => {
+                                debug!("Process {} will not restart", name);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            debug!("Supervision task for {} exiting", name);
+        })
+    }
+
+    /// Build a command from configuration, returning the command and log file paths
+    fn build_command(
+        &self,
+        config: &ProcessConfig,
+        notify_socket_path: Option<&Path>,
+        watchdog_usec: Option<u64>,
+    ) -> Result<(Arc<Command>, PathBuf, PathBuf)> {
+        // Create log directory
+        let log_dir = self.state_dir.join("logs");
+        std::fs::create_dir_all(&log_dir)
+            .into_diagnostic()
+            .wrap_err("Failed to create logs directory")?;
+
+        // Log file paths
+        let stdout_log = log_dir.join(format!("{}.stdout.log", config.name));
+        let stderr_log = log_dir.join(format!("{}.stderr.log", config.name));
+
+        // Build shell script that handles environment, cwd, logging, and sudo
+        let script = self.build_wrapper_script(
+            config,
+            &stdout_log,
+            &stderr_log,
+            notify_socket_path,
+            watchdog_usec,
+        )?;
+
+        let program = Program::Shell {
+            shell: Shell::new("bash"), // Use "bash" from PATH, not "/bin/bash" (NixOS compatible)
+            command: script,
+            args: vec![],
+        };
+
+        let command = Arc::new(Command {
+            program,
+            options: SpawnOptions {
+                session: true,
+                ..Default::default()
+            },
+        });
+
+        Ok((command, stdout_log, stderr_log))
+    }
+
+    /// Build a shell wrapper script that handles env vars, cwd, logging, and sudo
+    fn build_wrapper_script(
+        &self,
+        config: &ProcessConfig,
+        stdout_log: &Path,
+        stderr_log: &Path,
+        notify_socket_path: Option<&Path>,
+        watchdog_usec: Option<u64>,
+    ) -> Result<String> {
+        use std::fmt::Write;
+
+        let mut script = String::new();
+        writeln!(script, "#!/bin/bash").unwrap();
+        writeln!(script, "set -e").unwrap();
+
+        // Set working directory
+        if let Some(ref cwd) = config.cwd {
+            writeln!(script, "cd {}", shell_escape::escape(cwd.to_string_lossy())).unwrap();
+        }
+
+        // Export environment variables
+        if !config.env.is_empty() {
+            for (key, value) in &config.env {
+                writeln!(
+                    script,
+                    "export {}={}",
+                    shell_escape::escape(key.into()),
+                    shell_escape::escape(value.into())
+                )
+                .unwrap();
+            }
+        }
+
+        // Set notify socket path if configured
+        if let Some(path) = notify_socket_path {
+            writeln!(
+                script,
+                "export NOTIFY_SOCKET={}",
+                shell_escape::escape(path.to_string_lossy())
+            )
+            .unwrap();
+        }
+
+        // Set watchdog interval if configured
+        if let Some(usec) = watchdog_usec {
+            writeln!(script, "export WATCHDOG_USEC={}", usec).unwrap();
+        }
+
+        // Build the actual command
+        let mut cmd = String::new();
+
+        if config.use_sudo {
+            // Use sudo with env preservation
+            write!(cmd, "sudo -E ").unwrap();
+        }
+
+        // Add the command (not escaped - exec can be a shell command with pipes/redirects)
+        write!(cmd, "{}", config.exec).unwrap();
+
+        // Add arguments (escaped for safety)
+        for arg in &config.args {
+            write!(cmd, " {}", shell_escape::escape(arg.into())).unwrap();
+        }
+
+        // Redirect output to logs
+        writeln!(
+            script,
+            "{} >> {} 2>> {}",
+            cmd,
+            shell_escape::escape(stdout_log.to_string_lossy()),
+            shell_escape::escape(stderr_log.to_string_lossy())
+        )
+        .unwrap();
+
+        debug!("Generated wrapper script for {}: {}", config.name, script);
+        Ok(script)
     }
 
     /// Stop a process by name
@@ -961,7 +1581,10 @@ mod tests {
             name: "test-echo".to_string(),
             exec: "echo".to_string(),
             args: vec!["hello".to_string()],
-            restart: crate::config::RestartPolicy::Never,
+            restart: crate::config::RestartConfig {
+                on: RestartPolicy::Never,
+                max: Some(5),
+            },
             ..Default::default()
         };
 

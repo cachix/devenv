@@ -283,8 +283,6 @@ impl TaskState {
                 name: process_name,
                 exec: cmd.clone(),
                 cwd: self.task.cwd.clone().map(std::path::PathBuf::from),
-                restart: devenv_processes::RestartPolicy::OnFailure,
-                max_restarts: Some(5),
                 ..Default::default()
             }
         };
@@ -297,8 +295,8 @@ impl TaskState {
         merged_env.extend(config.env.clone());
         config.env = merged_env;
 
-        // Check if we need to wait for readiness (notify enabled, has listen sockets, or has allocated ports)
-        let requires_ready_wait = config.notify.as_ref().map_or(false, |n| n.enable)
+        // Check if we need to wait for readiness (ready config, has listen sockets, or has allocated ports)
+        let requires_ready_wait = config.ready.is_some()
             || config
                 .listen
                 .iter()
