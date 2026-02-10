@@ -23,10 +23,6 @@ fn normalize_pattern_for_base_dir(pattern: &str, base_dir: &Path) -> String {
         None => (false, pattern),
     };
 
-    if base_dir == Path::new(".") {
-        return pattern.to_string();
-    }
-
     let base_dir_str = base_dir.to_string_lossy();
     let stripped = if let Some(rest) = raw_pattern.strip_prefix(&format!("{}/", base_dir_str)) {
         rest
@@ -38,10 +34,27 @@ fn normalize_pattern_for_base_dir(pattern: &str, base_dir: &Path) -> String {
         raw_pattern
     };
 
+    // `ignore` treats patterns without a path separator as basename matches at any depth.
+    // After stripping the base directory, we can accidentally turn anchored patterns like
+    // `src/*.ts` into `*.ts`, which would match files in subdirectories too.
+    //
+    // Preserve the old glob expansion semantics by anchoring single-segment patterns
+    // to the base directory root.
+    let stripped = if stripped.is_empty()
+        || stripped == "."
+        || stripped.starts_with('/')
+        || stripped.contains('/')
+        || stripped.contains('\\')
+    {
+        stripped.to_string()
+    } else {
+        format!("/{}", stripped)
+    };
+
     if negated {
         format!("!{}", stripped)
     } else {
-        stripped.to_string()
+        stripped
     }
 }
 
@@ -995,6 +1008,31 @@ mod tests {
     fn test_expand_glob_patterns_empty() {
         let result = expand_glob_patterns(&[]);
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_expand_glob_patterns_preserves_depth_for_single_segment_patterns() {
+        let temp_dir = TempDir::new().unwrap();
+        let base = temp_dir.path();
+
+        let src_dir = base.join("src");
+        let src_sub_dir = src_dir.join("sub");
+        std::fs::create_dir_all(&src_sub_dir).unwrap();
+
+        std::fs::write(src_dir.join("foo.txt"), "root").unwrap();
+        std::fs::write(src_sub_dir.join("foo.txt"), "nested").unwrap();
+        std::fs::write(src_dir.join("a.ts"), "a").unwrap();
+        std::fs::write(src_sub_dir.join("b.ts"), "b").unwrap();
+
+        let foo_pattern = format!("{}/src/foo.txt", base.display());
+        let foo_matches = expand_glob_patterns(&[foo_pattern]);
+        assert_eq!(foo_matches.len(), 1);
+        assert!(foo_matches[0].ends_with("/src/foo.txt"));
+
+        let ts_pattern = format!("{}/src/*.ts", base.display());
+        let ts_matches = expand_glob_patterns(&[ts_pattern]);
+        assert_eq!(ts_matches.len(), 1);
+        assert!(ts_matches[0].ends_with("/src/a.ts"));
     }
 
     #[test]
