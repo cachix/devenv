@@ -4,7 +4,7 @@ use crate::types::{DependencyKind, DependencySpec, TaskType};
 use devenv_processes::ProcessConfig;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct TaskConfig {
     pub name: String,
     #[serde(default)]
@@ -25,6 +25,9 @@ pub struct TaskConfig {
     pub cwd: Option<String>,
     #[serde(default)]
     pub show_output: bool,
+    /// Environment variables to set for this task
+    #[serde(default)]
+    pub env: std::collections::HashMap<String, String>,
     /// Process-specific configuration (only used when type = "process")
     #[serde(default)]
     pub process: Option<ProcessConfig>,

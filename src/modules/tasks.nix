@@ -126,6 +126,7 @@ let
               command = config.command;
               input = config.input;
               exec_if_modified = config.execIfModified;
+              env = config.env;
               cwd = config.cwd;
               show_output = config.showOutput;
               process = {
@@ -141,6 +142,11 @@ let
               };
             };
             description = "Internal configuration for the task.";
+          };
+          env = lib.mkOption {
+            type = types.attrsOf types.str;
+            default = { };
+            description = "Environment variables to set for this task.";
           };
           exports = lib.mkOption {
             type = types.listOf types.str;

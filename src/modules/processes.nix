@@ -57,6 +57,12 @@ let
         '';
       };
 
+      env = lib.mkOption {
+        type = types.attrsOf types.str;
+        default = { };
+        description = "Environment variables to set for this process.";
+      };
+
       cwd = lib.mkOption {
         type = types.nullOr types.str;
         default = null;
@@ -427,6 +433,7 @@ in
           value = {
             type = "process";
             exec = process.exec;
+            env = process.env;
             cwd = process.cwd;
             after = process.after;
             before = process.before;

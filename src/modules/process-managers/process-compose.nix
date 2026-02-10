@@ -143,8 +143,12 @@ in
                 if value.process-compose.is_elevated or false
                 then config.process.taskCommandsBase.${name}
                 else config.process.taskCommands.${name};
+              envList = lib.mapAttrsToList (k: v: "${k}=${v}") value.env;
+              pcEnv = value.process-compose.environment or [ ];
             in
-            { inherit command; } // value.process-compose
+            { inherit command; } // value.process-compose // {
+              environment = envList ++ pcEnv;
+            }
           )
           config.processes;
       };

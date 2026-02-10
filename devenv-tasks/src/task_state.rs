@@ -154,6 +154,11 @@ impl TaskState {
         // Internal for now
         env.insert("DEVENV_TASK_ENV".to_string(), devenv_env);
 
+        // Merge per-task env vars (take precedence over upstream exports)
+        for (key, value) in &self.task.env {
+            env.insert(key.clone(), value.clone());
+        }
+
         // Set DEVENV_TASKS_OUTPUTS
         let outputs_json = serde_json::to_string(outputs)
             .into_diagnostic()
@@ -285,8 +290,10 @@ impl TaskState {
         };
 
         // Merge devenv shell environment into process config
-        // Process-specific env vars take precedence over shell env
+        // Task-level env takes precedence over shell env,
+        // process-specific env takes precedence over both
         let mut merged_env = env.clone();
+        merged_env.extend(self.task.env.clone());
         merged_env.extend(config.env.clone());
         config.env = merged_env;
 

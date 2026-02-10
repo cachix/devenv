@@ -2481,98 +2481,45 @@ mod tests {
             // Root tasks (no dependencies)
             TaskConfig {
                 name: "devenv:typecheck".to_string(),
-                r#type: Default::default(),
-                after: vec![],
-                before: vec![],
                 command: Some("echo typecheck".to_string()),
-                status: None,
-                exec_if_modified: vec![],
-                input: None,
-                cwd: None,
-                show_output: false,
-                process: None,
+                ..Default::default()
             },
             TaskConfig {
                 name: "devenv:lint".to_string(),
-                r#type: Default::default(),
-                after: vec![],
-                before: vec![],
                 command: Some("echo lint".to_string()),
-                status: None,
-                exec_if_modified: vec![],
-                input: None,
-                cwd: None,
-                show_output: false,
-                process: None,
+                ..Default::default()
             },
             // Level 2 tasks (depend on Level 1)
             TaskConfig {
                 name: "devenv:test".to_string(),
-                r#type: Default::default(),
                 after: vec!["devenv:lint".to_string(), "devenv:typecheck".to_string()],
-                before: vec![],
                 command: Some("echo test".to_string()),
-                status: None,
-                exec_if_modified: vec![],
-                input: None,
-                cwd: None,
-                show_output: false,
-                process: None,
+                ..Default::default()
             },
             // Different namespace
             TaskConfig {
                 name: "myapp:setup".to_string(),
-                r#type: Default::default(),
-                after: vec![],
-                before: vec![],
                 command: Some("echo setup".to_string()),
-                status: None,
-                exec_if_modified: vec![],
-                input: None,
-                cwd: None,
-                show_output: false,
-                process: None,
+                ..Default::default()
             },
             TaskConfig {
                 name: "myapp:build".to_string(),
-                r#type: Default::default(),
                 after: vec!["myapp:setup".to_string()],
-                before: vec![],
                 command: Some("echo build".to_string()),
-                status: None,
-                exec_if_modified: vec![],
-                input: None,
-                cwd: None,
-                show_output: false,
-                process: None,
+                ..Default::default()
             },
             // Level 3 (deeply nested)
             TaskConfig {
                 name: "myapp:package".to_string(),
-                r#type: Default::default(),
                 after: vec!["myapp:build".to_string()],
-                before: vec![],
                 command: Some("echo package".to_string()),
-                status: None,
-                exec_if_modified: vec![],
-                input: None,
-                cwd: None,
-                show_output: false,
-                process: None,
+                ..Default::default()
             },
             // Standalone task
             TaskConfig {
                 name: "cleanup".to_string(),
-                r#type: Default::default(),
-                after: vec![],
-                before: vec![],
                 command: Some("echo cleanup".to_string()),
-                status: None,
-                exec_if_modified: vec![],
-                input: None,
-                cwd: None,
-                show_output: false,
-                process: None,
+                ..Default::default()
             },
         ];
 
@@ -2694,16 +2641,7 @@ mod tests {
     fn test_merge_task_input_into_none() {
         let mut task = tasks::TaskConfig {
             name: "test".to_string(),
-            r#type: Default::default(),
-            after: vec![],
-            before: vec![],
-            command: None,
-            status: None,
-            exec_if_modified: vec![],
-            input: None,
-            cwd: None,
-            show_output: false,
-            process: None,
+            ..Default::default()
         };
         let mut cli = serde_json::Map::new();
         cli.insert("key".to_string(), serde_json::json!("value"));
@@ -2718,16 +2656,8 @@ mod tests {
     fn test_merge_task_input_shallow_merge() {
         let mut task = tasks::TaskConfig {
             name: "test".to_string(),
-            r#type: Default::default(),
-            after: vec![],
-            before: vec![],
-            command: None,
-            status: None,
-            exec_if_modified: vec![],
             input: Some(serde_json::json!({"existing": 1, "override_me": "old"})),
-            cwd: None,
-            show_output: false,
-            process: None,
+            ..Default::default()
         };
         let mut cli = serde_json::Map::new();
         cli.insert("override_me".to_string(), serde_json::json!("new"));
