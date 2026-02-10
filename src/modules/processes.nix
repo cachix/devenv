@@ -1,4 +1,4 @@
-{ config, options, lib, pkgs, ... }:
+{ config, options, lib, pkgs, sandbox, ... }:
 let
   types = lib.types;
   listenType = import ./lib/listen.nix { inherit lib; };
@@ -481,9 +481,9 @@ in
       procfileScript = pkgs.writeShellScript "devenv-up" ''
         ${lib.optionalString config.devenv.debug "set -x"}
 
-        ${config.process.manager.before}
+        ${sandbox} ${config.process.manager.before}
 
-        ${config.process.manager.command}
+        ${sandbox} ${config.process.manager.command}
 
         backgroundPID=$!
 
@@ -491,7 +491,7 @@ in
           echo "Stopping processes..."
           kill -TERM $backgroundPID
           wait $backgroundPID
-          ${config.process.manager.after}
+          ${sandbox} ${config.process.manager.after}
           echo "Processes stopped."
         }
 

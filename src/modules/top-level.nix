@@ -1,6 +1,7 @@
-{ config, pkgs, lib, bootstrapPkgs ? null, ... }:
+{ config, pkgs, lib, bootstrapPkgs ? null, devenvSandbox ? { enable = false; }, ... }:
 let
   types = lib.types;
+
   # Returns a list of all the entries in a folder
   listEntries = path:
     map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
@@ -19,6 +20,113 @@ let
   };
 
   failedAssertions = builtins.map (x: x.message) (builtins.filter (x: !x.assertion) config.assertions);
+
+  sandboxer = pkgs.rustPlatform.buildRustPackage {
+    pname = "sandboxer";
+    version = "0.0.1";
+    src = pkgs.fetchFromGitHub {
+      owner = "landlock-lsm";
+      repo = "landlockconfig";
+      rev = "8b6b59b339181f9fa1ec6f7889564ba154c1a47d";
+      hash = "sha256-4LOauaC3eTLvERp9E7HIcunzkJ7HHcLkLAmaSbisr/c=";
+    };
+    # Upstream doesn't have a Cargo.lock file yet, so we provide one
+    postUnpack = ''
+      cp ${./landlockconfig.Cargo.lock} source/Cargo.lock
+    '';
+    cargoLock = {
+      lockFile = ./landlockconfig.Cargo.lock;
+    };
+    installPhase = ''
+      mkdir -p $out/bin
+      cp target/*/release/examples/sandboxer $out/bin/
+    '';
+    cargoBuildFlags = [
+      "--example"
+      "sandboxer"
+    ];
+  };
+
+  shellHook = pkgs.writeShellScriptBin "shellHook" config.enterShell;
+
+  # Extract store paths from environment variable values
+  # Only include values with proper Nix context (derivations or context strings)
+  # Plain strings without context are ignored - exportReferencesGraph will reject them anyway
+  extractEnvStorePaths = envAttrs:
+    lib.filter
+      (v: v != null)
+      (lib.mapAttrsToList
+        (name: value:
+          if lib.isDerivation value then
+            value
+          else if lib.isString value && builtins.hasContext value then
+            value
+          else
+            null
+        )
+        envAttrs
+      );
+
+  # Compute the closure of all packages that need to be accessible in the sandbox
+  # This creates a derivation that uses exportReferencesGraph to get all dependencies
+  sandboxer-settings =
+    let
+      # Extract store paths from config.env that have Nix context
+      envStorePaths = extractEnvStorePaths config.env;
+
+      # List of root packages whose closure we need
+      closureRoots = lib.flatten [
+        config.packages
+        config.inputsFrom
+        sandboxer
+        config.stdenv
+        shellHook
+        envStorePaths
+      ];
+
+      # Create a derivation that computes the closure and generates the TOML config
+      # We use exportReferencesGraph to get all transitive dependencies
+      # Create a trivial derivation that references all closure roots (handles both files and directories)
+      allRoots = pkgs.writeText "sandbox-closure-roots" (
+        lib.concatStringsSep "\n" (map toString closureRoots)
+      );
+      mkSandboxConfig = pkgs.runCommand "sandboxer-settings.toml"
+        {
+          # exportReferencesGraph writes the closure of allRoots to a file
+          exportReferencesGraph = [ "closure" allRoots ];
+          nativeBuildInputs = [ pkgs.jq ];
+        }
+        ''
+          # Start generating the TOML config
+          cat > $out <<'HEADER'
+          abi = 5
+
+          [[path_beneath]]
+          allowed_access = ["abi.read_write"]
+          parent = [
+            "${config.devenv.root}",
+            "${config.devenv.runtime}",
+            "${config.devenv.tmpdir}",
+            "/proc",
+            "/tmp",
+            "/dev/tty",
+            "/dev/null"
+          ]
+
+          [[path_beneath]]
+          allowed_access = ["abi.read_execute"]
+          parent = [
+            "/proc/stat",
+          HEADER
+
+          # Extract, deduplicate, and format store paths
+          grep '^/nix/store' closure | sort -u | sed 's|^|  "|; s|$|",|' >> $out
+
+          echo "]" >> $out
+        '';
+    in
+    mkSandboxConfig;
+  sandbox = lib.optionalString devenvSandbox.enable "${sandboxer}/bin/sandboxer --toml ${sandboxer-settings} --";
 
   performAssertions =
     let
@@ -229,6 +337,24 @@ in
         internal = true;
       };
 
+      sandbox = lib.mkOption {
+        type = types.submodule {
+          options = {
+            enable = lib.mkOption {
+              type = types.bool;
+              readOnly = true;
+              description = ''
+                Enable the sandbox. This option is controlled by the `sandbox.enable` setting
+                in devenv.yaml and cannot be overridden in devenv.nix.
+              '';
+            };
+          };
+        };
+        readOnly = true;
+        default = devenvSandbox;
+        description = "Sandbox configuration";
+      };
+
       runtime = lib.mkOption {
         type = types.str;
         internal = true;
@@ -372,17 +498,38 @@ in
         # On macOS, the default apple-sdk is added to stdenv via `extraBuildInputs`.
         # If we don't remove it from stdenv, then its setup hooks will clobber any SDK added to `packages`.
         isAppleSDK = pkg: builtins.match ".*apple-sdk.*" (pkg.pname or "") != null;
-        partitionedPkgs = builtins.partition isAppleSDK config.packages;
+        partitionedPkgs = builtins.partition isAppleSDK wrappedPackages;
         buildInputs = partitionedPkgs.right;
         nativeBuildInputs = partitionedPkgs.wrong;
+        # Use devenvSandbox directly from module args (bypasses config system, cannot be overridden)
+        wrappedPackages = if devenvSandbox.enable then map wrapBinaries config.packages else config.packages;
+        wrappedInputsFrom = if devenvSandbox.enable then map wrapBinaries config.inputsFrom else config.inputsFrom;
+        wrapBinaries =
+          pkg:
+          pkgs.stdenv.mkDerivation {
+            name = "wrapped-${pkg.name}";
+            src = [ pkg ];
+            buildInputs = [ pkgs.makeWrapper ];
+
+            postBuild = ''
+              mkdir -p $out/bin
+              for bin in $src/bin/*; do
+                 if [ -x "$bin" ] && [ -f "$bin" ]; then
+                  echo "exec ${sandbox} $bin \"\$@\"" > $out/bin/$(basename $bin)
+                  chmod +x $out/bin/$(basename $bin)
+                 fi
+               done
+            '';
+          };
       in
       performAssertions (
         (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
-          inherit (config) hardeningDisable inputsFrom name;
+          inherit (config) hardeningDisable name;
+          inputsFrom = wrappedInputsFrom;
           inherit buildInputs nativeBuildInputs;
           shellHook = ''
             ${lib.optionalString config.devenv.debug "set -x"}
-            ${config.enterShell}
+            ${sandbox} "${shellHook}/bin/shellHook"
           '';
         } // config.env)
       );

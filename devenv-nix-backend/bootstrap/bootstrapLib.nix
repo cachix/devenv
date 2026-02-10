@@ -32,6 +32,7 @@ rec {
     , devenv_tmpdir
     , devenv_runtime
     , devenv_istesting ? false
+    , devenv_sandbox ? null
     , devenv_direnvrc_latest_version
     , container_name ? null
     , active_profiles ? [ ]
@@ -128,6 +129,7 @@ rec {
               _module.args.pkgs = evalPkgs.appendOverlays (config.overlays or [ ]);
               _module.args.secretspec = secretspec;
               _module.args.devenvPrimops = primops;
+              _module.args.devenvSandbox = devenv_sandbox;
             }
           )
           (inputs.devenv.modules + /top-level.nix)

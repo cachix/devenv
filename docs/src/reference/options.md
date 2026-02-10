@@ -3025,6 +3025,49 @@ string
 
 
 
+## devenv.sandbox
+
+
+
+Sandbox configuration
+
+
+
+*Type:*
+submodule *(read only)*
+
+
+
+*Default:*
+
+```
+{
+  enable = false;
+}
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
+## devenv.sandbox.enable
+
+
+
+Enable the sandbox. This option is controlled by the ` sandbox.enable ` setting
+in devenv.yaml and cannot be overridden in devenv.nix.
+
+
+
+*Type:*
+boolean *(read only)*
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
 ## devenv.warnOnNewVersion
 
 
@@ -5369,8 +5412,6 @@ boolean
 
 ## git-hooks.hooks.black
 
-
-
 black hook
 
 
@@ -5384,6 +5425,8 @@ submodule
 
 
 ## git-hooks.hooks.black.enable
+
+
 
 Whether to enable this pre-commit hook.
 
@@ -7437,8 +7480,6 @@ boolean
 
 ## git-hooks.hooks.headache.description
 
-
-
 Description of the hook. Used for metadata purposes only.
 
 
@@ -7457,6 +7498,8 @@ string
 
 
 ## git-hooks.hooks.headache.settings.header-file
+
+
 
 Path to the header file.
 

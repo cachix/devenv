@@ -181,6 +181,9 @@ pub struct Config {
     pub backend: NixBackendType,
     #[setting(nested)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub sandbox: Option<SandboxConfig>,
+    #[setting(nested)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub secretspec: Option<SecretspecConfig>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(merge = schematic::merge::replace)]
@@ -199,6 +202,13 @@ pub struct SecretspecConfig {
     pub profile: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub provider: Option<String>,
+}
+
+#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SandboxConfig {
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(default = false)]
+    pub enable: bool,
 }
 
 // TODO: https://github.com/moonrepo/schematic/issues/105

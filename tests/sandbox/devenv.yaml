@@ -1,0 +1,6 @@
+sandbox:
+  enable: true
+
+inputs:
+  devenv:
+    url: path:../..?dir=src/modules
