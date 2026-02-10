@@ -970,6 +970,27 @@ fn build_summary_view_impl(
             })
             .into_any(),
         );
+        has_content = true;
+    }
+
+    // Processes - show if there are any running
+    if summary.running_processes > 0 {
+        if has_content {
+            children.push(element!(View(margin_left: if use_symbols { 1 } else { 2 }, margin_right: if use_symbols { 1 } else { 2 }, flex_shrink: 0.0) {
+                Text(content: "│", color: COLOR_HIERARCHY)
+            }).into_any());
+        }
+
+        children.push(element!(View(margin_right: 1, flex_shrink: 0.0) {
+            Text(content: format!("{}", summary.running_processes), color: COLOR_COMPLETED, weight: Weight::Bold)
+        }).into_any());
+
+        children.push(
+            element!(View(flex_shrink: 0.0) {
+                Text(content: if summary.running_processes == 1 { "process" } else { "processes" })
+            })
+            .into_any(),
+        );
     }
 
     // Build help text - always show, adapt based on terminal width

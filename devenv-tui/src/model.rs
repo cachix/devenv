@@ -1172,6 +1172,12 @@ impl ActivityModel {
                         summary.failed_tasks += 1
                     }
                 },
+                (ActivityVariant::Process(proc), NixActivityState::Active) => {
+                    if proc.status == ProcessStatus::Running || proc.status == ProcessStatus::Ready
+                    {
+                        summary.running_processes += 1;
+                    }
+                }
                 _ => {}
             }
         }
@@ -1435,6 +1441,7 @@ pub struct ActivitySummary {
     pub running_tasks: usize,
     pub completed_tasks: usize,
     pub failed_tasks: usize,
+    pub running_processes: usize,
 }
 
 /// Format an EvalOp as a display string for logging.
