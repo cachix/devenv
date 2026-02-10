@@ -520,16 +520,15 @@ in
           ports.management.allocate = baseManagementPort;
           exec = "${keycloak-start}/bin/keycloak-start";
 
+          ready = {
+            exec = "${keycloak-health}/bin/keycloak-health";
+            initial_delay = 20;
+            timeout = 4;
+            failure_threshold = 20;
+          };
+
           process-compose = {
             description = "The keycloak identity and access management server.";
-            readiness_probe = {
-              exec.command = "${keycloak-health}/bin/keycloak-health";
-              initial_delay_seconds = 20;
-              period_seconds = 10;
-              timeout_seconds = 4;
-              success_threshold = 1;
-              failure_threshold = 20;
-            };
           };
         };
 

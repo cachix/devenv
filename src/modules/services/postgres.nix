@@ -428,30 +428,24 @@ in
       ports.main.allocate = basePort;
       exec = "${startScript}/bin/start-postgres";
 
+      ready = {
+        exec = ''
+          if [[ -f "$PGDATA/.devenv_initialized" ]]; then
+            ${postgresPkg}/bin/pg_isready -d template1 && \
+            ${postgresPkg}/bin/psql -c "SELECT 1" template1 > /dev/null 2>&1
+          else
+            echo "Waiting for PostgreSQL initialization to complete..." 2>&1
+            exit 1
+          fi
+        '';
+        initial_delay = 2;
+        timeout = 4;
+        failure_threshold = 5;
+      };
+
       process-compose = {
         # SIGINT (= 2) for faster shutdown: https://www.postgresql.org/docs/current/server-shutdown.html
         shutdown.signal = 2;
-
-        readiness_probe = {
-          # pg_isready does not distinguish between a server that is ready and one that's being initialized by initdb.
-          exec.command = ''
-            if [[ -f "$PGDATA/.devenv_initialized" ]]; then
-              ${postgresPkg}/bin/pg_isready -d template1 && \\
-              ${postgresPkg}/bin/psql -c "SELECT 1" template1 > /dev/null 2>&1
-            else
-              echo "Waiting for PostgreSQL initialization to complete..." 2>&1
-              exit 1
-            fi
-          '';
-          initial_delay_seconds = 2;
-          period_seconds = 10;
-          timeout_seconds = 4;
-          success_threshold = 1;
-          failure_threshold = 5;
-        };
-
-        # https://github.com/F1bonacc1/process-compose#-auto-restart-if-not-healthy
-        availability.restart = "on_failure";
       };
     };
   };

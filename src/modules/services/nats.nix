@@ -280,23 +280,17 @@ in
       ports.monitoring.allocate = baseMonitoringPort;
       exec = "exec ${cfg.package}/bin/nats-server ${buildArgs}";
 
-      process-compose = {
-        readiness_probe = {
-          # Use HTTP healthz endpoint if monitoring is enabled, otherwise TCP check
-          exec.command =
-            if cfg.monitoring.enable then
-              "${pkgs.curl}/bin/curl -f http://${cfg.host}:${toString allocatedMonitoringPort}/healthz"
-            else
-              "${pkgs.netcat}/bin/nc -z ${cfg.host} ${toString allocatedPort}";
-          initial_delay_seconds = 2;
-          period_seconds = 5;
-          timeout_seconds = 3;
-          success_threshold = 1;
-          failure_threshold = 5;
-        };
-
-        # https://github.com/F1bonacc1/process-compose#-auto-restart-if-not-healthy
-        availability.restart = "on_failure";
+      ready = {
+        # Use HTTP healthz endpoint if monitoring is enabled, otherwise TCP check
+        exec =
+          if cfg.monitoring.enable then
+            "${pkgs.curl}/bin/curl -f http://${cfg.host}:${toString allocatedMonitoringPort}/healthz"
+          else
+            "${pkgs.netcat}/bin/nc -z ${cfg.host} ${toString allocatedPort}";
+        initial_delay = 2;
+        period = 5;
+        timeout = 3;
+        failure_threshold = 5;
       };
     };
   };

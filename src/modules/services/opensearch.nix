@@ -178,17 +178,11 @@ in
       ports.transport.allocate = baseTransportPort;
       exec = "${startScript}";
 
-      process-compose = {
-        readiness_probe = {
-          exec.command = "${pkgs.curl}/bin/curl -f -k http://${cfg.settings."network.host"}:${toString allocatedHttpPort}";
-          initial_delay_seconds = 2;
-          period_seconds = 10;
-          timeout_seconds = 2;
-          success_threshold = 1;
-          failure_threshold = 5;
-        };
-
-        availability.restart = "on_failure";
+      ready = {
+        exec = "${pkgs.curl}/bin/curl -f -k http://${cfg.settings."network.host"}:${toString allocatedHttpPort}";
+        initial_delay = 2;
+        timeout = 2;
+        failure_threshold = 5;
       };
     };
   };

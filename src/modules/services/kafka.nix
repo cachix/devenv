@@ -316,15 +316,10 @@ in
           ports.controller.allocate = baseControllerPort;
           exec = "${startKafka}/bin/start-kafka";
 
-          process-compose = {
-            readiness_probe = {
-              exec.command = "${cfg.package}/bin/kafka-topics.sh --list --bootstrap-server localhost:${toString allocatedPort}";
-              initial_delay_seconds = 5;
-              period_seconds = 10;
-              timeout_seconds = 5;
-              success_threshold = 1;
-              failure_threshold = 3;
-            };
+          ready = {
+            exec = "${cfg.package}/bin/kafka-topics.sh --list --bootstrap-server localhost:${toString allocatedPort}";
+            initial_delay = 5;
+            timeout = 5;
           };
         };
       })
