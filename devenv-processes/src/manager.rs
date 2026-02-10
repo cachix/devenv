@@ -239,15 +239,21 @@ impl Process {
         }
     }
 
-    /// Abort all sub-tasks (TCP probe, file watcher, notify forwarder).
-    fn abort_subtasks(&mut self) {
+    /// Abort process-lifecycle-dependent sub-tasks (TCP probe, notify forwarder).
+    /// The file watcher is left running since it watches the filesystem, not the process.
+    fn abort_process_subtasks(&mut self) {
         if let Some(task) = self.tcp_probe_task.take() {
             task.abort();
         }
-        if let Some(task) = self.file_watcher_task.take() {
+        if let Some(task) = self.notify_forwarder_task.take() {
             task.abort();
         }
-        if let Some(task) = self.notify_forwarder_task.take() {
+    }
+
+    /// Abort all sub-tasks (TCP probe, file watcher, notify forwarder).
+    fn abort_subtasks(&mut self) {
+        self.abort_process_subtasks();
+        if let Some(task) = self.file_watcher_task.take() {
             task.abort();
         }
     }
@@ -1039,7 +1045,7 @@ impl NativeProcessManager {
                                 let was_stopped = process.stopped;
                                 process.reset_for_restart();
                                 process.restarting = true;
-                                process.abort_subtasks();
+                                process.abort_process_subtasks();
 
                                 // Respawn TCP probe if needed
                                 if !process.config.listen.is_empty()
@@ -1185,9 +1191,9 @@ impl NativeProcessManager {
                         let mut jobs = jobs.write().await;
                         if let Some(process) = jobs.get_mut(&name) {
                             match rx.await {
-                                Ok((true, _is_failure)) => {
+                                Ok((true, is_failure)) => {
                                     // Check max restarts
-                                    match process.check_exit_policy(true) {
+                                    match process.check_exit_policy(is_failure) {
                                         ExitAction::Restart => {
                                             info!("Restarting process {} (attempt {})", name, process.restart_count);
                                             process.activity.log(format!(
