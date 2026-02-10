@@ -3,8 +3,8 @@ source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
 ✗ test:failing-task failed → Expected: 42, Got: 0 0ms
-  Running test suite...
-  FAILED: assertion error in test_foo
-  Expected: 42, Got: 0
+  │ Running test suite...
+  │ FAILED: assertion error in test_foo
+  │ Expected: 42, Got: 0
 
  0 of 1 tasks                                  ↑↓ nav
