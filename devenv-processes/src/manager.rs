@@ -1,11 +1,14 @@
 use async_trait::async_trait;
 use devenv_activity::{Activity, ProcessStatus};
+use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix::sys::signal::{self, Signal as NixSignal};
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -48,12 +51,25 @@ pub struct ProcessState {
     pub pid: u32,
 }
 
-/// Handle to a managed process job
-pub struct JobHandle {
+/// Supervision status for a process
+enum SupervisorStatus {
+    /// Waiting for process to become ready (initial or after restart).
+    WaitingForReady { watchdog_deadline: Option<Instant> },
+    /// Process is ready. Watchdog deadline active if configured.
+    Ready { watchdog_deadline: Option<Instant> },
+}
+
+/// Action to take after a process exits or watchdog timeout
+enum ExitAction {
+    Restart,
+    GiveUp,
+    Stop,
+}
+
+/// Handle to a managed process with supervision state
+pub struct Process {
     /// The watchexec job for process control
     pub job: Arc<Job>,
-    /// Supervisor task handling restarts
-    pub supervisor_task: JoinHandle<()>,
     /// Activity for tracking process lifecycle
     pub activity: Activity,
     /// Output reader tasks (stdout, stderr)
@@ -62,19 +78,198 @@ pub struct JobHandle {
     pub notify_socket: Option<Arc<NotifySocket>>,
     /// Ready state for signaling when process becomes ready (READY=1 or TCP probe)
     pub ready_state: tokio::sync::watch::Sender<bool>,
+
+    // Sub-task handles (for cleanup)
+    tcp_probe_task: Option<JoinHandle<()>>,
+    file_watcher_task: Option<JoinHandle<()>>,
+    notify_forwarder_task: Option<JoinHandle<()>>,
+
+    // Supervision state
+    config: ProcessConfig,
+    status: SupervisorStatus,
+    restart_count: usize,
+    ready_signaled: bool,
+    /// Initiated restart in progress — absorb next exit
+    restarting: bool,
+    /// Process exited and won't restart, kept for TUI visibility
+    stopped: bool,
+    watchdog_timeout: Option<Duration>,
+    watchdog_require_ready: bool,
+    /// Cooldown: ignore file watch events until this instant
+    file_watch_cooldown: Option<Instant>,
+}
+
+impl Process {
+    /// Determine the action to take based on restart policy and exit status.
+    fn check_exit_policy(&mut self, is_failure: bool) -> ExitAction {
+        let should_restart = match self.config.restart {
+            RestartPolicy::Never => false,
+            RestartPolicy::Always => true,
+            RestartPolicy::OnFailure => is_failure,
+        };
+
+        if !should_restart {
+            return ExitAction::Stop;
+        }
+
+        if let Some(max) = self.config.max_restarts
+            && self.restart_count >= max
+        {
+            return ExitAction::GiveUp;
+        }
+
+        self.restart_count += 1;
+        ExitAction::Restart
+    }
+
+    /// Handle a notify message from the process.
+    fn handle_notify_message(&mut self, msg: &NotifyMessage) {
+        let name = &self.config.name;
+        match msg {
+            NotifyMessage::Ready => {
+                info!("Process {} signaled ready", name);
+                self.activity.log("Process signaled ready");
+                self.activity.set_status(ProcessStatus::Ready);
+                self.restart_count = 0;
+                if !self.ready_signaled {
+                    self.ready_signaled = true;
+                    let _ = self.ready_state.send(true);
+                }
+                self.status = SupervisorStatus::Ready {
+                    watchdog_deadline: self.new_watchdog_deadline(),
+                };
+            }
+            NotifyMessage::Watchdog => {
+                debug!("Watchdog ping from {}", name);
+                self.restart_count = 0;
+                if let SupervisorStatus::Ready {
+                    ref mut watchdog_deadline,
+                } = self.status
+                {
+                    if let Some(timeout) = self.watchdog_timeout {
+                        *watchdog_deadline = Some(Instant::now() + timeout);
+                    }
+                } else {
+                    debug!("Ignoring watchdog ping from {} (not in Ready state)", name);
+                }
+            }
+            NotifyMessage::Status(status) => {
+                debug!("Status from {}: {}", name, status);
+                self.activity.log(format!("Status: {}", status));
+            }
+            NotifyMessage::Stopping => {
+                debug!("Process {} signaled stopping", name);
+                self.activity.log("Process signaled stopping");
+            }
+            NotifyMessage::Reloading => {
+                debug!("Process {} signaled reloading", name);
+                self.activity.log("Process reloading configuration");
+            }
+            NotifyMessage::Unknown(s) => {
+                debug!("Unknown notify message from {}: {}", name, s);
+            }
+        }
+    }
+
+    /// Handle watchdog timeout — check max_restarts and return action.
+    fn handle_watchdog_timeout(&mut self) -> ExitAction {
+        let name = &self.config.name;
+        warn!("Watchdog timeout for process {}", name);
+        self.activity
+            .error("Watchdog timeout - no heartbeat received");
+
+        if let Some(max) = self.config.max_restarts
+            && self.restart_count >= max
+        {
+            warn!(
+                "Process {} reached max restarts ({}) after watchdog timeout, giving up",
+                name, max
+            );
+            self.activity
+                .error(format!("Max restarts ({}) reached, giving up", max));
+            return ExitAction::GiveUp;
+        }
+
+        self.restart_count += 1;
+        info!(
+            "Restarting process {} due to watchdog timeout (attempt {})",
+            name, self.restart_count
+        );
+        self.activity.log(format!(
+            "Restarting due to watchdog timeout (attempt {})",
+            self.restart_count
+        ));
+        ExitAction::Restart
+    }
+
+    /// Reset supervision state for a user-initiated restart (Ctrl+R).
+    fn reset_for_restart(&mut self) {
+        self.restart_count = 0;
+        self.ready_signaled = false;
+        let _ = self.ready_state.send(false);
+        self.restarting = false;
+        self.stopped = false;
+        self.file_watch_cooldown = None;
+        self.status = self.initial_status();
+    }
+
+    /// Compute the initial supervision status based on config.
+    fn initial_status(&self) -> SupervisorStatus {
+        if !self.watchdog_require_ready {
+            SupervisorStatus::Ready {
+                watchdog_deadline: self.new_watchdog_deadline(),
+            }
+        } else {
+            SupervisorStatus::WaitingForReady {
+                watchdog_deadline: None,
+            }
+        }
+    }
+
+    /// Compute a new watchdog deadline from now, if configured.
+    fn new_watchdog_deadline(&self) -> Option<Instant> {
+        self.watchdog_timeout.map(|t| Instant::now() + t)
+    }
+
+    /// Return the current watchdog deadline, if any.
+    fn watchdog_deadline(&self) -> Option<Instant> {
+        match &self.status {
+            SupervisorStatus::Ready { watchdog_deadline }
+            | SupervisorStatus::WaitingForReady { watchdog_deadline } => *watchdog_deadline,
+        }
+    }
+
+    /// Abort all sub-tasks (TCP probe, file watcher, notify forwarder).
+    fn abort_subtasks(&mut self) {
+        if let Some(task) = self.tcp_probe_task.take() {
+            task.abort();
+        }
+        if let Some(task) = self.file_watcher_task.take() {
+            task.abort();
+        }
+        if let Some(task) = self.notify_forwarder_task.take() {
+            task.abort();
+        }
+    }
 }
 
 /// Native process manager using watchexec-supervisor
 pub struct NativeProcessManager {
-    jobs: Arc<RwLock<HashMap<String, JobHandle>>>,
+    jobs: Arc<RwLock<HashMap<String, Process>>>,
     state_dir: PathBuf,
-    shutdown: Arc<tokio::sync::Notify>,
     /// Process configurations (populated when processes are started)
     process_configs: RwLock<HashMap<String, ProcessConfig>>,
     /// Command receiver for process control (restart, etc.)
     command_rx: Arc<tokio::sync::Mutex<Option<mpsc::Receiver<ProcessCommand>>>>,
     /// Parent activity for grouping all processes under "Starting processes"
     processes_activity: Arc<RwLock<Option<Activity>>>,
+    /// Channel for notify socket messages from forwarder tasks
+    notify_tx: mpsc::Sender<(String, Vec<NotifyMessage>)>,
+    #[allow(clippy::type_complexity)]
+    notify_rx: tokio::sync::Mutex<Option<mpsc::Receiver<(String, Vec<NotifyMessage>)>>>,
+    /// Channel for file watch events from watcher tasks
+    file_watch_tx: mpsc::Sender<String>,
+    file_watch_rx: tokio::sync::Mutex<Option<mpsc::Receiver<String>>>,
 }
 
 impl NativeProcessManager {
@@ -85,13 +280,19 @@ impl NativeProcessManager {
     ) -> Result<Self> {
         std::fs::create_dir_all(&state_dir).into_diagnostic()?;
 
+        let (notify_tx, notify_rx) = mpsc::channel(64);
+        let (file_watch_tx, file_watch_rx) = mpsc::channel(64);
+
         Ok(Self {
             jobs: Arc::new(RwLock::new(HashMap::new())),
             state_dir,
-            shutdown: Arc::new(tokio::sync::Notify::new()),
             process_configs: RwLock::new(process_configs),
             command_rx: Arc::new(tokio::sync::Mutex::new(None)),
             processes_activity: Arc::new(RwLock::new(None)),
+            notify_tx,
+            notify_rx: tokio::sync::Mutex::new(Some(notify_rx)),
+            file_watch_tx,
+            file_watch_rx: tokio::sync::Mutex::new(Some(file_watch_rx)),
         })
     }
 
@@ -236,27 +437,192 @@ impl NativeProcessManager {
         // Create ready state for signaling when process becomes ready
         let (ready_state, _ready_rx) = tokio::sync::watch::channel(false);
 
-        // Spawn supervision task
-        let supervisor_task = self.spawn_supervisor(
-            config.clone(),
-            job.clone(),
-            activity.clone(),
-            notify_socket.clone(),
-            ready_state.clone(),
-        );
+        // Extract watchdog config
+        let watchdog_timeout = config
+            .watchdog
+            .as_ref()
+            .map(|w| Duration::from_micros(w.usec));
+        let watchdog_require_ready = config
+            .watchdog
+            .as_ref()
+            .map(|w| w.require_ready)
+            .unwrap_or(true);
 
-        // Store the job handle
+        // Spawn TCP probe task if needed
+        let tcp_probe_task = if !config.listen.is_empty()
+            && config.notify.as_ref().is_none_or(|n| !n.enable)
+        {
+            config
+                .listen
+                .iter()
+                .find_map(|spec| {
+                    if spec.kind == crate::config::ListenKind::Tcp {
+                        spec.address.clone()
+                    } else {
+                        None
+                    }
+                })
+                .map(|address| {
+                    let ready_state = ready_state.clone();
+                    let probe_name = config.name.clone();
+                    let probe_activity = activity.clone();
+                    tokio::spawn(async move {
+                        debug!("Starting TCP probe for {} at {}", probe_name, address);
+                        loop {
+                            match tokio::net::TcpStream::connect(&address).await {
+                                Ok(_) => {
+                                    info!("TCP probe succeeded for {} at {}", probe_name, address);
+                                    probe_activity.log("TCP probe succeeded - process ready");
+                                    probe_activity.set_status(ProcessStatus::Ready);
+                                    let _ = ready_state.send(true);
+                                    break;
+                                }
+                                Err(_) => {
+                                    tokio::time::sleep(Duration::from_millis(100)).await;
+                                }
+                            }
+                        }
+                    })
+                })
+        } else {
+            None
+        };
+
+        // Spawn file watcher task if watch paths are configured
+        let file_watcher_task = if !config.watch.paths.is_empty() {
+            let paths = config.watch.paths.clone();
+            let extensions = config.watch.extensions.clone();
+            let ignore = config.watch.ignore.clone();
+            let watch_name = config.name.clone();
+            let tx = self.file_watch_tx.clone();
+
+            Some(tokio::spawn(async move {
+                let ignores: Vec<(String, Option<PathBuf>)> = ignore
+                    .iter()
+                    .map(|pattern| {
+                        let glob_pattern = if pattern.contains('/') || pattern.starts_with("**") {
+                            pattern.clone()
+                        } else {
+                            format!("**/{}", pattern)
+                        };
+                        (glob_pattern, None)
+                    })
+                    .collect();
+
+                let origin = paths.first().cloned().unwrap_or_else(|| PathBuf::from("."));
+
+                let filterer = match GlobsetFilterer::new(
+                    &origin,
+                    std::iter::empty::<(String, Option<PathBuf>)>(),
+                    ignores,
+                    std::iter::empty::<PathBuf>(),
+                    std::iter::empty(),
+                    extensions.iter().map(std::ffi::OsString::from),
+                )
+                .await
+                {
+                    Ok(f) => Arc::new(f),
+                    Err(e) => {
+                        warn!("Failed to create filterer for {}: {}", watch_name, e);
+                        return;
+                    }
+                };
+
+                let name_for_action = watch_name.clone();
+                let wx = match Watchexec::new(move |action| {
+                    if action.events.iter().any(|e| e.paths().next().is_some()) {
+                        let _ = tx.try_send(name_for_action.clone());
+                    }
+                    action
+                }) {
+                    Ok(wx) => wx,
+                    Err(e) => {
+                        warn!("Failed to create file watcher for {}: {}", watch_name, e);
+                        return;
+                    }
+                };
+
+                wx.config.pathset(paths.iter().map(|p| p.as_path()));
+                wx.config.filterer(filterer);
+                wx.config.throttle(Duration::from_millis(500));
+
+                let mut watch_info = format!(
+                    "File watcher started for {} watching {:?}",
+                    watch_name, paths
+                );
+                if !extensions.is_empty() {
+                    watch_info.push_str(&format!(" (extensions: {:?})", extensions));
+                }
+                if !ignore.is_empty() {
+                    watch_info.push_str(&format!(" (ignoring {:?})", ignore));
+                }
+                info!("{}", watch_info);
+
+                if let Err(e) = wx.main().await {
+                    warn!("File watcher for {} stopped: {}", watch_name, e);
+                }
+            }))
+        } else {
+            None
+        };
+
+        // Spawn notify forwarder task
+        let notify_forwarder_task = if let Some(socket) = notify_socket.clone() {
+            let name = config.name.clone();
+            let tx = self.notify_tx.clone();
+            Some(tokio::spawn(async move {
+                loop {
+                    match socket.recv().await {
+                        Ok(messages) => {
+                            if tx.send((name.clone(), messages)).await.is_err() {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            debug!("Notify socket error for {}: {}", name, e);
+                            break;
+                        }
+                    }
+                }
+            }))
+        } else {
+            None
+        };
+
+        // Build initial supervision status
+        let initial_status = if !watchdog_require_ready {
+            SupervisorStatus::Ready {
+                watchdog_deadline: watchdog_timeout.map(|t| Instant::now() + t),
+            }
+        } else {
+            SupervisorStatus::WaitingForReady {
+                watchdog_deadline: None,
+            }
+        };
+
+        // Store the process
         let job_clone = job.clone();
         let mut jobs = self.jobs.write().await;
         jobs.insert(
             config.name.clone(),
-            JobHandle {
+            Process {
                 job,
-                supervisor_task,
                 activity,
                 output_readers: Some((stdout_tailer, stderr_tailer)),
                 notify_socket,
                 ready_state,
+                tcp_probe_task,
+                file_watcher_task,
+                notify_forwarder_task,
+                config: config.clone(),
+                status: initial_status,
+                restart_count: 0,
+                ready_signaled: false,
+                restarting: false,
+                stopped: false,
+                watchdog_timeout,
+                watchdog_require_ready,
+                file_watch_cooldown: None,
             },
         );
 
@@ -329,379 +695,6 @@ impl NativeProcessManager {
                     }
                 }
             }
-        })
-    }
-
-    /// Spawn a supervision task that monitors the job and handles restarts
-    fn spawn_supervisor(
-        &self,
-        config: ProcessConfig,
-        job: Arc<Job>,
-        activity: Activity,
-        notify_socket: Option<Arc<NotifySocket>>,
-        ready_state: tokio::sync::watch::Sender<bool>,
-    ) -> JoinHandle<()> {
-        let shutdown = self.shutdown.clone();
-        let name = config.name.clone();
-
-        // Extract watchdog config
-        let watchdog_timeout = config
-            .watchdog
-            .as_ref()
-            .map(|w| Duration::from_micros(w.usec));
-        let watchdog_require_ready = config
-            .watchdog
-            .as_ref()
-            .map(|w| w.require_ready)
-            .unwrap_or(true);
-
-        // Check if we need TCP probe for readiness (listen sockets without notify)
-        let tcp_probe_address =
-            if !config.listen.is_empty() && config.notify.as_ref().is_none_or(|n| !n.enable) {
-                // Find the first TCP listen socket
-                config.listen.iter().find_map(|spec| {
-                    if spec.kind == crate::config::ListenKind::Tcp {
-                        spec.address.clone()
-                    } else {
-                        None
-                    }
-                })
-            } else {
-                None
-            };
-
-        tokio::spawn(async move {
-            enum SupervisorStatus {
-                /// Waiting for process to become ready (initial or after restart).
-                WaitingForReady { watchdog_deadline: Option<Instant> },
-                /// Process is ready. Watchdog deadline active if configured.
-                Ready { watchdog_deadline: Option<Instant> },
-                /// We killed the process (watchdog, file watch, or external restart).
-                /// Absorb the next to_wait exit without checking restart policy.
-                Restarting,
-            }
-
-            impl SupervisorStatus {
-                fn watchdog_deadline(&self) -> Option<Instant> {
-                    match self {
-                        Self::Ready { watchdog_deadline }
-                        | Self::WaitingForReady { watchdog_deadline } => *watchdog_deadline,
-                        Self::Restarting => None,
-                    }
-                }
-            }
-
-            let mut restart_count = 0usize;
-            let mut ready_signaled = false;
-
-            let new_deadline = || watchdog_timeout.map(|t| Instant::now() + t);
-
-            let mut state = if !watchdog_require_ready {
-                SupervisorStatus::Ready {
-                    watchdog_deadline: new_deadline(),
-                }
-            } else {
-                SupervisorStatus::WaitingForReady {
-                    watchdog_deadline: None,
-                }
-            };
-
-            // Spawn TCP probe task if needed
-            let _tcp_probe_task = if let Some(address) = tcp_probe_address {
-                let ready_state = ready_state.clone();
-                let probe_name = name.clone();
-                let probe_activity = activity.clone();
-                Some(tokio::spawn(async move {
-                    debug!("Starting TCP probe for {} at {}", probe_name, address);
-                    loop {
-                        match tokio::net::TcpStream::connect(&address).await {
-                            Ok(_) => {
-                                info!("TCP probe succeeded for {} at {}", probe_name, address);
-                                probe_activity.log("TCP probe succeeded - process ready");
-                                probe_activity.set_status(ProcessStatus::Ready);
-                                let _ = ready_state.send(true);
-                                break;
-                            }
-                            Err(_) => {
-                                tokio::time::sleep(Duration::from_millis(100)).await;
-                            }
-                        }
-                    }
-                }))
-            } else {
-                None
-            };
-
-            // Set up file watcher if watch paths are configured
-            let (watch_tx, mut watch_rx) = mpsc::channel::<()>(1);
-            let _watcher_task = if !config.watch.paths.is_empty() {
-                let paths = config.watch.paths.clone();
-                let extensions = config.watch.extensions.clone();
-                let ignore = config.watch.ignore.clone();
-                let watch_name = name.clone();
-                let tx = watch_tx.clone();
-
-                Some(tokio::spawn(async move {
-                    // Build ignore patterns for GlobsetFilterer
-                    // Format: (pattern, optional_base_path)
-                    let ignores: Vec<(String, Option<PathBuf>)> = ignore
-                        .iter()
-                        .map(|pattern| {
-                            // Support both "**/pattern" and "pattern" styles
-                            let glob_pattern = if pattern.contains('/') || pattern.starts_with("**")
-                            {
-                                pattern.clone()
-                            } else {
-                                format!("**/{}", pattern)
-                            };
-                            (glob_pattern, None)
-                        })
-                        .collect();
-
-                    // Get origin path (first watch path or current dir)
-                    let origin = paths.first().cloned().unwrap_or_else(|| PathBuf::from("."));
-
-                    // Create the filterer
-                    let filterer = match GlobsetFilterer::new(
-                        &origin,
-                        std::iter::empty::<(String, Option<PathBuf>)>(), // no filters (allow all)
-                        ignores,
-                        std::iter::empty::<PathBuf>(), // no whitelist
-                        std::iter::empty(),            // no ignore files
-                        extensions.iter().map(|e| std::ffi::OsString::from(e)), // extension filter
-                    )
-                    .await
-                    {
-                        Ok(f) => Arc::new(f),
-                        Err(e) => {
-                            warn!("Failed to create filterer for {}: {}", watch_name, e);
-                            return;
-                        }
-                    };
-
-                    let tx = tx;
-                    let wx = match Watchexec::new(move |action| {
-                        // Events are already filtered by the filterer
-                        if action.events.iter().any(|e| e.paths().next().is_some()) {
-                            let _ = tx.try_send(());
-                        }
-                        action
-                    }) {
-                        Ok(wx) => wx,
-                        Err(e) => {
-                            warn!("Failed to create file watcher for {}: {}", watch_name, e);
-                            return;
-                        }
-                    };
-
-                    // Configure paths to watch
-                    wx.config.pathset(paths.iter().map(|p| p.as_path()));
-
-                    // Set the filterer
-                    wx.config.filterer(filterer);
-
-                    let mut watch_info = format!(
-                        "File watcher started for {} watching {:?}",
-                        watch_name, paths
-                    );
-                    if !extensions.is_empty() {
-                        watch_info.push_str(&format!(" (extensions: {:?})", extensions));
-                    }
-                    if !ignore.is_empty() {
-                        watch_info.push_str(&format!(" (ignoring {:?})", ignore));
-                    }
-                    info!("{}", watch_info);
-
-                    if let Err(e) = wx.main().await {
-                        warn!("File watcher for {} stopped: {}", watch_name, e);
-                    }
-                }))
-            } else {
-                None
-            };
-
-            loop {
-                tokio::select! {
-                    _ = shutdown.notified() => {
-                        debug!("Shutdown requested for {}", name);
-                        break;
-                    }
-                    _ = watch_rx.recv() => {
-                        // File change detected, restart the process
-                        info!("File change detected for {}, restarting", name);
-                        activity.log("File change detected, restarting");
-                        job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                        job.start().await;
-                        state = SupervisorStatus::Restarting;
-                    }
-                    // Handle notify socket messages
-                    result = async {
-                        match &notify_socket {
-                            Some(socket) => socket.recv().await,
-                            None => std::future::pending().await,
-                        }
-                    } => {
-                        if let Ok(messages) = result {
-                            for msg in messages {
-                                match msg {
-                                    NotifyMessage::Ready => {
-                                        info!("Process {} signaled ready", name);
-                                        activity.log("Process signaled ready");
-                                        activity.set_status(ProcessStatus::Ready);
-                                        restart_count = 0;
-                                        // Signal waiting tasks that process is ready
-                                        if !ready_signaled {
-                                            ready_signaled = true;
-                                            let _ = ready_state.send(true);
-                                        }
-                                        state = SupervisorStatus::Ready { watchdog_deadline: new_deadline() };
-                                    }
-                                    NotifyMessage::Watchdog => {
-                                        debug!("Watchdog ping from {}", name);
-                                        restart_count = 0;
-                                        if let SupervisorStatus::Ready { ref mut watchdog_deadline } = state {
-                                            if let Some(timeout) = watchdog_timeout {
-                                                *watchdog_deadline = Some(Instant::now() + timeout);
-                                            }
-                                        } else {
-                                            debug!("Ignoring watchdog ping from {} (not in Ready state)", name);
-                                        }
-                                    }
-                                    NotifyMessage::Status(status) => {
-                                        debug!("Status from {}: {}", name, status);
-                                        activity.log(&format!("Status: {}", status));
-                                    }
-                                    NotifyMessage::Stopping => {
-                                        debug!("Process {} signaled stopping", name);
-                                        activity.log("Process signaled stopping");
-                                    }
-                                    NotifyMessage::Reloading => {
-                                        debug!("Process {} signaled reloading", name);
-                                        activity.log("Process reloading configuration");
-                                    }
-                                    NotifyMessage::Unknown(s) => {
-                                        debug!("Unknown notify message from {}: {}", name, s);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // Handle watchdog timeout
-                    _ = async {
-                        match state.watchdog_deadline() {
-                            Some(deadline) => tokio::time::sleep_until(deadline.into()).await,
-                            None => std::future::pending().await,
-                        }
-                    }, if state.watchdog_deadline().is_some() => {
-                        warn!("Watchdog timeout for process {}", name);
-                        activity.error("Watchdog timeout - no heartbeat received");
-
-                        // Check max restarts limit before restarting
-                        if let Some(max) = config.max_restarts {
-                            if restart_count >= max {
-                                warn!(
-                                    "Process {} reached max restarts ({}) after watchdog timeout, giving up",
-                                    name, max
-                                );
-                                activity.error(format!("Max restarts ({}) reached, giving up", max));
-                                activity.fail();
-                                break;
-                            }
-                        }
-
-                        // Restart on watchdog timeout
-                        restart_count += 1;
-                        info!("Restarting process {} due to watchdog timeout (attempt {})", name, restart_count);
-                        activity.log(format!("Restarting due to watchdog timeout (attempt {})", restart_count));
-                        job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
-                        state = SupervisorStatus::Restarting;
-                    }
-                    _ = job.to_wait() => {
-                        // Process ended, check if we should restart
-                        if matches!(state, SupervisorStatus::Restarting) {
-                            debug!("Absorbing stale exit for {} after initiated restart", name);
-                            state = if watchdog_require_ready {
-                                SupervisorStatus::WaitingForReady { watchdog_deadline: None }
-                            } else {
-                                SupervisorStatus::Ready { watchdog_deadline: new_deadline() }
-                            };
-                            continue;
-                        }
-
-                        let policy = config.restart;
-                        let max_restarts = config.max_restarts;
-                        let process_name = name.clone();
-
-                        // Use a channel to get the restart decision from run_async
-                        let (tx, rx) = tokio::sync::oneshot::channel();
-
-                        job.run_async(move |ctx| {
-                            // Extract status before async block (lifetime constraint)
-                            let status = if let CommandState::Finished { status, .. } = ctx.current {
-                                Some(*status)
-                            } else {
-                                None
-                            };
-
-                            Box::new(async move {
-                                if let Some(status) = status {
-                                    let is_failure = !matches!(status, ProcessEnd::Success);
-
-                                    let should_restart = match policy {
-                                        RestartPolicy::Never => false,
-                                        RestartPolicy::Always => true,
-                                        RestartPolicy::OnFailure => is_failure,
-                                    };
-
-                                    if should_restart {
-                                        debug!(
-                                            "Process {} exited with {:?}, policy: {:?}",
-                                            process_name, status, policy
-                                        );
-                                    }
-
-                                    let _ = tx.send(should_restart);
-                                }
-                            })
-                        }).await;
-
-                        // Check restart decision
-                        match rx.await {
-                            Ok(true) => {
-                                // Check max restarts limit
-                                if let Some(max) = max_restarts
-                                    && restart_count >= max
-                                {
-                                    warn!(
-                                        "Process {} reached max restarts ({}), giving up",
-                                        name, max
-                                    );
-                                    activity.error(format!("Max restarts ({}) reached, giving up", max));
-                                    activity.fail();
-                                    break;
-                                }
-
-                                restart_count += 1;
-                                info!("Restarting process {} (attempt {})", name, restart_count);
-                                activity.log(format!("Restarting (attempt {})", restart_count));
-                                job.start().await;
-                                state = if watchdog_require_ready {
-                                    SupervisorStatus::WaitingForReady { watchdog_deadline: None }
-                                } else {
-                                    SupervisorStatus::Ready { watchdog_deadline: new_deadline() }
-                                };
-                            }
-                            _ => {
-                                debug!("Process {} will not restart", name);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            debug!("Supervision task for {} exiting", name);
         })
     }
 
@@ -830,23 +823,23 @@ impl NativeProcessManager {
     pub async fn stop(&self, name: &str) -> Result<()> {
         let mut jobs = self.jobs.write().await;
 
-        if let Some(handle) = jobs.remove(name) {
+        if let Some(mut process) = jobs.remove(name) {
             debug!("Stopping process: {}", name);
 
             // Stopping a process intentionally is not a failure
-            handle.activity.reset();
+            process.activity.reset();
 
-            // Abort the supervisor task first to prevent restarts
-            handle.supervisor_task.abort();
+            // Abort sub-tasks to prevent restarts and clean up
+            process.abort_subtasks();
 
             // Abort output reader tasks
-            if let Some((stdout_reader, stderr_reader)) = handle.output_readers {
+            if let Some((stdout_reader, stderr_reader)) = process.output_readers.take() {
                 stdout_reader.abort();
                 stderr_reader.abort();
             }
 
             // Send terminate signal with grace period
-            handle
+            process
                 .job
                 .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
                 .await;
@@ -867,77 +860,6 @@ impl NativeProcessManager {
         for name in job_names {
             let _ = self.stop(&name).await; // Continue even if one fails
         }
-        Ok(())
-    }
-
-    /// Restart a process by name
-    ///
-    /// This resets the restart count and activity state, respawns the supervision
-    /// task if it exited (e.g., due to max restarts), and restarts the underlying job.
-    pub async fn restart(&self, name: &str) -> Result<()> {
-        // Get the process config - needed if we need to respawn the supervisor
-        let config = {
-            let configs = self.process_configs.read().await;
-            configs
-                .get(name)
-                .ok_or_else(|| miette::miette!("Process {} not found in configuration", name))?
-                .clone()
-        };
-
-        let mut jobs = self.jobs.write().await;
-        let handle = jobs
-            .get_mut(name)
-            .ok_or_else(|| miette::miette!("Process {} not running", name))?;
-
-        // Reset activity state (unfail it) and set status to restarting
-        handle.activity.reset();
-        handle.activity.set_status(ProcessStatus::Restarting);
-
-        // Get log file paths and truncate them
-        let log_dir = self.state_dir.join("logs");
-        let stdout_log = log_dir.join(format!("{}.stdout.log", name));
-        let stderr_log = log_dir.join(format!("{}.stderr.log", name));
-        let _ = std::fs::write(&stdout_log, "");
-        let _ = std::fs::write(&stderr_log, "");
-
-        // Check if supervisor task has exited (e.g., due to max restarts)
-        if handle.supervisor_task.is_finished() {
-            // Supervisor has exited - need to start fresh with new supervision.
-            // Order matters: start job first, then spawn supervisor (like start_command does).
-            // This gives the process a fresh restart quota (restart_count = 0).
-            info!(
-                "Supervisor for {} has exited, starting fresh with new supervision",
-                name
-            );
-            handle.job.start().await;
-            handle.supervisor_task = self.spawn_supervisor(
-                config,
-                handle.job.clone(),
-                handle.activity.clone(),
-                handle.notify_socket.clone(),
-                handle.ready_state.clone(),
-            );
-        } else {
-            // Abort supervisor and respawn fresh to reset restart_count
-            // and avoid races with stale exit notifications.
-            handle.supervisor_task.abort();
-            handle
-                .job
-                .restart_with_signal(Signal::Terminate, Duration::from_secs(2))
-                .await;
-            handle.supervisor_task = self.spawn_supervisor(
-                config,
-                handle.job.clone(),
-                handle.activity.clone(),
-                handle.notify_socket.clone(),
-                handle.ready_state.clone(),
-            );
-        }
-
-        // Set status back to running
-        handle.activity.set_status(ProcessStatus::Running);
-
-        info!("Process {} restarted", name);
         Ok(())
     }
 
@@ -971,35 +893,426 @@ impl NativeProcessManager {
         bail!("Process {} ready state channel closed", name);
     }
 
-    /// Run the manager event loop (keeps processes alive)
-    /// This should be called when running in detached mode
-    pub async fn run(self: Arc<Self>) -> Result<()> {
-        use futures::stream::StreamExt;
-        use signal_hook::consts::signal::*;
-        use signal_hook_tokio::Signals;
+    /// Spawn the event loop as a background tokio task.
+    ///
+    /// Returns a JoinHandle. The event loop runs until the cancellation token
+    /// is cancelled or all processes have stopped. This is useful for tests
+    /// that call `start_command()` directly and need supervision running.
+    pub async fn spawn_event_loop(
+        &self,
+        cancellation_token: tokio_util::sync::CancellationToken,
+    ) -> JoinHandle<Result<()>> {
+        let jobs = self.jobs.clone();
+        let state_dir = self.state_dir.clone();
+        let notify_tx = self.notify_tx.clone();
+        let notify_rx = self.notify_rx.lock().await.take();
+        let file_watch_rx = self.file_watch_rx.lock().await.take();
 
-        info!("Manager event loop started");
+        let token = cancellation_token.clone();
+        tokio::spawn(async move {
+            let shutdown = Box::pin(async move { token.cancelled().await });
+            Self::event_loop_inner(
+                jobs,
+                state_dir,
+                notify_tx,
+                shutdown,
+                None,
+                notify_rx,
+                file_watch_rx,
+            )
+            .await
+        })
+    }
 
-        // Set up signal handling for graceful shutdown
-        let signals = Signals::new([SIGTERM, SIGINT]).into_diagnostic()?;
-        let mut signals = signals.fuse();
+    /// Create an exit watcher future for a process.
+    /// Returns a future that resolves with the process name when the process exits.
+    fn make_exit_watcher(
+        name: String,
+        job: Arc<Job>,
+    ) -> Pin<Box<dyn futures::Future<Output = String> + Send>> {
+        Box::pin(async move {
+            job.to_wait().await;
+            name
+        })
+    }
+
+    /// Central event loop that handles all supervision, shared by run() and run_foreground().
+    async fn event_loop(
+        &self,
+        shutdown: Pin<Box<dyn futures::Future<Output = ()> + Send>>,
+        command_rx: Option<mpsc::Receiver<ProcessCommand>>,
+    ) -> Result<()> {
+        let notify_rx = self.notify_rx.lock().await.take();
+        let file_watch_rx = self.file_watch_rx.lock().await.take();
+
+        Self::event_loop_inner(
+            self.jobs.clone(),
+            self.state_dir.clone(),
+            self.notify_tx.clone(),
+            shutdown,
+            command_rx,
+            notify_rx,
+            file_watch_rx,
+        )
+        .await
+    }
+
+    /// Inner event loop implementation that operates on shared state.
+    async fn event_loop_inner(
+        jobs: Arc<RwLock<HashMap<String, Process>>>,
+        state_dir: PathBuf,
+        notify_tx: mpsc::Sender<(String, Vec<NotifyMessage>)>,
+        mut shutdown: Pin<Box<dyn futures::Future<Output = ()> + Send>>,
+        mut command_rx: Option<mpsc::Receiver<ProcessCommand>>,
+        mut notify_rx: Option<mpsc::Receiver<(String, Vec<NotifyMessage>)>>,
+        mut file_watch_rx: Option<mpsc::Receiver<String>>,
+    ) -> Result<()> {
+        // Seed exit watchers from all current processes
+        let mut exit_watchers: FuturesUnordered<
+            Pin<Box<dyn futures::Future<Output = String> + Send>>,
+        > = FuturesUnordered::new();
+        {
+            let jobs = jobs.read().await;
+            for (name, process) in jobs.iter() {
+                exit_watchers.push(Self::make_exit_watcher(name.clone(), process.job.clone()));
+            }
+        }
 
         loop {
+            // Compute the next watchdog deadline across all processes
+            let next_watchdog = {
+                let jobs = jobs.read().await;
+                jobs.values()
+                    .filter(|p| !p.stopped && !p.restarting)
+                    .filter_map(|p| p.watchdog_deadline())
+                    .min()
+            };
+
             tokio::select! {
-                Some(signal) = signals.next() => {
-                    match signal {
-                        SIGTERM | SIGINT => {
-                            info!("Received shutdown signal, stopping all processes");
-                            self.stop_all().await?;
-                            break;
+                _ = &mut shutdown => {
+                    info!("Shutdown requested, stopping all processes");
+                    // Inline stop_all: iterate and stop each process
+                    let job_names: Vec<String> = {
+                        let j = jobs.read().await;
+                        j.keys().cloned().collect()
+                    };
+                    for stop_name in job_names {
+                        let mut j = jobs.write().await;
+                        if let Some(mut process) = j.remove(&stop_name) {
+                            process.activity.reset();
+                            process.abort_subtasks();
+                            if let Some((r1, r2)) = process.output_readers.take() {
+                                r1.abort();
+                                r2.abort();
+                            }
+                            drop(j);
+                            process
+                                .job
+                                .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
+                                .await;
                         }
-                        _ => {}
+                    }
+                    break;
+                }
+
+                Some(cmd) = async {
+                    match command_rx.as_mut() {
+                        Some(rx) => rx.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match cmd {
+                        ProcessCommand::Restart(name) => {
+                            info!("Received restart command for process: {}", name);
+                            let mut jobs = jobs.write().await;
+                            if let Some(process) = jobs.get_mut(&name) {
+                                process.activity.reset();
+                                process.activity.set_status(ProcessStatus::Restarting);
+
+                                // Truncate log files
+                                let log_dir = state_dir.join("logs");
+                                let stdout_log = log_dir.join(format!("{}.stdout.log", name));
+                                let stderr_log = log_dir.join(format!("{}.stderr.log", name));
+                                let _ = std::fs::write(&stdout_log, "");
+                                let _ = std::fs::write(&stderr_log, "");
+
+                                let was_stopped = process.stopped;
+                                process.reset_for_restart();
+                                process.restarting = true;
+                                process.abort_subtasks();
+
+                                // Respawn TCP probe if needed
+                                if !process.config.listen.is_empty()
+                                    && process.config.notify.as_ref().is_none_or(|n| !n.enable)
+                                    && let Some(address) = process.config.listen.iter().find_map(|spec| {
+                                        if spec.kind == crate::config::ListenKind::Tcp {
+                                            spec.address.clone()
+                                        } else {
+                                            None
+                                        }
+                                    }) {
+                                        let ready_state = process.ready_state.clone();
+                                        let probe_name = name.clone();
+                                        let probe_activity = process.activity.clone();
+                                        process.tcp_probe_task = Some(tokio::spawn(async move {
+                                            debug!("Starting TCP probe for {} at {}", probe_name, address);
+                                            loop {
+                                                match tokio::net::TcpStream::connect(&address).await {
+                                                    Ok(_) => {
+                                                        info!("TCP probe succeeded for {} at {}", probe_name, address);
+                                                        probe_activity.log("TCP probe succeeded - process ready");
+                                                        probe_activity.set_status(ProcessStatus::Ready);
+                                                        let _ = ready_state.send(true);
+                                                        break;
+                                                    }
+                                                    Err(_) => {
+                                                        tokio::time::sleep(Duration::from_millis(100)).await;
+                                                    }
+                                                }
+                                            }
+                                        }));
+                                    }
+
+                                // Respawn notify forwarder if needed
+                                if let Some(socket) = process.notify_socket.clone() {
+                                    let fwd_name = name.clone();
+                                    let tx = notify_tx.clone();
+                                    process.notify_forwarder_task = Some(tokio::spawn(async move {
+                                        loop {
+                                            match socket.recv().await {
+                                                Ok(messages) => {
+                                                    if tx.send((fwd_name.clone(), messages)).await.is_err() {
+                                                        break;
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    debug!("Notify socket error for {}: {}", fwd_name, e);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }));
+                                }
+
+                                if was_stopped {
+                                    // Process was stopped, start fresh
+                                    process.job.start().await;
+                                    process.restarting = false;
+                                } else {
+                                    // Process is running, use try_restart to atomically restart
+                                    process.job.try_restart_with_signal(
+                                        Signal::Terminate,
+                                        Duration::from_secs(2),
+                                    ).await;
+                                }
+
+                                process.activity.set_status(ProcessStatus::Running);
+
+                                // Push a new exit watcher
+                                exit_watchers.push(Self::make_exit_watcher(
+                                    name.clone(),
+                                    process.job.clone(),
+                                ));
+                            } else {
+                                warn!("Process {} not found for restart", name);
+                            }
+                        }
                     }
                 }
-                // Add a small sleep to avoid busy loop
+
+                Some(name) = exit_watchers.next() => {
+                    // Phase 1: Check restarting flag under write lock
+                    let phase1_result = {
+                        let mut jobs = jobs.write().await;
+                        if let Some(process) = jobs.get_mut(&name) {
+                            if process.restarting {
+                                // Absorb the exit from an initiated restart
+                                debug!("Absorbing stale exit for {} after initiated restart", name);
+                                process.restarting = false;
+                                process.status = process.initial_status();
+                                // Push new exit watcher for the restarted process
+                                exit_watchers.push(Self::make_exit_watcher(
+                                    name.clone(),
+                                    process.job.clone(),
+                                ));
+                                None // handled
+                            } else {
+                                // Extract what we need for Phase 2
+                                let job = process.job.clone();
+                                let policy = process.config.restart;
+                                Some((job, policy))
+                            }
+                        } else {
+                            // Process was removed (stopped externally), silently ignore
+                            None
+                        }
+                    };
+
+                    if let Some((job, policy)) = phase1_result {
+                        // Phase 2: call run_async (no lock held)
+                        let (tx, rx) = tokio::sync::oneshot::channel();
+                        let process_name = name.clone();
+
+                        job.run_async(move |ctx| {
+                            let status = if let CommandState::Finished { status, .. } = ctx.current {
+                                Some(*status)
+                            } else {
+                                None
+                            };
+
+                            Box::new(async move {
+                                if let Some(status) = status {
+                                    let is_failure = !matches!(status, ProcessEnd::Success);
+                                    let should_restart = match policy {
+                                        RestartPolicy::Never => false,
+                                        RestartPolicy::Always => true,
+                                        RestartPolicy::OnFailure => is_failure,
+                                    };
+
+                                    if should_restart {
+                                        debug!(
+                                            "Process {} exited with {:?}, policy: {:?}",
+                                            process_name, status, policy
+                                        );
+                                    }
+
+                                    let _ = tx.send((should_restart, is_failure));
+                                }
+                            })
+                        }).await;
+
+                        // Phase 3: Act on the result under write lock
+                        let mut jobs = jobs.write().await;
+                        if let Some(process) = jobs.get_mut(&name) {
+                            match rx.await {
+                                Ok((true, _is_failure)) => {
+                                    // Check max restarts
+                                    match process.check_exit_policy(true) {
+                                        ExitAction::Restart => {
+                                            info!("Restarting process {} (attempt {})", name, process.restart_count);
+                                            process.activity.log(format!(
+                                                "Restarting (attempt {})",
+                                                process.restart_count
+                                            ));
+                                            process.status = process.initial_status();
+                                            job.start().await;
+                                            exit_watchers.push(Self::make_exit_watcher(
+                                                name.clone(),
+                                                process.job.clone(),
+                                            ));
+                                        }
+                                        ExitAction::GiveUp => {
+                                            warn!("Process {} reached max restarts, giving up", name);
+                                            process.activity.error(format!(
+                                                "Max restarts ({}) reached, giving up",
+                                                process.config.max_restarts.unwrap_or(0)
+                                            ));
+                                            process.activity.fail();
+                                            process.stopped = true;
+                                        }
+                                        ExitAction::Stop => {
+                                            debug!("Process {} will not restart", name);
+                                            process.stopped = true;
+                                        }
+                                    }
+                                }
+                                Ok((false, _)) => {
+                                    debug!("Process {} will not restart", name);
+                                    process.stopped = true;
+                                }
+                                Err(_) => {
+                                    debug!("Process {} exit status channel dropped", name);
+                                    process.stopped = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Some((name, messages)) = async {
+                    match notify_rx.as_mut() {
+                        Some(rx) => rx.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    let mut jobs = jobs.write().await;
+                    if let Some(process) = jobs.get_mut(&name) {
+                        for msg in &messages {
+                            process.handle_notify_message(msg);
+                        }
+                    }
+                }
+
+                Some(name) = async {
+                    match file_watch_rx.as_mut() {
+                        Some(rx) => rx.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    let mut jobs = jobs.write().await;
+                    if let Some(process) = jobs.get_mut(&name) {
+                        if process.restarting || process.stopped {
+                            continue;
+                        }
+                        if let Some(cooldown) = process.file_watch_cooldown
+                            && Instant::now() < cooldown
+                        {
+                            continue;
+                        }
+                        info!("File change detected for {}, restarting", name);
+                        process.activity.log("File change detected, restarting");
+                        process.restarting = true;
+                        process.file_watch_cooldown = Some(Instant::now() + Duration::from_millis(500));
+                        process.status = process.initial_status();
+                        process.job.try_restart_with_signal(
+                            Signal::Terminate,
+                            Duration::from_secs(2),
+                        ).await;
+                    }
+                }
+
+                _ = async {
+                    match next_watchdog {
+                        Some(deadline) => tokio::time::sleep_until(deadline.into()).await,
+                        None => std::future::pending().await,
+                    }
+                }, if next_watchdog.is_some() => {
+                    let now = Instant::now();
+                    let mut jobs = jobs.write().await;
+                    let names: Vec<String> = jobs.keys().cloned().collect();
+                    for name in names {
+                        let process = jobs.get_mut(&name).unwrap();
+                        if process.stopped || process.restarting {
+                            continue;
+                        }
+                        if let Some(deadline) = process.watchdog_deadline()
+                            && now >= deadline {
+                                match process.handle_watchdog_timeout() {
+                                    ExitAction::Restart => {
+                                        process.restarting = true;
+                                        process.job.try_restart_with_signal(
+                                            Signal::Terminate,
+                                            Duration::from_secs(2),
+                                        ).await;
+                                    }
+                                    ExitAction::GiveUp => {
+                                        process.activity.fail();
+                                        process.stopped = true;
+                                    }
+                                    ExitAction::Stop => {
+                                        process.stopped = true;
+                                    }
+                                }
+                            }
+                    }
+                }
+
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                    // Check if all jobs are still alive
-                    let jobs = self.jobs.read().await;
+                    let jobs = jobs.read().await;
+                    if !jobs.is_empty() && jobs.values().all(|p| p.stopped) {
+                        debug!("All processes stopped, exiting");
+                        break;
+                    }
                     if jobs.is_empty() {
                         debug!("No jobs running, exiting");
                         break;
@@ -1008,8 +1321,33 @@ impl NativeProcessManager {
             }
         }
 
-        info!("Manager event loop stopped");
         Ok(())
+    }
+
+    /// Run the manager event loop (keeps processes alive)
+    /// This should be called when running in detached mode
+    pub async fn run(self: Arc<Self>) -> Result<()> {
+        use signal_hook::consts::signal::*;
+        use signal_hook_tokio::Signals;
+
+        info!("Manager event loop started");
+
+        let mut signals = Signals::new([SIGTERM, SIGINT]).into_diagnostic()?;
+
+        let shutdown = Box::pin(async move {
+            use futures::StreamExt;
+            loop {
+                match signals.next().await {
+                    Some(sig) if sig == SIGTERM || sig == SIGINT => break,
+                    _ => continue,
+                }
+            }
+        });
+
+        let result = self.event_loop(shutdown, None).await;
+
+        info!("Manager event loop stopped");
+        result
     }
 
     /// Run the manager event loop in foreground (non-Arc version)
@@ -1026,43 +1364,14 @@ impl NativeProcessManager {
     ) -> Result<()> {
         info!("Manager event loop started (foreground)");
 
-        // Take the command receiver from the struct
-        let mut command_rx = self.command_rx.lock().await.take();
+        let command_rx = self.command_rx.lock().await.take();
+        let token = cancellation_token.clone();
+        let shutdown = Box::pin(async move { token.cancelled().await });
 
-        loop {
-            tokio::select! {
-                _ = cancellation_token.cancelled() => {
-                    info!("Shutdown requested, stopping all processes");
-                    self.stop_all().await?;
-                    break;
-                }
-                Some(cmd) = async {
-                    match command_rx.as_mut() {
-                        Some(rx) => rx.recv().await,
-                        None => std::future::pending().await,
-                    }
-                } => {
-                    match cmd {
-                        ProcessCommand::Restart(name) => {
-                            info!("Received restart command for process: {}", name);
-                            if let Err(e) = self.restart(&name).await {
-                                warn!("Failed to restart process {}: {}", name, e);
-                            }
-                        }
-                    }
-                }
-                _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                    let jobs = self.jobs.read().await;
-                    if jobs.is_empty() {
-                        debug!("No jobs running, exiting");
-                        break;
-                    }
-                }
-            }
-        }
+        let result = self.event_loop(shutdown, command_rx).await;
 
         info!("Manager event loop stopped");
-        Ok(())
+        result
     }
 
     /// Save the manager PID to a file
@@ -1311,9 +1620,7 @@ impl ProcessManager for NativeProcessManager {
             pid::write_pid(&self.manager_pid_file(), std::process::id()).await?;
 
             // Run the event loop (shutdown via cancellation token from tokio-shutdown)
-            let token = options
-                .cancellation_token
-                .unwrap_or_else(tokio_util::sync::CancellationToken::new);
+            let token = options.cancellation_token.unwrap_or_default();
             let result = self.run_foreground(token).await;
 
             // Clean up PID file

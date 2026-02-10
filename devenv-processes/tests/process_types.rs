@@ -36,6 +36,8 @@ async fn test_foreground_default_restarts_on_failure() {
             .await
             .expect("Failed to start");
 
+        let mel = ManagerWithEventLoop::start(manager).await;
+
         // Wait for restarts
         tokio::time::sleep(Duration::from_secs(2)).await;
 
@@ -51,7 +53,7 @@ async fn test_foreground_default_restarts_on_failure() {
             count
         );
 
-        manager.stop_all().await.expect("Failed to stop");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -78,6 +80,8 @@ async fn test_foreground_never_policy() {
             .await
             .expect("Failed to start");
 
+        let mel = ManagerWithEventLoop::start(manager).await;
+
         // Wait
         tokio::time::sleep(Duration::from_millis(500)).await;
 
@@ -86,6 +90,8 @@ async fn test_foreground_never_policy() {
             .unwrap_or_default();
         let count = content.lines().count();
         assert_eq!(count, 1, "Foreground with Never policy should not restart");
+
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -121,6 +127,8 @@ async fn test_default_process_type_is_foreground() {
             .await
             .expect("Failed to start");
 
+        let mel = ManagerWithEventLoop::start(manager).await;
+
         // Wait for restarts - if default is Foreground, it should restart
         tokio::time::sleep(Duration::from_secs(2)).await;
 
@@ -135,7 +143,7 @@ async fn test_default_process_type_is_foreground() {
             count
         );
 
-        manager.stop_all().await.expect("Failed to stop");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");

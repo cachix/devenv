@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tokio::fs;
+use tokio::task::JoinHandle;
 
 /// Test context that manages temp directories and cleanup
 pub struct TestContext {
@@ -60,6 +61,34 @@ impl TestContext {
         let mut configs = HashMap::new();
         configs.insert(config.name.clone(), config);
         self.create_manager(configs)
+    }
+}
+
+/// A manager with a background event loop for tests that need supervision.
+pub struct ManagerWithEventLoop {
+    pub manager: NativeProcessManager,
+    pub cancel: tokio_util::sync::CancellationToken,
+    event_loop_handle: JoinHandle<miette::Result<()>>,
+}
+
+impl ManagerWithEventLoop {
+    /// Start the event loop in the background.
+    /// Must be called AFTER all `start_command()` calls.
+    pub async fn start(manager: NativeProcessManager) -> Self {
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let event_loop_handle = manager.spawn_event_loop(cancel.clone()).await;
+        Self {
+            manager,
+            cancel,
+            event_loop_handle,
+        }
+    }
+
+    /// Stop all processes and shut down the event loop.
+    pub async fn shutdown(self) {
+        self.manager.stop_all().await.ok();
+        self.cancel.cancel();
+        let _ = self.event_loop_handle.await;
     }
 }
 

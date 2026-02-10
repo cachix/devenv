@@ -54,6 +54,8 @@ sleep 3600
             .await
             .expect("Failed to start");
 
+        let mel = ManagerWithEventLoop::start(manager).await;
+
         // Wait for initial start
         assert!(
             wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
@@ -73,7 +75,7 @@ sleep 3600
             count
         );
 
-        manager.stop_all().await.expect("Failed to stop");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -112,6 +114,8 @@ sleep 3600
             .await
             .expect("Failed to start");
 
+        let mel = ManagerWithEventLoop::start(manager).await;
+
         // Wait for initial start
         assert!(
             wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
@@ -131,7 +135,7 @@ sleep 3600
             count
         );
 
-        manager.stop_all().await.expect("Failed to stop");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -176,6 +180,8 @@ sleep 3600
             .await
             .expect("Failed to start");
 
+        let mel = ManagerWithEventLoop::start(manager).await;
+
         // Wait for initial start
         assert!(
             wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
@@ -212,7 +218,7 @@ sleep 3600
             count
         );
 
-        manager.stop_all().await.expect("Failed to stop");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -253,6 +259,8 @@ sleep 3600
             .await
             .expect("Failed to start");
 
+        let mel = ManagerWithEventLoop::start(manager).await;
+
         assert!(
             wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
             "Process should start initially"
@@ -288,7 +296,7 @@ sleep 3600
             count
         );
 
-        manager.stop_all().await.expect("Failed to stop");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -336,6 +344,8 @@ sleep 3600
             .await
             .expect("Failed to start");
 
+        let mel = ManagerWithEventLoop::start(manager).await;
+
         assert!(
             wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
             "Process should start initially"
@@ -367,7 +377,7 @@ sleep 3600
             count
         );
 
-        manager.stop_all().await.expect("Failed to stop");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -407,6 +417,8 @@ sleep 3600
             .await
             .expect("Failed to start");
 
+        let mel = ManagerWithEventLoop::start(manager).await;
+
         assert!(
             wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
             "Process should start"
@@ -429,7 +441,7 @@ sleep 3600
             "Without watch paths, file changes should not trigger restart"
         );
 
-        manager.stop_all().await.expect("Failed to stop");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -464,6 +476,8 @@ sleep 3600
             .start_command(&config, None)
             .await
             .expect("Failed to start");
+
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         assert!(
             wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
@@ -508,7 +522,7 @@ sleep 3600
             stable_count
         );
 
-        manager.stop_all().await.expect("Failed to stop");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");

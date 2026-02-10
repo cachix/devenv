@@ -39,6 +39,7 @@ async fn test_restart_never() {
             .start_command(&config, None)
             .await
             .expect("Failed to start");
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for initial start
         let count = wait_for_line_count(&counter_file, "started", 1, STARTUP_TIMEOUT).await;
@@ -47,6 +48,16 @@ async fn test_restart_never() {
         // Poll to confirm no restart happened
         let count = wait_for_line_count(&counter_file, "started", 2, Duration::from_secs(2)).await;
         assert_eq!(count, 1, "Process with Never policy should not restart");
+
+        // Wait a bit more to ensure no delayed restart
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let content = tokio::fs::read_to_string(&counter_file)
+            .await
+            .unwrap_or_default();
+        let count = content.lines().count();
+        assert_eq!(count, 1, "Process should still not have restarted");
+
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -73,6 +84,7 @@ async fn test_restart_always_on_success() {
             .start_command(&config, None)
             .await
             .expect("Failed to start");
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Poll until at least 2 starts (proves restart on success)
         let count = wait_for_line_count(&counter_file, "started", 2, RESTART_TIMEOUT).await;
@@ -90,7 +102,7 @@ async fn test_restart_always_on_success() {
             count
         );
 
-        manager.stop_all().await.expect("Failed to stop");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -117,6 +129,7 @@ async fn test_restart_always_on_failure() {
             .start_command(&config, None)
             .await
             .expect("Failed to start");
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Poll until restart detected
         let count = wait_for_line_count(&counter_file, "started", 2, RESTART_TIMEOUT).await;
@@ -126,7 +139,7 @@ async fn test_restart_always_on_failure() {
             count
         );
 
-        manager.stop_all().await.expect("Failed to stop");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -153,6 +166,7 @@ async fn test_restart_on_failure_with_failure() {
             .start_command(&config, None)
             .await
             .expect("Failed to start");
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Poll until restart detected
         let count = wait_for_line_count(&counter_file, "started", 2, RESTART_TIMEOUT).await;
@@ -162,7 +176,7 @@ async fn test_restart_on_failure_with_failure() {
             count
         );
 
-        manager.stop_all().await.expect("Failed to stop");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -189,6 +203,7 @@ async fn test_restart_on_failure_with_success() {
             .start_command(&config, None)
             .await
             .expect("Failed to start");
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for initial start
         let count = wait_for_line_count(&counter_file, "started", 1, STARTUP_TIMEOUT).await;
@@ -200,6 +215,19 @@ async fn test_restart_on_failure_with_success() {
             count, 1,
             "Process with OnFailure policy should NOT restart on exit 0"
         );
+
+        // Wait more to ensure no delayed restart
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let content = tokio::fs::read_to_string(&counter_file)
+            .await
+            .unwrap_or_default();
+        assert_eq!(
+            content.lines().count(),
+            1,
+            "Process should still not have restarted"
+        );
+
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -228,6 +256,7 @@ async fn test_max_restarts_limit() {
             .start_command(&config, None)
             .await
             .expect("Failed to start");
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for all restarts to complete (1 initial + 3 restarts = 4)
         let count = wait_for_line_count(&counter_file, "started", 4, RESTART_TIMEOUT).await;
@@ -242,6 +271,8 @@ async fn test_max_restarts_limit() {
             count, 4,
             "Process should not restart beyond max_restarts limit"
         );
+
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -270,6 +301,7 @@ async fn test_unlimited_restarts() {
             .start_command(&config, None)
             .await
             .expect("Failed to start");
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Poll until multiple restarts observed
         let count = wait_for_line_count(&counter_file, "started", 5, RESTART_TIMEOUT).await;
@@ -279,8 +311,8 @@ async fn test_unlimited_restarts() {
             count
         );
 
-        // Stop the process
-        manager.stop_all().await.expect("Failed to stop");
+        // Stop the process and shut down the event loop
+        mel.manager.stop_all().await.expect("Failed to stop");
 
         // Record count after stop
         let final_count =
@@ -298,6 +330,8 @@ async fn test_unlimited_restarts() {
             after_stop, final_count,
             "Process should stop restarting after stop_all"
         );
+
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");

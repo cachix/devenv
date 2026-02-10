@@ -94,6 +94,7 @@ sleep 3600
         let config = notify_process_config("notify-test", &script);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for process to start
         assert!(
@@ -109,7 +110,7 @@ sleep 3600
             notify_socket_path.display()
         );
 
-        manager.stop_all().await.unwrap();
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -134,6 +135,7 @@ sleep 3600
         let config = notify_process_config("env-check", &script);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for the output file and check NOTIFY_SOCKET was set
         let expected_path = ctx.state_dir.join("notify/env-check.sock");
@@ -144,7 +146,7 @@ sleep 3600
             expected_path.display()
         );
 
-        manager.stop_all().await.unwrap();
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -169,6 +171,7 @@ sleep 3600
         let config = watchdog_process_config("watchdog-env", &script, 30_000_000, true);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Check that WATCHDOG_USEC was set
         assert!(
@@ -176,7 +179,7 @@ sleep 3600
             "WATCHDOG_USEC should be set to 30000000"
         );
 
-        manager.stop_all().await.unwrap();
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -200,6 +203,7 @@ sleep 3600
         let config = notify_process_config("cleanup-test", &script);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for process to start
         assert!(
@@ -213,8 +217,8 @@ sleep 3600
             "Notify socket should exist while process is running"
         );
 
-        // Stop the process
-        manager.stop_all().await.unwrap();
+        // Stop the process and shut down the event loop
+        mel.shutdown().await;
 
         // Poll until socket is cleaned up
         let path = notify_socket_path.clone();
@@ -259,6 +263,7 @@ sleep 3600
         };
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for process to start
         assert!(
@@ -273,7 +278,7 @@ sleep 3600
             "Notify socket should NOT exist when notify is disabled"
         );
 
-        manager.stop_all().await.unwrap();
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -297,6 +302,7 @@ sleep 3600
         let config = notify_process_config("ready-test", &script);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for process to start
         assert!(
@@ -311,11 +317,7 @@ sleep 3600
         // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Process should still be running (READY=1 doesn't stop it)
-        manager
-            .stop_all()
-            .await
-            .expect("Process should still be running to stop");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -339,6 +341,7 @@ sleep 3600
         let config = notify_process_config("status-test", &script);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for process to start
         assert!(
@@ -356,11 +359,7 @@ sleep 3600
         // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Process should still be running
-        manager
-            .stop_all()
-            .await
-            .expect("Process should still be running after STATUS");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -385,6 +384,7 @@ sleep 3600
         let config = watchdog_process_config("watchdog-ping", &script, 2_000_000, false);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for process to start
         assert!(
@@ -402,11 +402,7 @@ sleep 3600
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
 
-        // Process should still be running because we kept pinging
-        manager
-            .stop_all()
-            .await
-            .expect("Process should still be running when watchdog pings are sent");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -439,6 +435,7 @@ sleep 3600
         let config = watchdog_process_config("watchdog-timeout", &script, 1_000_000, false);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for initial start
         assert!(
@@ -454,7 +451,7 @@ sleep 3600
             count
         );
 
-        manager.stop_all().await.unwrap();
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -487,6 +484,7 @@ sleep 3600
         let config = watchdog_process_config("watchdog-ready", &script, 1_000_000, true);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for initial start
         assert!(
@@ -515,7 +513,7 @@ sleep 3600
             count
         );
 
-        manager.stop_all().await.unwrap();
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -539,6 +537,7 @@ sleep 3600
         let config = notify_process_config("stopping-test", &script);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for process to start
         assert!(
@@ -553,11 +552,7 @@ sleep 3600
         // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Process should still be running (STOPPING is informational)
-        manager
-            .stop_all()
-            .await
-            .expect("Process should still be running after STOPPING");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -583,6 +578,7 @@ sleep 3600
         let config = notify_process_config("reloading-test", &script);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for process to start
         assert!(
@@ -597,11 +593,7 @@ sleep 3600
         // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Process should still be running (RELOADING is informational)
-        manager
-            .stop_all()
-            .await
-            .expect("Process should still be running after RELOADING");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -625,6 +617,7 @@ sleep 3600
         let config = notify_process_config("multi-state", &script);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for process to start
         assert!(
@@ -642,11 +635,7 @@ sleep 3600
         // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Process should still be running
-        manager
-            .stop_all()
-            .await
-            .expect("Process should still be running after multi-state notification");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -672,6 +661,7 @@ sleep 3600
         let config = notify_process_config("invalid-notify", &script);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for process to start
         assert!(
@@ -691,11 +681,7 @@ sleep 3600
         // Brief wait to ensure async notification processing completes
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Process should still be running - invalid messages shouldn't crash anything
-        manager
-            .stop_all()
-            .await
-            .expect("Process should still be running after invalid notifications");
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -728,6 +714,7 @@ sleep 3600
 
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for initial start
         assert!(
@@ -751,7 +738,7 @@ sleep 3600
             count
         );
 
-        manager.stop_all().await.unwrap();
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
@@ -782,6 +769,7 @@ sleep 3600
         let config = watchdog_process_config("delayed-hang", &script, 1_000_000, true);
         let manager = ctx.create_manager_single(config.clone());
         let _job = manager.start_command(&config, None).await.unwrap();
+        let mel = ManagerWithEventLoop::start(manager).await;
 
         // Wait for initial start
         assert!(
@@ -811,7 +799,7 @@ sleep 3600
             count
         );
 
-        manager.stop_all().await.unwrap();
+        mel.shutdown().await;
     })
     .await
     .expect("Test timed out");
