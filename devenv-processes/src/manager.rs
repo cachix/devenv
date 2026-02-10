@@ -263,6 +263,12 @@ impl NativeProcessManager {
 
         // Create ready state for signaling when process becomes ready
         let (ready_state, _ready_rx) = tokio::sync::watch::channel(false);
+        let (watch_ready_tx, watch_ready_rx) = if config.watch.paths.is_empty() {
+            (None, None)
+        } else {
+            let (tx, rx) = tokio::sync::oneshot::channel::<std::result::Result<(), String>>();
+            (Some(tx), Some(rx))
+        };
 
         // If no readiness mechanism is configured, mark process as immediately ready
         let has_notify = config.notify.as_ref().is_some_and(|n| n.enable);
@@ -278,6 +284,7 @@ impl NativeProcessManager {
             activity.clone(),
             notify_socket.clone(),
             ready_state.clone(),
+            watch_ready_tx,
         );
 
         // Store the job handle
@@ -294,6 +301,28 @@ impl NativeProcessManager {
                 ready_state,
             },
         );
+
+        if let Some(watch_ready_rx) = watch_ready_rx {
+            let watch_start = tokio::time::timeout(Duration::from_secs(5), watch_ready_rx).await;
+            match watch_start {
+                Ok(Ok(Ok(()))) => {}
+                Ok(Ok(Err(err))) => {
+                    let _ = self.stop(&config.name).await;
+                    bail!("Failed to start file watcher for {}: {}", config.name, err);
+                }
+                Ok(Err(_)) => {
+                    let _ = self.stop(&config.name).await;
+                    bail!("File watcher setup channel closed for {}", config.name);
+                }
+                Err(_) => {
+                    let _ = self.stop(&config.name).await;
+                    bail!(
+                        "Timed out waiting for file watcher setup for {}",
+                        config.name
+                    );
+                }
+            }
+        }
 
         info!("Command '{}' started", config.name);
         Ok(job_clone)
@@ -375,6 +404,7 @@ impl NativeProcessManager {
         activity: Activity,
         notify_socket: Option<Arc<NotifySocket>>,
         ready_state: tokio::sync::watch::Sender<bool>,
+        watch_ready_tx: Option<tokio::sync::oneshot::Sender<std::result::Result<(), String>>>,
     ) -> JoinHandle<()> {
         let shutdown = self.shutdown.clone();
         let name = config.name.clone();
@@ -411,6 +441,7 @@ impl NativeProcessManager {
         };
 
         tokio::spawn(async move {
+            let mut watch_ready_tx = watch_ready_tx;
             let mut restart_count = 0usize;
             let mut ready_signaled = false;
 
@@ -519,6 +550,7 @@ impl NativeProcessManager {
                 let ignore = config.watch.ignore.clone();
                 let watch_name = name.clone();
                 let tx = watch_tx.clone();
+                let mut ready_tx = watch_ready_tx.take();
 
                 Some(tokio::spawn(async move {
                     // Build ignore patterns for GlobsetFilterer
@@ -553,6 +585,9 @@ impl NativeProcessManager {
                     {
                         Ok(f) => Arc::new(f),
                         Err(e) => {
+                            if let Some(tx) = ready_tx.take() {
+                                let _ = tx.send(Err(format!("filterer setup failed: {}", e)));
+                            }
                             warn!("Failed to create filterer for {}: {}", watch_name, e);
                             return;
                         }
@@ -568,6 +603,9 @@ impl NativeProcessManager {
                     }) {
                         Ok(wx) => wx,
                         Err(e) => {
+                            if let Some(tx) = ready_tx.take() {
+                                let _ = tx.send(Err(format!("watcher creation failed: {}", e)));
+                            }
                             warn!("Failed to create file watcher for {}: {}", watch_name, e);
                             return;
                         }
@@ -591,7 +629,12 @@ impl NativeProcessManager {
                     }
                     info!("{}", watch_info);
 
-                    if let Err(e) = wx.main().await {
+                    let wx_task = wx.main();
+                    if let Some(tx) = ready_tx.take() {
+                        let _ = tx.send(Ok(()));
+                    }
+
+                    if let Err(e) = wx_task.await {
                         warn!("File watcher for {} stopped: {}", watch_name, e);
                     }
                 }))
@@ -1002,6 +1045,7 @@ impl NativeProcessManager {
                 handle.activity.clone(),
                 handle.notify_socket.clone(),
                 handle.ready_state.clone(),
+                None,
             );
         } else {
             // Supervisor is still running - just restart the job.
