@@ -259,6 +259,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     "building".to_string(),
                     activity.short_name.clone(),
                     elapsed_str,
+                    activity.variant.clone(),
                 )
                 .with_suffix(phase_suffix.clone())
                 .with_completed(is_completed)
@@ -277,6 +278,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 "building".to_string(),
                 activity.short_name.clone(),
                 elapsed_str,
+                activity.variant.clone(),
             )
             .with_suffix(phase_suffix)
             .with_completed(is_completed)
@@ -323,11 +325,15 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             let prefix = build_activity_prefix(*depth, *completed);
 
-            let main_line = ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
-                .with_suffix(status_text)
-                .with_completed(completed.is_some())
-                .with_selection(*is_selected)
-                .render(terminal_width, *depth, prefix);
+            let main_line = ActivityTextComponent::name_only(
+                activity.name.clone(),
+                elapsed_str,
+                activity.variant.clone(),
+            )
+            .with_suffix(status_text)
+            .with_completed(completed.is_some())
+            .with_selection(*is_selected)
+            .render(terminal_width, *depth, prefix);
 
             // Show logs inline for tasks with show_output=true or failed tasks
             let task_failed = *completed == Some(false);
@@ -380,6 +386,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         "downloading".to_string(),
                         activity.short_name.clone(),
                         elapsed_str,
+                        activity.variant.clone(),
                     )
                     .with_suffix(from_suffix)
                     .with_completed(completed.is_some())
@@ -398,6 +405,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     "downloading".to_string(),
                     activity.short_name.clone(),
                     elapsed_str,
+                    activity.variant.clone(),
                 )
                 .with_suffix(from_suffix)
                 .with_completed(completed.is_some())
@@ -412,6 +420,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 "copying".to_string(),
                 activity.short_name.clone(),
                 elapsed_str,
+                activity.variant.clone(),
             )
             .with_suffix(Some("to the store".to_string()))
             .with_completed(completed.is_some())
@@ -429,6 +438,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 "querying".to_string(),
                 activity.short_name.clone(),
                 elapsed_str,
+                activity.variant.clone(),
             )
             .with_suffix(suffix)
             .with_completed(completed.is_some())
@@ -442,6 +452,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 "fetching".to_string(),
                 activity.name.clone(),
                 elapsed_str,
+                activity.variant.clone(),
             )
             .with_completed(completed.is_some())
             .with_selection(*is_selected)
@@ -461,12 +472,15 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             if *is_selected && logs.is_some() {
                 let prefix = build_activity_prefix(*depth, *completed);
 
-                let main_line =
-                    ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
-                        .with_suffix(suffix)
-                        .with_completed(completed.is_some())
-                        .with_selection(*is_selected)
-                        .render(terminal_width, *depth, prefix);
+                let main_line = ActivityTextComponent::name_only(
+                    activity.name.clone(),
+                    elapsed_str,
+                    activity.variant.clone(),
+                )
+                .with_suffix(suffix)
+                .with_completed(completed.is_some())
+                .with_selection(*is_selected)
+                .render(terminal_width, *depth, prefix);
 
                 return ExpandedContentComponent::new(logs.as_deref())
                     .with_empty_message("  → no files evaluated yet (press '^e' to expand)")
@@ -475,19 +489,27 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             let prefix = build_activity_prefix(*depth, *completed);
 
-            return ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
-                .with_suffix(suffix)
-                .with_completed(completed.is_some())
-                .with_selection(*is_selected)
-                .render(terminal_width, *depth, prefix);
+            return ActivityTextComponent::name_only(
+                activity.name.clone(),
+                elapsed_str,
+                activity.variant.clone(),
+            )
+            .with_suffix(suffix)
+            .with_completed(completed.is_some())
+            .with_selection(*is_selected)
+            .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::UserOperation => {
             let prefix = build_activity_prefix(*depth, *completed);
 
-            return ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
-                .with_completed(completed.is_some())
-                .with_selection(*is_selected)
-                .render(terminal_width, *depth, prefix);
+            return ActivityTextComponent::name_only(
+                activity.name.clone(),
+                elapsed_str,
+                activity.variant.clone(),
+            )
+            .with_completed(completed.is_some())
+            .with_selection(*is_selected)
+            .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Devenv => {
             let prefix = build_activity_prefix(*depth, *completed);
@@ -519,11 +541,15 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 None
             };
 
-            let main_line = ActivityTextComponent::name_only(activity.name.clone(), elapsed_str)
-                .with_suffix(suffix)
-                .with_completed(completed.is_some())
-                .with_selection(*is_selected)
-                .render(terminal_width, *depth, prefix);
+            let main_line = ActivityTextComponent::name_only(
+                activity.name.clone(),
+                elapsed_str,
+                activity.variant.clone(),
+            )
+            .with_suffix(suffix)
+            .with_completed(completed.is_some())
+            .with_selection(*is_selected)
+            .render(terminal_width, *depth, prefix);
 
             // Show logs when selected or when failed
             let failed = *completed == Some(false);
@@ -571,11 +597,15 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             let prefix = build_activity_prefix(*depth, *completed);
 
-            let main_line =
-                ActivityTextComponent::new("".to_string(), activity.name.clone(), elapsed_str)
-                    .with_suffix(status_text)
-                    .with_selection(*is_selected)
-                    .render(terminal_width, *depth, prefix);
+            let main_line = ActivityTextComponent::new(
+                "".to_string(),
+                activity.name.clone(),
+                elapsed_str,
+                activity.variant.clone(),
+            )
+            .with_suffix(status_text)
+            .with_selection(*is_selected)
+            .render(terminal_width, *depth, prefix);
 
             // Show logs: always show LOG_VIEWPORT_SHOW_OUTPUT lines,
             // expand when selected, show more when failed
@@ -755,6 +785,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 "unknown".to_string(),
                 activity.name.clone(),
                 elapsed_str,
+                activity.variant.clone(),
             )
             .with_completed(completed.is_some())
             .with_selection(*is_selected)

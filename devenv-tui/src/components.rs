@@ -138,10 +138,11 @@ pub struct ActivityTextComponent {
     pub is_selected: bool,
     pub elapsed: String,
     pub is_completed: bool,
+    pub variant: ActivityVariant,
 }
 
 impl ActivityTextComponent {
-    pub fn new(action: String, name: String, elapsed: String) -> Self {
+    pub fn new(action: String, name: String, elapsed: String, variant: ActivityVariant) -> Self {
         Self {
             action,
             name,
@@ -149,13 +150,14 @@ impl ActivityTextComponent {
             is_selected: false,
             elapsed,
             is_completed: false,
+            variant,
         }
     }
 
     /// Create a component that displays only the name (no action prefix).
     /// Use this for activities where the name is self-describing (e.g., "Evaluating Nix").
-    pub fn name_only(name: String, elapsed: String) -> Self {
-        Self::new(String::new(), name, elapsed)
+    pub fn name_only(name: String, elapsed: String, variant: ActivityVariant) -> Self {
+        Self::new(String::new(), name, elapsed, variant)
     }
 
     pub fn with_suffix(mut self, suffix: Option<String>) -> Self {
@@ -202,6 +204,8 @@ impl ActivityTextComponent {
         } else if self.is_completed {
             (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
         } else if depth == 0 {
+            (COLOR_ACTIVE, COLOR_SECONDARY, COLOR_HIERARCHY, None)
+        } else if matches!(self.variant, ActivityVariant::Process(_)) {
             (COLOR_ACTIVE, COLOR_SECONDARY, COLOR_HIERARCHY, None)
         } else {
             (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
@@ -723,7 +727,7 @@ impl<'a> ExpandedContentComponent<'a> {
                     line_elements.push(
                         element! {
                             View(height: 1, flex_direction: FlexDirection::Row, padding_left: indent as u32, padding_right: 1) {
-                                Text(content: format!("\x1b[0m│ {line}"), color: Color::AnsiValue(245))
+                                Text(content: format!("│ {line}"), color: Color::AnsiValue(245))
                             }
                         }
                         .into_any(),
