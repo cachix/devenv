@@ -115,22 +115,59 @@ let
         '';
       };
 
-      notify = lib.mkOption {
+      ready = lib.mkOption {
         type = lib.types.nullOr (lib.types.submodule {
           options = {
-            enable = lib.mkOption {
+            exec = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Shell command to execute. Exit 0 = ready.";
+            };
+            http = lib.mkOption {
+              type = lib.types.submodule {
+                options.get = lib.mkOption {
+                  type = lib.types.nullOr (lib.types.submodule {
+                    options = {
+                      host = lib.mkOption { type = lib.types.str; default = "127.0.0.1"; };
+                      port = lib.mkOption { type = lib.types.port; };
+                      path = lib.mkOption { type = lib.types.str; default = "/"; };
+                      scheme = lib.mkOption { type = lib.types.str; default = "http"; };
+                    };
+                  });
+                  default = null;
+                };
+              };
+              default = { };
+            };
+            notify = lib.mkOption {
               type = lib.types.bool;
-              default = true;
-              description = "Enable systemd notify protocol";
+              default = false;
+              description = "Enable systemd notify protocol for readiness signaling.";
+            };
+            initial_delay = lib.mkOption {
+              type = lib.types.int;
+              default = 0;
+            };
+            period = lib.mkOption {
+              type = lib.types.int;
+              default = 10;
+            };
+            timeout = lib.mkOption {
+              type = lib.types.int;
+              default = 1;
+            };
+            success_threshold = lib.mkOption {
+              type = lib.types.int;
+              default = 1;
+            };
+            failure_threshold = lib.mkOption {
+              type = lib.types.int;
+              default = 3;
             };
           };
         });
         default = null;
-        description = ''
-          Systemd notify socket configuration.
-
-          The process can send READY=1, STATUS=..., etc. via NOTIFY_SOCKET.
-        '';
+        description = "Readiness probe configuration.";
       };
 
       watch = lib.mkOption {
@@ -194,7 +231,7 @@ in
           pseudo_terminal = pc.pseudo_terminal or false;
           listen = pc.listen or [ ];
           watchdog = pc.watchdog or null;
-          notify = pc.notify or null;
+          ready = process.ready;
           inherit (process) watch;
         }
       )
@@ -207,9 +244,11 @@ in
           let
             native = cfg.processConfig.${name};
           in
-          removeAttrs process [ "enable" "process-compose" "ports" ] // {
+          removeAttrs process [ "enable" "process-compose" "ports" "notify" "ready" "restart" ] // {
             inherit name;
-            inherit (native) use_sudo pseudo_terminal watchdog notify;
+            inherit (native) use_sudo pseudo_terminal watchdog;
+            ready = native.ready;
+            restart = process.restart;
             listen = map
               (spec: removeAttrs spec [ "path" ] // {
                 path = if spec.path != null then toString spec.path else null;
