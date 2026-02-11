@@ -2605,7 +2605,7 @@ rec {
         dependencies = [
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.61.2";
+            packageId = "windows-sys 0.48.0";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_System_Console" ];
           }
@@ -4422,6 +4422,10 @@ rec {
             packageId = "devenv-reload";
           }
           {
+            name = "devenv-shell";
+            packageId = "devenv-shell";
+          }
+          {
             name = "devenv-snix-backend";
             packageId = "devenv-snix-backend";
             optional = true;
@@ -5190,6 +5194,7 @@ rec {
           {
             name = "caps";
             packageId = "caps";
+            target = { target, features }: ("linux" == target."os" or null);
           }
           {
             name = "daemonize";
@@ -5459,8 +5464,18 @@ rec {
         ];
         devDependencies = [
           {
+            name = "insta";
+            packageId = "insta";
+            features = [ "filters" "json" ];
+          }
+          {
             name = "tempfile";
             packageId = "tempfile";
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "process" "fs" "io-util" "macros" "rt-multi-thread" "sync" "time" "macros" "rt-multi-thread" "time" ];
           }
           {
             name = "tokio-test";
@@ -10354,7 +10369,12 @@ rec {
         crateName = "inquire";
         version = "0.9.3";
         edition = "2018";
-        sha256 = "11vgb2mawrpsddxs1b8zzc22gcg50pcv4qjpzajas9q4fswmm7wp";
+        workspace_member = null;
+        src = pkgs.fetchgit {
+          url = "https://github.com/domenkozar/inquire";
+          rev = "d8ef6e8d6d9a0201778226b09fdd462355dc69da";
+          sha256 = "12z9xbym4xzjv9bxd5lhp5bybncaqhk60q4c2bqwf0pfv4gx03fw";
+        };
         authors = [
           "Mikael Mello <git@mikaelmello.com>"
         ];
@@ -15873,7 +15893,7 @@ rec {
         dependencies = [
           {
             name = "heck";
-            packageId = "heck 0.5.0";
+            packageId = "heck 0.4.1";
           }
           {
             name = "itertools";
@@ -15953,7 +15973,7 @@ rec {
         dependencies = [
           {
             name = "heck";
-            packageId = "heck 0.5.0";
+            packageId = "heck 0.4.1";
           }
           {
             name = "itertools";
@@ -16212,7 +16232,7 @@ rec {
         dependencies = [
           {
             name = "heck";
-            packageId = "heck 0.5.0";
+            packageId = "heck 0.4.1";
           }
           {
             name = "prost";
@@ -18372,33 +18392,6 @@ rec {
           "serde1" = [ "serde" "text-size/serde" ];
         };
       };
-      "rpassword" = rec {
-        crateName = "rpassword";
-        version = "7.4.0";
-        edition = "2018";
-        sha256 = "0ffzfff51pl95a7px9gwlz243mn3vxyw7klcxhhng7049yvcim36";
-        authors = [
-          "Conrad Kleinespel <conradk@conradk.com>"
-        ];
-        dependencies = [
-          {
-            name = "libc";
-            packageId = "libc";
-            target = { target, features }: (target."unix" or false);
-          }
-          {
-            name = "rtoolbox";
-            packageId = "rtoolbox";
-          }
-          {
-            name = "windows-sys";
-            packageId = "windows-sys 0.59.0";
-            target = { target, features }: (target."windows" or false);
-            features = [ "Win32_Foundation" "Win32_System_Console" "Win32_Storage_FileSystem" "Win32_Security" "Win32_System_SystemServices" ];
-          }
-        ];
-
-      };
       "rsa" = rec {
         crateName = "rsa";
         version = "0.9.10";
@@ -18498,31 +18491,6 @@ rec {
           "u64_digit" = [ "num-bigint/u64_digit" ];
         };
         resolvedDefaultFeatures = [ "default" "pem" "std" "u64_digit" ];
-      };
-      "rtoolbox" = rec {
-        crateName = "rtoolbox";
-        version = "0.0.3";
-        edition = "2018";
-        sha256 = "0vvz9p8wdzspwd7hk0cxyjr0i49cfqks5q02drym5glz4h5rgk57";
-        authors = [
-          "Conrad Kleinespel <conradk@conradk.com>"
-        ];
-        dependencies = [
-          {
-            name = "libc";
-            packageId = "libc";
-            target = { target, features }: (target."unix" or false);
-          }
-          {
-            name = "windows-sys";
-            packageId = "windows-sys 0.52.0";
-            target = { target, features }: (target."windows" or false);
-            features = [ "Win32_Foundation" "Win32_Security" "Win32_Storage_FileSystem" "Win32_System_Console" "Win32_System_SystemServices" ];
-          }
-        ];
-        features = {
-          "serde" = [ "dep:serde" "dep:serde_json" ];
-        };
       };
       "rustc-demangle" = rec {
         crateName = "rustc-demangle";
@@ -19700,14 +19668,14 @@ rec {
       };
       "secretspec" = rec {
         crateName = "secretspec";
-        version = "0.6.2";
+        version = "0.7.1";
         edition = "2024";
         crateBin = [];
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/secretspec";
-          rev = "ee0a5922c49225b42ed1b2aee658f294e9b51c6a";
-          sha256 = "1zfwydb0h4kr49ri14z2gnlpvdpyqlvx7mgjgbzxkpq7mihwcagz";
+          rev = "388d71cddc74abc644579e029930933d126d1630";
+          sha256 = "1c48alv7f7qmc9kn3zhn5hzbxncnvkb0qxikkkmgzjd6fng33z51";
         };
         dependencies = [
           {
@@ -19718,6 +19686,10 @@ rec {
           {
             name = "colored";
             packageId = "colored";
+          }
+          {
+            name = "data-encoding";
+            packageId = "data-encoding";
           }
           {
             name = "directories";
@@ -19751,8 +19723,8 @@ rec {
             packageId = "once_cell";
           }
           {
-            name = "rpassword";
-            packageId = "rpassword";
+            name = "rand";
+            packageId = "rand 0.9.2";
           }
           {
             name = "secrecy";
@@ -19787,6 +19759,11 @@ rec {
           {
             name = "url";
             packageId = "url";
+          }
+          {
+            name = "uuid";
+            packageId = "uuid";
+            features = [ "v4" ];
           }
           {
             name = "whoami";
@@ -19941,7 +19918,12 @@ rec {
         crateName = "ser_nix";
         version = "0.2.1";
         edition = "2024";
-        sha256 = "0lz000jlm1dr5silfrckp25px9z00x0g24nymfqwk678y3hyrxkm";
+        workspace_member = null;
+        src = pkgs.fetchgit {
+          url = "https://github.com/cachix/ser_nix.git";
+          rev = "e993c09b3db698e5d61847a0fbfbe05546c7b28a";
+          sha256 = "17zsiikqqfyx7j5mdciia39hk8qily75q4s76qkjlhg2h80qvnv4";
+        };
         authors = [
           "James Craven <4jamesccraven@gmail.com>"
         ];
@@ -28754,7 +28736,7 @@ rec {
         dependencies = [
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.61.2";
+            packageId = "windows-sys 0.48.0";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_Storage_FileSystem" "Win32_System_Console" "Win32_System_SystemInformation" ];
           }
@@ -30292,7 +30274,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_IO" "Win32_System_Pipes" "Win32_System_WindowsProgramming" "Win32_UI" "Win32_UI_Shell" "default" ];
+        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Console" "Win32_System_IO" "Win32_System_Pipes" "Win32_System_SystemInformation" "Win32_System_WindowsProgramming" "Win32_UI" "Win32_UI_Shell" "default" ];
       };
       "windows-sys 0.52.0" = rec {
         crateName = "windows-sys";
@@ -30540,7 +30522,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Console" "Win32_System_IO" "Win32_System_SystemServices" "Win32_System_Threading" "Win32_System_WindowsProgramming" "default" ];
+        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_IO" "Win32_System_Threading" "Win32_System_WindowsProgramming" "default" ];
       };
       "windows-sys 0.59.0" = rec {
         crateName = "windows-sys";
@@ -30799,7 +30781,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_NetworkManagement" "Win32_NetworkManagement_IpHelper" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Console" "Win32_System_IO" "Win32_System_SystemServices" "Win32_System_Threading" "Win32_UI" "Win32_UI_Input" "Win32_UI_Input_KeyboardAndMouse" "default" ];
+        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_NetworkManagement" "Win32_NetworkManagement_IpHelper" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Console" "Win32_System_IO" "Win32_System_Threading" "Win32_UI" "Win32_UI_Input" "Win32_UI_Input_KeyboardAndMouse" "default" ];
       };
       "windows-sys 0.60.2" = rec {
         crateName = "windows-sys";
