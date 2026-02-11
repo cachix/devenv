@@ -880,4 +880,153 @@ mod tests {
         assert!(summary.contains("Queued: 0"));
         assert!(summary.contains("Completed: 0"));
     }
+
+    #[test]
+    fn test_push_request_empty_paths() {
+        let request = ClientPushRequest::new(vec![], true);
+        let json = serde_json::to_string(&request).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["contents"]["storePaths"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_push_request_roundtrip() {
+        let paths = vec![
+            "/nix/store/abc123-pkg".to_string(),
+            "/nix/store/def456-pkg".to_string(),
+        ];
+        let request = ClientPushRequest::new(paths.clone(), true);
+        let json = serde_json::to_string(&request).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed["tag"], "ClientPushRequest");
+        assert_eq!(parsed["contents"]["subscribeToUpdates"], true);
+        let store_paths: Vec<String> = parsed["contents"]["storePaths"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(store_paths, paths);
+    }
+
+    #[test]
+    fn test_parse_daemon_event_push_started() {
+        let json = r#"{"tag": "PushEvent", "contents": "PushStarted"}"#;
+        let event: DaemonEvent = serde_json::from_str(json).unwrap();
+        assert_eq!(event.tag, "PushEvent");
+        let push: PushEvent = serde_json::from_value(event.contents).unwrap();
+        assert!(matches!(push, PushEvent::PushStarted));
+    }
+
+    #[test]
+    fn test_parse_daemon_event_store_path_attempt() {
+        let json = r#"{"tag": "PushEvent", "contents": {"PushStorePathAttempt": {"path": "/nix/store/abc123-pkg", "size": 1024}}}"#;
+        let event: DaemonEvent = serde_json::from_str(json).unwrap();
+        let push: PushEvent = serde_json::from_value(event.contents).unwrap();
+        match push {
+            PushEvent::StorePathAttempt { path, size } => {
+                assert_eq!(path, "/nix/store/abc123-pkg");
+                assert_eq!(size, 1024);
+            }
+            other => panic!("Expected StorePathAttempt, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_daemon_event_store_path_progress() {
+        let json = r#"{"tag": "PushEvent", "contents": {"PushStorePathProgress": {"path": "/nix/store/abc123-pkg", "bytes_uploaded": 512, "total_bytes": 1024}}}"#;
+        let event: DaemonEvent = serde_json::from_str(json).unwrap();
+        let push: PushEvent = serde_json::from_value(event.contents).unwrap();
+        match push {
+            PushEvent::StorePathProgress { path, bytes_uploaded, total_bytes } => {
+                assert_eq!(path, "/nix/store/abc123-pkg");
+                assert_eq!(bytes_uploaded, 512);
+                assert_eq!(total_bytes, 1024);
+            }
+            other => panic!("Expected StorePathProgress, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_daemon_event_store_path_done() {
+        let json = r#"{"tag": "PushEvent", "contents": {"PushStorePathDone": {"path": "/nix/store/abc123-pkg"}}}"#;
+        let event: DaemonEvent = serde_json::from_str(json).unwrap();
+        let push: PushEvent = serde_json::from_value(event.contents).unwrap();
+        match push {
+            PushEvent::StorePathSuccess { path } => {
+                assert_eq!(path, "/nix/store/abc123-pkg");
+            }
+            other => panic!("Expected StorePathSuccess, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_daemon_event_store_path_failed() {
+        let json = r#"{"tag": "PushEvent", "contents": {"PushStorePathFailed": {"path": "/nix/store/abc123-pkg", "reason": "upload timeout"}}}"#;
+        let event: DaemonEvent = serde_json::from_str(json).unwrap();
+        let push: PushEvent = serde_json::from_value(event.contents).unwrap();
+        match push {
+            PushEvent::StorePathFailed { path, reason } => {
+                assert_eq!(path, "/nix/store/abc123-pkg");
+                assert_eq!(reason, "upload timeout");
+            }
+            other => panic!("Expected StorePathFailed, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_daemon_event_push_finished() {
+        let json = r#"{"tag": "PushEvent", "contents": {"PushFinished": {"total_paths": 10, "succeeded": 8, "failed": 2}}}"#;
+        let event: DaemonEvent = serde_json::from_str(json).unwrap();
+        let push: PushEvent = serde_json::from_value(event.contents).unwrap();
+        match push {
+            PushEvent::PushFinished { total_paths, succeeded, failed } => {
+                assert_eq!(total_paths, 10);
+                assert_eq!(succeeded, 8);
+                assert_eq!(failed, 2);
+            }
+            other => panic!("Expected PushFinished, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_daemon_event_unknown_string_variant() {
+        let json = r#"{"tag": "PushEvent", "contents": "SomeNewEvent"}"#;
+        let event: DaemonEvent = serde_json::from_str(json).unwrap();
+        let push: PushEvent = serde_json::from_value(event.contents).unwrap();
+        assert!(matches!(push, PushEvent::Unknown));
+    }
+
+    #[test]
+    fn test_parse_daemon_event_unknown_map_variant_fails() {
+        let json = r#"{"tag": "PushEvent", "contents": {"SomeNewEvent": {"foo": "bar"}}}"#;
+        let event: DaemonEvent = serde_json::from_str(json).unwrap();
+        assert!(serde_json::from_value::<PushEvent>(event.contents).is_err());
+    }
+
+    #[test]
+    fn test_parse_daemon_event_attempt_missing_size_defaults() {
+        let json = r#"{"tag": "PushEvent", "contents": {"PushStorePathAttempt": {"path": "/nix/store/abc123-pkg"}}}"#;
+        let event: DaemonEvent = serde_json::from_str(json).unwrap();
+        let push: PushEvent = serde_json::from_value(event.contents).unwrap();
+        match push {
+            PushEvent::StorePathAttempt { path, size } => {
+                assert_eq!(path, "/nix/store/abc123-pkg");
+                assert_eq!(size, 0);
+            }
+            other => panic!("Expected StorePathAttempt, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_spawn_config_dry_run_false() {
+        let config = DaemonSpawnConfig {
+            cache_name: "my-cache".to_string(),
+            socket_path: PathBuf::from("/tmp/test.sock"),
+            binary: PathBuf::from("cachix"),
+            dry_run: false,
+        };
+        assert!(!config.dry_run);
+    }
 }
