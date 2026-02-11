@@ -4,15 +4,6 @@ use std::fs;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
-/// Bash arguments for interactive shell with custom rcfile.
-/// Usage: bash --noprofile --rcfile <path> -i
-///
-/// - `--noprofile`: Skip login shell files (/etc/profile, ~/.bash_profile) to avoid PATH overrides
-/// - `--rcfile <path>`: Source our custom init script
-/// - `-i`: Force interactive mode (must come AFTER --rcfile due to bash argument parsing)
-pub const BASH_INTERACTIVE_ARGS_PREFIX: &[&str] = &["--noprofile", "--rcfile"];
-pub const BASH_INTERACTIVE_ARGS_SUFFIX: &[&str] = &["-i"];
-
 /// Safely write a file with locking, avoiding writing if the content hasn't changed.
 ///
 /// Returns Ok(true) if the file was written, Ok(false) if no write was needed.

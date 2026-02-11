@@ -18,6 +18,7 @@ devenv-tasks.workspace = true
 devenv-tui.workspace = true
 devenv-cache-core.workspace = true
 devenv-reload.workspace = true
+devenv-shell.workspace = true
 devenv-snix-backend = { workspace = true, optional = true }
 devenv-nix-backend.workspace = true
 rand.workspace = true

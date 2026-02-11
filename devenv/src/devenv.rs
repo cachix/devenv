@@ -13,6 +13,7 @@ use devenv_core::{
     nix_backend::{DevenvPaths, NixBackend, Options},
     ports::PortAllocator,
 };
+use devenv_shell::dialect::{BashDialect, ShellDialect};
 use include_dir::{Dir, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use nix::sys::signal;
@@ -619,9 +620,11 @@ impl Devenv {
                 shell_cmd.arg(&script_path);
             }
             None => {
-                shell_cmd.args(util::BASH_INTERACTIVE_ARGS_PREFIX);
+                let dialect = BashDialect;
+                let interactive_args = dialect.interactive_args();
+                shell_cmd.args(&interactive_args.prefix);
                 shell_cmd.arg(&script_path);
-                shell_cmd.args(util::BASH_INTERACTIVE_ARGS_SUFFIX);
+                shell_cmd.args(&interactive_args.suffix);
             }
         }
 
