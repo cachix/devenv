@@ -7,7 +7,7 @@ nix flake init --template "${DEVENV_REPO}#flake-parts"
 nix flake update --override-input devenv "${DEVENV_REPO}"
 
 # Test that nix develop works with the devenv-root override
-nix develop --accept-flake-config --override-input devenv-root "file+file://"<(printf %s "$PWD") --command echo nix-develop started successfully |& tee ./console
+nix develop --accept-flake-config --override-input devenv-root "file+file://"<(printf %s "$PWD") --command echo nix-develop started successfully 2>&1 | tee ./console
 grep -F 'nix-develop started successfully' <./console
 grep -F 'Hello, world!' <./console
 

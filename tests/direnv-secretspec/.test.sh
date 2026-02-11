@@ -5,14 +5,6 @@
 # 2. The error message tells user to run devenv shell interactively
 set -xeuo pipefail
 
-# Use the local devenv build (cargo target or provided DEVENV_BIN)
-DEVENV_BIN="${DEVENV_BIN:-../../target/debug/devenv}"
-if [ ! -x "$DEVENV_BIN" ]; then
-  echo "Error: devenv binary not found at $DEVENV_BIN. Run 'cargo build' first." >&2
-  exit 1
-fi
-export PATH="$(dirname "$(realpath "$DEVENV_BIN")"):$PATH"
-
 # Install direnv
 export PATH="$(nix build nixpkgs#direnv --print-out-paths)/bin:$PATH"
 

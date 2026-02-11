@@ -7,7 +7,7 @@ devenv shell ls -- -la | grep ".test.sh"
 devenv shell ls ../ | grep "cli"
 devenv info | grep "python3-"
 devenv show | grep "python3-"
-devenv search ncdu |& grep -E "Found [0-9]+ packages and [0-9]+ options for 'ncdu'"
+devenv search ncdu 2>&1 | grep -E "Found [0-9]+ packages and [0-9]+ options for 'ncdu'"
 
 # there should be no processes
 devenv up && exit 1
