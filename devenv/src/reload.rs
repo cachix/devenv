@@ -201,7 +201,10 @@ __devenv_apply_reverse_diff() {
             local var="${decl#declare -x }"
             var="${var%%=*}"
             prev_vars["$var"]=1
-            eval "$decl" 2>/dev/null
+            # Use export instead of eval'ing the declare statement directly,
+            # because declare -x inside a function creates a local variable
+            # in bash 5.0+.
+            eval "export ${decl#declare -x }" 2>/dev/null
         fi
     done <<< "$diff_content"
 
