@@ -5975,8 +5975,7 @@ checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 [[package]]
 name = "ser_nix"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75f6ece1f0e898c9b1abde12f14007e0a77e8bb8936547a32eb9854a2500e053"
+source = "git+https://github.com/cachix/ser_nix.git?branch=fix-percent-chars-in-paths#e993c09b3db698e5d61847a0fbfbe05546c7b28a"
 dependencies = [
  "serde",
 ]

@@ -528,7 +528,6 @@ impl NixRustBackend {
         &self,
         eval_state: &mut EvalState,
     ) -> Result<nix_bindings_expr::value::Value> {
-        let import_path = self.bootstrap_file("default.nix");
         let args_nix = self
             .cached_args_nix_eval
             .get()
@@ -536,8 +535,13 @@ impl NixRustBackend {
         let base = self.paths.root.to_str().unwrap();
 
         // 1. Get the import function
+        let import_path = self.bootstrap_file("default.nix");
+        // Escape the Nix path literal
+        let import_nix_path = ser_nix::to_string(&ser_nix::NixPathBuf::from(import_path))
+            .into_diagnostic()
+            .wrap_err("Failed to serialize import path")?;
         let import_fn = eval_state
-            .eval_from_string(&format!("import {}", import_path.display()), base)
+            .eval_from_string(&format!("import ({import_nix_path})"), base)
             .to_miette()
             .wrap_err("Failed to evaluate import expression")?;
 
@@ -939,10 +943,10 @@ impl NixRustBackend {
 
         // Acquire lock once and queue all paths in a single operation
         let daemon_guard = self.cachix_daemon.lock().await;
-        if let Some(daemon) = daemon_guard.as_ref() {
-            if let Err(e) = daemon.queue_paths(path_strings).await {
-                tracing::warn!("Failed to queue paths to cachix: {}", e);
-            }
+        if let Some(daemon) = daemon_guard.as_ref()
+            && let Err(e) = daemon.queue_paths(path_strings).await
+        {
+            tracing::warn!("Failed to queue paths to cachix: {}", e);
         }
 
         Ok(())
@@ -1018,8 +1022,6 @@ impl NixBackend for NixRustBackend {
     async fn assemble(&self, args: &NixArgs<'_>) -> Result<()> {
         // Initialize caching eval state if not already set
         if self.caching_eval_state.get().is_none() {
-            let default_nix_path = self.bootstrap_file("default.nix");
-
             let args_nix = ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string());
             let cache_key_args = format!(
                 "{}:port_allocation={}:strict_ports={}",
@@ -1032,10 +1034,11 @@ impl NixBackend for NixRustBackend {
             let args_nix_eval =
                 args_nix.replace("\"builtins.currentSystem\"", "builtins.currentSystem");
 
-            let import_expr = format!(
-                "(import {import_path} {args_nix_eval})",
-                import_path = default_nix_path.display(),
-            );
+            let import_path = self.bootstrap_file("default.nix");
+            let import_nix_path = ser_nix::to_string(&ser_nix::NixPathBuf::from(import_path))
+                .into_diagnostic()
+                .wrap_err("Failed to serialize import path")?;
+            let import_expr = format!("(import ({import_nix_path}) {args_nix_eval})",);
 
             self.cached_import_expr.set(import_expr).ok();
             self.cached_args_nix_eval.set(args_nix_eval).ok();

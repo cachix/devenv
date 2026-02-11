@@ -104,7 +104,7 @@ serde_json = "1.0.145"
 serde_repr = "0.1.20"
 serde_with = "3"
 serde_yaml = "0.9.34"
-ser_nix = "0.2.1"
+ser_nix = { git = "https://github.com/cachix/ser_nix.git", branch = "fix-percent-chars-in-paths" }
 similar = "2.7.0"
 sha2 = "0.10.9"
 shell-escape = "0.1.5"
