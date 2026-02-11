@@ -238,10 +238,6 @@ __devenv_reload_apply() {{
         source "{0}"
         rm -f "{0}"
 
-        # Append clean system paths (same as initial setup)
-        export PATH="${{PATH:+$PATH:}}$_DEVENV_SYSTEM_PATH"
-        export XDG_DATA_DIRS="${{XDG_DATA_DIRS:+$XDG_DATA_DIRS:}}$_DEVENV_SYSTEM_XDG_DATA_DIRS"
-
         # Compute and store new diff (in _DEVENV_DIFF env var)
         __devenv_compute_diff "$before_file"
         rm -f "$before_file"
@@ -287,31 +283,12 @@ set +o history
 # Environment diff helpers (always defined for tracking)
 {env_diff_helpers}
 
-# Helper to filter out /nix/store paths from a colon-separated list
-__devenv_filter_nix_paths() {{
-    local result=""
-    local IFS=':'
-    for p in $1; do
-        [[ "$p" != /nix/store/* ]] && result="${{result:+$result:}}$p"
-    done
-    echo "$result"
-}}
-
-# Extract clean system paths (filter out /nix/store from inherited env)
-# These are saved once and reused on reload to avoid inheriting pollution
-export _DEVENV_SYSTEM_PATH="$(__devenv_filter_nix_paths "$PATH")"
-export _DEVENV_SYSTEM_XDG_DATA_DIRS="$(__devenv_filter_nix_paths "$XDG_DATA_DIRS")"
-
 # Capture environment BEFORE sourcing devenv (for diff tracking)
 _devenv_before_file=$(mktemp)
 __devenv_capture_env > "$_devenv_before_file"
 
 # Source the devenv environment
 source "{env_script_path}"
-
-# Append clean system paths (preserves system tools without nix pollution)
-export PATH="${{PATH:+$PATH:}}$_DEVENV_SYSTEM_PATH"
-export XDG_DATA_DIRS="${{XDG_DATA_DIRS:+$XDG_DATA_DIRS:}}$_DEVENV_SYSTEM_XDG_DATA_DIRS"
 
 # Compute and store the initial diff in _DEVENV_DIFF env var
 __devenv_compute_diff "$_devenv_before_file"

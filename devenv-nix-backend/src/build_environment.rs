@@ -116,14 +116,29 @@ impl BuildEnvironment {
 
     /// Convert to a full shell activation script.
     ///
-    /// Sets all environment variables and evaluates shellHook.
-    /// Does NOT append to PATH/XDG_DATA_DIRS - the shell's diff mechanism
-    /// (inspired by direnv) handles preserving the base environment.
+    /// Saves PATH and XDG_DATA_DIRS before applying the Nix environment,
+    /// then appends the saved values afterwards to preserve system paths.
+    /// Matches `nix develop` behavior from nix/src/nix/develop.cc.
     pub fn to_activation_script(&self) -> String {
+        const SAVED_VARS: &[&str] = &["PATH", "XDG_DATA_DIRS"];
+
         let mut out = String::new();
+
+        // Save current values
+        for var in SAVED_VARS {
+            out.push_str(&format!("{var}=${{{var}:-}}\n"));
+            out.push_str(&format!("nix_saved_{var}=\"${var}\"\n"));
+        }
 
         // Environment variables and functions
         out.push_str(&self.to_bash());
+
+        // Restore saved values (append to preserve system paths)
+        for var in SAVED_VARS {
+            out.push_str(&format!(
+                "{var}=\"${var}${{nix_saved_{var}:+:$nix_saved_{var}}}\"\n"
+            ));
+        }
 
         // Evaluate shellHook
         out.push_str("\neval \"${shellHook:-}\"\n");
