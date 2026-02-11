@@ -444,6 +444,7 @@ impl NativeProcessManager {
             let mut watch_ready_tx = watch_ready_tx;
             let mut restart_count = 0usize;
             let mut ready_signaled = false;
+            let mut watchdog_kill_pending = false;
 
             // Watchdog state
             let mut is_ready = !watchdog_require_ready; // If require_ready is false, start as ready
@@ -661,6 +662,7 @@ impl NativeProcessManager {
                         while watch_rx.try_recv().is_ok() {}
                         job.start().await;
                         // Reset watchdog state on restart
+                        watchdog_kill_pending = false;
                         is_ready = !watchdog_require_ready;
                         watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
                             Some(Instant::now() + watchdog_timeout.unwrap())
@@ -727,7 +729,7 @@ impl NativeProcessManager {
                         warn!("Watchdog timeout for process {}", name);
                         activity.error("Watchdog timeout - no heartbeat received");
 
-                        // Check max restarts limit before restarting
+                        // Check max restarts limit before killing
                         if let Some(max) = config.restart.max {
                             if restart_count >= max {
                                 warn!(
@@ -740,91 +742,103 @@ impl NativeProcessManager {
                             }
                         }
 
-                        // Restart on watchdog timeout
-                        restart_count += 1;
-                        info!("Restarting process {} due to watchdog timeout (attempt {})", name, restart_count);
-                        activity.log(format!("Restarting due to watchdog timeout (attempt {})", restart_count));
-                        job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                        // Kill the process and let the to_wait() handler perform the
+                        // actual restart.  restart_with_signal sends [GracefulStop, Start]
+                        // as two independent controls — Start can be processed before the
+                        // process has died, making it a no-op.  Meanwhile the watchdog
+                        // keeps firing and inflating restart_count, eventually hitting
+                        // max before any restart actually happens.
+                        watchdog_kill_pending = true;
+                        info!("Killing process {} due to watchdog timeout", name);
+                        activity.log("Killing due to watchdog timeout");
+                        job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
 
-                        // Reset watchdog state for new instance
-                        is_ready = !watchdog_require_ready;
-                        watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
-                            Some(Instant::now() + watchdog_timeout.unwrap())
-                        } else {
-                            None
-                        };
+                        // Disable watchdog until the restart completes in to_wait()
+                        watchdog_deadline = None;
                     }
                     _ = job.to_wait() => {
-                        // Process ended, check if we should restart
-                        let policy = config.restart.on;
-                        let max_restarts = config.restart.max;
-                        let process_name = name.clone();
+                        // Process ended — decide whether to restart.
+                        // A watchdog kill always forces a restart (regardless of
+                        // restart policy), while normal exits follow the configured
+                        // restart policy.
+                        let force_restart = watchdog_kill_pending;
+                        watchdog_kill_pending = false;
 
-                        // Use a channel to get the restart decision from run_async
-                        let (tx, rx) = tokio::sync::oneshot::channel();
+                        let should_restart = if force_restart {
+                            true
+                        } else {
+                            let policy = config.restart.on;
+                            let process_name = name.clone();
 
-                        job.run_async(move |ctx| {
-                            // Extract status before async block (lifetime constraint)
-                            let status = if let CommandState::Finished { status, .. } = ctx.current {
-                                Some(*status)
-                            } else {
-                                None
-                            };
+                            let (tx, rx) = tokio::sync::oneshot::channel();
 
-                            Box::new(async move {
-                                if let Some(status) = status {
-                                    let is_failure = !matches!(status, ProcessEnd::Success);
-
-                                    let should_restart = match policy {
-                                        RestartPolicy::Never => false,
-                                        RestartPolicy::Always => true,
-                                        RestartPolicy::OnFailure => is_failure,
-                                    };
-
-                                    if should_restart {
-                                        debug!(
-                                            "Process {} exited with {:?}, policy: {:?}",
-                                            process_name, status, policy
-                                        );
-                                    }
-
-                                    let _ = tx.send(should_restart);
-                                }
-                            })
-                        }).await;
-
-                        // Check restart decision
-                        match rx.await {
-                            Ok(true) => {
-                                // Check max restarts limit
-                                if let Some(max) = max_restarts
-                                    && restart_count >= max
-                                {
-                                    warn!(
-                                        "Process {} reached max restarts ({}), giving up",
-                                        name, max
-                                    );
-                                    activity.error(format!("Max restarts ({}) reached, giving up", max));
-                                    activity.fail();
-                                    break;
-                                }
-
-                                restart_count += 1;
-                                info!("Restarting process {} (attempt {})", name, restart_count);
-                                activity.log(format!("Restarting (attempt {})", restart_count));
-                                job.start().await;
-                                // Reset watchdog state for new instance
-                                is_ready = !watchdog_require_ready;
-                                watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
-                                    Some(Instant::now() + watchdog_timeout.unwrap())
+                            job.run_async(move |ctx| {
+                                let status = if let CommandState::Finished { status, .. } = ctx.current {
+                                    Some(*status)
                                 } else {
                                     None
                                 };
-                            }
-                            _ => {
-                                debug!("Process {} will not restart", name);
+
+                                Box::new(async move {
+                                    if let Some(status) = status {
+                                        let is_failure = !matches!(status, ProcessEnd::Success);
+
+                                        let should_restart = match policy {
+                                            RestartPolicy::Never => false,
+                                            RestartPolicy::Always => true,
+                                            RestartPolicy::OnFailure => is_failure,
+                                        };
+
+                                        if should_restart {
+                                            debug!(
+                                                "Process {} exited with {:?}, policy: {:?}",
+                                                process_name, status, policy
+                                            );
+                                        }
+
+                                        let _ = tx.send(should_restart);
+                                    }
+                                })
+                            }).await;
+
+                            matches!(rx.await, Ok(true))
+                        };
+
+                        if should_restart {
+                            let max_restarts = config.restart.max;
+
+                            // Check max restarts limit
+                            if let Some(max) = max_restarts
+                                && restart_count >= max
+                            {
+                                warn!(
+                                    "Process {} reached max restarts ({}), giving up",
+                                    name, max
+                                );
+                                activity.error(format!("Max restarts ({}) reached, giving up", max));
+                                activity.fail();
                                 break;
                             }
+
+                            restart_count += 1;
+                            if force_restart {
+                                info!("Restarting process {} due to watchdog timeout (attempt {})", name, restart_count);
+                                activity.log(format!("Restarting due to watchdog timeout (attempt {})", restart_count));
+                            } else {
+                                info!("Restarting process {} (attempt {})", name, restart_count);
+                                activity.log(format!("Restarting (attempt {})", restart_count));
+                            }
+                            job.start().await;
+                            // Reset watchdog state for new instance
+                            is_ready = !watchdog_require_ready;
+                            watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
+                                Some(Instant::now() + watchdog_timeout.unwrap())
+                            } else {
+                                None
+                            };
+                        } else {
+                            debug!("Process {} will not restart", name);
+                            break;
                         }
                     }
                 }
