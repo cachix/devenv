@@ -495,7 +495,12 @@ impl ShellSession {
 
                     // Check for terminal clear sequences and redraw status line
                     if self.config.show_status_line && contains_clear_sequence(&data) {
+                        // Save cursor before scroll region setup (DECSTBM resets cursor to home)
+                        let _ = write!(stdout, "\x1b7");
                         let _ = self.setup_scroll_region(&mut stdout);
+                        // Restore cursor to where the shell left it
+                        let _ = write!(stdout, "\x1b8");
+                        let _ = stdout.flush();
                         let _ = self.status_line.draw(&mut stdout, self.size.cols);
                     }
                 }
