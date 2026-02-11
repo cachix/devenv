@@ -35,5 +35,7 @@ regex = { workspace = true }
 libc = "0.2"
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tokio-test = "0.4"
 tempfile = { workspace = true }
+insta = { workspace = true }

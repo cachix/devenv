@@ -1,0 +1,8 @@
+---
+source: devenv-shell/tests/session_tests.rs
+expression: "non_empty.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(\"\\n\")"
+---
+Watched files (3):
+  devenv.nix
+  devenv.yaml
+  shell.nix

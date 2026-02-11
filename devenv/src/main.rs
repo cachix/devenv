@@ -766,7 +766,7 @@ async fn run_reload_shell(
 ) -> Result<()> {
     use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
     use devenv_tasks::PtyExecutor;
-    use devenv_tui::{PtyTaskRequest, ShellSession, TuiHandoff};
+    use devenv_tui::{PtyTaskRequest, SessionIo, ShellSession, TuiHandoff};
     use tokio::sync::mpsc;
 
     let config = devenv.config.read().await.clone();
@@ -904,7 +904,9 @@ async fn run_reload_shell(
 
     // Run shell session on current thread (owns terminal)
     let shell_session = ShellSession::with_defaults().with_status_line(is_interactive);
-    let session_result = shell_session.run(command_rx, event_tx, handoff).await;
+    let session_result = shell_session
+        .run(command_rx, event_tx, handoff, SessionIo::default())
+        .await;
 
     // Wait for task runner (if any) and coordinator to finish
     if let Some(handle) = task_handle

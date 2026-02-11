@@ -28,6 +28,7 @@ pub use devenv_shell::{
     PtyTaskResult,
     SessionConfig,
     SessionError,
+    SessionIo,
     ShellCommand,
     ShellEvent,
     ShellSession,

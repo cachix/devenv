@@ -1,0 +1,5 @@
+---
+source: devenv-shell/tests/session_tests.rs
+expression: "rows[23]"
+---
+ ✓ devenv ready in [TIME] | watching 2 files                     Ctrl-Alt-R reload

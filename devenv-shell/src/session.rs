@@ -113,6 +113,22 @@ impl Default for SessionConfig {
     }
 }
 
+/// Injectable I/O for the shell session.
+/// When fields are None, real stdin/stdout are used.
+pub struct SessionIo {
+    pub stdin: Option<Box<dyn std::io::Read + Send>>,
+    pub stdout: Option<Box<dyn std::io::Write + Send>>,
+}
+
+impl Default for SessionIo {
+    fn default() -> Self {
+        Self {
+            stdin: None,
+            stdout: None,
+        }
+    }
+}
+
 /// Internal events for the shell session event loop.
 enum Event {
     Stdin(Vec<u8>),
@@ -192,6 +208,7 @@ impl ShellSession {
         mut command_rx: mpsc::Receiver<ShellCommand>,
         event_tx: mpsc::Sender<ShellEvent>,
         handoff: Option<TuiHandoff>,
+        io: SessionIo,
     ) -> Result<(), SessionError> {
         // Wait for the initial Spawn command
         let (initial_cmd, _watch_files) = match command_rx.recv().await {
@@ -252,21 +269,23 @@ impl ShellSession {
         let _raw_guard = RawModeGuard::new()?;
         tracing::trace!("session: raw mode active");
 
-        let mut stdout = io::stdout();
+        let injected_stdin = io.stdin.is_some();
+        let mut stdout: Box<dyn Write + Send> = io.stdout.unwrap_or_else(|| Box::new(io::stdout()));
+        let stdin_source: Box<dyn Read + Send> = io.stdin.unwrap_or_else(|| Box::new(io::stdin()));
 
         // Query cursor position FIRST before any terminal resets.
         // This tells us where TUI left the cursor after its final render.
-        // Only query when stdin is a terminal - the response comes via stdin,
-        // so this would hang if stdin is not a TTY (e.g. piped or /dev/null).
-        let cursor_row = if io::stdin().is_terminal() {
+        // Skip when stdin is injected (not a real terminal) — the response comes
+        // via stdin, so this would hang if stdin is not a TTY.
+        let cursor_row = if !injected_stdin && io::stdin().is_terminal() {
             write!(stdout, "\x1b[6n")?;
             stdout.flush()?;
 
             let mut response = Vec::new();
-            let mut stdin = io::stdin();
+            let mut stdin_real = io::stdin();
             let mut buf = [0u8; 1];
             loop {
-                match stdin.read(&mut buf) {
+                match stdin_real.read(&mut buf) {
                     Ok(0) => break, // EOF
                     Ok(_) if buf[0] != 0 => {
                         response.push(buf[0]);
@@ -337,7 +356,7 @@ impl ShellSession {
         // Spawn stdin reader thread
         let stdin_tx = event_tx_internal.clone();
         std::thread::spawn(move || {
-            let mut stdin = io::stdin();
+            let mut stdin = stdin_source;
             let mut buf = [0u8; 1024];
             loop {
                 match stdin.read(&mut buf) {
@@ -399,7 +418,13 @@ impl ShellSession {
         // Main event loop
         tracing::trace!("session: starting event loop");
         let result = self
-            .event_loop(&pty, &mut vt, &mut event_rx_internal, &event_tx)
+            .event_loop(
+                &pty,
+                &mut vt,
+                &mut event_rx_internal,
+                &event_tx,
+                &mut stdout,
+            )
             .await;
 
         // Clean up - reset scroll region before exiting
@@ -421,8 +446,8 @@ impl ShellSession {
         vt: &mut Vt,
         event_rx: &mut mpsc::Receiver<Event>,
         coordinator_tx: &mpsc::Sender<ShellEvent>,
+        stdout: &mut Box<dyn Write + Send>,
     ) -> Result<(), SessionError> {
-        let mut stdout = io::stdout();
         let spinner_interval = Duration::from_millis(SPINNER_INTERVAL_MS);
         let mut last_resize_check = std::time::Instant::now();
 
@@ -434,7 +459,7 @@ impl ShellSession {
                     event = event_rx.recv() => event,
                     _ = tokio::time::sleep(spinner_interval) => {
                         // Redraw status line to animate spinner
-                        self.status_line.draw(&mut stdout, self.size.cols)?;
+                        self.status_line.draw(stdout, self.size.cols)?;
                         continue;
                     }
                 }
@@ -477,7 +502,7 @@ impl ShellSession {
                                 pty.write_all(&[0x0C])?;
                                 pty.flush()?;
                             }
-                            self.status_line.draw(&mut stdout, self.size.cols)?;
+                            self.status_line.draw(stdout, self.size.cols)?;
                         }
                         continue;
                     }
@@ -497,11 +522,11 @@ impl ShellSession {
                     if self.config.show_status_line && contains_clear_sequence(&data) {
                         // Save cursor before scroll region setup (DECSTBM resets cursor to home)
                         let _ = write!(stdout, "\x1b7");
-                        let _ = self.setup_scroll_region(&mut stdout);
+                        let _ = self.setup_scroll_region(stdout);
                         // Restore cursor to where the shell left it
                         let _ = write!(stdout, "\x1b8");
                         let _ = stdout.flush();
-                        let _ = self.status_line.draw(&mut stdout, self.size.cols);
+                        let _ = self.status_line.draw(stdout, self.size.cols);
                     }
                 }
 
@@ -510,7 +535,7 @@ impl ShellSession {
                 }
 
                 Event::Command(cmd) => {
-                    self.handle_command(cmd, &mut stdout)?;
+                    self.handle_command(cmd, stdout)?;
                 }
             }
 
@@ -538,7 +563,7 @@ impl ShellSession {
     fn handle_command(
         &mut self,
         cmd: ShellCommand,
-        stdout: &mut io::Stdout,
+        stdout: &mut Box<dyn Write + Send>,
     ) -> Result<(), SessionError> {
         match cmd {
             ShellCommand::ReloadReady { changed_files } => {

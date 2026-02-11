@@ -1627,6 +1627,7 @@ version = "2.0.0"
 dependencies = [
  "avt",
  "crossterm 0.28.1",
+ "insta",
  "iocraft",
  "libc",
  "portable-pty",
