@@ -332,8 +332,15 @@ in
         ))
         cfg.settings;
 
+      # Overlay allocated ports to avoid infinite recursion (#2490).
+      finalConfig = filteredConfig // {
+        http-port = allocatedHttpPort;
+        https-port = allocatedHttpsPort;
+        http-management-port = allocatedManagementPort;
+      };
+
       # Write the keycloak config file.
-      confFile = pkgs.writeText "keycloak.conf" (keycloakConfig filteredConfig);
+      confFile = pkgs.writeText "keycloak.conf" (keycloakConfig finalConfig);
 
       keycloakBuild = (
         cfg.package.override {
@@ -457,12 +464,7 @@ in
           db = cfg.database.type;
 
           health-enabled = true;
-          http-management-port = allocatedManagementPort;
           http-management-relative-path = "/";
-
-          # Override ports with allocated values
-          http-port = allocatedHttpPort;
-          https-port = allocatedHttpsPort;
 
           log-console-level = "info";
           log-level = "info";
