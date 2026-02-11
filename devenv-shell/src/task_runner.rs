@@ -276,10 +276,12 @@ impl PtyTaskRunner {
             .map_err(|e| TaskRunnerError::Pty(format!("Failed to flush PTY: {}", e)))
     }
 
-    /// Restore PROMPT_COMMAND and re-enable history when handing control to user.
+    /// Restore PROMPT_COMMAND when handing control to user.
+    /// History is re-enabled separately inside drain_pty_to_vt() so the
+    /// sentinel echo commands are never recorded.
     fn restore_prompt_command(&self) -> Result<(), TaskRunnerError> {
         self.pty
-            .write_all(b"PROMPT_COMMAND=\"$__devenv_saved_pc\"; set -o history\n")
+            .write_all(b"PROMPT_COMMAND=\"$__devenv_saved_pc\"\n")
             .map_err(|e| {
                 TaskRunnerError::Pty(format!("Failed to restore PROMPT_COMMAND: {}", e))
             })?;
@@ -301,6 +303,13 @@ impl PtyTaskRunner {
         }
 
         self.restore_prompt_command()?;
+        // Re-enable history (no drain in this path, so send directly)
+        self.pty
+            .write_all(b" set -o history\n")
+            .map_err(|e| TaskRunnerError::Pty(format!("Failed to re-enable history: {}", e)))?;
+        self.pty
+            .flush()
+            .map_err(|e| TaskRunnerError::Pty(format!("Failed to flush PTY: {}", e)))?;
         tracing::trace!("run_loop: task channel closed, exiting");
         Ok(())
     }
@@ -330,6 +339,8 @@ impl PtyTaskRunner {
         // Drain any pending PTY output into VT so it doesn't leak to stdout later.
         // Uses a sentinel to deterministically consume all output without leaving
         // zombie threads that could steal future PTY reads.
+        // History is still disabled at this point; the drain command itself
+        // re-enables history after the sentinels so they are never recorded.
         self.drain_pty_to_vt(vt).await;
 
         tracing::trace!("run_with_vt: task channel closed, exiting");
@@ -347,8 +358,10 @@ impl PtyTaskRunner {
         // Send the sentinel echo twice as separate command lines.
         // Reading until the second match ensures the PROMPT_COMMAND output
         // between them is consumed, leaving exactly one prompt in the buffer.
-        // Space prefix prevents the commands from appearing in shell history.
-        let cmd = format!(" echo '{sentinel}'\n echo '{sentinel}'\n");
+        // History is still disabled (set +o history from init), so the sentinel
+        // commands are not recorded. We re-enable history after the second
+        // sentinel so the drain consumes all internal command output.
+        let cmd = format!(" echo '{sentinel}'\n echo '{sentinel}'; set -o history\n");
         if self.pty.write_all(cmd.as_bytes()).is_err() || self.pty.flush().is_err() {
             tracing::warn!("drain_pty_to_vt: failed to send sentinel command");
             return;
