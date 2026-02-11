@@ -2,7 +2,7 @@
 { pkgs
 , lib
 , stdenv
-, nix
+
 , openssl
 , dbus
 , protobuf
@@ -10,17 +10,23 @@
 , llvmPackages
 , boehmgc
 , cachix
+, nix
 , nixd
+
+  # Helpers
+, callPackage
 , makeBinaryWrapper
 , installShellFiles
 , glibcLocalesUtf8
-, gitMinimal
+
+  # Rust 
 , rustPlatform
 , buildRustCrate
 , defaultCrateOverrides
 , rustc
 , cargo
 , cargoProfile ? "release"
+
 , gitRev ? ""
 , isRelease ? false
 }:
@@ -37,26 +43,7 @@ let
   };
 
   # Import crate2nix generated file with overrides
-  crateConfig = import ./crate-config.nix {
-    inherit
-      lib
-      stdenv
-      nix
-      openssl
-      dbus
-      protobuf
-      pkg-config
-      llvmPackages
-      boehmgc
-      cachix
-      nixd
-      makeBinaryWrapper
-      installShellFiles
-      glibcLocalesUtf8
-      rustPlatform
-      gitRev
-      ;
-  };
+  crateConfig = callPackage ./crate-config.nix { };
 
   cargoNix = import ./Cargo.nix {
     inherit pkgs lib stdenv;
