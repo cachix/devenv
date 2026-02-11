@@ -1,10 +1,9 @@
 use crate::error::{CacheError, CacheResult};
-use sqlx::migrate::{MigrateDatabase, Migrator};
+use sqlx::migrate::Migrator;
 use sqlx::sqlite::{
     SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous,
 };
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tracing::{error, trace};
 
@@ -21,8 +20,7 @@ impl Database {
     /// * `path` - Path to the SQLite database file
     /// * `migrator` - The migrator containing database migrations to apply
     pub async fn new(path: PathBuf, migrator: &Migrator) -> CacheResult<Self> {
-        let db_url = format!("sqlite:{}", path.display());
-        let options = connection_options(&db_url)?;
+        let options = connection_options(&path);
 
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
@@ -40,11 +38,11 @@ impl Database {
             // Close the existing connection
             db.pool.close().await;
 
-            // Delete and recreate the database
-            sqlx::Sqlite::drop_database(&db_url).await?;
+            // Delete the database and associated WAL/SHM files
+            remove_sqlite_files(&db.path);
 
             // Recreate the database and connection pool
-            let options = connection_options(&db_url)?;
+            let options = connection_options(&db.path);
             let new_pool = SqlitePoolOptions::new()
                 .max_connections(5)
                 .connect_with(options)
@@ -80,8 +78,9 @@ impl Database {
 }
 
 /// Create SQLite connection options
-fn connection_options(db_url: &str) -> CacheResult<SqliteConnectOptions> {
-    let options = SqliteConnectOptions::from_str(db_url)?
+fn connection_options(path: &Path) -> SqliteConnectOptions {
+    SqliteConnectOptions::new()
+        .filename(path)
         .journal_mode(SqliteJournalMode::Wal)
         .synchronous(SqliteSynchronous::Normal)
         .busy_timeout(Duration::from_secs(10))
@@ -90,9 +89,16 @@ fn connection_options(db_url: &str) -> CacheResult<SqliteConnectOptions> {
         .pragma("wal_autocheckpoint", "1000")
         .pragma("journal_size_limit", (64 * 1024 * 1024).to_string()) // 64 MB
         .pragma("mmap_size", "134217728") // 128 MB
-        .pragma("cache_size", "2000"); // 2000 pages
+        .pragma("cache_size", "2000") // 2000 pages
+}
 
-    Ok(options)
+/// Remove a SQLite database file and its associated WAL/SHM files.
+fn remove_sqlite_files(path: &Path) {
+    for suffix in ["", "-wal", "-shm"] {
+        let mut file = path.as_os_str().to_owned();
+        file.push(suffix);
+        let _ = std::fs::remove_file(Path::new(&file));
+    }
 }
 
 #[cfg(test)]
@@ -100,7 +106,28 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    /// Test database creation with migrations
+    #[tokio::test]
+    async fn test_database_with_percent_encoded_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir_with_percent = temp_dir.path().join("test%2Fdir");
+        std::fs::create_dir_all(&dir_with_percent).unwrap();
+        let db_path = dir_with_percent.join("test.db");
+
+        let migrations_dir = temp_dir.path().join("migrations");
+        std::fs::create_dir_all(&migrations_dir).unwrap();
+        std::fs::write(
+            migrations_dir.join("20250507000001_test.sql"),
+            "CREATE TABLE test (id INTEGER PRIMARY KEY)",
+        )
+        .unwrap();
+
+        let migrator = sqlx::migrate::Migrator::new(migrations_dir).await.unwrap();
+        let db = Database::new(db_path.clone(), &migrator).await.unwrap();
+
+        assert!(db_path.exists());
+        db.close().await;
+    }
+
     #[tokio::test]
     async fn test_database_creation() {
         let temp_dir = TempDir::new().unwrap();
