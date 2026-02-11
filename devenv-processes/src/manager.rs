@@ -751,7 +751,9 @@ impl NativeProcessManager {
                         watchdog_kill_pending = true;
                         info!("Killing process {} due to watchdog timeout", name);
                         activity.log("Killing due to watchdog timeout");
-                        job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                        // Use an immediate stop here to avoid backend-specific
+                        // graceful-stop timing variance under watchdog pressure.
+                        job.stop().await;
 
                         // Disable watchdog until the restart completes in to_wait()
                         watchdog_deadline = None;
