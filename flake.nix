@@ -207,6 +207,7 @@
             inherit config;
             ci = config.ciDerivation;
           };
+        mkStandardShell = import ./src/non-flake-shell.nix self;
       };
 
       overlays.default = final: prev: {
