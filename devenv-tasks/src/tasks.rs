@@ -27,6 +27,7 @@ pub struct TasksBuilder {
     db_path: Option<PathBuf>,
     shutdown: Arc<tokio_shutdown::Shutdown>,
     executor: Option<Arc<dyn TaskExecutor>>,
+    refresh_task_cache: bool,
 }
 
 impl TasksBuilder {
@@ -42,6 +43,7 @@ impl TasksBuilder {
             db_path: None,
             shutdown,
             executor: None,
+            refresh_task_cache: false,
         }
     }
 
@@ -54,6 +56,12 @@ impl TasksBuilder {
     /// Set a custom task executor (defaults to subprocess executor)
     pub fn with_executor(mut self, executor: Arc<dyn TaskExecutor>) -> Self {
         self.executor = Some(executor);
+        self
+    }
+
+    /// Force a refresh of the task cache, skipping cache reads
+    pub fn with_refresh_task_cache(mut self, refresh_task_cache: bool) -> Self {
+        self.refresh_task_cache = refresh_task_cache;
         self
     }
 
@@ -133,6 +141,7 @@ impl TasksBuilder {
             process_manager,
             env: self.config.env,
             executor,
+            refresh_task_cache: self.refresh_task_cache,
         };
 
         tasks.resolve_dependencies(task_indices).await?;
@@ -168,6 +177,8 @@ pub struct Tasks {
     /// Environment variables to pass to processes
     pub env: HashMap<String, String>,
     pub executor: Arc<dyn TaskExecutor>,
+    /// Force a refresh of the task cache, skipping cache reads
+    pub refresh_task_cache: bool,
 }
 
 impl Tasks {
@@ -747,6 +758,7 @@ impl Tasks {
             let orchestration_activity_clone = Arc::clone(&orchestration_activity);
             let completed_tasks_clone = Arc::clone(&completed_tasks);
             let executor_clone = Arc::clone(&self.executor);
+            let refresh_task_cache = self.refresh_task_cache;
 
             running_tasks.spawn(move || {
                 // Clone for use inside the async block; the original is borrowed by in_activity
@@ -767,6 +779,7 @@ impl Tasks {
                                 shutdown_clone.cancellation_token(),
                                 task_activity_id,
                                 executor_clone.as_ref(),
+                                refresh_task_cache,
                             )
                             .await
                         {

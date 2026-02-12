@@ -199,6 +199,9 @@ pub struct GlobalOptions {
     )]
     pub refresh_eval_cache: bool,
 
+    #[arg(long, global = true, help = "Force a refresh of the task cache.")]
+    pub refresh_task_cache: bool,
+
     #[arg(
         long,
         global = true,
@@ -310,6 +313,7 @@ impl Default for GlobalOptions {
             eval_cache: true,
             no_eval_cache: false,
             refresh_eval_cache: false,
+            refresh_task_cache: false,
             offline: false,
             clean: None,
             nix_debugger: false,

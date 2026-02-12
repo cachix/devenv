@@ -410,6 +410,195 @@ exit 0
 }
 
 #[tokio::test]
+async fn test_refresh_task_cache_with_status() -> Result<(), Error> {
+    // When refresh_task_cache is set, tasks with a passing status command
+    // should still be re-executed instead of being skipped.
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let command_script = create_script(
+        r#"#!/bin/sh
+echo '{"result": "executed"}' > $DEVENV_TASK_OUTPUT_FILE
+echo "Task executed"
+"#,
+    )?;
+    let command = command_script.to_str().unwrap();
+
+    // Status script returns 0 (would normally cause the task to be skipped)
+    let status_script = create_script("#!/bin/sh\nexit 0")?;
+    let status = status_script.to_str().unwrap();
+
+    let task_name = "refresh:status_task";
+
+    // First run: execute the task normally to populate the cache
+    let config1 = Config::try_from(json!({
+        "roots": [task_name],
+        "run_mode": "all",
+        "tasks": [{
+            "name": task_name,
+            "command": command,
+            "status": status
+        }]
+    }))
+    .unwrap();
+
+    let tasks1 = Tasks::builder(config1, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path.clone())
+        .with_refresh_task_cache(true)
+        .build()
+        .await?;
+    tasks1.run(false).await;
+
+    match &tasks1.graph[tasks1.tasks_order[0]].read().await.status {
+        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+        other => panic!("Expected Success on first run, got: {other:?}"),
+    }
+
+    // Second run without refresh: status returns 0, so task should be skipped
+    let config2 = Config::try_from(json!({
+        "roots": [task_name],
+        "run_mode": "all",
+        "tasks": [{
+            "name": task_name,
+            "command": command,
+            "status": status
+        }]
+    }))
+    .unwrap();
+
+    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
+    tasks2.run(false).await;
+
+    match &tasks2.graph[tasks2.tasks_order[0]].read().await.status {
+        TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_))) => {}
+        other => panic!("Expected Skipped (cached) without refresh, got: {other:?}"),
+    }
+
+    // Third run WITH refresh_task_cache: status returns 0, but task should still execute
+    let config3 = Config::try_from(json!({
+        "roots": [task_name],
+        "run_mode": "all",
+        "tasks": [{
+            "name": task_name,
+            "command": command,
+            "status": status
+        }]
+    }))
+    .unwrap();
+
+    let tasks3 = Tasks::builder(config3, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .with_refresh_task_cache(true)
+        .build()
+        .await?;
+    tasks3.run(false).await;
+
+    match &tasks3.graph[tasks3.tasks_order[0]].read().await.status {
+        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+        other => panic!("Expected Success with refresh_task_cache, got: {other:?}"),
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_refresh_task_cache_with_exec_if_modified() -> Result<(), Error> {
+    // When refresh_task_cache is set, tasks with exec_if_modified should
+    // re-execute even when the watched files haven't changed.
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let test_file = tempfile::NamedTempFile::new()?;
+    let test_file_path = test_file.path().to_str().unwrap().to_string();
+    fs::write(&test_file_path, "initial content").await?;
+
+    let command_script = create_script(
+        r#"#!/bin/sh
+echo '{"result": "executed"}' > $DEVENV_TASK_OUTPUT_FILE
+echo "Task executed"
+"#,
+    )?;
+    let command = command_script.to_str().unwrap();
+
+    let task_name = "refresh:exec_if_mod_task";
+
+    // First run: task executes (first time, no cache)
+    let config1 = Config::try_from(json!({
+        "roots": [task_name],
+        "run_mode": "all",
+        "tasks": [{
+            "name": task_name,
+            "command": command,
+            "exec_if_modified": [test_file_path]
+        }]
+    }))
+    .unwrap();
+
+    let tasks1 = Tasks::builder(config1, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
+    tasks1.run(false).await;
+
+    match &tasks1.graph[tasks1.tasks_order[0]].read().await.status {
+        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+        other => panic!("Expected Success on first run, got: {other:?}"),
+    }
+
+    // Second run without refresh: file not modified, should be skipped
+    let config2 = Config::try_from(json!({
+        "roots": [task_name],
+        "run_mode": "all",
+        "tasks": [{
+            "name": task_name,
+            "command": command,
+            "exec_if_modified": [test_file_path]
+        }]
+    }))
+    .unwrap();
+
+    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
+    tasks2.run(false).await;
+
+    match &tasks2.graph[tasks2.tasks_order[0]].read().await.status {
+        TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_))) => {}
+        other => panic!("Expected Skipped (cached) without refresh, got: {other:?}"),
+    }
+
+    // Third run WITH refresh_task_cache: file not modified, but task should still execute
+    let config3 = Config::try_from(json!({
+        "roots": [task_name],
+        "run_mode": "all",
+        "tasks": [{
+            "name": task_name,
+            "command": command,
+            "exec_if_modified": [test_file_path]
+        }]
+    }))
+    .unwrap();
+
+    let tasks3 = Tasks::builder(config3, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .with_refresh_task_cache(true)
+        .build()
+        .await?;
+    tasks3.run(false).await;
+
+    match &tasks3.graph[tasks3.tasks_order[0]].read().await.status {
+        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+        other => panic!("Expected Success with refresh_task_cache, got: {other:?}"),
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_exec_if_modified() -> Result<(), Error> {
     // Create a unique tempdir for this test
     let temp_dir = TempDir::new().unwrap();

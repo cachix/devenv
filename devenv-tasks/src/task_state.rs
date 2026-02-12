@@ -403,14 +403,23 @@ impl TaskState {
         cancellation: CancellationToken,
         activity_id: u64,
         executor: &dyn TaskExecutor,
+        refresh_task_cache: bool,
     ) -> Result<TaskCompleted> {
         // Create the Activity with the pre-assigned ID - this emits Task::Start
         let task_activity = Activity::task_with_id(activity_id);
 
         // Run the entire task within the activity's scope for proper parent-child nesting
-        self.run_inner(now, outputs, cache, cancellation, &task_activity, executor)
-            .in_activity(&task_activity)
-            .await
+        self.run_inner(
+            now,
+            outputs,
+            cache,
+            cancellation,
+            &task_activity,
+            executor,
+            refresh_task_cache,
+        )
+        .in_activity(&task_activity)
+        .await
     }
 
     async fn run_inner(
@@ -421,6 +430,7 @@ impl TaskState {
         cancellation: CancellationToken,
         task_activity: &Activity,
         executor: &dyn TaskExecutor,
+        refresh_task_cache: bool,
     ) -> Result<TaskCompleted> {
         tracing::debug!(
             "Running task '{}' with exec_if_modified: {:?}, status: {}",
@@ -429,109 +439,114 @@ impl TaskState {
             self.task.status.is_some()
         );
 
-        // Check if we should run based on the status command
-        if let Some(cmd) = &self.task.status {
-            // First check if we have cached output from a previous run
-            let task_name = &self.task.name;
-            let cached_output = match cache.get_task_output(task_name).await {
-                Ok(Some(output)) => {
-                    tracing::debug!("Found cached output for task {} in database", task_name);
-                    Some(output)
-                }
-                Ok(None) => {
-                    tracing::debug!("No cached output found for task {}", task_name);
-                    None
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to get cached output for task {}: {}", task_name, e);
-                    None
-                }
-            };
+        // Check if we should skip based on cache (status command or exec_if_modified)
+        if !refresh_task_cache {
+            if let Some(cmd) = &self.task.status {
+                // First check if we have cached output from a previous run
+                let task_name = &self.task.name;
+                let cached_output = match cache.get_task_output(task_name).await {
+                    Ok(Some(output)) => {
+                        tracing::debug!("Found cached output for task {} in database", task_name);
+                        Some(output)
+                    }
+                    Ok(None) => {
+                        tracing::debug!("No cached output found for task {}", task_name);
+                        None
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to get cached output for task {}: {}", task_name, e);
+                        None
+                    }
+                };
 
-            let (mut command, _) = self
-                .prepare_command(cmd, outputs)
-                .wrap_err("Failed to prepare status command")?;
+                let (mut command, _) = self
+                    .prepare_command(cmd, outputs)
+                    .wrap_err("Failed to prepare status command")?;
 
-            // Create a Command activity for the status check (automatically parented to task_activity)
-            let status_activity = Activity::command(&self.task.name)
-                .command(cmd)
-                .level(ActivityLevel::Debug)
-                .start();
+                // Create a Command activity for the status check (automatically parented to task_activity)
+                let status_activity = Activity::command(&self.task.name)
+                    .command(cmd)
+                    .level(ActivityLevel::Debug)
+                    .start();
 
-            match command.output().await {
-                Ok(output) => {
-                    if !output.status.success() {
+                match command.output().await {
+                    Ok(output) => {
+                        if !output.status.success() {
+                            status_activity.fail();
+                        }
+
+                        if output.status.success() {
+                            let output = Output(cached_output);
+                            tracing::debug!("Task {} skipped with output: {:?}", task_name, output);
+                            task_activity.cached();
+                            return Ok(TaskCompleted::Skipped(Skipped::Cached(output)));
+                        }
+                    }
+                    Err(e) => {
                         status_activity.fail();
-                    }
-
-                    if output.status.success() {
-                        let output = Output(cached_output);
-                        tracing::debug!("Task {} skipped with output: {:?}", task_name, output);
-                        task_activity.cached();
-                        return Ok(TaskCompleted::Skipped(Skipped::Cached(output)));
-                    }
-                }
-                Err(e) => {
-                    status_activity.fail();
-                    return Ok(TaskCompleted::Failed(
-                        now.elapsed(),
-                        TaskFailure {
-                            stdout: Vec::new(),
-                            stderr: Vec::new(),
-                            error: e.to_string(),
-                        },
-                    ));
-                }
-            }
-        } else if !self.task.exec_if_modified.is_empty() {
-            tracing::debug!(
-                "Task '{}' has exec_if_modified files: {:?}",
-                self.task.name,
-                self.task.exec_if_modified
-            );
-
-            let files_modified = self.check_modified_files(cache).await;
-            tracing::debug!(
-                "Task '{}' files modified check result: {}",
-                self.task.name,
-                files_modified
-            );
-
-            if !files_modified {
-                // If no status command but we have paths to check, and none are modified,
-                // First check if we have outputs in the current run's outputs map
-                let mut task_output = outputs.get(&self.task.name).cloned();
-
-                // If not, try to load from the cache
-                if task_output.is_none() {
-                    match cache.get_task_output(&self.task.name).await {
-                        Ok(Some(cached_output)) => {
-                            tracing::debug!(
-                                "Found cached output for task {} in database",
-                                self.task.name
-                            );
-                            task_output = Some(cached_output);
-                        }
-                        Ok(None) => {
-                            tracing::debug!("No cached output found for task {}", self.task.name);
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to get cached output for task {}: {}",
-                                self.task.name,
-                                e
-                            );
-                        }
+                        return Ok(TaskCompleted::Failed(
+                            now.elapsed(),
+                            TaskFailure {
+                                stdout: Vec::new(),
+                                stderr: Vec::new(),
+                                error: e.to_string(),
+                            },
+                        ));
                     }
                 }
-
+            } else if !self.task.exec_if_modified.is_empty() {
                 tracing::debug!(
-                    "Skipping task {} due to unmodified files, output: {:?}",
+                    "Task '{}' has exec_if_modified files: {:?}",
                     self.task.name,
-                    task_output
+                    self.task.exec_if_modified
                 );
-                task_activity.cached();
-                return Ok(TaskCompleted::Skipped(Skipped::Cached(Output(task_output))));
+
+                let files_modified = self.check_modified_files(cache).await;
+                tracing::debug!(
+                    "Task '{}' files modified check result: {}",
+                    self.task.name,
+                    files_modified
+                );
+
+                if !files_modified {
+                    // If no status command but we have paths to check, and none are modified,
+                    // First check if we have outputs in the current run's outputs map
+                    let mut task_output = outputs.get(&self.task.name).cloned();
+
+                    // If not, try to load from the cache
+                    if task_output.is_none() {
+                        match cache.get_task_output(&self.task.name).await {
+                            Ok(Some(cached_output)) => {
+                                tracing::debug!(
+                                    "Found cached output for task {} in database",
+                                    self.task.name
+                                );
+                                task_output = Some(cached_output);
+                            }
+                            Ok(None) => {
+                                tracing::debug!(
+                                    "No cached output found for task {}",
+                                    self.task.name
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to get cached output for task {}: {}",
+                                    self.task.name,
+                                    e
+                                );
+                            }
+                        }
+                    }
+
+                    tracing::debug!(
+                        "Skipping task {} due to unmodified files, output: {:?}",
+                        self.task.name,
+                        task_output
+                    );
+                    task_activity.cached();
+                    return Ok(TaskCompleted::Skipped(Skipped::Cached(Output(task_output))));
+                }
             }
         }
 

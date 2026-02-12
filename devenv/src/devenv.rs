@@ -1109,6 +1109,7 @@ impl Devenv {
         }
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
+            .with_refresh_task_cache(self.global_options.refresh_task_cache)
             .build()
             .await?;
 
