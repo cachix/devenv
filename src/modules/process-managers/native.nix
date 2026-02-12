@@ -1,6 +1,7 @@
 { pkgs, config, lib, ... }:
 let
   cfg = config.process.managers.native;
+  readyType = import ../lib/ready.nix { inherit lib; };
   processType = lib.types.submodule ({ config, ... }: {
     options = {
       use_sudo = lib.mkOption {
@@ -116,56 +117,7 @@ let
       };
 
       ready = lib.mkOption {
-        type = lib.types.nullOr (lib.types.submodule {
-          options = {
-            exec = lib.mkOption {
-              type = lib.types.nullOr lib.types.str;
-              default = null;
-              description = "Shell command to execute. Exit 0 = ready.";
-            };
-            http = lib.mkOption {
-              type = lib.types.submodule {
-                options.get = lib.mkOption {
-                  type = lib.types.nullOr (lib.types.submodule {
-                    options = {
-                      host = lib.mkOption { type = lib.types.str; default = "127.0.0.1"; };
-                      port = lib.mkOption { type = lib.types.port; };
-                      path = lib.mkOption { type = lib.types.str; default = "/"; };
-                      scheme = lib.mkOption { type = lib.types.str; default = "http"; };
-                    };
-                  });
-                  default = null;
-                };
-              };
-              default = { };
-            };
-            notify = lib.mkOption {
-              type = lib.types.bool;
-              default = false;
-              description = "Enable systemd notify protocol for readiness signaling.";
-            };
-            initial_delay = lib.mkOption {
-              type = lib.types.int;
-              default = 0;
-            };
-            period = lib.mkOption {
-              type = lib.types.int;
-              default = 10;
-            };
-            timeout = lib.mkOption {
-              type = lib.types.int;
-              default = 1;
-            };
-            success_threshold = lib.mkOption {
-              type = lib.types.int;
-              default = 1;
-            };
-            failure_threshold = lib.mkOption {
-              type = lib.types.int;
-              default = 3;
-            };
-          };
-        });
+        type = lib.types.nullOr readyType;
         default = null;
         description = "Readiness probe configuration.";
       };
