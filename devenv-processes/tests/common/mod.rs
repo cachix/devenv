@@ -137,6 +137,27 @@ pub fn watch_process_config(
     }
 }
 
+/// Create watch config with extension filter
+pub fn watch_process_config_with_extensions(
+    name: &str,
+    script_path: &Path,
+    watch_paths: Vec<PathBuf>,
+    extensions: Vec<String>,
+) -> ProcessConfig {
+    ProcessConfig {
+        name: name.to_string(),
+        exec: script_path.to_string_lossy().to_string(),
+        args: vec![],
+        watch: WatchConfig {
+            paths: watch_paths,
+            extensions,
+            ignore: vec![],
+        },
+        restart: RestartPolicy::Never,
+        ..Default::default()
+    }
+}
+
 // ============================================================================
 // Wait Helpers
 // ============================================================================

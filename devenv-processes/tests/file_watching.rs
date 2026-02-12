@@ -294,6 +294,81 @@ sleep 3600
     .expect("Test timed out");
 }
 
+/// Test that extension filter only triggers on matching extensions
+#[tokio::test(flavor = "multi_thread")]
+async fn test_extension_filter() {
+    timeout(TEST_TIMEOUT, async {
+        let ctx = TestContext::new();
+        let counter_file = ctx.temp_path().join("ext_counter.txt");
+        let watch_dir = ctx.temp_path().join("ext_watch");
+
+        tokio::fs::create_dir_all(&watch_dir)
+            .await
+            .expect("Failed to create watch dir");
+
+        let script_content = format!(
+            r#"#!/bin/sh
+echo "started" >> {}
+sleep 3600
+"#,
+            counter_file.display()
+        );
+        let script = ctx.create_script("ext_test.sh", &script_content).await;
+
+        // Only watch .rs files
+        let config = watch_process_config_with_extensions(
+            "watch-ext",
+            &script,
+            vec![watch_dir.clone()],
+            vec!["rs".to_string()],
+        );
+
+        let manager = ctx.create_manager_single(config.clone());
+        manager
+            .start_command(&config, None)
+            .await
+            .expect("Failed to start");
+
+        assert!(
+            wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
+            "Process should start initially"
+        );
+
+        // Step 1: Prove watcher is active with a .rs file
+        tokio::fs::write(watch_dir.join("canary.rs"), "fn main() {}")
+            .await
+            .expect("Failed to create canary file");
+
+        let count = wait_for_line_count(&counter_file, "started", 2, WATCH_TIMEOUT).await;
+        assert_eq!(
+            count, 2,
+            "Canary .rs file should trigger exactly one restart (got {} starts)",
+            count
+        );
+
+        // Step 2: Write non-.rs file, then a .rs trigger
+        tokio::fs::write(watch_dir.join("readme.txt"), "hello")
+            .await
+            .expect("Failed to create .txt file");
+        tokio::fs::write(watch_dir.join("trigger.rs"), "fn test() {}")
+            .await
+            .expect("Failed to create trigger .rs file");
+
+        let count = wait_for_line_count(&counter_file, "started", 3, WATCH_TIMEOUT).await;
+
+        // If the .txt file had triggered a restart, count would be 4
+        assert_eq!(
+            count, 3,
+            "Non-.rs file should NOT trigger restart (got {} starts, expected 3)",
+            count
+        );
+
+        manager.stop_all().await.expect("Failed to stop");
+    })
+    .await
+    .expect("Test timed out");
+}
+
 // ============================================================================
 // Multiple Watch Paths Tests
 // ============================================================================
