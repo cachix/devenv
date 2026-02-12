@@ -43,6 +43,7 @@ types.submodule {
         };
       };
       default = { };
+      description = "HTTP readiness probe configuration.";
     };
 
     notify = lib.mkOption {
