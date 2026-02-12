@@ -117,6 +117,9 @@ pub struct NixRustBackend {
     // Cachix daemon for pushing store paths (only when cachix.push is configured)
     cachix_daemon: Arc<tokio::sync::Mutex<Option<crate::cachix_daemon::OwnedDaemon>>>,
 
+    // Activity for the cachix push operation (visible in TUI)
+    cachix_activity: Arc<tokio::sync::Mutex<Option<Activity>>>,
+
     // Cached import expression: (import /path/to/default.nix { ... args ... })
     // Set once in assemble(). Kept for potential future use (e.g., debugging).
     #[allow(dead_code)]
@@ -375,8 +378,12 @@ impl NixRustBackend {
         let (cleanup_tx, cleanup_rx) = tokio::sync::oneshot::channel::<()>();
         shutdown.set_cleanup_receiver(cleanup_rx);
 
+        let cachix_activity: Arc<tokio::sync::Mutex<Option<Activity>>> =
+            Arc::new(tokio::sync::Mutex::new(None));
+
         // Spawn cleanup task that waits for shutdown signal via cancellation token.
         let daemon_for_cleanup = cachix_daemon.clone();
+        let activity_for_cleanup = cachix_activity.clone();
         let shutdown_for_task = shutdown.clone();
         tokio::spawn(async move {
             // Wait for shutdown signal
@@ -402,6 +409,9 @@ impl NixRustBackend {
                 }
             }
 
+            // Drop the cachix activity to emit Operation::Complete
+            let _ = activity_for_cleanup.lock().await.take();
+
             // Signal cleanup complete (ignore error if receiver dropped)
             let _ = cleanup_tx.send(());
         });
@@ -417,6 +427,7 @@ impl NixRustBackend {
             cache_invalidated: AtomicBool::new(false),
             cachix_manager,
             cachix_daemon: cachix_daemon.clone(),
+            cachix_activity: cachix_activity.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
             cached_args_nix_eval: Arc::new(OnceCell::new()),
             shutdown: shutdown.clone(),
@@ -912,18 +923,23 @@ impl NixRustBackend {
             dry_run: false,
         };
 
+        let activity = Activity::operation(format!("Pushing to {}", push_cache)).start();
+
         match crate::cachix_daemon::OwnedDaemon::spawn(
             spawn_config,
             crate::cachix_daemon::ConnectionParams::default(),
+            Some(activity.clone()),
         )
         .await
         {
             Ok(daemon) => {
                 let mut handle = self.cachix_daemon.lock().await;
                 *handle = Some(daemon);
+                *self.cachix_activity.lock().await = Some(activity);
                 tracing::info!(push_cache, "Cachix daemon started");
             }
             Err(e) => {
+                activity.fail();
                 tracing::warn!("Failed to start cachix daemon: {}", e);
             }
         }
@@ -989,27 +1005,29 @@ impl NixRustBackend {
                 Ok(metrics) => {
                     tracing::info!("{}", metrics.summary());
 
-                    // Report any failures to the user
                     if metrics.failed > 0 {
-                        let failed_reasons = metrics.failed_with_reasons.lock().await;
-                        if !failed_reasons.is_empty() {
-                            tracing::warn!(
-                                failed_count = metrics.failed,
-                                "Some paths failed to push to cachix:"
-                            );
+                        let mut activity_guard = self.cachix_activity.lock().await;
+                        if let Some(ref activity) = *activity_guard {
+                            activity.fail();
+                            let failed_reasons = metrics.failed_with_reasons.lock().await;
                             for (path, reason) in failed_reasons.iter() {
-                                tracing::warn!("  {} - {}", path, reason);
+                                activity.error(format!("{}: {}", path, reason));
                             }
-                        } else {
-                            tracing::warn!(
-                                failed_count = metrics.failed,
-                                "Some paths failed to push to cachix (no details available)"
-                            );
                         }
+                        // Drop to emit the failed Complete event
+                        let _ = activity_guard.take();
+                    } else {
+                        // Drop to emit the successful Complete event
+                        let _ = self.cachix_activity.lock().await.take();
                     }
                 }
                 Err(e) => {
                     tracing::warn!("Timeout waiting for cachix push completion: {}", e);
+                    let mut activity_guard = self.cachix_activity.lock().await;
+                    if let Some(ref activity) = *activity_guard {
+                        activity.fail();
+                    }
+                    let _ = activity_guard.take();
                 }
             }
         }
