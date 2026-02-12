@@ -940,11 +940,6 @@ package
 *Default:*
 ` pkgs.cachix `
 
-
-
-*Example:*
-` inputs.devenv.inputs.cachix.packages.${pkgs.stdenv.system}.cachix `
-
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix](https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix)
 
