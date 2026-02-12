@@ -53,8 +53,11 @@ jobs:
         run: |
           nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv-tasks-fast-build
 
-      # Use -j 1 because Nix C++ FFI has global state (Activity/logging system)
-      # that is not thread-safe when multiple EvalStates are used concurrently
+      # Only test crates excluded from the Nix build's check phase (package.nix):
+      # - devenv-nix-backend: needs Nix store access unavailable in Nix sandbox
+      # - devenv-reload: needs PTY (devpts) unavailable in Nix sandbox
+      # - devenv-shell: needs PTY (devpts) unavailable in Nix sandbox
+      # nextest runs each test in a separate process, avoiding Nix C++ FFI global state issues
       - name: Run integration tests
         run: |
-          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo nextest run --all-features -j 1
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo nextest run -j 2 -p devenv-nix-backend -p devenv-reload -p devenv-shell
