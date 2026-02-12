@@ -22193,6 +22193,27 @@ attribute set of (submodule)
 
 
 
+## processes.\<name>.enable
+
+
+
+Whether to start this process automatically with ` devenv up `.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
 ## processes.\<name>.after
 
 
