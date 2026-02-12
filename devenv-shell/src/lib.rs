@@ -34,10 +34,7 @@ pub use status_line::{
 pub use task_runner::{PtyTaskRunner, TaskRunnerError, strip_ansi_codes};
 
 // Main session
-pub use session::{
-    SessionConfig, SessionError, SessionIo, ShellSession, TuiHandoff,
-    contains_alternate_screen_sequence,
-};
+pub use session::{SessionConfig, SessionError, SessionIo, ShellSession, TuiHandoff};
 
 // Re-export for convenience
 pub use portable_pty::{CommandBuilder, PtySize};
