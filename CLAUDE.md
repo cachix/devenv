@@ -108,6 +108,20 @@ MyFeature {
 
 3. **Wire up** in `devenv/src/main.rs` `run_devenv()` function.
 
+## Tracing / Debugging
+
+Tracing is disabled by default. Enable it with `--trace-output` to set the destination and optionally `--trace-format` to control the format:
+
+- **Trace to stderr**: `cargo run -- --trace-output stderr shell`
+- **Trace to file**: `cargo run -- --trace-output file:/tmp/devenv.log shell`
+- **Pretty format**: `cargo run -- --trace-output stderr --trace-format pretty shell`
+- **JSON format** (default): `cargo run -- --trace-output stderr --trace-format json shell`
+- **Full format**: `cargo run -- --trace-output stderr --trace-format full shell`
+
+When `--trace-output` is stdout or stderr, the TUI is automatically disabled (tracing mode).
+
+Environment variables `DEVENV_TRACE_OUTPUT` and `DEVENV_TRACE_FORMAT` can be used instead of CLI flags.
+
 ## Code Style
 
 - **Imports**: Group std lib, external crates, then internal
