@@ -52,6 +52,14 @@
       flake-parts.follows = "flake-parts";
     };
   };
+  inputs.crate2nix = {
+    url = "github:nix-community/crate2nix";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+  inputs.rust-overlay = {
+    url = "github:oxalica/rust-overlay";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
 
   outputs =
     { self
@@ -75,19 +83,29 @@
         system:
         let
           overlays = [
+            inputs.rust-overlay.overlays.default
             (final: prev: {
               inherit (inputs.cachix.packages.${system}) cachix;
               nix = inputs.nix.packages.${system}.nix;
               nixd = inputs.nixd.packages.${system}.nixd;
+              crate2nix = inputs.crate2nix.packages.${system}.default;
             })
           ];
           pkgs = import nixpkgs { inherit overlays system; };
           gitRev = self.shortRev or (self.dirtyShortRev or "");
-          workspace = pkgs.callPackage ./workspace.nix { inherit gitRev; };
+          # Use stable Rust from rust-overlay for crate2nix builds
+          # (nixpkgs' buildRustCrate uses Rust 1.73 which is too old for some deps)
+          rustToolchain = pkgs.rust-bin.stable.latest.default;
+          workspace = pkgs.callPackage ./workspace.nix {
+            inherit pkgs gitRev;
+            rustc = rustToolchain;
+            cargo = rustToolchain;
+          };
         in
         {
           inherit (workspace.crates) devenv devenv-tasks devenv-tasks-fast-build;
           default = self.packages.${system}.devenv;
+          crate2nix = inputs.crate2nix.packages.${system}.default;
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
           devenv-image = import ./containers/devenv/image.nix {

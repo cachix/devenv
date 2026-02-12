@@ -1,10 +1,15 @@
-{ inputs
-, pkgs
-, lib
-, config
-, options
-, ...
+{
+  inputs,
+  pkgs,
+  lib,
+  config,
+  options,
+  ...
 }:
+
+let
+  inherit (pkgs.stdenv) system;
+in
 {
   env = {
     # The path to the eval cache database (for migrations)
@@ -61,7 +66,7 @@
 
   # Project dependencies
   packages = [
-    inputs.nix.packages.${pkgs.stdenv.system}.nix # Required for integration tests
+    inputs.nix.packages.${system}.nix # Required for integration tests
     pkgs.git
     pkgs.xorg.libxcb
     pkgs.yaml2json
@@ -80,6 +85,7 @@
     pkgs.protobuf # snix
     pkgs.dbus # secretspec
     pkgs.nixd # LSP for devenv lsp command
+    inputs.crate2nix.packages.${system}.default # Generate Cargo.nix from Cargo.lock
   ];
 
   languages = {
@@ -116,7 +122,14 @@
     '';
   };
 
+  tasks."devenv:crate2nix" = {
+    description = "Generate Cargo.nix from Cargo.lock";
+    exec = "crate2nix generate";
+    execIfModified = [ "Cargo.lock" ];
+  };
+
   git-hooks.package = pkgs.prek;
+  git-hooks.excludes = [ "Cargo.nix" ];
   git-hooks.hooks = {
     nixpkgs-fmt.enable = true;
     rustfmt.enable = true;

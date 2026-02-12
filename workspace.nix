@@ -1,92 +1,107 @@
-# Tooling to build the workspace crates
-{ lib
+# Tooling to build the workspace crates using crate2nix
+{ pkgs
+, lib
+, stdenv
+
+, openssl
+, dbus
+, protobuf
+, pkg-config
+, llvmPackages
+, boehmgc
+, cachix
+, nix
+, nixd
+
+  # Helpers
 , callPackage
+, makeBinaryWrapper
+, installShellFiles
+, glibcLocalesUtf8
+
+  # Rust 
+, rustPlatform
+, buildRustCrate
+, defaultCrateOverrides
+, rustc
+, cargo
 , cargoProfile ? "release"
+
 , gitRev ? ""
 , isRelease ? false
-,
 }:
 
 let
-  src = lib.fileset.toSource {
-    root = ./.;
-    fileset =
-      lib.fileset.difference
-        (lib.fileset.unions [
-          ./.cargo
-          ./Cargo.toml
-          ./Cargo.lock
-          ./devenv
-          ./devenv-activity
-          ./devenv-activity-macros
-          ./devenv-cache-core
-          ./devenv-core
-          ./devenv-eval-cache
-          ./devenv-nix-backend
-          ./devenv-nix-backend-macros
-          ./devenv-processes
-          ./devenv-reload
-          ./devenv-run-tests
-          ./devenv-shell
-          ./devenv-snix-backend
-          ./devenv-tasks
-          ./devenv-tui
-          ./nix-conf-parser
-          ./tokio-shutdown
-          ./xtask
-        ])
-        # Ignore local builds
-        (lib.fileset.fileFilter (file: file.name == "target") ./.);
-  };
-
-  cargoToml = builtins.fromTOML (builtins.readFile "${src}/Cargo.toml");
+  cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
   version = cargoToml.workspace.package.version;
 
-  cargoLock = {
-    lockFile = "${src}/Cargo.lock";
-    outputHashes = {
-      "iocraft-0.7.16" = "sha256-iSvX3wzHHkqS0HtjEGQRV7p4LHaGaNrgmK0/iPuuy24=";
-      "crossterm-0.28.1" = "sha256-EC3HTF/l9E+3DnsLfB6L+SDNmfgWWJOSq8Oo+rQ3dVQ=";
-      "nix-compat-0.1.0" = "sha256-dSkomGSFJgTtsxHWsBG8Qy2hqQDuemqDsKRJxvmuZ54=";
-      "nix-bindings-bindgen-raw-0.1.0" = "sha256-eGhbWajbNe1Q7+RbqMogtKtlMjDOIsqt+xny8gZ+iFY=";
-      "wu-manber-0.1.0" = "sha256-7YIttaQLfFC/32utojh2DyOHVsZiw8ul/z0lvOhAE/4=";
-      "inquire-0.9.3" = "sha256-3A3QH9nuAsfxEoxgYCbEitnlV7mQltZX2vJ3Uv3q6Ys=";
-      "secretspec-0.7.1" = "sha256-ofwxnnWmyf/qnDN2DNbcltm+PiwW/mFnYhUfdzZViLA=";
-      # https://github.com/4jamesccraven/ser_nix/pull/5
-      "ser_nix-0.2.1" = "sha256-ZNuNAYLiQSonNkcTXI6nEaMJ01AxslaLPN07jGeM+p8=";
-    };
+  # Override buildRustCrate to use the newer rustc from languages.rust
+  # The default buildRustCrate uses an older rustc (1.73) which doesn't support
+  # APIs needed by newer crate versions like clap_lex 0.7.6
+  buildRustCrateNew = buildRustCrate.override {
+    inherit rustc cargo;
+  };
+
+  # Import crate2nix generated file with overrides
+  crateConfig = callPackage ./crate-config.nix { };
+
+  cargoNix = import ./Cargo.nix {
+    inherit pkgs lib stdenv;
+    buildRustCrateForPkgs = _: buildRustCrateNew;
+    defaultCrateOverrides = defaultCrateOverrides // crateConfig;
+    release = cargoProfile == "release" || cargoProfile == "release_fast";
+    # Enable tracing_unstable for dependency resolution so valuable crate is included.
+    # This matches the --cfg tracing_unstable passed via crate-config.nix at compile time.
+    extraTargetFlags = { tracing_unstable = true; };
+  };
+
+  # Wrap the devenv binary with required paths
+  wrapDevenv = drv: stdenv.mkDerivation {
+    pname = "devenv-wrapped";
+    inherit version;
+    src = drv;
+
+    nativeBuildInputs = [ makeBinaryWrapper installShellFiles ];
+
+    # Include devenv-run-tests in the output
+    devenvRunTests = cargoNix.workspaceMembers.devenv-run-tests.build;
+
+    installPhase =
+      let
+        setDefaultLocaleArchive = lib.optionalString (glibcLocalesUtf8 != null) ''
+          --set-default LOCALE_ARCHIVE ${glibcLocalesUtf8}/lib/locale/locale-archive
+        '';
+      in
+      ''
+        mkdir -p $out/bin
+
+        cp $src/bin/devenv $out/bin/
+        cp $devenvRunTests/bin/devenv-run-tests $out/bin/
+
+        wrapProgram $out/bin/devenv \
+          --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
+          ${setDefaultLocaleArchive}
+
+        wrapProgram $out/bin/devenv-run-tests \
+          --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
+          ${setDefaultLocaleArchive}
+      '';
   };
 in
 {
   inherit version;
 
+  # Expose raw crate builds for debugging/development
+  rawCrates = cargoNix.workspaceMembers;
+
   crates = {
-    devenv = callPackage ./devenv/package.nix {
-      inherit
-        src
-        version
-        cargoLock
-        cargoProfile
-        gitRev
-        isRelease
-        ;
-    };
+    # Main devenv package with wrapping and shell completions
+    devenv = wrapDevenv cargoNix.workspaceMembers.devenv.build;
 
-    devenv-tasks = callPackage ./devenv-tasks/package.nix {
-      inherit
-        src
-        version
-        cargoLock
-        cargoProfile
-        ;
-    };
+    # devenv-tasks standalone
+    devenv-tasks = cargoNix.workspaceMembers.devenv-tasks.build;
 
-    # A custom tasks build for the module system.
-    # Use a faster release profile and skip tests.
-    devenv-tasks-fast-build = callPackage ./devenv-tasks/package.nix {
-      inherit src version cargoLock;
-      cargoProfile = "release_fast";
-      doCheck = false;
-    };
+    # Fast build variant (same as regular since crate2nix doesn't support profiles)
+    devenv-tasks-fast-build = cargoNix.workspaceMembers.devenv-tasks.build;
   };
 }
