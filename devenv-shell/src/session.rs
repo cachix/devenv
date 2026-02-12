@@ -62,6 +62,38 @@ impl Renderer {
         self.update_cursor(stdout, vt)
     }
 
+    /// Scroll the real terminal to push content into native scrollback, then render.
+    ///
+    /// When the VT reports scrolled lines (via `Changes.scrollback`), we briefly set
+    /// a DECSTBM scroll region to protect the status line row, write newlines to scroll
+    /// the real terminal, then reset the region. This pushes content into the terminal's
+    /// native scrollback buffer — the same mechanism tmux uses.
+    fn render_with_scroll(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Vt,
+        scroll_count: usize,
+        content_rows: u16,
+    ) -> io::Result<()> {
+        if scroll_count > 0 && content_rows > 0 {
+            let effective = scroll_count.min(content_rows as usize);
+            // Set scroll region to content area (protects status line row below)
+            write!(stdout, "\x1b[1;{}r", content_rows)?;
+            write!(stdout, "\x1b[{};1H", content_rows)?;
+            let newlines = "\n".repeat(effective);
+            stdout.write_all(newlines.as_bytes())?;
+            // Reset scroll region to full terminal
+            write!(stdout, "\x1b[r")?;
+            // Shift prev_lines to match the scroll
+            if effective < self.prev_lines.len() {
+                self.prev_lines.drain(..effective);
+            } else {
+                self.prev_lines.clear();
+            }
+        }
+        self.render(stdout, vt)
+    }
+
     /// Full redraw of all VT lines (after resize or initialization).
     fn render_full(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
         let view = vt.view();
@@ -532,8 +564,17 @@ impl ShellSession {
                                     error_text.push_str(&format!("  {}\r\n", line));
                                 }
                                 error_text.push_str("\r\n");
-                                vt.feed_str(&error_text);
-                                renderer.render(stdout, vt)?;
+                                let scroll_count = {
+                                    let changes = vt.feed_str(&error_text);
+                                    changes.scrollback.count()
+                                };
+                                let content_rows = self.pty_size().rows;
+                                renderer.render_with_scroll(
+                                    stdout,
+                                    vt,
+                                    scroll_count,
+                                    content_rows,
+                                )?;
                             } else {
                                 // Clear screen via Ctrl-L to hide error output
                                 pty.write_all(&[0x0C])?;
@@ -552,14 +593,19 @@ impl ShellSession {
                 }
 
                 Event::PtyOutput(data) => {
-                    // Feed all output into VT state machine
-                    vt.feed_str(&String::from_utf8_lossy(&data));
+                    // Feed output into VT and track how many lines scrolled off
+                    let mut total_scroll: usize = 0;
+                    {
+                        let changes = vt.feed_str(&String::from_utf8_lossy(&data));
+                        total_scroll += changes.scrollback.count();
+                    }
 
                     // Batch: drain any additional pending PtyOutput events
                     while let Ok(event) = event_rx.try_recv() {
                         match event {
                             Event::PtyOutput(more) => {
-                                vt.feed_str(&String::from_utf8_lossy(&more));
+                                let changes = vt.feed_str(&String::from_utf8_lossy(&more));
+                                total_scroll += changes.scrollback.count();
                             }
                             Event::PtyExit => {
                                 // Render final state before exiting
@@ -576,8 +622,9 @@ impl ShellSession {
                         }
                     }
 
-                    // Render the VT state to the terminal
-                    renderer.render(stdout, vt)?;
+                    // Scroll real terminal to push content into native scrollback, then render
+                    let content_rows = self.pty_size().rows;
+                    renderer.render_with_scroll(stdout, vt, total_scroll, content_rows)?;
                     if self.config.show_status_line {
                         self.status_line
                             .draw(stdout, self.size.cols, self.size.rows)?;
@@ -683,8 +730,12 @@ impl ShellSession {
                 for file in &files {
                     text.push_str(&format!("  {}\r\n", file.display()));
                 }
-                vt.feed_str(&text);
-                renderer.render(stdout, vt)?;
+                let scroll_count = {
+                    let changes = vt.feed_str(&text);
+                    changes.scrollback.count()
+                };
+                let content_rows = self.pty_size().rows;
+                renderer.render_with_scroll(stdout, vt, scroll_count, content_rows)?;
                 self.draw_status_and_cursor(stdout, vt)?;
             }
 
