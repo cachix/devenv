@@ -11,7 +11,7 @@ use iocraft::{FullscreenMouseEvent, MouseEventKind};
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 use tokio::sync::Notify;
-use tokio_shutdown::Shutdown;
+use tokio_shutdown::{Shutdown, Signal};
 
 /// Fullscreen component for viewing expanded logs.
 ///
@@ -202,6 +202,7 @@ fn handle_key_event(
 
         // Ctrl+C to shutdown
         KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+            shutdown.set_last_signal(Signal::SIGINT);
             shutdown.shutdown();
         }
 

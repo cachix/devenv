@@ -135,18 +135,25 @@ impl Shutdown {
 
                 tokio::select! {
                     _ = sigint.recv() => {
-                        info!("Received SIGINT (Ctrl+C), shutting down gracefully...");
                         last_signal = Signal::SIGINT;
                     }
                     _ = sigterm.recv() => {
-                        info!("Received SIGTERM, shutting down gracefully...");
                         last_signal = Signal::SIGTERM;
                     }
                     _ = sighup.recv() => {
-                        info!("Received SIGHUP, shutting down gracefully...");
                         last_signal = Signal::SIGHUP;
                     }
                 }
+
+                // If a signal was already received (either from a previous real
+                // signal or set by the TUI keyboard handler), this is a repeated
+                // interrupt — force-exit immediately.
+                if shutdown.last_signal.load(Ordering::Relaxed) != 0 {
+                    info!("Received second signal, forcing exit...");
+                    shutdown.exit_process();
+                }
+
+                info!("Received {:?}, shutting down gracefully...", last_signal);
 
                 // Store the last signal received
                 shutdown

@@ -228,7 +228,16 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Signal backend that terminal is now available for shell, passing render height
     let _ = terminal_ready_tx.send(tui_render_height);
 
-    let Ok(devenv_output) = devenv_thread.join() else {
+    // Poll instead of blocking join() — a blocking join would stall the
+    // single-threaded tokio event loop, preventing signal handlers from running.
+    // With polling, a second Ctrl+C (real SIGINT) can be processed and force-exit.
+    let devenv_output = loop {
+        if devenv_thread.is_finished() {
+            break devenv_thread.join();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    };
+    let Ok(devenv_output) = devenv_output else {
         bail!("devenv thread panicked");
     };
 
