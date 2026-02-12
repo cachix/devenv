@@ -411,7 +411,16 @@ impl NativeProcessManager {
             // Set up file watcher if watch paths are configured
             let (watch_tx, mut watch_rx) = mpsc::channel::<()>(1);
             let _watcher_task = if !config.watch.paths.is_empty() {
-                let paths = config.watch.paths.clone();
+                // Canonicalize watch paths to resolve symlinks. On macOS,
+                // /tmp -> /private/tmp and /var -> /private/var; FSEvents
+                // reports events using resolved paths, so the watched paths
+                // must match for watchexec to attach path tags to events.
+                let paths: Vec<PathBuf> = config
+                    .watch
+                    .paths
+                    .iter()
+                    .map(|p| p.canonicalize().unwrap_or_else(|_| p.clone()))
+                    .collect();
                 let extensions = config.watch.extensions.clone();
                 let ignore = config.watch.ignore.clone();
                 let watch_name = name.clone();
