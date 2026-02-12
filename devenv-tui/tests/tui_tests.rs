@@ -1636,3 +1636,172 @@ fn test_overflow_clips_top_keeps_bottom() {
         output
     );
 }
+
+/// Test cachix push operation starting shows in the TUI.
+#[test]
+fn test_cachix_push_started() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+        id: 1,
+        name: "Pushing to my-cache".to_string(),
+        parent: None,
+        detail: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    let output = render_to_string(&model, &ui_state);
+    assert_tui_snapshot!(output);
+}
+
+/// Test cachix push operation with progress updates showing path detail.
+#[test]
+fn test_cachix_push_progress() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+        id: 1,
+        name: "Pushing to my-cache".to_string(),
+        parent: None,
+        detail: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Progress {
+        id: 1,
+        done: 3,
+        expected: 10,
+        detail: Some("hello-2.12".to_string()),
+        timestamp: Timestamp::now(),
+    }));
+
+    let output = render_to_string(&model, &ui_state);
+    assert_tui_snapshot!(output);
+}
+
+/// Test cachix push operation completing successfully.
+#[test]
+fn test_cachix_push_success() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+        id: 1,
+        name: "Pushing to my-cache".to_string(),
+        parent: None,
+        detail: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Progress {
+        id: 1,
+        done: 10,
+        expected: 10,
+        detail: None,
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Complete {
+        id: 1,
+        outcome: ActivityOutcome::Success,
+        timestamp: Timestamp::now(),
+    }));
+
+    let output = render_to_string(&model, &ui_state);
+    assert_tui_snapshot!(output);
+}
+
+/// Test cachix push operation with failed paths shows error logs.
+#[test]
+fn test_cachix_push_with_failures() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+        id: 1,
+        name: "Pushing to my-cache".to_string(),
+        parent: None,
+        detail: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Progress {
+        id: 1,
+        done: 5,
+        expected: 10,
+        detail: Some("openssl-3.0.0".to_string()),
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Log {
+        id: 1,
+        line: "openssl-3.0.0: HTTP 403: Access Denied".to_string(),
+        is_error: true,
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Log {
+        id: 1,
+        line: "glibc-2.37: HTTP 500: Internal Server Error".to_string(),
+        is_error: true,
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Progress {
+        id: 1,
+        done: 8,
+        expected: 10,
+        detail: None,
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Complete {
+        id: 1,
+        outcome: ActivityOutcome::Failed,
+        timestamp: Timestamp::now(),
+    }));
+
+    let output = render_to_string(&model, &ui_state);
+    assert_tui_snapshot!(output);
+}
+
+/// Test cachix push alongside other activities (build + push concurrent).
+#[test]
+fn test_cachix_push_alongside_build() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(ActivityEvent::Build(Build::Start {
+        id: 1,
+        name: "hello-2.12".to_string(),
+        parent: None,
+        derivation_path: None,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Build(Build::Phase {
+        id: 1,
+        phase: "buildPhase".to_string(),
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+        id: 2,
+        name: "Pushing to my-cache".to_string(),
+        parent: None,
+        detail: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Progress {
+        id: 2,
+        done: 3,
+        expected: 7,
+        detail: Some("python-3.11.5".to_string()),
+        timestamp: Timestamp::now(),
+    }));
+
+    let output = render_to_string(&model, &ui_state);
+    assert_tui_snapshot!(output);
+}
