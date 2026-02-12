@@ -551,12 +551,12 @@ in
 
       # Process to start for exporting the above.
       processes.keycloak-realm-export-all = mkIf (realmsExport != [ ]) {
+        enable = false;
         exec = "${keycloak-realm-export-all}/bin/keycloak-realm-export-all";
         process-compose = {
           description = ''
             Save the configured realms from keycloak, to back them up. You can run it manually.
           '';
-          disabled = true;
           depends_on = {
             keycloak = {
               condition = "process_completed";

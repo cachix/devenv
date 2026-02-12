@@ -33,6 +33,12 @@ let
 
   processType = types.submodule ({ config, name, ... }: {
     options = {
+      enable = lib.mkOption {
+        type = types.bool;
+        default = true;
+        description = "Whether to start this process automatically with `devenv up`.";
+      };
+
       exec = lib.mkOption {
         type = types.str;
         description = "Bash code to run the process.";
@@ -425,84 +431,89 @@ in
       process.managers.${implementation}.enable = lib.mkDefault true;
     }
 
-    (lib.mkIf options.processes.isDefined {
-      # Create tasks for each defined process
-      tasks = lib.mapAttrs'
-        (name: process: {
-          name = "devenv:processes:${name}";
-          value = {
-            type = "process";
-            exec = process.exec;
-            env = process.env;
-            cwd = process.cwd;
-            after = process.after;
-            before = process.before;
-            # Always show output for process tasks so process-compose can capture it
-            showOutput = true;
-            # Process-specific configuration
-            use_sudo = process.use_sudo;
-            pseudo_terminal = process.pseudo_terminal;
-            restart = process.restart;
-            max_restarts = process.max_restarts;
-            listen = process.listen;
-            ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
-            watch = process.watch;
-            notify = process.notify;
-            watchdog = process.watchdog;
-          };
-        })
-        config.processes;
+    (lib.mkIf options.processes.isDefined (
+      let
+        enabledProcesses = lib.filterAttrs (_: p: p.enable) config.processes;
+      in
+      {
+        # Create tasks only for enabled processes (native manager discovers process tasks from this)
+        tasks = lib.mapAttrs'
+          (name: process: {
+            name = "devenv:processes:${name}";
+            value = {
+              type = "process";
+              exec = process.exec;
+              env = process.env;
+              cwd = process.cwd;
+              after = process.after;
+              before = process.before;
+              # Always show output for process tasks so process-compose can capture it
+              showOutput = true;
+              # Process-specific configuration
+              use_sudo = process.use_sudo;
+              pseudo_terminal = process.pseudo_terminal;
+              restart = process.restart;
+              max_restarts = process.max_restarts;
+              listen = process.listen;
+              ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
+              watch = process.watch;
+              notify = process.notify;
+              watchdog = process.watchdog;
+            };
+          })
+          enabledProcesses;
 
-      # Provide the devenv-tasks command for each process so process managers can use it
-      # to support before/after task dependencies
-      process.taskCommandsBase = lib.mapAttrs
-        (name: _: "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} devenv:processes:${name}")
-        config.processes;
+        # Provide the devenv-tasks command for each enabled process so process managers can use it
+        # to support before/after task dependencies
+        process.taskCommandsBase = lib.mapAttrs
+          (name: _: "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} devenv:processes:${name}")
+          enabledProcesses;
 
-      # With exec prefix for proper signal handling (derived from base)
-      process.taskCommands = lib.mapAttrs
-        (name: cmd: "exec ${cmd}")
-        config.process.taskCommandsBase;
+        # With exec prefix for proper signal handling (derived from base)
+        process.taskCommands = lib.mapAttrs
+          (name: cmd: "exec ${cmd}")
+          config.process.taskCommandsBase;
 
-      procfile =
-        pkgs.writeText "procfile" (lib.concatStringsSep "\n"
-          (lib.mapAttrsToList (name: _: "${name}: ${config.process.taskCommands.${name}}")
-            config.processes));
+        procfile =
+          pkgs.writeText "procfile" (lib.concatStringsSep "\n"
+            (lib.mapAttrsToList (name: _: "${name}: ${config.process.taskCommands.${name}}")
+              enabledProcesses));
 
-      procfileEnv =
-        let
-          envList =
-            lib.mapAttrsToList
-              (name: value: "${name}=${builtins.toJSON value}")
-              config.env;
-        in
-        pkgs.writeText "procfile-env" (lib.concatStringsSep "\n" envList);
+        procfileEnv =
+          let
+            envList =
+              lib.mapAttrsToList
+                (name: value: "${name}=${builtins.toJSON value}")
+                config.env;
+          in
+          pkgs.writeText "procfile-env" (lib.concatStringsSep "\n" envList);
 
-      procfileScript = pkgs.writeShellScript "devenv-up" ''
-        ${lib.optionalString config.devenv.debug "set -x"}
+        procfileScript = pkgs.writeShellScript "devenv-up" ''
+          ${lib.optionalString config.devenv.debug "set -x"}
 
-        ${config.process.manager.before}
+          ${config.process.manager.before}
 
-        ${config.process.manager.command}
+          ${config.process.manager.command}
 
-        backgroundPID=$!
+          backgroundPID=$!
 
-        down() {
-          echo "Stopping processes..."
-          kill -TERM $backgroundPID
-          wait $backgroundPID
-          ${config.process.manager.after}
-          echo "Processes stopped."
-        }
+          down() {
+            echo "Stopping processes..."
+            kill -TERM $backgroundPID
+            wait $backgroundPID
+            ${config.process.manager.after}
+            echo "Processes stopped."
+          }
 
-        trap down SIGINT SIGTERM
+          trap down SIGINT SIGTERM
 
-        wait
-      '';
+          wait
+        '';
 
-      ci = [ config.procfileScript ];
+        ci = [ config.procfileScript ];
 
-      infoSections."processes" = lib.mapAttrsToList (name: process: "${name}: exec ${pkgs.writeShellScript name process.exec}") config.processes;
-    })
+        infoSections."processes" = lib.mapAttrsToList (name: process: "${name}: exec ${pkgs.writeShellScript name process.exec}") enabledProcesses;
+      }
+    ))
   ];
 }

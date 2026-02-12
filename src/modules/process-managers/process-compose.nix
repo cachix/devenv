@@ -140,7 +140,8 @@ in
           (name: value:
             let
               command =
-                if value.process-compose.is_elevated or false
+                if !value.enable then value.exec
+                else if value.process-compose.is_elevated or false
                 then config.process.taskCommandsBase.${name}
                 else config.process.taskCommands.${name};
               envList = lib.mapAttrsToList (k: v: "${k}=${v}") value.env;
@@ -148,7 +149,7 @@ in
             in
             { inherit command; } // value.process-compose // {
               environment = envList ++ pcEnv;
-            }
+            } // lib.optionalAttrs (!value.enable) { disabled = true; }
           )
           config.processes;
       };

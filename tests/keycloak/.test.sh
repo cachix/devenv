@@ -3,8 +3,6 @@ set -e
 
 echo "Startup complete..."
 echo "Checking for keycloak readiness..."
-echo "Process compose socket: $PC_SOCKET_PATH"
-# bash
 
 test_connection() {
   for i in $(seq 1 10); do
