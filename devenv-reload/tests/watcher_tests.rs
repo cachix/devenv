@@ -8,7 +8,8 @@ use tempfile::TempDir;
 #[tokio::test]
 async fn test_watcher_detects_file_modification() {
     let temp_dir = TempDir::new().expect("create temp dir");
-    let file_path = temp_dir.path().join("test.nix");
+    let base = temp_dir.path().canonicalize().expect("canonicalize");
+    let file_path = base.join("test.nix");
 
     // Create initial file
     File::create(&file_path)
@@ -41,8 +42,9 @@ async fn test_watcher_detects_file_modification() {
 #[tokio::test]
 async fn test_watcher_multiple_files() {
     let temp_dir = TempDir::new().expect("create temp dir");
-    let file1 = temp_dir.path().join("file1.nix");
-    let file2 = temp_dir.path().join("file2.nix");
+    let base = temp_dir.path().canonicalize().expect("canonicalize");
+    let file1 = base.join("file1.nix");
+    let file2 = base.join("file2.nix");
 
     // Create files
     File::create(&file1)
@@ -83,7 +85,8 @@ async fn test_watcher_nonexistent_path_error() {
 #[tokio::test]
 async fn test_watcher_rapid_modifications() {
     let temp_dir = TempDir::new().expect("create temp dir");
-    let file_path = temp_dir.path().join("rapid.nix");
+    let base = temp_dir.path().canonicalize().expect("canonicalize");
+    let file_path = base.join("rapid.nix");
 
     File::create(&file_path)
         .expect("create")
@@ -112,7 +115,8 @@ async fn test_watcher_rapid_modifications() {
 #[tokio::test]
 async fn test_watcher_drops_cleanly() {
     let temp_dir = TempDir::new().expect("create temp dir");
-    let file_path = temp_dir.path().join("drop_test.nix");
+    let base = temp_dir.path().canonicalize().expect("canonicalize");
+    let file_path = base.join("drop_test.nix");
 
     File::create(&file_path)
         .expect("create")
@@ -131,7 +135,7 @@ async fn test_watcher_drops_cleanly() {
 #[tokio::test]
 async fn test_watcher_detects_file_creation_in_watched_dir() {
     let temp_dir = TempDir::new().expect("create temp dir");
-    let watch_dir = temp_dir.path().to_path_buf();
+    let watch_dir = temp_dir.path().canonicalize().expect("canonicalize");
 
     // Watch the directory
     let mut watcher = FileWatcher::new(&[watch_dir.clone()]).expect("create watcher");
@@ -154,8 +158,9 @@ async fn test_watcher_detects_file_creation_in_watched_dir() {
 #[tokio::test]
 async fn test_watcher_handle_adds_path_at_runtime() {
     let temp_dir = TempDir::new().expect("create temp dir");
-    let initial_file = temp_dir.path().join("initial.nix");
-    let runtime_file = temp_dir.path().join("runtime.nix");
+    let base = temp_dir.path().canonicalize().expect("canonicalize");
+    let initial_file = base.join("initial.nix");
+    let runtime_file = base.join("runtime.nix");
 
     // Create initial file
     File::create(&initial_file)

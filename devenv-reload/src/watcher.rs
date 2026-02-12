@@ -70,7 +70,12 @@ impl FileWatcher {
                     for path in event.paths {
                         // Canonicalize to match stored paths
                         let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
-                        if watched.contains(&canonical) {
+                        // Match if the path itself is watched, or if its parent directory is watched
+                        if watched.contains(&canonical)
+                            || canonical
+                                .parent()
+                                .is_some_and(|p| watched.contains(p))
+                        {
                             let _ = tx.blocking_send(FileChangeEvent { path: canonical });
                         }
                     }
