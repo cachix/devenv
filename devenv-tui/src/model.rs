@@ -126,6 +126,16 @@ pub enum ActivityVariant {
     Unknown,
 }
 
+impl ActivityVariant {
+    /// Whether this variant is always rendered as a top-level activity in the TUI,
+    /// even when it has a tracing parent.
+    /// These activities are added to `root_activities` and excluded from their
+    /// parent's child list.
+    fn is_always_top_level(&self) -> bool {
+        matches!(self, ActivityVariant::Devenv)
+    }
+}
+
 /// Key-value detail/metadata for an activity
 #[derive(Debug, Clone)]
 pub struct ActivityDetail {
@@ -775,6 +785,8 @@ impl ActivityModel {
             level
         };
 
+        let is_root = parent.is_none() || variant.is_always_top_level();
+
         let activity = Activity {
             id,
             name: name.clone(),
@@ -790,7 +802,7 @@ impl ActivityModel {
             level: effective_level,
         };
 
-        if parent.is_none() {
+        if is_root {
             self.root_activities.push(id);
         }
 
@@ -1297,12 +1309,15 @@ impl ActivityModel {
             .get(&parent_id)
             .is_some_and(|a| matches!(a.variant, ActivityVariant::Task(_)));
 
-        // Get all children of this parent (including additional parents), excluding UserOperation
+        // Get all children of this parent (including additional parents),
+        // excluding hidden and promoted-to-top-level activities.
         let mut all_children: Vec<_> = self
             .activities
             .values()
             .filter(|a| {
-                if matches!(a.variant, ActivityVariant::UserOperation) {
+                if matches!(a.variant, ActivityVariant::UserOperation)
+                    || a.variant.is_always_top_level()
+                {
                     return false;
                 }
                 // Check primary parent
@@ -1398,6 +1413,7 @@ impl ActivityModel {
             .filter(|a| {
                 a.parent_id == Some(activity_id)
                     && !matches!(a.variant, ActivityVariant::UserOperation)
+                    && !a.variant.is_always_top_level()
                     && a.level <= filter_level
             })
             .count()

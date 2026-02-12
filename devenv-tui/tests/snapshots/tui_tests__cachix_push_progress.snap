@@ -1,0 +1,7 @@
+---
+source: devenv-tui/tests/tui_tests.rs
+expression: output
+---
+⠋ Pushing to my-cache 3/10 → hello-2.12
+
+                                  ↑↓ nav

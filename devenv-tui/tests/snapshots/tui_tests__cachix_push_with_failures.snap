@@ -1,0 +1,9 @@
+---
+source: devenv-tui/tests/tui_tests.rs
+expression: output
+---
+✗ Pushing to my-cache 8/10                  0ms
+  │ openssl-3.0.0: HTTP 403: Access Denied
+  │ glibc-2.37: HTTP 500: Internal Server Error
+
+                                         ↑↓ nav
