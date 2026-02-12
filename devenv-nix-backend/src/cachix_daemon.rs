@@ -6,8 +6,10 @@
 //! - Automatically reconnects on daemon crashes
 //! - Provides real-time metrics and observability
 //! - Integrates with build/eval loops via callbacks
+//! - Reports progress to the TUI via Activity
 
 use anyhow::{Context, Result, anyhow};
+use devenv_activity::Activity;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -269,6 +271,22 @@ impl PushEvent {
     }
 }
 
+/// Extract a short display name from a Nix store path.
+/// `/nix/store/abc123-package-1.0` → `package-1.0`
+fn short_path_name(path: &str) -> &str {
+    path.rsplit('/')
+        .next()
+        .map(|basename| {
+            // Skip the hash prefix (32 chars + dash)
+            if basename.len() > 33 && basename.as_bytes()[32] == b'-' {
+                &basename[33..]
+            } else {
+                basename
+            }
+        })
+        .unwrap_or(path)
+}
+
 /// Low-level socket client for daemon communication
 struct SocketClient {
     write_half: tokio::net::unix::OwnedWriteHalf,
@@ -494,7 +512,11 @@ pub struct OwnedDaemon {
 
 impl OwnedDaemon {
     /// Spawn daemon and connect client
-    pub async fn spawn(config: DaemonSpawnConfig, connection: ConnectionParams) -> Result<Self> {
+    pub async fn spawn(
+        config: DaemonSpawnConfig,
+        connection: ConnectionParams,
+        activity: Option<Activity>,
+    ) -> Result<Self> {
         let socket_path = config.socket_path.clone();
         let process = DaemonProcess::spawn(&config).await?;
 
@@ -502,7 +524,7 @@ impl OwnedDaemon {
             socket_path,
             connection,
         };
-        let client = DaemonClient::connect(connect_config).await?;
+        let client = DaemonClient::connect(connect_config, activity).await?;
 
         Ok(Self { process, client })
     }
@@ -554,7 +576,10 @@ struct AtomicMetrics {
 
 impl DaemonClient {
     /// Connect to an existing cachix daemon
-    pub async fn connect(config: DaemonConnectConfig) -> Result<Self> {
+    pub async fn connect(
+        config: DaemonConnectConfig,
+        activity: Option<Activity>,
+    ) -> Result<Self> {
         let client_id = Uuid::new_v4();
         tracing::debug!(client_id = %client_id, "Connecting to cachix daemon");
 
@@ -579,8 +604,16 @@ impl DaemonClient {
             let config = config.clone();
 
             tokio::spawn(async move {
-                Self::event_loop(client_id, client, pending_paths, work_notify, metrics, config)
-                    .await
+                Self::event_loop(
+                    client_id,
+                    client,
+                    pending_paths,
+                    work_notify,
+                    metrics,
+                    config,
+                    activity,
+                )
+                .await
             })
         };
 
@@ -655,6 +688,7 @@ impl DaemonClient {
         work_notify: Arc<Notify>,
         metrics: Arc<AtomicMetrics>,
         config: DaemonConnectConfig,
+        activity: Option<Activity>,
     ) {
         let mut reconnect_backoff = Duration::from_millis(config.connection.reconnect_backoff_ms);
 
@@ -688,6 +722,7 @@ impl DaemonClient {
                 Arc::clone(&client),
                 Arc::clone(&pending_paths),
                 Arc::clone(&metrics),
+                activity.as_ref(),
             )
             .await;
 
@@ -710,6 +745,7 @@ impl DaemonClient {
         client: Arc<Mutex<Option<SocketClient>>>,
         pending_paths: Arc<Mutex<VecDeque<String>>>,
         metrics: Arc<AtomicMetrics>,
+        activity: Option<&Activity>,
     ) -> bool {
         // Collect paths to send in this batch
         let mut paths_to_send = Vec::new();
@@ -749,7 +785,7 @@ impl DaemonClient {
             }
 
             // Read events for this push
-            Self::read_push_events(client, &metrics, &paths_to_send).await;
+            Self::read_push_events(client, &metrics, &paths_to_send, activity).await;
         }
 
         false // Don't wait, immediately process more work
@@ -759,6 +795,7 @@ impl DaemonClient {
         client: &mut SocketClient,
         metrics: &Arc<AtomicMetrics>,
         sent_paths: &[String],
+        activity: Option<&Activity>,
     ) {
         let mut paths_accounted = 0;
 
@@ -768,12 +805,16 @@ impl DaemonClient {
                     match event {
                         PushEvent::StorePathAttempt { ref path, .. } => {
                             tracing::debug!(path = %path, "Attempting to push");
+                            if let Some(activity) = activity {
+                                let done = metrics.completed.load(Ordering::SeqCst)
+                                    + metrics.failed.load(Ordering::SeqCst);
+                                let expected = done
+                                    + metrics.in_progress.load(Ordering::SeqCst)
+                                    + metrics.queued.load(Ordering::SeqCst);
+                                activity.progress(done, expected, Some(short_path_name(path)));
+                            }
                         }
-                        PushEvent::StorePathProgress {
-                            ref path,
-                            current_bytes,
-                            ..
-                        } => {
+                        PushEvent::StorePathProgress { ref path, current_bytes, .. } => {
                             tracing::debug!(path = %path, current_bytes, "Upload progress");
                         }
                         PushEvent::StorePathDone { ref path } => {
@@ -781,6 +822,15 @@ impl DaemonClient {
                             metrics.completed.fetch_add(1, Ordering::SeqCst);
                             metrics.in_progress.fetch_sub(1, Ordering::SeqCst);
                             paths_accounted += 1;
+
+                            if let Some(activity) = activity {
+                                let done = metrics.completed.load(Ordering::SeqCst)
+                                    + metrics.failed.load(Ordering::SeqCst);
+                                let expected = done
+                                    + metrics.in_progress.load(Ordering::SeqCst)
+                                    + metrics.queued.load(Ordering::SeqCst);
+                                activity.progress(done, expected, None);
+                            }
                         }
                         PushEvent::StorePathFailed { ref path, ref reason } => {
                             tracing::warn!(path = %path, reason = %reason, "Push failed");
@@ -790,6 +840,16 @@ impl DaemonClient {
                             // Store failure reason for user visibility
                             if let Ok(mut failed_map) = metrics.failed_with_reasons.try_lock() {
                                 failed_map.insert(path.clone(), reason.clone());
+                            }
+
+                            if let Some(activity) = activity {
+                                activity.error(format!("{}: {}", path, reason));
+                                let done = metrics.completed.load(Ordering::SeqCst)
+                                    + metrics.failed.load(Ordering::SeqCst);
+                                let expected = done
+                                    + metrics.in_progress.load(Ordering::SeqCst)
+                                    + metrics.queued.load(Ordering::SeqCst);
+                                activity.progress(done, expected, None);
                             }
 
                             paths_accounted += 1;
@@ -1147,6 +1207,16 @@ mod tests {
         assert_eq!(msg.tag, "DaemonPong");
         // Non-push messages should be filtered at the read_event level (return None)
         assert_ne!(msg.tag, "DaemonPushEvent");
+    }
+
+    #[test]
+    fn test_short_path_name() {
+        assert_eq!(
+            short_path_name("/nix/store/abcdef01234567890abcdef012345678-package-1.0"),
+            "package-1.0"
+        );
+        assert_eq!(short_path_name("/nix/store/short"), "short");
+        assert_eq!(short_path_name("bare-name"), "bare-name");
     }
 
     #[test]
