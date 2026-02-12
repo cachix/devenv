@@ -3,6 +3,7 @@
 use avt::Vt;
 use devenv_shell::{
     CommandBuilder, PtySize, SessionConfig, SessionIo, ShellCommand, ShellEvent, ShellSession,
+    contains_alternate_screen_sequence,
 };
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
@@ -550,6 +551,127 @@ async fn test_print_watched_files() {
             .join("\n")
     );
 
+    let _ = stdin_ours.write_all(b"\n");
+    drop(stdin_ours);
+    drop(cmd_tx);
+    let _ = handle.await;
+}
+
+#[test]
+fn test_alternate_screen_detection() {
+    // Enter sequences
+    assert_eq!(
+        contains_alternate_screen_sequence(b"\x1b[?1049h"),
+        Some(true)
+    );
+    assert_eq!(contains_alternate_screen_sequence(b"\x1b[?47h"), Some(true));
+    assert_eq!(
+        contains_alternate_screen_sequence(b"\x1b[?1047h"),
+        Some(true)
+    );
+
+    // Exit sequences
+    assert_eq!(
+        contains_alternate_screen_sequence(b"\x1b[?1049l"),
+        Some(false)
+    );
+    assert_eq!(
+        contains_alternate_screen_sequence(b"\x1b[?47l"),
+        Some(false)
+    );
+    assert_eq!(
+        contains_alternate_screen_sequence(b"\x1b[?1047l"),
+        Some(false)
+    );
+
+    // No match
+    assert_eq!(contains_alternate_screen_sequence(b"hello world"), None);
+    assert_eq!(contains_alternate_screen_sequence(b"\x1b[2J"), None);
+
+    // Embedded in other data
+    assert_eq!(
+        contains_alternate_screen_sequence(b"stuff\x1b[?1049hmore"),
+        Some(true)
+    );
+
+    // Last transition wins when both are present
+    assert_eq!(
+        contains_alternate_screen_sequence(b"\x1b[?1049h\x1b[?1049l"),
+        Some(false)
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_alternate_screen_suspends_status_line() {
+    let (io, mut stdin_ours, mut stdout_ours) = test_io();
+    let (cmd_tx, cmd_rx) = mpsc::channel(10);
+    let (event_tx, _event_rx) = mpsc::channel(10);
+
+    let session = status_line_session();
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+
+    // Spawn a shell that:
+    // 1. Waits for input (so we can set up status line)
+    // 2. Enters alternate screen, prints a marker
+    // 3. Waits for input
+    // 4. Exits alternate screen, prints another marker
+    // 5. Waits for input then exits
+    cmd_tx
+        .send(spawn_cmd(concat!(
+            "read line1; ",
+            "printf '\\033[?1049h'; echo ALT_ENTERED; ",
+            "read line2; ",
+            "printf '\\033[?1049l'; echo ALT_EXITED; ",
+            "read line3"
+        )))
+        .await
+        .unwrap();
+
+    // Set up the status line with watched files so it has content
+    cmd_tx
+        .send(ShellCommand::WatchedFiles {
+            files: vec!["a.nix".into()],
+        })
+        .await
+        .unwrap();
+
+    // Wait for status line to appear
+    let mut all_bytes = read_until(&mut stdout_ours, b"watching", Duration::from_secs(5));
+    let rows = render(&all_bytes, 80, 24);
+    assert!(
+        rows[23].contains("watching"),
+        "status line should be visible before alternate screen"
+    );
+
+    // Trigger alternate screen entry
+    stdin_ours.write_all(b"\n").unwrap();
+    stdin_ours.flush().unwrap();
+
+    // Wait for alternate screen entry marker
+    all_bytes = read_until(&mut stdout_ours, b"ALT_ENTERED", Duration::from_secs(5));
+    let rows = render(&all_bytes, 80, 24);
+    // In alternate screen: status line should NOT be on row 23
+    // The alternate screen clears the display, so status line text should be absent
+    assert!(
+        !rows[23].contains("watching"),
+        "status line should not be visible in alternate screen, got: {:?}",
+        rows[23]
+    );
+
+    // Trigger alternate screen exit
+    stdin_ours.write_all(b"\n").unwrap();
+    stdin_ours.flush().unwrap();
+
+    // Wait for alternate screen exit marker and status line restoration
+    all_bytes = read_until(&mut stdout_ours, b"watching", Duration::from_secs(5));
+    let rows = render(&all_bytes, 80, 24);
+    assert!(
+        rows[23].contains("watching"),
+        "status line should be restored after exiting alternate screen, got: {:?}",
+        rows[23]
+    );
+
+    // Clean up
     let _ = stdin_ours.write_all(b"\n");
     drop(stdin_ours);
     drop(cmd_tx);
