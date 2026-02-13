@@ -294,16 +294,20 @@ in
       (lib.mkIf cfg.enable {
         packages = [ cfg.package ];
 
-        # Override settings with allocated ports
-        services.kafka.settings = {
-          "listeners" = rebuildListeners cfg.settings."listeners";
-          "advertised.listeners" = lib.mkIf (cfg.settings ? "advertised.listeners")
-            (rebuildListeners cfg.settings."advertised.listeners");
-          "controller.quorum.voters" = lib.mkIf (cfg.settings ? "controller.quorum.voters")
-            (rebuildQuorumVoters cfg.settings."controller.quorum.voters");
-        };
-
-        services.kafka.configFiles.serverProperties = generator "server.properties" stringlySettings;
+        # Overlay allocated ports at config file generation to avoid infinite
+        # recursion (#2494).  Writing back into cfg.settings would create a
+        # cycle because basePort/baseControllerPort read from the same attrs.
+        services.kafka.configFiles.serverProperties =
+          let
+            portOverrides = {
+              "listeners" = mkPropertyString (rebuildListeners cfg.settings."listeners");
+            } // lib.optionalAttrs (cfg.settings ? "advertised.listeners") {
+              "advertised.listeners" = mkPropertyString (rebuildListeners cfg.settings."advertised.listeners");
+            } // lib.optionalAttrs (cfg.settings ? "controller.quorum.voters") {
+              "controller.quorum.voters" = mkPropertyString (rebuildQuorumVoters cfg.settings."controller.quorum.voters");
+            };
+          in
+          generator "server.properties" (stringlySettings // portOverrides);
 
         processes.kafka = {
           ports.main.allocate = basePort;
