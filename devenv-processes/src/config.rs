@@ -177,4 +177,7 @@ pub struct ProcessConfig {
     /// Linux-specific configuration
     #[serde(default)]
     pub linux: LinuxConfig,
+    /// Process names this process depends on (used for shutdown ordering).
+    #[serde(default)]
+    pub depends_on: Vec<String>,
 }

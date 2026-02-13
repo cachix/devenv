@@ -202,13 +202,28 @@ in
 
     # Export process configurations as JSON for the native manager
     process.nativeConfigJson = pkgs.writeText "process-config.json" (builtins.toJSON (
+      let
+        enabledProcesses = lib.filterAttrs (_: p: p.enable) config.processes;
+        processPrefix = "devenv:processes:";
+        # Extract process name from a task dependency like "devenv:processes:postgres@ready"
+        extractProcessDep = dep:
+          let
+            stripped = lib.removePrefix processPrefix dep;
+            # Remove @ready or @complete suffix
+            name = builtins.head (lib.splitString "@" stripped);
+          in
+          if lib.hasPrefix processPrefix dep && enabledProcesses ? ${name}
+          then name
+          else null;
+      in
       lib.mapAttrs
         (name: process:
           let
             native = cfg.processConfig.${name};
+            depends_on = lib.filter (x: x != null) (map extractProcessDep process.after);
           in
-          removeAttrs process [ "enable" "process-compose" "ports" ] // {
-            inherit name;
+          removeAttrs process [ "enable" "process-compose" "ports" "after" "before" ] // {
+            inherit name depends_on;
             inherit (native) use_sudo pseudo_terminal watchdog notify;
             listen = map
               (spec: removeAttrs spec [ "path" ] // {
@@ -221,7 +236,7 @@ in
             };
           }
         )
-        (lib.filterAttrs (_: p: p.enable) config.processes)
+        enabledProcesses
     ));
 
     # The actual process manager command will be invoked from devenv.rs

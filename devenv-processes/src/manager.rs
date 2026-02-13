@@ -4,7 +4,7 @@ use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix::sys::signal::{self, Signal as NixSignal};
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -84,6 +84,87 @@ pub struct JobHandle {
     pub supervisor_task: JoinHandle<()>,
     /// Output reader tasks (stdout, stderr)
     pub output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
+}
+
+/// Compute shutdown order: reverse topological sort of the dependency graph.
+///
+/// Processes with no dependents stop first; processes that others depend on stop last.
+/// Uses Kahn's algorithm on the reversed graph. Processes not in the graph or in cycles
+/// are appended at the end (stopped first to be safe).
+fn reverse_topo_order(jobs: &HashMap<String, JobHandle>) -> Vec<String> {
+    let deps: HashMap<&str, &[String]> = jobs
+        .iter()
+        .map(|(name, handle)| (name.as_str(), handle.resources.config.depends_on.as_slice()))
+        .collect();
+    shutdown_order(&deps)
+}
+
+/// Pure topological sort for shutdown ordering.
+///
+/// Given a map of process names to their dependencies (processes they depend on),
+/// returns a list ordered so that dependents come before their dependencies.
+fn shutdown_order(deps: &HashMap<&str, &[String]>) -> Vec<String> {
+    let names: HashSet<&str> = deps.keys().copied().collect();
+
+    // Build the dependency graph: edge A→B where "A depends_on B".
+    // Kahn's on this graph yields nodes with no incoming edges (leaves) first.
+    // Leaves are processes that nothing else depends on — they should stop first.
+    let mut in_degree: HashMap<&str, usize> = HashMap::new();
+    let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
+
+    for &name in &names {
+        in_degree.entry(name).or_insert(0);
+        adj.entry(name).or_default();
+    }
+
+    for (&name, &dep_list) in deps {
+        for dep in dep_list {
+            if names.contains(dep.as_str()) {
+                adj.entry(name).or_default().push(dep.as_str());
+                *in_degree.entry(dep.as_str()).or_insert(0) += 1;
+            }
+        }
+    }
+
+    // Kahn's algorithm
+    let mut queue: VecDeque<&str> = in_degree
+        .iter()
+        .filter(|&(_, &deg)| deg == 0)
+        .map(|(&name, _)| name)
+        .collect();
+    queue.make_contiguous().sort();
+
+    let mut result: Vec<String> = Vec::with_capacity(names.len());
+
+    while let Some(node) = queue.pop_front() {
+        result.push(node.to_string());
+        if let Some(neighbors) = adj.get(node) {
+            let mut next: Vec<&str> = Vec::new();
+            for &neighbor in neighbors {
+                let deg = in_degree.get_mut(neighbor).unwrap();
+                *deg -= 1;
+                if *deg == 0 {
+                    next.push(neighbor);
+                }
+            }
+            next.sort();
+            queue.extend(next);
+        }
+    }
+
+    // Any remaining nodes (cycles) get appended sorted
+    if result.len() < names.len() {
+        let in_result: HashSet<&str> = result.iter().map(|s| s.as_str()).collect();
+        let mut remaining: Vec<String> = names
+            .iter()
+            .filter(|n| !in_result.contains(**n))
+            .map(|n| n.to_string())
+            .collect();
+        remaining.sort();
+        result.extend(remaining);
+    }
+
+    result
 }
 
 /// Native process manager using watchexec-supervisor
@@ -322,14 +403,17 @@ impl NativeProcessManager {
         }
     }
 
-    /// Stop all processes
+    /// Stop all processes in reverse dependency order.
+    ///
+    /// Processes that depend on others are stopped first, so that dependencies
+    /// remain available while dependents are draining.
     pub async fn stop_all(&self) -> Result<()> {
         let jobs = self.jobs.read().await;
-        let job_names: Vec<String> = jobs.keys().cloned().collect();
-        drop(jobs); // Release the read lock
+        let stop_order = reverse_topo_order(&jobs);
+        drop(jobs);
 
-        for name in job_names {
-            let _ = self.stop(&name).await; // Continue even if one fails
+        for name in stop_order {
+            let _ = self.stop(&name).await;
         }
         Ok(())
     }
@@ -954,5 +1038,94 @@ mod tests {
 
         // Clean up
         let _ = manager.stop_all().await;
+    }
+
+    #[test]
+    fn shutdown_order_no_deps() {
+        let deps: HashMap<&str, &[String]> = [("a", &[] as &[String]), ("b", &[]), ("c", &[])]
+            .into_iter()
+            .collect();
+        let order = super::shutdown_order(&deps);
+        assert_eq!(order, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn shutdown_order_linear_chain() {
+        // web → api → db: web depends_on api, api depends_on db
+        let api = vec!["db".to_string()];
+        let web = vec!["api".to_string()];
+        let deps: HashMap<&str, &[String]> = [
+            ("web", web.as_slice()),
+            ("api", api.as_slice()),
+            ("db", &[]),
+        ]
+        .into_iter()
+        .collect();
+        let order = super::shutdown_order(&deps);
+        // web should stop first, then api, then db
+        assert_eq!(order, vec!["web", "api", "db"]);
+    }
+
+    #[test]
+    fn shutdown_order_diamond() {
+        // frontend and backend both depend on db
+        let fe = vec!["db".to_string()];
+        let be = vec!["db".to_string()];
+        let deps: HashMap<&str, &[String]> = [
+            ("frontend", fe.as_slice()),
+            ("backend", be.as_slice()),
+            ("db", &[] as &[String]),
+        ]
+        .into_iter()
+        .collect();
+        let order = super::shutdown_order(&deps);
+        // Both frontend and backend should come before db
+        let db_pos = order.iter().position(|n| n == "db").unwrap();
+        let fe_pos = order.iter().position(|n| n == "frontend").unwrap();
+        let be_pos = order.iter().position(|n| n == "backend").unwrap();
+        assert!(fe_pos < db_pos);
+        assert!(be_pos < db_pos);
+    }
+
+    #[test]
+    fn shutdown_order_ignores_unknown_deps() {
+        // "app" depends on "missing" which isn't in the job set
+        let app = vec!["missing".to_string()];
+        let deps: HashMap<&str, &[String]> = [("app", app.as_slice())].into_iter().collect();
+        let order = super::shutdown_order(&deps);
+        assert_eq!(order, vec!["app"]);
+    }
+
+    #[test]
+    fn shutdown_order_cycle_appended() {
+        // a → b → a (cycle)
+        let a_deps = vec!["b".to_string()];
+        let b_deps = vec!["a".to_string()];
+        let deps: HashMap<&str, &[String]> = [("a", a_deps.as_slice()), ("b", b_deps.as_slice())]
+            .into_iter()
+            .collect();
+        let order = super::shutdown_order(&deps);
+        // Both should appear (cycle nodes appended)
+        assert_eq!(order.len(), 2);
+        assert!(order.contains(&"a".to_string()));
+        assert!(order.contains(&"b".to_string()));
+    }
+
+    #[test]
+    fn shutdown_order_mixed_deps_and_independent() {
+        // api → db, worker (independent)
+        let api = vec!["db".to_string()];
+        let deps: HashMap<&str, &[String]> = [
+            ("api", api.as_slice()),
+            ("db", &[] as &[String]),
+            ("worker", &[]),
+        ]
+        .into_iter()
+        .collect();
+        let order = super::shutdown_order(&deps);
+        let api_pos = order.iter().position(|n| n == "api").unwrap();
+        let db_pos = order.iter().position(|n| n == "db").unwrap();
+        assert!(api_pos < db_pos);
+        assert_eq!(order.len(), 3);
     }
 }
