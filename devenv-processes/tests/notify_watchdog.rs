@@ -722,8 +722,8 @@ sleep 3600
         );
         let script = ctx.create_script("watchdog-max.sh", &script_content).await;
 
-        // Use 500ms watchdog timeout, max 2 restarts
-        let mut config = watchdog_process_config("watchdog-max", &script, 500_000, false);
+        // Use 1s watchdog timeout, max 2 restarts
+        let mut config = watchdog_process_config("watchdog-max", &script, 1_000_000, false);
         config.max_restarts = Some(2);
 
         let manager = ctx.create_manager_single(config.clone());
