@@ -50,7 +50,7 @@ let
         hooks;
 
   # Auto-format hook using git-hooks if enabled
-  preCommitHook = lib.optional config.git-hooks.enable {
+  preCommitHook = lib.optional (cfg.runPreCommitOnWrites && config.git-hooks.enable) {
     matcher = "^(Edit|MultiEdit|Write)$";
     command = ''
       cd "$DEVENV_ROOT" && ${config.git-hooks.package.meta.mainProgram} run
@@ -587,6 +587,14 @@ in
       internal = true;
       description = ''
         Path to the Claude Code settings file within the repository.
+      '';
+    };
+
+    runPreCommitOnWrites = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        	Run pre-commit hooks after every write (Edit, MultiEdit, or Write command).
       '';
     };
   };
