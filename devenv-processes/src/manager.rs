@@ -90,7 +90,7 @@ pub struct JobHandle {
 ///
 /// Processes with no dependents stop first; processes that others depend on stop last.
 /// Uses Kahn's algorithm on the reversed graph. Processes not in the graph or in cycles
-/// are appended at the end (stopped first to be safe).
+/// are appended at the end (stopped last).
 fn reverse_topo_order(jobs: &HashMap<String, JobHandle>) -> Vec<String> {
     let deps: HashMap<&str, &[String]> = jobs
         .iter()
@@ -743,7 +743,7 @@ impl NativeProcessManager {
     }
 
     /// Save the manager PID to a file
-    pub fn save_manager_pid(pid_path: &PathBuf) -> Result<()> {
+    pub fn save_manager_pid(pid_path: &Path) -> Result<()> {
         let pid = std::process::id();
         std::fs::write(pid_path, pid.to_string()).into_diagnostic()?;
         debug!("Saved manager PID {} to {}", pid, pid_path.display());
@@ -751,7 +751,7 @@ impl NativeProcessManager {
     }
 
     /// Load the manager PID from a file
-    pub fn load_manager_pid(pid_path: &PathBuf) -> Result<u32> {
+    pub fn load_manager_pid(pid_path: &Path) -> Result<u32> {
         let pid_str = std::fs::read_to_string(pid_path).into_diagnostic()?;
         let pid = pid_str.trim().parse::<u32>().into_diagnostic()?;
         Ok(pid)
