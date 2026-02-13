@@ -10,7 +10,7 @@
 mod common;
 
 use common::*;
-use devenv_processes::{NotifyConfig, ProcessConfig, WatchdogConfig};
+use devenv_processes::{NotifyConfig, ProcessConfig, SupervisorPhase, WatchdogConfig};
 use sd_notify::NotifyState;
 use std::os::unix::net::UnixDatagram;
 use std::sync::Mutex;
@@ -79,29 +79,14 @@ fn send_raw_notify(socket_path: &std::path::Path, message: &str) -> std::io::Res
 async fn test_notify_socket_created() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let output_file = ctx.temp_path().join("output.txt");
-
-        // Create a simple script that writes output and sleeps
-        let script_content = format!(
-            r#"#!/bin/sh
-echo "started" > {}
-sleep 3600
-"#,
-            output_file.display()
-        );
-        let script = ctx.create_script("notify-test.sh", &script_content).await;
+        let script = ctx
+            .create_script("notify-test.sh", "#!/bin/sh\nsleep 3600\n")
+            .await;
 
         let config = notify_process_config("notify-test", &script);
         let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
-        // Wait for process to start
-        assert!(
-            wait_for_file_content(&output_file, "started", STARTUP_TIMEOUT).await,
-            "Process should start"
-        );
-
-        // Check that notify socket was created
         let notify_socket_path = ctx.state_dir.join("notify/notify-test.sock");
         assert!(
             notify_socket_path.exists(),
@@ -186,26 +171,13 @@ sleep 3600
 async fn test_notify_socket_cleanup_on_stop() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let output_file = ctx.temp_path().join("output.txt");
-
-        let script_content = format!(
-            r#"#!/bin/sh
-echo "started" > {}
-sleep 3600
-"#,
-            output_file.display()
-        );
-        let script = ctx.create_script("cleanup-test.sh", &script_content).await;
+        let script = ctx
+            .create_script("cleanup-test.sh", "#!/bin/sh\nsleep 3600\n")
+            .await;
 
         let config = notify_process_config("cleanup-test", &script);
         let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
-
-        // Wait for process to start
-        assert!(
-            wait_for_file_content(&output_file, "started", STARTUP_TIMEOUT).await,
-            "Process should start"
-        );
 
         let notify_socket_path = ctx.state_dir.join("notify/cleanup-test.sock");
         assert!(
@@ -213,10 +185,8 @@ sleep 3600
             "Notify socket should exist while process is running"
         );
 
-        // Stop the process
         manager.stop_all().await.unwrap();
 
-        // Poll until socket is cleaned up
         let path = notify_socket_path.clone();
         assert!(
             wait_for_condition(
@@ -238,35 +208,34 @@ sleep 3600
 async fn test_no_notify_socket_when_disabled() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let output_file = ctx.temp_path().join("output.txt");
+        let script = ctx
+            .create_script("no-notify.sh", "#!/bin/sh\nsleep 3600\n")
+            .await;
 
-        let script_content = format!(
-            r#"#!/bin/sh
-echo "started" > {}
-sleep 3600
-"#,
-            output_file.display()
-        );
-        let script = ctx.create_script("no-notify.sh", &script_content).await;
-
-        // Create config WITHOUT notify
         let config = ProcessConfig {
             name: "no-notify".to_string(),
             exec: script.to_string_lossy().to_string(),
             args: vec![],
-            notify: None, // Disabled
+            notify: None,
             ..Default::default()
         };
         let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
-        // Wait for process to start
         assert!(
-            wait_for_file_content(&output_file, "started", STARTUP_TIMEOUT).await,
-            "Process should start"
+            wait_for_condition(
+                || async {
+                    manager
+                        .job_state("no-notify")
+                        .await
+                        .is_some_and(|s| s.phase == SupervisorPhase::Starting || s.phase == SupervisorPhase::Ready)
+                },
+                STARTUP_TIMEOUT
+            )
+            .await,
+            "Supervisor should be running"
         );
 
-        // Notify socket should NOT exist
         let notify_socket_path = ctx.state_dir.join("notify/no-notify.sock");
         assert!(
             !notify_socket_path.exists(),
@@ -283,35 +252,19 @@ sleep 3600
 async fn test_manager_receives_ready_notification() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let output_file = ctx.temp_path().join("output.txt");
-
-        let script_content = format!(
-            r#"#!/bin/sh
-echo "started" > {}
-sleep 3600
-"#,
-            output_file.display()
-        );
-        let script = ctx.create_script("ready-test.sh", &script_content).await;
+        let script = ctx
+            .create_script("ready-test.sh", "#!/bin/sh\nsleep 3600\n")
+            .await;
 
         let config = notify_process_config("ready-test", &script);
         let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
-        // Wait for process to start
-        assert!(
-            wait_for_file_content(&output_file, "started", STARTUP_TIMEOUT).await,
-            "Process should start"
-        );
-
-        // Send READY=1 notification
         let notify_socket_path = ctx.state_dir.join("notify/ready-test.sock");
         send_notify(&notify_socket_path, &[NotifyState::Ready]);
 
-        // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Process should still be running (READY=1 doesn't stop it)
         manager
             .stop_all()
             .await
@@ -325,38 +278,22 @@ sleep 3600
 async fn test_manager_receives_status_notification() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let output_file = ctx.temp_path().join("output.txt");
-
-        let script_content = format!(
-            r#"#!/bin/sh
-echo "started" > {}
-sleep 3600
-"#,
-            output_file.display()
-        );
-        let script = ctx.create_script("status-test.sh", &script_content).await;
+        let script = ctx
+            .create_script("status-test.sh", "#!/bin/sh\nsleep 3600\n")
+            .await;
 
         let config = notify_process_config("status-test", &script);
         let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
-        // Wait for process to start
-        assert!(
-            wait_for_file_content(&output_file, "started", STARTUP_TIMEOUT).await,
-            "Process should start"
-        );
-
-        // Send STATUS notification
         let notify_socket_path = ctx.state_dir.join("notify/status-test.sock");
         send_notify(
             &notify_socket_path,
             &[NotifyState::Status("Loading configuration...")],
         );
 
-        // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Process should still be running
         manager
             .stop_all()
             .await
@@ -370,27 +307,14 @@ sleep 3600
 async fn test_watchdog_ping_resets_timer() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let output_file = ctx.temp_path().join("output.txt");
-
-        let script_content = format!(
-            r#"#!/bin/sh
-echo "started" > {}
-sleep 3600
-"#,
-            output_file.display()
-        );
-        let script = ctx.create_script("watchdog-ping.sh", &script_content).await;
+        let script = ctx
+            .create_script("watchdog-ping.sh", "#!/bin/sh\nsleep 3600\n")
+            .await;
 
         // Use a 2 second watchdog timeout, but don't require ready
         let config = watchdog_process_config("watchdog-ping", &script, 2_000_000, false);
         let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
-
-        // Wait for process to start
-        assert!(
-            wait_for_file_content(&output_file, "started", STARTUP_TIMEOUT).await,
-            "Process should start"
-        );
 
         let notify_socket_path = ctx.state_dir.join("notify/watchdog-ping.sock");
 
@@ -402,7 +326,6 @@ sleep 3600
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
 
-        // Process should still be running because we kept pinging
         manager
             .stop_all()
             .await
@@ -416,42 +339,29 @@ sleep 3600
 async fn test_watchdog_timeout_triggers_restart() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("start_count.txt");
-
-        // Script increments counter each time it starts
-        let script_content = format!(
-            r#"#!/bin/sh
-if [ -f "{0}" ]; then
-    count=$(($(cat "{0}") + 1))
-else
-    count=1
-fi
-echo $count > "{0}"
-sleep 3600
-"#,
-            counter_file.display()
-        );
         let script = ctx
-            .create_script("watchdog-timeout.sh", &script_content)
+            .create_script("watchdog-timeout.sh", "#!/bin/sh\nsleep 3600\n")
             .await;
 
         // Use a 1 second watchdog timeout, require_ready=false so watchdog starts immediately
         let config = watchdog_process_config("watchdog-timeout", &script, 1_000_000, false);
         let manager = ctx.create_manager();
-        let _job = manager.start_command(&config, None).await.unwrap();
+        manager.start_command(&config, None).await.unwrap();
 
-        // Wait for initial start
+        // Don't send any watchdog pings — wait for at least one restart
+        let restarted = wait_for_condition(
+            || async {
+                manager
+                    .job_state("watchdog-timeout")
+                    .await
+                    .is_some_and(|s| s.restart_count >= 1)
+            },
+            RESTART_TIMEOUT,
+        )
+        .await;
         assert!(
-            wait_for_file_content(&counter_file, "1", STARTUP_TIMEOUT).await,
-            "Process should start initially"
-        );
-
-        // Don't send any watchdog pings - poll until restart detected
-        let count = wait_for_counter_value(&counter_file, 2, RESTART_TIMEOUT).await;
-        assert!(
-            count >= 2,
-            "Process should have restarted due to watchdog timeout, count={}",
-            count
+            restarted,
+            "Process should have restarted due to watchdog timeout"
         );
 
         manager.stop_all().await.unwrap();
@@ -464,23 +374,8 @@ sleep 3600
 async fn test_watchdog_requires_ready_before_enforcing() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("start_count.txt");
-
-        // Script increments counter each time it starts
-        let script_content = format!(
-            r#"#!/bin/sh
-if [ -f "{0}" ]; then
-    count=$(($(cat "{0}") + 1))
-else
-    count=1
-fi
-echo $count > "{0}"
-sleep 3600
-"#,
-            counter_file.display()
-        );
         let script = ctx
-            .create_script("watchdog-ready.sh", &script_content)
+            .create_script("watchdog-ready.sh", "#!/bin/sh\nsleep 3600\n")
             .await;
 
         // Use a 1 second watchdog timeout with require_ready=true
@@ -488,18 +383,13 @@ sleep 3600
         let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
-        // Wait for initial start
-        assert!(
-            wait_for_file_content(&counter_file, "1", STARTUP_TIMEOUT).await,
-            "Process should start initially"
-        );
-
         // Wait longer than watchdog timeout WITHOUT sending READY=1.
         // This is inherently timing-dependent: we must wait long enough to
         // prove the watchdog did NOT fire. 3x the watchdog timeout is generous.
-        let count = wait_for_counter_value(&counter_file, 2, Duration::from_secs(3)).await;
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        let status = manager.job_state("watchdog-ready").await.unwrap();
         assert_eq!(
-            count, 1,
+            status.restart_count, 0,
             "Process should NOT restart without READY=1 when require_ready=true"
         );
 
@@ -507,12 +397,19 @@ sleep 3600
         let notify_socket_path = ctx.state_dir.join("notify/watchdog-ready.sock");
         send_notify(&notify_socket_path, &[NotifyState::Ready]);
 
-        // Poll until watchdog-triggered restart
-        let count = wait_for_counter_value(&counter_file, 2, RESTART_TIMEOUT).await;
+        let restarted = wait_for_condition(
+            || async {
+                manager
+                    .job_state("watchdog-ready")
+                    .await
+                    .is_some_and(|s| s.restart_count >= 1)
+            },
+            RESTART_TIMEOUT,
+        )
+        .await;
         assert!(
-            count >= 2,
-            "Process should restart after READY=1 and watchdog timeout, count={}",
-            count
+            restarted,
+            "Process should restart after READY=1 and watchdog timeout"
         );
 
         manager.stop_all().await.unwrap();
@@ -525,35 +422,19 @@ sleep 3600
 async fn test_manager_receives_stopping_notification() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let output_file = ctx.temp_path().join("output.txt");
-
-        let script_content = format!(
-            r#"#!/bin/sh
-echo "started" > {}
-sleep 3600
-"#,
-            output_file.display()
-        );
-        let script = ctx.create_script("stopping-test.sh", &script_content).await;
+        let script = ctx
+            .create_script("stopping-test.sh", "#!/bin/sh\nsleep 3600\n")
+            .await;
 
         let config = notify_process_config("stopping-test", &script);
         let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
-        // Wait for process to start
-        assert!(
-            wait_for_file_content(&output_file, "started", STARTUP_TIMEOUT).await,
-            "Process should start"
-        );
-
-        // Send STOPPING=1 notification
         let notify_socket_path = ctx.state_dir.join("notify/stopping-test.sock");
         send_notify(&notify_socket_path, &[NotifyState::Stopping]);
 
-        // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Process should still be running (STOPPING is informational)
         manager
             .stop_all()
             .await
@@ -567,37 +448,19 @@ sleep 3600
 async fn test_manager_receives_reloading_notification() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let output_file = ctx.temp_path().join("output.txt");
-
-        let script_content = format!(
-            r#"#!/bin/sh
-echo "started" > {}
-sleep 3600
-"#,
-            output_file.display()
-        );
         let script = ctx
-            .create_script("reloading-test.sh", &script_content)
+            .create_script("reloading-test.sh", "#!/bin/sh\nsleep 3600\n")
             .await;
 
         let config = notify_process_config("reloading-test", &script);
         let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
-        // Wait for process to start
-        assert!(
-            wait_for_file_content(&output_file, "started", STARTUP_TIMEOUT).await,
-            "Process should start"
-        );
-
-        // Send RELOADING=1 notification
         let notify_socket_path = ctx.state_dir.join("notify/reloading-test.sock");
         send_notify(&notify_socket_path, &[NotifyState::Reloading]);
 
-        // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Process should still be running (RELOADING is informational)
         manager
             .stop_all()
             .await
@@ -611,38 +474,22 @@ sleep 3600
 async fn test_multiple_states_in_one_message() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let output_file = ctx.temp_path().join("output.txt");
-
-        let script_content = format!(
-            r#"#!/bin/sh
-echo "started" > {}
-sleep 3600
-"#,
-            output_file.display()
-        );
-        let script = ctx.create_script("multi-state.sh", &script_content).await;
+        let script = ctx
+            .create_script("multi-state.sh", "#!/bin/sh\nsleep 3600\n")
+            .await;
 
         let config = notify_process_config("multi-state", &script);
         let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
-        // Wait for process to start
-        assert!(
-            wait_for_file_content(&output_file, "started", STARTUP_TIMEOUT).await,
-            "Process should start"
-        );
-
-        // Send multiple states in one notification (READY + STATUS)
         let notify_socket_path = ctx.state_dir.join("notify/multi-state.sock");
         send_notify(
             &notify_socket_path,
             &[NotifyState::Ready, NotifyState::Status("Fully initialized")],
         );
 
-        // Brief wait to ensure async notification is processed
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Process should still be running
         manager
             .stop_all()
             .await
@@ -656,42 +503,24 @@ sleep 3600
 async fn test_invalid_notification_does_not_crash() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let output_file = ctx.temp_path().join("output.txt");
-
-        let script_content = format!(
-            r#"#!/bin/sh
-echo "started" > {}
-sleep 3600
-"#,
-            output_file.display()
-        );
         let script = ctx
-            .create_script("invalid-notify.sh", &script_content)
+            .create_script("invalid-notify.sh", "#!/bin/sh\nsleep 3600\n")
             .await;
 
         let config = notify_process_config("invalid-notify", &script);
         let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
-        // Wait for process to start
-        assert!(
-            wait_for_file_content(&output_file, "started", STARTUP_TIMEOUT).await,
-            "Process should start"
-        );
-
         let notify_socket_path = ctx.state_dir.join("notify/invalid-notify.sock");
 
-        // Send various malformed messages - manager should handle gracefully
-        send_raw_notify(&notify_socket_path, "").unwrap(); // Empty
-        send_raw_notify(&notify_socket_path, "INVALID").unwrap(); // No =
-        send_raw_notify(&notify_socket_path, "=VALUE").unwrap(); // No key
-        send_raw_notify(&notify_socket_path, "UNKNOWN=1\n").unwrap(); // Unknown key
-        send_raw_notify(&notify_socket_path, "\x00\x01\x02").unwrap(); // Binary garbage
+        send_raw_notify(&notify_socket_path, "").unwrap();
+        send_raw_notify(&notify_socket_path, "INVALID").unwrap();
+        send_raw_notify(&notify_socket_path, "=VALUE").unwrap();
+        send_raw_notify(&notify_socket_path, "UNKNOWN=1\n").unwrap();
+        send_raw_notify(&notify_socket_path, "\x00\x01\x02").unwrap();
 
-        // Brief wait to ensure async notification processing completes
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Process should still be running - invalid messages shouldn't crash anything
         manager
             .stop_all()
             .await
@@ -705,50 +534,34 @@ sleep 3600
 async fn test_watchdog_respects_max_restarts() {
     timeout(Duration::from_secs(60), async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("start_count.txt");
-
-        // Script increments counter each time it starts
-        let script_content = format!(
-            r#"#!/bin/sh
-if [ -f "{0}" ]; then
-    count=$(($(cat "{0}") + 1))
-else
-    count=1
-fi
-echo $count > "{0}"
-sleep 3600
-"#,
-            counter_file.display()
-        );
-        let script = ctx.create_script("watchdog-max.sh", &script_content).await;
+        let script = ctx.create_script("watchdog-max.sh", "#!/bin/sh\nsleep 3600\n").await;
 
         // Use 1s watchdog timeout, max 2 restarts
         let mut config = watchdog_process_config("watchdog-max", &script, 1_000_000, false);
         config.max_restarts = Some(2);
 
         let manager = ctx.create_manager();
-        let _job = manager.start_command(&config, None).await.unwrap();
+        manager.start_command(&config, None).await.unwrap();
 
-        // Wait for initial start
-        assert!(
-            wait_for_file_content(&counter_file, "1", STARTUP_TIMEOUT).await,
-            "Process should start initially"
-        );
+        // Wait for the supervisor to give up after exhausting restarts.
+        // With max_restarts=2, the watchdog fires 3 times: 2 restarts then GaveUp.
+        let gave_up = wait_for_condition(
+            || async {
+                manager
+                    .job_state("watchdog-max")
+                    .await
+                    .is_some_and(|s| s.phase == devenv_processes::SupervisorPhase::GaveUp)
+            },
+            RESTART_TIMEOUT,
+        )
+        .await;
+        assert!(gave_up, "Supervisor should give up after max_restarts");
 
-        // Poll until at least one restart
-        let count = wait_for_counter_value(&counter_file, 2, RESTART_TIMEOUT).await;
-        assert!(
-            count >= 2,
-            "Process should have restarted at least once, count={}",
-            count
-        );
-
-        // Wait for restarts to exhaust, then confirm max is respected
-        let count = wait_for_counter_value(&counter_file, 4, Duration::from_secs(5)).await;
-        assert!(
-            count <= 3,
-            "Process should respect max_restarts=2, but started {} times",
-            count
+        let status = manager.job_state("watchdog-max").await.unwrap();
+        assert_eq!(
+            status.restart_count, 2,
+            "Expected exactly 2 restarts, got {}",
+            status.restart_count
         );
 
         manager.stop_all().await.unwrap();
@@ -761,37 +574,17 @@ sleep 3600
 async fn test_delayed_hang_detection() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("start_count.txt");
-
-        // Script increments counter each time it starts
-        let script_content = format!(
-            r#"#!/bin/sh
-if [ -f "{0}" ]; then
-    count=$(($(cat "{0}") + 1))
-else
-    count=1
-fi
-echo $count > "{0}"
-sleep 3600
-"#,
-            counter_file.display()
-        );
-        let script = ctx.create_script("delayed-hang.sh", &script_content).await;
+        let script = ctx
+            .create_script("delayed-hang.sh", "#!/bin/sh\nsleep 3600\n")
+            .await;
 
         // Use 1 second watchdog timeout with require_ready=true
         let config = watchdog_process_config("delayed-hang", &script, 1_000_000, true);
         let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
-        // Wait for initial start
-        assert!(
-            wait_for_file_content(&counter_file, "1", STARTUP_TIMEOUT).await,
-            "Process should start initially"
-        );
-
         let notify_socket_path = ctx.state_dir.join("notify/delayed-hang.sock");
 
-        // Send READY=1 to start watchdog enforcement
         send_notify(&notify_socket_path, &[NotifyState::Ready]);
 
         // Send a few watchdog pings to keep it alive.
@@ -802,13 +595,20 @@ sleep 3600
             tokio::time::sleep(Duration::from_millis(400)).await;
         }
 
-        // Now stop sending pings - simulate a hang.
-        // Poll until watchdog-triggered restart.
-        let count = wait_for_counter_value(&counter_file, 2, RESTART_TIMEOUT).await;
+        // Stop sending pings to simulate a hang
+        let restarted = wait_for_condition(
+            || async {
+                manager
+                    .job_state("delayed-hang")
+                    .await
+                    .is_some_and(|s| s.restart_count >= 1)
+            },
+            RESTART_TIMEOUT,
+        )
+        .await;
         assert!(
-            count >= 2,
-            "Process should restart after delayed hang, count={}",
-            count
+            restarted,
+            "Process should restart after delayed hang"
         );
 
         manager.stop_all().await.unwrap();

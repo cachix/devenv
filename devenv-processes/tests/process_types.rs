@@ -3,27 +3,27 @@
 mod common;
 
 use common::*;
-use devenv_processes::{ProcessConfig, ProcessType, RestartPolicy};
+use devenv_processes::{ProcessConfig, ProcessType, RestartPolicy, SupervisorPhase};
 use std::time::Duration;
 use tokio::time::timeout;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(30);
+const RESTART_TIMEOUT: Duration = Duration::from_secs(10);
 
 // ============================================================================
 // Foreground Process Type Tests
 // ============================================================================
 
-/// Test that foreground process (default) behaves as before - restarts on failure
 #[tokio::test(flavor = "multi_thread")]
 async fn test_foreground_default_restarts_on_failure() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("counter.txt");
+        let script = ctx.create_script("fg-fail.sh", "#!/bin/sh\nexit 1\n").await;
 
-        // Foreground process with OnFailure policy (default behavior)
         let config = ProcessConfig {
             name: "foreground-fail".to_string(),
-            exec: format!(r#"echo "started" >> {}; exit 1"#, counter_file.display()),
+            exec: script.to_string_lossy().to_string(),
+            args: vec![],
             process_type: ProcessType::Foreground,
             restart: RestartPolicy::OnFailure,
             max_restarts: Some(2),
@@ -36,19 +36,22 @@ async fn test_foreground_default_restarts_on_failure() {
             .await
             .expect("Failed to start");
 
-        // Wait for restarts
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        let reached_gave_up = wait_for_condition(
+            || async {
+                manager
+                    .job_state("foreground-fail")
+                    .await
+                    .is_some_and(|s| s.phase == SupervisorPhase::GaveUp)
+            },
+            RESTART_TIMEOUT,
+        )
+        .await;
+        assert!(reached_gave_up, "Process should reach GaveUp phase");
 
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-        let count = content.lines().count();
-
-        // Should have started multiple times (1 initial + restarts)
-        assert!(
-            count >= 2,
-            "Foreground process should restart on failure, got {} starts",
-            count
+        let status = manager.job_state("foreground-fail").await.unwrap();
+        assert_eq!(
+            status.restart_count, 2,
+            "Should have restarted exactly 2 times"
         );
 
         manager.stop_all().await.expect("Failed to stop");
@@ -57,16 +60,18 @@ async fn test_foreground_default_restarts_on_failure() {
     .expect("Test timed out");
 }
 
-/// Test that foreground process with Never policy doesn't restart
 #[tokio::test(flavor = "multi_thread")]
 async fn test_foreground_never_policy() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("counter.txt");
+        let script = ctx
+            .create_script("fg-never.sh", "#!/bin/sh\nexit 1\n")
+            .await;
 
         let config = ProcessConfig {
             name: "foreground-never".to_string(),
-            exec: format!(r#"echo "started" >> {}; exit 1"#, counter_file.display()),
+            exec: script.to_string_lossy().to_string(),
+            args: vec![],
             process_type: ProcessType::Foreground,
             restart: RestartPolicy::Never,
             ..Default::default()
@@ -78,37 +83,35 @@ async fn test_foreground_never_policy() {
             .await
             .expect("Failed to start");
 
-        // Wait
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
 
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-        let count = content.lines().count();
-        assert_eq!(count, 1, "Foreground with Never policy should not restart");
+        let status = manager.job_state("foreground-never").await.unwrap();
+        assert_eq!(
+            status.restart_count, 0,
+            "Foreground with Never policy should not restart"
+        );
     })
     .await
     .expect("Test timed out");
 }
 
-/// Test that default process type is Foreground
 #[tokio::test(flavor = "multi_thread")]
 async fn test_default_process_type_is_foreground() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("counter.txt");
+        let script = ctx
+            .create_script("default-type.sh", "#!/bin/sh\nexit 1\n")
+            .await;
 
-        // Don't specify process_type - should default to Foreground
         let config = ProcessConfig {
             name: "default-type".to_string(),
-            exec: format!(r#"echo "started" >> {}; exit 1"#, counter_file.display()),
-            // process_type not specified - should default to Foreground
+            exec: script.to_string_lossy().to_string(),
+            args: vec![],
             restart: RestartPolicy::OnFailure,
             max_restarts: Some(2),
             ..Default::default()
         };
 
-        // Verify the default
         assert_eq!(
             config.process_type,
             ProcessType::Foreground,
@@ -121,18 +124,23 @@ async fn test_default_process_type_is_foreground() {
             .await
             .expect("Failed to start");
 
-        // Wait for restarts - if default is Foreground, it should restart
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        let reached_gave_up = wait_for_condition(
+            || async {
+                manager
+                    .job_state("default-type")
+                    .await
+                    .is_some_and(|s| s.phase == SupervisorPhase::GaveUp)
+            },
+            RESTART_TIMEOUT,
+        )
+        .await;
+        assert!(reached_gave_up, "Process should reach GaveUp phase");
 
-        let content = tokio::fs::read_to_string(&counter_file)
-            .await
-            .unwrap_or_default();
-        let count = content.lines().count();
-
+        let status = manager.job_state("default-type").await.unwrap();
         assert!(
-            count >= 2,
-            "Default process type should behave as Foreground and restart, got {} starts",
-            count
+            status.restart_count >= 1,
+            "Default process type should behave as Foreground and restart, got {} restarts",
+            status.restart_count
         );
 
         manager.stop_all().await.expect("Failed to stop");
