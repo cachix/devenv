@@ -12,15 +12,22 @@ use crate::config::WatchConfig;
 
 /// Handle for a running file watcher.
 ///
-/// Dropping this handle does *not* stop the watcher task, but the
-/// receiver will close once both this handle and the internal sender
-/// are dropped.
+/// Dropping this handle aborts the watcher task and releases OS-level
+/// file system watchers (inotify/FSEvents handles).
 pub struct FileWatcher {
     pub rx: mpsc::Receiver<()>,
     // Kept alive so that rx.recv() blocks (instead of returning None)
     // when no watcher task is running.
     _tx: mpsc::Sender<()>,
-    _task: Option<JoinHandle<()>>,
+    task: Option<JoinHandle<()>>,
+}
+
+impl Drop for FileWatcher {
+    fn drop(&mut self) {
+        if let Some(task) = self.task.take() {
+            task.abort();
+        }
+    }
 }
 
 impl FileWatcher {
@@ -34,7 +41,7 @@ impl FileWatcher {
             return Self {
                 rx,
                 _tx: tx,
-                _task: None,
+                task: None,
             };
         }
 
@@ -120,7 +127,7 @@ impl FileWatcher {
         Self {
             rx,
             _tx: tx,
-            _task: Some(task),
+            task: Some(task),
         }
     }
 }
