@@ -136,11 +136,11 @@ impl SupervisorState {
             Event::WatchdogPing => {
                 if let Some(timeout) = self.watchdog_timeout {
                     self.watchdog_deadline = Some(now + timeout);
-                }
-                self.startup_deadline = None;
-                if !self.watchdog_require_ready {
-                    self.watchdog_armed = true;
-                    self.phase = SupervisorPhase::Ready;
+                    self.startup_deadline = None;
+                    if !self.watchdog_require_ready {
+                        self.watchdog_armed = true;
+                        self.phase = SupervisorPhase::Ready;
+                    }
                 }
                 Action::None
             }
@@ -388,6 +388,21 @@ mod tests {
         // ...but not armed, so next_deadline() doesn't return it
         assert!(!state.watchdog_armed);
         assert!(state.next_deadline().is_none());
+    }
+
+    #[test]
+    fn watchdog_ping_without_watchdog_configured_is_noop() {
+        let now = Instant::now();
+        let config = config_with_startup_timeout(5);
+        let mut state = SupervisorState::new(&config, now);
+
+        let startup_before = state.startup_deadline;
+        state.on_event(Event::WatchdogPing, now + Duration::from_secs(1));
+
+        // Startup deadline must NOT be cleared — no watchdog is configured
+        assert_eq!(state.startup_deadline, startup_before);
+        assert_eq!(state.phase(), SupervisorPhase::Starting);
+        assert!(!state.watchdog_armed);
     }
 
     #[test]
