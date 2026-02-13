@@ -30,6 +30,7 @@ pub mod pid;
 pub mod process_compose;
 pub mod pty;
 pub mod socket_activation;
+pub mod supervisor_state;
 
 // Re-export config types at crate root
 pub use config::{
