@@ -78,6 +78,9 @@ regex = { workspace = true }
 
 # Terminal UI components
 console = { workspace = true }
+
+# Base64 encoding (for OSC 52 clipboard)
+base64 = { workspace = true }
 [[bin]]
 name = "tui-replay"
 path = "src/bin/tui-replay.rs"

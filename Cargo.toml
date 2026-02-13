@@ -56,6 +56,7 @@ nix-bindings-fetchers = { git = "https://github.com/cachix/nix-bindings-rust.git
 nix-cmd = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
 nix-bindings-bindgen-raw = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
 
+base64 = "0.22"
 anyhow = "1.0.92"
 ansiterm = "0.12.2"
 astral-tokio-tar = "0.5.6"
