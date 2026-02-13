@@ -153,6 +153,18 @@ pub struct ProcessConfig {
     pub restart: RestartPolicy,
     #[serde(default)]
     pub max_restarts: Option<usize>,
+    /// Maximum time in seconds for the process to signal readiness (like systemd TimeoutStartSec).
+    /// If the process doesn't send READY=1 or WATCHDOG=1 before this deadline, it's restarted.
+    #[serde(default)]
+    pub startup_timeout: Option<u64>,
+    /// Maximum restarts within the sliding window (like systemd StartLimitBurst).
+    /// Overrides max_restarts when set. Default: 5.
+    #[serde(default)]
+    pub restart_limit_burst: Option<usize>,
+    /// Sliding window size in seconds for restart rate limiting (like systemd StartLimitIntervalSec).
+    /// Default: 10.
+    #[serde(default)]
+    pub restart_limit_interval: Option<u64>,
     /// Watch configuration for file-triggered restarts
     #[serde(default)]
     pub watch: WatchConfig,
