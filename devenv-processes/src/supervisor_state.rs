@@ -397,7 +397,7 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
 
         let later = now + Duration::from_millis(500);
-        state.on_event(Event::WatchdogPing, later);
+        let _ = state.on_event(Event::WatchdogPing, later);
 
         // Deadline is set (for tracking)...
         assert_eq!(
@@ -416,7 +416,7 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
 
         let startup_before = state.startup_deadline;
-        state.on_event(Event::WatchdogPing, now + Duration::from_secs(1));
+        let _ = state.on_event(Event::WatchdogPing, now + Duration::from_secs(1));
 
         // Startup deadline must NOT be cleared — no watchdog is configured
         assert_eq!(state.startup_deadline, startup_before);
@@ -505,7 +505,7 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
         assert!(state.startup_deadline.is_some());
 
-        state.on_event(Event::Ready, now + Duration::from_secs(1));
+        let _ = state.on_event(Event::Ready, now + Duration::from_secs(1));
         assert!(state.startup_deadline.is_none());
     }
 
@@ -516,7 +516,7 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
         assert!(state.startup_deadline.is_some());
 
-        state.on_event(Event::WatchdogPing, now + Duration::from_secs(1));
+        let _ = state.on_event(Event::WatchdogPing, now + Duration::from_secs(1));
         assert!(state.startup_deadline.is_none());
     }
 
@@ -546,7 +546,7 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
 
         let original_deadline = state.startup_deadline.unwrap();
-        state.on_event(Event::ExtendTimeout { usec: 3_000_000 }, now);
+        let _ = state.on_event(Event::ExtendTimeout { usec: 3_000_000 }, now);
         assert_eq!(
             state.startup_deadline,
             Some(original_deadline + Duration::from_secs(3))
@@ -560,10 +560,10 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
 
         // Move to Ready phase
-        state.on_event(Event::Ready, now);
+        let _ = state.on_event(Event::Ready, now);
         let deadline_before = state.startup_deadline;
 
-        state.on_event(Event::ExtendTimeout { usec: 3_000_000 }, now);
+        let _ = state.on_event(Event::ExtendTimeout { usec: 3_000_000 }, now);
         assert_eq!(state.startup_deadline, deadline_before);
     }
 
@@ -582,7 +582,7 @@ mod tests {
         assert!(state.is_startup_deadline(startup));
 
         // After extending startup past watchdog, watchdog is earlier
-        state.on_event(
+        let _ = state.on_event(
             Event::ExtendTimeout {
                 usec: 10_000_000, // +10s
             },
@@ -623,7 +623,7 @@ mod tests {
 
         for i in 0..5 {
             let t = now + Duration::from_millis(i * 10);
-            state.on_event(
+            let _ = state.on_event(
                 Event::ProcessExit {
                     status: ExitStatus::Failure,
                 },
@@ -651,7 +651,7 @@ mod tests {
         // Use up 4 of the 5 burst slots
         for i in 0..4 {
             let t = now + Duration::from_millis(i * 10);
-            state.on_event(
+            let _ = state.on_event(
                 Event::ProcessExit {
                     status: ExitStatus::Failure,
                 },
@@ -680,7 +680,7 @@ mod tests {
         // Exhaust the burst limit
         for i in 0..5 {
             let t = now + Duration::from_millis(i * 10);
-            state.on_event(
+            let _ = state.on_event(
                 Event::ProcessExit {
                     status: ExitStatus::Failure,
                 },
@@ -855,7 +855,7 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
 
         assert_eq!(state.phase(), SupervisorPhase::Starting);
-        state.on_event(Event::Ready, now);
+        let _ = state.on_event(Event::Ready, now);
         assert_eq!(state.phase(), SupervisorPhase::Ready);
         assert!(state.is_ready());
     }
@@ -867,7 +867,7 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
 
         assert_eq!(state.phase(), SupervisorPhase::Starting);
-        state.on_event(Event::WatchdogPing, now);
+        let _ = state.on_event(Event::WatchdogPing, now);
         assert_eq!(state.phase(), SupervisorPhase::Ready);
         assert!(state.is_ready());
     }
@@ -880,7 +880,7 @@ mod tests {
 
         for i in 0..5 {
             let t = now + Duration::from_millis(i * 10);
-            state.on_event(
+            let _ = state.on_event(
                 Event::ProcessExit {
                     status: ExitStatus::Failure,
                 },
@@ -890,7 +890,7 @@ mod tests {
         }
 
         let t = now + Duration::from_millis(100);
-        state.on_event(
+        let _ = state.on_event(
             Event::ProcessExit {
                 status: ExitStatus::Failure,
             },
@@ -908,7 +908,7 @@ mod tests {
         // Exhaust rate limit to reach GaveUp
         for i in 0..5 {
             let t = now + Duration::from_millis(i * 10);
-            state.on_event(
+            let _ = state.on_event(
                 Event::ProcessExit {
                     status: ExitStatus::Failure,
                 },
@@ -917,7 +917,7 @@ mod tests {
             state.on_restart_complete(t);
         }
         let t = now + Duration::from_millis(100);
-        state.on_event(
+        let _ = state.on_event(
             Event::ProcessExit {
                 status: ExitStatus::Failure,
             },
@@ -952,7 +952,7 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
 
         // Move to Ready, arm watchdog
-        state.on_event(Event::Ready, now);
+        let _ = state.on_event(Event::Ready, now);
         assert_eq!(state.phase(), SupervisorPhase::Ready);
         assert!(state.watchdog_armed);
         assert!(state.startup_deadline.is_none());
@@ -997,13 +997,13 @@ mod tests {
         assert_eq!(status.restart_count, 0);
         assert!(!status.is_ready());
 
-        state.on_event(Event::Ready, now);
+        let _ = state.on_event(Event::Ready, now);
         let status = state.status();
         assert_eq!(status.phase, SupervisorPhase::Ready);
         assert!(status.is_ready());
 
         let t = now + Duration::from_millis(10);
-        state.on_event(
+        let _ = state.on_event(
             Event::ProcessExit {
                 status: ExitStatus::Failure,
             },
@@ -1038,7 +1038,7 @@ mod tests {
         // Exhaust rate limit via process exits
         for i in 0..5 {
             let t = now + Duration::from_millis(i * 10);
-            state.on_event(
+            let _ = state.on_event(
                 Event::ProcessExit {
                     status: ExitStatus::Failure,
                 },
@@ -1167,7 +1167,7 @@ mod tests {
         // Use up all 3 slots
         for i in 0..3 {
             let t = now + Duration::from_millis(i * 10);
-            state.on_event(
+            let _ = state.on_event(
                 Event::ProcessExit {
                     status: ExitStatus::Failure,
                 },
