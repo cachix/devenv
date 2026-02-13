@@ -7,13 +7,20 @@ use watchexec_supervisor::command::{Command, Program, Shell, SpawnOptions};
 
 use crate::config::ProcessConfig;
 
+/// The output of building a process command: the command itself and its log paths.
+pub struct BuiltCommand {
+    pub command: Arc<Command>,
+    pub stdout_log: PathBuf,
+    pub stderr_log: PathBuf,
+}
+
 /// Build a command from configuration, returning the command and log file paths.
 pub fn build_command(
     state_dir: &Path,
     config: &ProcessConfig,
     notify_socket_path: Option<&Path>,
     watchdog_usec: Option<u64>,
-) -> Result<(Arc<Command>, PathBuf, PathBuf)> {
+) -> Result<BuiltCommand> {
     let log_dir = state_dir.join("logs");
     std::fs::create_dir_all(&log_dir)
         .into_diagnostic()
@@ -22,7 +29,13 @@ pub fn build_command(
     let stdout_log = log_dir.join(format!("{}.stdout.log", config.name));
     let stderr_log = log_dir.join(format!("{}.stderr.log", config.name));
 
-    let script = build_wrapper_script(config, &stdout_log, &stderr_log, notify_socket_path, watchdog_usec);
+    let script = build_wrapper_script(
+        config,
+        &stdout_log,
+        &stderr_log,
+        notify_socket_path,
+        watchdog_usec,
+    );
 
     let program = Program::Shell {
         shell: Shell::new("bash"),
@@ -38,7 +51,11 @@ pub fn build_command(
         },
     });
 
-    Ok((command, stdout_log, stderr_log))
+    Ok(BuiltCommand {
+        command,
+        stdout_log,
+        stderr_log,
+    })
 }
 
 /// Build a shell wrapper script that handles env vars, cwd, logging, and sudo.
