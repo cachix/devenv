@@ -304,11 +304,11 @@ impl StatusLine {
         }
 
         // Write everything in one batch to minimize flicker:
-        // 1. Hide cursor + save position
-        // 2. Move to status line + clear + write content
+        // 1. Hide cursor, reset origin mode (DECOM off for absolute coords), save position
+        // 2. Move to status line (row 999) + clear + write content
         // 3. Restore position + show cursor
         // Using raw escape sequences to avoid multiple flushes from execute! macro
-        write!(stdout, "\x1b[?25l\x1b7\x1b[?6l\x1b[999;1H\x1b[2K")?;
+        write!(stdout, "\x1b[?25l\x1b[?6l\x1b7\x1b[999;1H\x1b[2K")?;
         stdout.write_all(&content)?;
         write!(stdout, "\x1b8\x1b[?25h")?;
         stdout.flush()?;
