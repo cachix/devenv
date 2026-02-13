@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -257,8 +256,8 @@ impl NativeProcessManager {
         job.start().await;
 
         // Spawn file tailers to emit output to activity
-        let stdout_tailer = Self::spawn_file_tailer(stdout_log, activity.clone(), false);
-        let stderr_tailer = Self::spawn_file_tailer(stderr_log, activity.clone(), true);
+        let stdout_tailer = crate::log_tailer::spawn_file_tailer(stdout_log, activity.clone(), false);
+        let stderr_tailer = crate::log_tailer::spawn_file_tailer(stderr_log, activity.clone(), true);
 
         // Create ready state for signaling when process becomes ready
         let (ready_state, _ready_rx) = tokio::sync::watch::channel(false);
@@ -298,73 +297,6 @@ impl NativeProcessManager {
         Ok(job_clone)
     }
 
-    /// Spawn a task that tails a log file and emits lines to activity
-    fn spawn_file_tailer(path: PathBuf, activity: Activity, is_stderr: bool) -> JoinHandle<()> {
-        use tokio::io::AsyncSeekExt;
-
-        tokio::spawn(async move {
-            // File is already created/truncated by start_command before job starts
-            let file = match tokio::fs::File::open(&path).await {
-                Ok(f) => f,
-                Err(e) => {
-                    debug!("Failed to open log file {}: {}", path.display(), e);
-                    return;
-                }
-            };
-
-            // Track our position in the file to avoid re-reading on EOF
-            let mut position: u64 = 0;
-            let mut reader = BufReader::new(file).lines();
-
-            loop {
-                match reader.next_line().await {
-                    Ok(Some(line)) => {
-                        // Update position: line length + newline byte
-                        position += line.len() as u64 + 1;
-                        if is_stderr {
-                            activity.error(&line);
-                        } else {
-                            activity.log(&line);
-                        }
-                    }
-                    Ok(None) => {
-                        // EOF reached, wait a bit and try again (tail -f behavior)
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-
-                        // Re-open file and seek to last known position
-                        let new_file = match tokio::fs::File::open(&path).await {
-                            Ok(f) => f,
-                            Err(_) => break,
-                        };
-
-                        // Check if file was truncated (e.g., during restart)
-                        // If so, reset position to read from the beginning
-                        let metadata = match new_file.metadata().await {
-                            Ok(m) => m,
-                            Err(_) => break,
-                        };
-                        if metadata.len() < position {
-                            // File was truncated, reset to beginning
-                            position = 0;
-                        }
-
-                        // Seek to where we left off (or beginning if truncated)
-                        let mut new_file = new_file;
-                        if let Err(e) = new_file.seek(std::io::SeekFrom::Start(position)).await {
-                            debug!("Failed to seek in log file {}: {}", path.display(), e);
-                            break;
-                        }
-
-                        reader = BufReader::new(new_file).lines();
-                    }
-                    Err(e) => {
-                        debug!("Error reading log file {}: {}", path.display(), e);
-                        break;
-                    }
-                }
-            }
-        })
-    }
 
     /// Spawn a supervision task that monitors the job and handles restarts
     fn spawn_supervisor(
