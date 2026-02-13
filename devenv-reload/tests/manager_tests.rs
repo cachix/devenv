@@ -281,6 +281,9 @@ async fn test_manager_keeps_shell_on_build_failure_during_reload() {
     assert!(first.is_ok(), "timeout waiting for initial build");
     assert_eq!(build_count.load(Ordering::SeqCst), 1);
 
+    // Allow the OS file watcher to finish setting up
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
     // Trigger reload (will fail)
     modify_file(&watch_file, "trigger failure");
 
@@ -379,6 +382,9 @@ async fn test_manager_keeps_shell_on_spawn_failure_during_reload() {
     let first = tokio::time::timeout(TEST_TIMEOUT, build_rx.recv()).await;
     assert!(first.is_ok(), "timeout waiting for initial build");
     assert_eq!(build_count.load(Ordering::SeqCst), 1);
+
+    // Allow the OS file watcher to finish setting up
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     // Trigger reload (spawn will fail)
     modify_file(&watch_file, "trigger spawn failure");
@@ -496,6 +502,9 @@ async fn test_manager_cancels_old_build_on_new_change() {
     let handle = tokio::spawn(async move { ShellManager::run(config, builder, msg_tx).await });
 
     tokio::task::yield_now().await;
+
+    // Allow the OS file watcher to finish setting up
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     // Trigger first file change
     modify_file(&watch_file, "change 1");

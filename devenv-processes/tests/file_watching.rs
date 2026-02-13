@@ -7,6 +7,13 @@
 //! to avoid timing-dependent flakiness. Negative assertions (should NOT
 //! restart) use a "canary" pattern: write a non-ignored file after the
 //! ignored file to prove the watcher was active throughout.
+//!
+//! Each test sleeps 1s after the process starts (and thus after the
+//! watcher is registered) before modifying watched files. Neither notify
+//! nor watchexec expose an API to know when the native OS file watcher
+//! has finished setting up, so a short sleep is a somewhat reliable way to
+//! avoid a race between watcher registration and the first file write.
+//! Another option would be to use the polling watcher instead just for tests.
 
 mod common;
 
@@ -59,6 +66,9 @@ sleep 3600
             wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
             "Process should start initially"
         );
+
+        // Allow the OS file watcher to finish setting up
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
         // Modify the watched file
         tokio::fs::write(&watch_file, "modified")
@@ -117,6 +127,9 @@ sleep 3600
             wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
             "Process should start initially"
         );
+
+        // Allow the OS file watcher to finish setting up
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
         // Create a new file in the watched directory
         tokio::fs::write(watch_dir.join("new_file.txt"), "new content")
@@ -181,6 +194,9 @@ sleep 3600
             wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
             "Process should start initially"
         );
+
+        // Allow the OS file watcher to finish setting up
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
         // Step 1: Prove watcher is active with a canary file
         tokio::fs::write(watch_dir.join("canary.txt"), "canary")
@@ -258,6 +274,9 @@ sleep 3600
             "Process should start initially"
         );
 
+        // Allow the OS file watcher to finish setting up
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
         // Step 1: Prove watcher is active with a canary file
         tokio::fs::write(watch_dir.join("canary.txt"), "canary")
             .await
@@ -333,6 +352,9 @@ sleep 3600
             wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
             "Process should start initially"
         );
+
+        // Allow the OS file watcher to finish setting up
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
         // Step 1: Prove watcher is active with a .rs file
         tokio::fs::write(watch_dir.join("canary.rs"), "fn main() {}")
@@ -415,6 +437,9 @@ sleep 3600
             wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
             "Process should start initially"
         );
+
+        // Allow the OS file watcher to finish setting up
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
         // Change file in first directory
         tokio::fs::write(watch_dir1.join("file1.txt"), "content1")
@@ -544,6 +569,9 @@ sleep 3600
             wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
             "Process should start"
         );
+
+        // Allow the OS file watcher to finish setting up
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
         // Make many rapid changes
         for i in 0..10 {
