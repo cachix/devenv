@@ -12,10 +12,13 @@ use devenv_activity::{ActivityEvent, ActivityLevel};
 use devenv_processes::ProcessCommand;
 use iocraft::prelude::*;
 use std::io::{self, Write};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use tokio::sync::{Notify, mpsc, watch};
 use tokio_shutdown::{Shutdown, Signal};
 use tracing::debug;
+
+/// Original terminal settings saved before TUI enters raw mode.
+static ORIGINAL_TERMIOS: OnceLock<libc::termios> = OnceLock::new();
 
 /// Configuration for the TUI application.
 ///
@@ -351,12 +354,43 @@ impl TuiApp {
     }
 }
 
+/// Save the current terminal state before starting the TUI.
+///
+/// Must be called before iocraft's render_loop enters raw mode, so we have
+/// the original (cooked) terminal settings to restore later. This is more
+/// robust than relying on crossterm's `disable_raw_mode()`, which only works
+/// if crossterm's own `enable_raw_mode()` was used to enter raw mode.
+pub fn save_terminal_state() {
+    #[cfg(unix)]
+    {
+        use std::os::unix::io::AsRawFd;
+        let fd = io::stdin().as_raw_fd();
+        if unsafe { libc::isatty(fd) } == 0 {
+            return;
+        }
+        let mut termios: libc::termios = unsafe { std::mem::zeroed() };
+        if unsafe { libc::tcgetattr(fd, &mut termios) } == 0 {
+            ORIGINAL_TERMIOS.get_or_init(|| termios);
+        }
+    }
+}
+
 /// Restore terminal to normal state.
 /// Call this after the TUI has exited to ensure the terminal is usable.
 pub fn restore_terminal() {
     let mut stderr = io::stderr();
 
-    // Disable raw mode if it was enabled
+    // Restore original terminal settings saved before TUI started.
+    // This is more reliable than crossterm's disable_raw_mode() because
+    // iocraft may manage raw mode independently of crossterm.
+    #[cfg(unix)]
+    if let Some(original) = ORIGINAL_TERMIOS.get() {
+        use std::os::unix::io::AsRawFd;
+        let fd = io::stdin().as_raw_fd();
+        unsafe { libc::tcsetattr(fd, libc::TCSANOW, original) };
+    }
+
+    // Fallback: also try crossterm's disable_raw_mode
     let _ = terminal::disable_raw_mode();
 
     // Show cursor (TUI may have hidden it)

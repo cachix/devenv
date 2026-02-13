@@ -30,6 +30,9 @@ tracing-subscriber = { workspace = true }
 # Data structures
 indexmap = { workspace = true }
 
+# Terminal state management
+libc = "0.2"
+
 # Error handling
 thiserror = { workspace = true }
 anyhow = { workspace = true }

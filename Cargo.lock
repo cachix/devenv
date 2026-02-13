@@ -1715,6 +1715,7 @@ dependencies = [
  "indexmap 2.13.0",
  "insta",
  "iocraft",
+ "libc",
  "miette",
  "once_cell",
  "rand 0.8.5",

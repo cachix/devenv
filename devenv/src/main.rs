@@ -162,6 +162,9 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
         ActivityLevel::Info
     };
 
+    // Save terminal state before TUI enters raw mode, so we can restore it reliably
+    devenv_tui::app::save_terminal_state();
+
     // In reload shell mode, backend_done is just a handoff signal; don't trigger global shutdown.
     let shutdown_on_backend_done = !matches!(
         &cli.command,
