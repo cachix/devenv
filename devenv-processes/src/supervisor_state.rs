@@ -78,14 +78,16 @@ impl SupervisorState {
             .watchdog
             .as_ref()
             .map(|w| Duration::from_micros(w.usec));
-        let watchdog_require_ready = config.watchdog.as_ref().map_or(true, |w| w.require_ready);
-        // startup_timeout, restart_limit_burst, restart_limit_interval added in Phase 9
+        let watchdog_require_ready = config.watchdog.as_ref().is_none_or(|w| w.require_ready);
+        // startup_timeout, restart_limit_burst, restart_limit_interval added in Phase 9.
+        // Until then, fall back to max_restarts for burst limit.
         let startup_timeout = None;
+        let restart_limit_burst = config.max_restarts.unwrap_or(DEFAULT_RESTART_LIMIT_BURST);
 
         let mut state = Self {
             restart_timestamps: VecDeque::new(),
             restart_count: 0,
-            restart_limit_burst: DEFAULT_RESTART_LIMIT_BURST,
+            restart_limit_burst,
             restart_limit_interval: DEFAULT_RESTART_LIMIT_INTERVAL,
             watchdog_armed: false,
             watchdog_deadline: None,
@@ -127,10 +129,10 @@ impl SupervisorState {
             Event::WatchdogTimeout => self.try_restart(now, "watchdog timeout"),
             Event::StartupTimeout => self.try_restart(now, "startup timeout"),
             Event::ExtendTimeout { usec } => {
-                if self.phase == SupervisorPhase::Starting {
-                    if let Some(deadline) = self.startup_deadline.as_mut() {
-                        *deadline += Duration::from_micros(usec);
-                    }
+                if self.phase == SupervisorPhase::Starting
+                    && let Some(deadline) = self.startup_deadline.as_mut()
+                {
+                    *deadline += Duration::from_micros(usec);
                 }
                 Action::None
             }
@@ -225,11 +227,11 @@ impl SupervisorState {
     /// When require_ready=false and watchdog is configured, arm from the start
     /// so that the watchdog timeout fires if the process never pings.
     fn arm_initial_watchdog(&mut self, now: Instant) {
-        if !self.watchdog_require_ready {
-            if let Some(timeout) = self.watchdog_timeout {
-                self.watchdog_armed = true;
-                self.watchdog_deadline = Some(now + timeout);
-            }
+        if !self.watchdog_require_ready
+            && let Some(timeout) = self.watchdog_timeout
+        {
+            self.watchdog_armed = true;
+            self.watchdog_deadline = Some(now + timeout);
         }
     }
 }

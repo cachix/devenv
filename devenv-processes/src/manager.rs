@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -42,12 +42,12 @@ pub enum ApiResponse {
 }
 
 use watchexec_supervisor::{
-    ProcessEnd, Signal,
-    job::{CommandState, Job, start_job},
+    Signal,
+    job::{Job, start_job},
 };
 
-use crate::config::{ProcessConfig, RestartPolicy};
-use crate::notify_socket::{NotifyMessage, NotifySocket};
+use crate::config::ProcessConfig;
+use crate::notify_socket::NotifySocket;
 use crate::pid::{self, PidStatus};
 use crate::socket_activation::{ProcessSetupWrapper, activation_from_listen};
 use crate::{ProcessManager, StartOptions};
@@ -259,7 +259,8 @@ impl NativeProcessManager {
         };
 
         // Spawn supervision task
-        let supervisor_task = self.spawn_supervisor(&resources);
+        let supervisor_task =
+            crate::supervisor::spawn_supervisor(&resources, self.shutdown.clone());
 
         // Store the job handle
         let mut jobs = self.jobs.write().await;
@@ -274,285 +275,6 @@ impl NativeProcessManager {
 
         info!("Command '{}' started", config.name);
         Ok(job)
-    }
-
-    /// Spawn a supervision task that monitors the job and handles restarts
-    fn spawn_supervisor(&self, resources: &ProcessResources) -> JoinHandle<()> {
-        let shutdown = self.shutdown.clone();
-        let config = resources.config.clone();
-        let job = resources.job.clone();
-        let activity = resources.activity.clone();
-        let notify_socket = resources.notify_socket.clone();
-        let ready_state = resources.ready_state.clone();
-        let name = config.name.clone();
-
-        // Extract watchdog config
-        let watchdog_timeout = config
-            .watchdog
-            .as_ref()
-            .map(|w| Duration::from_micros(w.usec));
-        let watchdog_require_ready = config
-            .watchdog
-            .as_ref()
-            .map(|w| w.require_ready)
-            .unwrap_or(true);
-
-        // Check if we need TCP probe for readiness (listen sockets or allocated ports, without notify)
-        let tcp_probe_address = if config.notify.as_ref().is_none_or(|n| !n.enable) {
-            // First try listen sockets
-            config
-                .listen
-                .iter()
-                .find_map(|spec| {
-                    if spec.kind == crate::config::ListenKind::Tcp {
-                        spec.address.clone()
-                    } else {
-                        None
-                    }
-                })
-                // Fall back to the first allocated port
-                .or_else(|| {
-                    config
-                        .ports
-                        .values()
-                        .next()
-                        .map(|port| format!("127.0.0.1:{}", port))
-                })
-        } else {
-            None
-        };
-
-        tokio::spawn(async move {
-            let mut restart_count = 0usize;
-            let mut ready_signaled = false;
-
-            // Watchdog state
-            let mut is_ready = !watchdog_require_ready; // If require_ready is false, start as ready
-            let mut watchdog_deadline: Option<Instant> = if watchdog_timeout.is_some() && is_ready {
-                Some(Instant::now() + watchdog_timeout.unwrap())
-            } else {
-                None
-            };
-
-            // Spawn TCP probe task if needed
-            let _tcp_probe_task = if let Some(address) = tcp_probe_address {
-                let ready_state = ready_state.clone();
-                let probe_name = name.clone();
-                let probe_activity = activity.clone();
-                Some(tokio::spawn(async move {
-                    debug!("Starting TCP probe for {} at {}", probe_name, address);
-                    loop {
-                        match tokio::net::TcpStream::connect(&address).await {
-                            Ok(_) => {
-                                info!("TCP probe succeeded for {} at {}", probe_name, address);
-                                probe_activity.log("TCP probe succeeded - process ready");
-                                probe_activity.set_status(ProcessStatus::Ready);
-                                let _ = ready_state.send(true);
-                                break;
-                            }
-                            Err(_) => {
-                                tokio::time::sleep(Duration::from_millis(100)).await;
-                            }
-                        }
-                    }
-                }))
-            } else {
-                None
-            };
-
-            let mut file_watcher = crate::file_watcher::FileWatcher::new(&config.watch, &name);
-
-            loop {
-                tokio::select! {
-                    _ = shutdown.notified() => {
-                        debug!("Shutdown requested for {}", name);
-                        break;
-                    }
-                    _ = file_watcher.rx.recv() => {
-                        // File change detected, restart the process
-                        info!("File change detected for {}, restarting", name);
-                        activity.log("File change detected, restarting");
-                        job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                        job.start().await;
-                        // Reset watchdog state on restart
-                        is_ready = !watchdog_require_ready;
-                        watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
-                            Some(Instant::now() + watchdog_timeout.unwrap())
-                        } else {
-                            None
-                        };
-                    }
-                    // Handle notify socket messages
-                    result = async {
-                        match &notify_socket {
-                            Some(socket) => socket.recv().await,
-                            None => std::future::pending().await,
-                        }
-                    } => {
-                        if let Ok(messages) = result {
-                            for msg in messages {
-                                match msg {
-                                    NotifyMessage::Ready => {
-                                        info!("Process {} signaled ready", name);
-                                        activity.log("Process signaled ready");
-                                        activity.set_status(ProcessStatus::Ready);
-                                        // Signal waiting tasks that process is ready
-                                        if !ready_signaled {
-                                            ready_signaled = true;
-                                            let _ = ready_state.send(true);
-                                        }
-                                        // Start watchdog timer now if configured
-                                        if let Some(timeout) = watchdog_timeout {
-                                            watchdog_deadline = Some(Instant::now() + timeout);
-                                        }
-                                    }
-                                    NotifyMessage::Watchdog => {
-                                        debug!("Watchdog ping from {}", name);
-                                        if let Some(timeout) = watchdog_timeout {
-                                            watchdog_deadline = Some(Instant::now() + timeout);
-                                        }
-                                    }
-                                    NotifyMessage::Status(status) => {
-                                        debug!("Status from {}: {}", name, status);
-                                        activity.log(&format!("Status: {}", status));
-                                    }
-                                    NotifyMessage::Stopping => {
-                                        debug!("Process {} signaled stopping", name);
-                                        activity.log("Process signaled stopping");
-                                    }
-                                    NotifyMessage::Reloading => {
-                                        debug!("Process {} signaled reloading", name);
-                                        activity.log("Process reloading configuration");
-                                    }
-                                    NotifyMessage::WatchdogTrigger => {
-                                        debug!("Watchdog trigger from {}", name);
-                                    }
-                                    NotifyMessage::ExtendTimeout { usec } => {
-                                        debug!("Extend timeout from {}: {} usec", name, usec);
-                                    }
-                                    NotifyMessage::Unknown(s) => {
-                                        debug!("Unknown notify message from {}: {}", name, s);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // Handle watchdog timeout
-                    _ = async {
-                        match watchdog_deadline {
-                            Some(deadline) => tokio::time::sleep_until(deadline.into()).await,
-                            None => std::future::pending().await,
-                        }
-                    }, if watchdog_deadline.is_some() => {
-                        warn!("Watchdog timeout for process {}", name);
-                        activity.error("Watchdog timeout - no heartbeat received");
-
-                        // Check max restarts limit before restarting
-                        if let Some(max) = config.max_restarts {
-                            if restart_count >= max {
-                                warn!(
-                                    "Process {} reached max restarts ({}) after watchdog timeout, giving up",
-                                    name, max
-                                );
-                                activity.error(format!("Max restarts ({}) reached, giving up", max));
-                                activity.fail();
-                                break;
-                            }
-                        }
-
-                        // Restart on watchdog timeout
-                        restart_count += 1;
-                        info!("Restarting process {} due to watchdog timeout (attempt {})", name, restart_count);
-                        activity.log(format!("Restarting due to watchdog timeout (attempt {})", restart_count));
-                        job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
-
-                        // Reset watchdog state for new instance
-                        is_ready = !watchdog_require_ready;
-                        watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
-                            Some(Instant::now() + watchdog_timeout.unwrap())
-                        } else {
-                            None
-                        };
-                    }
-                    _ = job.to_wait() => {
-                        // Process ended, check if we should restart
-                        let policy = config.restart;
-                        let max_restarts = config.max_restarts;
-                        let process_name = name.clone();
-
-                        // Use a channel to get the restart decision from run_async
-                        let (tx, rx) = tokio::sync::oneshot::channel();
-
-                        job.run_async(move |ctx| {
-                            // Extract status before async block (lifetime constraint)
-                            let status = if let CommandState::Finished { status, .. } = ctx.current {
-                                Some(*status)
-                            } else {
-                                None
-                            };
-
-                            Box::new(async move {
-                                if let Some(status) = status {
-                                    let is_failure = !matches!(status, ProcessEnd::Success);
-
-                                    let should_restart = match policy {
-                                        RestartPolicy::Never => false,
-                                        RestartPolicy::Always => true,
-                                        RestartPolicy::OnFailure => is_failure,
-                                    };
-
-                                    if should_restart {
-                                        debug!(
-                                            "Process {} exited with {:?}, policy: {:?}",
-                                            process_name, status, policy
-                                        );
-                                    }
-
-                                    let _ = tx.send(should_restart);
-                                }
-                            })
-                        }).await;
-
-                        // Check restart decision
-                        match rx.await {
-                            Ok(true) => {
-                                // Check max restarts limit
-                                if let Some(max) = max_restarts
-                                    && restart_count >= max
-                                {
-                                    warn!(
-                                        "Process {} reached max restarts ({}), giving up",
-                                        name, max
-                                    );
-                                    activity.error(format!("Max restarts ({}) reached, giving up", max));
-                                    activity.fail();
-                                    break;
-                                }
-
-                                restart_count += 1;
-                                info!("Restarting process {} (attempt {})", name, restart_count);
-                                activity.log(format!("Restarting (attempt {})", restart_count));
-                                job.start().await;
-                                // Reset watchdog state for new instance
-                                is_ready = !watchdog_require_ready;
-                                watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
-                                    Some(Instant::now() + watchdog_timeout.unwrap())
-                                } else {
-                                    None
-                                };
-                            }
-                            _ => {
-                                debug!("Process {} will not restart", name);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            debug!("Supervision task for {} exiting", name);
-        })
     }
 
     /// Stop a process by name
@@ -634,7 +356,8 @@ impl NativeProcessManager {
                 name
             );
             handle.resources.job.start().await;
-            handle.supervisor_task = self.spawn_supervisor(&handle.resources);
+            handle.supervisor_task =
+                crate::supervisor::spawn_supervisor(&handle.resources, self.shutdown.clone());
         } else {
             // Supervisor is still running - just restart the job.
             // The existing supervisor will continue monitoring with its current restart_count.
@@ -1151,9 +874,7 @@ impl ProcessManager for NativeProcessManager {
             pid::write_pid(&self.manager_pid_file(), std::process::id()).await?;
 
             // Run the event loop (shutdown via cancellation token from tokio-shutdown)
-            let token = options
-                .cancellation_token
-                .unwrap_or_else(tokio_util::sync::CancellationToken::new);
+            let token = options.cancellation_token.unwrap_or_default();
             let result = self.run_foreground(token, None).await;
 
             // Clean up PID file
@@ -1208,7 +929,7 @@ mod tests {
             name: "test-echo".to_string(),
             exec: "echo".to_string(),
             args: vec!["hello".to_string()],
-            restart: RestartPolicy::Never,
+            restart: crate::config::RestartPolicy::Never,
             ..Default::default()
         };
 
