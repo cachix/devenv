@@ -23,6 +23,7 @@ pub fn get_process_runtime_dir(runtime_dir: &Path) -> Result<PathBuf> {
     Ok(dir)
 }
 
+pub mod command;
 pub mod config;
 pub mod manager;
 pub mod notify_socket;

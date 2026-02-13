@@ -46,7 +46,6 @@ use watchexec::Watchexec;
 use watchexec_filterer_globset::GlobsetFilterer;
 use watchexec_supervisor::{
     ProcessEnd, Signal,
-    command::{Command, Program, Shell, SpawnOptions},
     job::{CommandState, Job, start_job},
 };
 
@@ -209,7 +208,8 @@ impl NativeProcessManager {
         let watchdog_usec = config.watchdog.as_ref().map(|w| w.usec);
 
         // Build the command (creates log directory and wrapper script)
-        let (cmd, stdout_log, stderr_log) = self.build_command(
+        let (cmd, stdout_log, stderr_log) = crate::command::build_command(
+            &self.state_dir,
             config,
             notify_socket.as_ref().map(|s| s.path()),
             watchdog_usec,
@@ -742,126 +742,6 @@ impl NativeProcessManager {
         })
     }
 
-    /// Build a command from configuration, returning the command and log file paths
-    fn build_command(
-        &self,
-        config: &ProcessConfig,
-        notify_socket_path: Option<&Path>,
-        watchdog_usec: Option<u64>,
-    ) -> Result<(Arc<Command>, PathBuf, PathBuf)> {
-        // Create log directory
-        let log_dir = self.state_dir.join("logs");
-        std::fs::create_dir_all(&log_dir)
-            .into_diagnostic()
-            .wrap_err("Failed to create logs directory")?;
-
-        // Log file paths
-        let stdout_log = log_dir.join(format!("{}.stdout.log", config.name));
-        let stderr_log = log_dir.join(format!("{}.stderr.log", config.name));
-
-        // Build shell script that handles environment, cwd, logging, and sudo
-        let script = self.build_wrapper_script(
-            config,
-            &stdout_log,
-            &stderr_log,
-            notify_socket_path,
-            watchdog_usec,
-        )?;
-
-        let program = Program::Shell {
-            shell: Shell::new("bash"), // Use "bash" from PATH, not "/bin/bash" (NixOS compatible)
-            command: script,
-            args: vec![],
-        };
-
-        let command = Arc::new(Command {
-            program,
-            options: SpawnOptions {
-                session: true,
-                ..Default::default()
-            },
-        });
-
-        Ok((command, stdout_log, stderr_log))
-    }
-
-    /// Build a shell wrapper script that handles env vars, cwd, logging, and sudo
-    fn build_wrapper_script(
-        &self,
-        config: &ProcessConfig,
-        stdout_log: &Path,
-        stderr_log: &Path,
-        notify_socket_path: Option<&Path>,
-        watchdog_usec: Option<u64>,
-    ) -> Result<String> {
-        use std::fmt::Write;
-
-        let mut script = String::new();
-        writeln!(script, "#!/bin/bash").unwrap();
-        writeln!(script, "set -e").unwrap();
-
-        // Set working directory
-        if let Some(ref cwd) = config.cwd {
-            writeln!(script, "cd {}", shell_escape::escape(cwd.to_string_lossy())).unwrap();
-        }
-
-        // Export environment variables
-        if !config.env.is_empty() {
-            for (key, value) in &config.env {
-                writeln!(
-                    script,
-                    "export {}={}",
-                    shell_escape::escape(key.into()),
-                    shell_escape::escape(value.into())
-                )
-                .unwrap();
-            }
-        }
-
-        // Set notify socket path if configured
-        if let Some(path) = notify_socket_path {
-            writeln!(
-                script,
-                "export NOTIFY_SOCKET={}",
-                shell_escape::escape(path.to_string_lossy())
-            )
-            .unwrap();
-        }
-
-        // Set watchdog interval if configured
-        if let Some(usec) = watchdog_usec {
-            writeln!(script, "export WATCHDOG_USEC={}", usec).unwrap();
-        }
-
-        // Build the actual command
-        let mut cmd = String::new();
-
-        if config.use_sudo {
-            // Use sudo with env preservation
-            write!(cmd, "sudo -E ").unwrap();
-        }
-
-        // Add the command (not escaped - exec can be a shell command with pipes/redirects)
-        write!(cmd, "{}", config.exec).unwrap();
-
-        // Add arguments (escaped for safety)
-        for arg in &config.args {
-            write!(cmd, " {}", shell_escape::escape(arg.into())).unwrap();
-        }
-
-        // Redirect output to logs
-        writeln!(
-            script,
-            "{} >> {} 2>> {}",
-            cmd,
-            shell_escape::escape(stdout_log.to_string_lossy()),
-            shell_escape::escape(stderr_log.to_string_lossy())
-        )
-        .unwrap();
-
-        debug!("Generated wrapper script for {}: {}", config.name, script);
-        Ok(script)
-    }
 
     /// Stop a process by name
     pub async fn stop(&self, name: &str) -> Result<()> {
