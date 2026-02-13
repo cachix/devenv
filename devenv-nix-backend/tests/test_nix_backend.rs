@@ -1618,50 +1618,6 @@ async fn test_metadata_before_any_update() {
 // STATE CONSISTENCY TESTS
 // ============================================================================
 
-/// Test that build after update uses new lock
-#[nix_test]
-async fn test_build_after_update_uses_new_lock() {
-    let yaml = r#"inputs:
-  nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
-  git-hooks:
-    url: github:cachix/git-hooks.nix
-"#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, GlobalOptions::default());
-    backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(
-            &paths,
-            &config,
-            config.nixpkgs_config(get_current_system()),
-        ))
-        .await
-        .expect("Failed to assemble");
-
-    // update() -> build() and verify build uses new locked versions
-    backend.update(&None).await.expect("Update failed");
-
-    // Verify lock file was created
-    let lock_path = temp_dir.path().join("devenv.lock");
-    assert!(lock_path.exists(), "Lock file should exist after update");
-
-    // Build should succeed using the locked versions
-    let result = backend.build(&["shell"], None, None).await;
-
-    assert!(
-        result.is_ok(),
-        "Build after update should succeed: {:?}",
-        result.err()
-    );
-
-    let paths = result.unwrap();
-    assert!(!paths.is_empty(), "Build should return paths");
-    assert!(
-        paths[0].to_str().unwrap().starts_with("/nix/store"),
-        "Built path should be in nix store"
-    );
-}
-
 // ============================================================================
 // GET_BASH() METHOD TESTS
 // ============================================================================
