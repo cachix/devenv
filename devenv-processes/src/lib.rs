@@ -53,6 +53,7 @@ pub use socket_activation::{
     ActivatedSockets, ActivationSpec, ActivationSpecBuilder, SD_LISTEN_FDS_START,
     SocketActivationWrapper, activation_from_listen,
 };
+pub use supervisor_state::{JobStatus, SupervisorPhase};
 
 /// Options for starting processes
 #[derive(Debug, Clone, Default)]

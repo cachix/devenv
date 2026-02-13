@@ -26,7 +26,7 @@ pub fn spawn_supervisor(
     let job = resources.job.clone();
     let activity = resources.activity.clone();
     let notify_socket = resources.notify_socket.clone();
-    let ready_state = resources.ready_state.clone();
+    let status_tx = resources.status_tx.clone();
     let name = config.name.clone();
 
     // TCP probe for readiness (listen sockets or allocated ports, without notify)
@@ -58,20 +58,18 @@ pub fn spawn_supervisor(
         let mut state = SupervisorState::new(&config, Instant::now());
         let mut ready_signaled = false;
 
-        // TCP probe task: continuously tries to connect until success
-        let _tcp_probe_task = tcp_probe_address.map(|address| {
-            let ready_state = ready_state.clone();
+        // TCP probe: signals the supervisor loop when the port becomes reachable.
+        // The supervisor handles the Ready event so status is updated consistently.
+        let (mut tcp_ready_rx, _tcp_probe_task) = if let Some(address) = tcp_probe_address {
+            let (tx, rx) = tokio::sync::mpsc::channel::<()>(1);
             let name = name.clone();
-            let activity = activity.clone();
-            tokio::spawn(async move {
+            let task = tokio::spawn(async move {
                 debug!("Starting TCP probe for {} at {}", name, address);
                 loop {
                     match tokio::net::TcpStream::connect(&address).await {
                         Ok(_) => {
                             info!("TCP probe succeeded for {} at {}", name, address);
-                            activity.log("TCP probe succeeded - process ready");
-                            activity.set_status(ProcessStatus::Ready);
-                            let _ = ready_state.send(true);
+                            let _ = tx.send(()).await;
                             break;
                         }
                         Err(_) => {
@@ -79,8 +77,11 @@ pub fn spawn_supervisor(
                         }
                     }
                 }
-            })
-        });
+            });
+            (Some(rx), Some(task))
+        } else {
+            (None, None)
+        };
 
         let mut file_watcher = crate::file_watcher::FileWatcher::new(&config.watch, &name);
 
@@ -99,15 +100,31 @@ pub fn spawn_supervisor(
                     break;
                 }
 
+                Some(()) = async {
+                    match &mut tcp_ready_rx {
+                        Some(rx) => rx.recv().await,
+                        None => std::future::pending::<Option<()>>().await,
+                    }
+                } => {
+                    activity.log("TCP probe succeeded - process ready");
+                    activity.set_status(ProcessStatus::Ready);
+                    state.on_event(Event::Ready, Instant::now());
+                    if !ready_signaled {
+                        ready_signaled = true;
+                    }
+                    let _ = status_tx.send(state.status());
+                    tcp_ready_rx = None;
+                }
+
                 _ = file_watcher.rx.recv() => {
                     info!("File change detected for {}, restarting", name);
                     activity.log("File change detected, restarting");
-                    // FileChange always returns Restart (no rate limiting)
                     state.on_event(Event::FileChange, Instant::now());
                     job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     job.start().await;
                     state.on_restart_complete(Instant::now());
+                    let _ = status_tx.send(state.status());
                 }
 
                 result = async {
@@ -127,12 +144,13 @@ pub fn spawn_supervisor(
                                     state.on_event(Event::Ready, Instant::now());
                                     if !ready_signaled {
                                         ready_signaled = true;
-                                        let _ = ready_state.send(true);
                                     }
+                                    let _ = status_tx.send(state.status());
                                 }
                                 NotifyMessage::Watchdog => {
                                     debug!("Watchdog ping from {}", name);
                                     state.on_event(Event::WatchdogPing, Instant::now());
+                                    let _ = status_tx.send(state.status());
                                 }
                                 NotifyMessage::WatchdogTrigger => {
                                     debug!("Watchdog trigger from {}", name);
@@ -150,14 +168,16 @@ pub fn spawn_supervisor(
                                             activity.error(reason);
                                             activity.fail();
                                             gave_up = true;
-                                            break;
                                         }
                                         Action::None => {}
                                     }
+                                    let _ = status_tx.send(state.status());
+                                    if gave_up { break; }
                                 }
                                 NotifyMessage::ExtendTimeout { usec } => {
                                     debug!("Extend timeout from {}: {} usec", name, usec);
                                     state.on_event(Event::ExtendTimeout { usec }, Instant::now());
+                                    let _ = status_tx.send(state.status());
                                 }
                                 NotifyMessage::Status(status) => {
                                     debug!("Status from {}: {}", name, status);
@@ -205,10 +225,12 @@ pub fn spawn_supervisor(
                             warn!("{}: {}", name, reason);
                             activity.error(reason);
                             activity.fail();
+                            let _ = status_tx.send(state.status());
                             break;
                         }
                         Action::None => {}
                     }
+                    let _ = status_tx.send(state.status());
                 }
 
                 _ = job.to_wait() => {
@@ -249,13 +271,16 @@ pub fn spawn_supervisor(
                             warn!("{}: {}", name, reason);
                             activity.error(reason);
                             activity.fail();
+                            let _ = status_tx.send(state.status());
                             break;
                         }
                         Action::None => {
                             debug!("Process {} exited, not restarting", name);
+                            let _ = status_tx.send(state.status());
                             break;
                         }
                     }
+                    let _ = status_tx.send(state.status());
                 }
             }
 
