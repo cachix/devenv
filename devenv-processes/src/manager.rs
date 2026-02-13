@@ -612,6 +612,12 @@ impl NativeProcessManager {
                                         debug!("Process {} signaled reloading", name);
                                         activity.log("Process reloading configuration");
                                     }
+                                    NotifyMessage::WatchdogTrigger => {
+                                        debug!("Watchdog trigger from {}", name);
+                                    }
+                                    NotifyMessage::ExtendTimeout { usec } => {
+                                        debug!("Extend timeout from {}: {} usec", name, usec);
+                                    }
                                     NotifyMessage::Unknown(s) => {
                                         debug!("Unknown notify message from {}: {}", name, s);
                                     }
