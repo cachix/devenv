@@ -246,7 +246,6 @@ impl NativeProcessManager {
         let initial_status = crate::supervisor_state::JobStatus {
             phase: crate::supervisor_state::SupervisorPhase::Starting,
             restart_count: 0,
-            is_ready: false,
         };
         let (status_tx, status_rx) = tokio::sync::watch::channel(initial_status);
 
@@ -403,12 +402,12 @@ impl NativeProcessManager {
             handle.status_rx.clone()
         };
 
-        if status_rx.borrow().is_ready {
+        if status_rx.borrow().is_ready() {
             return Ok(());
         }
 
         while status_rx.changed().await.is_ok() {
-            if status_rx.borrow().is_ready {
+            if status_rx.borrow().is_ready() {
                 return Ok(());
             }
         }
