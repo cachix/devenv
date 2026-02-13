@@ -66,20 +66,22 @@ pub struct ProcessState {
     pub pid: u32,
 }
 
+/// Per-process handles shared between `JobHandle` and the supervision task.
+pub struct ProcessResources {
+    pub config: ProcessConfig,
+    pub job: Arc<Job>,
+    pub activity: Activity,
+    pub notify_socket: Option<Arc<NotifySocket>>,
+    pub ready_state: tokio::sync::watch::Sender<bool>,
+}
+
 /// Handle to a managed process job
 pub struct JobHandle {
-    /// The watchexec job for process control
-    pub job: Arc<Job>,
+    pub resources: ProcessResources,
     /// Supervisor task handling restarts
     pub supervisor_task: JoinHandle<()>,
-    /// Activity for tracking process lifecycle
-    pub activity: Activity,
     /// Output reader tasks (stdout, stderr)
     pub output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
-    /// Notify socket for systemd-style notifications (owned here to keep alive)
-    pub notify_socket: Option<Arc<NotifySocket>>,
-    /// Ready state for signaling when process becomes ready (READY=1 or TCP probe)
-    pub ready_state: tokio::sync::watch::Sender<bool>,
 }
 
 /// Native process manager using watchexec-supervisor
@@ -87,36 +89,21 @@ pub struct NativeProcessManager {
     jobs: Arc<RwLock<HashMap<String, JobHandle>>>,
     state_dir: PathBuf,
     shutdown: Arc<tokio::sync::Notify>,
-    /// Process configurations (populated when processes are started)
-    process_configs: RwLock<HashMap<String, ProcessConfig>>,
-    /// Command receiver for process control (restart, etc.)
-    command_rx: Arc<tokio::sync::Mutex<Option<mpsc::Receiver<ProcessCommand>>>>,
     /// Parent activity for grouping all processes under "Starting processes"
     processes_activity: Arc<RwLock<Option<Activity>>>,
 }
 
 impl NativeProcessManager {
     /// Create a new native process manager
-    pub fn new(
-        state_dir: PathBuf,
-        process_configs: HashMap<String, ProcessConfig>,
-    ) -> Result<Self> {
+    pub fn new(state_dir: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(&state_dir).into_diagnostic()?;
 
         Ok(Self {
             jobs: Arc::new(RwLock::new(HashMap::new())),
             state_dir,
             shutdown: Arc::new(tokio::sync::Notify::new()),
-            process_configs: RwLock::new(process_configs),
-            command_rx: Arc::new(tokio::sync::Mutex::new(None)),
             processes_activity: Arc::new(RwLock::new(None)),
         })
-    }
-
-    /// Set the command receiver for process control
-    pub async fn set_command_receiver(&self, rx: mpsc::Receiver<ProcessCommand>) {
-        let mut guard = self.command_rx.lock().await;
-        *guard = Some(rx);
     }
 
     /// Get the state directory
@@ -149,12 +136,6 @@ impl NativeProcessManager {
                 "Process '{}' requested pseudo_terminal, but the native process manager does not support PTY yet",
                 config.name
             );
-        }
-
-        // Store config for restart support
-        {
-            let mut configs = self.process_configs.write().await;
-            configs.insert(config.name.clone(), config.clone());
         }
 
         // Extract ports from listen config and allocated ports
@@ -269,44 +250,40 @@ impl NativeProcessManager {
             let _ = ready_state.send(true);
         }
 
+        let resources = ProcessResources {
+            config: config.clone(),
+            job: job.clone(),
+            activity,
+            notify_socket,
+            ready_state,
+        };
+
         // Spawn supervision task
-        let supervisor_task = self.spawn_supervisor(
-            config.clone(),
-            job.clone(),
-            activity.clone(),
-            notify_socket.clone(),
-            ready_state.clone(),
-        );
+        let supervisor_task = self.spawn_supervisor(&resources);
 
         // Store the job handle
-        let job_clone = job.clone();
         let mut jobs = self.jobs.write().await;
         jobs.insert(
             config.name.clone(),
             JobHandle {
-                job,
+                resources,
                 supervisor_task,
-                activity,
                 output_readers: Some((stdout_tailer, stderr_tailer)),
-                notify_socket,
-                ready_state,
             },
         );
 
         info!("Command '{}' started", config.name);
-        Ok(job_clone)
+        Ok(job)
     }
 
     /// Spawn a supervision task that monitors the job and handles restarts
-    fn spawn_supervisor(
-        &self,
-        config: ProcessConfig,
-        job: Arc<Job>,
-        activity: Activity,
-        notify_socket: Option<Arc<NotifySocket>>,
-        ready_state: tokio::sync::watch::Sender<bool>,
-    ) -> JoinHandle<()> {
+    fn spawn_supervisor(&self, resources: &ProcessResources) -> JoinHandle<()> {
         let shutdown = self.shutdown.clone();
+        let config = resources.config.clone();
+        let job = resources.job.clone();
+        let activity = resources.activity.clone();
+        let notify_socket = resources.notify_socket.clone();
+        let ready_state = resources.ready_state.clone();
         let name = config.name.clone();
 
         // Extract watchdog config
@@ -586,7 +563,7 @@ impl NativeProcessManager {
             debug!("Stopping process: {}", name);
 
             // Stopping a process intentionally is not a failure
-            handle.activity.reset();
+            handle.resources.activity.reset();
 
             // Abort the supervisor task first to prevent restarts
             handle.supervisor_task.abort();
@@ -599,6 +576,7 @@ impl NativeProcessManager {
 
             // Send terminate signal with grace period
             handle
+                .resources
                 .job
                 .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
                 .await;
@@ -627,23 +605,17 @@ impl NativeProcessManager {
     /// This resets the restart count and activity state, respawns the supervision
     /// task if it exited (e.g., due to max restarts), and restarts the underlying job.
     pub async fn restart(&self, name: &str) -> Result<()> {
-        // Get the process config - needed if we need to respawn the supervisor
-        let config = {
-            let configs = self.process_configs.read().await;
-            configs
-                .get(name)
-                .ok_or_else(|| miette::miette!("Process {} not found in configuration", name))?
-                .clone()
-        };
-
         let mut jobs = self.jobs.write().await;
         let handle = jobs
             .get_mut(name)
             .ok_or_else(|| miette::miette!("Process {} not running", name))?;
 
         // Reset activity state (unfail it) and set status to restarting
-        handle.activity.reset();
-        handle.activity.set_status(ProcessStatus::Restarting);
+        handle.resources.activity.reset();
+        handle
+            .resources
+            .activity
+            .set_status(ProcessStatus::Restarting);
 
         // Get log file paths and truncate them
         let log_dir = self.state_dir.join("logs");
@@ -661,25 +633,20 @@ impl NativeProcessManager {
                 "Supervisor for {} has exited, starting fresh with new supervision",
                 name
             );
-            handle.job.start().await;
-            handle.supervisor_task = self.spawn_supervisor(
-                config,
-                handle.job.clone(),
-                handle.activity.clone(),
-                handle.notify_socket.clone(),
-                handle.ready_state.clone(),
-            );
+            handle.resources.job.start().await;
+            handle.supervisor_task = self.spawn_supervisor(&handle.resources);
         } else {
             // Supervisor is still running - just restart the job.
             // The existing supervisor will continue monitoring with its current restart_count.
             handle
+                .resources
                 .job
                 .restart_with_signal(Signal::Terminate, Duration::from_secs(2))
                 .await;
         }
 
         // Set status back to running
-        handle.activity.set_status(ProcessStatus::Running);
+        handle.resources.activity.set_status(ProcessStatus::Running);
 
         info!("Process {} restarted", name);
         Ok(())
@@ -698,7 +665,7 @@ impl NativeProcessManager {
             let handle = jobs
                 .get(name)
                 .ok_or_else(|| miette::miette!("Process {} not found", name))?;
-            handle.ready_state.clone()
+            handle.resources.ready_state.clone()
         };
 
         let mut ready_rx = ready_state.subscribe();
@@ -895,11 +862,9 @@ impl NativeProcessManager {
     pub async fn run_foreground(
         &self,
         cancellation_token: tokio_util::sync::CancellationToken,
+        mut command_rx: Option<mpsc::Receiver<ProcessCommand>>,
     ) -> Result<()> {
         info!("Manager event loop started (foreground)");
-
-        // Take the command receiver from the struct
-        let mut command_rx = self.command_rx.lock().await.take();
 
         loop {
             tokio::select! {
@@ -952,22 +917,21 @@ impl NativeProcessManager {
         Ok(pid)
     }
 
-    /// Start processes from stored configs, filtering by name if specified
+    /// Start processes from the given configs, filtering by name if specified
     async fn start_processes(
         &self,
+        configs: &HashMap<String, ProcessConfig>,
         process_names: &[String],
         env: &HashMap<String, String>,
     ) -> Result<()> {
-        // Collect configs to start (clone them to release the lock)
-        let configs_to_start: Vec<ProcessConfig> = {
-            let configs = self.process_configs.read().await;
-            let mut names_to_start: Vec<_> = if process_names.is_empty() {
-                configs.keys().cloned().collect()
-            } else {
-                process_names.to_vec()
-            };
-            names_to_start.sort();
+        let mut names_to_start: Vec<_> = if process_names.is_empty() {
+            configs.keys().cloned().collect()
+        } else {
+            process_names.to_vec()
+        };
+        names_to_start.sort();
 
+        let configs_to_start: Vec<ProcessConfig> = {
             let mut result = Vec::new();
             for name in &names_to_start {
                 let Some(process_config) = configs.get(name) else {
@@ -1117,7 +1081,7 @@ impl ProcessManager for NativeProcessManager {
 
             // Clone data needed in the daemon before daemonizing
             let state_dir = self.state_dir.clone();
-            let process_configs = self.process_configs.blocking_read().clone();
+            let process_configs = options.process_configs.clone();
             let process_names = options.processes.clone();
             let env = options.env.clone();
 
@@ -1153,9 +1117,10 @@ impl ProcessManager for NativeProcessManager {
 
                     // Recreate manager and run event loop
                     let result = runtime.block_on(async {
-                        let manager =
-                            Arc::new(NativeProcessManager::new(state_dir, process_configs)?);
-                        manager.start_processes(&process_names, &env).await?;
+                        let manager = Arc::new(NativeProcessManager::new(state_dir)?);
+                        manager
+                            .start_processes(&process_configs, &process_names, &env)
+                            .await?;
                         manager.run().await
                     });
 
@@ -1176,7 +1141,7 @@ impl ProcessManager for NativeProcessManager {
             }
         } else {
             // Start requested processes
-            self.start_processes(&options.processes, &options.env)
+            self.start_processes(&options.process_configs, &options.processes, &options.env)
                 .await?;
 
             // Foreground mode - run the event loop
@@ -1189,7 +1154,7 @@ impl ProcessManager for NativeProcessManager {
             let token = options
                 .cancellation_token
                 .unwrap_or_else(tokio_util::sync::CancellationToken::new);
-            let result = self.run_foreground(token).await;
+            let result = self.run_foreground(token, None).await;
 
             // Clean up PID file
             let _ = tokio::fs::remove_file(&self.manager_pid_file()).await;
@@ -1231,7 +1196,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_manager() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf(), HashMap::new());
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf());
         assert!(manager.is_ok());
     }
 
@@ -1247,10 +1212,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mut configs = HashMap::new();
-        configs.insert("test-echo".to_string(), config.clone());
-
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf(), configs).unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
 
         assert!(manager.start_command(&config, None).await.is_ok());
         assert_eq!(manager.list().await.len(), 1);

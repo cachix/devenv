@@ -1750,9 +1750,7 @@ impl Devenv {
                 .await
                 .map_err(|e| miette!("Failed to build task runner: {}", e))?;
 
-                if let Some(rx) = options.command_rx.take() {
-                    tasks_runner.process_manager.set_command_receiver(rx).await;
-                }
+                let command_rx = options.command_rx.take();
 
                 // Run process tasks under the Phase 4 activity
                 let _outputs = tasks_runner
@@ -1770,7 +1768,7 @@ impl Devenv {
                 if !options.detach {
                     let result = tasks_runner
                         .process_manager
-                        .run_foreground(self.shutdown.cancellation_token())
+                        .run_foreground(self.shutdown.cancellation_token(), command_rx)
                         .await
                         .map_err(|e| miette!("Process manager error: {}", e));
 
@@ -1806,6 +1804,7 @@ impl Devenv {
             };
 
             let start_options = processes::StartOptions {
+                process_configs: HashMap::new(),
                 processes,
                 detach: options.detach,
                 log_to_file: options.log_to_file,
@@ -1835,10 +1834,7 @@ impl Devenv {
         {
             // Native process manager is running
             let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
-            Box::new(processes::NativeProcessManager::new(
-                runtime_dir,
-                HashMap::new(),
-            )?)
+            Box::new(processes::NativeProcessManager::new(runtime_dir)?)
         } else if self.processes_pid().exists() {
             // Process-compose is running
             // We don't need the procfile_script for stopping, just use a dummy path

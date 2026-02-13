@@ -103,7 +103,7 @@ impl TasksUi {
         if !self.tasks.process_manager.list().await.is_empty() {
             let cancel = self.tasks.shutdown.cancellation_token();
             let pm = Arc::clone(&self.tasks.process_manager);
-            let fg_handle = tokio::spawn(async move { pm.run_foreground(cancel).await });
+            let fg_handle = tokio::spawn(async move { pm.run_foreground(cancel, None).await });
 
             if let Err(e) = self
                 .consume_events_until(fg_handle)

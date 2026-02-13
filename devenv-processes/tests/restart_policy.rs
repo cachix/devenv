@@ -34,7 +34,7 @@ async fn test_restart_never() {
             ..Default::default()
         };
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -68,7 +68,7 @@ async fn test_restart_always_on_success() {
             ..Default::default()
         };
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -112,7 +112,7 @@ async fn test_restart_always_on_failure() {
             ..Default::default()
         };
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -148,7 +148,7 @@ async fn test_restart_on_failure_with_failure() {
             ..Default::default()
         };
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -184,7 +184,7 @@ async fn test_restart_on_failure_with_success() {
             ..Default::default()
         };
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -223,7 +223,7 @@ async fn test_max_restarts_limit() {
             ..Default::default()
         };
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -265,7 +265,7 @@ async fn test_unlimited_restarts() {
             ..Default::default()
         };
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await

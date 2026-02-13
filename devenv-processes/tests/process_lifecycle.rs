@@ -69,7 +69,7 @@ async fn test_stop_single_process() {
 
         // Use sleep directly (doesn't need bash wrapper)
         let config = long_running_config("long-sleep", 3600);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
 
         // Start the process using start_command with the full sleep command
         let mut config_for_command = config.clone();
@@ -115,7 +115,7 @@ async fn test_multiple_processes() {
             configs.insert(name, config);
         }
 
-        let manager = ctx.create_manager(configs.clone());
+        let manager = ctx.create_manager();
 
         // Start all processes
         for (name, config) in &configs {
@@ -158,7 +158,7 @@ async fn test_stop_all_processes() {
             configs.insert(name.to_string(), config);
         }
 
-        let manager = ctx.create_manager(configs.clone());
+        let manager = ctx.create_manager();
 
         for config in configs.values() {
             manager.start_command(config, None).await.unwrap();
@@ -243,8 +243,7 @@ async fn test_force_kill_after_timeout() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_is_running_initially_false() {
     let ctx = TestContext::new();
-    let config = long_running_config("test", 3600);
-    let manager = ctx.create_manager_single(config);
+    let manager = ctx.create_manager();
 
     // Manager has no PID file initially
     assert!(!manager.is_running().await);

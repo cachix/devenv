@@ -92,7 +92,7 @@ sleep 3600
         let script = ctx.create_script("notify-test.sh", &script_content).await;
 
         let config = notify_process_config("notify-test", &script);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for process to start
@@ -132,7 +132,7 @@ sleep 3600
         let script = ctx.create_script("env-check.sh", &script_content).await;
 
         let config = notify_process_config("env-check", &script);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for the output file and check NOTIFY_SOCKET was set
@@ -167,7 +167,7 @@ sleep 3600
         let script = ctx.create_script("watchdog-env.sh", &script_content).await;
 
         let config = watchdog_process_config("watchdog-env", &script, 30_000_000, true);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Check that WATCHDOG_USEC was set
@@ -198,7 +198,7 @@ sleep 3600
         let script = ctx.create_script("cleanup-test.sh", &script_content).await;
 
         let config = notify_process_config("cleanup-test", &script);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for process to start
@@ -257,7 +257,7 @@ sleep 3600
             notify: None, // Disabled
             ..Default::default()
         };
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for process to start
@@ -295,7 +295,7 @@ sleep 3600
         let script = ctx.create_script("ready-test.sh", &script_content).await;
 
         let config = notify_process_config("ready-test", &script);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for process to start
@@ -337,7 +337,7 @@ sleep 3600
         let script = ctx.create_script("status-test.sh", &script_content).await;
 
         let config = notify_process_config("status-test", &script);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for process to start
@@ -383,7 +383,7 @@ sleep 3600
 
         // Use a 2 second watchdog timeout, but don't require ready
         let config = watchdog_process_config("watchdog-ping", &script, 2_000_000, false);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for process to start
@@ -437,7 +437,7 @@ sleep 3600
 
         // Use a 1 second watchdog timeout, require_ready=false so watchdog starts immediately
         let config = watchdog_process_config("watchdog-timeout", &script, 1_000_000, false);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for initial start
@@ -485,7 +485,7 @@ sleep 3600
 
         // Use a 1 second watchdog timeout with require_ready=true
         let config = watchdog_process_config("watchdog-ready", &script, 1_000_000, true);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for initial start
@@ -537,7 +537,7 @@ sleep 3600
         let script = ctx.create_script("stopping-test.sh", &script_content).await;
 
         let config = notify_process_config("stopping-test", &script);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for process to start
@@ -581,7 +581,7 @@ sleep 3600
             .await;
 
         let config = notify_process_config("reloading-test", &script);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for process to start
@@ -623,7 +623,7 @@ sleep 3600
         let script = ctx.create_script("multi-state.sh", &script_content).await;
 
         let config = notify_process_config("multi-state", &script);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for process to start
@@ -670,7 +670,7 @@ sleep 3600
             .await;
 
         let config = notify_process_config("invalid-notify", &script);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for process to start
@@ -726,7 +726,7 @@ sleep 3600
         let mut config = watchdog_process_config("watchdog-max", &script, 1_000_000, false);
         config.max_restarts = Some(2);
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for initial start
@@ -780,7 +780,7 @@ sleep 3600
 
         // Use 1 second watchdog timeout with require_ready=true
         let config = watchdog_process_config("delayed-hang", &script, 1_000_000, true);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         let _job = manager.start_command(&config, None).await.unwrap();
 
         // Wait for initial start

@@ -55,7 +55,7 @@ sleep 3600
         let config =
             watch_process_config("watch-restart", &script, vec![watch_file.clone()], vec![]);
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -116,7 +116,7 @@ sleep 3600
 
         let config = watch_process_config("watch-dir", &script, vec![watch_dir.clone()], vec![]);
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -183,7 +183,7 @@ sleep 3600
             vec!["*.log".to_string()],
         );
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -263,7 +263,7 @@ sleep 3600
             vec![".*".to_string()],
         );
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -342,7 +342,7 @@ sleep 3600
             vec!["rs".to_string()],
         );
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -427,7 +427,7 @@ sleep 3600
             vec![],
         );
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -501,7 +501,7 @@ sleep 3600
             ..Default::default()
         };
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -559,7 +559,7 @@ sleep 3600
         let config =
             watch_process_config("watch-debounce", &script, vec![watch_file.clone()], vec![]);
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await

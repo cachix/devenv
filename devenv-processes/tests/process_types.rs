@@ -30,7 +30,7 @@ async fn test_foreground_default_restarts_on_failure() {
             ..Default::default()
         };
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -72,7 +72,7 @@ async fn test_foreground_never_policy() {
             ..Default::default()
         };
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -115,7 +115,7 @@ async fn test_default_process_type_is_foreground() {
             "Default process_type should be Foreground"
         );
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
