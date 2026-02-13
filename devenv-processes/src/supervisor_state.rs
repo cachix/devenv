@@ -117,6 +117,12 @@ impl SupervisorState {
     }
 
     pub fn on_event(&mut self, event: Event, now: Instant) -> Action {
+        // Once the state machine has given up, only file changes (user-initiated)
+        // can still trigger a restart.
+        if self.phase == SupervisorPhase::GaveUp && event != Event::FileChange {
+            return Action::None;
+        }
+
         match event {
             Event::Ready => {
                 self.watchdog_armed = true;
@@ -855,6 +861,52 @@ mod tests {
                 status: ExitStatus::Failure,
             },
             t,
+        );
+        assert_eq!(state.phase(), SupervisorPhase::GaveUp);
+    }
+
+    #[test]
+    fn events_after_gave_up_are_ignored() {
+        let now = Instant::now();
+        let config = config_with_policy(RestartPolicy::Always);
+        let mut state = SupervisorState::new(&config, now);
+
+        // Exhaust rate limit to reach GaveUp
+        for i in 0..5 {
+            let t = now + Duration::from_millis(i * 10);
+            state.on_event(
+                Event::ProcessExit {
+                    status: ExitStatus::Failure,
+                },
+                t,
+            );
+            state.on_restart_complete(t);
+        }
+        let t = now + Duration::from_millis(100);
+        state.on_event(
+            Event::ProcessExit {
+                status: ExitStatus::Failure,
+            },
+            t,
+        );
+        assert_eq!(state.phase(), SupervisorPhase::GaveUp);
+
+        // All events should be ignored
+        assert_eq!(state.on_event(Event::Ready, t), Action::None);
+        assert_eq!(state.phase(), SupervisorPhase::GaveUp);
+
+        assert_eq!(state.on_event(Event::WatchdogPing, t), Action::None);
+        assert_eq!(state.on_event(Event::WatchdogTrigger, t), Action::None);
+        assert_eq!(state.on_event(Event::WatchdogTimeout, t), Action::None);
+        assert_eq!(state.on_event(Event::StartupTimeout, t), Action::None);
+        assert_eq!(
+            state.on_event(
+                Event::ProcessExit {
+                    status: ExitStatus::Failure,
+                },
+                t,
+            ),
+            Action::None
         );
         assert_eq!(state.phase(), SupervisorPhase::GaveUp);
     }
