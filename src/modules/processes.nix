@@ -120,7 +120,7 @@ let
       };
 
       startup_timeout = lib.mkOption {
-        type = types.nullOr types.int;
+        type = types.nullOr types.ints.unsigned;
         default = null;
         description = ''
           Maximum time in seconds for the process to signal readiness.
@@ -134,13 +134,13 @@ let
       };
 
       restart_limit_burst = lib.mkOption {
-        type = types.nullOr types.int;
+        type = types.nullOr types.ints.unsigned;
         default = null;
         description = ''
           Maximum number of restarts within the sliding window.
           When set, overrides `max_restarts`.
           Like systemd's StartLimitBurst.
-          Default: 5.
+          When null, falls back to `max_restarts`, or 5 if both are null.
 
           Only used when using native process manager.
         '';
@@ -148,12 +148,12 @@ let
       };
 
       restart_limit_interval = lib.mkOption {
-        type = types.nullOr types.int;
+        type = types.nullOr types.ints.unsigned;
         default = null;
         description = ''
           Sliding window size in seconds for restart rate limiting.
           Like systemd's StartLimitIntervalSec.
-          Default: 10.
+          When null, defaults to 10.
 
           Only used when using native process manager.
         '';
