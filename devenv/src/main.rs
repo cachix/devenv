@@ -10,7 +10,7 @@ use devenv::{
 use devenv_activity::ActivityLevel;
 use devenv_core::config::{self, Config, SecretspecConfig};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
-use std::{process::Command, sync::Arc};
+use std::{process::Command, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio_shutdown::Shutdown;
@@ -654,6 +654,12 @@ async fn run_devenv_inner(
             command: ProcessesCommand::Down {},
         } => {
             devenv.down().await?;
+            CommandResult::Done
+        }
+        Commands::Processes {
+            command: ProcessesCommand::Wait { timeout },
+        } => {
+            devenv.wait_for_ready(Duration::from_secs(timeout)).await?;
             CommandResult::Done
         }
         Commands::Tasks { command } => match command {

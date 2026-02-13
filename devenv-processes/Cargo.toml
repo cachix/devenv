@@ -14,6 +14,7 @@ miette.workspace = true
 nix.workspace = true
 process-wrap.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 shell-escape.workspace = true
 signal-hook.workspace = true
 signal-hook-tokio.workspace = true

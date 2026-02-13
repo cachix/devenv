@@ -36,7 +36,9 @@ pub use config::{
     ListenKind, ListenSpec, NotifyConfig, ProcessConfig, ProcessType, RestartPolicy,
     SocketActivationConfig, WatchConfig, WatchdogConfig,
 };
-pub use manager::{JobHandle, NativeProcessManager, ProcessCommand, ProcessState};
+pub use manager::{
+    ApiRequest, ApiResponse, JobHandle, NativeProcessManager, ProcessCommand, ProcessState,
+};
 pub use notify_socket::{NotifyMessage, NotifySocket};
 pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
 pub use process_compose::ProcessComposeManager;

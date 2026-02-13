@@ -125,12 +125,16 @@
 
               timeout $timeout $process_compose_wait
               ;;
+            "native")
+              echo "• Waiting for native processes to be ready (timeout: $timeout seconds)..." >&2
+              devenv processes wait --timeout $timeout
+              echo "✓ All processes are ready" >&2
+              ;;
             "")
               # No process manager configured, nothing to wait for
               ;;
             *)
               echo "✗ Unsupported process manager implementation: ${config.process.manager.implementation}" >&2
-              echo "✗ wait_for_processes is only implemented for process-compose" >&2
               return 1
               ;;
           esac

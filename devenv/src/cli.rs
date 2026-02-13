@@ -241,6 +241,12 @@ pub enum ProcessesCommand {
 
     #[command(alias = "stop", about = "Stop processes running in the background.")]
     Down {},
+
+    #[command(about = "Wait for all processes to be ready.")]
+    Wait {
+        #[arg(long, default_value = "120", help = "Timeout in seconds.")]
+        timeout: u64,
+    },
     // TODO: Status/Attach
 }
 

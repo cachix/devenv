@@ -1841,6 +1841,23 @@ impl Devenv {
         manager.stop().await
     }
 
+    pub async fn wait_for_ready(&self, timeout: std::time::Duration) -> Result<()> {
+        if self.native_manager_pid_file().exists() {
+            let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
+            let socket_path = runtime_dir.join("native.sock");
+            tokio::time::timeout(
+                timeout,
+                processes::NativeProcessManager::wait_for_ready(&socket_path),
+            )
+            .await
+            .map_err(|_| miette!("Timed out waiting for processes to be ready"))?
+        } else if self.processes_pid().exists() {
+            bail!("'devenv processes wait' is not yet supported for the process-compose backend")
+        } else {
+            bail!("No processes running")
+        }
+    }
+
     /// Assemble the devenv environment and return the serialized NixArgs string.
     /// The returned string can be used with `import bootstrap/default.nix <args>`.
     pub async fn assemble(&self, is_testing: bool) -> Result<String> {

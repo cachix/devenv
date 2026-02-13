@@ -1575,6 +1575,7 @@ dependencies = [
  "process-wrap",
  "sd-notify",
  "serde",
+ "serde_json",
  "shell-escape",
  "signal-hook",
  "signal-hook-tokio",

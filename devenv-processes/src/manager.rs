@@ -20,6 +20,28 @@ pub enum ProcessCommand {
     /// Restart a process by name
     Restart(String),
 }
+
+/// Request sent by a client to the native manager API socket.
+///
+/// Protocol: newline-delimited JSON over a Unix stream socket.
+/// The client sends one `ApiRequest` per line, the server responds with one `ApiResponse`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "command", rename_all = "snake_case")]
+pub enum ApiRequest {
+    /// Block until every managed process is ready, then respond.
+    Wait,
+}
+
+/// Response sent by the native manager API socket.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum ApiResponse {
+    /// All processes are ready.
+    Ready,
+    /// An error occurred.
+    Error { message: String },
+}
+
 use watchexec::Watchexec;
 use watchexec_filterer_globset::GlobsetFilterer;
 use watchexec_supervisor::{
@@ -109,6 +131,11 @@ impl NativeProcessManager {
     /// Path to the manager PID file
     pub fn manager_pid_file(&self) -> PathBuf {
         self.state_dir.join("native-manager.pid")
+    }
+
+    /// Path to the API socket
+    pub fn api_socket_path(&self) -> PathBuf {
+        self.state_dir.join("native.sock")
     }
 
     /// Start a command with the given configuration
@@ -235,6 +262,13 @@ impl NativeProcessManager {
 
         // Create ready state for signaling when process becomes ready
         let (ready_state, _ready_rx) = tokio::sync::watch::channel(false);
+
+        // If no readiness mechanism is configured, mark process as immediately ready
+        let has_notify = config.notify.as_ref().is_some_and(|n| n.enable);
+        let has_tcp_probe = !config.listen.is_empty() && !has_notify;
+        if !has_notify && !has_tcp_probe {
+            let _ = ready_state.send(true);
+        }
 
         // Spawn supervision task
         let supervisor_task = self.spawn_supervisor(
@@ -950,6 +984,134 @@ impl NativeProcessManager {
         bail!("Process {} ready state channel closed", name);
     }
 
+    /// Start the API socket server for external queries (e.g., `devenv processes wait`).
+    ///
+    /// Listens on `state_dir/native.sock` using newline-delimited JSON (`ApiRequest`/`ApiResponse`).
+    /// Must be called after all initial processes have been registered in `jobs`.
+    pub fn start_api_server(&self) -> Result<()> {
+        let sock_path = self.api_socket_path();
+        let _ = std::fs::remove_file(&sock_path);
+        let jobs = self.jobs.clone();
+
+        let listener = std::os::unix::net::UnixListener::bind(&sock_path)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to bind API socket at {}", sock_path.display()))?;
+        listener.set_nonblocking(true).into_diagnostic()?;
+        let listener = tokio::net::UnixListener::from_std(listener).into_diagnostic()?;
+        info!("API server listening on {}", sock_path.display());
+
+        tokio::spawn(async move {
+            loop {
+                match listener.accept().await {
+                    Ok((stream, _)) => {
+                        let jobs = jobs.clone();
+                        tokio::spawn(Self::handle_api_client(stream, jobs));
+                    }
+                    Err(e) => {
+                        warn!("API accept error: {}", e);
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Handle a single API client connection.
+    async fn handle_api_client(
+        stream: tokio::net::UnixStream,
+        jobs: Arc<RwLock<HashMap<String, JobHandle>>>,
+    ) {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        let (reader, mut writer) = stream.into_split();
+        let mut reader = BufReader::new(reader);
+        let mut line = String::new();
+        if reader.read_line(&mut line).await.is_err() {
+            return;
+        }
+
+        let response = match serde_json::from_str::<ApiRequest>(&line) {
+            Ok(ApiRequest::Wait) => {
+                // Subscribe to all process ready channels.
+                // If a process is already ready (borrow() == true), it is skipped
+                // immediately — this handles clients connecting after readiness.
+                let receivers: Vec<(String, tokio::sync::watch::Receiver<bool>)> = {
+                    let jobs = jobs.read().await;
+                    jobs.iter()
+                        .map(|(name, handle)| (name.clone(), handle.ready_state.subscribe()))
+                        .collect()
+                };
+
+                for (name, mut rx) in receivers {
+                    if *rx.borrow() {
+                        continue;
+                    }
+                    debug!("API: waiting for process {} to become ready", name);
+                    while rx.changed().await.is_ok() {
+                        if *rx.borrow() {
+                            break;
+                        }
+                    }
+                }
+
+                ApiResponse::Ready
+            }
+            Err(e) => ApiResponse::Error {
+                message: format!("invalid request: {}", e),
+            },
+        };
+
+        if let Ok(mut json) = serde_json::to_vec(&response) {
+            json.push(b'\n');
+            let _ = writer.write_all(&json).await;
+        }
+    }
+
+    /// Connect to a running native manager's API socket and send a request.
+    pub async fn api_request(socket_path: &Path, request: &ApiRequest) -> Result<ApiResponse> {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        let mut stream = tokio::net::UnixStream::connect(socket_path)
+            .await
+            .into_diagnostic()
+            .wrap_err_with(|| {
+                format!(
+                    "Failed to connect to native manager at {}",
+                    socket_path.display()
+                )
+            })?;
+
+        let mut request_json = serde_json::to_vec(request).into_diagnostic()?;
+        request_json.push(b'\n');
+        stream
+            .write_all(&request_json)
+            .await
+            .into_diagnostic()
+            .wrap_err("Failed to send request to native manager")?;
+
+        let mut reader = BufReader::new(&mut stream);
+        let mut response = String::new();
+        reader
+            .read_line(&mut response)
+            .await
+            .into_diagnostic()
+            .wrap_err("Failed to read response from native manager")?;
+
+        serde_json::from_str(&response)
+            .into_diagnostic()
+            .wrap_err("Failed to parse response from native manager")
+    }
+
+    /// Connect to a running native manager's API socket and wait for all processes to be ready.
+    pub async fn wait_for_ready(socket_path: &Path) -> Result<()> {
+        match Self::api_request(socket_path, &ApiRequest::Wait).await? {
+            ApiResponse::Ready => Ok(()),
+            ApiResponse::Error { message } => bail!("Native manager error: {}", message),
+        }
+    }
+
     /// Run the manager event loop (keeps processes alive)
     /// This should be called when running in detached mode
     pub async fn run(self: Arc<Self>) -> Result<()> {
@@ -1104,6 +1266,9 @@ impl NativeProcessManager {
                 .await
                 .wrap_err_with(|| format!("Failed to start process '{}'", config.name))?;
         }
+
+        // Start the API socket server for external queries
+        self.start_api_server()?;
 
         Ok(())
     }
@@ -1318,6 +1483,12 @@ impl ProcessManager for NativeProcessManager {
             pid::check_pid_file(&self.manager_pid_file()).await,
             Ok(PidStatus::Running(_))
         )
+    }
+}
+
+impl Drop for NativeProcessManager {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(self.api_socket_path());
     }
 }
 
