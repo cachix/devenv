@@ -396,10 +396,7 @@ impl NativeProcessManager {
 
         // The supervisor will update the status via status_tx once the
         // process is actually ready.
-        handle
-            .resources
-            .activity
-            .set_status(ProcessStatus::Running);
+        handle.resources.activity.set_status(ProcessStatus::Running);
 
         info!("Process {} restarted", name);
         Ok(())

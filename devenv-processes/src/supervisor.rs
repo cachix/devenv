@@ -16,10 +16,7 @@ use crate::notify_socket::NotifyMessage;
 use crate::supervisor_state::{Action, Event, ExitStatus, SupervisorState};
 
 /// Spawn a TCP readiness probe that connects in a loop until the port is reachable.
-fn spawn_tcp_probe(
-    address: String,
-    name: String,
-) -> (mpsc::Receiver<()>, JoinHandle<()>) {
+fn spawn_tcp_probe(address: String, name: String) -> (mpsc::Receiver<()>, JoinHandle<()>) {
     let (tx, rx) = mpsc::channel::<()>(1);
     let task = tokio::spawn(async move {
         debug!("Starting TCP probe for {} at {}", name, address);
@@ -84,13 +81,12 @@ pub fn spawn_supervisor(
 
         // TCP probe: signals the supervisor loop when the port becomes reachable.
         // The supervisor handles the Ready event so status is updated consistently.
-        let (mut tcp_ready_rx, mut tcp_probe_task) =
-            if let Some(ref address) = tcp_probe_address {
-                let (rx, task) = spawn_tcp_probe(address.clone(), name.clone());
-                (Some(rx), Some(task))
-            } else {
-                (None, None)
-            };
+        let (mut tcp_ready_rx, mut tcp_probe_task) = if let Some(ref address) = tcp_probe_address {
+            let (rx, task) = spawn_tcp_probe(address.clone(), name.clone());
+            (Some(rx), Some(task))
+        } else {
+            (None, None)
+        };
 
         let mut file_watcher = crate::file_watcher::FileWatcher::new(&config.watch, &name);
 
