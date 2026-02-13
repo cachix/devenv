@@ -6,7 +6,6 @@
 use devenv_processes::{
     ListenKind, ListenSpec, NativeProcessManager, ProcessConfig, RestartPolicy, WatchConfig,
 };
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
@@ -49,17 +48,9 @@ impl TestContext {
         path
     }
 
-    /// Create a NativeProcessManager with the given process configs
-    pub fn create_manager(&self, configs: HashMap<String, ProcessConfig>) -> NativeProcessManager {
-        NativeProcessManager::new(self.state_dir.clone(), configs)
-            .expect("Failed to create manager")
-    }
-
-    /// Create a NativeProcessManager with a single process config
-    pub fn create_manager_single(&self, config: ProcessConfig) -> NativeProcessManager {
-        let mut configs = HashMap::new();
-        configs.insert(config.name.clone(), config);
-        self.create_manager(configs)
+    /// Create a NativeProcessManager
+    pub fn create_manager(&self) -> NativeProcessManager {
+        NativeProcessManager::new(self.state_dir.clone()).expect("Failed to create manager")
     }
 }
 

@@ -82,15 +82,12 @@ impl TasksBuilder {
         };
 
         // Create process manager for long-running process tasks
-        // Note: empty process_configs since tasks manage processes individually via start_command()
         let process_manager = Arc::new(
-            NativeProcessManager::new(self.config.runtime_dir.clone(), HashMap::new()).map_err(
-                |e| {
-                    Error::IoError(std::io::Error::other(format!(
-                        "Failed to initialize process manager: {e}"
-                    )))
-                },
-            )?,
+            NativeProcessManager::new(self.config.runtime_dir.clone()).map_err(|e| {
+                Error::IoError(std::io::Error::other(format!(
+                    "Failed to initialize process manager: {e}"
+                )))
+            })?,
         );
 
         let mut graph = DiGraph::new();

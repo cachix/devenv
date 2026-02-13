@@ -30,7 +30,7 @@ async fn test_tcp_socket_activation_env_vars() {
 
         // Use port 0 to let OS assign a free port
         let config = tcp_socket_config("tcp-env-test", &script, "127.0.0.1:0");
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
 
         // Start the process
         manager
@@ -90,7 +90,7 @@ sleep 3600
         let script = ctx.create_script("server.sh", &script_content).await;
 
         let config = tcp_socket_config("tcp-immediate", &script, &addr.to_string());
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
 
         // Start the process
         manager
@@ -136,7 +136,7 @@ async fn test_unix_socket_activation_env_vars() {
             .await;
 
         let config = unix_socket_config("unix-env-test", &script, socket_path);
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
 
         // Start the process
         manager
@@ -186,7 +186,7 @@ sleep 3600
 
         // Config with mode 0o600
         let config = unix_socket_config("unix-perms", &script, socket_path.clone());
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
 
         manager
             .start_command(&config, None)
@@ -235,7 +235,7 @@ sleep 3600
         let script = ctx.create_script("server.sh", &script_content).await;
 
         let config = unix_socket_config("unix-connect", &script, socket_path.clone());
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
 
         manager
             .start_command(&config, None)
@@ -302,7 +302,7 @@ async fn test_multiple_listen_fds() {
             ..Default::default()
         };
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await
@@ -368,7 +368,7 @@ async fn test_mixed_tcp_unix_sockets() {
             ..Default::default()
         };
 
-        let manager = ctx.create_manager_single(config.clone());
+        let manager = ctx.create_manager();
         manager
             .start_command(&config, None)
             .await

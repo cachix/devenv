@@ -41,7 +41,8 @@ pub use config::{
     SocketActivationConfig, WatchConfig, WatchdogConfig,
 };
 pub use manager::{
-    ApiRequest, ApiResponse, JobHandle, NativeProcessManager, ProcessCommand, ProcessState,
+    ApiRequest, ApiResponse, JobHandle, NativeProcessManager, ProcessCommand, ProcessResources,
+    ProcessState,
 };
 pub use notify_socket::{NotifyMessage, NotifySocket};
 pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
@@ -55,6 +56,8 @@ pub use socket_activation::{
 /// Options for starting processes
 #[derive(Debug, Clone, Default)]
 pub struct StartOptions {
+    /// Process configurations to start
+    pub process_configs: HashMap<String, ProcessConfig>,
     /// Specific processes to start (empty = all)
     pub processes: Vec<String>,
     /// Run in background (detached from terminal)
