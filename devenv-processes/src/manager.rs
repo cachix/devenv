@@ -350,16 +350,31 @@ impl NativeProcessManager {
             .activity
             .set_status(ProcessStatus::Restarting);
 
-        // Get log file paths and truncate them
-        let log_dir = self.state_dir.join("logs");
-        let stdout_log = log_dir.join(format!("{}.stdout.log", name));
-        let stderr_log = log_dir.join(format!("{}.stderr.log", name));
+        // Truncate log files and restart output tailers
+        let (stdout_log, stderr_log) = crate::command::log_paths(&self.state_dir, name);
         let _ = std::fs::write(&stdout_log, "");
         let _ = std::fs::write(&stderr_log, "");
 
+        if let Some((stdout_reader, stderr_reader)) = handle.output_readers.take() {
+            stdout_reader.abort();
+            stderr_reader.abort();
+        }
+        handle.output_readers = Some((
+            crate::log_tailer::spawn_file_tailer(
+                stdout_log,
+                handle.resources.activity.clone(),
+                false,
+            ),
+            crate::log_tailer::spawn_file_tailer(
+                stderr_log,
+                handle.resources.activity.clone(),
+                true,
+            ),
+        ));
+
         // Check if supervisor task has exited (e.g., due to max restarts)
         if handle.supervisor_task.is_finished() {
-            // Supervisor has exited - need to start fresh with new supervision.
+            // Supervisor has exited — start fresh with new supervision.
             // Order matters: start job first, then spawn supervisor (like start_command does).
             // This gives the process a fresh restart quota (restart_count = 0).
             info!(
@@ -370,7 +385,7 @@ impl NativeProcessManager {
             handle.supervisor_task =
                 crate::supervisor::spawn_supervisor(&handle.resources, self.shutdown.clone());
         } else {
-            // Supervisor is still running - just restart the job.
+            // Supervisor is still running — just restart the job.
             // The existing supervisor will continue monitoring with its current restart_count.
             handle
                 .resources
@@ -379,8 +394,12 @@ impl NativeProcessManager {
                 .await;
         }
 
-        // Set status back to running
-        handle.resources.activity.set_status(ProcessStatus::Running);
+        // The supervisor will update the status via status_tx once the
+        // process is actually ready.
+        handle
+            .resources
+            .activity
+            .set_status(ProcessStatus::Running);
 
         info!("Process {} restarted", name);
         Ok(())
