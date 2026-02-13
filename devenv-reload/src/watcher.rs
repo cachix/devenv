@@ -72,9 +72,7 @@ impl FileWatcher {
                         let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
                         // Match if the path itself is watched, or if its parent directory is watched
                         if watched.contains(&canonical)
-                            || canonical
-                                .parent()
-                                .is_some_and(|p| watched.contains(p))
+                            || canonical.parent().is_some_and(|p| watched.contains(p))
                         {
                             let _ = tx.blocking_send(FileChangeEvent { path: canonical });
                         }
