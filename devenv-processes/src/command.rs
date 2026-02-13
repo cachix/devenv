@@ -14,6 +14,15 @@ pub struct BuiltCommand {
     pub stderr_log: PathBuf,
 }
 
+/// Compute the stdout/stderr log paths for a process.
+pub fn log_paths(state_dir: &Path, name: &str) -> (PathBuf, PathBuf) {
+    let log_dir = state_dir.join("logs");
+    (
+        log_dir.join(format!("{}.stdout.log", name)),
+        log_dir.join(format!("{}.stderr.log", name)),
+    )
+}
+
 /// Build a command from configuration, returning the command and log file paths.
 pub fn build_command(
     state_dir: &Path,
@@ -26,8 +35,7 @@ pub fn build_command(
         .into_diagnostic()
         .wrap_err("Failed to create logs directory")?;
 
-    let stdout_log = log_dir.join(format!("{}.stdout.log", config.name));
-    let stderr_log = log_dir.join(format!("{}.stderr.log", config.name));
+    let (stdout_log, stderr_log) = log_paths(state_dir, &config.name);
 
     let script = build_wrapper_script(
         config,
