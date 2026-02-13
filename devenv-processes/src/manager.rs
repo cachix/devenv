@@ -256,7 +256,6 @@ impl NativeProcessManager {
             let _ = status_tx.send(crate::supervisor_state::JobStatus {
                 phase: crate::supervisor_state::SupervisorPhase::Ready,
                 restart_count: 0,
-                is_ready: true,
             });
         }
 
@@ -496,12 +495,12 @@ impl NativeProcessManager {
                 };
 
                 for (name, mut rx) in receivers {
-                    if rx.borrow().is_ready {
+                    if rx.borrow().is_ready() {
                         continue;
                     }
                     debug!("API: waiting for process {} to become ready", name);
                     while rx.changed().await.is_ok() {
-                        if rx.borrow().is_ready {
+                        if rx.borrow().is_ready() {
                             break;
                         }
                     }

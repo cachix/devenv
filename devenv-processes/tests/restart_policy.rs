@@ -1,14 +1,12 @@
 //! Restart policy integration tests for NativeProcessManager.
 //!
-//! All tests use event-driven assertions (polling) instead of fixed sleeps
-//! to avoid timing-dependent flakiness. Negative assertions (should NOT
-//! restart) wait for the process to exit, then poll briefly to confirm
-//! no restart occurred.
+//! All tests use the `job_state()` API to observe supervisor phase and
+//! restart count, avoiding filesystem-based communication.
 
 mod common;
 
 use common::*;
-use devenv_processes::{ProcessConfig, RestartPolicy};
+use devenv_processes::{ProcessConfig, RestartPolicy, SupervisorPhase};
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -24,12 +22,12 @@ const RESTART_TIMEOUT: Duration = Duration::from_secs(10);
 async fn test_restart_never() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("counter.txt");
+        let script = ctx.create_script("exit_fail.sh", "#!/bin/sh\nexit 1\n").await;
 
-        // Process that writes to counter file and exits with failure
         let config = ProcessConfig {
             name: "no-restart".to_string(),
-            exec: format!(r#"echo "started" >> {}; exit 1"#, counter_file.display()),
+            exec: script.to_string_lossy().to_string(),
+            args: vec![],
             restart: RestartPolicy::Never,
             ..Default::default()
         };
@@ -40,13 +38,9 @@ async fn test_restart_never() {
             .await
             .expect("Failed to start");
 
-        // Wait for initial start
-        let count = wait_for_line_count(&counter_file, "started", 1, STARTUP_TIMEOUT).await;
-        assert_eq!(count, 1, "Process should start once");
-
-        // Poll to confirm no restart happened
-        let count = wait_for_line_count(&counter_file, "started", 2, Duration::from_secs(2)).await;
-        assert_eq!(count, 1, "Process with Never policy should not restart");
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let status = manager.job_state("no-restart").await.unwrap();
+        assert_eq!(status.restart_count, 0, "Process with Never policy should not restart");
     })
     .await
     .expect("Test timed out");
@@ -57,14 +51,14 @@ async fn test_restart_never() {
 async fn test_restart_always_on_success() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("counter.txt");
+        let script = ctx.create_script("exit_ok.sh", "#!/bin/sh\nexit 0\n").await;
 
-        // Process that writes to counter and exits successfully
         let config = ProcessConfig {
             name: "always-restart".to_string(),
-            exec: format!(r#"echo "started" >> {}; exit 0"#, counter_file.display()),
+            exec: script.to_string_lossy().to_string(),
+            args: vec![],
             restart: RestartPolicy::Always,
-            max_restarts: Some(3), // Limit restarts for test
+            max_restarts: Some(3),
             ..Default::default()
         };
 
@@ -74,23 +68,20 @@ async fn test_restart_always_on_success() {
             .await
             .expect("Failed to start");
 
-        // Poll until at least 2 starts (proves restart on success)
-        let count = wait_for_line_count(&counter_file, "started", 2, RESTART_TIMEOUT).await;
-        assert!(
-            count >= 2,
-            "Process with Always policy should restart on success, got {} starts",
-            count
-        );
+        let gave_up = wait_for_condition(
+            || async {
+                manager
+                    .job_state("always-restart")
+                    .await
+                    .is_some_and(|s| s.phase == SupervisorPhase::GaveUp)
+            },
+            RESTART_TIMEOUT,
+        )
+        .await;
+        assert!(gave_up, "Supervisor should give up after max_restarts");
 
-        // Wait for all restarts to complete (1 initial + 3 restarts = 4)
-        let count = wait_for_line_count(&counter_file, "started", 4, RESTART_TIMEOUT).await;
-        assert!(
-            count <= 4,
-            "Process should respect max_restarts limit, got {} starts",
-            count
-        );
-
-        manager.stop_all().await.expect("Failed to stop");
+        let status = manager.job_state("always-restart").await.unwrap();
+        assert_eq!(status.restart_count, 3);
     })
     .await
     .expect("Test timed out");
@@ -101,12 +92,12 @@ async fn test_restart_always_on_success() {
 async fn test_restart_always_on_failure() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("counter.txt");
+        let script = ctx.create_script("exit_fail.sh", "#!/bin/sh\nexit 1\n").await;
 
-        // Process that exits with failure
         let config = ProcessConfig {
             name: "always-fail".to_string(),
-            exec: format!(r#"echo "started" >> {}; exit 1"#, counter_file.display()),
+            exec: script.to_string_lossy().to_string(),
+            args: vec![],
             restart: RestartPolicy::Always,
             max_restarts: Some(2),
             ..Default::default()
@@ -118,15 +109,20 @@ async fn test_restart_always_on_failure() {
             .await
             .expect("Failed to start");
 
-        // Poll until restart detected
-        let count = wait_for_line_count(&counter_file, "started", 2, RESTART_TIMEOUT).await;
-        assert!(
-            count >= 2,
-            "Process with Always policy should restart on failure, got {} starts",
-            count
-        );
+        let gave_up = wait_for_condition(
+            || async {
+                manager
+                    .job_state("always-fail")
+                    .await
+                    .is_some_and(|s| s.phase == SupervisorPhase::GaveUp)
+            },
+            RESTART_TIMEOUT,
+        )
+        .await;
+        assert!(gave_up, "Supervisor should give up after max_restarts");
 
-        manager.stop_all().await.expect("Failed to stop");
+        let status = manager.job_state("always-fail").await.unwrap();
+        assert_eq!(status.restart_count, 2);
     })
     .await
     .expect("Test timed out");
@@ -137,12 +133,12 @@ async fn test_restart_always_on_failure() {
 async fn test_restart_on_failure_with_failure() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("counter.txt");
+        let script = ctx.create_script("exit_fail.sh", "#!/bin/sh\nexit 1\n").await;
 
-        // Process that exits with failure
         let config = ProcessConfig {
             name: "on-failure".to_string(),
-            exec: format!(r#"echo "started" >> {}; exit 1"#, counter_file.display()),
+            exec: script.to_string_lossy().to_string(),
+            args: vec![],
             restart: RestartPolicy::OnFailure,
             max_restarts: Some(2),
             ..Default::default()
@@ -154,15 +150,20 @@ async fn test_restart_on_failure_with_failure() {
             .await
             .expect("Failed to start");
 
-        // Poll until restart detected
-        let count = wait_for_line_count(&counter_file, "started", 2, RESTART_TIMEOUT).await;
-        assert!(
-            count >= 2,
-            "Process with OnFailure policy should restart on exit 1, got {} starts",
-            count
-        );
+        let gave_up = wait_for_condition(
+            || async {
+                manager
+                    .job_state("on-failure")
+                    .await
+                    .is_some_and(|s| s.phase == SupervisorPhase::GaveUp)
+            },
+            RESTART_TIMEOUT,
+        )
+        .await;
+        assert!(gave_up, "Supervisor should give up after max_restarts");
 
-        manager.stop_all().await.expect("Failed to stop");
+        let status = manager.job_state("on-failure").await.unwrap();
+        assert_eq!(status.restart_count, 2);
     })
     .await
     .expect("Test timed out");
@@ -173,12 +174,12 @@ async fn test_restart_on_failure_with_failure() {
 async fn test_restart_on_failure_with_success() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("counter.txt");
+        let script = ctx.create_script("exit_ok.sh", "#!/bin/sh\nexit 0\n").await;
 
-        // Process that exits successfully
         let config = ProcessConfig {
             name: "on-failure-success".to_string(),
-            exec: format!(r#"echo "started" >> {}; exit 0"#, counter_file.display()),
+            exec: script.to_string_lossy().to_string(),
+            args: vec![],
             restart: RestartPolicy::OnFailure,
             max_restarts: Some(3),
             ..Default::default()
@@ -190,14 +191,10 @@ async fn test_restart_on_failure_with_success() {
             .await
             .expect("Failed to start");
 
-        // Wait for initial start
-        let count = wait_for_line_count(&counter_file, "started", 1, STARTUP_TIMEOUT).await;
-        assert_eq!(count, 1, "Process should start once");
-
-        // Poll to confirm no restart (OnFailure + exit 0 = no restart)
-        let count = wait_for_line_count(&counter_file, "started", 2, Duration::from_secs(2)).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let status = manager.job_state("on-failure-success").await.unwrap();
         assert_eq!(
-            count, 1,
+            status.restart_count, 0,
             "Process with OnFailure policy should NOT restart on exit 0"
         );
     })
@@ -210,14 +207,12 @@ async fn test_restart_on_failure_with_success() {
 async fn test_max_restarts_limit() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("counter.txt");
+        let script = ctx.create_script("exit_fail.sh", "#!/bin/sh\nexit 1\n").await;
 
         let config = ProcessConfig {
             name: "max-restarts".to_string(),
-            exec: format!(
-                r#"echo "started" >> {}; sleep 0.1; exit 1"#,
-                counter_file.display()
-            ),
+            exec: script.to_string_lossy().to_string(),
+            args: vec![],
             restart: RestartPolicy::Always,
             max_restarts: Some(3),
             ..Default::default()
@@ -229,19 +224,20 @@ async fn test_max_restarts_limit() {
             .await
             .expect("Failed to start");
 
-        // Wait for all restarts to complete (1 initial + 3 restarts = 4)
-        let count = wait_for_line_count(&counter_file, "started", 4, RESTART_TIMEOUT).await;
-        assert_eq!(
-            count, 4,
-            "Process should start exactly 4 times (1 initial + 3 restarts)"
-        );
+        let gave_up = wait_for_condition(
+            || async {
+                manager
+                    .job_state("max-restarts")
+                    .await
+                    .is_some_and(|s| s.phase == SupervisorPhase::GaveUp)
+            },
+            RESTART_TIMEOUT,
+        )
+        .await;
+        assert!(gave_up, "Supervisor should give up after max_restarts");
 
-        // Confirm no more restarts beyond the limit
-        let count = wait_for_line_count(&counter_file, "started", 5, Duration::from_secs(2)).await;
-        assert_eq!(
-            count, 4,
-            "Process should not restart beyond max_restarts limit"
-        );
+        let status = manager.job_state("max-restarts").await.unwrap();
+        assert_eq!(status.restart_count, 3);
     })
     .await
     .expect("Test timed out");
@@ -252,16 +248,16 @@ async fn test_max_restarts_limit() {
 async fn test_unlimited_restarts() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let counter_file = ctx.temp_path().join("counter.txt");
+        let script = ctx
+            .create_script("exit_delay.sh", "#!/bin/sh\nsleep 0.1\nexit 1\n")
+            .await;
 
         let config = ProcessConfig {
             name: "unlimited".to_string(),
-            exec: format!(
-                r#"echo "started" >> {}; sleep 0.1; exit 1"#,
-                counter_file.display()
-            ),
+            exec: script.to_string_lossy().to_string(),
+            args: vec![],
             restart: RestartPolicy::Always,
-            max_restarts: None, // Unlimited
+            max_restarts: None,
             ..Default::default()
         };
 
@@ -271,31 +267,36 @@ async fn test_unlimited_restarts() {
             .await
             .expect("Failed to start");
 
-        // Poll until multiple restarts observed
-        let count = wait_for_line_count(&counter_file, "started", 5, RESTART_TIMEOUT).await;
-        assert!(
-            count >= 5,
-            "Process with unlimited restarts should keep restarting, got {} starts",
-            count
-        );
-
-        // Stop the process
-        manager.stop_all().await.expect("Failed to stop");
-
-        // Record count after stop
-        let final_count =
-            wait_for_line_count(&counter_file, "started", 1, Duration::from_millis(100)).await;
-
-        // Confirm no more restarts after stop
-        let after_stop = wait_for_line_count(
-            &counter_file,
-            "started",
-            final_count + 1,
-            Duration::from_secs(2),
+        let reached = wait_for_condition(
+            || async {
+                manager
+                    .job_state("unlimited")
+                    .await
+                    .is_some_and(|s| s.restart_count >= 4)
+            },
+            RESTART_TIMEOUT,
         )
         .await;
+        assert!(reached, "Process with unlimited restarts should keep restarting");
+
+        manager.stop_all().await.expect("Failed to stop");
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let count_after_stop = manager
+            .job_state("unlimited")
+            .await
+            .map(|s| s.restart_count)
+            .unwrap_or(0);
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let count_later = manager
+            .job_state("unlimited")
+            .await
+            .map(|s| s.restart_count)
+            .unwrap_or(0);
+
         assert_eq!(
-            after_stop, final_count,
+            count_after_stop, count_later,
             "Process should stop restarting after stop_all"
         );
     })

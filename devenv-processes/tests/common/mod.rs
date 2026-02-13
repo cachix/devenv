@@ -252,30 +252,6 @@ pub async fn wait_for_line_count(
     count
 }
 
-/// Wait for a file containing a single integer to reach at least `expected`.
-/// Returns the actual value found (or the value at timeout).
-/// Designed for watchdog-style counter files that overwrite with `echo $count > file`.
-pub async fn wait_for_counter_value(path: &Path, expected: i32, timeout: Duration) -> i32 {
-    let deadline = Instant::now() + timeout;
-    let mut delay = Duration::from_millis(10);
-    let max_delay = Duration::from_millis(500);
-    let mut value = 0;
-
-    while Instant::now() < deadline {
-        if let Ok(content) = tokio::fs::read_to_string(path).await {
-            if let Ok(v) = content.trim().parse::<i32>() {
-                value = v;
-                if value >= expected {
-                    return value;
-                }
-            }
-        }
-        tokio::time::sleep(delay).await;
-        delay = (delay * 2).min(max_delay);
-    }
-    value
-}
-
 /// Wait for TCP port to be accepting connections
 pub async fn wait_for_tcp_port(addr: &str, timeout: Duration) -> bool {
     let addr = addr.to_string();
