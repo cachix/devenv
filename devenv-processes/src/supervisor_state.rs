@@ -47,6 +47,14 @@ pub enum Action {
     None,
 }
 
+/// Snapshot of supervisor state for external observation.
+#[derive(Clone, Debug)]
+pub struct JobStatus {
+    pub phase: SupervisorPhase,
+    pub restart_count: usize,
+    pub is_ready: bool,
+}
+
 /// Pure state machine for per-process supervision.
 ///
 /// No I/O, no handles — takes `Event`s, returns `Action`s.
@@ -191,6 +199,15 @@ impl SupervisorState {
 
     pub fn phase(&self) -> SupervisorPhase {
         self.phase
+    }
+
+    /// Create a status snapshot for external observation.
+    pub fn status(&self) -> JobStatus {
+        JobStatus {
+            phase: self.phase,
+            restart_count: self.restart_count,
+            is_ready: self.is_ready(),
+        }
     }
 
     fn try_restart(&mut self, now: Instant, context: &'static str) -> Action {
@@ -862,6 +879,40 @@ mod tests {
         assert!(state.watchdog_armed);
         assert_eq!(state.watchdog_deadline, Some(t + Duration::from_secs(1)));
         assert_eq!(state.phase(), SupervisorPhase::Starting);
+    }
+
+    // =============================================================
+    // JobStatus snapshot
+    // =============================================================
+
+    #[test]
+    fn status_snapshot_reflects_state() {
+        let now = Instant::now();
+        let config = config_watchdog_and_policy(1_000_000, true, RestartPolicy::Always);
+        let mut state = SupervisorState::new(&config, now);
+
+        let status = state.status();
+        assert_eq!(status.phase, SupervisorPhase::Starting);
+        assert_eq!(status.restart_count, 0);
+        assert!(!status.is_ready);
+
+        state.on_event(Event::Ready, now);
+        let status = state.status();
+        assert_eq!(status.phase, SupervisorPhase::Ready);
+        assert!(status.is_ready);
+
+        let t = now + Duration::from_millis(10);
+        state.on_event(
+            Event::ProcessExit {
+                status: ExitStatus::Failure,
+            },
+            t,
+        );
+        state.on_restart_complete(t);
+        let status = state.status();
+        assert_eq!(status.phase, SupervisorPhase::Starting);
+        assert_eq!(status.restart_count, 1);
+        assert!(!status.is_ready);
     }
 
     // =============================================================

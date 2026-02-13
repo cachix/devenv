@@ -72,12 +72,14 @@ pub struct ProcessResources {
     pub job: Arc<Job>,
     pub activity: Activity,
     pub notify_socket: Option<Arc<NotifySocket>>,
-    pub ready_state: tokio::sync::watch::Sender<bool>,
+    pub status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
 }
 
 /// Handle to a managed process job
 pub struct JobHandle {
     pub resources: ProcessResources,
+    /// Status receiver for querying supervisor state
+    pub status_rx: tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
     /// Supervisor task handling restarts
     pub supervisor_task: JoinHandle<()>,
     /// Output reader tasks (stdout, stderr)
@@ -240,14 +242,23 @@ impl NativeProcessManager {
         let stderr_tailer =
             crate::log_tailer::spawn_file_tailer(proc_cmd.stderr_log, activity.clone(), true);
 
-        // Create ready state for signaling when process becomes ready
-        let (ready_state, _ready_rx) = tokio::sync::watch::channel(false);
+        // Create status channel for supervisor state observation
+        let initial_status = crate::supervisor_state::JobStatus {
+            phase: crate::supervisor_state::SupervisorPhase::Starting,
+            restart_count: 0,
+            is_ready: false,
+        };
+        let (status_tx, status_rx) = tokio::sync::watch::channel(initial_status);
 
         // If no readiness mechanism is configured, mark process as immediately ready
         let has_notify = config.notify.as_ref().is_some_and(|n| n.enable);
         let has_tcp_probe = !config.listen.is_empty() && !has_notify;
         if !has_notify && !has_tcp_probe {
-            let _ = ready_state.send(true);
+            let _ = status_tx.send(crate::supervisor_state::JobStatus {
+                phase: crate::supervisor_state::SupervisorPhase::Ready,
+                restart_count: 0,
+                is_ready: true,
+            });
         }
 
         let resources = ProcessResources {
@@ -255,7 +266,7 @@ impl NativeProcessManager {
             job: job.clone(),
             activity,
             notify_socket,
-            ready_state,
+            status_tx,
         };
 
         // Spawn supervision task
@@ -268,6 +279,7 @@ impl NativeProcessManager {
             config.name.clone(),
             JobHandle {
                 resources,
+                status_rx,
                 supervisor_task,
                 output_readers: Some((stdout_tailer, stderr_tailer)),
             },
@@ -383,26 +395,32 @@ impl NativeProcessManager {
 
     /// Wait for a process to become ready, avoiding missed early readiness signals.
     pub async fn wait_ready(&self, name: &str) -> Result<()> {
-        let ready_state = {
+        let mut status_rx = {
             let jobs = self.jobs.read().await;
             let handle = jobs
                 .get(name)
                 .ok_or_else(|| miette::miette!("Process {} not found", name))?;
-            handle.resources.ready_state.clone()
+            handle.status_rx.clone()
         };
 
-        let mut ready_rx = ready_state.subscribe();
-        if *ready_rx.borrow() {
+        if status_rx.borrow().is_ready {
             return Ok(());
         }
 
-        while ready_rx.changed().await.is_ok() {
-            if *ready_rx.borrow() {
+        while status_rx.changed().await.is_ok() {
+            if status_rx.borrow().is_ready {
                 return Ok(());
             }
         }
 
         bail!("Process {} ready state channel closed", name);
+    }
+
+    /// Query the current state of a process.
+    pub async fn job_state(&self, name: &str) -> Option<crate::supervisor_state::JobStatus> {
+        let jobs = self.jobs.read().await;
+        jobs.get(name)
+            .map(|handle| handle.status_rx.borrow().clone())
     }
 
     /// Start the API socket server for external queries (e.g., `devenv processes wait`).
@@ -455,23 +473,20 @@ impl NativeProcessManager {
 
         let response = match serde_json::from_str::<ApiRequest>(&line) {
             Ok(ApiRequest::Wait) => {
-                // Subscribe to all process ready channels.
-                // If a process is already ready (borrow() == true), it is skipped
-                // immediately — this handles clients connecting after readiness.
-                let receivers: Vec<(String, tokio::sync::watch::Receiver<bool>)> = {
+                let receivers: Vec<(String, tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>)> = {
                     let jobs = jobs.read().await;
                     jobs.iter()
-                        .map(|(name, handle)| (name.clone(), handle.ready_state.subscribe()))
+                        .map(|(name, handle)| (name.clone(), handle.status_rx.clone()))
                         .collect()
                 };
 
                 for (name, mut rx) in receivers {
-                    if *rx.borrow() {
+                    if rx.borrow().is_ready {
                         continue;
                     }
                     debug!("API: waiting for process {} to become ready", name);
                     while rx.changed().await.is_ok() {
-                        if *rx.borrow() {
+                        if rx.borrow().is_ready {
                             break;
                         }
                     }
