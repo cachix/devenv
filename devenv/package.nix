@@ -79,6 +79,10 @@ rustPlatform.buildRustPackage {
     export PROTO_ROOT="$NIX_BUILD_TOP/cargo-vendor-dir"
   '';
 
+  sandboxProfile = lib.optionalString stdenv.isDarwin ''
+    (allow mach-lookup (global-name "com.apple.FSEvents"))
+  '';
+
   nativeCheckInputs = [ gitMinimal bash ];
   preCheck = ''
     # Initialize git repo for tests that use git-root-relative imports
