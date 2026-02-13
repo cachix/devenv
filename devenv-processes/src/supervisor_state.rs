@@ -40,11 +40,32 @@ pub enum Event {
     FileChange,
 }
 
+#[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     Restart,
     GiveUp { reason: &'static str },
     None,
+}
+
+/// What triggered a restart attempt. Used to produce specific GiveUp reasons.
+#[derive(Debug, Clone, Copy)]
+enum RestartTrigger {
+    WatchdogTrigger,
+    WatchdogTimeout,
+    StartupTimeout,
+    ProcessExit,
+}
+
+impl RestartTrigger {
+    fn give_up_reason(self) -> &'static str {
+        match self {
+            Self::WatchdogTrigger => "watchdog trigger: restart rate limit exceeded",
+            Self::WatchdogTimeout => "watchdog timeout: restart rate limit exceeded",
+            Self::StartupTimeout => "startup timeout: restart rate limit exceeded",
+            Self::ProcessExit => "process exit: restart rate limit exceeded",
+        }
+    }
 }
 
 /// Snapshot of supervisor state for external observation.
@@ -144,9 +165,9 @@ impl SupervisorState {
                 }
                 Action::None
             }
-            Event::WatchdogTrigger => self.try_restart(now, "watchdog trigger"),
-            Event::WatchdogTimeout => self.try_restart(now, "watchdog timeout"),
-            Event::StartupTimeout => self.try_restart(now, "startup timeout"),
+            Event::WatchdogTrigger => self.try_restart(now, RestartTrigger::WatchdogTrigger),
+            Event::WatchdogTimeout => self.try_restart(now, RestartTrigger::WatchdogTimeout),
+            Event::StartupTimeout => self.try_restart(now, RestartTrigger::StartupTimeout),
             Event::ExtendTimeout { usec } => {
                 if self.phase == SupervisorPhase::Starting
                     && let Some(deadline) = self.startup_deadline.as_mut()
@@ -164,7 +185,7 @@ impl SupervisorState {
                 if !should_restart {
                     return Action::None;
                 }
-                self.try_restart(now, "process exit")
+                self.try_restart(now, RestartTrigger::ProcessExit)
             }
             Event::FileChange => Action::Restart,
         }
@@ -221,19 +242,13 @@ impl SupervisorState {
         }
     }
 
-    fn try_restart(&mut self, now: Instant, context: &'static str) -> Action {
+    fn try_restart(&mut self, now: Instant, trigger: RestartTrigger) -> Action {
         if self.can_restart(now) {
             Action::Restart
         } else {
             self.phase = SupervisorPhase::GaveUp;
             Action::GiveUp {
-                reason: match context {
-                    "watchdog trigger" => "watchdog trigger: restart rate limit exceeded",
-                    "watchdog timeout" => "watchdog timeout: restart rate limit exceeded",
-                    "startup timeout" => "startup timeout: restart rate limit exceeded",
-                    "process exit" => "process exit: restart rate limit exceeded",
-                    _ => "restart rate limit exceeded",
-                },
+                reason: trigger.give_up_reason(),
             }
         }
     }
