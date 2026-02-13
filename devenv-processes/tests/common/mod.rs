@@ -319,11 +319,9 @@ pub async fn wait_for_unix_socket(path: &Path, timeout: Duration) -> bool {
 pub fn script_echo_listen_fds(output_file: &Path) -> String {
     format!(
         r#"#!/bin/sh
-echo "LISTEN_FDS=$LISTEN_FDS" > {}
-echo "LISTEN_PID=$LISTEN_PID" >> {}
+printf "LISTEN_FDS=$LISTEN_FDS\nLISTEN_PID=$LISTEN_PID\n" > {}
 sleep 3600
 "#,
-        output_file.display(),
         output_file.display()
     )
 }
