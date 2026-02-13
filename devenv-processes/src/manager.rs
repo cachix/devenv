@@ -41,8 +41,6 @@ pub enum ApiResponse {
     Error { message: String },
 }
 
-use watchexec::Watchexec;
-use watchexec_filterer_globset::GlobsetFilterer;
 use watchexec_supervisor::{
     ProcessEnd, Signal,
     job::{CommandState, Job, start_job},
@@ -207,7 +205,7 @@ impl NativeProcessManager {
         let watchdog_usec = config.watchdog.as_ref().map(|w| w.usec);
 
         // Build the command (creates log directory and wrapper script)
-        let (cmd, stdout_log, stderr_log) = crate::command::build_command(
+        let proc_cmd = crate::command::build_command(
             &self.state_dir,
             config,
             notify_socket.as_ref().map(|s| s.path()),
@@ -215,10 +213,10 @@ impl NativeProcessManager {
         )?;
 
         // Truncate log files if they exist
-        let _ = std::fs::write(&stdout_log, "");
-        let _ = std::fs::write(&stderr_log, "");
+        let _ = std::fs::write(&proc_cmd.stdout_log, "");
+        let _ = std::fs::write(&proc_cmd.stderr_log, "");
 
-        let (job, _task) = start_job(cmd);
+        let (job, _task) = start_job(proc_cmd.command);
         let job = Arc::new(job);
 
         // Setup socket activation and/or capabilities if configured
@@ -256,8 +254,10 @@ impl NativeProcessManager {
         job.start().await;
 
         // Spawn file tailers to emit output to activity
-        let stdout_tailer = crate::log_tailer::spawn_file_tailer(stdout_log, activity.clone(), false);
-        let stderr_tailer = crate::log_tailer::spawn_file_tailer(stderr_log, activity.clone(), true);
+        let stdout_tailer =
+            crate::log_tailer::spawn_file_tailer(proc_cmd.stdout_log, activity.clone(), false);
+        let stderr_tailer =
+            crate::log_tailer::spawn_file_tailer(proc_cmd.stderr_log, activity.clone(), true);
 
         // Create ready state for signaling when process becomes ready
         let (ready_state, _ready_rx) = tokio::sync::watch::channel(false);
@@ -296,7 +296,6 @@ impl NativeProcessManager {
         info!("Command '{}' started", config.name);
         Ok(job_clone)
     }
-
 
     /// Spawn a supervision task that monitors the job and handles restarts
     fn spawn_supervisor(
@@ -384,102 +383,7 @@ impl NativeProcessManager {
                 None
             };
 
-            // Set up file watcher if watch paths are configured
-            let (watch_tx, mut watch_rx) = mpsc::channel::<()>(1);
-            let _watcher_task = if !config.watch.paths.is_empty() {
-                // Canonicalize watch paths to resolve symlinks. On macOS,
-                // /tmp -> /private/tmp and /var -> /private/var; FSEvents
-                // reports events using resolved paths, so the watched paths
-                // must match for watchexec to attach path tags to events.
-                let paths: Vec<PathBuf> = config
-                    .watch
-                    .paths
-                    .iter()
-                    .map(|p| p.canonicalize().unwrap_or_else(|_| p.clone()))
-                    .collect();
-                let extensions = config.watch.extensions.clone();
-                let ignore = config.watch.ignore.clone();
-                let watch_name = name.clone();
-                let tx = watch_tx.clone();
-
-                Some(tokio::spawn(async move {
-                    // Build ignore patterns for GlobsetFilterer
-                    // Format: (pattern, optional_base_path)
-                    let ignores: Vec<(String, Option<PathBuf>)> = ignore
-                        .iter()
-                        .map(|pattern| {
-                            // Support both "**/pattern" and "pattern" styles
-                            let glob_pattern = if pattern.contains('/') || pattern.starts_with("**")
-                            {
-                                pattern.clone()
-                            } else {
-                                format!("**/{}", pattern)
-                            };
-                            (glob_pattern, None)
-                        })
-                        .collect();
-
-                    // Get origin path (first watch path or current dir)
-                    let origin = paths.first().cloned().unwrap_or_else(|| PathBuf::from("."));
-
-                    // Create the filterer
-                    let filterer = match GlobsetFilterer::new(
-                        &origin,
-                        std::iter::empty::<(String, Option<PathBuf>)>(), // no filters (allow all)
-                        ignores,
-                        std::iter::empty::<PathBuf>(), // no whitelist
-                        std::iter::empty(),            // no ignore files
-                        extensions.iter().map(|e| std::ffi::OsString::from(e)), // extension filter
-                    )
-                    .await
-                    {
-                        Ok(f) => Arc::new(f),
-                        Err(e) => {
-                            warn!("Failed to create filterer for {}: {}", watch_name, e);
-                            return;
-                        }
-                    };
-
-                    let tx = tx;
-                    let wx = match Watchexec::new(move |action| {
-                        // Events are already filtered by the filterer
-                        if action.events.iter().any(|e| e.paths().next().is_some()) {
-                            let _ = tx.try_send(());
-                        }
-                        action
-                    }) {
-                        Ok(wx) => wx,
-                        Err(e) => {
-                            warn!("Failed to create file watcher for {}: {}", watch_name, e);
-                            return;
-                        }
-                    };
-
-                    // Configure paths to watch
-                    wx.config.pathset(paths.iter().map(|p| p.as_path()));
-
-                    // Set the filterer
-                    wx.config.filterer(filterer);
-
-                    let mut watch_info = format!(
-                        "File watcher started for {} watching {:?}",
-                        watch_name, paths
-                    );
-                    if !extensions.is_empty() {
-                        watch_info.push_str(&format!(" (extensions: {:?})", extensions));
-                    }
-                    if !ignore.is_empty() {
-                        watch_info.push_str(&format!(" (ignoring {:?})", ignore));
-                    }
-                    info!("{}", watch_info);
-
-                    if let Err(e) = wx.main().await {
-                        warn!("File watcher for {} stopped: {}", watch_name, e);
-                    }
-                }))
-            } else {
-                None
-            };
+            let mut file_watcher = crate::file_watcher::FileWatcher::new(&config.watch, &name);
 
             loop {
                 tokio::select! {
@@ -487,7 +391,7 @@ impl NativeProcessManager {
                         debug!("Shutdown requested for {}", name);
                         break;
                     }
-                    _ = watch_rx.recv() => {
+                    _ = file_watcher.rx.recv() => {
                         // File change detected, restart the process
                         info!("File change detected for {}, restarting", name);
                         activity.log("File change detected, restarting");
@@ -673,7 +577,6 @@ impl NativeProcessManager {
             debug!("Supervision task for {} exiting", name);
         })
     }
-
 
     /// Stop a process by name
     pub async fn stop(&self, name: &str) -> Result<()> {

@@ -25,6 +25,7 @@ pub fn get_process_runtime_dir(runtime_dir: &Path) -> Result<PathBuf> {
 
 pub mod command;
 pub mod config;
+pub mod file_watcher;
 pub mod log_tailer;
 pub mod manager;
 pub mod notify_socket;
