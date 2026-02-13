@@ -22,6 +22,10 @@ pub enum NotifyMessage {
     Reloading,
     /// Watchdog heartbeat (WATCHDOG=1)
     Watchdog,
+    /// Process signals explicit failure (WATCHDOG=trigger)
+    WatchdogTrigger,
+    /// Process requests more startup time (EXTEND_TIMEOUT_USEC=<n>)
+    ExtendTimeout { usec: u64 },
     /// Human-readable status message (STATUS=...)
     Status(String),
     /// Unrecognized message
@@ -112,6 +116,11 @@ fn parse_notify_message(data: &str) -> Vec<NotifyMessage> {
                 "STOPPING" if value == "1" => NotifyMessage::Stopping,
                 "RELOADING" if value == "1" => NotifyMessage::Reloading,
                 "WATCHDOG" if value == "1" => NotifyMessage::Watchdog,
+                "WATCHDOG" if value == "trigger" => NotifyMessage::WatchdogTrigger,
+                "EXTEND_TIMEOUT_USEC" => match value.parse::<u64>() {
+                    Ok(usec) => NotifyMessage::ExtendTimeout { usec },
+                    Err(_) => NotifyMessage::Unknown(line.to_string()),
+                },
                 "STATUS" => NotifyMessage::Status(value.to_string()),
                 _ => NotifyMessage::Unknown(line.to_string()),
             };
@@ -167,6 +176,29 @@ mod tests {
     fn test_parse_stopping() {
         let msgs = parse_notify_message("STOPPING=1\n");
         assert_eq!(msgs, vec![NotifyMessage::Stopping]);
+    }
+
+    #[test]
+    fn test_parse_watchdog_trigger() {
+        let msgs = parse_notify_message("WATCHDOG=trigger\n");
+        assert_eq!(msgs, vec![NotifyMessage::WatchdogTrigger]);
+    }
+
+    #[test]
+    fn test_parse_extend_timeout() {
+        let msgs = parse_notify_message("EXTEND_TIMEOUT_USEC=5000000\n");
+        assert_eq!(msgs, vec![NotifyMessage::ExtendTimeout { usec: 5_000_000 }]);
+    }
+
+    #[test]
+    fn test_parse_extend_timeout_invalid() {
+        let msgs = parse_notify_message("EXTEND_TIMEOUT_USEC=notanumber\n");
+        assert_eq!(
+            msgs,
+            vec![NotifyMessage::Unknown(
+                "EXTEND_TIMEOUT_USEC=notanumber".to_string()
+            )]
+        );
     }
 
     #[test]
