@@ -30,6 +30,39 @@ fn reset_scroll_region(stdout: &mut impl Write) -> io::Result<()> {
     stdout.flush()
 }
 
+/// Check if data contains alternate screen buffer sequences.
+///
+/// Detects:
+/// - `\x1b[?1049h` / `\x1b[?1049l` — modern alternate screen (xterm)
+/// - `\x1b[?47h` / `\x1b[?47l` — older alternate screen
+/// - `\x1b[?1047h` / `\x1b[?1047l` — alternate screen with clear
+///
+/// Returns `Some(true)` for enter, `Some(false)` for exit, `None` if not found.
+/// When both enter and exit are present, returns the last transition.
+pub fn contains_alternate_screen_sequence(data: &[u8]) -> Option<bool> {
+    let mut result = None;
+    let mut i = 0;
+    while i < data.len() {
+        if data[i] == 0x1b && i + 1 < data.len() && data[i + 1] == b'[' {
+            // CSI sequence — look for ?<number>h or ?<number>l
+            if i + 2 < data.len() && data[i + 2] == b'?' {
+                let mut j = i + 3;
+                while j < data.len() && data[j].is_ascii_digit() {
+                    j += 1;
+                }
+                if j < data.len() && (data[j] == b'h' || data[j] == b'l') {
+                    let param = &data[i + 3..j];
+                    if param == b"1049" || param == b"47" || param == b"1047" {
+                        result = Some(data[j] == b'h');
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+    result
+}
+
 /// Check if data contains terminal clear/reset sequences.
 /// This detects: \x1b[2J (clear screen), \x1b[3J (clear scrollback), \x1bc (reset terminal)
 fn contains_clear_sequence(data: &[u8]) -> bool {
@@ -144,6 +177,7 @@ pub struct ShellSession {
     config: SessionConfig,
     size: PtySize,
     status_line: StatusLine,
+    in_alternate_screen: bool,
 }
 
 impl ShellSession {
@@ -157,12 +191,14 @@ impl ShellSession {
             config,
             size,
             status_line,
+            in_alternate_screen: false,
         }
     }
 
-    /// Get the PTY size, reserving 1 row for status line if enabled.
+    /// Get the PTY size, reserving 1 row for status line if enabled
+    /// and not in alternate screen mode.
     fn pty_size(&self) -> PtySize {
-        if self.config.show_status_line {
+        if self.config.show_status_line && !self.in_alternate_screen {
             PtySize {
                 rows: self.size.rows.saturating_sub(1).max(1),
                 cols: self.size.cols,
@@ -458,8 +494,10 @@ impl ShellSession {
                 tokio::select! {
                     event = event_rx.recv() => event,
                     _ = tokio::time::sleep(spinner_interval) => {
-                        // Redraw status line to animate spinner
-                        self.status_line.draw(stdout, self.size.cols)?;
+                        // Redraw status line to animate spinner (skip in alternate screen)
+                        if !self.in_alternate_screen {
+                            self.status_line.draw(stdout, self.size.cols)?;
+                        }
                         continue;
                     }
                 }
@@ -518,8 +556,29 @@ impl ShellSession {
                     // Feed to VT for state tracking (used during reload)
                     vt.feed_str(&String::from_utf8_lossy(&data));
 
+                    // Detect alternate screen buffer transitions (e.g. vim, less)
+                    if self.config.show_status_line {
+                        if let Some(entering) = contains_alternate_screen_sequence(&data) {
+                            if entering && !self.in_alternate_screen {
+                                // Entering alternate screen: suspend status line
+                                self.in_alternate_screen = true;
+                                reset_scroll_region(stdout)?;
+                                let _ = pty.resize(self.pty_size());
+                            } else if !entering && self.in_alternate_screen {
+                                // Exiting alternate screen: restore status line
+                                self.in_alternate_screen = false;
+                                let _ = pty.resize(self.pty_size());
+                                self.setup_scroll_region(stdout)?;
+                                self.status_line.draw(stdout, self.size.cols)?;
+                            }
+                        }
+                    }
+
                     // Check for terminal clear sequences and redraw status line
-                    if self.config.show_status_line && contains_clear_sequence(&data) {
+                    if self.config.show_status_line
+                        && !self.in_alternate_screen
+                        && contains_clear_sequence(&data)
+                    {
                         // Save cursor before scroll region setup (DECSTBM resets cursor to home)
                         let _ = write!(stdout, "\x1b7");
                         let _ = self.setup_scroll_region(stdout);
@@ -568,12 +627,16 @@ impl ShellSession {
         match cmd {
             ShellCommand::ReloadReady { changed_files } => {
                 self.status_line.state_mut().set_reload_ready(changed_files);
-                self.status_line.draw(stdout, self.size.cols)?;
+                if !self.in_alternate_screen {
+                    self.status_line.draw(stdout, self.size.cols)?;
+                }
             }
 
             ShellCommand::Building { changed_files } => {
                 self.status_line.state_mut().set_building(changed_files);
-                self.status_line.draw(stdout, self.size.cols)?;
+                if !self.in_alternate_screen {
+                    self.status_line.draw(stdout, self.size.cols)?;
+                }
             }
 
             ShellCommand::BuildFailed {
@@ -583,22 +646,30 @@ impl ShellSession {
                 self.status_line
                     .state_mut()
                     .set_build_failed(changed_files, error);
-                self.status_line.draw(stdout, self.size.cols)?;
+                if !self.in_alternate_screen {
+                    self.status_line.draw(stdout, self.size.cols)?;
+                }
             }
 
             ShellCommand::ReloadApplied => {
                 self.status_line.state_mut().clear();
-                self.status_line.draw(stdout, self.size.cols)?;
+                if !self.in_alternate_screen {
+                    self.status_line.draw(stdout, self.size.cols)?;
+                }
             }
 
             ShellCommand::WatchedFiles { files } => {
                 self.status_line.state_mut().set_watched_files(files);
-                self.status_line.draw(stdout, self.size.cols)?;
+                if !self.in_alternate_screen {
+                    self.status_line.draw(stdout, self.size.cols)?;
+                }
             }
 
             ShellCommand::WatchingPaused { paused } => {
                 self.status_line.state_mut().set_paused(paused);
-                self.status_line.draw(stdout, self.size.cols)?;
+                if !self.in_alternate_screen {
+                    self.status_line.draw(stdout, self.size.cols)?;
+                }
             }
 
             ShellCommand::PrintWatchedFiles { files } => {
