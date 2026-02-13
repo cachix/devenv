@@ -87,16 +87,21 @@ impl SupervisorState {
             .as_ref()
             .map(|w| Duration::from_micros(w.usec));
         let watchdog_require_ready = config.watchdog.as_ref().is_none_or(|w| w.require_ready);
-        // startup_timeout, restart_limit_burst, restart_limit_interval added in Phase 9.
-        // Until then, fall back to max_restarts for burst limit.
-        let startup_timeout = None;
-        let restart_limit_burst = config.max_restarts.unwrap_or(DEFAULT_RESTART_LIMIT_BURST);
+        let startup_timeout = config.startup_timeout.map(Duration::from_secs);
+        let restart_limit_burst = config
+            .restart_limit_burst
+            .or(config.max_restarts)
+            .unwrap_or(DEFAULT_RESTART_LIMIT_BURST);
+        let restart_limit_interval = config
+            .restart_limit_interval
+            .map(Duration::from_secs)
+            .unwrap_or(DEFAULT_RESTART_LIMIT_INTERVAL);
 
         let mut state = Self {
             restart_timestamps: VecDeque::new(),
             restart_count: 0,
             restart_limit_burst,
-            restart_limit_interval: DEFAULT_RESTART_LIMIT_INTERVAL,
+            restart_limit_interval,
             watchdog_armed: false,
             watchdog_deadline: None,
             startup_deadline: startup_timeout.map(|d: Duration| now + d),
@@ -296,16 +301,26 @@ mod tests {
         }
     }
 
-    /// Build a state with startup_timeout (not yet in ProcessConfig).
-    fn state_with_startup_timeout(
-        config: &ProcessConfig,
-        startup_timeout: Duration,
-        now: Instant,
-    ) -> SupervisorState {
-        let mut state = SupervisorState::new(config, now);
-        state.startup_timeout = Some(startup_timeout);
-        state.startup_deadline = Some(now + startup_timeout);
-        state
+    fn config_with_startup_timeout(secs: u64) -> ProcessConfig {
+        ProcessConfig {
+            startup_timeout: Some(secs),
+            ..Default::default()
+        }
+    }
+
+    fn config_with_startup_and_watchdog(
+        startup_secs: u64,
+        watchdog_usec: u64,
+        require_ready: bool,
+    ) -> ProcessConfig {
+        ProcessConfig {
+            startup_timeout: Some(startup_secs),
+            watchdog: Some(WatchdogConfig {
+                usec: watchdog_usec,
+                require_ready,
+            }),
+            ..Default::default()
+        }
     }
 
     // =============================================================
@@ -436,8 +451,8 @@ mod tests {
     #[test]
     fn startup_timeout_triggers_restart() {
         let now = Instant::now();
-        let config = config_default();
-        let mut state = state_with_startup_timeout(&config, Duration::from_secs(5), now);
+        let config = config_with_startup_timeout(5);
+        let mut state = SupervisorState::new(&config, now);
 
         let action = state.on_event(Event::StartupTimeout, now + Duration::from_secs(5));
         assert_eq!(action, Action::Restart);
@@ -446,8 +461,8 @@ mod tests {
     #[test]
     fn startup_timeout_cleared_by_ready() {
         let now = Instant::now();
-        let config = config_with_watchdog(1_000_000, true);
-        let mut state = state_with_startup_timeout(&config, Duration::from_secs(5), now);
+        let config = config_with_startup_and_watchdog(5, 1_000_000, true);
+        let mut state = SupervisorState::new(&config, now);
         assert!(state.startup_deadline.is_some());
 
         state.on_event(Event::Ready, now + Duration::from_secs(1));
@@ -457,8 +472,8 @@ mod tests {
     #[test]
     fn startup_timeout_cleared_by_watchdog_ping() {
         let now = Instant::now();
-        let config = config_with_watchdog(1_000_000, true);
-        let mut state = state_with_startup_timeout(&config, Duration::from_secs(5), now);
+        let config = config_with_startup_and_watchdog(5, 1_000_000, true);
+        let mut state = SupervisorState::new(&config, now);
         assert!(state.startup_deadline.is_some());
 
         state.on_event(Event::WatchdogPing, now + Duration::from_secs(1));
@@ -468,8 +483,8 @@ mod tests {
     #[test]
     fn startup_timeout_respects_rate_limit() {
         let now = Instant::now();
-        let config = config_default();
-        let mut state = state_with_startup_timeout(&config, Duration::from_secs(1), now);
+        let config = config_with_startup_timeout(1);
+        let mut state = SupervisorState::new(&config, now);
 
         for i in 0..5 {
             let t = now + Duration::from_millis(i * 10);
@@ -487,8 +502,8 @@ mod tests {
     #[test]
     fn extend_timeout_pushes_startup_deadline_forward() {
         let now = Instant::now();
-        let config = config_default();
-        let mut state = state_with_startup_timeout(&config, Duration::from_secs(5), now);
+        let config = config_with_startup_timeout(5);
+        let mut state = SupervisorState::new(&config, now);
 
         let original_deadline = state.startup_deadline.unwrap();
         state.on_event(Event::ExtendTimeout { usec: 3_000_000 }, now);
@@ -501,8 +516,8 @@ mod tests {
     #[test]
     fn extend_timeout_ignored_when_not_starting() {
         let now = Instant::now();
-        let config = config_with_watchdog(1_000_000, true);
-        let mut state = state_with_startup_timeout(&config, Duration::from_secs(5), now);
+        let config = config_with_startup_and_watchdog(5, 1_000_000, true);
+        let mut state = SupervisorState::new(&config, now);
 
         // Move to Ready phase
         state.on_event(Event::Ready, now);
@@ -515,8 +530,8 @@ mod tests {
     #[test]
     fn next_deadline_returns_earlier_of_startup_and_watchdog() {
         let now = Instant::now();
-        let config = config_with_watchdog(10_000_000, false); // 10s watchdog
-        let mut state = state_with_startup_timeout(&config, Duration::from_secs(3), now);
+        let config = config_with_startup_and_watchdog(3, 10_000_000, false);
+        let mut state = SupervisorState::new(&config, now);
         // require_ready=false → watchdog armed from start
 
         let startup = now + Duration::from_secs(3);
@@ -847,8 +862,8 @@ mod tests {
     #[test]
     fn on_restart_complete_resets_all_transient_state() {
         let now = Instant::now();
-        let config = config_with_watchdog(1_000_000, true);
-        let mut state = state_with_startup_timeout(&config, Duration::from_secs(5), now);
+        let config = config_with_startup_and_watchdog(5, 1_000_000, true);
+        let mut state = SupervisorState::new(&config, now);
 
         // Move to Ready, arm watchdog
         state.on_event(Event::Ready, now);
@@ -960,5 +975,166 @@ mod tests {
 
         // File change still works
         assert_eq!(state.on_event(Event::FileChange, t), Action::Restart);
+    }
+
+    // =============================================================
+    // Config wiring
+    // =============================================================
+
+    #[test]
+    fn config_startup_timeout_sets_initial_deadline() {
+        let now = Instant::now();
+        let config = config_with_startup_timeout(30);
+        let state = SupervisorState::new(&config, now);
+
+        assert_eq!(state.startup_deadline, Some(now + Duration::from_secs(30)));
+        assert_eq!(state.startup_timeout, Some(Duration::from_secs(30)));
+    }
+
+    #[test]
+    fn config_restart_limit_burst_overrides_max_restarts() {
+        let now = Instant::now();
+        let config = ProcessConfig {
+            max_restarts: Some(3),
+            restart_limit_burst: Some(7),
+            restart: RestartPolicy::Always,
+            ..Default::default()
+        };
+        let mut state = SupervisorState::new(&config, now);
+
+        // Should allow 7 restarts, not 3
+        for i in 0..7 {
+            let t = now + Duration::from_millis(i * 10);
+            assert_eq!(
+                state.on_event(
+                    Event::ProcessExit {
+                        status: ExitStatus::Failure
+                    },
+                    t
+                ),
+                Action::Restart
+            );
+            state.on_restart_complete(t);
+        }
+        let t = now + Duration::from_millis(100);
+        assert!(matches!(
+            state.on_event(
+                Event::ProcessExit {
+                    status: ExitStatus::Failure
+                },
+                t
+            ),
+            Action::GiveUp { .. }
+        ));
+    }
+
+    #[test]
+    fn config_restart_limit_interval_controls_window() {
+        let now = Instant::now();
+        let config = ProcessConfig {
+            restart_limit_burst: Some(3),
+            restart_limit_interval: Some(2), // 2 second window
+            restart: RestartPolicy::Always,
+            ..Default::default()
+        };
+        let mut state = SupervisorState::new(&config, now);
+
+        // Use up all 3 slots
+        for i in 0..3 {
+            let t = now + Duration::from_millis(i * 10);
+            assert_eq!(
+                state.on_event(
+                    Event::ProcessExit {
+                        status: ExitStatus::Failure
+                    },
+                    t
+                ),
+                Action::Restart
+            );
+            state.on_restart_complete(t);
+        }
+
+        // 4th within 2s window — denied
+        let t = now + Duration::from_secs(1);
+        assert!(matches!(
+            state.on_event(
+                Event::ProcessExit {
+                    status: ExitStatus::Failure
+                },
+                t
+            ),
+            Action::GiveUp { .. }
+        ));
+    }
+
+    #[test]
+    fn config_restart_limit_interval_expires() {
+        let now = Instant::now();
+        let config = ProcessConfig {
+            restart_limit_burst: Some(3),
+            restart_limit_interval: Some(2), // 2 second window
+            restart: RestartPolicy::Always,
+            ..Default::default()
+        };
+        let mut state = SupervisorState::new(&config, now);
+
+        // Use up all 3 slots
+        for i in 0..3 {
+            let t = now + Duration::from_millis(i * 10);
+            state.on_event(
+                Event::ProcessExit {
+                    status: ExitStatus::Failure,
+                },
+                t,
+            );
+            state.on_restart_complete(t);
+        }
+
+        // After 3s (past the 2s window), old timestamps expire — restart allowed
+        let t = now + Duration::from_secs(3);
+        assert_eq!(
+            state.on_event(
+                Event::ProcessExit {
+                    status: ExitStatus::Failure
+                },
+                t
+            ),
+            Action::Restart
+        );
+    }
+
+    #[test]
+    fn config_max_restarts_used_as_burst_fallback() {
+        let now = Instant::now();
+        let config = ProcessConfig {
+            max_restarts: Some(2),
+            restart: RestartPolicy::Always,
+            ..Default::default()
+        };
+        let mut state = SupervisorState::new(&config, now);
+
+        for i in 0..2 {
+            let t = now + Duration::from_millis(i * 10);
+            assert_eq!(
+                state.on_event(
+                    Event::ProcessExit {
+                        status: ExitStatus::Failure
+                    },
+                    t
+                ),
+                Action::Restart
+            );
+            state.on_restart_complete(t);
+        }
+        let t = now + Duration::from_millis(50);
+        assert!(matches!(
+            state.on_event(
+                Event::ProcessExit {
+                    status: ExitStatus::Failure
+                },
+                t
+            ),
+            Action::GiveUp { .. }
+        ));
     }
 }

@@ -134,6 +134,9 @@ let
                 pseudo_terminal = config.pseudo_terminal;
                 restart = config.restart;
                 max_restarts = config.max_restarts;
+                startup_timeout = config.startup_timeout;
+                restart_limit_burst = config.restart_limit_burst;
+                restart_limit_interval = config.restart_limit_interval;
                 listen = config.listen;
                 ports = config.ports;
                 watch = config.watch;
@@ -242,6 +245,36 @@ let
             default = 5;
             description = ''
               Maximum number of restart attempts. null means unlimited restarts.
+
+              Only used when type = "process".
+            '';
+          };
+
+          startup_timeout = lib.mkOption {
+            type = types.nullOr types.int;
+            default = null;
+            description = ''
+              Maximum time in seconds for the process to signal readiness.
+
+              Only used when type = "process".
+            '';
+          };
+
+          restart_limit_burst = lib.mkOption {
+            type = types.nullOr types.int;
+            default = null;
+            description = ''
+              Maximum number of restarts within the sliding window.
+
+              Only used when type = "process".
+            '';
+          };
+
+          restart_limit_interval = lib.mkOption {
+            type = types.nullOr types.int;
+            default = null;
+            description = ''
+              Sliding window size in seconds for restart rate limiting.
 
               Only used when type = "process".
             '';

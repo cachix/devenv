@@ -113,9 +113,51 @@ let
         default = 5;
         description = ''
           Maximum number of restart attempts. null means unlimited restarts.
+          Deprecated: use `restart_limit_burst` for sliding-window rate limiting.
 
           Only used when using native process manager.
         '';
+      };
+
+      startup_timeout = lib.mkOption {
+        type = types.nullOr types.int;
+        default = null;
+        description = ''
+          Maximum time in seconds for the process to signal readiness.
+          If the process doesn't send READY=1 or WATCHDOG=1 before this deadline, it is restarted.
+          Like systemd's TimeoutStartSec.
+          The process can send EXTEND_TIMEOUT_USEC to extend this deadline.
+
+          Only used when using native process manager.
+        '';
+        example = 30;
+      };
+
+      restart_limit_burst = lib.mkOption {
+        type = types.nullOr types.int;
+        default = null;
+        description = ''
+          Maximum number of restarts within the sliding window.
+          When set, overrides `max_restarts`.
+          Like systemd's StartLimitBurst.
+          Default: 5.
+
+          Only used when using native process manager.
+        '';
+        example = 10;
+      };
+
+      restart_limit_interval = lib.mkOption {
+        type = types.nullOr types.int;
+        default = null;
+        description = ''
+          Sliding window size in seconds for restart rate limiting.
+          Like systemd's StartLimitIntervalSec.
+          Default: 10.
+
+          Only used when using native process manager.
+        '';
+        example = 60;
       };
 
       listen = lib.mkOption {
@@ -454,6 +496,9 @@ in
               pseudo_terminal = process.pseudo_terminal;
               restart = process.restart;
               max_restarts = process.max_restarts;
+              startup_timeout = process.startup_timeout;
+              restart_limit_burst = process.restart_limit_burst;
+              restart_limit_interval = process.restart_limit_interval;
               listen = process.listen;
               ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
               watch = process.watch;
