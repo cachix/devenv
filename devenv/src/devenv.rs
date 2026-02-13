@@ -2057,7 +2057,9 @@ impl Devenv {
             is_development_version: crate::is_development_version(),
             system: &self.global_options.system,
             devenv_root: &self.devenv_root,
-            skip_local_src: self.global_options.from.is_some(),
+            skip_local_src: self.global_options.from.is_some()
+                || (!self.global_options.option.is_empty()
+                    && !self.devenv_root.join("devenv.nix").exists()),
             devenv_dotfile: &self.devenv_dotfile,
             devenv_dotfile_path: &dotfile_relative_path,
             devenv_tmpdir: &self.devenv_tmp,
