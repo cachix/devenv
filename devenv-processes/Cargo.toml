@@ -33,5 +33,7 @@ portable-pty.workspace = true
 caps.workspace = true
 
 [dev-dependencies]
+kqueue.workspace = true
+notify.workspace = true
 sd-notify.workspace = true
 tracing-subscriber.workspace = true

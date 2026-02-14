@@ -79,7 +79,7 @@ rustPlatform.buildRustPackage {
     export PROTO_ROOT="$NIX_BUILD_TOP/cargo-vendor-dir"
   '';
 
-  sandboxProfile = lib.optionalString stdenv.isDarwin ''
+  sandboxProfile = ''
     (allow mach-lookup (global-name "com.apple.FSEvents"))
   '';
 
@@ -97,8 +97,8 @@ rustPlatform.buildRustPackage {
 
   useNextest = true;
 
-  # DEBUG: only run file watching tests to diagnose FSEvents in sandbox
-  cargoTestFlags = [ "-p" "devenv-processes" "--test" "file_watching" ];
+  # DEBUG: diagnose FSEvents/kqueue/poll in sandbox
+  cargoTestFlags = [ "-p" "devenv-processes" "--test" "fsevents_diagnosis" "--no-fail-fast" "--no-capture" ];
 
   postInstall =
     let
