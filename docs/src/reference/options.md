@@ -21748,50 +21748,6 @@ null or absolute path
 
 
 
-## process.managers.native.processConfig.\<name>.notify
-
-
-
-Systemd notify socket configuration.
-
-The process can send READY=1, STATUS=…, etc. via NOTIFY_SOCKET.
-
-
-
-*Type:*
-null or (submodule)
-
-
-
-*Default:*
-` null `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
-
-
-
-## process.managers.native.processConfig.\<name>.notify.enable
-
-
-
-Enable systemd notify protocol
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` true `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
-
-
-
 ## process.managers.native.processConfig.\<name>.pseudo_terminal
 
 
@@ -21809,6 +21765,301 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready
+
+
+
+Readiness probe configuration.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready.exec
+
+
+
+Shell command to execute. Exit 0 = ready.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "pg_isready -d template1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready.failure_threshold
+
+
+
+Consecutive failures before marking unhealthy.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 3 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready.http
+
+
+
+HTTP readiness probe configuration.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready.http.get
+
+
+
+HTTP GET readiness check.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready.http.get.host
+
+
+
+Host to connect to.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready.http.get.path
+
+
+
+HTTP path to request.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "/" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready.http.get.port
+
+
+
+Port to connect to.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready.http.get.scheme
+
+
+
+URL scheme (http or https).
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "http" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready.initial_delay
+
+
+
+Seconds to wait before first probe.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 0 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready.notify
+
+
+
+Enable systemd notify protocol for readiness signaling.
+The process must send READY=1 to the NOTIFY_SOCKET.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready.period
+
+
+
+Seconds between probes.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 10 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready.success_threshold
+
+
+
+Consecutive successes needed to be considered ready.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 1 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.processConfig.\<name>.ready.timeout
+
+
+
+Seconds before a probe times out.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 1 `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -22496,88 +22747,6 @@ null or string
 
 
 
-## processes.\<name>.max_restarts
-
-
-
-Maximum number of restart attempts. null means unlimited restarts.
-
-Only used when using native process manager.
-
-
-
-*Type:*
-null or signed integer
-
-
-
-*Default:*
-` 5 `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
-
-
-
-## processes.\<name>.notify
-
-
-
-Systemd notify protocol configuration for readiness signaling.
-
-Only used when using native process manager.
-
-
-
-*Type:*
-submodule
-
-
-
-*Default:*
-` { } `
-
-
-
-*Example:*
-
-```
-{
-  enable = true;
-}
-
-```
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
-
-
-
-## processes.\<name>.notify.enable
-
-
-
-Enable systemd notify protocol for readiness signaling.
-When enabled, the process must send READY=1 to the NOTIFY_SOCKET
-before dependent tasks with @ready suffix will be unblocked.
-
-Only used when using native process manager.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` false `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
-
-
-
 ## processes.\<name>.ports
 
 
@@ -22728,17 +22897,348 @@ boolean
 
 
 
+## processes.\<name>.ready
+
+
+
+How to determine if this process is ready to serve.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.ready.exec
+
+
+
+Shell command to execute. Exit 0 = ready.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "pg_isready -d template1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.ready.failure_threshold
+
+
+
+Consecutive failures before marking unhealthy.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 3 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.ready.http
+
+
+
+HTTP readiness probe configuration.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.ready.http.get
+
+
+
+HTTP GET readiness check.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.ready.http.get.host
+
+
+
+Host to connect to.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.ready.http.get.path
+
+
+
+HTTP path to request.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "/" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.ready.http.get.port
+
+
+
+Port to connect to.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.ready.http.get.scheme
+
+
+
+URL scheme (http or https).
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "http" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.ready.initial_delay
+
+
+
+Seconds to wait before first probe.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 0 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.ready.notify
+
+
+
+Enable systemd notify protocol for readiness signaling.
+The process must send READY=1 to the NOTIFY_SOCKET.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.ready.period
+
+
+
+Seconds between probes.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 10 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.ready.success_threshold
+
+
+
+Consecutive successes needed to be considered ready.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 1 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.ready.timeout
+
+
+
+Seconds before a probe times out.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 1 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
 ## processes.\<name>.restart
 
 
 
-Process restart policy:
+Process restart policy.
 
- - never: Never restart the process
- - always: Always restart when it exits
- - on_failure: Restart only on failure (non-zero exit code)
 
-Only used when using native process manager.
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.restart.max
+
+
+
+Maximum restart attempts. null = unlimited.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` 5 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.restart.on
+
+
+
+When to restart: never, always, or on_failure.
 
 
 
@@ -28929,8 +29429,8 @@ package
 Override the configuration file used by OpenTelemetry Collector.
 By default, a configuration is generated from ` services.opentelemetry-collector.settings `.
 
-If overriding, enable the ` health_check ` extension to allow process-compose to check whether the Collector is ready.
-Otherwise, disable the readiness probe by setting ` processes.opentelemetry-collector.process-compose.readiness_probe = lib.mkForce {}; `.
+If overriding, enable the ` health_check ` extension to allow the readiness probe to check whether the Collector is ready.
+Otherwise, disable the readiness probe by setting ` processes.opentelemetry-collector.ready = lib.mkForce null; `.
 
 
 
@@ -32591,77 +33091,6 @@ null or string
 
 
 
-## tasks.\<name>.max_restarts
-
-
-
-Maximum number of restart attempts. null means unlimited restarts.
-
-Only used when type = “process”.
-
-
-
-*Type:*
-null or signed integer
-
-
-
-*Default:*
-` 5 `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
-
-
-
-## tasks.\<name>.notify
-
-
-
-Systemd notify protocol configuration for readiness signaling.
-
-Only used when type = “process”.
-
-
-
-*Type:*
-submodule
-
-
-
-*Default:*
-` { } `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
-
-
-
-## tasks.\<name>.notify.enable
-
-
-
-Enable systemd notify protocol for readiness signaling.
-When enabled, the process must send READY=1 to the NOTIFY_SOCKET
-before dependent tasks with @ready suffix will be unblocked.
-
-Only used when type = “process”.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` false `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
-
-
-
 ## tasks.\<name>.ports
 
 
@@ -32709,17 +33138,348 @@ boolean
 
 
 
+## tasks.\<name>.ready
+
+
+
+How to determine if this process task is ready to serve.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ready.exec
+
+
+
+Shell command to execute. Exit 0 = ready.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "pg_isready -d template1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ready.failure_threshold
+
+
+
+Consecutive failures before marking unhealthy.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 3 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ready.http
+
+
+
+HTTP readiness probe configuration.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ready.http.get
+
+
+
+HTTP GET readiness check.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ready.http.get.host
+
+
+
+Host to connect to.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ready.http.get.path
+
+
+
+HTTP path to request.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "/" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ready.http.get.port
+
+
+
+Port to connect to.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ready.http.get.scheme
+
+
+
+URL scheme (http or https).
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "http" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ready.initial_delay
+
+
+
+Seconds to wait before first probe.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 0 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ready.notify
+
+
+
+Enable systemd notify protocol for readiness signaling.
+The process must send READY=1 to the NOTIFY_SOCKET.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ready.period
+
+
+
+Seconds between probes.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 10 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ready.success_threshold
+
+
+
+Consecutive successes needed to be considered ready.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 1 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.ready.timeout
+
+
+
+Seconds before a probe times out.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 1 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
 ## tasks.\<name>.restart
 
 
 
-Process restart policy:
+Process restart policy. Only used when type = “process”.
 
- - never: Never restart the process
- - always: Always restart when it exits
- - on_failure: Restart only on failure (non-zero exit code)
 
-Only used when type = “process”.
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.restart.max
+
+
+
+Maximum restart attempts. null = unlimited.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` 5 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.restart.on
+
+
+
+When to restart: never, always, or on_failure.
 
 
 

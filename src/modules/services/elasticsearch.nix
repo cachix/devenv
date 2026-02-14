@@ -190,18 +190,11 @@ in
       ports.transport.allocate = baseTransportPort;
       exec = "${startScript}";
 
-      process-compose = {
-        readiness_probe = {
-          exec.command = "${pkgs.curl}/bin/curl -f -k http://${cfg.listenAddress}:${toString allocatedHttpPort}";
-          initial_delay_seconds = 2;
-          period_seconds = 10;
-          timeout_seconds = 2;
-          success_threshold = 1;
-          failure_threshold = 5;
-        };
-
-        # https://github.com/F1bonacc1/process-compose#-auto-restart-if-not-healthy
-        availability.restart = "on_failure";
+      ready = {
+        exec = "${pkgs.curl}/bin/curl -f -k http://${cfg.listenAddress}:${toString allocatedHttpPort}";
+        initial_delay = 2;
+        timeout = 2;
+        failure_threshold = 5;
       };
     };
   };

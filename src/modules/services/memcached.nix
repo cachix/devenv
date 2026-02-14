@@ -57,20 +57,13 @@ in
       ports.main.allocate = basePort;
       exec = "exec ${cfg.package}/bin/memcached --port=${toString allocatedPort} --listen=${cfg.bind} ${lib.concatStringsSep " " cfg.startArgs}";
 
-      process-compose = {
-        readiness_probe = {
-          exec.command = ''
-            echo -e "stats\nquit" | ${pkgs.netcat}/bin/nc ${cfg.bind} ${toString allocatedPort} > /dev/null 2>&1
-          '';
-          initial_delay_seconds = 2;
-          period_seconds = 10;
-          timeout_seconds = 4;
-          success_threshold = 1;
-          failure_threshold = 5;
-        };
-
-        # https://github.com/F1bonacc1/process-compose#-auto-restart-if-not-healthy
-        availability.restart = "on_failure";
+      ready = {
+        exec = ''
+          echo -e "stats\nquit" | ${pkgs.netcat}/bin/nc ${cfg.bind} ${toString allocatedPort} > /dev/null 2>&1
+        '';
+        initial_delay = 2;
+        timeout = 4;
+        failure_threshold = 5;
       };
     };
   };

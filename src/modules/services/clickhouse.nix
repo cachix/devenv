@@ -62,17 +62,11 @@ in
       ports.http.allocate = baseHttpPort;
       exec = "exec clickhouse-server --config-file=${pkgs.writeText "clickhouse-config.yaml" cfg.config}";
 
-      process-compose = {
-        readiness_probe = {
-          exec.command = "${cfg.package}/bin/clickhouse-client --port ${toString allocatedPort} -q 'SELECT 1'";
-          initial_delay_seconds = 2;
-          period_seconds = 10;
-          timeout_seconds = 4;
-          success_threshold = 1;
-          failure_threshold = 5;
-        };
-
-        availability.restart = "on_failure";
+      ready = {
+        exec = "${cfg.package}/bin/clickhouse-client --port ${toString allocatedPort} -q 'SELECT 1'";
+        initial_delay = 2;
+        timeout = 4;
+        failure_threshold = 5;
       };
     };
   };

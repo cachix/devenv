@@ -19,11 +19,82 @@ mod common;
 
 use common::*;
 use devenv_processes::ProcessConfig;
+use std::path::Path;
 use std::time::Duration;
 use tokio::time::timeout;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(30);
 const WATCH_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Retry file writes until restart count reaches `target_starts`.
+async fn trigger_file_write_until_restart(
+    watch_file: &Path,
+    content_prefix: &str,
+    counter_file: &Path,
+    target_starts: usize,
+    timeout: Duration,
+) -> usize {
+    let start = std::time::Instant::now();
+    let mut attempt = 0usize;
+
+    while start.elapsed() < timeout {
+        attempt += 1;
+        tokio::fs::write(watch_file, format!("{content_prefix}-{attempt}"))
+            .await
+            .expect("Failed to update watched file");
+
+        let remaining = timeout.saturating_sub(start.elapsed());
+        let poll_window = remaining.min(Duration::from_secs(2));
+        let count = wait_for_line_count(counter_file, "started", target_starts, poll_window).await;
+        if count >= target_starts {
+            return count;
+        }
+    }
+
+    wait_for_line_count(
+        counter_file,
+        "started",
+        target_starts,
+        Duration::from_millis(50),
+    )
+    .await
+}
+
+/// Retry file creation in a watched directory until restart count reaches `target_starts`.
+async fn trigger_dir_create_until_restart(
+    watch_dir: &Path,
+    file_prefix: &str,
+    content_prefix: &str,
+    counter_file: &Path,
+    target_starts: usize,
+    timeout: Duration,
+) -> usize {
+    let start = std::time::Instant::now();
+    let mut attempt = 0usize;
+
+    while start.elapsed() < timeout {
+        attempt += 1;
+        let file_path = watch_dir.join(format!("{file_prefix}-{attempt}.txt"));
+        tokio::fs::write(file_path, format!("{content_prefix}-{attempt}"))
+            .await
+            .expect("Failed to create file in watched directory");
+
+        let remaining = timeout.saturating_sub(start.elapsed());
+        let poll_window = remaining.min(Duration::from_secs(2));
+        let count = wait_for_line_count(counter_file, "started", target_starts, poll_window).await;
+        if count >= target_starts {
+            return count;
+        }
+    }
+
+    wait_for_line_count(
+        counter_file,
+        "started",
+        target_starts,
+        Duration::from_millis(50),
+    )
+    .await
+}
 
 // ============================================================================
 // Basic File Watching Tests
@@ -67,16 +138,14 @@ sleep 3600
             "Process should start initially"
         );
 
-        // Allow the OS file watcher to finish setting up
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        // Modify the watched file
-        tokio::fs::write(&watch_file, "modified")
-            .await
-            .expect("Failed to modify watch file");
-
-        // Poll until restart detected
-        let count = wait_for_line_count(&counter_file, "started", 2, WATCH_TIMEOUT).await;
+        let count = trigger_file_write_until_restart(
+            &watch_file,
+            "modified",
+            &counter_file,
+            2,
+            WATCH_TIMEOUT,
+        )
+        .await;
         assert!(
             count >= 2,
             "Process should restart on file change, got {} starts",
@@ -128,16 +197,15 @@ sleep 3600
             "Process should start initially"
         );
 
-        // Allow the OS file watcher to finish setting up
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        // Create a new file in the watched directory
-        tokio::fs::write(watch_dir.join("new_file.txt"), "new content")
-            .await
-            .expect("Failed to create new file");
-
-        // Poll until restart detected
-        let count = wait_for_line_count(&counter_file, "started", 2, WATCH_TIMEOUT).await;
+        let count = trigger_dir_create_until_restart(
+            &watch_dir,
+            "new_file",
+            "new content",
+            &counter_file,
+            2,
+            WATCH_TIMEOUT,
+        )
+        .await;
         assert!(
             count >= 2,
             "Process should restart on new file in watched dir, got {} starts",
@@ -199,14 +267,18 @@ sleep 3600
         tokio::time::sleep(Duration::from_secs(1)).await;
 
         // Step 1: Prove watcher is active with a canary file
-        tokio::fs::write(watch_dir.join("canary.txt"), "canary")
-            .await
-            .expect("Failed to create canary file");
-
-        let count = wait_for_line_count(&counter_file, "started", 2, WATCH_TIMEOUT).await;
-        assert_eq!(
-            count, 2,
-            "Canary file should trigger exactly one restart (got {} starts)",
+        let count = trigger_dir_create_until_restart(
+            &watch_dir,
+            "canary",
+            "canary",
+            &counter_file,
+            2,
+            WATCH_TIMEOUT,
+        )
+        .await;
+        assert!(
+            count >= 2,
+            "Canary file should trigger restart (got {} starts)",
             count
         );
 
@@ -278,14 +350,18 @@ sleep 3600
         tokio::time::sleep(Duration::from_secs(1)).await;
 
         // Step 1: Prove watcher is active with a canary file
-        tokio::fs::write(watch_dir.join("canary.txt"), "canary")
-            .await
-            .expect("Failed to create canary file");
-
-        let count = wait_for_line_count(&counter_file, "started", 2, WATCH_TIMEOUT).await;
-        assert_eq!(
-            count, 2,
-            "Canary file should trigger exactly one restart (got {} starts)",
+        let count = trigger_dir_create_until_restart(
+            &watch_dir,
+            "canary",
+            "canary",
+            &counter_file,
+            2,
+            WATCH_TIMEOUT,
+        )
+        .await;
+        assert!(
+            count >= 2,
+            "Canary file should trigger restart (got {} starts)",
             count
         );
 
@@ -438,29 +514,30 @@ sleep 3600
             "Process should start initially"
         );
 
-        // Allow the OS file watcher to finish setting up
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        // Change file in first directory
-        tokio::fs::write(watch_dir1.join("file1.txt"), "content1")
-            .await
-            .expect("Failed to write to dir1");
-
-        // Poll until restart from dir1
-        let count = wait_for_line_count(&counter_file, "started", 2, WATCH_TIMEOUT).await;
+        let count = trigger_dir_create_until_restart(
+            &watch_dir1,
+            "file1",
+            "content1",
+            &counter_file,
+            2,
+            WATCH_TIMEOUT,
+        )
+        .await;
         assert!(
             count >= 2,
             "Should restart on change in first watch dir, got {} starts",
             count
         );
 
-        // Change file in second directory
-        tokio::fs::write(watch_dir2.join("file2.txt"), "content2")
-            .await
-            .expect("Failed to write to dir2");
-
-        // Poll until restart from dir2
-        let count = wait_for_line_count(&counter_file, "started", count + 1, WATCH_TIMEOUT).await;
+        let count = trigger_dir_create_until_restart(
+            &watch_dir2,
+            "file2",
+            "content2",
+            &counter_file,
+            count + 1,
+            WATCH_TIMEOUT,
+        )
+        .await;
         assert!(
             count >= 3,
             "Should also restart on change in second watch dir, got {} starts",

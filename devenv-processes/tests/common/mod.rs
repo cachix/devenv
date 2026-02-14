@@ -4,7 +4,8 @@
 #![allow(dead_code)]
 
 use devenv_processes::{
-    ListenKind, ListenSpec, NativeProcessManager, ProcessConfig, RestartPolicy, WatchConfig,
+    ListenKind, ListenSpec, NativeProcessManager, ProcessConfig, RestartConfig, RestartPolicy,
+    WatchConfig,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -73,7 +74,10 @@ pub fn long_running_config(name: &str, duration_secs: u32) -> ProcessConfig {
         name: name.to_string(),
         exec: "sleep".to_string(),
         args: vec![duration_secs.to_string()],
-        restart: RestartPolicy::Never,
+        restart: RestartConfig {
+            on: RestartPolicy::Never,
+            ..Default::default()
+        },
         ..Default::default()
     }
 }
@@ -92,7 +96,10 @@ pub fn tcp_socket_config(name: &str, script_path: &Path, address: &str) -> Proce
             backlog: Some(128),
             mode: None,
         }],
-        restart: RestartPolicy::Never,
+        restart: RestartConfig {
+            on: RestartPolicy::Never,
+            ..Default::default()
+        },
         ..Default::default()
     }
 }
@@ -111,7 +118,10 @@ pub fn unix_socket_config(name: &str, script_path: &Path, socket_path: PathBuf) 
             backlog: Some(128),
             mode: Some(0o600),
         }],
-        restart: RestartPolicy::Never,
+        restart: RestartConfig {
+            on: RestartPolicy::Never,
+            ..Default::default()
+        },
         ..Default::default()
     }
 }
@@ -132,7 +142,10 @@ pub fn watch_process_config(
             extensions: vec![],
             ignore,
         },
-        restart: RestartPolicy::Never,
+        restart: RestartConfig {
+            on: RestartPolicy::Never,
+            ..Default::default()
+        },
         ..Default::default()
     }
 }
@@ -153,7 +166,10 @@ pub fn watch_process_config_with_extensions(
             extensions,
             ignore: vec![],
         },
-        restart: RestartPolicy::Never,
+        restart: RestartConfig {
+            on: RestartPolicy::Never,
+            max: None,
+        },
         ..Default::default()
     }
 }

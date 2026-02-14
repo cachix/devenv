@@ -3,7 +3,7 @@
 mod common;
 
 use common::*;
-use devenv_processes::{ProcessConfig, ProcessType, RestartPolicy};
+use devenv_processes::{ProcessConfig, ProcessType, RestartConfig, RestartPolicy};
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -25,8 +25,10 @@ async fn test_foreground_default_restarts_on_failure() {
             name: "foreground-fail".to_string(),
             exec: format!(r#"echo "started" >> {}; exit 1"#, counter_file.display()),
             process_type: ProcessType::Foreground,
-            restart: RestartPolicy::OnFailure,
-            max_restarts: Some(2),
+            restart: RestartConfig {
+                on: RestartPolicy::OnFailure,
+                max: Some(2),
+            },
             ..Default::default()
         };
 
@@ -68,7 +70,10 @@ async fn test_foreground_never_policy() {
             name: "foreground-never".to_string(),
             exec: format!(r#"echo "started" >> {}; exit 1"#, counter_file.display()),
             process_type: ProcessType::Foreground,
-            restart: RestartPolicy::Never,
+            restart: RestartConfig {
+                on: RestartPolicy::Never,
+                ..Default::default()
+            },
             ..Default::default()
         };
 
@@ -103,8 +108,10 @@ async fn test_default_process_type_is_foreground() {
             name: "default-type".to_string(),
             exec: format!(r#"echo "started" >> {}; exit 1"#, counter_file.display()),
             // process_type not specified - should default to Foreground
-            restart: RestartPolicy::OnFailure,
-            max_restarts: Some(2),
+            restart: RestartConfig {
+                on: RestartPolicy::OnFailure,
+                max: Some(2),
+            },
             ..Default::default()
         };
 

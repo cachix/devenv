@@ -1,6 +1,7 @@
 { pkgs, config, lib, ... }:
 let
   cfg = config.process.managers.native;
+  readyType = import ../lib/ready.nix { inherit lib; };
   processType = lib.types.submodule ({ config, ... }: {
     options = {
       use_sudo = lib.mkOption {
@@ -115,22 +116,10 @@ let
         '';
       };
 
-      notify = lib.mkOption {
-        type = lib.types.nullOr (lib.types.submodule {
-          options = {
-            enable = lib.mkOption {
-              type = lib.types.bool;
-              default = true;
-              description = "Enable systemd notify protocol";
-            };
-          };
-        });
+      ready = lib.mkOption {
+        type = lib.types.nullOr readyType;
         default = null;
-        description = ''
-          Systemd notify socket configuration.
-
-          The process can send READY=1, STATUS=..., etc. via NOTIFY_SOCKET.
-        '';
+        description = "Readiness probe configuration.";
       };
 
       watch = lib.mkOption {
@@ -194,7 +183,7 @@ in
           pseudo_terminal = pc.pseudo_terminal or false;
           listen = pc.listen or [ ];
           watchdog = pc.watchdog or null;
-          notify = pc.notify or null;
+          ready = process.ready;
           inherit (process) watch;
         }
       )
@@ -207,9 +196,11 @@ in
           let
             native = cfg.processConfig.${name};
           in
-          removeAttrs process [ "enable" "process-compose" "ports" ] // {
+          removeAttrs process [ "enable" "process-compose" "ports" "notify" "ready" "restart" ] // {
             inherit name;
-            inherit (native) use_sudo pseudo_terminal watchdog notify;
+            inherit (native) use_sudo pseudo_terminal watchdog;
+            ready = native.ready;
+            restart = process.restart;
             listen = map
               (spec: removeAttrs spec [ "path" ] // {
                 path = if spec.path != null then toString spec.path else null;

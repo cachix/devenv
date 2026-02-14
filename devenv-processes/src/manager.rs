@@ -192,8 +192,9 @@ impl NativeProcessManager {
         }
         let activity = builder.start();
 
-        // Create notify socket if configured
-        let notify_socket = if config.notify.as_ref().is_some_and(|n| n.enable) {
+        // Create notify socket if configured via ready.notify
+        let uses_notify = config.ready.as_ref().map_or(false, |r| r.notify);
+        let notify_socket = if uses_notify {
             let socket = NotifySocket::new(&self.state_dir, &config.name).await?;
             info!(
                 "Created notify socket for {} at {}",
@@ -262,9 +263,15 @@ impl NativeProcessManager {
 
         // Create ready state for signaling when process becomes ready
         let (ready_state, _ready_rx) = tokio::sync::watch::channel(false);
+        let (watch_ready_tx, watch_ready_rx) = if config.watch.paths.is_empty() {
+            (None, None)
+        } else {
+            let (tx, rx) = tokio::sync::oneshot::channel::<std::result::Result<(), String>>();
+            (Some(tx), Some(rx))
+        };
 
         // If no readiness mechanism is configured, mark process as immediately ready
-        let has_notify = config.notify.as_ref().is_some_and(|n| n.enable);
+        let has_notify = config.ready.as_ref().is_some_and(|r| r.notify);
         let has_tcp_probe = !config.listen.is_empty() && !has_notify;
         if !has_notify && !has_tcp_probe {
             let _ = ready_state.send(true);
@@ -277,6 +284,7 @@ impl NativeProcessManager {
             activity.clone(),
             notify_socket.clone(),
             ready_state.clone(),
+            watch_ready_tx,
         );
 
         // Store the job handle
@@ -293,6 +301,28 @@ impl NativeProcessManager {
                 ready_state,
             },
         );
+
+        if let Some(watch_ready_rx) = watch_ready_rx {
+            let watch_start = tokio::time::timeout(Duration::from_secs(5), watch_ready_rx).await;
+            match watch_start {
+                Ok(Ok(Ok(()))) => {}
+                Ok(Ok(Err(err))) => {
+                    let _ = self.stop(&config.name).await;
+                    bail!("Failed to start file watcher for {}: {}", config.name, err);
+                }
+                Ok(Err(_)) => {
+                    let _ = self.stop(&config.name).await;
+                    bail!("File watcher setup channel closed for {}", config.name);
+                }
+                Err(_) => {
+                    let _ = self.stop(&config.name).await;
+                    bail!(
+                        "Timed out waiting for file watcher setup for {}",
+                        config.name
+                    );
+                }
+            }
+        }
 
         info!("Command '{}' started", config.name);
         Ok(job_clone)
@@ -374,6 +404,7 @@ impl NativeProcessManager {
         activity: Activity,
         notify_socket: Option<Arc<NotifySocket>>,
         ready_state: tokio::sync::watch::Sender<bool>,
+        watch_ready_tx: Option<tokio::sync::oneshot::Sender<std::result::Result<(), String>>>,
     ) -> JoinHandle<()> {
         let shutdown = self.shutdown.clone();
         let name = config.name.clone();
@@ -389,24 +420,31 @@ impl NativeProcessManager {
             .map(|w| w.require_ready)
             .unwrap_or(true);
 
-        // Check if we need TCP probe for readiness (listen sockets without notify)
-        let tcp_probe_address =
-            if !config.listen.is_empty() && config.notify.as_ref().is_none_or(|n| !n.enable) {
-                // Find the first TCP listen socket
-                config.listen.iter().find_map(|spec| {
-                    if spec.kind == crate::config::ListenKind::Tcp {
-                        spec.address.clone()
-                    } else {
-                        None
-                    }
-                })
-            } else {
-                None
-            };
+        // Check if we need TCP probe for readiness (listen sockets without notify or exec probe)
+        let has_notify = config.ready.as_ref().map_or(false, |r| r.notify);
+        let has_exec_probe = config
+            .ready
+            .as_ref()
+            .and_then(|r| r.exec.as_ref())
+            .is_some();
+        let tcp_probe_address = if !config.listen.is_empty() && !has_notify && !has_exec_probe {
+            // Find the first TCP listen socket
+            config.listen.iter().find_map(|spec| {
+                if spec.kind == crate::config::ListenKind::Tcp {
+                    spec.address.clone()
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        };
 
         tokio::spawn(async move {
+            let mut watch_ready_tx = watch_ready_tx;
             let mut restart_count = 0usize;
             let mut ready_signaled = false;
+            let mut watchdog_kill_pending = false;
 
             // Watchdog state
             let mut is_ready = !watchdog_require_ready; // If require_ready is false, start as ready
@@ -442,6 +480,60 @@ impl NativeProcessManager {
                 None
             };
 
+            // Spawn exec probe task if configured via ready.exec
+            let _exec_probe_task = if let Some(ref ready) = config.ready {
+                if let Some(ref cmd) = ready.exec {
+                    let cmd = cmd.clone();
+                    let initial_delay = Duration::from_secs(ready.initial_delay);
+                    let period = Duration::from_secs(ready.period);
+                    let timeout_dur = Duration::from_secs(ready.timeout);
+                    let success_threshold = ready.success_threshold;
+                    let ready_tx = ready_state.clone();
+                    let probe_name = name.clone();
+                    let probe_activity = activity.clone();
+
+                    Some(tokio::spawn(async move {
+                        tokio::time::sleep(initial_delay).await;
+                        let mut successes = 0u32;
+                        loop {
+                            let result = tokio::time::timeout(
+                                timeout_dur,
+                                tokio::process::Command::new("sh")
+                                    .arg("-c")
+                                    .arg(&cmd)
+                                    .stdout(std::process::Stdio::null())
+                                    .stderr(std::process::Stdio::null())
+                                    .status(),
+                            )
+                            .await;
+                            match result {
+                                Ok(Ok(status)) if status.success() => {
+                                    successes += 1;
+                                    if successes >= success_threshold {
+                                        info!(
+                                            "Exec probe succeeded for {} after {} check(s)",
+                                            probe_name, successes
+                                        );
+                                        probe_activity.log("Exec probe succeeded - process ready");
+                                        probe_activity.set_status(ProcessStatus::Ready);
+                                        let _ = ready_tx.send(true);
+                                        return;
+                                    }
+                                }
+                                _ => {
+                                    successes = 0;
+                                }
+                            }
+                            tokio::time::sleep(period).await;
+                        }
+                    }))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             // Set up file watcher if watch paths are configured
             let (watch_tx, mut watch_rx) = mpsc::channel::<()>(1);
             let _watcher_task = if !config.watch.paths.is_empty() {
@@ -459,6 +551,7 @@ impl NativeProcessManager {
                 let ignore = config.watch.ignore.clone();
                 let watch_name = name.clone();
                 let tx = watch_tx.clone();
+                let mut ready_tx = watch_ready_tx.take();
 
                 Some(tokio::spawn(async move {
                     // Build ignore patterns for GlobsetFilterer
@@ -493,6 +586,9 @@ impl NativeProcessManager {
                     {
                         Ok(f) => Arc::new(f),
                         Err(e) => {
+                            if let Some(tx) = ready_tx.take() {
+                                let _ = tx.send(Err(format!("filterer setup failed: {}", e)));
+                            }
                             warn!("Failed to create filterer for {}: {}", watch_name, e);
                             return;
                         }
@@ -508,6 +604,9 @@ impl NativeProcessManager {
                     }) {
                         Ok(wx) => wx,
                         Err(e) => {
+                            if let Some(tx) = ready_tx.take() {
+                                let _ = tx.send(Err(format!("watcher creation failed: {}", e)));
+                            }
                             warn!("Failed to create file watcher for {}: {}", watch_name, e);
                             return;
                         }
@@ -531,7 +630,12 @@ impl NativeProcessManager {
                     }
                     info!("{}", watch_info);
 
-                    if let Err(e) = wx.main().await {
+                    let wx_task = wx.main();
+                    if let Some(tx) = ready_tx.take() {
+                        let _ = tx.send(Ok(()));
+                    }
+
+                    if let Err(e) = wx_task.await {
                         warn!("File watcher for {} stopped: {}", watch_name, e);
                     }
                 }))
@@ -546,13 +650,19 @@ impl NativeProcessManager {
                         break;
                     }
                     _ = watch_rx.recv() => {
-                        // File change detected, restart the process
+                        // File change detected, restart the process.
                         info!("File change detected for {}, restarting", name);
                         activity.log("File change detected, restarting");
                         job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
                         tokio::time::sleep(Duration::from_millis(100)).await;
+                        // Drain events that accumulated during stop — the OS often
+                        // delivers multiple events per write (create, modify,
+                        // close-write) and some may arrive after the channel was
+                        // drained by recv(), causing a spurious second restart.
+                        while watch_rx.try_recv().is_ok() {}
                         job.start().await;
                         // Reset watchdog state on restart
+                        watchdog_kill_pending = false;
                         is_ready = !watchdog_require_ready;
                         watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
                             Some(Instant::now() + watchdog_timeout.unwrap())
@@ -619,8 +729,8 @@ impl NativeProcessManager {
                         warn!("Watchdog timeout for process {}", name);
                         activity.error("Watchdog timeout - no heartbeat received");
 
-                        // Check max restarts limit before restarting
-                        if let Some(max) = config.max_restarts {
+                        // Check max restarts limit before killing
+                        if let Some(max) = config.restart.max {
                             if restart_count >= max {
                                 warn!(
                                     "Process {} reached max restarts ({}) after watchdog timeout, giving up",
@@ -632,91 +742,105 @@ impl NativeProcessManager {
                             }
                         }
 
-                        // Restart on watchdog timeout
-                        restart_count += 1;
-                        info!("Restarting process {} due to watchdog timeout (attempt {})", name, restart_count);
-                        activity.log(format!("Restarting due to watchdog timeout (attempt {})", restart_count));
-                        job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                        // Kill the process and let the to_wait() handler perform the
+                        // actual restart.  restart_with_signal sends [GracefulStop, Start]
+                        // as two independent controls — Start can be processed before the
+                        // process has died, making it a no-op.  Meanwhile the watchdog
+                        // keeps firing and inflating restart_count, eventually hitting
+                        // max before any restart actually happens.
+                        watchdog_kill_pending = true;
+                        info!("Killing process {} due to watchdog timeout", name);
+                        activity.log("Killing due to watchdog timeout");
+                        // Use an immediate stop here to avoid backend-specific
+                        // graceful-stop timing variance under watchdog pressure.
+                        job.stop().await;
 
-                        // Reset watchdog state for new instance
-                        is_ready = !watchdog_require_ready;
-                        watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
-                            Some(Instant::now() + watchdog_timeout.unwrap())
-                        } else {
-                            None
-                        };
+                        // Disable watchdog until the restart completes in to_wait()
+                        watchdog_deadline = None;
                     }
                     _ = job.to_wait() => {
-                        // Process ended, check if we should restart
-                        let policy = config.restart;
-                        let max_restarts = config.max_restarts;
-                        let process_name = name.clone();
+                        // Process ended — decide whether to restart.
+                        // A watchdog kill always forces a restart (regardless of
+                        // restart policy), while normal exits follow the configured
+                        // restart policy.
+                        let force_restart = watchdog_kill_pending;
+                        watchdog_kill_pending = false;
 
-                        // Use a channel to get the restart decision from run_async
-                        let (tx, rx) = tokio::sync::oneshot::channel();
+                        let should_restart = if force_restart {
+                            true
+                        } else {
+                            let policy = config.restart.on;
+                            let process_name = name.clone();
 
-                        job.run_async(move |ctx| {
-                            // Extract status before async block (lifetime constraint)
-                            let status = if let CommandState::Finished { status, .. } = ctx.current {
-                                Some(*status)
-                            } else {
-                                None
-                            };
+                            let (tx, rx) = tokio::sync::oneshot::channel();
 
-                            Box::new(async move {
-                                if let Some(status) = status {
-                                    let is_failure = !matches!(status, ProcessEnd::Success);
-
-                                    let should_restart = match policy {
-                                        RestartPolicy::Never => false,
-                                        RestartPolicy::Always => true,
-                                        RestartPolicy::OnFailure => is_failure,
-                                    };
-
-                                    if should_restart {
-                                        debug!(
-                                            "Process {} exited with {:?}, policy: {:?}",
-                                            process_name, status, policy
-                                        );
-                                    }
-
-                                    let _ = tx.send(should_restart);
-                                }
-                            })
-                        }).await;
-
-                        // Check restart decision
-                        match rx.await {
-                            Ok(true) => {
-                                // Check max restarts limit
-                                if let Some(max) = max_restarts
-                                    && restart_count >= max
-                                {
-                                    warn!(
-                                        "Process {} reached max restarts ({}), giving up",
-                                        name, max
-                                    );
-                                    activity.error(format!("Max restarts ({}) reached, giving up", max));
-                                    activity.fail();
-                                    break;
-                                }
-
-                                restart_count += 1;
-                                info!("Restarting process {} (attempt {})", name, restart_count);
-                                activity.log(format!("Restarting (attempt {})", restart_count));
-                                job.start().await;
-                                // Reset watchdog state for new instance
-                                is_ready = !watchdog_require_ready;
-                                watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
-                                    Some(Instant::now() + watchdog_timeout.unwrap())
+                            job.run_async(move |ctx| {
+                                let status = if let CommandState::Finished { status, .. } = ctx.current {
+                                    Some(*status)
                                 } else {
                                     None
                                 };
-                            }
-                            _ => {
-                                debug!("Process {} will not restart", name);
+
+                                Box::new(async move {
+                                    if let Some(status) = status {
+                                        let is_failure = !matches!(status, ProcessEnd::Success);
+
+                                        let should_restart = match policy {
+                                            RestartPolicy::Never => false,
+                                            RestartPolicy::Always => true,
+                                            RestartPolicy::OnFailure => is_failure,
+                                        };
+
+                                        if should_restart {
+                                            debug!(
+                                                "Process {} exited with {:?}, policy: {:?}",
+                                                process_name, status, policy
+                                            );
+                                        }
+
+                                        let _ = tx.send(should_restart);
+                                    }
+                                })
+                            }).await;
+
+                            matches!(rx.await, Ok(true))
+                        };
+
+                        if should_restart {
+                            let max_restarts = config.restart.max;
+
+                            // Check max restarts limit
+                            if let Some(max) = max_restarts
+                                && restart_count >= max
+                            {
+                                warn!(
+                                    "Process {} reached max restarts ({}), giving up",
+                                    name, max
+                                );
+                                activity.error(format!("Max restarts ({}) reached, giving up", max));
+                                activity.fail();
                                 break;
                             }
+
+                            restart_count += 1;
+                            if force_restart {
+                                info!("Restarting process {} due to watchdog timeout (attempt {})", name, restart_count);
+                                activity.log(format!("Restarting due to watchdog timeout (attempt {})", restart_count));
+                            } else {
+                                info!("Restarting process {} (attempt {})", name, restart_count);
+                                activity.log(format!("Restarting (attempt {})", restart_count));
+                            }
+                            job.start().await;
+                            // Reset watchdog state for new instance
+                            is_ready = !watchdog_require_ready;
+                            watchdog_deadline = if watchdog_timeout.is_some() && is_ready {
+                                Some(Instant::now() + watchdog_timeout.unwrap())
+                            } else {
+                                None
+                            };
+                        } else {
+                            debug!("Process {} will not restart", name);
+                            break;
                         }
                     }
                 }
@@ -937,6 +1061,7 @@ impl NativeProcessManager {
                 handle.activity.clone(),
                 handle.notify_socket.clone(),
                 handle.ready_state.clone(),
+                None,
             );
         } else {
             // Supervisor is still running - just restart the job.
@@ -1512,7 +1637,10 @@ mod tests {
             name: "test-echo".to_string(),
             exec: "echo".to_string(),
             args: vec!["hello".to_string()],
-            restart: RestartPolicy::Never,
+            restart: crate::config::RestartConfig {
+                on: RestartPolicy::Never,
+                max: Some(5),
+            },
             ..Default::default()
         };
 
