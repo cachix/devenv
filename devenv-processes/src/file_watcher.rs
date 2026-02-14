@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use watchexec::Watchexec;
 use watchexec_filterer_globset::GlobsetFilterer;
 
@@ -52,7 +52,15 @@ impl FileWatcher {
         let paths: Vec<PathBuf> = config
             .paths
             .iter()
-            .map(|p| p.canonicalize().unwrap_or_else(|_| p.clone()))
+            .map(|p| {
+                let canonical = p.canonicalize();
+                debug!(
+                    original = %p.display(),
+                    canonical = ?canonical.as_ref().map(|c| c.display().to_string()),
+                    "Canonicalizing watch path"
+                );
+                canonical.unwrap_or_else(|_| p.clone())
+            })
             .collect();
         let extensions = config.extensions.clone();
         let ignore = config.ignore.clone();
@@ -73,6 +81,12 @@ impl FileWatcher {
                 .collect();
 
             let origin = paths.first().cloned().unwrap_or_else(|| PathBuf::from("."));
+            debug!(
+                %watch_name,
+                ?origin,
+                ?ignores,
+                "Creating GlobsetFilterer"
+            );
 
             let filterer = match GlobsetFilterer::new(
                 &origin,
@@ -91,9 +105,36 @@ impl FileWatcher {
                 }
             };
 
+            let action_name = watch_name.clone();
             let wx = match Watchexec::new(move |action| {
-                if action.events.iter().any(|e| e.paths().next().is_some()) {
-                    let _ = watch_tx.try_send(());
+                let events = &action.events;
+                let has_paths = events.iter().any(|e| e.paths().next().is_some());
+                debug!(
+                    %action_name,
+                    event_count = events.len(),
+                    has_paths,
+                    "Watchexec action callback"
+                );
+                for event in events.iter() {
+                    for (path, file_type) in event.paths() {
+                        debug!(
+                            %action_name,
+                            path = %path.display(),
+                            ?file_type,
+                            "Event path"
+                        );
+                    }
+                    if event.paths().next().is_none() {
+                        debug!(
+                            %action_name,
+                            tags = ?event.tags,
+                            "Non-path event"
+                        );
+                    }
+                }
+                if has_paths {
+                    let sent = watch_tx.try_send(());
+                    debug!(%action_name, ?sent, "Notified supervisor of file change");
                 }
                 action
             }) {
@@ -119,9 +160,11 @@ impl FileWatcher {
             }
             info!("{}", watch_info);
 
+            debug!(%watch_name, "Entering watchexec main loop");
             if let Err(e) = wx.main().await {
                 warn!("File watcher for {} stopped: {}", watch_name, e);
             }
+            debug!(%watch_name, "Watchexec main loop exited");
         });
 
         Self {

@@ -7,9 +7,26 @@ use devenv_processes::{
     ListenKind, ListenSpec, NativeProcessManager, ProcessConfig, RestartPolicy, WatchConfig,
 };
 use std::path::{Path, PathBuf};
+use std::sync::Once;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tokio::fs;
+
+static TRACING_INIT: Once = Once::new();
+
+/// Initialize tracing for tests. Controlled by RUST_LOG env var.
+/// Call at the start of any test that needs tracing output.
+pub fn init_tracing() {
+    TRACING_INIT.call_once(|| {
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("off")),
+            )
+            .with_test_writer()
+            .init();
+    });
+}
 
 /// Test context that manages temp directories and cleanup
 pub struct TestContext {

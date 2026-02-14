@@ -1584,6 +1584,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
  "watchexec",
  "watchexec-filterer-globset",
  "watchexec-supervisor",

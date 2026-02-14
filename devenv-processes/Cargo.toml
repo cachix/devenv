@@ -34,3 +34,4 @@ caps.workspace = true
 
 [dev-dependencies]
 sd-notify.workspace = true
+tracing-subscriber.workspace = true

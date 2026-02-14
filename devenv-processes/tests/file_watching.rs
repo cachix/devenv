@@ -30,6 +30,7 @@ const WATCH_TIMEOUT: Duration = Duration::from_secs(10);
 /// Test that process restarts when a watched file changes
 #[tokio::test(flavor = "multi_thread")]
 async fn test_restart_on_file_change() {
+    init_tracing();
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
         let counter_file = ctx.temp_path().join("restart_counter.txt");
@@ -98,6 +99,7 @@ sleep 3600
 /// Test watching a directory for changes
 #[tokio::test(flavor = "multi_thread")]
 async fn test_watch_directory() {
+    init_tracing();
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
         let counter_file = ctx.temp_path().join("dir_counter.txt");
@@ -172,6 +174,7 @@ sleep 3600
 /// Test that ignored files don't trigger restart
 #[tokio::test(flavor = "multi_thread")]
 async fn test_ignore_patterns() {
+    init_tracing();
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
         let counter_file = ctx.temp_path().join("ignore_counter.txt");
@@ -254,6 +257,7 @@ sleep 3600
 /// Test ignoring hidden files and directories
 #[tokio::test(flavor = "multi_thread")]
 async fn test_ignore_hidden_files() {
+    init_tracing();
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
         let counter_file = ctx.temp_path().join("hidden_counter.txt");
@@ -335,6 +339,7 @@ sleep 3600
 /// Test that extension filter only triggers on matching extensions
 #[tokio::test(flavor = "multi_thread")]
 async fn test_extension_filter() {
+    init_tracing();
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
         let counter_file = ctx.temp_path().join("ext_counter.txt");
@@ -420,6 +425,7 @@ sleep 3600
 /// Test watching multiple paths
 #[tokio::test(flavor = "multi_thread")]
 async fn test_multiple_watch_paths() {
+    init_tracing();
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
         let counter_file = ctx.temp_path().join("multi_counter.txt");
@@ -512,6 +518,7 @@ sleep 3600
 /// Test that empty watch paths doesn't set up a watcher
 #[tokio::test(flavor = "multi_thread")]
 async fn test_empty_watch_paths_no_watcher() {
+    init_tracing();
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
         let counter_file = ctx.temp_path().join("no_watch_counter.txt");
@@ -570,6 +577,7 @@ sleep 3600
 /// Test rapid file changes (debouncing behavior)
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rapid_file_changes_debounced() {
+    init_tracing();
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
         let counter_file = ctx.temp_path().join("debounce_counter.txt");

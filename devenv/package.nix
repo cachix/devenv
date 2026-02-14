@@ -90,13 +90,15 @@ rustPlatform.buildRustPackage {
     git init -b main
     git add -A
     popd
+
+    # DEBUG: enable tracing to diagnose FSEvents in sandbox
+    export RUST_LOG=debug
   '';
 
   useNextest = true;
 
-  # Skip devenv-nix-backend tests in sandbox due to store permission restrictions
-  # Skip devenv-reload and devenv-shell tests in sandbox - requires PTY (devpts) which isn't available
-  cargoTestFlags = [ "--workspace" "--exclude" "devenv-nix-backend" "--exclude" "devenv-reload" "--exclude" "devenv-shell" ];
+  # DEBUG: only run file watching tests to diagnose FSEvents in sandbox
+  cargoTestFlags = [ "-p" "devenv-processes" "--test" "file_watching" ];
 
   postInstall =
     let
