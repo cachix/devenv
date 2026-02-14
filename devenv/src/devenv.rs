@@ -1750,12 +1750,12 @@ impl Devenv {
                     .run_with_parent_activity(Arc::new(phase4))
                     .await;
 
-                if !options.detach {
-                    let pid_file = tasks_runner.process_manager.manager_pid_file();
-                    processes::write_pid(&pid_file, std::process::id())
-                        .await
-                        .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
+                let pid_file = tasks_runner.process_manager.manager_pid_file();
+                processes::write_pid(&pid_file, std::process::id())
+                    .await
+                    .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
 
+                if !options.detach {
                     let result = tasks_runner
                         .process_manager
                         .run_foreground(self.shutdown.cancellation_token())

@@ -1489,6 +1489,7 @@ impl ProcessManager for NativeProcessManager {
 impl Drop for NativeProcessManager {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(self.api_socket_path());
+        let _ = std::fs::remove_file(self.manager_pid_file());
     }
 }
 
