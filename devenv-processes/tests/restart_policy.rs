@@ -22,7 +22,9 @@ const RESTART_TIMEOUT: Duration = Duration::from_secs(10);
 async fn test_restart_never() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let script = ctx.create_script("exit_fail.sh", "#!/bin/sh\nexit 1\n").await;
+        let script = ctx
+            .create_script("exit_fail.sh", "#!/bin/sh\nexit 1\n")
+            .await;
 
         let config = ProcessConfig {
             name: "no-restart".to_string(),
@@ -40,7 +42,10 @@ async fn test_restart_never() {
 
         tokio::time::sleep(Duration::from_secs(2)).await;
         let status = manager.job_state("no-restart").await.unwrap();
-        assert_eq!(status.restart_count, 0, "Process with Never policy should not restart");
+        assert_eq!(
+            status.restart_count, 0,
+            "Process with Never policy should not restart"
+        );
     })
     .await
     .expect("Test timed out");
@@ -92,7 +97,9 @@ async fn test_restart_always_on_success() {
 async fn test_restart_always_on_failure() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let script = ctx.create_script("exit_fail.sh", "#!/bin/sh\nexit 1\n").await;
+        let script = ctx
+            .create_script("exit_fail.sh", "#!/bin/sh\nexit 1\n")
+            .await;
 
         let config = ProcessConfig {
             name: "always-fail".to_string(),
@@ -133,7 +140,9 @@ async fn test_restart_always_on_failure() {
 async fn test_restart_on_failure_with_failure() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let script = ctx.create_script("exit_fail.sh", "#!/bin/sh\nexit 1\n").await;
+        let script = ctx
+            .create_script("exit_fail.sh", "#!/bin/sh\nexit 1\n")
+            .await;
 
         let config = ProcessConfig {
             name: "on-failure".to_string(),
@@ -207,7 +216,9 @@ async fn test_restart_on_failure_with_success() {
 async fn test_max_restarts_limit() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        let script = ctx.create_script("exit_fail.sh", "#!/bin/sh\nexit 1\n").await;
+        let script = ctx
+            .create_script("exit_fail.sh", "#!/bin/sh\nexit 1\n")
+            .await;
 
         let config = ProcessConfig {
             name: "max-restarts".to_string(),
@@ -277,7 +288,10 @@ async fn test_unlimited_restarts() {
             RESTART_TIMEOUT,
         )
         .await;
-        assert!(reached, "Process with unlimited restarts should keep restarting");
+        assert!(
+            reached,
+            "Process with unlimited restarts should keep restarting"
+        );
 
         manager.stop_all().await.expect("Failed to stop");
 

@@ -305,3 +305,41 @@ pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Default timeout for socket connections
 pub const SOCKET_TIMEOUT: Duration = Duration::from_secs(5);
+
+// ============================================================================
+// File Watcher Helpers
+// ============================================================================
+
+/// Probe the file watcher until it's live by repeatedly writing to a watched
+/// path until the process restarts, proving the OS watcher is active.
+/// Returns the new start count.
+///
+/// FSEvents on macOS sets up asynchronously — there is no API to know when the
+/// OS watcher is actually ready. This helper replaces fixed sleeps by writing
+/// to `probe_path` every 500 ms until `counter_file` shows more than
+/// `current_count` lines matching `pattern`.
+pub async fn wait_for_watcher_ready(
+    probe_path: &Path,
+    counter_file: &Path,
+    pattern: &str,
+    current_count: usize,
+    timeout: Duration,
+) -> usize {
+    let deadline = Instant::now() + timeout;
+    let mut probe_num = 0u64;
+
+    while Instant::now() < deadline {
+        probe_num += 1;
+        tokio::fs::write(probe_path, format!("probe {probe_num}"))
+            .await
+            .expect("Failed to write probe file");
+
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let poll_time = Duration::from_millis(500).min(remaining);
+        let count = wait_for_line_count(counter_file, pattern, current_count + 1, poll_time).await;
+        if count > current_count {
+            return count;
+        }
+    }
+    current_count
+}

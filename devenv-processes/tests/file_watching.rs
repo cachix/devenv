@@ -8,12 +8,10 @@
 //! restart) use a "canary" pattern: write a non-ignored file after the
 //! ignored file to prove the watcher was active throughout.
 //!
-//! Each test sleeps 1s after the process starts (and thus after the
-//! watcher is registered) before modifying watched files. Neither notify
-//! nor watchexec expose an API to know when the native OS file watcher
-//! has finished setting up, so a short sleep is a somewhat reliable way to
-//! avoid a race between watcher registration and the first file write.
-//! Another option would be to use the polling watcher instead just for tests.
+//! Each test uses `wait_for_watcher_ready()` after the process starts to
+//! probe the file watcher until a restart is observed, proving the OS
+//! watcher is live. This replaces fixed sleeps and handles the asynchronous
+//! nature of FSEvents on macOS.
 
 mod common;
 
@@ -67,20 +65,28 @@ sleep 3600
             "Process should start initially"
         );
 
-        // Allow the OS file watcher to finish setting up
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        // Probe until the OS file watcher is live
+        let baseline =
+            wait_for_watcher_ready(&watch_file, &counter_file, "started", 1, WATCH_TIMEOUT).await;
+        assert!(
+            baseline > 1,
+            "Watcher probe should trigger at least one restart, got {} starts",
+            baseline
+        );
 
-        // Modify the watched file
+        // Modify the watched file (real change)
         tokio::fs::write(&watch_file, "modified")
             .await
             .expect("Failed to modify watch file");
 
         // Poll until restart detected
-        let count = wait_for_line_count(&counter_file, "started", 2, WATCH_TIMEOUT).await;
+        let count =
+            wait_for_line_count(&counter_file, "started", baseline + 1, WATCH_TIMEOUT).await;
         assert!(
-            count >= 2,
-            "Process should restart on file change, got {} starts",
-            count
+            count > baseline,
+            "Process should restart on file change, got {} starts (baseline {})",
+            count,
+            baseline
         );
 
         manager.stop_all().await.expect("Failed to stop");
@@ -128,8 +134,15 @@ sleep 3600
             "Process should start initially"
         );
 
-        // Allow the OS file watcher to finish setting up
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        // Probe until the OS file watcher is live
+        let sentinel = watch_dir.join("_sentinel.txt");
+        let baseline =
+            wait_for_watcher_ready(&sentinel, &counter_file, "started", 1, WATCH_TIMEOUT).await;
+        assert!(
+            baseline > 1,
+            "Watcher probe should trigger at least one restart, got {} starts",
+            baseline
+        );
 
         // Create a new file in the watched directory
         tokio::fs::write(watch_dir.join("new_file.txt"), "new content")
@@ -137,11 +150,13 @@ sleep 3600
             .expect("Failed to create new file");
 
         // Poll until restart detected
-        let count = wait_for_line_count(&counter_file, "started", 2, WATCH_TIMEOUT).await;
+        let count =
+            wait_for_line_count(&counter_file, "started", baseline + 1, WATCH_TIMEOUT).await;
         assert!(
-            count >= 2,
-            "Process should restart on new file in watched dir, got {} starts",
-            count
+            count > baseline,
+            "Process should restart on new file in watched dir, got {} starts (baseline {})",
+            count,
+            baseline
         );
 
         manager.stop_all().await.expect("Failed to stop");
@@ -195,22 +210,22 @@ sleep 3600
             "Process should start initially"
         );
 
-        // Allow the OS file watcher to finish setting up
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        // Step 1: Prove watcher is active with a canary file
-        tokio::fs::write(watch_dir.join("canary.txt"), "canary")
-            .await
-            .expect("Failed to create canary file");
-
-        let count = wait_for_line_count(&counter_file, "started", 2, WATCH_TIMEOUT).await;
-        assert_eq!(
-            count, 2,
-            "Canary file should trigger exactly one restart (got {} starts)",
-            count
+        // Probe until the OS file watcher is live (doubles as canary)
+        let baseline = wait_for_watcher_ready(
+            &watch_dir.join("canary.txt"),
+            &counter_file,
+            "started",
+            1,
+            WATCH_TIMEOUT,
+        )
+        .await;
+        assert!(
+            baseline > 1,
+            "Watcher probe should trigger at least one restart, got {} starts",
+            baseline
         );
 
-        // Step 2: Write ignored file, then a non-ignored trigger file
+        // Write ignored file, then a non-ignored trigger file
         tokio::fs::write(watch_dir.join("debug.log"), "log content")
             .await
             .expect("Failed to create log file");
@@ -218,14 +233,16 @@ sleep 3600
             .await
             .expect("Failed to create trigger file");
 
-        let count = wait_for_line_count(&counter_file, "started", 3, WATCH_TIMEOUT).await;
+        let count =
+            wait_for_line_count(&counter_file, "started", baseline + 1, WATCH_TIMEOUT).await;
 
-        // Step 3: Assert count is exactly 3 (initial + canary + trigger)
-        // If the .log file had triggered a restart, count would be 4
+        // If the .log file had triggered a restart, count would be baseline + 2
         assert_eq!(
-            count, 3,
-            "Ignored .log file should NOT trigger restart (got {} starts, expected 3)",
-            count
+            count,
+            baseline + 1,
+            "Ignored .log file should NOT trigger restart (got {} starts, expected {})",
+            count,
+            baseline + 1
         );
 
         manager.stop_all().await.expect("Failed to stop");
@@ -274,22 +291,22 @@ sleep 3600
             "Process should start initially"
         );
 
-        // Allow the OS file watcher to finish setting up
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        // Step 1: Prove watcher is active with a canary file
-        tokio::fs::write(watch_dir.join("canary.txt"), "canary")
-            .await
-            .expect("Failed to create canary file");
-
-        let count = wait_for_line_count(&counter_file, "started", 2, WATCH_TIMEOUT).await;
-        assert_eq!(
-            count, 2,
-            "Canary file should trigger exactly one restart (got {} starts)",
-            count
+        // Probe until the OS file watcher is live (doubles as canary)
+        let baseline = wait_for_watcher_ready(
+            &watch_dir.join("canary.txt"),
+            &counter_file,
+            "started",
+            1,
+            WATCH_TIMEOUT,
+        )
+        .await;
+        assert!(
+            baseline > 1,
+            "Watcher probe should trigger at least one restart, got {} starts",
+            baseline
         );
 
-        // Step 2: Write hidden file, then a non-hidden trigger file
+        // Write hidden file, then a non-hidden trigger file
         tokio::fs::write(watch_dir.join(".hidden"), "hidden content")
             .await
             .expect("Failed to create hidden file");
@@ -297,14 +314,16 @@ sleep 3600
             .await
             .expect("Failed to create trigger file");
 
-        let count = wait_for_line_count(&counter_file, "started", 3, WATCH_TIMEOUT).await;
+        let count =
+            wait_for_line_count(&counter_file, "started", baseline + 1, WATCH_TIMEOUT).await;
 
-        // Step 3: Assert count is exactly 3 (initial + canary + trigger)
-        // If the hidden file had triggered a restart, count would be 4
+        // If the hidden file had triggered a restart, count would be baseline + 2
         assert_eq!(
-            count, 3,
-            "Hidden file should NOT trigger restart (got {} starts, expected 3)",
-            count
+            count,
+            baseline + 1,
+            "Hidden file should NOT trigger restart (got {} starts, expected {})",
+            count,
+            baseline + 1
         );
 
         manager.stop_all().await.expect("Failed to stop");
@@ -353,22 +372,22 @@ sleep 3600
             "Process should start initially"
         );
 
-        // Allow the OS file watcher to finish setting up
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        // Step 1: Prove watcher is active with a .rs file
-        tokio::fs::write(watch_dir.join("canary.rs"), "fn main() {}")
-            .await
-            .expect("Failed to create canary file");
-
-        let count = wait_for_line_count(&counter_file, "started", 2, WATCH_TIMEOUT).await;
-        assert_eq!(
-            count, 2,
-            "Canary .rs file should trigger exactly one restart (got {} starts)",
-            count
+        // Probe until the OS file watcher is live (doubles as canary)
+        let baseline = wait_for_watcher_ready(
+            &watch_dir.join("canary.rs"),
+            &counter_file,
+            "started",
+            1,
+            WATCH_TIMEOUT,
+        )
+        .await;
+        assert!(
+            baseline > 1,
+            "Watcher probe should trigger at least one restart, got {} starts",
+            baseline
         );
 
-        // Step 2: Write non-.rs file, then a .rs trigger
+        // Write non-.rs file, then a .rs trigger
         tokio::fs::write(watch_dir.join("readme.txt"), "hello")
             .await
             .expect("Failed to create .txt file");
@@ -376,13 +395,16 @@ sleep 3600
             .await
             .expect("Failed to create trigger .rs file");
 
-        let count = wait_for_line_count(&counter_file, "started", 3, WATCH_TIMEOUT).await;
+        let count =
+            wait_for_line_count(&counter_file, "started", baseline + 1, WATCH_TIMEOUT).await;
 
-        // If the .txt file had triggered a restart, count would be 4
+        // If the .txt file had triggered a restart, count would be baseline + 2
         assert_eq!(
-            count, 3,
-            "Non-.rs file should NOT trigger restart (got {} starts, expected 3)",
-            count
+            count,
+            baseline + 1,
+            "Non-.rs file should NOT trigger restart (got {} starts, expected {})",
+            count,
+            baseline + 1
         );
 
         manager.stop_all().await.expect("Failed to stop");
@@ -438,8 +460,15 @@ sleep 3600
             "Process should start initially"
         );
 
-        // Allow the OS file watcher to finish setting up
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        // Probe until the OS file watcher is live
+        let sentinel = watch_dir1.join("_sentinel.txt");
+        let baseline =
+            wait_for_watcher_ready(&sentinel, &counter_file, "started", 1, WATCH_TIMEOUT).await;
+        assert!(
+            baseline > 1,
+            "Watcher probe should trigger at least one restart, got {} starts",
+            baseline
+        );
 
         // Change file in first directory
         tokio::fs::write(watch_dir1.join("file1.txt"), "content1")
@@ -447,11 +476,13 @@ sleep 3600
             .expect("Failed to write to dir1");
 
         // Poll until restart from dir1
-        let count = wait_for_line_count(&counter_file, "started", 2, WATCH_TIMEOUT).await;
+        let count =
+            wait_for_line_count(&counter_file, "started", baseline + 1, WATCH_TIMEOUT).await;
         assert!(
-            count >= 2,
-            "Should restart on change in first watch dir, got {} starts",
-            count
+            count > baseline,
+            "Should restart on change in first watch dir, got {} starts (baseline {})",
+            count,
+            baseline
         );
 
         // Change file in second directory
@@ -462,9 +493,10 @@ sleep 3600
         // Poll until restart from dir2
         let count = wait_for_line_count(&counter_file, "started", count + 1, WATCH_TIMEOUT).await;
         assert!(
-            count >= 3,
-            "Should also restart on change in second watch dir, got {} starts",
-            count
+            count >= baseline + 2,
+            "Should also restart on change in second watch dir, got {} starts (baseline {})",
+            count,
+            baseline
         );
 
         manager.stop_all().await.expect("Failed to stop");
@@ -570,8 +602,14 @@ sleep 3600
             "Process should start"
         );
 
-        // Allow the OS file watcher to finish setting up
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        // Probe until the OS file watcher is live
+        let baseline =
+            wait_for_watcher_ready(&watch_file, &counter_file, "started", 1, WATCH_TIMEOUT).await;
+        assert!(
+            baseline > 1,
+            "Watcher probe should trigger at least one restart, got {} starts",
+            baseline
+        );
 
         // Make many rapid changes
         for i in 0..10 {
@@ -582,11 +620,13 @@ sleep 3600
         }
 
         // Wait for at least one restart
-        let count = wait_for_line_count(&counter_file, "started", 2, WATCH_TIMEOUT).await;
+        let count =
+            wait_for_line_count(&counter_file, "started", baseline + 1, WATCH_TIMEOUT).await;
         assert!(
-            count >= 2,
-            "Should restart at least once after file changes, got {} starts",
-            count
+            count > baseline,
+            "Should restart at least once after file changes, got {} starts (baseline {})",
+            count,
+            baseline
         );
 
         // Poll until count stabilizes (same value for several consecutive checks)
@@ -606,9 +646,10 @@ sleep 3600
         }
 
         assert!(
-            stable_count < 10,
-            "Rapid changes should be debounced, got {} restarts",
-            stable_count
+            stable_count < baseline + 10,
+            "Rapid changes should be debounced, got {} restarts (baseline {})",
+            stable_count - baseline,
+            baseline
         );
 
         manager.stop_all().await.expect("Failed to stop");
