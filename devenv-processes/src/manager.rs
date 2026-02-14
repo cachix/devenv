@@ -487,7 +487,10 @@ impl NativeProcessManager {
 
         let response = match serde_json::from_str::<ApiRequest>(&line) {
             Ok(ApiRequest::Wait) => {
-                let receivers: Vec<(String, tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>)> = {
+                let receivers: Vec<(
+                    String,
+                    tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
+                )> = {
                     let jobs = jobs.read().await;
                     jobs.iter()
                         .map(|(name, handle)| (name.clone(), handle.status_rx.clone()))

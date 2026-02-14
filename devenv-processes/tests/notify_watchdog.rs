@@ -225,10 +225,9 @@ async fn test_no_notify_socket_when_disabled() {
         assert!(
             wait_for_condition(
                 || async {
-                    manager
-                        .job_state("no-notify")
-                        .await
-                        .is_some_and(|s| s.phase == SupervisorPhase::Starting || s.phase == SupervisorPhase::Ready)
+                    manager.job_state("no-notify").await.is_some_and(|s| {
+                        s.phase == SupervisorPhase::Starting || s.phase == SupervisorPhase::Ready
+                    })
                 },
                 STARTUP_TIMEOUT
             )
@@ -534,7 +533,9 @@ async fn test_invalid_notification_does_not_crash() {
 async fn test_watchdog_respects_max_restarts() {
     timeout(Duration::from_secs(60), async {
         let ctx = TestContext::new();
-        let script = ctx.create_script("watchdog-max.sh", "#!/bin/sh\nsleep 3600\n").await;
+        let script = ctx
+            .create_script("watchdog-max.sh", "#!/bin/sh\nsleep 3600\n")
+            .await;
 
         // Use 1s watchdog timeout, max 2 restarts
         let mut config = watchdog_process_config("watchdog-max", &script, 1_000_000, false);
@@ -606,10 +607,7 @@ async fn test_delayed_hang_detection() {
             RESTART_TIMEOUT,
         )
         .await;
-        assert!(
-            restarted,
-            "Process should restart after delayed hang"
-        );
+        assert!(restarted, "Process should restart after delayed hang");
 
         manager.stop_all().await.unwrap();
     })
