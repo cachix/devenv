@@ -166,7 +166,10 @@ pub fn watch_process_config_with_extensions(
             extensions,
             ignore: vec![],
         },
-        restart: RestartPolicy::Never,
+        restart: RestartConfig {
+            on: RestartPolicy::Never,
+            max: None,
+        },
         ..Default::default()
     }
 }
