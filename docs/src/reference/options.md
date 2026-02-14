@@ -22501,6 +22501,7 @@ null or string
 
 
 Maximum number of restart attempts. null means unlimited restarts.
+Deprecated: use ` restart_limit_burst ` for sliding-window rate limiting.
 
 Only used when using native process manager.
 
@@ -22749,6 +22750,98 @@ one of “never”, “always”, “on_failure”
 
 *Default:*
 ` "on_failure" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.restart_limit_burst
+
+
+
+Maximum number of restarts within the sliding window.
+When set, overrides ` max_restarts `.
+Like systemd’s StartLimitBurst.
+When null, falls back to ` max_restarts `, or 5 if both are null.
+
+Only used when using native process manager.
+
+
+
+*Type:*
+null or (unsigned integer, meaning >=0)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 10 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.restart_limit_interval
+
+
+
+Sliding window size in seconds for restart rate limiting.
+Like systemd’s StartLimitIntervalSec.
+When null, defaults to 10.
+
+Only used when using native process manager.
+
+
+
+*Type:*
+null or (unsigned integer, meaning >=0)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 60 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.startup_timeout
+
+
+
+Maximum time in seconds for the process to signal readiness.
+If the process doesn’t send READY=1 or WATCHDOG=1 before this deadline, it is restarted.
+Like systemd’s TimeoutStartSec.
+The process can send EXTEND_TIMEOUT_USEC to extend this deadline.
+
+Only used when using native process manager.
+
+
+
+*Type:*
+null or (unsigned integer, meaning >=0)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 30 `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -32767,6 +32860,52 @@ one of “never”, “always”, “on_failure”
 
 
 
+## tasks.\<name>.restart_limit_burst
+
+
+
+Maximum number of restarts within the sliding window.
+
+Only used when type = “process”.
+
+
+
+*Type:*
+null or (unsigned integer, meaning >=0)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.restart_limit_interval
+
+
+
+Sliding window size in seconds for restart rate limiting.
+
+Only used when type = “process”.
+
+
+
+*Type:*
+null or (unsigned integer, meaning >=0)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
 ## tasks.\<name>.showOutput
 
 
@@ -32782,6 +32921,29 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.startup_timeout
+
+
+
+Maximum time in seconds for the process to signal readiness.
+
+Only used when type = “process”.
+
+
+
+*Type:*
+null or (unsigned integer, meaning >=0)
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
