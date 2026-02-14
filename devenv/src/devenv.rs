@@ -1392,6 +1392,10 @@ impl Devenv {
     }
 
     pub async fn test(&self) -> Result<()> {
+        // Enable port allocation before assemble so that ports resolved
+        // during Nix evaluation (e.g. in enterTest) are properly allocated.
+        self.port_allocator.set_enabled(true);
+
         // ── Phase 1: Configuring shell ──────────────────────────────
         // Assemble with testing enabled, build dev environment, cache it,
         // check for processes, and capture shell env vars for up().
@@ -1677,6 +1681,11 @@ impl Devenv {
         }
 
         // ── Phase 4: Running processes ──────────────────────────────
+        // Release port reservations so processes can bind their allocated ports.
+        // The port allocator holds TcpListeners during Nix evaluation to prevent
+        // race conditions; dropping them here makes the ports available.
+        drop(self.port_allocator.take_reservations());
+
         // Check which process manager to use
         let implementation = {
             let phase4 = Activity::operation("Running processes")
