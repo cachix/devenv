@@ -271,7 +271,7 @@ impl NativeProcessManager {
         };
 
         // If no readiness mechanism is configured, mark process as immediately ready
-        let has_notify = config.notify.as_ref().is_some_and(|n| n.enable);
+        let has_notify = config.ready.as_ref().is_some_and(|r| r.notify);
         let has_tcp_probe = !config.listen.is_empty() && !has_notify;
         if !has_notify && !has_tcp_probe {
             let _ = ready_state.send(true);
