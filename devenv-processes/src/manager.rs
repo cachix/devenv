@@ -251,7 +251,7 @@ impl NativeProcessManager {
         let (status_tx, status_rx) = tokio::sync::watch::channel(initial_status);
 
         // If no readiness mechanism is configured, mark process as immediately ready
-        let has_notify = config.ready.as_ref().map_or(false, |r| r.notify);
+        let has_notify = config.ready.as_ref().is_some_and(|r| r.notify);
         let has_tcp_probe = !config.listen.is_empty() && !has_notify;
         if !has_notify && !has_tcp_probe {
             let _ = status_tx.send(crate::supervisor_state::JobStatus {
@@ -380,7 +380,7 @@ impl NativeProcessManager {
             .unwrap_or(true);
 
         // Check if we need TCP probe for readiness (listen sockets or allocated ports, without notify or exec probe)
-        let has_notify = config.ready.as_ref().map_or(false, |r| r.notify);
+        let has_notify = config.ready.as_ref().is_some_and(|r| r.notify);
         let has_exec_probe = config
             .ready
             .as_ref()
