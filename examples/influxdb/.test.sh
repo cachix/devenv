@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
 set -ex
 
-wait_for_port 8087 60
+# Use a test-local config path to avoid conflicts with existing configs
+export INFLUX_CONFIGS_PATH="$PWD/.influxdbv2/configs"
 
-influx --port 8087 --execute "CREATE DATABASE devenv"
-DATABASES=$(influx  --port 8087 --execute "SHOW DATABASES" | grep devenv)
+wait_for_port 8086 60
 
-if [[ "$DATABASES" != "devenv" ]]; then
-  echo "The influxdb database was not created"
+influx setup \
+  --username devenv \
+  --password devenvpass \
+  --org devenv-org \
+  --bucket devenv-bucket \
+  --force
+
+BUCKETS=$(influx bucket list --org devenv-org | grep devenv-bucket)
+
+if [[ -z "$BUCKETS" ]]; then
+  echo "The influxdb bucket was not created"
   exit 1
 fi

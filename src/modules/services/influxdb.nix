@@ -3,6 +3,21 @@
 let
   cfg = config.services.influxdb;
   types = lib.types;
+
+  # Port allocation
+  basePort = cfg.port;
+  allocatedPort = config.processes.influxdb-server.ports.main.value;
+
+  startScript = pkgs.writeShellScriptBin "start-influxdb" ''
+    set -euo pipefail
+    INFLUXDB_DATA="${config.env.DEVENV_STATE}/influxdb"
+    mkdir -p "$INFLUXDB_DATA"
+    exec ${cfg.package}/bin/influxd \
+      --bolt-path="$INFLUXDB_DATA/influxd.bolt" \
+      --engine-path="$INFLUXDB_DATA/engine" \
+      --http-bind-address=":${toString allocatedPort}" \
+      ${lib.concatStringsSep " " cfg.extraArgs}
+  '';
 in
 {
   options.services.influxdb = {
@@ -10,19 +25,48 @@ in
 
     package = lib.mkOption {
       type = types.package;
-      description = "An open-source distributed time series database";
-      default = pkgs.influxdb;
-      defaultText = lib.literalExpression "pkgs.influxdb";
+      description = "Which package of InfluxDB server to use";
+      default = pkgs.influxdb2-server;
+      defaultText = lib.literalExpression "pkgs.influxdb2-server";
     };
 
-    config = lib.mkOption {
-      type = types.lines;
-      default = "";
-      description = "Configuration for InfluxDB-server";
+    port = lib.mkOption {
+      type = types.port;
+      default = 8086;
+      description = "The TCP port for the InfluxDB HTTP API.";
+    };
+
+    extraArgs = lib.mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      example = [ "--flux-log-enabled" ];
+      description = "Additional arguments passed to `influxd` during startup.";
     };
   };
 
   config = lib.mkIf cfg.enable {
-    processes.influxdb-server.exec = "exec ${cfg.package}/bin/influxd -config ${pkgs.writeText "influxdb.conf" cfg.config}";
+    packages = [
+      pkgs.influxdb2-cli
+    ];
+
+    env.INFLUX_HOST = "http://localhost:${toString allocatedPort}";
+
+    processes.influxdb-server = {
+      ports.main.allocate = basePort;
+      exec = "${startScript}/bin/start-influxdb";
+
+      process-compose = {
+        readiness_probe = {
+          exec.command = "${pkgs.curl}/bin/curl -sf http://localhost:${toString allocatedPort}/health";
+          initial_delay_seconds = 2;
+          period_seconds = 10;
+          timeout_seconds = 4;
+          success_threshold = 1;
+          failure_threshold = 5;
+        };
+
+        availability.restart = "on_failure";
+      };
+    };
   };
 }
