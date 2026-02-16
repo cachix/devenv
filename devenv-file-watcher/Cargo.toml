@@ -6,6 +6,7 @@ license.workspace = true
 description = "Unified file watcher for devenv"
 
 [dependencies]
+async-priority-channel.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 watchexec.workspace = true

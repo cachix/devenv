@@ -2,13 +2,13 @@ use std::collections::HashSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
-use watchexec::{WatchedPath, Watchexec};
+use watchexec::{Config, WatchedPath};
 use watchexec_filterer_globset::GlobsetFilterer;
 
 #[derive(Debug, Error)]
@@ -34,8 +34,8 @@ pub struct FileWatcherConfig {
     /// Watch directories recursively (default: true).
     pub recursive: bool,
     /// Throttle duration for debouncing file change events.
-    /// Watchexec batches events and waits this long after the first event
-    /// before triggering the action handler. Default: 100ms.
+    /// Events are batched within this window after the first event
+    /// before being delivered. Default: 100ms.
     pub throttle: Duration,
 }
 
@@ -53,12 +53,12 @@ impl Default for FileWatcherConfig {
 
 /// Clone-able handle for runtime path addition.
 ///
-/// Always valid -- when no watchexec task is running, `watch()` tracks paths
+/// Always valid -- when no watcher is running, `watch()` tracks paths
 /// but no events fire.
 #[derive(Clone)]
 pub struct WatcherHandle {
     watched_paths: Arc<Mutex<HashSet<PathBuf>>>,
-    wx: Option<Arc<Watchexec>>,
+    config: Option<Arc<Config>>,
 }
 
 impl WatcherHandle {
@@ -69,10 +69,9 @@ impl WatcherHandle {
         let mut paths = self.watched_paths.lock().unwrap();
         paths.insert(canonical);
 
-        if let Some(ref wx) = self.wx {
+        if let Some(ref config) = self.config {
             let parents: HashSet<&Path> = paths.iter().filter_map(|p| p.parent()).collect();
-            wx.config
-                .pathset(parents.into_iter().map(WatchedPath::non_recursive));
+            config.pathset(parents.into_iter().map(WatchedPath::non_recursive));
         }
 
         Ok(())
@@ -85,19 +84,20 @@ impl WatcherHandle {
 
 /// Unified file watcher built on watchexec.
 ///
-/// Combines watchexec's filtering with runtime path addition and path reporting.
+/// Uses watchexec's fs worker for file events with manual filtering and
+/// throttling, without the full Watchexec event loop.
 pub struct FileWatcher {
     rx: mpsc::Receiver<FileChangeEvent>,
     // Kept alive so rx.recv() blocks (instead of returning None)
     // when no watcher task is running.
     _tx: mpsc::Sender<FileChangeEvent>,
     handle: WatcherHandle,
-    task: Option<JoinHandle<()>>,
+    tasks: Vec<JoinHandle<()>>,
 }
 
 impl Drop for FileWatcher {
     fn drop(&mut self) {
-        if let Some(task) = self.task.take() {
+        for task in &self.tasks {
             task.abort();
         }
     }
@@ -106,23 +106,29 @@ impl Drop for FileWatcher {
 impl FileWatcher {
     /// Create a new file watcher.
     ///
-    /// Infallible: when paths is empty or watchexec fails internally,
+    /// Infallible: when paths is empty or setup fails internally,
     /// `recv()` blocks forever.
     pub async fn new(config: FileWatcherConfig, name: &str) -> Self {
         let (tx, rx) = mpsc::channel::<FileChangeEvent>(100);
 
         let watched_paths = Arc::new(Mutex::new(HashSet::new()));
 
-        if config.paths.is_empty() {
-            return Self {
-                rx,
-                _tx: tx,
-                handle: WatcherHandle {
-                    watched_paths,
-                    wx: None,
-                },
-                task: None,
+        macro_rules! empty_watcher {
+            () => {
+                return Self {
+                    rx,
+                    _tx: tx,
+                    handle: WatcherHandle {
+                        watched_paths,
+                        config: None,
+                    },
+                    tasks: Vec::new(),
+                }
             };
+        }
+
+        if config.paths.is_empty() {
+            empty_watcher!();
         }
 
         // Canonicalize watch paths to resolve symlinks.
@@ -142,39 +148,11 @@ impl FileWatcher {
         }
 
         let watch_name = name.to_owned();
-        let watch_tx = tx.clone();
 
-        let wx = match Watchexec::new(move |action| {
-            for event in action.events.iter() {
-                for (path, _) in event.paths() {
-                    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-                    let _ = watch_tx.try_send(FileChangeEvent { path: canonical });
-                }
-            }
-            action
-        }) {
-            Ok(wx) => wx,
-            Err(e) => {
-                warn!("Failed to create file watcher for {}: {}", name, e);
-                return Self {
-                    rx,
-                    _tx: tx,
-                    handle: WatcherHandle {
-                        watched_paths,
-                        wx: None,
-                    },
-                    task: None,
-                };
-            }
-        };
+        // Set up the shared watchexec Config (used by fs::worker for
+        // pathset changes and by WatcherHandle for runtime path addition).
+        let wx_config = Arc::new(Config::default());
 
-        let handle = WatcherHandle {
-            watched_paths,
-            wx: Some(wx.clone()),
-        };
-
-        // Configure watchexec before spawning its event loop so the OS
-        // watcher is fully set up by the time `new()` returns.
         let ignores: Vec<(String, Option<PathBuf>)> = config
             .ignore
             .iter()
@@ -203,27 +181,24 @@ impl FileWatcher {
             Ok(f) => Arc::new(f),
             Err(e) => {
                 warn!("Failed to create filterer for {}: {}", watch_name, e);
-                return Self {
-                    rx,
-                    _tx: tx,
-                    handle,
-                    task: None,
-                };
+                empty_watcher!();
             }
         };
 
         if config.recursive {
-            wx.config.pathset(paths.iter().map(|p| p.as_path()));
+            wx_config.pathset(paths.iter().map(|p| p.as_path()));
         } else {
             // For non-recursive mode (individual files), watch parent
             // directories. FSEvents on macOS operates at directory
             // granularity and cannot watch individual files.
             let parents: HashSet<&Path> = paths.iter().filter_map(|p| p.parent()).collect();
-            wx.config
-                .pathset(parents.into_iter().map(WatchedPath::non_recursive));
+            wx_config.pathset(parents.into_iter().map(WatchedPath::non_recursive));
         }
-        wx.config.filterer(filterer);
-        wx.config.throttle(config.throttle);
+
+        let handle = WatcherHandle {
+            watched_paths,
+            config: Some(wx_config.clone()),
+        };
 
         let mut watch_info = format!(
             "File watcher started for {} watching {:?}",
@@ -234,25 +209,71 @@ impl FileWatcher {
         }
         info!("{}", watch_info);
 
-        // Only spawn the long-running event loop.
-        let task_wx = wx.clone();
-        let task = tokio::spawn(async move {
-            if let Err(e) = task_wx.main().await {
-                warn!("File watcher for {} stopped: {}", watch_name, e);
+        // We use watchexec's fs::worker directly instead of Watchexec::main()
+        // to avoid spawning its signal, keyboard, action, and error workers
+        // that we don't need.
+        let (ev_s, ev_r) = async_priority_channel::bounded(4096);
+        let (er_s, _er_r) = mpsc::channel(64);
+
+        // Task 1: fs worker — watches files via notify, sends raw events.
+        let fs_config = wx_config.clone();
+        let fs_errors = er_s;
+        let fs_task = tokio::spawn(async move {
+            if let Err(e) = watchexec::sources::fs::worker(fs_config, fs_errors, ev_s).await {
+                warn!("fs worker for {} stopped: {}", watch_name, e);
             }
         });
 
-        // Yield so the spawned event loop gets polled and starts the OS
-        // watcher.  Without this, on a single-threaded runtime the spawn
-        // won't run until the caller's next await point, and early file
-        // changes would be missed.
+        // Task 2: filter + throttle events, forward to our mpsc channel.
+        // watchexec's throttle_collect does this but is not publicly exposed,
+        // so we reimplement it here.
+        let throttle = config.throttle;
+        let watch_tx = tx.clone();
+        let filter_task = tokio::spawn(async move {
+            use watchexec::filter::Filterer;
+
+            loop {
+                let Ok((event, priority)) = ev_r.recv().await else {
+                    break;
+                };
+                let mut batch = vec![(event, priority)];
+
+                // Collect more events within the throttle window.
+                let deadline = Instant::now() + throttle;
+                loop {
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    if remaining.is_zero() {
+                        break;
+                    }
+                    match tokio::time::timeout(remaining, ev_r.recv()).await {
+                        Ok(Ok(ep)) => batch.push(ep),
+                        _ => break,
+                    }
+                }
+
+                for (event, priority) in &batch {
+                    if !filterer.check_event(event, *priority).unwrap_or(true) {
+                        continue;
+                    }
+                    for (path, _) in event.paths() {
+                        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+                        let _ = watch_tx.try_send(FileChangeEvent { path: canonical });
+                    }
+                }
+            }
+        });
+
+        // Yield so the spawned tasks get polled and the OS watcher starts.
+        // Without this, on a single-threaded runtime the spawns won't run
+        // until the caller's next await point, and early file changes
+        // would be missed.
         tokio::task::yield_now().await;
 
         Self {
             rx,
             _tx: tx,
             handle,
-            task: Some(task),
+            tasks: vec![fs_task, filter_task],
         }
     }
 
