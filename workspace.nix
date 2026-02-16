@@ -52,8 +52,6 @@ let
       "wu-manber-0.1.0" = "sha256-7YIttaQLfFC/32utojh2DyOHVsZiw8ul/z0lvOhAE/4=";
       "inquire-0.9.3" = "sha256-3A3QH9nuAsfxEoxgYCbEitnlV7mQltZX2vJ3Uv3q6Ys=";
       "secretspec-0.7.1" = "sha256-ofwxnnWmyf/qnDN2DNbcltm+PiwW/mFnYhUfdzZViLA=";
-      # https://github.com/4jamesccraven/ser_nix/pull/5
-      "ser_nix-0.2.1" = "sha256-ZNuNAYLiQSonNkcTXI6nEaMJ01AxslaLPN07jGeM+p8=";
     };
   };
 in
