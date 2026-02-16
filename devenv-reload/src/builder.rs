@@ -1,4 +1,4 @@
-use crate::watcher::WatcherHandle;
+use devenv_file_watcher::WatcherHandle;
 use portable_pty::CommandBuilder;
 use std::collections::HashMap;
 use std::path::PathBuf;

@@ -5,8 +5,8 @@
 
 use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
-use crate::watcher::FileWatcher;
 use devenv_activity::Activity;
+use devenv_file_watcher::{FileWatcher, FileWatcherConfig};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -27,8 +27,6 @@ fn hash_file(path: &Path) -> Option<blake3::Hash> {
 pub enum CoordinatorError {
     #[error("build failed: {0}")]
     Build(#[source] crate::builder::BuildError),
-    #[error("watcher error: {0}")]
-    Watcher(#[source] crate::watcher::WatcherError),
     #[error("channel closed")]
     ChannelClosed,
     #[error("IO error: {0}")]
@@ -69,8 +67,14 @@ impl ShellCoordinator {
         let cwd = std::env::current_dir()?;
 
         // Set up file watcher
-        let mut watcher =
-            FileWatcher::new(&config.watch_files).map_err(CoordinatorError::Watcher)?;
+        let mut watcher = FileWatcher::new(
+            FileWatcherConfig {
+                paths: config.watch_files.clone(),
+                recursive: false,
+                ..Default::default()
+            },
+            "devenv-reload",
+        );
         let watcher_handle = watcher.handle();
 
         // Collect watch files for reporting

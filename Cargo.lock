@@ -1527,6 +1527,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "devenv-file-watcher"
+version = "2.0.0"
+dependencies = [
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "watchexec",
+ "watchexec-filterer-globset",
+]
+
+[[package]]
 name = "devenv-nix-backend"
 version = "2.0.0"
 dependencies = [
@@ -1578,6 +1590,7 @@ dependencies = [
  "caps",
  "daemonize",
  "devenv-activity",
+ "devenv-file-watcher",
  "futures",
  "miette",
  "nix 0.30.1",
@@ -1594,8 +1607,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "watchexec",
- "watchexec-filterer-globset",
  "watchexec-supervisor",
 ]
 
@@ -1607,9 +1618,8 @@ dependencies = [
  "avt 0.17.0",
  "blake3",
  "devenv-activity",
+ "devenv-file-watcher",
  "devenv-shell",
- "notify",
- "notify-debouncer-mini",
  "portable-pty",
  "tempfile",
  "thiserror 2.0.18",
@@ -4227,18 +4237,6 @@ dependencies = [
  "notify-types",
  "walkdir",
  "windows-sys 0.60.2",
-]
-
-[[package]]
-name = "notify-debouncer-mini"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17849edfaabd9a5fef1c606d99cfc615a8e99f7ac4366406d86c7942a3184cf2"
-dependencies = [
- "log",
- "notify",
- "notify-types",
- "tempfile",
 ]
 
 [[package]]

@@ -1,0 +1,16 @@
+[package]
+name = "devenv-file-watcher"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Unified file watcher for devenv"
+
+[dependencies]
+tokio.workspace = true
+tracing.workspace = true
+watchexec.workspace = true
+watchexec-filterer-globset.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

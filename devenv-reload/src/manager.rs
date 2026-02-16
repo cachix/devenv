@@ -1,7 +1,7 @@
 use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
-use crate::watcher::FileWatcher;
 use avt::Vt;
+use devenv_file_watcher::{FileWatcher, FileWatcherConfig};
 use devenv_shell::{Pty, PtyError, RawModeGuard, get_terminal_size};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
@@ -27,8 +27,6 @@ pub enum ManagerError {
     Spawn(#[source] PtyError),
     #[error("build failed: {0}")]
     Build(#[source] crate::builder::BuildError),
-    #[error("watcher error: {0}")]
-    Watcher(#[source] crate::watcher::WatcherError),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
 }
@@ -58,7 +56,14 @@ impl ShellManager {
         let env: HashMap<String, String> = std::env::vars().collect();
 
         // Set up file watcher early so we can pass handle to initial build
-        let mut watcher = FileWatcher::new(&config.watch_files).map_err(ManagerError::Watcher)?;
+        let mut watcher = FileWatcher::new(
+            FileWatcherConfig {
+                paths: config.watch_files.clone(),
+                recursive: false,
+                ..Default::default()
+            },
+            "devenv-reload",
+        );
         let watcher_handle = watcher.handle();
 
         // Initial build

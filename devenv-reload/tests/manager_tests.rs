@@ -1,6 +1,7 @@
 mod common;
 
 use common::{TestShellBuilder, create_temp_dir_with_files, modify_file};
+use devenv_file_watcher::probe_watcher_ready;
 use devenv_reload::{
     BuildContext, BuildError, BuildTrigger, CommandBuilder, Config, ManagerError, ManagerMessage,
     ShellBuilder, ShellManager,
@@ -10,7 +11,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(5);
+const TEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Builder that tracks build count and signals on each build
 struct SignalingBuilder {
@@ -24,7 +25,7 @@ impl ShellBuilder for SignalingBuilder {
         let _ = self.build_tx.try_send(n);
         let mut cmd = CommandBuilder::new("sh");
         cmd.arg("-c");
-        cmd.arg("sleep 0.5; exit 0");
+        cmd.arg("sleep 3600");
         Ok(cmd)
     }
 
@@ -107,15 +108,19 @@ async fn test_manager_triggers_reload_on_file_change() {
     assert!(first_build.is_ok(), "timeout waiting for initial build");
     assert_eq!(first_build.unwrap(), Some(1));
 
-    // Modify file to trigger reload
+    // Probe until the OS file watcher is live
+    let probe_build = probe_watcher_ready(&watch_file, TEST_TIMEOUT, &mut build_rx).await;
+    assert!(probe_build >= 2, "expected at least build #2 from probe");
+
+    // Modify file to trigger reload (real change)
     modify_file(&watch_file, "modified");
 
     // Wait for reload build signal
     let second_build = tokio::time::timeout(TEST_TIMEOUT, build_rx.recv()).await;
     assert!(second_build.is_ok(), "timeout waiting for reload build");
     assert!(
-        second_build.unwrap().unwrap() >= 2,
-        "expected at least build #2"
+        second_build.unwrap().unwrap() >= probe_build + 1,
+        "expected build after probe"
     );
 
     // Verify we received a Reloaded message
@@ -161,7 +166,7 @@ async fn test_manager_provides_correct_context() {
 
             let mut cmd = CommandBuilder::new("sh");
             cmd.arg("-c");
-            cmd.arg("sleep 0.5; exit 0");
+            cmd.arg("sleep 3600");
             Ok(cmd)
         }
 
@@ -200,7 +205,10 @@ async fn test_manager_provides_correct_context() {
         assert_eq!(t[0], "initial");
     }
 
-    // Trigger reload
+    // Probe until the OS file watcher is live
+    let _probe_build = probe_watcher_ready(&watch_file, TEST_TIMEOUT, &mut build_rx).await;
+
+    // Trigger reload (real change)
     modify_file(&watch_file, "y");
 
     // Wait for reload build
@@ -209,11 +217,12 @@ async fn test_manager_provides_correct_context() {
 
     {
         let t = triggers.lock().unwrap();
-        assert!(t.len() >= 2, "expected at least 2 triggers, got {:?}", *t);
+        // Probe writes also trigger builds, so check that at least one file trigger exists
+        let has_file_trigger = t.iter().any(|s| s.starts_with("file:"));
         assert!(
-            t[1].starts_with("file:"),
-            "expected file trigger, got {}",
-            t[1]
+            has_file_trigger,
+            "expected at least one file trigger, got {:?}",
+            *t
         );
     }
 
@@ -281,8 +290,14 @@ async fn test_manager_keeps_shell_on_build_failure_during_reload() {
     assert!(first.is_ok(), "timeout waiting for initial build");
     assert_eq!(build_count.load(Ordering::SeqCst), 1);
 
-    // Allow the OS file watcher to finish setting up
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    // Probe until the OS file watcher is live
+    let _probe_build = probe_watcher_ready(&watch_file, TEST_TIMEOUT, &mut build_rx).await;
+
+    // Drain any buffered messages from probes
+    while tokio::time::timeout(Duration::from_millis(100), msg_rx.recv())
+        .await
+        .is_ok()
+    {}
 
     // Trigger reload (will fail)
     modify_file(&watch_file, "trigger failure");
@@ -290,10 +305,6 @@ async fn test_manager_keeps_shell_on_build_failure_during_reload() {
     // Wait for reload attempt
     let second = tokio::time::timeout(TEST_TIMEOUT, build_rx.recv()).await;
     assert!(second.is_ok(), "timeout waiting for reload attempt");
-    assert!(
-        build_count.load(Ordering::SeqCst) >= 2,
-        "build should have been attempted at least twice"
-    );
 
     // Verify we received a BuildFailed message
     let msg = tokio::time::timeout(TEST_TIMEOUT, msg_rx.recv()).await;
@@ -383,8 +394,14 @@ async fn test_manager_keeps_shell_on_spawn_failure_during_reload() {
     assert!(first.is_ok(), "timeout waiting for initial build");
     assert_eq!(build_count.load(Ordering::SeqCst), 1);
 
-    // Allow the OS file watcher to finish setting up
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    // Probe until the OS file watcher is live
+    let _probe_build = probe_watcher_ready(&watch_file, TEST_TIMEOUT, &mut build_rx).await;
+
+    // Drain any buffered messages from probes
+    while tokio::time::timeout(Duration::from_millis(100), msg_rx.recv())
+        .await
+        .is_ok()
+    {}
 
     // Trigger reload (spawn will fail)
     modify_file(&watch_file, "trigger spawn failure");
@@ -392,10 +409,6 @@ async fn test_manager_keeps_shell_on_spawn_failure_during_reload() {
     // Wait for reload attempt
     let second = tokio::time::timeout(TEST_TIMEOUT, build_rx.recv()).await;
     assert!(second.is_ok(), "timeout waiting for reload attempt");
-    assert!(
-        build_count.load(Ordering::SeqCst) >= 2,
-        "build should have been attempted at least twice"
-    );
 
     // Verify we received a ReloadFailed message
     let msg = tokio::time::timeout(TEST_TIMEOUT, msg_rx.recv()).await;
@@ -501,10 +514,9 @@ async fn test_manager_cancels_old_build_on_new_change() {
     let (msg_tx, _msg_rx) = mpsc::channel::<ManagerMessage>(10);
     let handle = tokio::spawn(async move { ShellManager::run(config, builder, msg_tx).await });
 
-    tokio::task::yield_now().await;
-
-    // Allow the OS file watcher to finish setting up
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    // Probe until the OS file watcher is live
+    let _probe_build =
+        probe_watcher_ready(&watch_file, TEST_TIMEOUT, &mut build_started_rx).await;
 
     // Trigger first file change
     modify_file(&watch_file, "change 1");
@@ -512,7 +524,7 @@ async fn test_manager_cancels_old_build_on_new_change() {
     // Wait for first build to start
     let first_build = tokio::time::timeout(TEST_TIMEOUT, build_started_rx.recv()).await;
     assert!(first_build.is_ok(), "timeout waiting for first build");
-    assert_eq!(first_build.unwrap(), Some(1), "first build should be #1");
+    let first_num = first_build.unwrap().unwrap();
 
     // Trigger second file change while first build is still in progress
     modify_file(&watch_file, "change 2");
@@ -520,7 +532,8 @@ async fn test_manager_cancels_old_build_on_new_change() {
     // Wait for second build to start
     let second_build = tokio::time::timeout(TEST_TIMEOUT, build_started_rx.recv()).await;
     assert!(second_build.is_ok(), "timeout waiting for second build");
-    assert_eq!(second_build.unwrap(), Some(2), "second build should be #2");
+    let second_num = second_build.unwrap().unwrap();
+    assert!(second_num > first_num, "second build should be after first");
 
     // Release the builds (only second one matters, first was aborted)
     let _ = release_tx.send(()).await;

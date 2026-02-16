@@ -88,7 +88,15 @@ pub fn spawn_supervisor(
             (None, None)
         };
 
-        let mut file_watcher = crate::file_watcher::FileWatcher::new(&config.watch, &name);
+        let mut file_watcher = devenv_file_watcher::FileWatcher::new(
+            devenv_file_watcher::FileWatcherConfig {
+                paths: config.watch.paths.clone(),
+                extensions: config.watch.extensions.clone(),
+                ignore: config.watch.ignore.clone(),
+                recursive: true,
+            },
+            &name,
+        );
 
         // Pin the deadline future outside the loop so it survives across iterations.
         // Recreate only when the deadline actually changes (after state transitions).
@@ -143,7 +151,7 @@ pub fn spawn_supervisor(
                     tcp_ready_rx = None;
                 }
 
-                _ = file_watcher.rx.recv() => {
+                _ = file_watcher.recv() => {
                     info!("File change detected for {}, restarting", name);
                     activity.log("File change detected, restarting");
                     match state.on_event(Event::FileChange, Instant::now()) {

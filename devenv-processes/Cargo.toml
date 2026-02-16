@@ -8,6 +8,7 @@ description = "Native process management for devenv"
 [dependencies]
 async-trait.workspace = true
 devenv-activity.workspace = true
+devenv-file-watcher.workspace = true
 daemonize.workspace = true
 futures.workspace = true
 miette.workspace = true
@@ -23,8 +24,6 @@ tempfile.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
-watchexec.workspace = true
-watchexec-filterer-globset.workspace = true
 watchexec-supervisor.workspace = true
 
 portable-pty.workspace = true

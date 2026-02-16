@@ -7,6 +7,7 @@ members = [
   "devenv-cache-core",
   "devenv-core",
   "devenv-eval-cache",
+  "devenv-file-watcher",
   "devenv-nix-backend",
   "devenv-nix-backend-macros",
   "devenv-processes",
@@ -34,6 +35,7 @@ devenv-activity = { path = "devenv-activity" }
 devenv-activity-macros = { path = "devenv-activity-macros" }
 devenv-core = { path = "devenv-core" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
+devenv-file-watcher = { path = "devenv-file-watcher" }
 devenv-processes = { path = "devenv-processes" }
 devenv-run-tests = { path = "devenv-run-tests" }
 devenv-snix-backend = { path = "devenv-snix-backend" }
@@ -90,8 +92,6 @@ once_cell = "1.21.3"
 petgraph = "0.8.2"
 pretty_assertions = { version = "1.4.1", features = ["unstable"] }
 netstat2 = "0.11"
-notify = "8"
-notify-debouncer-mini = "0.7"
 rand = "0.8.5"
 regex = "1.11.3"
 schemars = "1.0.4"
