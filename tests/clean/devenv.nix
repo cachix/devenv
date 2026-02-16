@@ -1,6 +1,6 @@
 {
   enterTest = ''
-    if [ -z "$RUST_LOG" ]; then
+    if [ -z "''${RUST_LOG:-}" ]; then
       echo "RUST_LOG is not set"
       exit 1
     fi

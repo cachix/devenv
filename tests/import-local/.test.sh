@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Test that devenv.local.nix in imported directories is loaded
 
 echo "DEBUG: SHARED_VAR=$SHARED_VAR"
