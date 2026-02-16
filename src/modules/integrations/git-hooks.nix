@@ -146,6 +146,7 @@ in
               did_install_hooks=0
               hooks_path_needs_restore=0
               local_hooks_path_needs_restore=0
+              worktree_config_needs_restore=0
 
               restore_hooks_path() {
                 if [ "$hooks_path_needs_restore" -eq 1 ]; then
@@ -161,6 +162,14 @@ in
                     ${git} config --local core.hooksPath "$previous_local_hooks_path" || true
                   else
                     ${git} config --local --unset-all core.hooksPath || true
+                  fi
+                fi
+
+                if [ "$worktree_config_needs_restore" -eq 1 ]; then
+                  if [ "$previous_worktree_config_set" -eq 1 ]; then
+                    ${git} config --local extensions.worktreeConfig "$previous_worktree_config" || true
+                  else
+                    ${git} config --local --unset-all extensions.worktreeConfig || true
                   fi
                 fi
               }
@@ -185,8 +194,15 @@ in
                   previous_local_hooks_path_set=1
                 fi
 
+                previous_worktree_config_set=0
+                previous_worktree_config=""
+                if previous_worktree_config=$(${git} config --local --bool --get extensions.worktreeConfig 2>/dev/null); then
+                  previous_worktree_config_set=1
+                fi
+
                 if [ "$git_dir_abs" != "$common_dir_abs" ] && [ "$common_is_bare" != "true" ]; then
                   ${git} config --local extensions.worktreeConfig true
+                  worktree_config_needs_restore=1
                   ${git} config --local --unset-all core.hooksPath || true
                   local_hooks_path_needs_restore=1
                   config_scope="--worktree"
@@ -241,6 +257,7 @@ in
                 ${git} config "$config_scope" core.hooksPath "$hooks_path"
                 hooks_path_needs_restore=0
                 local_hooks_path_needs_restore=0
+                worktree_config_needs_restore=0
               fi
             '';
           after = [ "devenv:files" ];
