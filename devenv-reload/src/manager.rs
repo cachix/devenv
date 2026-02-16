@@ -63,7 +63,8 @@ impl ShellManager {
                 ..Default::default()
             },
             "devenv-reload",
-        );
+        )
+        .await;
         let watcher_handle = watcher.handle();
 
         // Initial build

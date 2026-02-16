@@ -61,6 +61,12 @@ pub struct WatcherHandle {
     wx: Option<Arc<Watchexec>>,
 }
 
+/// Token sent once the spawned watchexec task has applied its initial
+/// configuration (paths, filterer, throttle) and is about to enter
+/// the event loop.  Awaiting this in `FileWatcher::new()` guarantees
+/// the OS watcher is active before the constructor returns.
+struct WatcherReady;
+
 impl WatcherHandle {
     /// Adds a path to watch (non-recursive, for individual files from builders).
     pub fn watch(&self, path: &Path) -> Result<(), WatcherError> {
@@ -144,7 +150,7 @@ impl FileWatcher {
     ///
     /// Infallible: when paths is empty or watchexec fails internally,
     /// `recv()` blocks forever.
-    pub fn new(config: FileWatcherConfig, name: &str) -> Self {
+    pub async fn new(config: FileWatcherConfig, name: &str) -> Self {
         let (tx, rx) = mpsc::channel::<FileChangeEvent>(100);
 
         let watched_paths = Arc::new(Mutex::new(HashSet::new()));
@@ -213,6 +219,8 @@ impl FileWatcher {
             wx: Some(wx.clone()),
         };
 
+        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<WatcherReady>();
+
         let task_wx = wx.clone();
         let task = tokio::spawn(async move {
             let ignores: Vec<(String, Option<PathBuf>)> = ignore
@@ -242,6 +250,7 @@ impl FileWatcher {
                 Ok(f) => Arc::new(f),
                 Err(e) => {
                     warn!("Failed to create filterer for {}: {}", watch_name, e);
+                    let _ = ready_tx.send(WatcherReady);
                     return;
                 }
             };
@@ -269,10 +278,16 @@ impl FileWatcher {
             }
             info!("{}", watch_info);
 
+            let _ = ready_tx.send(WatcherReady);
+
             if let Err(e) = task_wx.main().await {
                 warn!("File watcher for {} stopped: {}", watch_name, e);
             }
         });
+
+        // Wait for the spawned task to finish configuring the OS watcher
+        // before returning, so callers never miss early events.
+        let _ = ready_rx.await;
 
         Self {
             rx,
@@ -326,7 +341,8 @@ mod tests {
                 ..Default::default()
             },
             "test",
-        );
+        )
+        .await;
 
         watcher.wait_ready(&file_path, WATCH_TIMEOUT).await;
 
@@ -366,7 +382,8 @@ mod tests {
                 ..Default::default()
             },
             "test",
-        );
+        )
+        .await;
 
         watcher.wait_ready(&file1, WATCH_TIMEOUT).await;
 
@@ -392,7 +409,8 @@ mod tests {
                 ..Default::default()
             },
             "test",
-        );
+        )
+        .await;
 
         let result = tokio::time::timeout(Duration::from_millis(200), watcher.recv()).await;
         assert!(
@@ -419,7 +437,8 @@ mod tests {
                 ..Default::default()
             },
             "test",
-        );
+        )
+        .await;
 
         watcher.wait_ready(&file_path, WATCH_TIMEOUT).await;
 
@@ -454,7 +473,8 @@ mod tests {
                     ..Default::default()
                 },
                 "test",
-            );
+            )
+            .await;
         }
 
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -472,7 +492,8 @@ mod tests {
                 ..Default::default()
             },
             "test",
-        );
+        )
+        .await;
 
         let sentinel = watch_dir.join("_sentinel.txt");
         watcher.wait_ready(&sentinel, WATCH_TIMEOUT).await;
@@ -511,7 +532,8 @@ mod tests {
                 ..Default::default()
             },
             "test",
-        );
+        )
+        .await;
 
         watcher.wait_ready(&initial_file, WATCH_TIMEOUT).await;
 

@@ -74,7 +74,8 @@ impl ShellCoordinator {
                 ..Default::default()
             },
             "devenv-reload",
-        );
+        )
+        .await;
         let watcher_handle = watcher.handle();
 
         // Collect watch files for reporting

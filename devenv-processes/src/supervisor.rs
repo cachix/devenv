@@ -97,7 +97,8 @@ pub fn spawn_supervisor(
                 ..Default::default()
             },
             &name,
-        );
+        )
+        .await;
 
         // Pin the deadline future outside the loop so it survives across iterations.
         // Recreate only when the deadline actually changes (after state transitions).
