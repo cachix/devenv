@@ -1533,7 +1533,6 @@ dependencies = [
  "async-priority-channel",
  "miette",
  "tempfile",
- "thiserror 2.0.18",
  "tokio",
  "tracing",
  "watchexec",

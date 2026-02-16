@@ -4,21 +4,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 use watchexec::{Config, WatchedPath};
 use watchexec_filterer_globset::GlobsetFilterer;
-
-#[derive(Debug, Error)]
-pub enum WatcherError {
-    #[error("failed to watch path {path}: {source}")]
-    Watch {
-        path: PathBuf,
-        source: Box<watchexec::error::RuntimeError>,
-    },
-}
 
 #[derive(Debug, Clone)]
 pub struct FileChangeEvent {
@@ -63,7 +53,7 @@ pub struct WatcherHandle {
 
 impl WatcherHandle {
     /// Adds a path to watch (non-recursive, for individual files from builders).
-    pub fn watch(&self, path: &Path) -> Result<(), WatcherError> {
+    pub fn watch(&self, path: &Path) {
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
         let mut paths = self.watched_paths.lock().unwrap();
@@ -73,8 +63,6 @@ impl WatcherHandle {
             let parents: HashSet<&Path> = paths.iter().filter_map(|p| p.parent()).collect();
             config.pathset(parents.into_iter().map(WatchedPath::non_recursive));
         }
-
-        Ok(())
     }
 
     pub fn watched_paths(&self) -> Vec<PathBuf> {
@@ -507,7 +495,7 @@ mod tests {
         .await;
 
         let handle = watcher.handle();
-        handle.watch(&runtime_file).expect("add runtime watch");
+        handle.watch(&runtime_file);
 
         File::create(&runtime_file)
             .expect("open file")

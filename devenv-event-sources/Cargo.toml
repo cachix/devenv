@@ -12,7 +12,6 @@ tokio = { workspace = true, features = ["net"] }
 tracing.workspace = true
 watchexec.workspace = true
 watchexec-filterer-globset.workspace = true
-thiserror.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
