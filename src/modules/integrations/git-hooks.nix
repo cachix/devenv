@@ -145,7 +145,6 @@ in
 
               did_install_hooks=0
               hooks_path_needs_restore=0
-              local_hooks_path_needs_restore=0
               worktree_config_needs_restore=0
 
               restore_hooks_path() {
@@ -154,14 +153,6 @@ in
                     ${git} config "$config_scope" core.hooksPath "$previous_hooks_path" || true
                   else
                     ${git} config "$config_scope" --unset-all core.hooksPath || true
-                  fi
-                fi
-
-                if [ "$local_hooks_path_needs_restore" -eq 1 ]; then
-                  if [ "$previous_local_hooks_path_set" -eq 1 ]; then
-                    ${git} config --local core.hooksPath "$previous_local_hooks_path" || true
-                  else
-                    ${git} config --local --unset-all core.hooksPath || true
                   fi
                 fi
 
@@ -188,12 +179,6 @@ in
                 config_scope="--local"
                 hooks_path="$common_dir/hooks"
 
-                previous_local_hooks_path_set=0
-                previous_local_hooks_path=""
-                if previous_local_hooks_path=$(${git} config --local --get core.hooksPath 2>/dev/null); then
-                  previous_local_hooks_path_set=1
-                fi
-
                 previous_worktree_config_set=0
                 previous_worktree_config=""
                 if previous_worktree_config=$(${git} config --local --bool --get extensions.worktreeConfig 2>/dev/null); then
@@ -203,8 +188,6 @@ in
                 if [ "$git_dir_abs" != "$common_dir_abs" ] && [ "$common_is_bare" != "true" ]; then
                   ${git} config --local extensions.worktreeConfig true
                   worktree_config_needs_restore=1
-                  ${git} config --local --unset-all core.hooksPath || true
-                  local_hooks_path_needs_restore=1
                   config_scope="--worktree"
                 elif [ "$git_dir_abs" != "$common_dir_abs" ] && [ "$common_is_bare" = "true" ]; then
                   hooks_path="$common_dir_abs/hooks"
@@ -256,7 +239,6 @@ in
               if [ "$did_install_hooks" -eq 1 ]; then
                 ${git} config "$config_scope" core.hooksPath "$hooks_path"
                 hooks_path_needs_restore=0
-                local_hooks_path_needs_restore=0
                 worktree_config_needs_restore=0
               fi
             '';
