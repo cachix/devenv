@@ -6,7 +6,7 @@
 use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
 use devenv_activity::Activity;
-use devenv_file_watcher::{FileWatcher, FileWatcherConfig};
+use devenv_event_sources::{FileWatcher, FileWatcherConfig};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

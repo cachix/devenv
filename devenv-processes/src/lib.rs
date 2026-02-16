@@ -27,7 +27,6 @@ pub mod command;
 pub mod config;
 pub mod log_tailer;
 pub mod manager;
-pub mod notify_socket;
 pub mod pid;
 pub mod process_compose;
 pub mod pty;
@@ -40,11 +39,11 @@ pub use config::{
     ListenKind, ListenSpec, NotifyConfig, ProcessConfig, ProcessType, RestartPolicy,
     SocketActivationConfig, WatchConfig, WatchdogConfig,
 };
+pub use devenv_event_sources::{NotifyMessage, NotifySocket};
 pub use manager::{
     ApiRequest, ApiResponse, JobHandle, NativeProcessManager, ProcessCommand, ProcessResources,
     ProcessState,
 };
-pub use notify_socket::{NotifyMessage, NotifySocket};
 pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
 pub use process_compose::ProcessComposeManager;
 pub use pty::PtyProcess;

@@ -47,10 +47,10 @@ use watchexec_supervisor::{
 };
 
 use crate::config::ProcessConfig;
-use crate::notify_socket::NotifySocket;
 use crate::pid::{self, PidStatus};
 use crate::socket_activation::{ProcessSetupWrapper, activation_from_listen};
 use crate::{ProcessManager, StartOptions};
+use devenv_event_sources::NotifySocket;
 
 /// State file for persisting process information
 #[derive(Debug, Clone, Serialize, Deserialize)]

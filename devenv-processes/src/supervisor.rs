@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use devenv_activity::ProcessStatus;
+use devenv_event_sources::{FileWatcher, FileWatcherConfig, NotifyMessage, TcpProbe};
 use futures::future::Either;
-use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
@@ -12,29 +12,7 @@ use watchexec_supervisor::{ProcessEnd, Signal};
 
 use crate::config::ListenKind;
 use crate::manager::ProcessResources;
-use crate::notify_socket::NotifyMessage;
 use crate::supervisor_state::{Action, Event, ExitStatus, SupervisorState};
-
-/// Spawn a TCP readiness probe that connects in a loop until the port is reachable.
-fn spawn_tcp_probe(address: String, name: String) -> (mpsc::Receiver<()>, JoinHandle<()>) {
-    let (tx, rx) = mpsc::channel::<()>(1);
-    let task = tokio::spawn(async move {
-        debug!("Starting TCP probe for {} at {}", name, address);
-        loop {
-            match tokio::net::TcpStream::connect(&address).await {
-                Ok(_) => {
-                    info!("TCP probe succeeded for {} at {}", name, address);
-                    let _ = tx.send(()).await;
-                    break;
-                }
-                Err(_) => {
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
-            }
-        }
-    });
-    (rx, task)
-}
 
 /// Spawn a supervision task that monitors a job and handles restarts.
 ///
@@ -81,15 +59,12 @@ pub fn spawn_supervisor(
 
         // TCP probe: signals the supervisor loop when the port becomes reachable.
         // The supervisor handles the Ready event so status is updated consistently.
-        let (mut tcp_ready_rx, mut tcp_probe_task) = if let Some(ref address) = tcp_probe_address {
-            let (rx, task) = spawn_tcp_probe(address.clone(), name.clone());
-            (Some(rx), Some(task))
-        } else {
-            (None, None)
-        };
+        let mut tcp_probe = tcp_probe_address
+            .as_ref()
+            .map(|addr| TcpProbe::spawn(addr.clone(), name.clone()));
 
-        let mut file_watcher = devenv_file_watcher::FileWatcher::new(
-            devenv_file_watcher::FileWatcherConfig {
+        let mut file_watcher = FileWatcher::new(
+            FileWatcherConfig {
                 paths: config.watch.paths.clone(),
                 extensions: config.watch.extensions.clone(),
                 ignore: config.watch.ignore.clone(),
@@ -117,20 +92,6 @@ pub fn spawn_supervisor(
             };
         }
 
-        /// Re-arm TCP probe after a restart (the old port binding is gone).
-        macro_rules! rearm_tcp_probe {
-            () => {
-                if let Some(ref address) = tcp_probe_address {
-                    if let Some(task) = tcp_probe_task.take() {
-                        task.abort();
-                    }
-                    let (rx, task) = spawn_tcp_probe(address.clone(), name.clone());
-                    tcp_ready_rx = Some(rx);
-                    tcp_probe_task = Some(task);
-                }
-            };
-        }
-
         'supervisor: loop {
             tokio::select! {
                 biased;
@@ -141,8 +102,8 @@ pub fn spawn_supervisor(
                 }
 
                 Some(()) = async {
-                    match &mut tcp_ready_rx {
-                        Some(rx) => rx.recv().await,
+                    match &mut tcp_probe {
+                        Some(probe) => probe.recv().await,
                         None => std::future::pending::<Option<()>>().await,
                     }
                 } => {
@@ -150,7 +111,7 @@ pub fn spawn_supervisor(
                     activity.set_status(ProcessStatus::Ready);
                     let _ = state.on_event(Event::Ready, Instant::now());
                     let _ = status_tx.send(state.status());
-                    tcp_ready_rx = None;
+                    tcp_probe = None;
                 }
 
                 _ = file_watcher.recv() => {
@@ -164,7 +125,9 @@ pub fn spawn_supervisor(
                             state.on_restart_complete(Instant::now());
                             let count = state.restart_count();
                             activity.log(format!("Restarted (attempt {})", count));
-                            rearm_tcp_probe!();
+                            if let Some(ref address) = tcp_probe_address {
+                                tcp_probe = Some(TcpProbe::spawn(address.clone(), name.clone()));
+                            }
                         }
                         Action::GiveUp { reason } => {
                             warn!("{}: {}", name, reason);
@@ -209,7 +172,9 @@ pub fn spawn_supervisor(
                                             let count = state.restart_count();
                                             warn!("Process {} watchdog trigger, restarted (attempt {})", name, count);
                                             activity.log(format!("Restarted (attempt {})", count));
-                                            rearm_tcp_probe!();
+                                            if let Some(ref address) = tcp_probe_address {
+                                tcp_probe = Some(TcpProbe::spawn(address.clone(), name.clone()));
+                            }
                                         }
                                         Action::GiveUp { reason } => {
                                             warn!("{}: {}", name, reason);
@@ -269,7 +234,9 @@ pub fn spawn_supervisor(
                             let count = state.restart_count();
                             info!("Restarted process {} (attempt {})", name, count);
                             activity.log(format!("Restarted (attempt {})", count));
-                            rearm_tcp_probe!();
+                            if let Some(ref address) = tcp_probe_address {
+                                tcp_probe = Some(TcpProbe::spawn(address.clone(), name.clone()));
+                            }
                         }
                         Action::GiveUp { reason } => {
                             warn!("{}: {}", name, reason);
@@ -316,7 +283,9 @@ pub fn spawn_supervisor(
                             let count = state.restart_count();
                             info!("Restarted process {} (attempt {})", name, count);
                             activity.log(format!("Restarted (attempt {})", count));
-                            rearm_tcp_probe!();
+                            if let Some(ref address) = tcp_probe_address {
+                                tcp_probe = Some(TcpProbe::spawn(address.clone(), name.clone()));
+                            }
                         }
                         Action::GiveUp { reason } => {
                             warn!("{}: {}", name, reason);
@@ -337,11 +306,6 @@ pub fn spawn_supervisor(
 
             // Refresh the pinned deadline future only when the deadline changed
             refresh_deadline!(state, current_deadline, deadline_fut);
-        }
-
-        // Clean up background tasks
-        if let Some(task) = tcp_probe_task.take() {
-            task.abort();
         }
 
         debug!("Supervision task for {} exiting", name);

@@ -8,7 +8,7 @@ description = "Native process management for devenv"
 [dependencies]
 async-trait.workspace = true
 devenv-activity.workspace = true
-devenv-file-watcher.workspace = true
+devenv-event-sources.workspace = true
 daemonize.workspace = true
 futures.workspace = true
 miette.workspace = true

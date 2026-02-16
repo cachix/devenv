@@ -9,7 +9,7 @@ pub use coordinator::{CoordinatorError, ShellCoordinator};
 pub use manager::{ManagerError, ManagerMessage, ShellManager};
 
 // Re-export file watcher types
-pub use devenv_file_watcher::{FileChangeEvent, FileWatcher, FileWatcherConfig, WatcherHandle};
+pub use devenv_event_sources::{FileChangeEvent, FileWatcher, FileWatcherConfig, WatcherHandle};
 
 // Re-export types from devenv-shell for backwards compatibility
 pub use devenv_shell::{

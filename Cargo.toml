@@ -7,7 +7,7 @@ members = [
   "devenv-cache-core",
   "devenv-core",
   "devenv-eval-cache",
-  "devenv-file-watcher",
+  "devenv-event-sources",
   "devenv-nix-backend",
   "devenv-nix-backend-macros",
   "devenv-processes",
@@ -35,7 +35,7 @@ devenv-activity = { path = "devenv-activity" }
 devenv-activity-macros = { path = "devenv-activity-macros" }
 devenv-core = { path = "devenv-core" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
-devenv-file-watcher = { path = "devenv-file-watcher" }
+devenv-event-sources = { path = "devenv-event-sources" }
 devenv-processes = { path = "devenv-processes" }
 devenv-run-tests = { path = "devenv-run-tests" }
 devenv-snix-backend = { path = "devenv-snix-backend" }

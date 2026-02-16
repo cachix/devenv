@@ -1,7 +1,7 @@
 use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
 use avt::Vt;
-use devenv_file_watcher::{FileWatcher, FileWatcherConfig};
+use devenv_event_sources::{FileWatcher, FileWatcherConfig};
 use devenv_shell::{Pty, PtyError, RawModeGuard, get_terminal_size};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};

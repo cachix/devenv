@@ -22,7 +22,7 @@ let
           ./devenv-cache-core
           ./devenv-core
           ./devenv-eval-cache
-          ./devenv-file-watcher
+          ./devenv-event-sources
           ./devenv-nix-backend
           ./devenv-nix-backend-macros
           ./devenv-processes

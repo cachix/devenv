@@ -1527,10 +1527,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "devenv-file-watcher"
+name = "devenv-event-sources"
 version = "2.0.0"
 dependencies = [
  "async-priority-channel",
+ "miette",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -1591,7 +1592,7 @@ dependencies = [
  "caps",
  "daemonize",
  "devenv-activity",
- "devenv-file-watcher",
+ "devenv-event-sources",
  "futures",
  "miette",
  "nix 0.30.1",
@@ -1619,7 +1620,7 @@ dependencies = [
  "avt 0.17.0",
  "blake3",
  "devenv-activity",
- "devenv-file-watcher",
+ "devenv-event-sources",
  "devenv-shell",
  "portable-pty",
  "tempfile",

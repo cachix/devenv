@@ -9,7 +9,7 @@ description = "Shell session manager with hot-reload capability"
 
 [dependencies]
 devenv-activity = { workspace = true }
-devenv-file-watcher = { workspace = true }
+devenv-event-sources = { workspace = true }
 devenv-shell = { workspace = true }
 portable-pty = { workspace = true }
 avt = { workspace = true }
