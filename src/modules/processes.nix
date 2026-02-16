@@ -55,6 +55,8 @@ let
           a free port starting from that base, incrementing until available.
 
           The resolved port is available via `config.processes.<name>.ports.<port>.value`.
+
+          Requires devenv 2.0+.
         '';
         example = lib.literalExpression ''
           {
@@ -76,30 +78,14 @@ let
         description = "Working directory to run the process in. If not specified, the current working directory will be used.";
       };
 
-      use_sudo = lib.mkOption {
-        type = types.bool;
-        default = false;
-        description = ''
-          Run this process with sudo/elevated privileges.
-
-          Only used when using native process manager.
-        '';
-      };
-
-      pseudo_terminal = lib.mkOption {
-        type = types.bool;
-        default = false;
-        description = ''
-          Run this process in a pseudo-terminal (PTY).
-
-          Only used when using native process manager.
-        '';
-      };
-
       ready = lib.mkOption {
         type = types.nullOr readyType;
         default = null;
-        description = "How to determine if this process is ready to serve.";
+        description = ''
+          How to determine if this process is ready to serve.
+
+          Requires devenv 2.0+.
+        '';
       };
 
       restart = lib.mkOption {
@@ -168,7 +154,7 @@ let
         description = ''
           Socket activation configuration for systemd-style socket passing.
 
-          Only used when using native process manager.
+          Requires devenv 2.0+.
         '';
         example = [
           {
@@ -204,7 +190,7 @@ let
         description = ''
           Systemd watchdog configuration.
 
-          Only used when using native process manager.
+          Requires devenv 2.0+.
         '';
         example = lib.literalExpression ''
           {
@@ -267,7 +253,7 @@ let
                 Paths to watch for changes (files or directories).
                 When files in these paths change, the process will be restarted.
 
-                Only used when using native process manager.
+                Requires devenv 2.0+.
               '';
               example = lib.literalExpression ''
                 [ ./src ./config.yaml ]
@@ -281,7 +267,7 @@ let
                 File extensions to watch (e.g., "rs", "js", "py").
                 If empty, all file extensions are watched.
 
-                Only used when using native process manager.
+                Requires devenv 2.0+.
               '';
               example = [ "rs" "toml" ];
             };
@@ -292,7 +278,7 @@ let
               description = ''
                 Glob patterns to ignore (e.g., ".git", "target", "*.log").
 
-                Only used when using native process manager.
+                Requires devenv 2.0+.
               '';
               example = [ "*.log" ".git" "target" ];
             };
@@ -302,7 +288,7 @@ let
         description = ''
           File watching configuration for automatic process restarts.
 
-          Only used when using native process manager.
+          Requires devenv 2.0+.
         '';
         example = lib.literalExpression ''
           {
@@ -468,8 +454,6 @@ in
               # Always show output for process tasks so process-compose can capture it
               showOutput = true;
               # Process-specific configuration
-              use_sudo = process.use_sudo;
-              pseudo_terminal = process.pseudo_terminal;
               ready = process.ready;
               restart = process.restart;
               listen = process.listen;

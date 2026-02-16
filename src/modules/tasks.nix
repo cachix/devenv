@@ -131,8 +131,6 @@ let
               cwd = config.cwd;
               show_output = config.showOutput;
               process = {
-                use_sudo = config.use_sudo;
-                pseudo_terminal = config.pseudo_terminal;
                 ready = config.ready;
                 restart = config.restart;
                 listen = config.listen;
@@ -201,26 +199,6 @@ let
             type = types.nullOr types.str;
             default = null;
             description = "Working directory to run the task in. If not specified, the current working directory will be used.";
-          };
-
-          use_sudo = lib.mkOption {
-            type = types.bool;
-            default = false;
-            description = ''
-              Run this process task with sudo/elevated privileges.
-
-              Only used when type = "process".
-            '';
-          };
-
-          pseudo_terminal = lib.mkOption {
-            type = types.bool;
-            default = false;
-            description = ''
-              Run this process task in a pseudo-terminal (PTY).
-
-              Only used when type = "process".
-            '';
           };
 
           ready = lib.mkOption {

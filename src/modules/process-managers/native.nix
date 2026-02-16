@@ -4,26 +4,6 @@ let
   readyType = import ../lib/ready.nix { inherit lib; };
   processType = lib.types.submodule ({ config, ... }: {
     options = {
-      use_sudo = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = ''
-          Run this process with sudo/elevated privileges.
-
-          Similar to process-compose's is_elevated option.
-        '';
-      };
-
-      pseudo_terminal = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = ''
-          Run this process in a pseudo-terminal (PTY).
-
-          Useful for interactive processes that require terminal capabilities.
-        '';
-      };
-
       listen = lib.mkOption {
         type = lib.types.listOf (lib.types.submodule {
           options = {
@@ -179,8 +159,6 @@ in
           pc = process.process-compose or { };
         in
         {
-          use_sudo = pc.is_elevated or false;
-          pseudo_terminal = pc.pseudo_terminal or false;
           listen = pc.listen or [ ];
           watchdog = pc.watchdog or null;
           ready = process.ready;
@@ -198,7 +176,7 @@ in
           in
           removeAttrs process [ "enable" "process-compose" "ports" "notify" "ready" "restart" ] // {
             inherit name;
-            inherit (native) use_sudo pseudo_terminal watchdog;
+            inherit (native) watchdog;
             ready = native.ready;
             restart = process.restart;
             listen = map

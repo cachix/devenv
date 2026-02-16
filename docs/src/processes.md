@@ -37,8 +37,10 @@ Control how processes restart when they exit:
 {
   processes.worker = {
     exec = "worker --queue jobs";
-    restart = "always";
-    max_restarts = 10;  # null for unlimited
+    restart = {
+      on = "always";
+      max = 10;  # null for unlimited (default: 5)
+    };
   };
 }
 ```
@@ -62,7 +64,90 @@ Processes can depend on other processes using `after` and `before`:
 
 Use `@complete` to wait for a process to stop (soft dependency), or `@ready` (default) for readiness.
 
+## Ready Probes
+
+!!! tip "New in devenv 2.0"
+
+Ready probes let the process manager detect when a process is ready to serve. This is used by `after` dependencies to know when a dependency is available.
+
+### Exec probe
+
+Run a shell command to check readiness. Exit code 0 means ready:
+
+```nix title="devenv.nix"
+{
+  processes.database = {
+    exec = "postgres -D $PGDATA";
+    ready = {
+      exec = "pg_isready -d template1";
+    };
+  };
+}
+```
+
+### HTTP probe
+
+Poll an HTTP endpoint for readiness:
+
+```nix title="devenv.nix"
+{
+  processes.api = {
+    exec = "myserver";
+    ready = {
+      http.get = {
+        port = 8080;
+        path = "/health";
+        # host = "127.0.0.1";  # default
+        # scheme = "http";     # default
+      };
+    };
+  };
+}
+```
+
+### Notify probe
+
+Use systemd-style readiness notification. Your process should send `READY=1` to the socket path in `$NOTIFY_SOCKET`:
+
+```nix title="devenv.nix"
+{
+  processes.database = {
+    exec = "postgres";
+    ready.notify = true;
+  };
+
+  processes.api = {
+    exec = "myapi";
+    after = [ "devenv:processes:database" ];  # waits for READY=1
+  };
+}
+```
+
+### Probe timing options
+
+All probe types support these timing options:
+
+```nix title="devenv.nix"
+{
+  processes.api = {
+    exec = "myserver";
+    ready = {
+      http.get = { port = 8080; path = "/health"; };
+      initial_delay = 2;    # seconds before first probe (default: 0)
+      period = 10;           # seconds between probes (default: 10)
+      timeout = 1;           # seconds before probe times out (default: 1)
+      success_threshold = 1; # consecutive successes needed (default: 1)
+      failure_threshold = 3; # consecutive failures before unhealthy (default: 3)
+    };
+  };
+}
+```
+
+When `listen` sockets or allocated `ports` are configured and no explicit probe is set, a TCP connectivity check is used automatically.
+
 ## File Watching
+
+!!! tip "New in devenv 2.0"
 
 Automatically restart processes when files change:
 
@@ -80,6 +165,8 @@ Automatically restart processes when files change:
 ```
 
 ## Socket Activation
+
+!!! tip "New in devenv 2.0"
 
 Socket activation allows the process manager to bind sockets before starting your process. This enables zero-downtime restarts and lazy process startup.
 
@@ -111,20 +198,21 @@ Your process receives these environment variables:
 
 File descriptors start at 3 (after stdin, stdout, stderr). This is compatible with systemd socket activation.
 
-## Notify Protocol
+## Watchdog
 
-Enable systemd-style readiness notification. Your process should send `READY=1` to the socket path in `$NOTIFY_SOCKET` when ready.
+!!! tip "New in devenv 2.0"
+
+Enable systemd-compatible watchdog monitoring. Your process must periodically send `WATCHDOG=1` to the notify socket, or it will be killed and restarted:
 
 ```nix title="devenv.nix"
 {
-  processes.database = {
-    exec = "postgres";
-    notify.enable = true;
-  };
-
   processes.api = {
-    exec = "myapi";
-    after = [ "devenv:processes:database" ];  # waits for READY=1
+    exec = "myserver";
+    ready.notify = true;
+    watchdog = {
+      usec = 30000000;      # 30 seconds
+      require_ready = true;  # only enforce after READY=1 (default)
+    };
   };
 }
 ```

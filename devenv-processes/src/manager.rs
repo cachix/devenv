@@ -133,11 +133,10 @@ impl NativeProcessManager {
     ) -> Result<Arc<Job>> {
         debug!("Starting command '{}': {}", config.name, config.exec);
 
-        if config.pseudo_terminal {
-            bail!(
-                "Process '{}' requested pseudo_terminal, but the native process manager does not support PTY yet",
-                config.name
-            );
+        // Store config for restart support
+        {
+            let mut configs = self.process_configs.write().await;
+            configs.insert(config.name.clone(), config.clone());
         }
 
         // Extract ports from listen config and allocated ports
@@ -879,11 +878,6 @@ impl NativeProcessManager {
 
         // Build the actual command
         let mut cmd = String::new();
-
-        if config.use_sudo {
-            // Use sudo with env preservation
-            write!(cmd, "sudo -E ").unwrap();
-        }
 
         // Add the command (not escaped - exec can be a shell command with pipes/redirects)
         write!(cmd, "{}", config.exec).unwrap();

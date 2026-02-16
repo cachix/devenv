@@ -228,10 +228,6 @@ pub struct ProcessConfig {
     #[serde(default)]
     pub env: HashMap<String, String>,
     #[serde(default)]
-    pub use_sudo: bool,
-    #[serde(default)]
-    pub pseudo_terminal: bool,
-    #[serde(default)]
     pub listen: Vec<ListenSpec>,
     /// Allocated ports for display (e.g., {"http": 8080, "admin": 9000})
     #[serde(default)]
