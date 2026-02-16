@@ -69,7 +69,7 @@ impl ShellCoordinator {
         // Set up file watcher
         let mut watcher = FileWatcher::new(
             FileWatcherConfig {
-                paths: config.watch_files.clone(),
+                paths: &config.watch_files,
                 recursive: false,
                 ..Default::default()
             },

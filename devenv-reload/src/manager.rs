@@ -58,7 +58,7 @@ impl ShellManager {
         // Set up file watcher early so we can pass handle to initial build
         let mut watcher = FileWatcher::new(
             FileWatcherConfig {
-                paths: config.watch_files.clone(),
+                paths: &config.watch_files,
                 recursive: false,
                 ..Default::default()
             },

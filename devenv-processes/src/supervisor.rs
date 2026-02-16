@@ -65,9 +65,9 @@ pub fn spawn_supervisor(
 
         let mut file_watcher = FileWatcher::new(
             FileWatcherConfig {
-                paths: config.watch.paths.clone(),
-                extensions: config.watch.extensions.clone(),
-                ignore: config.watch.ignore.clone(),
+                paths: &config.watch.paths,
+                extensions: &config.watch.extensions,
+                ignore: &config.watch.ignore,
                 recursive: true,
                 ..Default::default()
             },

@@ -25,12 +25,12 @@ pub struct FileChangeEvent {
     pub path: PathBuf,
 }
 
-pub struct FileWatcherConfig {
-    pub paths: Vec<PathBuf>,
+pub struct FileWatcherConfig<'a> {
+    pub paths: &'a [PathBuf],
     /// File extensions to watch (e.g., "rs", "js"). Empty means all.
-    pub extensions: Vec<String>,
+    pub extensions: &'a [String],
     /// Glob patterns to ignore (e.g., ".git", "*.log").
-    pub ignore: Vec<String>,
+    pub ignore: &'a [String],
     /// Watch directories recursively (default: true).
     pub recursive: bool,
     /// Throttle duration for debouncing file change events.
@@ -39,12 +39,12 @@ pub struct FileWatcherConfig {
     pub throttle: Duration,
 }
 
-impl Default for FileWatcherConfig {
+impl Default for FileWatcherConfig<'_> {
     fn default() -> Self {
         Self {
-            paths: Vec::new(),
-            extensions: Vec::new(),
-            ignore: Vec::new(),
+            paths: &[],
+            extensions: &[],
+            ignore: &[],
             recursive: true,
             throttle: Duration::from_millis(100),
         }
@@ -108,7 +108,7 @@ impl FileWatcher {
     ///
     /// Infallible: when paths is empty or setup fails internally,
     /// `recv()` blocks forever.
-    pub async fn new(config: FileWatcherConfig, name: &str) -> Self {
+    pub async fn new(config: FileWatcherConfig<'_>, name: &str) -> Self {
         let (tx, rx) = mpsc::channel::<FileChangeEvent>(100);
 
         let watched_paths = Arc::new(Mutex::new(HashSet::new()));
@@ -307,9 +307,10 @@ mod tests {
             .write_all(b"initial content")
             .expect("write");
 
+        let paths = vec![file_path.clone()];
         let mut watcher = FileWatcher::new(
             FileWatcherConfig {
-                paths: vec![file_path.clone()],
+                paths: &paths,
                 recursive: false,
                 ..Default::default()
             },
@@ -346,9 +347,10 @@ mod tests {
             .write_all(b"2")
             .expect("write");
 
+        let paths = vec![file1.clone(), file2.clone()];
         let mut watcher = FileWatcher::new(
             FileWatcherConfig {
-                paths: vec![file1.clone(), file2.clone()],
+                paths: &paths,
                 recursive: false,
                 ..Default::default()
             },
@@ -371,9 +373,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_nonexistent_path_blocks_forever() {
+        let paths = vec![PathBuf::from("/this/path/does/not/exist/file.nix")];
         let mut watcher = FileWatcher::new(
             FileWatcherConfig {
-                paths: vec![PathBuf::from("/this/path/does/not/exist/file.nix")],
+                paths: &paths,
                 recursive: false,
                 ..Default::default()
             },
@@ -399,9 +402,10 @@ mod tests {
             .write_all(b"0")
             .expect("write");
 
+        let paths = vec![file_path.clone()];
         let mut watcher = FileWatcher::new(
             FileWatcherConfig {
-                paths: vec![file_path.clone()],
+                paths: &paths,
                 recursive: false,
                 ..Default::default()
             },
@@ -433,9 +437,10 @@ mod tests {
             .expect("write");
 
         {
+            let paths = vec![file_path.clone()];
             let _watcher = FileWatcher::new(
                 FileWatcherConfig {
-                    paths: vec![file_path.clone()],
+                    paths: &paths,
                     recursive: false,
                     ..Default::default()
                 },
@@ -452,9 +457,10 @@ mod tests {
         let temp_dir = TempDir::new().expect("create temp dir");
         let watch_dir = temp_dir.path().canonicalize().expect("canonicalize");
 
+        let paths = vec![watch_dir.clone()];
         let mut watcher = FileWatcher::new(
             FileWatcherConfig {
-                paths: vec![watch_dir.clone()],
+                paths: &paths,
                 recursive: true,
                 ..Default::default()
             },
@@ -489,9 +495,10 @@ mod tests {
             .write_all(b"runtime")
             .expect("write");
 
+        let paths = vec![initial_file.clone()];
         let mut watcher = FileWatcher::new(
             FileWatcherConfig {
-                paths: vec![initial_file.clone()],
+                paths: &paths,
                 recursive: false,
                 ..Default::default()
             },
