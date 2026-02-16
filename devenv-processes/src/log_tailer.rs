@@ -1,3 +1,4 @@
+use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -18,44 +19,50 @@ pub fn spawn_file_tailer(path: PathBuf, activity: Activity, is_stderr: bool) -> 
             }
         };
 
-        let mut position: u64 = 0;
-        let mut reader = BufReader::new(file).lines();
+        let mut ino = file.metadata().await.map(|m| m.ino()).unwrap_or(0);
+        let mut reader = BufReader::new(file);
 
         loop {
-            match reader.next_line().await {
-                Ok(Some(line)) => {
-                    position += line.len() as u64 + 1;
+            let mut line = String::new();
+            match reader.read_line(&mut line).await {
+                Ok(0) => {
+                    // EOF — check for truncation or replacement before sleeping
+                    let position = reader.stream_position().await.unwrap_or(0);
+
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+
+                    let meta = match tokio::fs::metadata(&path).await {
+                        Ok(m) => m,
+                        Err(_) => break,
+                    };
+
+                    if meta.ino() != ino {
+                        // File was replaced (e.g., process restart created a new file).
+                        // Re-open from the beginning.
+                        let file = match tokio::fs::File::open(&path).await {
+                            Ok(f) => f,
+                            Err(_) => break,
+                        };
+                        ino = meta.ino();
+                        reader = BufReader::new(file);
+                    } else if meta.len() < position {
+                        // Same file but truncated — seek back to the start.
+                        if reader.seek(std::io::SeekFrom::Start(0)).await.is_err() {
+                            break;
+                        }
+                    }
+                    // Otherwise the file just hasn't grown yet; loop will re-read.
+                }
+                Ok(_) => {
+                    // Strip trailing newline before emitting
+                    if line.ends_with('\n') {
+                        line.pop();
+                    }
                     if is_stderr {
                         activity.error(&line);
                     } else {
                         activity.log(&line);
                     }
-                }
-                Ok(None) => {
-                    // EOF reached, wait a bit and try again (tail -f behavior)
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-
-                    let new_file = match tokio::fs::File::open(&path).await {
-                        Ok(f) => f,
-                        Err(_) => break,
-                    };
-
-                    // Reset position if file was truncated (e.g., during restart)
-                    let metadata = match new_file.metadata().await {
-                        Ok(m) => m,
-                        Err(_) => break,
-                    };
-                    if metadata.len() < position {
-                        position = 0;
-                    }
-
-                    let mut new_file = new_file;
-                    if let Err(e) = new_file.seek(std::io::SeekFrom::Start(position)).await {
-                        debug!("Failed to seek in log file {}: {}", path.display(), e);
-                        break;
-                    }
-
-                    reader = BufReader::new(new_file).lines();
                 }
                 Err(e) => {
                     debug!("Error reading log file {}: {}", path.display(), e);
