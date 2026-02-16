@@ -159,6 +159,8 @@ in
     processes.minio.ports.console.allocate = baseConsolePort;
     processes.minio.exec = "${startScript}";
 
+    env.MINIO_PORT = allocatedApiPort;
+    env.MINIO_CONSOLE_PORT = allocatedConsolePort;
     env.MINIO_DATA_DIR = config.env.DEVENV_STATE + "/minio/data";
     env.MINIO_CONFIG_DIR = config.env.DEVENV_STATE + "/minio/config";
     env.MINIO_REGION = "${cfg.region}";

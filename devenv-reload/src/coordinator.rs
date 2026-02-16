@@ -301,7 +301,7 @@ impl ShellCoordinator {
                     }
                 }
 
-                Event::Tui(ShellEvent::Exited) => {
+                Event::Tui(ShellEvent::Exited { .. }) => {
                     // Shell exited, we're done
                     break;
                 }

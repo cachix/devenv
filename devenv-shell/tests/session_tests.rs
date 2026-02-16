@@ -85,7 +85,7 @@ async fn test_spawn_and_exit() {
         tokio::select! {
             event = event_rx.recv() => {
                 match event {
-                    Some(ShellEvent::Exited) => break,
+                    Some(ShellEvent::Exited { .. }) => break,
                     None => panic!("event channel closed without Exited"),
                     _ => continue,
                 }

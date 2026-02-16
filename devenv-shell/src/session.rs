@@ -133,7 +133,7 @@ impl Default for SessionIo {
 enum Event {
     Stdin(Vec<u8>),
     PtyOutput(Vec<u8>),
-    PtyExit,
+    PtyExit(Option<u32>),
     Command(ShellCommand),
 }
 
@@ -209,7 +209,7 @@ impl ShellSession {
         event_tx: mpsc::Sender<ShellEvent>,
         handoff: Option<TuiHandoff>,
         io: SessionIo,
-    ) -> Result<(), SessionError> {
+    ) -> Result<Option<u32>, SessionError> {
         // Wait for the initial Spawn command
         let (initial_cmd, _watch_files) = match command_rx.recv().await {
             Some(ShellCommand::Spawn {
@@ -225,7 +225,7 @@ impl ShellSession {
                 if let Some(h) = handoff {
                     let _ = h.backend_done_tx.send(());
                 }
-                return Ok(());
+                return Ok(None);
             }
             Some(other) => {
                 if let Some(h) = handoff {
@@ -385,7 +385,8 @@ impl ShellSession {
             loop {
                 match pty_reader.read(&mut buf) {
                     Ok(0) => {
-                        let _ = pty_tx.blocking_send(Event::PtyExit);
+                        let exit_code = pty_reader.try_wait().ok().flatten().map(|s| s.exit_code());
+                        let _ = pty_tx.blocking_send(Event::PtyExit(exit_code));
                         break;
                     }
                     Ok(n) => {
@@ -398,7 +399,8 @@ impl ShellSession {
                     }
                     Err(e) => {
                         tracing::warn!("session: PTY read error: {}", e);
-                        let _ = pty_tx.blocking_send(Event::PtyExit);
+                        let exit_code = pty_reader.try_wait().ok().flatten().map(|s| s.exit_code());
+                        let _ = pty_tx.blocking_send(Event::PtyExit(exit_code));
                         break;
                     }
                 }
@@ -417,7 +419,7 @@ impl ShellSession {
 
         // Main event loop
         tracing::trace!("session: starting event loop");
-        let result = self
+        let exit_code = self
             .event_loop(
                 &pty,
                 &mut vt,
@@ -433,13 +435,16 @@ impl ShellSession {
         }
         let _ = pty.kill();
 
-        // Notify coordinator that shell exited
-        let _ = event_tx.send(ShellEvent::Exited).await;
+        let exit_code = exit_code?;
 
-        result
+        // Notify coordinator that shell exited
+        let _ = event_tx.send(ShellEvent::Exited { exit_code }).await;
+
+        Ok(exit_code)
     }
 
     /// Main event loop handling stdin, PTY output, and coordinator commands.
+    /// Returns the exit code from the PTY child process, if available.
     async fn event_loop(
         &mut self,
         pty: &Arc<Pty>,
@@ -447,7 +452,7 @@ impl ShellSession {
         event_rx: &mut mpsc::Receiver<Event>,
         coordinator_tx: &mpsc::Sender<ShellEvent>,
         stdout: &mut Box<dyn Write + Send>,
-    ) -> Result<(), SessionError> {
+    ) -> Result<Option<u32>, SessionError> {
         let spinner_interval = Duration::from_millis(SPINNER_INTERVAL_MS);
         let mut last_resize_check = std::time::Instant::now();
 
@@ -530,8 +535,8 @@ impl ShellSession {
                     }
                 }
 
-                Event::PtyExit => {
-                    return Ok(());
+                Event::PtyExit(exit_code) => {
+                    return Ok(exit_code);
                 }
 
                 Event::Command(cmd) => {
@@ -556,7 +561,7 @@ impl ShellSession {
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     /// Handle a command from the coordinator.

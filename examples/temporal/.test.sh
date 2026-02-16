@@ -1,7 +1,7 @@
 #!/bin/sh
 set -x
 
-export TEMPORAL_ADDRESS=127.0.0.1:17233
+export TEMPORAL_ADDRESS=127.0.0.1:$TEMPORAL_PORT
 
 # temporal status and store its exit status
 check_temporal_status() {

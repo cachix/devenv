@@ -293,6 +293,8 @@ in
       })
       (lib.mkIf cfg.enable {
         packages = [ cfg.package ];
+        env.KAFKA_PORT = allocatedPort;
+        env.KAFKA_CONTROLLER_PORT = allocatedControllerPort;
 
         # Overlay allocated ports at config file generation to avoid infinite
         # recursion (#2494).  Writing back into cfg.settings would create a

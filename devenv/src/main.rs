@@ -42,6 +42,8 @@ enum CommandResult {
     Print(String),
     /// Exec into this command after cleanup (TUI shutdown, terminal restore)
     Exec(Command),
+    /// Exit with a specific code (e.g., from shell exit)
+    ExitCode(i32),
     /// Prompt for missing secrets after TUI cleanup
     PromptSecrets {
         provider: Option<String>,
@@ -66,6 +68,9 @@ impl CommandResult {
                 use std::os::unix::process::CommandExt;
                 let err = cmd.exec();
                 miette::bail!("Failed to exec: {}", err);
+            }
+            CommandResult::ExitCode(code) => {
+                std::process::exit(code);
             }
             CommandResult::PromptSecrets { provider, profile } => {
                 // Load secretspec and prompt for missing secrets
@@ -534,7 +539,7 @@ async fn run_devenv_inner(
             } else {
                 // Run shell with hot-reload capability (default)
                 // Passes channels for TUI-to-shell terminal handoff
-                run_reload_shell(
+                let exit_code = run_reload_shell(
                     devenv,
                     cmd,
                     args.clone(),
@@ -545,7 +550,10 @@ async fn run_devenv_inner(
                     terminal_ready_rx,
                 )
                 .await?;
-                CommandResult::Done
+                match exit_code {
+                    Some(code) => CommandResult::ExitCode(code as i32),
+                    None => CommandResult::Done,
+                }
             }
         }
         Commands::Test { .. } => {
@@ -781,7 +789,7 @@ async fn run_reload_shell(
     shutdown: Arc<Shutdown>,
     backend_done_tx: tokio::sync::oneshot::Sender<()>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
-) -> Result<()> {
+) -> Result<Option<u32>> {
     use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
     use devenv_tasks::PtyExecutor;
     use devenv_tui::{PtyTaskRequest, SessionIo, ShellSession, TuiHandoff};
@@ -922,9 +930,10 @@ async fn run_reload_shell(
 
     // Run shell session on current thread (owns terminal)
     let shell_session = ShellSession::with_defaults().with_status_line(is_interactive);
-    let session_result = shell_session
+    let exit_code = shell_session
         .run(command_rx, event_tx, handoff, SessionIo::default())
-        .await;
+        .await
+        .map_err(|e| miette::miette!("Shell session error: {}", e))?;
 
     // Wait for task runner (if any) and coordinator to finish
     if let Some(handle) = task_handle
@@ -934,5 +943,5 @@ async fn run_reload_shell(
     }
     let _ = coordinator_handle.await;
 
-    session_result.map_err(|e| miette::miette!("Shell session error: {}", e))
+    Ok(exit_code)
 }

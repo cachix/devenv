@@ -260,6 +260,8 @@ in
       ))
     ];
 
+    env.NATS_PORT = allocatedPort;
+    env.NATS_MONITORING_PORT = allocatedMonitoringPort;
     env.NATS_DATA_DIR = config.env.DEVENV_STATE + "/nats";
 
     # Create necessary directories

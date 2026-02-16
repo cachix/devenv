@@ -43,7 +43,7 @@ pub enum ShellCommand {
 #[derive(Debug)]
 pub enum ShellEvent {
     /// Shell process exited.
-    Exited,
+    Exited { exit_code: Option<u32> },
     /// Terminal was resized.
     Resize { cols: u16, rows: u16 },
     /// User pressed Ctrl-Alt-D to toggle file watching.

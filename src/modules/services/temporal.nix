@@ -126,6 +126,8 @@ in
 
   config = lib.mkIf cfg.enable {
     packages = [ cfg.package ];
+    env.TEMPORAL_PORT = allocatedPort;
+    env.TEMPORAL_UI_PORT = allocatedUiPort;
     processes.temporal.ports.main.allocate = basePort;
     processes.temporal.ports.ui.allocate = baseUiPort;
     processes.temporal.exec = "exec ${cfg.package}/bin/temporal server start-dev ${lib.concatStringsSep " " commandArgs}";

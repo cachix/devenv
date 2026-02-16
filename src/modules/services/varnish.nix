@@ -63,6 +63,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    env.VARNISH_PORT = allocatedPort;
     processes.varnish.ports.main.allocate = basePort;
     processes.varnish.exec = "exec ${cfg.package}/bin/varnishd -n ${workingDir} -F -f ${cfgFile} -s malloc,${toString cfg.memorySize} -a ${listenAddr} ${lib.optionalString (cfg.extraModules != []) " -p vmod_path='${lib.makeSearchPathOutput "lib" "lib/varnish/vmods" ([cfg.package] ++ cfg.extraModules)}' -r vmod_path"}";
 
