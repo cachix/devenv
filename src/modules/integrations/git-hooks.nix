@@ -144,6 +144,19 @@ in
               fi
 
               did_install_hooks=0
+              hooks_path_needs_restore=0
+
+              restore_hooks_path() {
+                if [ "$hooks_path_needs_restore" -eq 1 ]; then
+                  if [ "$previous_hooks_path_set" -eq 1 ]; then
+                    ${git} config "$config_scope" core.hooksPath "$previous_hooks_path" || true
+                  else
+                    ${git} config "$config_scope" --unset-all core.hooksPath || true
+                  fi
+                fi
+              }
+
+              trap restore_hooks_path EXIT
 
               setup_hooks_path() {
                 GIT_WC=$(${git} rev-parse --show-toplevel)
@@ -164,6 +177,13 @@ in
                   hooks_path="$common_dir_abs/hooks"
                 fi
 
+                previous_hooks_path_set=0
+                previous_hooks_path=""
+                if previous_hooks_path=$(${git} config "$config_scope" --get core.hooksPath 2>/dev/null); then
+                  previous_hooks_path_set=1
+                fi
+
+                hooks_path_needs_restore=1
                 ${git} config "$config_scope" core.hooksPath ""
               }
 
@@ -202,6 +222,7 @@ in
 
               if [ "$did_install_hooks" -eq 1 ]; then
                 ${git} config "$config_scope" core.hooksPath "$hooks_path"
+                hooks_path_needs_restore=0
               fi
             '';
           after = [ "devenv:files" ];
