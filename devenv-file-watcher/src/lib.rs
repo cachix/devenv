@@ -89,42 +89,6 @@ impl WatcherHandle {
     }
 }
 
-/// Probe a watched path until a signal arrives on `rx`.
-///
-/// Repeatedly writes to `probe_path` and waits for `rx.recv()` to fire.
-/// On macOS, FSEvents initializes asynchronously so there is no readiness
-/// signal — this is the only reliable way to know the watcher is active.
-///
-/// Drains any extra signals buffered from probe writes before returning.
-pub async fn probe_watcher_ready<T>(
-    probe_path: &Path,
-    timeout: std::time::Duration,
-    rx: &mut mpsc::Receiver<T>,
-) -> T {
-    let deadline = std::time::Instant::now() + timeout;
-    let mut probe_num = 0u64;
-
-    while std::time::Instant::now() < deadline {
-        probe_num += 1;
-        let _ = std::fs::write(probe_path, format!("probe {probe_num}"));
-
-        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        let poll_time = std::time::Duration::from_millis(500).min(remaining);
-        match tokio::time::timeout(poll_time, rx.recv()).await {
-            Ok(Some(value)) => {
-                while tokio::time::timeout(std::time::Duration::from_millis(100), rx.recv())
-                    .await
-                    .is_ok()
-                {}
-                return value;
-            }
-            _ => continue,
-        }
-    }
-
-    panic!("file watcher did not become ready within {:?}", timeout);
-}
-
 /// Unified file watcher built on watchexec.
 ///
 /// Combines watchexec's filtering with runtime path addition and path reporting.
@@ -304,13 +268,6 @@ impl FileWatcher {
     pub async fn recv(&mut self) -> Option<FileChangeEvent> {
         self.rx.recv().await
     }
-
-    /// Probe until the OS file watcher is live.
-    ///
-    /// Convenience wrapper around [`probe_watcher_ready`].
-    pub async fn wait_ready(&mut self, probe_path: &Path, timeout: std::time::Duration) {
-        let _ = probe_watcher_ready(probe_path, timeout, &mut self.rx).await;
-    }
 }
 
 #[cfg(test)]
@@ -343,8 +300,6 @@ mod tests {
             "test",
         )
         .await;
-
-        watcher.wait_ready(&file_path, WATCH_TIMEOUT).await;
 
         File::create(&file_path)
             .expect("open file")
@@ -384,8 +339,6 @@ mod tests {
             "test",
         )
         .await;
-
-        watcher.wait_ready(&file1, WATCH_TIMEOUT).await;
 
         File::create(&file1)
             .expect("open")
@@ -440,8 +393,6 @@ mod tests {
         )
         .await;
 
-        watcher.wait_ready(&file_path, WATCH_TIMEOUT).await;
-
         for i in 1..=5 {
             File::create(&file_path)
                 .expect("open")
@@ -495,9 +446,6 @@ mod tests {
         )
         .await;
 
-        let sentinel = watch_dir.join("_sentinel.txt");
-        watcher.wait_ready(&sentinel, WATCH_TIMEOUT).await;
-
         let new_file = watch_dir.join("new_file.nix");
         File::create(&new_file)
             .expect("create file")
@@ -535,12 +483,8 @@ mod tests {
         )
         .await;
 
-        watcher.wait_ready(&initial_file, WATCH_TIMEOUT).await;
-
         let handle = watcher.handle();
         handle.watch(&runtime_file).expect("add runtime watch");
-
-        watcher.wait_ready(&runtime_file, WATCH_TIMEOUT).await;
 
         File::create(&runtime_file)
             .expect("open file")
