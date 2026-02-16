@@ -1,9 +1,10 @@
-{ pkgs
-, self
-, lib
-, config
-, inputs
-, ...
+{
+  pkgs,
+  self,
+  lib,
+  config,
+  inputs,
+  ...
 }:
 
 let
@@ -47,19 +48,18 @@ let
 
   githooksSubmodule =
     if git-hooks != null then
-      lib.types.submoduleWith
-        {
-          modules = [
-            (git-hooks + "/modules/all-modules.nix")
-            {
-              rootSrc = self;
-              package = lib.mkDefault pkgs.prek;
-              tools = import (git-hooks + "/nix/call-tools.nix") pkgs;
-            }
-          ];
-          specialArgs = { inherit pkgs; };
-          shorthandOnlyDefinesConfig = true;
-        }
+      lib.types.submoduleWith {
+        modules = [
+          (git-hooks + "/modules/all-modules.nix")
+          {
+            rootSrc = self;
+            package = lib.mkDefault pkgs.prek;
+            tools = import (git-hooks + "/nix/call-tools.nix") pkgs;
+          }
+        ];
+        specialArgs = { inherit pkgs; };
+        shorthandOnlyDefinesConfig = true;
+      }
     else
       defaultModule;
 
@@ -143,6 +143,8 @@ in
                 exit 0
               fi
 
+              ${git} config --local core.hooksPath ""
+
               # Install hooks for configured stages
               if [ -z "${lib.concatStringsSep " " installStages}" ]; then
                 # Default: install pre-commit hook
@@ -162,6 +164,10 @@ in
                   esac
                 done
               fi
+
+              GIT_WC=$(${git} rev-parse --show-toplevel)
+              common_dir=$(${git} -C "$GIT_WC" rev-parse --path-format=relative --git-common-dir)
+              ${git} config --local core.hooksPath "$common_dir/hooks"
             '';
           after = [ "devenv:files" ];
           before = [ "devenv:enterShell" ];
