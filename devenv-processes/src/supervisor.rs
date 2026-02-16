@@ -173,8 +173,8 @@ pub fn spawn_supervisor(
                                             warn!("Process {} watchdog trigger, restarted (attempt {})", name, count);
                                             activity.log(format!("Restarted (attempt {})", count));
                                             if let Some(ref address) = tcp_probe_address {
-                                tcp_probe = Some(TcpProbe::spawn(address.clone(), name.clone()));
-                            }
+                                                tcp_probe = Some(TcpProbe::spawn(address.clone(), name.clone()));
+                                            }
                                         }
                                         Action::GiveUp { reason } => {
                                             warn!("{}: {}", name, reason);
