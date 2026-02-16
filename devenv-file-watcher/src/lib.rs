@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -32,6 +33,10 @@ pub struct FileWatcherConfig {
     pub ignore: Vec<String>,
     /// Watch directories recursively (default: true).
     pub recursive: bool,
+    /// Throttle duration for debouncing file change events.
+    /// Watchexec batches events and waits this long after the first event
+    /// before triggering the action handler. Default: 100ms.
+    pub throttle: Duration,
 }
 
 impl Default for FileWatcherConfig {
@@ -41,6 +46,7 @@ impl Default for FileWatcherConfig {
             extensions: Vec::new(),
             ignore: Vec::new(),
             recursive: true,
+            throttle: Duration::from_millis(100),
         }
     }
 }
@@ -174,6 +180,7 @@ impl FileWatcher {
         let extensions = config.extensions;
         let ignore = config.ignore;
         let recursive = config.recursive;
+        let throttle = config.throttle;
         let watch_name = name.to_owned();
         let watch_tx = tx.clone();
 
@@ -251,6 +258,7 @@ impl FileWatcher {
                     .pathset(parents.into_iter().map(WatchedPath::non_recursive));
             }
             task_wx.config.filterer(filterer);
+            task_wx.config.throttle(throttle);
 
             let mut watch_info = format!(
                 "File watcher started for {} watching {:?}",

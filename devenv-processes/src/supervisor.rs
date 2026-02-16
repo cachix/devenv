@@ -94,6 +94,7 @@ pub fn spawn_supervisor(
                 extensions: config.watch.extensions.clone(),
                 ignore: config.watch.ignore.clone(),
                 recursive: true,
+                ..Default::default()
             },
             &name,
         );
