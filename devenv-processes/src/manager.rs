@@ -389,20 +389,30 @@ impl NativeProcessManager {
             .map(|w| w.require_ready)
             .unwrap_or(true);
 
-        // Check if we need TCP probe for readiness (listen sockets without notify)
-        let tcp_probe_address =
-            if !config.listen.is_empty() && config.notify.as_ref().is_none_or(|n| !n.enable) {
-                // Find the first TCP listen socket
-                config.listen.iter().find_map(|spec| {
+        // Check if we need TCP probe for readiness (listen sockets or allocated ports, without notify)
+        let tcp_probe_address = if config.notify.as_ref().is_none_or(|n| !n.enable) {
+            // First try listen sockets
+            config
+                .listen
+                .iter()
+                .find_map(|spec| {
                     if spec.kind == crate::config::ListenKind::Tcp {
                         spec.address.clone()
                     } else {
                         None
                     }
                 })
-            } else {
-                None
-            };
+                // Fall back to the first allocated port
+                .or_else(|| {
+                    config
+                        .ports
+                        .values()
+                        .next()
+                        .map(|port| format!("127.0.0.1:{}", port))
+                })
+        } else {
+            None
+        };
 
         tokio::spawn(async move {
             let mut restart_count = 0usize;

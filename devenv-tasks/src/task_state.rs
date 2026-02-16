@@ -297,12 +297,13 @@ impl TaskState {
         merged_env.extend(config.env.clone());
         config.env = merged_env;
 
-        // Check if we need to wait for readiness (notify enabled or has listen sockets)
+        // Check if we need to wait for readiness (notify enabled, has listen sockets, or has allocated ports)
         let requires_ready_wait = config.notify.as_ref().map_or(false, |n| n.enable)
             || config
                 .listen
                 .iter()
-                .any(|spec| spec.kind == ListenKind::Tcp);
+                .any(|spec| spec.kind == ListenKind::Tcp)
+            || !config.ports.is_empty();
 
         // Start the process via the manager (which tracks it for shutdown)
         manager.start_command(&config, parent_id).await?;

@@ -305,10 +305,15 @@ impl Tasks {
                         let has_listen = dep_task.task.process.as_ref().map_or(false, |p| {
                             p.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
                         });
-                        if !has_notify && !has_listen {
+                        let has_ports = dep_task
+                            .task
+                            .process
+                            .as_ref()
+                            .map_or(false, |p| !p.ports.is_empty());
+                        if !has_notify && !has_listen && !has_ports {
                             validation_errors.push(format!(
-                                "Task '{}' depends on '{}@ready' but process has no notify.enable or TCP listen config. \
-                                 Add notify.enable = true or configure a TCP listen socket for the process.",
+                                "Task '{}' depends on '{}@ready' but process has no notify.enable, TCP listen config, or allocated ports. \
+                                 Add notify.enable = true, configure a TCP listen socket, or allocate ports for the process.",
                                 task_state.task.name, dep_spec.name
                             ));
                         }
@@ -347,10 +352,15 @@ impl Tasks {
                         let has_listen = task_state.task.process.as_ref().map_or(false, |p| {
                             p.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
                         });
-                        if !has_notify && !has_listen {
+                        let has_ports = task_state
+                            .task
+                            .process
+                            .as_ref()
+                            .map_or(false, |p| !p.ports.is_empty());
+                        if !has_notify && !has_listen && !has_ports {
                             validation_errors.push(format!(
-                                "Process '{}' has tasks depending on it via @ready but has no notify.enable or TCP listen config. \
-                                 Add notify.enable = true or configure a TCP listen socket for the process.",
+                                "Process '{}' has tasks depending on it via @ready but has no notify.enable, TCP listen config, or allocated ports. \
+                                 Add notify.enable = true, configure a TCP listen socket, or allocate ports for the process.",
                                 task_state.task.name
                             ));
                         }
