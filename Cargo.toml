@@ -99,6 +99,7 @@ schematic = { version = "0.18.12", features = [
   "renderer_json_schema",
 ] }
 secrecy = "0.10"
+# https://github.com/mikaelmello/inquire/pull/330
 secretspec = { git = "https://github.com/cachix/secretspec", tag = "v0.7.1" }
 serde = { version = "1.0.226", features = ["derive"] }
 serde_json = "1.0.145"
@@ -175,7 +176,9 @@ crossterm = "0.28.1"
 
 [patch.crates-io]
 # Patched TUI dependencies to supported rendering to stderr
+# https://github.com/ccbrown/iocraft/pull/157
 iocraft = { git = "https://github.com/sandydoo/iocraft", branch = "feat-configure-output" }
+# https://github.com/crossterm-rs/crossterm/pull/1026
 crossterm = { git = "https://github.com/sandydoo/crossterm", branch = "0.28-cachix" }
 
 
