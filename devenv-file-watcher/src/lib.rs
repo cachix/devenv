@@ -61,12 +61,6 @@ pub struct WatcherHandle {
     wx: Option<Arc<Watchexec>>,
 }
 
-/// Token sent once the spawned watchexec task has applied its initial
-/// configuration (paths, filterer, throttle) and is about to enter
-/// the event loop.  Awaiting this in `FileWatcher::new()` guarantees
-/// the OS watcher is active before the constructor returns.
-struct WatcherReady;
-
 impl WatcherHandle {
     /// Adds a path to watch (non-recursive, for individual files from builders).
     pub fn watch(&self, path: &Path) -> Result<(), WatcherError> {
@@ -147,10 +141,6 @@ impl FileWatcher {
             }
         }
 
-        let extensions = config.extensions;
-        let ignore = config.ignore;
-        let recursive = config.recursive;
-        let throttle = config.throttle;
         let watch_name = name.to_owned();
         let watch_tx = tx.clone();
 
@@ -183,75 +173,80 @@ impl FileWatcher {
             wx: Some(wx.clone()),
         };
 
-        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<WatcherReady>();
+        // Configure watchexec before spawning its event loop so the OS
+        // watcher is fully set up by the time `new()` returns.
+        let ignores: Vec<(String, Option<PathBuf>)> = config
+            .ignore
+            .iter()
+            .map(|pattern| {
+                let glob_pattern = if pattern.contains('/') || pattern.starts_with("**") {
+                    pattern.clone()
+                } else {
+                    format!("**/{}", pattern)
+                };
+                (glob_pattern, None)
+            })
+            .collect();
 
+        let origin = paths.first().cloned().unwrap_or_else(|| PathBuf::from("."));
+
+        let filterer = match GlobsetFilterer::new(
+            &origin,
+            std::iter::empty::<(String, Option<PathBuf>)>(),
+            ignores,
+            std::iter::empty::<PathBuf>(),
+            std::iter::empty(),
+            config.extensions.iter().map(OsString::from),
+        )
+        .await
+        {
+            Ok(f) => Arc::new(f),
+            Err(e) => {
+                warn!("Failed to create filterer for {}: {}", watch_name, e);
+                return Self {
+                    rx,
+                    _tx: tx,
+                    handle,
+                    task: None,
+                };
+            }
+        };
+
+        if config.recursive {
+            wx.config.pathset(paths.iter().map(|p| p.as_path()));
+        } else {
+            // For non-recursive mode (individual files), watch parent
+            // directories. FSEvents on macOS operates at directory
+            // granularity and cannot watch individual files.
+            let parents: HashSet<&Path> = paths.iter().filter_map(|p| p.parent()).collect();
+            wx.config
+                .pathset(parents.into_iter().map(WatchedPath::non_recursive));
+        }
+        wx.config.filterer(filterer);
+        wx.config.throttle(config.throttle);
+
+        let mut watch_info = format!(
+            "File watcher started for {} watching {:?}",
+            watch_name, paths
+        );
+        if !config.extensions.is_empty() {
+            watch_info.push_str(&format!(" (extensions: {:?})", config.extensions));
+        }
+        info!("{}", watch_info);
+
+        // Only spawn the long-running event loop.
         let task_wx = wx.clone();
         let task = tokio::spawn(async move {
-            let ignores: Vec<(String, Option<PathBuf>)> = ignore
-                .iter()
-                .map(|pattern| {
-                    let glob_pattern = if pattern.contains('/') || pattern.starts_with("**") {
-                        pattern.clone()
-                    } else {
-                        format!("**/{}", pattern)
-                    };
-                    (glob_pattern, None)
-                })
-                .collect();
-
-            let origin = paths.first().cloned().unwrap_or_else(|| PathBuf::from("."));
-
-            let filterer = match GlobsetFilterer::new(
-                &origin,
-                std::iter::empty::<(String, Option<PathBuf>)>(),
-                ignores,
-                std::iter::empty::<PathBuf>(),
-                std::iter::empty(),
-                extensions.iter().map(OsString::from),
-            )
-            .await
-            {
-                Ok(f) => Arc::new(f),
-                Err(e) => {
-                    warn!("Failed to create filterer for {}: {}", watch_name, e);
-                    let _ = ready_tx.send(WatcherReady);
-                    return;
-                }
-            };
-
-            if recursive {
-                task_wx.config.pathset(paths.iter().map(|p| p.as_path()));
-            } else {
-                // For non-recursive mode (individual files), watch parent
-                // directories. FSEvents on macOS operates at directory
-                // granularity and cannot watch individual files.
-                let parents: HashSet<&Path> = paths.iter().filter_map(|p| p.parent()).collect();
-                task_wx
-                    .config
-                    .pathset(parents.into_iter().map(WatchedPath::non_recursive));
-            }
-            task_wx.config.filterer(filterer);
-            task_wx.config.throttle(throttle);
-
-            let mut watch_info = format!(
-                "File watcher started for {} watching {:?}",
-                watch_name, paths
-            );
-            if !extensions.is_empty() {
-                watch_info.push_str(&format!(" (extensions: {:?})", extensions));
-            }
-            info!("{}", watch_info);
-
-            let _ = ready_tx.send(WatcherReady);
-
             if let Err(e) = task_wx.main().await {
                 warn!("File watcher for {} stopped: {}", watch_name, e);
             }
         });
 
-        // Wait for the spawned task to finish configuring the OS watcher
-        // before returning, so callers never miss early events.
-        let _ = ready_rx.await;
+        // Yield so the spawned event loop gets polled and starts the OS
+        // watcher.  Without this, on a single-threaded runtime the spawn
+        // won't run until the caller's next await point, and early file
+        // changes would be missed.
+        tokio::task::yield_now().await;
 
         Self {
             rx,
