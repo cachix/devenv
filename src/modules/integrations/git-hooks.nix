@@ -143,24 +143,35 @@ in
                 exit 0
               fi
 
-              GIT_WC=$(${git} rev-parse --show-toplevel)
-              git_dir_abs=$(${git} -C "$GIT_WC" rev-parse --path-format=absolute --git-dir)
-              common_dir_abs=$(${git} -C "$GIT_WC" rev-parse --path-format=absolute --git-common-dir)
-              common_dir=$(${git} -C "$GIT_WC" rev-parse --path-format=relative --git-common-dir)
+              did_install_hooks=0
 
-              # In linked worktrees, store hooksPath in worktree-local config so
-              # each worktree resolves the relative path against its own root.
-              config_scope="--local"
-              if [ "$git_dir_abs" != "$common_dir_abs" ]; then
-                ${git} config --local extensions.worktreeConfig true
-                ${git} config --local --unset-all core.hooksPath || true
-                config_scope="--worktree"
-              fi
+              setup_hooks_path() {
+                GIT_WC=$(${git} rev-parse --show-toplevel)
+                git_dir_abs=$(${git} -C "$GIT_WC" rev-parse --path-format=absolute --git-dir)
+                common_dir_abs=$(${git} -C "$GIT_WC" rev-parse --path-format=absolute --git-common-dir)
+                common_dir=$(${git} -C "$GIT_WC" rev-parse --path-format=relative --git-common-dir)
+                common_is_bare=$(${git} config --file "$common_dir_abs/config" --bool core.bare || true)
 
-              ${git} config "$config_scope" core.hooksPath ""
+                # In linked worktrees, store hooksPath in worktree-local config so
+                # each worktree resolves the relative path against its own root.
+                config_scope="--local"
+                hooks_path="$common_dir/hooks"
+                if [ "$git_dir_abs" != "$common_dir_abs" ] && [ "$common_is_bare" != "true" ]; then
+                  ${git} config --local extensions.worktreeConfig true
+                  ${git} config --local --unset-all core.hooksPath || true
+                  config_scope="--worktree"
+                elif [ "$git_dir_abs" != "$common_dir_abs" ] && [ "$common_is_bare" = "true" ]; then
+                  hooks_path="$common_dir_abs/hooks"
+                fi
+
+                ${git} config "$config_scope" core.hooksPath ""
+              }
 
               # Install hooks for configured stages
               if [ -z "${lib.concatStringsSep " " installStages}" ]; then
+                did_install_hooks=1
+                setup_hooks_path
+
                 # Default: install pre-commit hook
                 ${executable} install -c ${configPath}
               else
@@ -170,16 +181,28 @@ in
                       # Skip manual stage - it's not a git hook
                       ;;
                     commit|merge-commit|push)
+                      if [ "$did_install_hooks" -eq 0 ]; then
+                        did_install_hooks=1
+                        setup_hooks_path
+                      fi
+
                       ${executable} install -c ${configPath} -t "pre-$stage"
                       ;;
                     *)
+                      if [ "$did_install_hooks" -eq 0 ]; then
+                        did_install_hooks=1
+                        setup_hooks_path
+                      fi
+
                       ${executable} install -c ${configPath} -t "$stage"
                       ;;
                   esac
                 done
               fi
 
-              ${git} config "$config_scope" core.hooksPath "$common_dir/hooks"
+              if [ "$did_install_hooks" -eq 1 ]; then
+                ${git} config "$config_scope" core.hooksPath "$hooks_path"
+              fi
             '';
           after = [ "devenv:files" ];
           before = [ "devenv:enterShell" ];
