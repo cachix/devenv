@@ -110,6 +110,7 @@ ser_nix = "0.2.2"
 similar = "2.7.0"
 sha2 = "0.10.9"
 shell-escape = "0.1.5"
+strip-ansi-escapes = "0.2"
 sqlx = { version = "0.8.6", features = ["time", "sqlite", "runtime-tokio"] }
 strum = { version = "0.27", features = ["derive"] }
 tempfile = "3.23.0"

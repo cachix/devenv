@@ -29,12 +29,13 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 # ANSI stripping
-regex = { workspace = true }
+strip-ansi-escapes = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [dev-dependencies]
+regex = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tokio-test = "0.4"
 tempfile = { workspace = true }

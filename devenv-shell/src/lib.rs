@@ -31,7 +31,7 @@ pub use status_line::{
 };
 
 // Task execution
-pub use task_runner::{PtyTaskRunner, TaskRunnerError, strip_ansi_codes};
+pub use task_runner::{PtyTaskRunner, TaskRunnerError};
 
 // Main session
 pub use session::{SessionConfig, SessionError, SessionIo, ShellSession, TuiHandoff};

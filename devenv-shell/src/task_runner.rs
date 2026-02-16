@@ -5,9 +5,9 @@
 
 use crate::protocol::{PtyTaskRequest, PtyTaskResult};
 use crate::pty::Pty;
-use regex::Regex;
 use std::sync::Arc;
 use std::time::Instant;
+use strip_ansi_escapes::strip_str;
 use thiserror::Error;
 use tokio::sync::mpsc;
 
@@ -22,23 +22,6 @@ pub enum TaskRunnerError {
     ShellNotReady,
     #[error("spawn_blocking failed: {0}")]
     SpawnBlocking(String),
-}
-
-/// Strip ANSI escape sequences from a string.
-///
-/// Used for marker detection in PTY output where ANSI codes can appear
-/// around markers due to terminal control sequences.
-pub fn strip_ansi_codes(s: &str) -> String {
-    // Match ANSI escape sequences:
-    // - CSI sequences: ESC [ followed by parameters (digits, semicolons, ?, >) ending with a letter
-    //   Example: \x1b[?2004l (bracketed paste mode), \x1b[0m (reset), \x1b[1;32m (color)
-    // - OSC sequences: ESC ] ... BEL
-    // - Character set selection: ESC ( or ESC ) followed by character
-    static ANSI_RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    let re = ANSI_RE.get_or_init(|| {
-        Regex::new(r"\x1b\[[0-9;?>=]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[()][0-9A-Z]").unwrap()
-    });
-    re.replace_all(s, "").to_string()
 }
 
 /// Marker-based task execution in PTY.
@@ -209,7 +192,7 @@ impl PtyTaskRunner {
                 output_buffer = output_buffer[newline_pos + 1..].to_string();
 
                 // Strip ANSI codes and trim whitespace for marker detection
-                let clean = strip_ansi_codes(&line);
+                let clean = strip_str(&line);
                 let trimmed = clean.trim();
 
                 tracing::trace!("execute: line (started={}): {:?}", started, trimmed);
@@ -397,7 +380,7 @@ impl PtyTaskRunner {
                     // PROMPT_COMMAND output between them.
                     let match_count = buffer
                         .lines()
-                        .filter(|line| strip_ansi_codes(line).trim() == sentinel)
+                        .filter(|line| strip_str(line).trim() == sentinel)
                         .count();
                     if match_count >= 2 {
                         break;
@@ -558,7 +541,7 @@ impl PtyTaskRunner {
                 let line = output_buffer[..newline_pos].to_string();
                 output_buffer = output_buffer[newline_pos + 1..].to_string();
 
-                let clean = strip_ansi_codes(&line);
+                let clean = strip_str(&line);
                 let trimmed = clean.trim();
 
                 tracing::trace!("execute_with_vt: line (started={}): {:?}", started, trimmed);
@@ -613,46 +596,5 @@ impl PtyTaskRunner {
             stderr_lines: Vec::new(),
             error,
         });
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_strip_ansi_codes() {
-        // Basic ANSI color code
-        assert_eq!(strip_ansi_codes("\x1b[32mgreen\x1b[0m"), "green");
-
-        // CSI sequence with multiple params
-        assert_eq!(
-            strip_ansi_codes("\x1b[1;32mbold green\x1b[0m"),
-            "bold green"
-        );
-
-        // Bracketed paste mode
-        assert_eq!(strip_ansi_codes("\x1b[?2004ltext"), "text");
-
-        // No ANSI codes
-        assert_eq!(strip_ansi_codes("plain text"), "plain text");
-
-        // Mixed content
-        assert_eq!(
-            strip_ansi_codes("start\x1b[31mred\x1b[0mend"),
-            "startredend"
-        );
-    }
-
-    #[test]
-    fn test_strip_ansi_codes_osc() {
-        // OSC sequence (title change)
-        assert_eq!(strip_ansi_codes("\x1b]0;title\x07text"), "text");
-    }
-
-    #[test]
-    fn test_strip_ansi_codes_charset() {
-        // Character set selection
-        assert_eq!(strip_ansi_codes("\x1b(Btext"), "text");
     }
 }
