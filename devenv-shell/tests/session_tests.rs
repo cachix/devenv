@@ -232,13 +232,46 @@ fn render(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String> {
         .collect()
 }
 
-/// Insta filters to normalize timing and spinner in status line snapshots.
+/// Insta filters to normalize spinner in status line snapshots.
 fn status_line_filters() -> Vec<(&'static str, &'static str)> {
-    vec![
-        (r"[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]", "[SPIN]"),
-        (r" for \d+(m \d+|\.\d+)?(ms|s)", " for [TIME]"),
-        (r" in \d+(m \d+|\.\d+)?(ms|s)", " in [TIME]"),
-    ]
+    vec![(r"[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]", "[SPIN]")]
+}
+
+/// Replace timing values with [TIME] while preserving line width.
+///
+/// Duration text width varies with actual timing (e.g. "0ms" vs "10ms"),
+/// which changes iocraft's SpaceBetween gap. A simple regex filter would
+/// normalize the duration text but leave the gap different, causing flaky
+/// snapshots. This function compensates by adjusting the gap.
+fn filter_timing(line: &str) -> String {
+    let time_re = regex::Regex::new(r"\d+(?:m \d+|\.\d+)?(?:ms|s)").unwrap();
+    let gap_re = regex::Regex::new(r" {3,}").unwrap();
+
+    if let Some(tm) = time_re.find(line) {
+        let replacement = "[TIME]";
+        let width_delta = replacement.len() as isize - tm.as_str().len() as isize;
+        let replaced = format!(
+            "{}{}{}",
+            &line[..tm.start()],
+            replacement,
+            &line[tm.end()..]
+        );
+
+        // Adjust the right-alignment gap to compensate for the width change
+        if let Some(gm) = gap_re.find(&replaced) {
+            let new_gap = (gm.as_str().len() as isize - width_delta).max(2) as usize;
+            format!(
+                "{}{}{}",
+                &replaced[..gm.start()],
+                " ".repeat(new_gap),
+                &replaced[gm.end()..]
+            )
+        } else {
+            replaced
+        }
+    } else {
+        line.to_string()
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -343,7 +376,7 @@ async fn test_build_lifecycle_status_line() {
     ));
     let rows = render(&all_bytes, 80, 24);
     insta::with_settings!({ filters => status_line_filters() }, {
-        insta::assert_snapshot!("building", rows[23]);
+        insta::assert_snapshot!("building", filter_timing(&rows[23]));
     });
 
     // Reload ready state
@@ -360,7 +393,7 @@ async fn test_build_lifecycle_status_line() {
     ));
     let rows = render(&all_bytes, 80, 24);
     insta::with_settings!({ filters => status_line_filters() }, {
-        insta::assert_snapshot!("reload_ready", rows[23]);
+        insta::assert_snapshot!("reload_ready", filter_timing(&rows[23]));
     });
 
     let _ = stdin_ours.write_all(b"\n");

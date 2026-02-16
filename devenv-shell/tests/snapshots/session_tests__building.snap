@@ -1,5 +1,5 @@
 ---
 source: devenv-shell/tests/session_tests.rs
-expression: "rows[23]"
+expression: "filter_timing(&rows[23])"
 ---
  [SPIN] devenv building for [TIME], changed devenv.nix
