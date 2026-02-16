@@ -143,7 +143,21 @@ in
                 exit 0
               fi
 
-              ${git} config --local core.hooksPath ""
+              GIT_WC=$(${git} rev-parse --show-toplevel)
+              git_dir_abs=$(${git} -C "$GIT_WC" rev-parse --path-format=absolute --git-dir)
+              common_dir_abs=$(${git} -C "$GIT_WC" rev-parse --path-format=absolute --git-common-dir)
+              common_dir=$(${git} -C "$GIT_WC" rev-parse --path-format=relative --git-common-dir)
+
+              # In linked worktrees, store hooksPath in worktree-local config so
+              # each worktree resolves the relative path against its own root.
+              config_scope="--local"
+              if [ "$git_dir_abs" != "$common_dir_abs" ]; then
+                ${git} config --local extensions.worktreeConfig true
+                ${git} config --local --unset-all core.hooksPath || true
+                config_scope="--worktree"
+              fi
+
+              ${git} config "$config_scope" core.hooksPath ""
 
               # Install hooks for configured stages
               if [ -z "${lib.concatStringsSep " " installStages}" ]; then
@@ -165,9 +179,7 @@ in
                 done
               fi
 
-              GIT_WC=$(${git} rev-parse --show-toplevel)
-              common_dir=$(${git} -C "$GIT_WC" rev-parse --path-format=relative --git-common-dir)
-              ${git} config --local core.hooksPath "$common_dir/hooks"
+              ${git} config "$config_scope" core.hooksPath "$common_dir/hooks"
             '';
           after = [ "devenv:files" ];
           before = [ "devenv:enterShell" ];
