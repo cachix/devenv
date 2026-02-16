@@ -20,7 +20,7 @@ macro_rules! assert_tui_snapshot {
 
 use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Evaluate, Fetch, FetchKind, Message,
-    Operation, Task, TaskInfo, Timestamp,
+    Operation, Process, Task, TaskInfo, Timestamp,
 };
 use devenv_tui::{ActivityModel, RenderContext, UiState, view::view};
 use iocraft::prelude::*;
@@ -1564,4 +1564,75 @@ fn test_task_diamond_dependency() {
     let output = render_to_string(&model, &ui_state);
     // Shared task should appear under both branch-a and branch-b
     assert_tui_snapshot!(output);
+}
+
+/// Test that when activities overflow a small terminal, the bottom content
+/// (running processes with logs) remains visible and the summary line is last.
+#[test]
+fn test_overflow_clips_top_keeps_bottom() {
+    let model = ActivityModel::new();
+    let mut ui_state = UiState::new();
+    // Use a very small terminal height to force overflow
+    ui_state.set_terminal_size(TEST_WIDTH, 10);
+
+    let mut model = model;
+
+    // Create several completed activities (these should get clipped at the top)
+    for i in 1..=5 {
+        model.apply_activity_event(ActivityEvent::Build(Build::Start {
+            id: i,
+            name: format!("completed-build-{}", i),
+            parent: None,
+            derivation_path: None,
+            timestamp: Timestamp::now(),
+        }));
+        model.apply_activity_event(ActivityEvent::Build(Build::Complete {
+            id: i,
+            outcome: ActivityOutcome::Success,
+            timestamp: Timestamp::now(),
+        }));
+    }
+
+    // Create a running process with logs (this should remain visible at the bottom)
+    model.apply_activity_event(ActivityEvent::Process(Process::Start {
+        id: 10,
+        name: "web-server".to_string(),
+        parent: None,
+        command: None,
+        ports: vec![],
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Process(Process::Log {
+        id: 10,
+        line: "Listening on port 3000".to_string(),
+        is_error: false,
+        timestamp: Timestamp::now(),
+    }));
+
+    let output = render_to_string(&model, &ui_state);
+
+    // The last non-empty line should be the summary/status line (contains nav hints)
+    let lines: Vec<&str> = output.lines().collect();
+    let last_non_empty = lines.iter().rev().find(|l| !l.trim().is_empty()).unwrap();
+    assert!(
+        last_non_empty.contains("nav"),
+        "Last line should be the summary status line, got: {:?}",
+        last_non_empty
+    );
+
+    // The process log should be visible
+    assert!(
+        output.contains("Listening on port 3000"),
+        "Process log line should be visible in overflow output.\nFull output:\n{}",
+        output
+    );
+
+    // The very last line should be the summary (no trailing empty lines)
+    let last_line = lines.last().unwrap();
+    assert!(
+        !last_line.trim().is_empty(),
+        "Last line should be summary, not empty.\nFull output (debug):\n{:?}",
+        output
+    );
 }

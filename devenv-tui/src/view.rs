@@ -169,7 +169,7 @@ pub fn view(
 
     element! {
         ContextProvider(value: Context::owned(terminal_size)) {
-            View(flex_direction: FlexDirection::Column, max_height: terminal_size.height as u32, width: 100pct) {
+            View(flex_direction: FlexDirection::Column, max_height: terminal_size.height as u32, width: 100pct, overflow: Overflow::Hidden, justify_content: JustifyContent::FlexEnd) {
                 #(children)
             }
         }
