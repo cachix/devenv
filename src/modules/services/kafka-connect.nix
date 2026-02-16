@@ -202,7 +202,18 @@ in
     let
       pkg = kafkaCfg.package;
 
-      configFile = generator "connect-standalone.properties" stringlySettings;
+      # Overlay allocated port at config file generation to avoid infinite
+      # recursion.  Writing back into cfg.settings would create a cycle
+      # because basePort reads from the same attrs.
+      portOverrides = {
+        "listeners" = mkPropertyString (
+          if cfg.settings."listeners" != null && cfg.settings."listeners" != [ ]
+          then map (l: rebuildListener l allocatedPort) cfg.settings."listeners"
+          else [ "http://localhost:${toString allocatedPort}" ]
+        );
+      };
+
+      configFile = generator "connect-standalone.properties" (stringlySettings // portOverrides);
 
       # TODO: make it work with .properties files?
       # connectorFiles = lib.lists.map (c: generator "connector-${c.name}.properties" (stringlyGeneric c)) cfg.initialConnectors;
@@ -215,11 +226,9 @@ in
       '';
     in
     (lib.mkIf cfg.enable (lib.mkIf kafkaCfg.enable {
-      # Set listeners with allocated port if not explicitly configured
-      services.kafka.connect.settings."listeners" = lib.mkDefault [ "http://localhost:${toString allocatedPort}" ];
-
       processes.kafka-connect = {
         ports.main.allocate = basePort;
+        after = [ "devenv:processes:kafka" ];
         exec = "${startKafkaConnect}/bin/start-kafka-connect";
 
         process-compose = {
