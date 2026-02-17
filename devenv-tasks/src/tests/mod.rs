@@ -1835,6 +1835,81 @@ async fn test_run_mode() -> Result<(), Error> {
 }
 
 #[tokio::test]
+async fn test_any_scheduled_task_needs_sudo_excludes_unrelated_tasks() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let root_script = create_basic_script("root")?;
+    let unrelated_script = create_basic_script("unrelated")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["app:root"],
+            "run_mode": "single",
+            "tasks": [
+                {
+                    "name": "app:root",
+                    "command": root_script.to_str().unwrap(),
+                    "use_sudo": false
+                },
+                {
+                    "name": "app:unrelated",
+                    "command": unrelated_script.to_str().unwrap(),
+                    "use_sudo": true
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    assert!(!tasks.any_scheduled_task_needs_sudo().await);
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_any_scheduled_task_needs_sudo_includes_selected_dependencies() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let dep_script = create_basic_script("dep")?;
+    let root_script = create_basic_script("root")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["app:root"],
+            "run_mode": "before",
+            "tasks": [
+                {
+                    "name": "app:dep",
+                    "command": dep_script.to_str().unwrap(),
+                    "use_sudo": true
+                },
+                {
+                    "name": "app:root",
+                    "command": root_script.to_str().unwrap(),
+                    "after": ["app:dep"],
+                    "use_sudo": false
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    assert!(tasks.any_scheduled_task_needs_sudo().await);
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_before_tasks() -> Result<(), Error> {
     // Create a unique tempdir for this test
     let temp_dir = TempDir::new().unwrap();

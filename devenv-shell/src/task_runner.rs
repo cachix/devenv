@@ -111,11 +111,20 @@ impl PtyTaskRunner {
 
         // Change directory if specified
         if let Some(ref cwd) = request.cwd {
-            cmd_parts.push(format!("cd '{cwd}'"));
+            let escaped = cwd.replace('\'', "'\\''");
+            cmd_parts.push(format!("cd '{escaped}'"));
         }
 
-        // Execute the command
-        cmd_parts.push(request.command.clone());
+        // Execute the command.
+        // Note: the command is expected to be a Nix store path (simple executable path),
+        // not an arbitrary shell expression. The sudo path wraps it as a single argument
+        // to `sudo -E`, so compound shell commands would not work correctly.
+        if request.use_sudo {
+            let escaped = request.command.replace('\'', "'\\''");
+            cmd_parts.push(format!("sudo -E '{escaped}'"));
+        } else {
+            cmd_parts.push(request.command.clone());
+        }
 
         // Echo end marker with exit code
         cmd_parts.push(format!("echo '{end_marker_prefix}'$?'__'"));
@@ -468,10 +477,20 @@ impl PtyTaskRunner {
         }
 
         if let Some(ref cwd) = request.cwd {
-            cmd_parts.push(format!("cd '{cwd}'"));
+            let escaped = cwd.replace('\'', "'\\''");
+            cmd_parts.push(format!("cd '{escaped}'"));
         }
 
-        cmd_parts.push(request.command.clone());
+        // Execute the command.
+        // Note: the command is expected to be a Nix store path (simple executable path),
+        // not an arbitrary shell expression. The sudo path wraps it as a single argument
+        // to `sudo -E`, so compound shell commands would not work correctly.
+        if request.use_sudo {
+            let escaped = request.command.replace('\'', "'\\''");
+            cmd_parts.push(format!("sudo -E '{escaped}'"));
+        } else {
+            cmd_parts.push(request.command.clone());
+        }
         cmd_parts.push(format!("echo '{end_marker_prefix}'$?'__'"));
 
         // Prefix with space to prevent command from being saved to shell history

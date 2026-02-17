@@ -1036,6 +1036,19 @@ impl Devenv {
         Ok(tasks)
     }
 
+    /// Pre-authenticate with sudo if any scheduled task needs it.
+    /// In TUI mode, only checks for cached credentials (can't show a password prompt).
+    /// In non-TUI mode, prompts the user interactively if needed.
+    /// Returns a scoped guard that refreshes sudo credentials periodically.
+    async fn maybe_sudo_preauth(
+        &self,
+        tasks_runner: &tasks::Tasks,
+    ) -> Result<Option<tasks::SudoCredentialRefresh>> {
+        Ok(tasks_runner
+            .maybe_sudo_preauth(self.shutdown.cancellation_token(), !self.global_options.tui)
+            .await?)
+    }
+
     /// Run tasks and return their outputs as JSON string.
     pub async fn tasks_run(
         &self,
@@ -1112,6 +1125,8 @@ impl Devenv {
             .with_refresh_task_cache(self.global_options.refresh_task_cache)
             .build()
             .await?;
+
+        let _sudo_refresh = self.maybe_sudo_preauth(&tasks).await?;
 
         // In TUI mode, skip TasksUi to avoid corrupting the TUI display
         // TUI captures activity events directly via the channel initialized in main.rs
@@ -1194,6 +1209,8 @@ impl Devenv {
             .build()
             .await?;
 
+        let _sudo_refresh = self.maybe_sudo_preauth(&tasks).await?;
+
         // In TUI mode, skip TasksUi to avoid corrupting the TUI display
         // TUI captures activity events directly via the channel initialized in main.rs
         let outputs = if self.global_options.tui {
@@ -1264,6 +1281,8 @@ impl Devenv {
             .with_executor(executor)
             .build()
             .await?;
+
+        let _sudo_refresh = self.maybe_sudo_preauth(&tasks).await?;
 
         // In TUI mode, run without TasksUi (TUI captures activity events directly)
         let outputs = tasks.run(false).await;
@@ -1668,6 +1687,8 @@ impl Devenv {
                 .build()
                 .await?;
 
+            let _sudo_refresh = self.maybe_sudo_preauth(&enter_shell_tasks).await?;
+
             let outputs = enter_shell_tasks.run(false).await;
 
             // Merge task-exported env vars (e.g., PATH with venv/bin) on top of
@@ -1744,6 +1765,8 @@ impl Devenv {
                 .build()
                 .await
                 .map_err(|e| miette!("Failed to build task runner: {}", e))?;
+
+                let _sudo_refresh = self.maybe_sudo_preauth(&tasks_runner).await?;
 
                 let command_rx = options.command_rx.take();
 

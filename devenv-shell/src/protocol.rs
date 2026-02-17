@@ -60,6 +60,8 @@ pub struct PtyTaskRequest {
     pub id: u64,
     /// The command to execute (path to script).
     pub command: String,
+    /// Whether to run the command with sudo.
+    pub use_sudo: bool,
     /// Environment variables to set before execution.
     pub env: BTreeMap<String, String>,
     /// Working directory (optional).

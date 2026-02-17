@@ -211,6 +211,47 @@ impl Tasks {
         status
     }
 
+    /// Returns true if any task in the scheduled execution set needs sudo.
+    ///
+    /// Note: this intentionally ignores `sudo_context` (i.e., when devenv itself
+    /// was invoked under sudo) because in that case credentials are already available.
+    pub async fn any_scheduled_task_needs_sudo(&self) -> bool {
+        for index in &self.tasks_order {
+            let task_state = self.graph[*index].read().await;
+            if task_state.task.use_sudo {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Pre-authenticate with sudo if any scheduled task needs it.
+    ///
+    /// When `allow_interactive` is true, prompts the user for a password if
+    /// credentials are not cached. When false, only checks for cached credentials
+    /// (suitable for TUI mode or non-TTY environments).
+    ///
+    /// Returns a scoped guard that refreshes sudo credentials periodically.
+    pub async fn maybe_sudo_preauth(
+        &self,
+        cancel: tokio_util::sync::CancellationToken,
+        allow_interactive: bool,
+    ) -> miette::Result<Option<crate::SudoCredentialRefresh>> {
+        if !self.any_scheduled_task_needs_sudo().await {
+            return Ok(None);
+        }
+
+        if allow_interactive {
+            crate::privileges::ensure_sudo_authenticated().await?;
+        } else {
+            crate::privileges::ensure_sudo_authenticated_noninteractive()?;
+        }
+
+        Ok(Some(crate::privileges::spawn_sudo_credential_refresh(
+            cancel,
+        )))
+    }
+
     fn resolve_namespace_roots(
         roots: &[String],
         task_indices: &HashMap<String, NodeIndex>,

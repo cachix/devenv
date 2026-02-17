@@ -122,8 +122,10 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
     // When there's no TTY (e.g., running under process-compose), we should show normal output since
     // there's no TUI to corrupt and process-compose needs to capture our stdout/stderr for its logs.
     let has_tty = is_tty();
-    let mut verbosity = if let Ok(cmdline) = env::var("DEVENV_CMDLINE") {
-        let cmdline = cmdline.to_lowercase();
+    let cmdline = env::var("DEVENV_CMDLINE")
+        .ok()
+        .map(|cmdline| cmdline.to_lowercase());
+    let mut verbosity = if let Some(cmdline) = cmdline.as_deref() {
         if cmdline.contains("--quiet") || cmdline.contains(" -q ") {
             VerbosityLevel::Quiet
         } else if cmdline.contains("--verbose") || cmdline.contains(" -v ") {
@@ -147,6 +149,16 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
         verbosity = VerbosityLevel::Quiet;
     }
 
+    // Match devenv's sudo preauth behavior:
+    // - in TUI mode, do non-interactive credential checks only
+    // - in non-TUI mode with a TTY, allow an interactive sudo prompt
+    let running_under_tui = has_tty
+        && cmdline
+            .as_deref()
+            .map(|line| !line.contains("--no-tui"))
+            .unwrap_or(false);
+    let allow_interactive_sudo_prompt = has_tty && !running_under_tui;
+
     match args.command {
         Command::Run {
             roots,
@@ -158,8 +170,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             let mut tasks: Vec<TaskConfig> = fetch_tasks(&task_file)?;
 
             // If --show-output flag is present, enable output for all tasks
-            if let Ok(cmdline) = env::var("DEVENV_CMDLINE") {
-                let cmdline = cmdline.to_lowercase();
+            if let Some(cmdline) = cmdline.as_deref() {
                 if cmdline.contains("--show-output") {
                     for task in &mut tasks {
                         task.show_output = true;
@@ -184,6 +195,13 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             let tasks = Tasks::builder(config, verbosity, Arc::clone(&shutdown))
                 .build()
                 .await?;
+
+            // Ensure sudo credentials are ready before execution if any scheduled task needs sudo.
+            // In non-interactive contexts (e.g. process managers), fail early when no cached creds.
+            let _sudo_refresh = tasks
+                .maybe_sudo_preauth(shutdown.cancellation_token(), allow_interactive_sudo_prompt)
+                .await
+                .map_err(|e| TaskError::Other(e.to_string()))?;
 
             // Initialize activity channel for TasksUi
             let (activity_rx, activity_handle) = devenv_activity::init();

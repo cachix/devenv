@@ -14,7 +14,7 @@ pub use executor::{
     ExecutionContext, ExecutionResult, OutputCallback, PtyExecutor, SubprocessExecutor,
     TaskExecutor, default_executor,
 };
-pub use privileges::SudoContext;
+pub use privileges::{SudoContext, SudoCredentialRefresh};
 pub use tasks::{Tasks, TasksBuilder, compute_display_hierarchy};
 pub use types::{
     DependencyKind, Outputs, TaskCompleted, TaskOutputs, TaskStatus, TaskType, TasksStatus, UiMode,

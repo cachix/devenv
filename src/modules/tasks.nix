@@ -129,6 +129,7 @@ let
               env = config.env;
               cwd = config.cwd;
               show_output = config.showOutput;
+              use_sudo = config.use_sudo;
               process = {
                 use_sudo = config.use_sudo;
                 pseudo_terminal = config.pseudo_terminal;
@@ -210,9 +211,7 @@ let
             type = types.bool;
             default = false;
             description = ''
-              Run this process task with sudo/elevated privileges.
-
-              Only used when type = "process".
+              Run this task with sudo/elevated privileges.
             '';
           };
 

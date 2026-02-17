@@ -25,6 +25,8 @@ pub struct TaskConfig {
     pub cwd: Option<String>,
     #[serde(default)]
     pub show_output: bool,
+    #[serde(default)]
+    pub use_sudo: bool,
     /// Environment variables to set for this task
     #[serde(default)]
     pub env: std::collections::HashMap<String, String>,

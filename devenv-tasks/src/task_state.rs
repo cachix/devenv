@@ -172,19 +172,17 @@ impl TaskState {
         &self,
         cmd: &str,
         outputs: &BTreeMap<String, serde_json::Value>,
+        use_sudo: bool,
     ) -> Result<(Command, tempfile::NamedTempFile)> {
         let (env, outputs_file) = self.prepare_env(outputs)?;
 
-        // If we dropped privileges but have sudo context, restore sudo for the task
-        let mut command = if let Some(_ctx) = &self.sudo_context {
-            // Wrap with sudo to restore elevated privileges
+        let mut command = if use_sudo {
+            // Wrap with sudo to restore elevated privileges.
+            // The command here is a Nix store path to a task script, not an arbitrary shell command.
             let mut sudo_cmd = Command::new("sudo");
-            // Use -E to preserve environment variables
-            // The command here is a store path to a task script, not an arbitrary shell command.
             sudo_cmd.args(["-E", cmd]);
             sudo_cmd
         } else {
-            // Normal execution - no sudo involved
             Command::new(cmd)
         };
 
@@ -460,8 +458,10 @@ impl TaskState {
                     }
                 };
 
+                // Status commands run without sudo — they only check whether a task
+                // needs to run (e.g. file existence), not perform privileged work.
                 let (mut command, _) = self
-                    .prepare_command(cmd, outputs)
+                    .prepare_command(cmd, outputs, false)
                     .wrap_err("Failed to prepare status command")?;
 
                 // Create a Command activity for the status check (automatically parented to task_activity)
@@ -591,7 +591,7 @@ impl TaskState {
             command: cmd,
             cwd: self.task.cwd.as_deref(),
             env,
-            use_sudo: self.sudo_context.is_some(),
+            use_sudo: self.task.use_sudo || self.sudo_context.is_some(),
             output_file_path: outputs_file.path(),
         };
 

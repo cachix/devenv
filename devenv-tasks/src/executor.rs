@@ -324,6 +324,7 @@ impl TaskExecutor for PtyExecutor {
         let request = devenv_shell::PtyTaskRequest {
             id,
             command: ctx.command.to_string(),
+            use_sudo: ctx.use_sudo,
             env,
             cwd: ctx.cwd.map(|s| s.to_string()),
             response_tx,
