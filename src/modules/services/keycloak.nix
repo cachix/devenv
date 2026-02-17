@@ -526,10 +526,6 @@ in
             probe_timeout = 4;
             failure_threshold = 20;
           };
-
-          process-compose = {
-            description = "The keycloak identity and access management server.";
-          };
         };
 
       # Export a single realm.
@@ -552,16 +548,7 @@ in
       processes.keycloak-realm-export-all = mkIf (realmsExport != [ ]) {
         enable = false;
         exec = "${keycloak-realm-export-all}/bin/keycloak-realm-export-all";
-        process-compose = {
-          description = ''
-            Save the configured realms from keycloak, to back them up. You can run it manually.
-          '';
-          depends_on = {
-            keycloak = {
-              condition = "process_completed";
-            };
-          };
-        };
+        after = [ "devenv:processes:keycloak@complete" ];
       };
     };
 }

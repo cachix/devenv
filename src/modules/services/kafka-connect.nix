@@ -238,14 +238,6 @@ in
           };
           initial_delay = 2;
         };
-
-        process-compose = {
-          depends_on = {
-            kafka = {
-              condition = "process_healthy";
-            };
-          };
-        };
       };
 
     }));

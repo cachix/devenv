@@ -55,17 +55,13 @@ in
       ports.main.allocate = basePort;
       exec = "${startScript}/bin/start-influxdb";
 
-      process-compose = {
-        readiness_probe = {
-          exec.command = "${pkgs.curl}/bin/curl -sf http://localhost:${toString allocatedPort}/health";
-          initial_delay_seconds = 2;
-          period_seconds = 10;
-          timeout_seconds = 4;
-          success_threshold = 1;
-          failure_threshold = 5;
-        };
-
-        availability.restart = "on_failure";
+      ready = {
+        exec = "${pkgs.curl}/bin/curl -sf http://localhost:${toString allocatedPort}/health";
+        initial_delay = 2;
+        period = 10;
+        probe_timeout = 4;
+        success_threshold = 1;
+        failure_threshold = 5;
       };
     };
   };
