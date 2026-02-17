@@ -25,26 +25,6 @@ To start the processes, run:
 $ devenv up
 ```
 
-## Restart Policies
-
-Control how processes restart when they exit:
-
-- `on_failure` (default) - restart only on non-zero exit
-- `always` - restart on any exit
-- `never` - never restart
-
-```nix title="devenv.nix"
-{
-  processes.worker = {
-    exec = "worker --queue jobs";
-    restart = {
-      on = "always";
-      max = 10;  # null for unlimited (default: 5)
-    };
-  };
-}
-```
-
 ## Dependencies
 
 Processes can depend on other processes using `after` and `before`:
@@ -63,6 +43,40 @@ Processes can depend on other processes using `after` and `before`:
 ```
 
 Use `@complete` to wait for a process to stop (soft dependency), or `@ready` (default) for readiness.
+
+## Using Pre-built Services
+
+Devenv provides many pre-configured services with proper process management. See the [Services documentation](services/index.md) for available services like:
+
+- [PostgreSQL](services/postgres.md)
+- [Redis](services/redis.md)
+- [MySQL](services/mysql.md)
+- [MongoDB](services/mongodb.md)
+- [Elasticsearch](services/elasticsearch.md)
+
+These services come with sensible defaults, health checks, and proper initialization scripts.
+
+## Restart Policies
+
+!!! tip "New in devenv 2.0"
+
+Control how processes restart when they exit:
+
+- `on_failure` (default) - restart only on non-zero exit
+- `always` - restart on any exit
+- `never` - never restart
+
+```nix title="devenv.nix"
+{
+  processes.worker = {
+    exec = "worker --queue jobs";
+    restart = {
+      on = "always";
+      max = 10;  # null for unlimited (default: 5)
+    };
+  };
+}
+```
 
 ## Ready Probes
 
@@ -217,17 +231,6 @@ Enable systemd-compatible watchdog monitoring. Your process must periodically se
 }
 ```
 
-## Using Pre-built Services
-
-Devenv provides many pre-configured services with proper process management. See the [Services documentation](services/index.md) for available services like:
-
-- [PostgreSQL](services/postgres.md)
-- [Redis](services/redis.md)
-- [MySQL](services/mysql.md)
-- [MongoDB](services/mongodb.md)
-- [Elasticsearch](services/elasticsearch.md)
-
-These services come with sensible defaults, health checks, and proper initialization scripts.
 
 ## Git Integration
 
