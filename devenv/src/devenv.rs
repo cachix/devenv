@@ -2039,7 +2039,7 @@ impl Devenv {
 
         let username = whoami::fallible::username().ok();
 
-        // TODO: remove in the next release
+        // TODO: remove devenv_dotfile_path and derive the relative path inside NixArgs instead
         let dotfile_relative_path = PathBuf::from(format!(
             "./{}",
             self.devenv_dotfile

@@ -3,7 +3,7 @@
 use devenv_core::{
     CliOptionsConfig, Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend, PortAllocator,
 };
-use devenv_nix_backend::{ProjectRoot, load_lock_file, nix_backend::NixRustBackend};
+use devenv_nix_backend::{load_lock_file, nix_backend::NixRustBackend};
 use devenv_nix_backend_macros::nix_test;
 use nix_bindings_fetchers::FetchersSettings;
 use std::fs;
@@ -26,10 +26,15 @@ struct TestNixArgs {
 
 impl TestNixArgs {
     fn new(paths: &DevenvPaths) -> Self {
+        let dotfile_name = paths
+            .dotfile
+            .file_name()
+            .expect("dotfile should have a file name")
+            .to_string_lossy();
         TestNixArgs {
-            tmpdir: PathBuf::from("/tmp"),
-            runtime: PathBuf::from("/tmp/runtime"),
-            dotfile_path: PathBuf::from(".devenv"),
+            tmpdir: paths.root.join("tmp"),
+            runtime: paths.root.join("runtime"),
+            dotfile_path: PathBuf::from(format!("./{}", dotfile_name)),
         }
     }
 
@@ -93,15 +98,6 @@ inputs:
 "#;
     fs::write(&yaml_path, yaml_content).expect("Failed to write minimal devenv.yaml");
     yaml_path
-}
-
-/// Copy fixture lock file to destination directory
-/// This avoids unnecessary update() calls in tests that don't specifically test locking
-fn copy_fixture_lock(dest_dir: &Path) {
-    let fixture_lock = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-        .join("tests/fixtures/devenv.lock");
-    let dest_lock = dest_dir.join("devenv.lock");
-    fs::copy(&fixture_lock, &dest_lock).expect("Failed to copy fixture lock file");
 }
 
 #[test]

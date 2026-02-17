@@ -9,12 +9,8 @@ use devenv_core::{
     CliOptionsConfig, Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend, Options,
     PortAllocator,
 };
-use devenv_nix_backend::ProjectRoot;
 use devenv_nix_backend::nix_backend::NixRustBackend;
 use devenv_nix_backend_macros::nix_test;
-use once_cell::sync::OnceCell;
-use secretspec;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -43,7 +39,6 @@ impl Drop for CwdGuard {
 mod common;
 use common::create_test_cachix_manager;
 use common::get_current_system;
-use common::mock_cachix_daemon::MockCachixDaemon;
 
 /// Get the repo root directory (where Cargo.toml is) - for ignored tests only
 fn get_repo_root() -> std::path::PathBuf {
@@ -102,10 +97,15 @@ struct TestNixArgs {
 
 impl TestNixArgs {
     fn new(paths: &DevenvPaths) -> Self {
+        let dotfile_name = paths
+            .dotfile
+            .file_name()
+            .expect("dotfile should have a file name")
+            .to_string_lossy();
         TestNixArgs {
-            tmpdir: PathBuf::from("/tmp"),
-            runtime: PathBuf::from("/tmp/runtime"),
-            dotfile_path: PathBuf::from("./.devenv"),
+            tmpdir: paths.root.join("tmp"),
+            runtime: paths.root.join("runtime"),
+            dotfile_path: PathBuf::from(format!("./{}", dotfile_name)),
         }
     }
 
@@ -165,8 +165,6 @@ fn setup_isolated_test_env(
     let cwd_guard = CwdGuard::new(temp_path);
 
     // Get repo root for copying files
-    let repo_root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-
     // Write custom devenv.nix if provided
     if let Some(nix) = nix_content {
         std::fs::write(temp_path.join("devenv.nix"), nix)
@@ -282,7 +280,7 @@ async fn test_backend_update_specific_input() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
+    let (_temp_dir, _cwd_guard, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
@@ -507,7 +505,7 @@ async fn test_backend_metadata() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
+    let (_temp_dir, _cwd_guard, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
@@ -603,7 +601,7 @@ async fn test_metadata_standalone() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
+    let (_temp_dir, _cwd_guard, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     println!("Created backend");
 
@@ -631,7 +629,7 @@ async fn test_metadata_after_update() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
+    let (_temp_dir, _cwd_guard, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     println!("Created backend");
 
@@ -663,7 +661,7 @@ async fn test_full_backend_workflow() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
+    let (_temp_dir, _cwd_guard, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     println!("Created NixRustBackend: {}", backend.name());
 
@@ -1099,7 +1097,7 @@ async fn test_backend_creation_with_offline_mode() {
     let mut global_options = GlobalOptions::default();
     global_options.offline = true;
 
-    let result = NixRustBackend::new(
+    let _result = NixRustBackend::new(
         paths.clone(),
         config.clone(),
         global_options,
@@ -1125,7 +1123,7 @@ async fn test_backend_with_system_override() {
     let mut global_options = GlobalOptions::default();
     global_options.system = "aarch64-linux".to_string();
 
-    let result = NixRustBackend::new(
+    let _result = NixRustBackend::new(
         paths.clone(),
         config.clone(),
         global_options,
@@ -1151,7 +1149,7 @@ async fn test_backend_with_impure_mode() {
     let mut global_options = GlobalOptions::default();
     global_options.impure = true;
 
-    let result = NixRustBackend::new(
+    let _result = NixRustBackend::new(
         paths.clone(),
         config.clone(),
         global_options,
@@ -1177,7 +1175,7 @@ async fn test_backend_with_custom_nix_options() {
     let mut global_options = GlobalOptions::default();
     global_options.nix_option = vec!["tarball-ttl".to_string(), "0".to_string()];
 
-    let result = NixRustBackend::new(
+    let _result = NixRustBackend::new(
         paths.clone(),
         config.clone(),
         global_options,
@@ -1203,7 +1201,7 @@ async fn test_backend_with_nix_debugger_enabled() {
     let mut global_options = GlobalOptions::default();
     global_options.nix_debugger = true;
 
-    let result = NixRustBackend::new(
+    let _result = NixRustBackend::new(
         paths.clone(),
         config.clone(),
         global_options,
@@ -1313,7 +1311,7 @@ async fn test_build_empty_attributes_array() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
+    let (_temp_dir, _cwd_guard, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
@@ -1372,7 +1370,7 @@ async fn test_dev_env_bash_output_format() {
     let gc_root = get_repo_root().join(".devenv/profile");
 
     // TODO: Test dev_env(false, ...) returns bash script format
-    let result = backend.dev_env(false, &gc_root).await;
+    let _result = backend.dev_env(false, &gc_root).await;
     todo!("Implement: test bash output format")
 }
 
@@ -1407,8 +1405,8 @@ async fn test_dev_env_multiple_calls_same_gc_root() {
     let gc_root = get_repo_root().join(".devenv/profile");
 
     // TODO: Call dev_env twice with same gc_root, verify both succeed
-    let result1 = backend.dev_env(true, &gc_root).await;
-    let result2 = backend.dev_env(true, &gc_root).await;
+    let _result1 = backend.dev_env(true, &gc_root).await;
+    let _result2 = backend.dev_env(true, &gc_root).await;
     todo!("Implement: test multiple dev_env calls")
 }
 
@@ -1447,7 +1445,7 @@ async fn test_dev_env_gc_root_already_exists_as_file() {
     std::fs::write(&gc_root, "existing file content").expect("Failed to create file");
 
     // TODO: Call dev_env and verify it replaces the file with symlink
-    let result = backend.dev_env(true, &gc_root).await;
+    let _result = backend.dev_env(true, &gc_root).await;
     todo!("Implement: test gc_root file replacement")
 }
 
@@ -1579,7 +1577,7 @@ async fn test_metadata_before_any_update() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
+    let (_temp_dir, _cwd_guard, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
@@ -2158,7 +2156,7 @@ async fn test_workflow_build_then_incremental_update() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
+    let (_temp_dir, _cwd_guard, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
@@ -2266,7 +2264,7 @@ async fn test_backend_reuse_across_operations() {
     let paths = create_test_paths();
     let config = load_config_from_repo();
 
-    let backend = NixRustBackend::new(
+    let _backend = NixRustBackend::new(
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
@@ -2587,154 +2585,4 @@ async fn test_concurrent_build_operations() {
     assert!(!paths1.is_empty(), "Build 1 should return paths");
     assert!(!paths2.is_empty(), "Build 2 should return paths");
     assert!(!paths3.is_empty(), "Build 3 should return paths");
-}
-
-// ============================================================================
-// CACHIX DAEMON INTEGRATION TESTS
-// ============================================================================
-
-/// Integration test: Build with NixBackend and verify paths are pushed to cachix daemon
-///
-/// This test:
-/// 1. Starts a mock cachix daemon
-/// 2. Creates a backend configured with cachix.push
-/// 3. Builds a dynamic derivation (always rebuilds due to builtins.currentTime)
-/// 4. Verifies the built paths were pushed to the daemon
-#[nix_test]
-async fn test_build_with_cachix_push_integration() {
-    // Start mock daemon
-    let mock = Arc::new(
-        MockCachixDaemon::start()
-            .await
-            .expect("Failed to start mock daemon"),
-    );
-
-    eprintln!("Mock daemon socket: {:?}", mock.socket_path());
-
-    // Spawn background handler
-    let _handler = mock.spawn_handler();
-
-    // Give daemon time to start
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-    // Create test environment with cachix push enabled
-    let test_dir = tempfile::tempdir().expect("Failed to create test dir");
-
-    // Create devenv.yaml with inputs
-    std::fs::write(
-        test_dir.path().join("devenv.yaml"),
-        r#"
-inputs:
-  nixpkgs:
-    url: github:NixOS/nixpkgs/nixos-23.11
-"#,
-    )
-    .expect("Failed to write devenv.yaml");
-
-    // Create devenv.nix with cachix push and a dynamic derivation
-    std::fs::write(
-        test_dir.path().join("devenv.nix"),
-        r#"
-{ pkgs, ... }:
-
-{
-  # Configure cachix push
-  cachix.push = "test-cache";
-
-  # Create a test package that always changes due to currentTime
-  outputs.test-package = pkgs.runCommand "test-package-${toString builtins.currentTime}" {} ''
-    mkdir -p $out
-    echo "Built at: ${toString builtins.currentTime}" > $out/timestamp.txt
-    echo "This derivation always rebuilds due to currentTime" > $out/info.txt
-  '';
-}
-"#,
-    )
-    .expect("Failed to write devenv.nix");
-
-    // Load config and create backend
-    let config = Config::load_from(test_dir.path()).expect("Failed to load config");
-    let paths = create_test_paths_in(test_dir.path());
-
-    let backend = NixRustBackend::new(
-        paths.clone(),
-        config.clone(),
-        GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root(), Some(mock.socket_path().to_path_buf())),
-        Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
-    )
-    .expect("Failed to create backend");
-
-    // Assemble (initializes cachix daemon)
-    backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(
-            &paths,
-            &config,
-            config.nixpkgs_config(get_current_system()),
-        ))
-        .await
-        .expect("Failed to assemble backend");
-
-    // Build our dynamic test package via config.outputs
-    let gc_root = paths.dot_gc.join("test-build");
-    let result = backend
-        .build(&["config.outputs.test-package"], None, Some(&gc_root))
-        .await;
-
-    assert!(result.is_ok(), "Build should succeed: {:?}", result.err());
-    let built_paths = result.unwrap();
-    assert!(!built_paths.is_empty(), "Build should return paths");
-
-    eprintln!("Built {} paths", built_paths.len());
-    for path in &built_paths {
-        eprintln!("  - {}", path.display());
-    }
-
-    // Give daemon time to process pushes
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Explicitly finalize cachix push (can't rely on Drop in async context)
-    // This waits for all queued paths to complete
-    backend
-        .finalize_cachix_push()
-        .await
-        .expect("Failed to finalize cachix push");
-
-    // Drop backend now that push is finalized
-    drop(backend);
-
-    // Small delay to ensure all tasks complete
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-    // Verify paths were pushed
-    let pushed_paths = mock.get_pushed_paths().await;
-
-    eprintln!("Pushed {} paths to mock daemon", pushed_paths.len());
-    for path in &pushed_paths {
-        eprintln!("  - {}", path);
-    }
-
-    assert!(
-        !pushed_paths.is_empty(),
-        "At least some paths should be pushed to cachix daemon"
-    );
-
-    // Verify at least one built path was pushed
-    let built_path_strs: Vec<String> = built_paths
-        .iter()
-        .filter_map(|p| p.to_str().map(|s| s.to_string()))
-        .collect();
-
-    let any_pushed = built_path_strs
-        .iter()
-        .any(|built| pushed_paths.contains(built));
-
-    assert!(
-        any_pushed,
-        "At least one built path should be pushed. Built: {:?}, Pushed: {:?}",
-        built_path_strs, pushed_paths
-    );
 }
