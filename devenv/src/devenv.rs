@@ -1370,7 +1370,7 @@ impl Devenv {
 
     /// Extract env vars exported by tasks (e.g., PATH from Python venv)
     /// from the task outputs JSON and merge them into `envs`.
-    fn merge_task_exports(task_outputs_json: &str, envs: &mut HashMap<String, String>) {
+    pub fn merge_task_exports(task_outputs_json: &str, envs: &mut HashMap<String, String>) {
         if let Ok(outputs) = serde_json::from_str::<
             std::collections::BTreeMap<String, serde_json::Value>,
         >(task_outputs_json)
