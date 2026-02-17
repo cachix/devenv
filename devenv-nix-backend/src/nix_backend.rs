@@ -1208,7 +1208,7 @@ impl NixBackend for NixRustBackend {
             None
         };
 
-        let activity = Activity::evaluate("Building shell")
+        let activity = Activity::evaluate("Evaluating shell")
             .level(ActivityLevel::Info)
             .start();
 
@@ -1442,7 +1442,7 @@ impl NixBackend for NixRustBackend {
                 None
             };
 
-            let activity = Activity::evaluate(format!("Building {}", attr_path))
+            let activity = Activity::evaluate(format!("Evaluating {}", attr_path))
                 .level(ActivityLevel::Info)
                 .start();
 
