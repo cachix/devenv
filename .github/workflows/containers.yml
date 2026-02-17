@@ -2,12 +2,9 @@
 name: Publish containers
 
 on:
-  workflow_call:
-    inputs:
-      ref:
-        description: "Git revision (tag, commit, or branch) to build from"
-        required: false
-        type: string
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
 
   workflow_dispatch:
     inputs:
@@ -19,9 +16,13 @@ on:
 env:
   REGISTRY: ghcr.io
   REPOSITORY: ${{ github.repository }}
+  REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_sha }}
 
 jobs:
   devcontainer:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -32,7 +33,7 @@ jobs:
         id: checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ env.REF }}
 
       - name: Set up QEMU for multi-arch builds
         uses: docker/setup-qemu-action@v3
@@ -70,6 +71,9 @@ jobs:
             DEVENV_VERSION=${{ steps.checkout.outputs.commit }}
 
   devenv:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     strategy:
       matrix:
         include:
@@ -89,7 +93,7 @@ jobs:
         id: checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ env.REF }}
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31
@@ -152,7 +156,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ env.REF }}
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
