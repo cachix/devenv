@@ -12,7 +12,7 @@ use watchexec_supervisor::{ProcessEnd, Signal};
 
 use crate::config::ListenKind;
 use crate::manager::ProcessResources;
-use crate::supervisor_state::{Action, Event, ExitStatus, SupervisorState};
+use crate::supervisor_state::{Action, Event, ExitStatus, SupervisorPhase, SupervisorState};
 
 /// Spawn a supervision task that monitors a job and handles restarts.
 ///
@@ -216,7 +216,7 @@ pub fn spawn_supervisor(
 
                 _ = &mut deadline_fut => {
                     let now = Instant::now();
-                    let is_startup = current_deadline.is_some_and(|d| state.is_startup_deadline(d));
+                    let is_startup = state.phase() == SupervisorPhase::Starting;
                     if is_startup {
                         warn!("Startup timeout for process {}", name);
                         activity.error("Startup timeout - process did not become ready");

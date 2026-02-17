@@ -221,11 +221,6 @@ impl SupervisorState {
         }
     }
 
-    /// Whether `deadline` is the startup deadline (vs watchdog).
-    pub fn is_startup_deadline(&self, deadline: Instant) -> bool {
-        self.startup_deadline == Some(deadline)
-    }
-
     pub fn restart_count(&self) -> usize {
         self.restart_count
     }
@@ -579,7 +574,6 @@ mod tests {
 
         // Startup is earlier
         assert_eq!(state.next_deadline(), Some(startup));
-        assert!(state.is_startup_deadline(startup));
 
         // After extending startup past watchdog, watchdog is earlier
         let _ = state.on_event(
@@ -589,7 +583,6 @@ mod tests {
             now,
         );
         assert_eq!(state.next_deadline(), Some(watchdog));
-        assert!(!state.is_startup_deadline(watchdog));
     }
 
     // =============================================================
