@@ -439,7 +439,7 @@ in
           fi
         '';
         initial_delay = 2;
-        timeout = 4;
+        probe_timeout = 4;
         failure_threshold = 5;
       };
 

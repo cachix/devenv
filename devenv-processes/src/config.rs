@@ -105,9 +105,12 @@ pub struct ReadyConfig {
     /// Seconds between probes
     #[serde(default = "default_period")]
     pub period: u64,
-    /// Seconds before a probe times out
-    #[serde(default = "default_timeout")]
-    pub timeout: u64,
+    /// Seconds before a single probe times out
+    #[serde(default = "default_probe_timeout")]
+    pub probe_timeout: u64,
+    /// Overall deadline in seconds for the process to become ready. None = no deadline.
+    #[serde(default)]
+    pub timeout: Option<u64>,
     /// Consecutive successes needed to be considered ready
     #[serde(default = "default_success")]
     pub success_threshold: u32,
@@ -124,7 +127,8 @@ impl Default for ReadyConfig {
             notify: false,
             initial_delay: 0,
             period: default_period(),
-            timeout: default_timeout(),
+            probe_timeout: default_probe_timeout(),
+            timeout: None,
             success_threshold: default_success(),
             failure_threshold: default_failure(),
         }
@@ -155,6 +159,9 @@ pub struct RestartConfig {
     /// Maximum restart attempts. None = unlimited.
     #[serde(default)]
     pub max: Option<usize>,
+    /// Sliding window in seconds for restart rate limiting. None = lifetime limit.
+    #[serde(default)]
+    pub window: Option<u64>,
 }
 
 impl Default for RestartConfig {
@@ -162,6 +169,7 @@ impl Default for RestartConfig {
         Self {
             on: RestartPolicy::OnFailure,
             max: Some(5),
+            window: None,
         }
     }
 }
@@ -170,7 +178,7 @@ fn default_period() -> u64 {
     10
 }
 
-fn default_timeout() -> u64 {
+fn default_probe_timeout() -> u64 {
     1
 }
 

@@ -319,7 +319,7 @@ in
           ready = {
             exec = "${cfg.package}/bin/kafka-topics.sh --list --bootstrap-server localhost:${toString allocatedPort}";
             initial_delay = 5;
-            timeout = 5;
+            probe_timeout = 5;
           };
         };
       })

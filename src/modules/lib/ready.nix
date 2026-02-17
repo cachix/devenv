@@ -67,10 +67,16 @@ types.submodule {
       description = "Seconds between probes.";
     };
 
-    timeout = lib.mkOption {
+    probe_timeout = lib.mkOption {
       type = types.int;
       default = 1;
-      description = "Seconds before a probe times out.";
+      description = "Seconds before a single probe times out.";
+    };
+
+    timeout = lib.mkOption {
+      type = types.nullOr types.ints.unsigned;
+      default = null;
+      description = "Overall deadline in seconds for the process to become ready. null = no deadline.";
     };
 
     success_threshold = lib.mkOption {

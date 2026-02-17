@@ -72,7 +72,7 @@ in
           port = 13133;
         };
         initial_delay = 2;
-        timeout = 5;
+        probe_timeout = 5;
       };
     };
   };

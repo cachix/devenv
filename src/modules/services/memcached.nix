@@ -62,7 +62,7 @@ in
           echo -e "stats\nquit" | ${pkgs.netcat}/bin/nc ${cfg.bind} ${toString allocatedPort} > /dev/null 2>&1
         '';
         initial_delay = 2;
-        timeout = 4;
+        probe_timeout = 4;
         failure_threshold = 5;
       };
     };

@@ -68,6 +68,7 @@ async fn test_restart_always_on_success() {
             restart: RestartConfig {
                 on: RestartPolicy::Always,
                 max: Some(3),
+                window: None,
             },
             ..Default::default()
         };
@@ -113,6 +114,7 @@ async fn test_restart_always_on_failure() {
             restart: RestartConfig {
                 on: RestartPolicy::Always,
                 max: Some(2),
+                window: None,
             },
             ..Default::default()
         };
@@ -158,6 +160,7 @@ async fn test_restart_on_failure_with_failure() {
             restart: RestartConfig {
                 on: RestartPolicy::OnFailure,
                 max: Some(2),
+                window: None,
             },
             ..Default::default()
         };
@@ -201,6 +204,7 @@ async fn test_restart_on_failure_with_success() {
             restart: RestartConfig {
                 on: RestartPolicy::OnFailure,
                 max: Some(3),
+                window: None,
             },
             ..Default::default()
         };
@@ -238,6 +242,7 @@ async fn test_max_restarts_limit() {
             restart: RestartConfig {
                 on: RestartPolicy::Always,
                 max: Some(3),
+                window: None,
             },
             ..Default::default()
         };
@@ -283,6 +288,7 @@ async fn test_unlimited_restarts() {
             restart: RestartConfig {
                 on: RestartPolicy::Always,
                 max: None,
+                window: None,
             },
             ..Default::default()
         };

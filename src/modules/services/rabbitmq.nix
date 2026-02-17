@@ -178,7 +178,7 @@ in
         exec = "${cfg.package}/bin/rabbitmq-diagnostics -q ping";
         initial_delay = 10;
         period = 3;
-        timeout = 3;
+        probe_timeout = 3;
         failure_threshold = 5;
       };
     };

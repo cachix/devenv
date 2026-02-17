@@ -193,7 +193,7 @@ in
       ready = {
         exec = "${pkgs.curl}/bin/curl -f -k http://${cfg.listenAddress}:${toString allocatedHttpPort}";
         initial_delay = 2;
-        timeout = 2;
+        probe_timeout = 2;
         failure_threshold = 5;
       };
     };

@@ -523,7 +523,7 @@ in
           ready = {
             exec = "${keycloak-health}/bin/keycloak-health";
             initial_delay = 20;
-            timeout = 4;
+            probe_timeout = 4;
             failure_threshold = 20;
           };
 

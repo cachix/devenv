@@ -28,6 +28,7 @@ async fn test_foreground_default_restarts_on_failure() {
             restart: RestartConfig {
                 on: RestartPolicy::OnFailure,
                 max: Some(2),
+                window: None,
             },
             ..Default::default()
         };
@@ -115,6 +116,7 @@ async fn test_default_process_type_is_foreground() {
             restart: RestartConfig {
                 on: RestartPolicy::OnFailure,
                 max: Some(2),
+                window: None,
             },
             ..Default::default()
         };

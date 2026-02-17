@@ -160,6 +160,7 @@ pub fn watch_process_config_with_extensions(
         restart: RestartConfig {
             on: RestartPolicy::Never,
             max: None,
+            window: None,
         },
         ..Default::default()
     }

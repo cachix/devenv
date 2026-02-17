@@ -65,7 +65,7 @@ in
       ready = {
         exec = "${cfg.package}/bin/clickhouse-client --port ${toString allocatedPort} -q 'SELECT 1'";
         initial_delay = 2;
-        timeout = 4;
+        probe_timeout = 4;
         failure_threshold = 5;
       };
     };

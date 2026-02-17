@@ -289,7 +289,7 @@ in
             "${pkgs.netcat}/bin/nc -z ${cfg.host} ${toString allocatedPort}";
         initial_delay = 2;
         period = 5;
-        timeout = 3;
+        probe_timeout = 3;
         failure_threshold = 5;
       };
     };

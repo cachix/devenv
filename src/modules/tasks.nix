@@ -221,40 +221,15 @@ let
                   default = 5;
                   description = "Maximum restart attempts. null = unlimited.";
                 };
+                window = lib.mkOption {
+                  type = types.nullOr types.ints.unsigned;
+                  default = null;
+                  description = "Sliding window in seconds for restart rate limiting. null = lifetime limit.";
+                };
               };
             };
             default = { };
             description = "Process restart policy. Only used when type = \"process\".";
-          };
-
-          startup_timeout = lib.mkOption {
-            type = types.nullOr types.ints.unsigned;
-            default = null;
-            description = ''
-              Maximum time in seconds for the process to signal readiness.
-
-              Only used when type = "process".
-            '';
-          };
-
-          restart_limit_burst = lib.mkOption {
-            type = types.nullOr types.ints.unsigned;
-            default = null;
-            description = ''
-              Maximum number of restarts within the sliding window.
-
-              Only used when type = "process".
-            '';
-          };
-
-          restart_limit_interval = lib.mkOption {
-            type = types.nullOr types.ints.unsigned;
-            default = null;
-            description = ''
-              Sliding window size in seconds for restart rate limiting.
-
-              Only used when type = "process".
-            '';
           };
 
           ports = lib.mkOption {

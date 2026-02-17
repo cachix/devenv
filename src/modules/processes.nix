@@ -101,51 +101,15 @@ let
               default = 5;
               description = "Maximum restart attempts. null = unlimited.";
             };
+            window = lib.mkOption {
+              type = types.nullOr types.ints.unsigned;
+              default = null;
+              description = "Sliding window in seconds for restart rate limiting. null = lifetime limit.";
+            };
           };
         };
         default = { };
         description = "Process restart policy.";
-      };
-
-      startup_timeout = lib.mkOption {
-        type = types.nullOr types.ints.unsigned;
-        default = null;
-        description = ''
-          Maximum time in seconds for the process to signal readiness.
-          If the process doesn't send READY=1 or WATCHDOG=1 before this deadline, it is restarted.
-          Like systemd's TimeoutStartSec.
-          The process can send EXTEND_TIMEOUT_USEC to extend this deadline.
-
-          Only used when using native process manager.
-        '';
-        example = 30;
-      };
-
-      restart_limit_burst = lib.mkOption {
-        type = types.nullOr types.ints.unsigned;
-        default = null;
-        description = ''
-          Maximum number of restarts within the sliding window.
-          When set, overrides `max_restarts`.
-          Like systemd's StartLimitBurst.
-          When null, falls back to `max_restarts`, or 5 if both are null.
-
-          Only used when using native process manager.
-        '';
-        example = 10;
-      };
-
-      restart_limit_interval = lib.mkOption {
-        type = types.nullOr types.ints.unsigned;
-        default = null;
-        description = ''
-          Sliding window size in seconds for restart rate limiting.
-          Like systemd's StartLimitIntervalSec.
-          When null, defaults to 10.
-
-          Only used when using native process manager.
-        '';
-        example = 60;
       };
 
       listen = lib.mkOption {

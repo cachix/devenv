@@ -63,7 +63,7 @@ in
           ${pkgs.awscli2}/bin/aws dynamodb list-tables --endpoint-url http://127.0.0.1:${toString allocatedPort} --output text --no-cli-pager >/dev/null 2>&1
         '';
         initial_delay = 2;
-        timeout = 5;
+        probe_timeout = 5;
         failure_threshold = 5;
       };
     };

@@ -30,7 +30,7 @@ pub fn spawn_supervisor(
     let name = config.name.clone();
 
     // TCP probe for readiness (listen sockets or allocated ports, without notify)
-    let tcp_probe_address = if config.notify.as_ref().is_none_or(|n| !n.enable) {
+    let tcp_probe_address = if !config.ready.as_ref().is_some_and(|r| r.notify) {
         // First try listen sockets
         config
             .listen

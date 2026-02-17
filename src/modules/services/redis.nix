@@ -92,7 +92,7 @@ in
       ready = {
         exec = if allocatedPort == 0 then unixSocketPing else tcpPing;
         initial_delay = 2;
-        timeout = 4;
+        probe_timeout = 4;
         failure_threshold = 5;
       };
     };

@@ -172,7 +172,7 @@ in
           path = "/-/ready";
         };
         initial_delay = 2;
-        timeout = 4;
+        probe_timeout = 4;
       };
     };
 
