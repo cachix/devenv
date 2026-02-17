@@ -1022,9 +1022,9 @@ impl Devenv {
         // parse tasks config
         let tasks_json = fs::read_to_string(&tasks_json_file[0])
             .await
-            .expect("Failed to read config file");
-        let tasks: Vec<tasks::TaskConfig> =
-            serde_json::from_str(&tasks_json).expect("Failed to parse tasks config");
+            .map_err(|e| miette::miette!("Failed to read task config file: {}", e))?;
+        let tasks: Vec<tasks::TaskConfig> = serde_json::from_str(&tasks_json)
+            .map_err(|e| miette::miette!("Failed to parse task config: {}", e))?;
 
         // Cache task names for shell completions
         let task_names: Vec<&str> = tasks.iter().map(|t| t.name.as_str()).collect();
