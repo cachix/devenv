@@ -39,8 +39,8 @@ in
         Override the configuration file used by OpenTelemetry Collector.
         By default, a configuration is generated from `services.opentelemetry-collector.settings`.
 
-        If overriding, enable the `health_check` extension to allow process-compose to check whether the Collector is ready.
-        Otherwise, disable the readiness probe by setting `processes.opentelemetry-collector.process-compose.readiness_probe = lib.mkForce {};`.
+        If overriding, enable the `health_check` extension to allow the readiness probe to check whether the Collector is ready.
+        Otherwise, disable the readiness probe by setting `processes.opentelemetry-collector.ready = lib.mkForce null;`.
       '';
       default = null;
       example = lib.literalExpression ''
@@ -64,21 +64,15 @@ in
     processes.opentelemetry-collector = {
       exec = "exec ${lib.getExe cfg.package} --config ${otelConfig}";
 
-      process-compose = {
-        readiness_probe = {
-          http_get = {
-            host = "localhost";
-            scheme = "http";
-            path = "/";
-            port = 13133;
-          };
-          initial_delay_seconds = 2;
-          period_seconds = 10;
-          timeout_seconds = 5;
-          success_threshold = 1;
-          failure_threshold = 3;
+      ready = {
+        http.get = {
+          host = "localhost";
+          scheme = "http";
+          path = "/";
+          port = 13133;
         };
-        availability.restart = "on_failure";
+        initial_delay = 2;
+        probe_timeout = 5;
       };
     };
   };

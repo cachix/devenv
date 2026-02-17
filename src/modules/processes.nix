@@ -2,6 +2,7 @@
 let
   types = lib.types;
   listenType = import ./lib/listen.nix { inherit lib; };
+  readyType = import ./lib/ready.nix { inherit lib; };
 
   # Get primops from _module.args (set via specialArgs in bootstrapLib.nix)
   # Use default empty attrset if not available (e.g., when evaluated without devenv CLI)
@@ -54,6 +55,8 @@ let
           a free port starting from that base, incrementing until available.
 
           The resolved port is available via `config.processes.<name>.ports.<port>.value`.
+
+          Requires devenv 2.0+.
         '';
         example = lib.literalExpression ''
           {
@@ -75,89 +78,38 @@ let
         description = "Working directory to run the process in. If not specified, the current working directory will be used.";
       };
 
-      use_sudo = lib.mkOption {
-        type = types.bool;
-        default = false;
+      ready = lib.mkOption {
+        type = types.nullOr readyType;
+        default = null;
         description = ''
-          Run this process with sudo/elevated privileges.
+          How to determine if this process is ready to serve.
 
-          Only used when using native process manager.
-        '';
-      };
-
-      pseudo_terminal = lib.mkOption {
-        type = types.bool;
-        default = false;
-        description = ''
-          Run this process in a pseudo-terminal (PTY).
-
-          Only used when using native process manager.
+          Requires devenv 2.0+.
         '';
       };
 
       restart = lib.mkOption {
-        type = types.enum [ "never" "always" "on_failure" ];
-        default = "on_failure";
-        description = ''
-          Process restart policy:
-          - never: Never restart the process
-          - always: Always restart when it exits
-          - on_failure: Restart only on failure (non-zero exit code)
-
-          Only used when using native process manager.
-        '';
-      };
-
-      max_restarts = lib.mkOption {
-        type = types.nullOr types.int;
-        default = 5;
-        description = ''
-          Maximum number of restart attempts. null means unlimited restarts.
-          Deprecated: use `restart_limit_burst` for sliding-window rate limiting.
-
-          Only used when using native process manager.
-        '';
-      };
-
-      startup_timeout = lib.mkOption {
-        type = types.nullOr types.ints.unsigned;
-        default = null;
-        description = ''
-          Maximum time in seconds for the process to signal readiness.
-          If the process doesn't send READY=1 or WATCHDOG=1 before this deadline, it is restarted.
-          Like systemd's TimeoutStartSec.
-          The process can send EXTEND_TIMEOUT_USEC to extend this deadline.
-
-          Only used when using native process manager.
-        '';
-        example = 30;
-      };
-
-      restart_limit_burst = lib.mkOption {
-        type = types.nullOr types.ints.unsigned;
-        default = null;
-        description = ''
-          Maximum number of restarts within the sliding window.
-          When set, overrides `max_restarts`.
-          Like systemd's StartLimitBurst.
-          When null, falls back to `max_restarts`, or 5 if both are null.
-
-          Only used when using native process manager.
-        '';
-        example = 10;
-      };
-
-      restart_limit_interval = lib.mkOption {
-        type = types.nullOr types.ints.unsigned;
-        default = null;
-        description = ''
-          Sliding window size in seconds for restart rate limiting.
-          Like systemd's StartLimitIntervalSec.
-          When null, defaults to 10.
-
-          Only used when using native process manager.
-        '';
-        example = 60;
+        type = types.submodule {
+          options = {
+            on = lib.mkOption {
+              type = types.enum [ "never" "always" "on_failure" ];
+              default = "on_failure";
+              description = "When to restart: never, always, or on_failure.";
+            };
+            max = lib.mkOption {
+              type = types.nullOr types.int;
+              default = 5;
+              description = "Maximum restart attempts. null = unlimited.";
+            };
+            window = lib.mkOption {
+              type = types.nullOr types.ints.unsigned;
+              default = null;
+              description = "Sliding window in seconds for restart rate limiting. null = lifetime limit.";
+            };
+          };
+        };
+        default = { };
+        description = "Process restart policy.";
       };
 
       listen = lib.mkOption {
@@ -166,7 +118,7 @@ let
         description = ''
           Socket activation configuration for systemd-style socket passing.
 
-          Only used when using native process manager.
+          Requires devenv 2.0+.
         '';
         example = [
           {
@@ -202,7 +154,7 @@ let
         description = ''
           Systemd watchdog configuration.
 
-          Only used when using native process manager.
+          Requires devenv 2.0+.
         '';
         example = lib.literalExpression ''
           {
@@ -265,7 +217,7 @@ let
                 Paths to watch for changes (files or directories).
                 When files in these paths change, the process will be restarted.
 
-                Only used when using native process manager.
+                Requires devenv 2.0+.
               '';
               example = lib.literalExpression ''
                 [ ./src ./config.yaml ]
@@ -279,7 +231,7 @@ let
                 File extensions to watch (e.g., "rs", "js", "py").
                 If empty, all file extensions are watched.
 
-                Only used when using native process manager.
+                Requires devenv 2.0+.
               '';
               example = [ "rs" "toml" ];
             };
@@ -290,7 +242,7 @@ let
               description = ''
                 Glob patterns to ignore (e.g., ".git", "target", "*.log").
 
-                Only used when using native process manager.
+                Requires devenv 2.0+.
               '';
               example = [ "*.log" ".git" "target" ];
             };
@@ -300,7 +252,7 @@ let
         description = ''
           File watching configuration for automatic process restarts.
 
-          Only used when using native process manager.
+          Requires devenv 2.0+.
         '';
         example = lib.literalExpression ''
           {
@@ -311,32 +263,6 @@ let
         '';
       };
 
-      notify = lib.mkOption {
-        type = types.submodule {
-          options.enable = lib.mkOption {
-            type = types.bool;
-            default = false;
-            description = ''
-              Enable systemd notify protocol for readiness signaling.
-              When enabled, the process must send READY=1 to the NOTIFY_SOCKET
-              before dependent tasks with @ready suffix will be unblocked.
-
-              Only used when using native process manager.
-            '';
-          };
-        };
-        default = { };
-        description = ''
-          Systemd notify protocol configuration for readiness signaling.
-
-          Only used when using native process manager.
-        '';
-        example = lib.literalExpression ''
-          {
-            enable = true;
-          }
-        '';
-      };
     };
   });
 
@@ -492,17 +418,11 @@ in
               # Always show output for process tasks so process-compose can capture it
               showOutput = true;
               # Process-specific configuration
-              use_sudo = process.use_sudo;
-              pseudo_terminal = process.pseudo_terminal;
+              ready = process.ready;
               restart = process.restart;
-              max_restarts = process.max_restarts;
-              startup_timeout = process.startup_timeout;
-              restart_limit_burst = process.restart_limit_burst;
-              restart_limit_interval = process.restart_limit_interval;
               listen = process.listen;
               ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
               watch = process.watch;
-              notify = process.notify;
               watchdog = process.watchdog;
             };
           })

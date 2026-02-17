@@ -3,7 +3,7 @@
 mod common;
 
 use common::*;
-use devenv_processes::{ProcessConfig, ProcessType, RestartPolicy, SupervisorPhase};
+use devenv_processes::{ProcessConfig, ProcessType, RestartConfig, RestartPolicy, SupervisorPhase};
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -25,8 +25,11 @@ async fn test_foreground_default_restarts_on_failure() {
             exec: script.to_string_lossy().to_string(),
             args: vec![],
             process_type: ProcessType::Foreground,
-            restart: RestartPolicy::OnFailure,
-            max_restarts: Some(2),
+            restart: RestartConfig {
+                on: RestartPolicy::OnFailure,
+                max: Some(2),
+                window: None,
+            },
             ..Default::default()
         };
 
@@ -73,7 +76,10 @@ async fn test_foreground_never_policy() {
             exec: script.to_string_lossy().to_string(),
             args: vec![],
             process_type: ProcessType::Foreground,
-            restart: RestartPolicy::Never,
+            restart: RestartConfig {
+                on: RestartPolicy::Never,
+                ..Default::default()
+            },
             ..Default::default()
         };
 
@@ -107,8 +113,11 @@ async fn test_default_process_type_is_foreground() {
             name: "default-type".to_string(),
             exec: script.to_string_lossy().to_string(),
             args: vec![],
-            restart: RestartPolicy::OnFailure,
-            max_restarts: Some(2),
+            restart: RestartConfig {
+                on: RestartPolicy::OnFailure,
+                max: Some(2),
+                window: None,
+            },
             ..Default::default()
         };
 

@@ -113,13 +113,15 @@ impl SupervisorState {
             .as_ref()
             .map(|w| Duration::from_micros(w.usec));
         let watchdog_require_ready = config.watchdog.as_ref().is_none_or(|w| w.require_ready);
-        let startup_timeout = config.startup_timeout.map(Duration::from_secs);
-        let restart_limit_burst = config
-            .restart_limit_burst
-            .or(config.max_restarts)
-            .unwrap_or(DEFAULT_RESTART_LIMIT_BURST);
+        let startup_timeout = config
+            .ready
+            .as_ref()
+            .and_then(|r| r.timeout)
+            .map(Duration::from_secs);
+        let restart_limit_burst = config.restart.max.unwrap_or(DEFAULT_RESTART_LIMIT_BURST);
         let restart_limit_interval = config
-            .restart_limit_interval
+            .restart
+            .window
             .map(Duration::from_secs)
             .unwrap_or(DEFAULT_RESTART_LIMIT_INTERVAL);
 
@@ -134,7 +136,7 @@ impl SupervisorState {
             phase: SupervisorPhase::Starting,
             watchdog_timeout,
             watchdog_require_ready,
-            restart_policy: config.restart,
+            restart_policy: config.restart.on,
             startup_timeout,
         };
 
@@ -281,7 +283,7 @@ impl SupervisorState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::WatchdogConfig;
+    use crate::config::{ReadyConfig, RestartConfig, WatchdogConfig};
 
     // -- helpers --
 
@@ -301,7 +303,10 @@ mod tests {
 
     fn config_with_policy(policy: RestartPolicy) -> ProcessConfig {
         ProcessConfig {
-            restart: policy,
+            restart: RestartConfig {
+                on: policy,
+                ..Default::default()
+            },
             ..Default::default()
         }
     }
@@ -316,14 +321,20 @@ mod tests {
                 usec,
                 require_ready,
             }),
-            restart: policy,
+            restart: RestartConfig {
+                on: policy,
+                ..Default::default()
+            },
             ..Default::default()
         }
     }
 
     fn config_with_startup_timeout(secs: u64) -> ProcessConfig {
         ProcessConfig {
-            startup_timeout: Some(secs),
+            ready: Some(ReadyConfig {
+                timeout: Some(secs),
+                ..Default::default()
+            }),
             ..Default::default()
         }
     }
@@ -334,7 +345,10 @@ mod tests {
         require_ready: bool,
     ) -> ProcessConfig {
         ProcessConfig {
-            startup_timeout: Some(startup_secs),
+            ready: Some(ReadyConfig {
+                timeout: Some(startup_secs),
+                ..Default::default()
+            }),
             watchdog: Some(WatchdogConfig {
                 usec: watchdog_usec,
                 require_ready,
@@ -1071,17 +1085,19 @@ mod tests {
     }
 
     #[test]
-    fn config_restart_limit_burst_overrides_max_restarts() {
+    fn config_restart_max_controls_burst() {
         let now = Instant::now();
         let config = ProcessConfig {
-            max_restarts: Some(3),
-            restart_limit_burst: Some(7),
-            restart: RestartPolicy::Always,
+            restart: RestartConfig {
+                on: RestartPolicy::Always,
+                max: Some(7),
+                window: None,
+            },
             ..Default::default()
         };
         let mut state = SupervisorState::new(&config, now);
 
-        // Should allow 7 restarts, not 3
+        // Should allow 7 restarts
         for i in 0..7 {
             let t = now + Duration::from_millis(i * 10);
             assert_eq!(
@@ -1108,12 +1124,14 @@ mod tests {
     }
 
     #[test]
-    fn config_restart_limit_interval_controls_window() {
+    fn config_restart_window_controls_interval() {
         let now = Instant::now();
         let config = ProcessConfig {
-            restart_limit_burst: Some(3),
-            restart_limit_interval: Some(2), // 2 second window
-            restart: RestartPolicy::Always,
+            restart: RestartConfig {
+                on: RestartPolicy::Always,
+                max: Some(3),
+                window: Some(2), // 2 second window
+            },
             ..Default::default()
         };
         let mut state = SupervisorState::new(&config, now);
@@ -1147,12 +1165,14 @@ mod tests {
     }
 
     #[test]
-    fn config_restart_limit_interval_expires() {
+    fn config_restart_window_expires() {
         let now = Instant::now();
         let config = ProcessConfig {
-            restart_limit_burst: Some(3),
-            restart_limit_interval: Some(2), // 2 second window
-            restart: RestartPolicy::Always,
+            restart: RestartConfig {
+                on: RestartPolicy::Always,
+                max: Some(3),
+                window: Some(2), // 2 second window
+            },
             ..Default::default()
         };
         let mut state = SupervisorState::new(&config, now);
@@ -1183,11 +1203,14 @@ mod tests {
     }
 
     #[test]
-    fn config_max_restarts_used_as_burst_fallback() {
+    fn config_restart_max_as_burst_limit() {
         let now = Instant::now();
         let config = ProcessConfig {
-            max_restarts: Some(2),
-            restart: RestartPolicy::Always,
+            restart: RestartConfig {
+                on: RestartPolicy::Always,
+                max: Some(2),
+                window: None,
+            },
             ..Default::default()
         };
         let mut state = SupervisorState::new(&config, now);

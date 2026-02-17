@@ -10,7 +10,7 @@
 mod common;
 
 use common::*;
-use devenv_processes::{NotifyConfig, ProcessConfig, SupervisorPhase, WatchdogConfig};
+use devenv_processes::{ProcessConfig, ReadyConfig, SupervisorPhase, WatchdogConfig};
 use sd_notify::NotifyState;
 use std::os::unix::net::UnixDatagram;
 use std::sync::Mutex;
@@ -29,7 +29,10 @@ fn notify_process_config(name: &str, script_path: &std::path::Path) -> ProcessCo
         name: name.to_string(),
         exec: script_path.to_string_lossy().to_string(),
         args: vec![],
-        notify: Some(NotifyConfig { enable: true }),
+        ready: Some(ReadyConfig {
+            notify: true,
+            ..Default::default()
+        }),
         ..Default::default()
     }
 }
@@ -45,7 +48,10 @@ fn watchdog_process_config(
         name: name.to_string(),
         exec: script_path.to_string_lossy().to_string(),
         args: vec![],
-        notify: Some(NotifyConfig { enable: true }),
+        ready: Some(ReadyConfig {
+            notify: true,
+            ..Default::default()
+        }),
         watchdog: Some(WatchdogConfig {
             usec: watchdog_usec,
             require_ready,
@@ -212,11 +218,11 @@ async fn test_no_notify_socket_when_disabled() {
             .create_script("no-notify.sh", "#!/bin/sh\nsleep 3600\n")
             .await;
 
+        // Create config WITHOUT notify (no ready config)
         let config = ProcessConfig {
             name: "no-notify".to_string(),
             exec: script.to_string_lossy().to_string(),
             args: vec![],
-            notify: None,
             ..Default::default()
         };
         let manager = ctx.create_manager();
@@ -539,7 +545,7 @@ async fn test_watchdog_respects_max_restarts() {
 
         // Use 1s watchdog timeout, max 2 restarts
         let mut config = watchdog_process_config("watchdog-max", &script, 1_000_000, false);
-        config.max_restarts = Some(2);
+        config.restart.max = Some(2);
 
         let manager = ctx.create_manager();
         manager.start_command(&config, None).await.unwrap();

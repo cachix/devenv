@@ -231,15 +231,15 @@ in
         after = [ "devenv:processes:kafka" ];
         exec = "${startKafkaConnect}/bin/start-kafka-connect";
 
-        process-compose = {
-          readiness_probe = {
-            initial_delay_seconds = 2;
-            http_get = {
-              path = "/connectors";
-              port = allocatedPort;
-            };
+        ready = {
+          http.get = {
+            path = "/connectors";
+            port = allocatedPort;
           };
+          initial_delay = 2;
+        };
 
+        process-compose = {
           depends_on = {
             kafka = {
               condition = "process_healthy";

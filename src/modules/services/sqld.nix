@@ -34,14 +34,12 @@ in
       ports.main.allocate = basePort;
       exec = "exec ${pkgs.sqld}/bin/sqld --http-listen-addr 127.0.0.1:${toString allocatedPort} ${qs cfg.extraArgs}";
 
-      process-compose = {
-        readiness_probe = {
-          initial_delay_seconds = 2;
-          http_get = {
-            path = "/health";
-            port = allocatedPort;
-          };
+      ready = {
+        http.get = {
+          path = "/health";
+          port = allocatedPort;
         };
+        initial_delay = 2;
       };
     };
   };

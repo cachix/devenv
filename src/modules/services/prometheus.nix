@@ -165,21 +165,14 @@ in
       ports.main.allocate = basePort;
       exec = "exec ${cfg.package}/bin/prometheus ${prometheusArgs}";
 
-      process-compose = {
-        readiness_probe = {
-          http_get = {
-            host = "127.0.0.1";
-            port = allocatedPort;
-            path = "/-/ready";
-          };
-          initial_delay_seconds = 2;
-          period_seconds = 10;
-          timeout_seconds = 4;
-          success_threshold = 1;
-          failure_threshold = 3;
+      ready = {
+        http.get = {
+          host = "127.0.0.1";
+          port = allocatedPort;
+          path = "/-/ready";
         };
-
-        availability.restart = "on_failure";
+        initial_delay = 2;
+        probe_timeout = 4;
       };
     };
 

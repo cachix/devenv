@@ -289,16 +289,15 @@ impl Tasks {
                         }
                     });
 
-                    // Validate @ready dependencies on process tasks require notify/listen
+                    // Validate @ready dependencies on process tasks require ready or listen
                     if resolved_kind == DependencyKind::Ready
                         && dep_task.task.r#type == TaskType::Process
                     {
-                        let has_notify = dep_task
+                        let has_ready = dep_task
                             .task
                             .process
                             .as_ref()
-                            .and_then(|p| p.notify.as_ref())
-                            .map_or(false, |n| n.enable);
+                            .map_or(false, |p| p.ready.is_some());
                         let has_listen = dep_task.task.process.as_ref().map_or(false, |p| {
                             p.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
                         });
@@ -307,10 +306,10 @@ impl Tasks {
                             .process
                             .as_ref()
                             .map_or(false, |p| !p.ports.is_empty());
-                        if !has_notify && !has_listen && !has_ports {
+                        if !has_ready && !has_listen && !has_ports {
                             validation_errors.push(format!(
-                                "Task '{}' depends on '{}@ready' but process has no notify.enable, TCP listen config, or allocated ports. \
-                                 Add notify.enable = true, configure a TCP listen socket, or allocate ports for the process.",
+                                "Task '{}' depends on '{}@ready' but process has no ready config, TCP listen config, or allocated ports. \
+                                 Add a ready probe, configure a TCP listen socket, or allocate ports for the process.",
                                 task_state.task.name, dep_spec.name
                             ));
                         }
@@ -336,16 +335,15 @@ impl Tasks {
                         }
                     });
 
-                    // Validate @ready dependencies - current task must have notify/listen if it's a process
+                    // Validate @ready dependencies - current task must have ready or listen if it's a process
                     if resolved_kind == DependencyKind::Ready
                         && task_state.task.r#type == TaskType::Process
                     {
-                        let has_notify = task_state
+                        let has_ready = task_state
                             .task
                             .process
                             .as_ref()
-                            .and_then(|p| p.notify.as_ref())
-                            .map_or(false, |n| n.enable);
+                            .map_or(false, |p| p.ready.is_some());
                         let has_listen = task_state.task.process.as_ref().map_or(false, |p| {
                             p.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
                         });
@@ -354,10 +352,10 @@ impl Tasks {
                             .process
                             .as_ref()
                             .map_or(false, |p| !p.ports.is_empty());
-                        if !has_notify && !has_listen && !has_ports {
+                        if !has_ready && !has_listen && !has_ports {
                             validation_errors.push(format!(
-                                "Process '{}' has tasks depending on it via @ready but has no notify.enable, TCP listen config, or allocated ports. \
-                                 Add notify.enable = true, configure a TCP listen socket, or allocate ports for the process.",
+                                "Process '{}' has tasks depending on it via @ready but has no ready config, TCP listen config, or allocated ports. \
+                                 Add a ready probe, configure a TCP listen socket, or allocate ports for the process.",
                                 task_state.task.name
                             ));
                         }

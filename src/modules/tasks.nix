@@ -2,6 +2,7 @@
 let
   types = lib.types;
   listenType = import ./lib/listen.nix { inherit lib; };
+  readyType = import ./lib/ready.nix { inherit lib; };
 
   # Attempt to evaluate devenv-tasks using the exact nixpkgs used by the root devenv flake.
   # If the locked input is not what we expect, fall back to evaluating with the user's nixpkgs.
@@ -130,17 +131,11 @@ let
               cwd = config.cwd;
               show_output = config.showOutput;
               process = {
-                use_sudo = config.use_sudo;
-                pseudo_terminal = config.pseudo_terminal;
+                ready = config.ready;
                 restart = config.restart;
-                max_restarts = config.max_restarts;
-                startup_timeout = config.startup_timeout;
-                restart_limit_burst = config.restart_limit_burst;
-                restart_limit_interval = config.restart_limit_interval;
                 listen = config.listen;
                 ports = config.ports;
                 watch = config.watch;
-                notify = config.notify;
                 watchdog = config.watchdog;
               };
             };
@@ -206,78 +201,35 @@ let
             description = "Working directory to run the task in. If not specified, the current working directory will be used.";
           };
 
-          use_sudo = lib.mkOption {
-            type = types.bool;
-            default = false;
-            description = ''
-              Run this process task with sudo/elevated privileges.
-
-              Only used when type = "process".
-            '';
-          };
-
-          pseudo_terminal = lib.mkOption {
-            type = types.bool;
-            default = false;
-            description = ''
-              Run this process task in a pseudo-terminal (PTY).
-
-              Only used when type = "process".
-            '';
+          ready = lib.mkOption {
+            type = types.nullOr readyType;
+            default = null;
+            description = "How to determine if this process task is ready to serve.";
           };
 
           # Process-specific configuration (only used when type = "process")
           restart = lib.mkOption {
-            type = types.enum [ "never" "always" "on_failure" ];
-            default = "on_failure";
-            description = ''
-              Process restart policy:
-              - never: Never restart the process
-              - always: Always restart when it exits
-              - on_failure: Restart only on failure (non-zero exit code)
-
-              Only used when type = "process".
-            '';
-          };
-
-          max_restarts = lib.mkOption {
-            type = types.nullOr types.int;
-            default = 5;
-            description = ''
-              Maximum number of restart attempts. null means unlimited restarts.
-
-              Only used when type = "process".
-            '';
-          };
-
-          startup_timeout = lib.mkOption {
-            type = types.nullOr types.ints.unsigned;
-            default = null;
-            description = ''
-              Maximum time in seconds for the process to signal readiness.
-
-              Only used when type = "process".
-            '';
-          };
-
-          restart_limit_burst = lib.mkOption {
-            type = types.nullOr types.ints.unsigned;
-            default = null;
-            description = ''
-              Maximum number of restarts within the sliding window.
-
-              Only used when type = "process".
-            '';
-          };
-
-          restart_limit_interval = lib.mkOption {
-            type = types.nullOr types.ints.unsigned;
-            default = null;
-            description = ''
-              Sliding window size in seconds for restart rate limiting.
-
-              Only used when type = "process".
-            '';
+            type = types.submodule {
+              options = {
+                on = lib.mkOption {
+                  type = types.enum [ "never" "always" "on_failure" ];
+                  default = "on_failure";
+                  description = "When to restart: never, always, or on_failure.";
+                };
+                max = lib.mkOption {
+                  type = types.nullOr types.int;
+                  default = 5;
+                  description = "Maximum restart attempts. null = unlimited.";
+                };
+                window = lib.mkOption {
+                  type = types.nullOr types.ints.unsigned;
+                  default = null;
+                  description = "Sliding window in seconds for restart rate limiting. null = lifetime limit.";
+                };
+              };
+            };
+            default = { };
+            description = "Process restart policy. Only used when type = \"process\".";
           };
 
           ports = lib.mkOption {
@@ -387,27 +339,6 @@ let
             '';
           };
 
-          notify = lib.mkOption {
-            type = types.submodule {
-              options.enable = lib.mkOption {
-                type = types.bool;
-                default = false;
-                description = ''
-                  Enable systemd notify protocol for readiness signaling.
-                  When enabled, the process must send READY=1 to the NOTIFY_SOCKET
-                  before dependent tasks with @ready suffix will be unblocked.
-
-                  Only used when type = "process".
-                '';
-              };
-            };
-            default = { };
-            description = ''
-              Systemd notify protocol configuration for readiness signaling.
-
-              Only used when type = "process".
-            '';
-          };
         };
       });
   tasksJSON = (lib.mapAttrsToList (name: value: { inherit name; } // value.config) config.tasks);

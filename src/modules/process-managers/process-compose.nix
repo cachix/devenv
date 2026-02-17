@@ -146,10 +146,42 @@ in
                 else config.process.taskCommands.${name};
               envList = lib.mapAttrsToList (k: v: "${k}=${v}") value.env;
               pcEnv = value.process-compose.environment or [ ];
+
+              # Translate ready -> readiness_probe
+              typedProbe = lib.optionalAttrs
+                (value.ready != null && (value.ready.exec != null || value.ready.http.get != null))
+                (
+                  let r = value.ready; in {
+                    readiness_probe =
+                      (lib.optionalAttrs (r.exec != null) { exec.command = r.exec; })
+                      // (lib.optionalAttrs (r.http.get != null) { http_get = r.http.get; })
+                      // {
+                        initial_delay_seconds = r.initial_delay;
+                        period_seconds = r.period;
+                        timeout_seconds = r.timeout;
+                        inherit (r) success_threshold failure_threshold;
+                      };
+                  }
+                );
+
+              # Translate restart -> availability
+              typedAvailability = {
+                availability = {
+                  restart = value.restart.on;
+                } // lib.optionalAttrs (value.restart.max != null) {
+                  max_restarts = value.restart.max;
+                };
+              };
+
+              # Escape hatch (environment handled separately)
+              pcAttrs = removeAttrs value.process-compose [ "environment" ];
             in
-            { inherit command; } // value.process-compose // {
-              environment = envList ++ pcEnv;
-            } // lib.optionalAttrs (!value.enable) { disabled = true; }
+            { inherit command; }
+            // typedAvailability
+            // typedProbe
+            // pcAttrs
+            // { environment = envList ++ pcEnv; }
+            // lib.optionalAttrs (!value.enable) { disabled = true; }
           )
           config.processes;
       };

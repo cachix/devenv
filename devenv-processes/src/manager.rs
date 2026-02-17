@@ -133,13 +133,6 @@ impl NativeProcessManager {
     ) -> Result<Arc<Job>> {
         debug!("Starting command '{}': {}", config.name, config.exec);
 
-        if config.pseudo_terminal {
-            bail!(
-                "Process '{}' requested pseudo_terminal, but the native process manager does not support PTY yet",
-                config.name
-            );
-        }
-
         // Extract ports from listen config and allocated ports
         let mut ports: Vec<String> = config
             .listen
@@ -171,8 +164,9 @@ impl NativeProcessManager {
         }
         let activity = builder.start();
 
-        // Create notify socket if configured
-        let notify_socket = if config.notify.as_ref().is_some_and(|n| n.enable) {
+        // Create notify socket if configured via ready.notify
+        let uses_notify = config.ready.as_ref().map_or(false, |r| r.notify);
+        let notify_socket = if uses_notify {
             let socket = NotifySocket::new(&self.state_dir, &config.name).await?;
             info!(
                 "Created notify socket for {} at {}",
@@ -250,7 +244,7 @@ impl NativeProcessManager {
         let (status_tx, status_rx) = tokio::sync::watch::channel(initial_status);
 
         // If no readiness mechanism is configured, mark process as immediately ready
-        let has_notify = config.notify.as_ref().is_some_and(|n| n.enable);
+        let has_notify = config.ready.as_ref().is_some_and(|r| r.notify);
         let has_tcp_probe = !config.listen.is_empty() && !has_notify;
         if !has_notify && !has_tcp_probe {
             let _ = status_tx.send(crate::supervisor_state::JobStatus {
@@ -945,6 +939,7 @@ impl Drop for NativeProcessManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::RestartPolicy;
 
     #[tokio::test]
     async fn test_create_manager() {
@@ -961,7 +956,11 @@ mod tests {
             name: "test-echo".to_string(),
             exec: "echo".to_string(),
             args: vec!["hello".to_string()],
-            restart: crate::config::RestartPolicy::Never,
+            restart: crate::config::RestartConfig {
+                on: RestartPolicy::Never,
+                max: Some(5),
+                window: None,
+            },
             ..Default::default()
         };
 

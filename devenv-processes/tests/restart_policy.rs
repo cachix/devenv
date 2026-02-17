@@ -6,7 +6,7 @@
 mod common;
 
 use common::*;
-use devenv_processes::{ProcessConfig, RestartPolicy, SupervisorPhase};
+use devenv_processes::{ProcessConfig, RestartConfig, RestartPolicy, SupervisorPhase};
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -30,7 +30,10 @@ async fn test_restart_never() {
             name: "no-restart".to_string(),
             exec: script.to_string_lossy().to_string(),
             args: vec![],
-            restart: RestartPolicy::Never,
+            restart: RestartConfig {
+                on: RestartPolicy::Never,
+                ..Default::default()
+            },
             ..Default::default()
         };
 
@@ -62,8 +65,11 @@ async fn test_restart_always_on_success() {
             name: "always-restart".to_string(),
             exec: script.to_string_lossy().to_string(),
             args: vec![],
-            restart: RestartPolicy::Always,
-            max_restarts: Some(3),
+            restart: RestartConfig {
+                on: RestartPolicy::Always,
+                max: Some(3),
+                window: None,
+            },
             ..Default::default()
         };
 
@@ -105,8 +111,11 @@ async fn test_restart_always_on_failure() {
             name: "always-fail".to_string(),
             exec: script.to_string_lossy().to_string(),
             args: vec![],
-            restart: RestartPolicy::Always,
-            max_restarts: Some(2),
+            restart: RestartConfig {
+                on: RestartPolicy::Always,
+                max: Some(2),
+                window: None,
+            },
             ..Default::default()
         };
 
@@ -148,8 +157,11 @@ async fn test_restart_on_failure_with_failure() {
             name: "on-failure".to_string(),
             exec: script.to_string_lossy().to_string(),
             args: vec![],
-            restart: RestartPolicy::OnFailure,
-            max_restarts: Some(2),
+            restart: RestartConfig {
+                on: RestartPolicy::OnFailure,
+                max: Some(2),
+                window: None,
+            },
             ..Default::default()
         };
 
@@ -189,8 +201,11 @@ async fn test_restart_on_failure_with_success() {
             name: "on-failure-success".to_string(),
             exec: script.to_string_lossy().to_string(),
             args: vec![],
-            restart: RestartPolicy::OnFailure,
-            max_restarts: Some(3),
+            restart: RestartConfig {
+                on: RestartPolicy::OnFailure,
+                max: Some(3),
+                window: None,
+            },
             ..Default::default()
         };
 
@@ -224,8 +239,11 @@ async fn test_max_restarts_limit() {
             name: "max-restarts".to_string(),
             exec: script.to_string_lossy().to_string(),
             args: vec![],
-            restart: RestartPolicy::Always,
-            max_restarts: Some(3),
+            restart: RestartConfig {
+                on: RestartPolicy::Always,
+                max: Some(3),
+                window: None,
+            },
             ..Default::default()
         };
 
@@ -267,8 +285,11 @@ async fn test_unlimited_restarts() {
             name: "unlimited".to_string(),
             exec: script.to_string_lossy().to_string(),
             args: vec![],
-            restart: RestartPolicy::Always,
-            max_restarts: None,
+            restart: RestartConfig {
+                on: RestartPolicy::Always,
+                max: None,
+                window: None,
+            },
             ..Default::default()
         };
 
