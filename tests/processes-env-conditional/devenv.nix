@@ -1,6 +1,8 @@
 { lib, config, ... }:
 
 {
+  process.manager.implementation = "process-compose";
+
   env.ENABLE_PROCESS = true;
 
   # This pattern should not cause infinite recursion

@@ -73,118 +73,122 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    env = {
-      PC_CONFIG_FILES = toString cfg.configFile;
-      PC_SOCKET_PATH = if cfg.unixSocket.enable then cfg.unixSocket.path else null;
-    };
-
-    process.manager.args = {
-      "config" = cfg.configFile;
-      "disable-dotenv" = true;
-      "port" = if !cfg.unixSocket.enable then toString cfg.port else null;
-      # Prevent the TUI from immediately closing if all processes fail.
-      # Improves the UX by letting users inspect the logs.
-      "keep-project" = cfg.tui.enable;
-      "unix-socket" =
-        if cfg.unixSocket.enable
-        then cfg.unixSocket.path
-        else null;
-      # TODO: move -t (for tui) here. We need a newer nixpkgs for optionValueSeparator = "=".
-    };
-
-    process.manager.command = lib.mkDefault ''
-      # Ensure the log directory exists
-      mkdir -p "${config.devenv.state}/process-compose"
-
-      ${lib.optionalString cfg.unixSocket.enable ''
-      # Attach to an existing process-compose instance if:
-      # - The unix socket is enabled
-      # - The socket file exists
-      # - The file is a unix socket
-      # - There's an active process listening on the socket
-      if ${pkgs.coreutils}/bin/timeout 1 ${lib.getExe pkgs.socat} - "UNIX-CONNECT:$PC_SOCKET_PATH" </dev/null >/dev/null 2>&1; then
-        echo "Attaching to existing process-compose server at $PC_SOCKET_PATH" >&2
-        exec ${lib.getExe cfg.package} --unix-socket "$PC_SOCKET_PATH" attach "$@"
-      fi
-      ''}
-
-      # Start a new process-compose server
-      ${lib.getExe cfg.package} \
-        ${lib.cli.toGNUCommandLineShell { } config.process.manager.args} \
-        -t="''${PC_TUI_ENABLED:-${lib.boolToString cfg.tui.enable}}" \
-        up "$@" &
-    '';
-
-    packages = [ cfg.package ];
-
-    process.managers.process-compose = {
-      configFile = lib.mkDefault (settingsFormat.generate "process-compose.yaml" cfg.settings);
-      settings = {
-        version = lib.mkDefault "0.5";
-        is_strict = lib.mkDefault true;
-        log_location = lib.mkDefault "${config.devenv.state}/process-compose/process-compose.log";
-        shell = {
-          shell_command = lib.mkDefault (lib.getExe pkgs.bashInteractive);
-          shell_argument = lib.mkDefault "-c";
-          elevated_shell_command = lib.mkDefault "sudo";
-          # Pass-through environment variables required by devenv-tasks when using elevated processes.
-          elevated_shell_argument = lib.mkDefault (lib.concatStringsSep " " [
-            "DEVENV_DOTFILE='${config.devenv.dotfile}'"
-            "DEVENV_CMDLINE=\"$DEVENV_CMDLINE\""
-            "DEVENV_TASK_FILE='${config.task.config}'"
-            "-S"
-          ]);
-        };
-        processes = lib.mapAttrs
-          (name: value:
-            let
-              command =
-                if !value.enable then value.exec
-                else if value.process-compose.is_elevated or false
-                then config.process.taskCommandsBase.${name}
-                else config.process.taskCommands.${name};
-              envList = lib.mapAttrsToList (k: v: "${k}=${v}") value.env;
-              pcEnv = value.process-compose.environment or [ ];
-
-              # Translate ready -> readiness_probe
-              typedProbe = lib.optionalAttrs
-                (value.ready != null && (value.ready.exec != null || value.ready.http.get != null))
-                (
-                  let r = value.ready; in {
-                    readiness_probe =
-                      (lib.optionalAttrs (r.exec != null) { exec.command = r.exec; })
-                      // (lib.optionalAttrs (r.http.get != null) { http_get = r.http.get; })
-                      // {
-                        initial_delay_seconds = r.initial_delay;
-                        period_seconds = r.period;
-                        timeout_seconds = r.timeout;
-                        inherit (r) success_threshold failure_threshold;
-                      };
-                  }
-                );
-
-              # Translate restart -> availability
-              typedAvailability = {
-                availability = {
-                  restart = value.restart.on;
-                } // lib.optionalAttrs (value.restart.max != null) {
-                  max_restarts = value.restart.max;
-                };
-              };
-
-              # Escape hatch (environment handled separately)
-              pcAttrs = removeAttrs value.process-compose [ "environment" ];
-            in
-            { inherit command; }
-            // typedAvailability
-            // typedProbe
-            // pcAttrs
-            // { environment = envList ++ pcEnv; }
-            // lib.optionalAttrs (!value.enable) { disabled = true; }
-          )
-          config.processes;
+  config = lib.mkMerge [
+    (lib.mkIf (config.process.manager.implementation == "process-compose") {
+      env = {
+        PC_CONFIG_FILES = toString cfg.configFile;
+        PC_SOCKET_PATH = if cfg.unixSocket.enable then cfg.unixSocket.path else null;
       };
-    };
-  };
+    })
+
+    (lib.mkIf cfg.enable {
+      process.manager.args = {
+        "config" = cfg.configFile;
+        "disable-dotenv" = true;
+        "port" = if !cfg.unixSocket.enable then toString cfg.port else null;
+        # Prevent the TUI from immediately closing if all processes fail.
+        # Improves the UX by letting users inspect the logs.
+        "keep-project" = cfg.tui.enable;
+        "unix-socket" =
+          if cfg.unixSocket.enable
+          then cfg.unixSocket.path
+          else null;
+        # TODO: move -t (for tui) here. We need a newer nixpkgs for optionValueSeparator = "=".
+      };
+
+      process.manager.command = lib.mkDefault ''
+        # Ensure the log directory exists
+        mkdir -p "${config.devenv.state}/process-compose"
+
+        ${lib.optionalString cfg.unixSocket.enable ''
+        # Attach to an existing process-compose instance if:
+        # - The unix socket is enabled
+        # - The socket file exists
+        # - The file is a unix socket
+        # - There's an active process listening on the socket
+        if ${pkgs.coreutils}/bin/timeout 1 ${lib.getExe pkgs.socat} - "UNIX-CONNECT:$PC_SOCKET_PATH" </dev/null >/dev/null 2>&1; then
+          echo "Attaching to existing process-compose server at $PC_SOCKET_PATH" >&2
+          exec ${lib.getExe cfg.package} --unix-socket "$PC_SOCKET_PATH" attach "$@"
+        fi
+        ''}
+
+        # Start a new process-compose server
+        ${lib.getExe cfg.package} \
+          ${lib.cli.toGNUCommandLineShell { } config.process.manager.args} \
+          -t="''${PC_TUI_ENABLED:-${lib.boolToString cfg.tui.enable}}" \
+          up "$@" &
+      '';
+
+      packages = [ cfg.package ];
+
+      process.managers.process-compose = {
+        configFile = lib.mkDefault (settingsFormat.generate "process-compose.yaml" cfg.settings);
+        settings = {
+          version = lib.mkDefault "0.5";
+          is_strict = lib.mkDefault true;
+          log_location = lib.mkDefault "${config.devenv.state}/process-compose/process-compose.log";
+          shell = {
+            shell_command = lib.mkDefault (lib.getExe pkgs.bashInteractive);
+            shell_argument = lib.mkDefault "-c";
+            elevated_shell_command = lib.mkDefault "sudo";
+            # Pass-through environment variables required by devenv-tasks when using elevated processes.
+            elevated_shell_argument = lib.mkDefault (lib.concatStringsSep " " [
+              "DEVENV_DOTFILE='${config.devenv.dotfile}'"
+              "DEVENV_CMDLINE=\"$DEVENV_CMDLINE\""
+              "DEVENV_TASK_FILE='${config.task.config}'"
+              "-S"
+            ]);
+          };
+          processes = lib.mapAttrs
+            (name: value:
+              let
+                command =
+                  if !value.enable then value.exec
+                  else if value.process-compose.is_elevated or false
+                  then config.process.taskCommandsBase.${name}
+                  else config.process.taskCommands.${name};
+                envList = lib.mapAttrsToList (k: v: "${k}=${v}") value.env;
+                pcEnv = value.process-compose.environment or [ ];
+
+                # Translate ready -> readiness_probe
+                typedProbe = lib.optionalAttrs
+                  (value.ready != null && (value.ready.exec != null || value.ready.http.get != null))
+                  (
+                    let r = value.ready; in {
+                      readiness_probe =
+                        (lib.optionalAttrs (r.exec != null) { exec.command = r.exec; })
+                        // (lib.optionalAttrs (r.http.get != null) { http_get = r.http.get; })
+                        // {
+                          initial_delay_seconds = r.initial_delay;
+                          period_seconds = r.period;
+                          timeout_seconds = r.timeout;
+                          inherit (r) success_threshold failure_threshold;
+                        };
+                    }
+                  );
+
+                # Translate restart -> availability
+                typedAvailability = {
+                  availability = {
+                    restart = value.restart.on;
+                  } // lib.optionalAttrs (value.restart.max != null) {
+                    max_restarts = value.restart.max;
+                  };
+                };
+
+                # Escape hatch (environment handled separately)
+                pcAttrs = removeAttrs value.process-compose [ "environment" ];
+              in
+              { inherit command; }
+              // typedAvailability
+              // typedProbe
+              // pcAttrs
+              // { environment = envList ++ pcEnv; }
+              // lib.optionalAttrs (!value.enable) { disabled = true; }
+            )
+            config.processes;
+        };
+      };
+    })
+  ];
 }
