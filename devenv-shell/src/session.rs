@@ -321,14 +321,21 @@ impl ShellSession {
         write!(stdout, "\x1b[r\x1b[?6l")?;
         stdout.flush()?;
 
-        // Get terminal size without moving cursor (preserves TUI cursor position)
-        if let Ok((cols, rows)) = terminal::size() {
-            self.size = PtySize {
-                rows,
-                cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            };
+        // Get terminal size without moving cursor (preserves TUI cursor position).
+        // Only query when no explicit size was configured (config.size is None).
+        // TODO: query the size from the actual stdout fd (e.g. TIOCGWINSZ on the
+        // writer) instead of crossterm::terminal::size() which always uses the
+        // process's controlling terminal. That would make this work correctly even
+        // with injected I/O and remove the need for the config.size guard.
+        if self.config.size.is_none() {
+            if let Ok((cols, rows)) = terminal::size() {
+                self.size = PtySize {
+                    rows,
+                    cols,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                };
+            }
         }
         tracing::debug!(
             "session: terminal size: {}x{}",
