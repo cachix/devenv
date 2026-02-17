@@ -576,10 +576,7 @@ struct AtomicMetrics {
 
 impl DaemonClient {
     /// Connect to an existing cachix daemon
-    pub async fn connect(
-        config: DaemonConnectConfig,
-        activity: Option<Activity>,
-    ) -> Result<Self> {
+    pub async fn connect(config: DaemonConnectConfig, activity: Option<Activity>) -> Result<Self> {
         let client_id = Uuid::new_v4();
         tracing::debug!(client_id = %client_id, "Connecting to cachix daemon");
 
@@ -814,7 +811,11 @@ impl DaemonClient {
                                 activity.progress(done, expected, Some(short_path_name(path)));
                             }
                         }
-                        PushEvent::StorePathProgress { ref path, current_bytes, .. } => {
+                        PushEvent::StorePathProgress {
+                            ref path,
+                            current_bytes,
+                            ..
+                        } => {
                             tracing::debug!(path = %path, current_bytes, "Upload progress");
                         }
                         PushEvent::StorePathDone { ref path } => {
@@ -832,7 +833,10 @@ impl DaemonClient {
                                 activity.progress(done, expected, None);
                             }
                         }
-                        PushEvent::StorePathFailed { ref path, ref reason } => {
+                        PushEvent::StorePathFailed {
+                            ref path,
+                            ref reason,
+                        } => {
                             tracing::warn!(path = %path, reason = %reason, "Push failed");
                             metrics.failed.fetch_add(1, Ordering::SeqCst);
                             metrics.in_progress.fetch_sub(1, Ordering::SeqCst);
@@ -1031,7 +1035,10 @@ mod tests {
         let request = ClientPushRequest::new(vec![], true);
         let json = serde_json::to_string(&request).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed["contents"]["storePaths"].as_array().unwrap().len(), 0);
+        assert_eq!(
+            parsed["contents"]["storePaths"].as_array().unwrap().len(),
+            0
+        );
     }
 
     #[test]

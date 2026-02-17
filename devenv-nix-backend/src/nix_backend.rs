@@ -1113,7 +1113,8 @@ impl NixBackend for NixRustBackend {
         if let Some(cachix_config) = self.get_cachix_config().await? {
             self.apply_cachix_substituters(&cachix_config).await?;
             if let Some(ref push_cache) = cachix_config.caches.push {
-                self.init_cachix_daemon(push_cache, &cachix_config.binary).await?;
+                self.init_cachix_daemon(push_cache, &cachix_config.binary)
+                    .await?;
             }
         }
 
@@ -2101,7 +2102,11 @@ impl NixRustBackend {
             Err(e) => {
                 // Log the full error to help debug port allocation errors
                 tracing::error!(error = %e, "Failed to convert {} to JSON", attr_path);
-                return Err(miette::miette!("Failed to convert {} to JSON: {}", attr_path, e));
+                return Err(miette::miette!(
+                    "Failed to convert {} to JSON: {}",
+                    attr_path,
+                    e
+                ));
             }
         };
 
