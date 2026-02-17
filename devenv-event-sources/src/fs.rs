@@ -60,8 +60,11 @@ impl WatcherHandle {
         paths.insert(canonical);
 
         if let Some(ref config) = self.config {
-            let parents: HashSet<&Path> = paths.iter().filter_map(|p| p.parent()).collect();
-            config.pathset(parents.into_iter().map(WatchedPath::non_recursive));
+            config.pathset(
+                paths
+                    .iter()
+                    .map(|p| WatchedPath::non_recursive(p.as_path())),
+            );
         }
     }
 
@@ -176,11 +179,11 @@ impl FileWatcher {
         if config.recursive {
             wx_config.pathset(paths.iter().map(|p| p.as_path()));
         } else {
-            // For non-recursive mode (individual files), watch parent
-            // directories. FSEvents on macOS operates at directory
-            // granularity and cannot watch individual files.
-            let parents: HashSet<&Path> = paths.iter().filter_map(|p| p.parent()).collect();
-            wx_config.pathset(parents.into_iter().map(WatchedPath::non_recursive));
+            wx_config.pathset(
+                paths
+                    .iter()
+                    .map(|p| WatchedPath::non_recursive(p.as_path())),
+            );
         }
 
         let handle = WatcherHandle {
@@ -496,6 +499,9 @@ mod tests {
 
         let handle = watcher.handle();
         handle.watch(&runtime_file);
+
+        // Let the fs worker pick up the new pathset and set up the notify watcher.
+        tokio::task::yield_now().await;
 
         File::create(&runtime_file)
             .expect("open file")
