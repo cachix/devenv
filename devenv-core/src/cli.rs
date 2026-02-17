@@ -7,6 +7,10 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::error;
 
+fn should_auto_disable_tui(is_ci: bool, has_tty: bool) -> bool {
+    is_ci || !has_tty
+}
+
 #[derive(clap::ValueEnum, Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TraceFormat {
@@ -343,8 +347,8 @@ impl GlobalOptions {
         // Disable TUI in CI environments or when not running in a TTY
         if self.tui {
             let is_ci = env::var_os("CI").is_some();
-            let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
-            if is_ci || !is_tty {
+            let has_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
+            if should_auto_disable_tui(is_ci, has_tty) {
                 self.tui = false;
             }
         }
@@ -398,6 +402,26 @@ pub fn default_system() -> String {
         "unknown OS"
     };
     format!("{arch}-{os}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_auto_disable_tui;
+
+    #[test]
+    fn auto_disables_tui_in_ci() {
+        assert!(should_auto_disable_tui(true, true));
+    }
+
+    #[test]
+    fn auto_disables_tui_without_tty() {
+        assert!(should_auto_disable_tui(false, false));
+    }
+
+    #[test]
+    fn keeps_tui_when_interactive_and_not_ci() {
+        assert!(!should_auto_disable_tui(false, true));
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
