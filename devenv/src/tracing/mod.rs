@@ -1,11 +1,9 @@
 mod devenv_layer;
 mod human_duration;
-mod indicatif_layer;
 mod span_ids;
 mod span_timings;
 
-use devenv_layer::{DevenvFieldFormatter, DevenvFormat, DevenvLayer};
-use indicatif_layer::{DevenvIndicatifFilter, IndicatifLayer};
+use devenv_layer::{DevenvFormat, DevenvLayer};
 use span_ids::{SpanContext, SpanIdLayer};
 
 pub use devenv_core::cli::{TraceFormat, TraceOutput};
@@ -104,20 +102,11 @@ pub fn init_tracing_default() {
     init_cli_tracing(Level::default(), None);
 }
 
-/// Initialize tracing for legacy CLI mode with spinners and progress indicators.
+/// Initialize tracing for legacy CLI mode.
 /// Export format is always JSON.
 pub fn init_cli_tracing(level: Level, trace_output: Option<&TraceOutput>) {
     let ansi = io::stderr().is_terminal();
     let export_writer = trace_output.and_then(create_trace_writer);
-
-    let style =
-        tracing_indicatif::style::ProgressStyle::with_template("{spinner:.blue} {span_fields}")
-            .unwrap()
-            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]);
-    let indicatif = IndicatifLayer::new()
-        .with_progress_style(style)
-        .with_span_field_formatter(DevenvFieldFormatter);
-    let writer = indicatif.get_stderr_writer();
 
     Registry::default()
         .with(create_filter(level))
@@ -126,10 +115,9 @@ pub fn init_cli_tracing(level: Level, trace_output: Option<&TraceOutput>) {
         .with(
             tracing_subscriber::fmt::layer()
                 .event_format(DevenvFormat::default())
-                .with_writer(writer)
+                .with_writer(io::stderr)
                 .with_ansi(ansi),
         )
-        .with(DevenvIndicatifFilter::new(indicatif))
         .with(export_writer.map(create_json_layer))
         .init();
 }

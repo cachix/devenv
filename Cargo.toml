@@ -129,8 +129,6 @@ tracing-subscriber = { version = "0.3.20", features = [
 ] }
 valuable = { version = "0.1", features = ["derive"] }
 json-subscriber = { version = "0.2.6" }
-tracing-indicatif = "=0.3.9"
-indicatif = "0.17.11"
 tokio = { version = "1.47.1", features = [
   "process",
   "fs",

@@ -342,9 +342,7 @@ impl GlobalOptions {
 
         // Disable TUI in CI environments or when not running in a TTY
         if self.tui {
-            let is_ci = env::var("CI")
-                .map(|s| s == "true" || s == "1")
-                .unwrap_or(false);
+            let is_ci = env::var_os("CI").is_some();
             let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
             if is_ci || !is_tty {
                 self.tui = false;

@@ -20,8 +20,6 @@ struct SpanContext {
     msg: String,
     /// Whether the span has an error event.
     has_error: bool,
-    /// Whether the spinner should be disabled for this span.
-    no_spinner: bool,
     /// Span timings
     timings: SpanTimings,
 }
@@ -67,42 +65,6 @@ macro_rules! with_event_from_span {
     };
 }
 
-/// Custom field formatter that extracts just the devenv.user_message value
-pub struct DevenvFieldFormatter;
-
-impl<'a> FormatFields<'a> for DevenvFieldFormatter {
-    fn format_fields<R>(&self, mut writer: Writer<'a>, fields: R) -> fmt::Result
-    where
-        R: tracing_subscriber::field::RecordFields,
-    {
-        // Extract just the user message value, not the field name
-        #[derive(Default)]
-        struct UserMessageExtractor {
-            user_message: Option<String>,
-        }
-
-        impl Visit for UserMessageExtractor {
-            fn record_debug(&mut self, _field: &Field, _value: &dyn fmt::Debug) {}
-
-            fn record_str(&mut self, field: &Field, value: &str) {
-                if field.name() == "devenv.user_message" {
-                    self.user_message = Some(value.to_string());
-                }
-            }
-        }
-
-        let mut extractor = UserMessageExtractor::default();
-        fields.record(&mut extractor);
-
-        if let Some(msg) = extractor.user_message {
-            write!(writer, "{msg}")
-        } else {
-            // Fallback - show nothing for spans without user messages
-            Ok(())
-        }
-    }
-}
-
 #[derive(Default)]
 pub struct DevenvLayer {
     /// Whether the span has an error event.
@@ -127,7 +89,6 @@ where
         #[derive(Default)]
         struct UserMessageVisitor {
             user_message: Option<String>,
-            no_spinner: bool,
         }
 
         impl Visit for UserMessageVisitor {
@@ -136,12 +97,6 @@ where
             fn record_str(&mut self, field: &Field, value: &str) {
                 if field.name() == "devenv.user_message" {
                     self.user_message = Some(value.to_string());
-                }
-            }
-
-            fn record_bool(&mut self, field: &Field, value: bool) {
-                if field.name() == "devenv.no_spinner" {
-                    self.no_spinner = value;
                 }
             }
         }
@@ -155,28 +110,24 @@ where
             ext.insert(SpanContext {
                 msg: msg.clone(),
                 has_error: false,
-                no_spinner: visitor.no_spinner,
                 timings: SpanTimings::new(),
             });
 
-            // If spinner is disabled, emit a start event to show the initial message
-            if visitor.no_spinner {
-                let msg = msg.clone();
-
-                with_event_from_span!(
-                    id,
-                    span,
-                    "message" = msg,
-                    "devenv.ui.message" = true,
-                    "devenv.span_event_kind" = SpanKind::Start as u8,
-                    "devenv.span_has_error" = false,
-                    |event| {
-                        drop(ext);
-                        drop(span);
-                        ctx.event(&event);
-                    }
-                );
-            }
+            // Emit a start event to show the initial message
+            let msg = msg.clone();
+            with_event_from_span!(
+                id,
+                span,
+                "message" = msg,
+                "devenv.ui.message" = true,
+                "devenv.span_event_kind" = SpanKind::Start as u8,
+                "devenv.span_has_error" = false,
+                |event| {
+                    drop(ext);
+                    drop(span);
+                    ctx.event(&event);
+                }
+            );
         }
     }
 
@@ -303,16 +254,10 @@ where
                 let msg = &span_ctx.msg;
                 match span_kind {
                     SpanKind::Start => {
-                        // If spinner is disabled, show the start message with a dot
-                        if span_ctx.no_spinner {
-                            if ansi {
-                                write!(writer, "{prefix} ", prefix = style("•").blue())?;
-                            }
-                            return writeln!(writer, "{msg}");
+                        if ansi {
+                            write!(writer, "{prefix} ", prefix = style("•").blue())?;
                         }
-                        // Otherwise, IndicatifLayer will handle the spinner, but we still need to
-                        // return early to avoid duplicate output in our format layer
-                        return Ok(());
+                        return writeln!(writer, "{msg}");
                     }
 
                     SpanKind::End => {
