@@ -21,6 +21,8 @@ pub struct Shutdown {
     last_signal: AtomicI32,
     /// Optional receiver for cleanup completion signal
     cleanup_complete: Mutex<Option<oneshot::Receiver<()>>>,
+    /// Hook called before force-exiting (e.g., to restore terminal state)
+    pre_exit_hook: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
 }
 
 impl std::fmt::Debug for Shutdown {
@@ -40,7 +42,16 @@ impl Shutdown {
             token: CancellationToken::new(),
             last_signal: AtomicI32::new(0),
             cleanup_complete: Mutex::new(None),
+            pre_exit_hook: Mutex::new(None),
         })
+    }
+
+    /// Set a hook to be called before force-exiting the process.
+    ///
+    /// This is called when `exit_process()` is triggered (e.g., on second Ctrl+C).
+    /// Use this to restore terminal state or perform other critical cleanup.
+    pub fn set_pre_exit_hook<F: Fn() + Send + Sync + 'static>(&self, hook: F) {
+        *self.pre_exit_hook.lock().unwrap() = Some(Box::new(hook));
     }
 
     /// Set the cleanup completion receiver.
@@ -218,6 +229,13 @@ impl Shutdown {
     /// Restore the default handler for the last received signal and re-raise the signal
     /// to terminate with the correct exit code.
     pub fn exit_process(&self) -> ! {
+        // Run pre-exit hook (e.g., restore terminal state) before killing the process
+        if let Ok(guard) = self.pre_exit_hook.lock() {
+            if let Some(hook) = guard.as_ref() {
+                hook();
+            }
+        }
+
         let signal = self.last_signal().unwrap_or(Signal::SIGTERM);
         let action = SigAction::new(NixSigHandler::SigDfl, SaFlags::empty(), SigSet::empty());
         unsafe {

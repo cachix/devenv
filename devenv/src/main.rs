@@ -170,6 +170,14 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Save terminal state before TUI enters raw mode, so we can restore it reliably
     devenv_tui::app::save_terminal_state();
 
+    // Install panic hook to restore terminal state on panic.
+    // Without this, a panic during TUI rendering leaves the terminal in raw mode.
+    let prev_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        devenv_tui::app::restore_terminal();
+        prev_hook(info);
+    }));
+
     // In reload shell mode, backend_done is just a handoff signal; don't trigger global shutdown.
     let shutdown_on_backend_done = !matches!(
         &cli.command,
@@ -183,6 +191,11 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Signal handlers catch external signals (SIGINT from `kill`, SIGTERM, etc.)
     // TUI also handles Ctrl+C as keyboard event and sets last_signal manually
     let shutdown = Shutdown::new();
+
+    // Restore terminal before force-exit (second Ctrl+C) to prevent
+    // leaving the terminal in raw mode with echo disabled.
+    shutdown.set_pre_exit_hook(devenv_tui::app::restore_terminal);
+
     shutdown.install_signals().await;
 
     // Channel to signal TUI when backend is fully done (including cleanup)

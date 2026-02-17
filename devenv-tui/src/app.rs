@@ -377,12 +377,19 @@ pub fn save_terminal_state() {
 
 /// Restore terminal to normal state.
 /// Call this after the TUI has exited to ensure the terminal is usable.
+/// Safe to call multiple times and from signal/panic contexts.
 pub fn restore_terminal() {
     let mut stderr = io::stderr();
 
+    // Try crossterm's disable_raw_mode first as a best-effort fallback.
+    // This must come BEFORE tcsetattr so our saved original state has
+    // the final word (crossterm may not have the correct saved state if
+    // iocraft managed raw mode independently).
+    let _ = terminal::disable_raw_mode();
+
     // Restore original terminal settings saved before TUI started.
-    // This is more reliable than crossterm's disable_raw_mode() because
-    // iocraft may manage raw mode independently of crossterm.
+    // This is the authoritative restoration — it always restores the
+    // exact terminal state from before the TUI was initialized.
     #[cfg(unix)]
     if let Some(original) = ORIGINAL_TERMIOS.get() {
         use std::os::unix::io::AsRawFd;
@@ -390,8 +397,8 @@ pub fn restore_terminal() {
         unsafe { libc::tcsetattr(fd, libc::TCSANOW, original) };
     }
 
-    // Fallback: also try crossterm's disable_raw_mode
-    let _ = terminal::disable_raw_mode();
+    // Leave alternate screen (expanded log view uses fullscreen mode)
+    let _ = execute!(stderr, terminal::LeaveAlternateScreen);
 
     // Show cursor (TUI may have hidden it)
     let _ = execute!(stderr, cursor::Show);
