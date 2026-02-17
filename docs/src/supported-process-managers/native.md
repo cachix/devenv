@@ -168,13 +168,11 @@ null or absolute path
 
 
 
-### process\.managers\.native\.processConfig\.\<name>\.notify
+### process\.managers\.native\.processConfig\.\<name>\.ready
 
 
 
-Systemd notify socket configuration\.
-
-The process can send READY=1, STATUS=…, etc\. via NOTIFY_SOCKET\.
+Readiness probe configuration\.
 
 
 
@@ -191,34 +189,201 @@ null or (submodule)
 
 
 
-### process\.managers\.native\.processConfig\.\<name>\.notify\.enable
+### process\.managers\.native\.processConfig\.\<name>\.ready\.exec
 
 
 
-Enable systemd notify protocol
+Shell command to execute\. Exit 0 = ready\.
 
 
 
 *Type:*
-boolean
+null or string
 
 
 
 *Default:*
-` true `
+` null `
+
+
+
+*Example:*
+` "pg_isready -d template1" `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
 
 
 
-### process\.managers\.native\.processConfig\.\<name>\.pseudo_terminal
+### process\.managers\.native\.processConfig\.\<name>\.ready\.failure_threshold
 
 
 
-Run this process in a pseudo-terminal (PTY)\.
+Consecutive failures before marking unhealthy\.
 
-Useful for interactive processes that require terminal capabilities\.
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 3 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process\.managers\.native\.processConfig\.\<name>\.ready\.http
+
+
+
+HTTP readiness probe configuration\.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process\.managers\.native\.processConfig\.\<name>\.ready\.http\.get
+
+
+
+HTTP GET readiness check\.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process\.managers\.native\.processConfig\.\<name>\.ready\.http\.get\.host
+
+
+
+Host to connect to\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process\.managers\.native\.processConfig\.\<name>\.ready\.http\.get\.path
+
+
+
+HTTP path to request\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "/" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process\.managers\.native\.processConfig\.\<name>\.ready\.http\.get\.port
+
+
+
+Port to connect to\.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process\.managers\.native\.processConfig\.\<name>\.ready\.http\.get\.scheme
+
+
+
+URL scheme (http or https)\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "http" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process\.managers\.native\.processConfig\.\<name>\.ready\.initial_delay
+
+
+
+Seconds to wait before first probe\.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 0 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process\.managers\.native\.processConfig\.\<name>\.ready\.notify
+
+
+
+Enable systemd notify protocol for readiness signaling\.
+The process must send READY=1 to the NOTIFY_SOCKET\.
 
 
 
@@ -235,23 +400,84 @@ boolean
 
 
 
-### process\.managers\.native\.processConfig\.\<name>\.use_sudo
+### process\.managers\.native\.processConfig\.\<name>\.ready\.period
 
 
 
-Run this process with sudo/elevated privileges\.
-
-Similar to process-compose’s is_elevated option\.
+Seconds between probes\.
 
 
 
 *Type:*
-boolean
+signed integer
 
 
 
 *Default:*
-` false `
+` 10 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process\.managers\.native\.processConfig\.\<name>\.ready\.probe_timeout
+
+
+
+Seconds before a single probe times out\.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 1 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process\.managers\.native\.processConfig\.\<name>\.ready\.success_threshold
+
+
+
+Consecutive successes needed to be considered ready\.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 1 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process\.managers\.native\.processConfig\.\<name>\.ready\.timeout
+
+
+
+Overall deadline in seconds for the process to become ready\. null = no deadline\.
+
+
+
+*Type:*
+null or (unsigned integer, meaning >=0)
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
