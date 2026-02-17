@@ -523,7 +523,7 @@ async fn run_devenv_inner(
         } => {
             if no_reload {
                 // Run enterShell tasks first (TUI shows progress)
-                let task_outputs_json = devenv.run_enter_shell_tasks().await?;
+                let task_exports = devenv.run_enter_shell_tasks().await?;
 
                 // Signal TUI can exit now (tasks completed)
                 if let Some(tx) = backend_done_tx.take() {
@@ -537,9 +537,7 @@ async fn run_devenv_inner(
                 };
 
                 // Merge task-exported env vars (e.g., PATH with venv/bin) into the shell command
-                let mut envs = std::collections::HashMap::new();
-                Devenv::merge_task_exports(&task_outputs_json, &mut envs);
-                for (key, value) in envs {
+                for (key, value) in task_exports {
                     shell_config.command.env(key, value);
                 }
 
@@ -827,13 +825,11 @@ async fn run_reload_shell(
     let use_pty_tasks = cmd.is_none();
     if !use_pty_tasks {
         // Run enterShell tasks with subprocess executor (like --no-reload mode)
-        let task_outputs_json = devenv.run_enter_shell_tasks().await?;
+        let task_exports = devenv.run_enter_shell_tasks().await?;
 
         // Merge task-exported env vars (e.g., PATH with venv/bin) into the current process
         // so they're inherited by the shell session
-        let mut envs = std::collections::HashMap::new();
-        Devenv::merge_task_exports(&task_outputs_json, &mut envs);
-        for (key, value) in envs {
+        for (key, value) in task_exports {
             unsafe {
                 std::env::set_var(&key, &value);
             }

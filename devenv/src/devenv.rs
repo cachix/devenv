@@ -1154,10 +1154,10 @@ impl Devenv {
         Ok(format_tasks_tree(&tasks))
     }
 
-    /// Run enterShell tasks and return their outputs.
+    /// Run enterShell tasks and return env vars exported by tasks (e.g., PATH with venv/bin).
     /// This runs tasks via Rust (not bash hook) to enable TUI progress reporting.
     /// Task failures are logged as warnings but don't prevent shell entry.
-    pub async fn run_enter_shell_tasks(&self) -> Result<String> {
+    pub async fn run_enter_shell_tasks(&self) -> Result<HashMap<String, String>> {
         self.assemble(false).await?;
 
         // Capture the shell environment to ensure tasks run with proper devenv setup
@@ -1218,7 +1218,7 @@ impl Devenv {
         // Note: Task failures are shown in the TUI/UI output, no need to bail here.
         // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
 
-        Ok(serde_json::to_string(&outputs).expect("parsing of outputs failed"))
+        Ok(Self::collect_task_exports(&outputs))
     }
 
     /// Run enterShell tasks with a custom executor.
@@ -1227,7 +1227,7 @@ impl Devenv {
     pub async fn run_enter_shell_tasks_with_executor(
         &self,
         executor: Arc<dyn tasks::TaskExecutor>,
-    ) -> Result<String> {
+    ) -> Result<HashMap<String, String>> {
         self.assemble(false).await?;
 
         // Capture the shell environment to ensure tasks run with proper devenv setup
@@ -1271,7 +1271,7 @@ impl Devenv {
         // Note: Task failures are shown in the TUI output, no need to bail here.
         // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
 
-        Ok(serde_json::to_string(&outputs).expect("parsing of outputs failed"))
+        Ok(Self::collect_task_exports(&outputs))
     }
 
     /// Get the shell environment as a map of environment variables.
@@ -1369,26 +1369,23 @@ impl Devenv {
     }
 
     /// Extract env vars exported by tasks (e.g., PATH from Python venv)
-    /// from the task outputs JSON and merge them into `envs`.
-    pub fn merge_task_exports(task_outputs_json: &str, envs: &mut HashMap<String, String>) {
-        if let Ok(outputs) = serde_json::from_str::<
-            std::collections::BTreeMap<String, serde_json::Value>,
-        >(task_outputs_json)
-        {
-            for value in outputs.values() {
-                if let Some(env_obj) = value
-                    .get("devenv")
-                    .and_then(|d| d.get("env"))
-                    .and_then(|e| e.as_object())
-                {
-                    for (env_key, env_value) in env_obj {
-                        if let Some(env_str) = env_value.as_str() {
-                            envs.insert(env_key.clone(), env_str.to_string());
-                        }
+    /// from task outputs into a HashMap.
+    fn collect_task_exports(outputs: &tasks::Outputs) -> HashMap<String, String> {
+        let mut envs = HashMap::new();
+        for value in outputs.values() {
+            if let Some(env_obj) = value
+                .get("devenv")
+                .and_then(|d| d.get("env"))
+                .and_then(|e| e.as_object())
+            {
+                for (env_key, env_value) in env_obj {
+                    if let Some(env_str) = env_value.as_str() {
+                        envs.insert(env_key.clone(), env_str.to_string());
                     }
                 }
             }
         }
+        envs
     }
 
     pub async fn test(&self) -> Result<()> {
@@ -1675,9 +1672,7 @@ impl Devenv {
 
             // Merge task-exported env vars (e.g., PATH with venv/bin) on top of
             // the nix shell env. Task exports take precedence.
-            let task_outputs_json =
-                serde_json::to_string(&outputs).expect("parsing of outputs failed");
-            Self::merge_task_exports(&task_outputs_json, &mut envs);
+            envs.extend(Self::collect_task_exports(&outputs));
         }
 
         // ── Phase 4: Running processes ──────────────────────────────
