@@ -7,6 +7,7 @@ let
     else config.name;
   types = lib.types;
   envContainerName = builtins.getEnv "DEVENV_CONTAINER";
+  projectRoot = builtins.path { path = self; name = "source"; };
 
   nix2containerInput = config.lib.getInput {
     name = "nix2container";
@@ -205,7 +206,7 @@ let
       copyToRoot = lib.mkOption {
         type = types.either types.path (types.listOf types.path);
         description = "Add a path to the container. Defaults to the whole git repo.";
-        default = self;
+        default = projectRoot;
         defaultText = lib.literalExpression "self";
       };
 
