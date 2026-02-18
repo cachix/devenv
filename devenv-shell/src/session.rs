@@ -242,7 +242,7 @@ impl ShellSession {
         let mut vt = Vt::new(pty_size.cols as usize, pty_size.rows as usize);
 
         // Handle TUI handoff if present
-        if let Some(mut handoff) = handoff {
+        let tui_height = if let Some(mut handoff) = handoff {
             // Signal that PTY is ready for tasks
             if let Some(tx) = handoff.pty_ready_tx.take() {
                 let _ = tx.send(());
@@ -258,11 +258,16 @@ impl ShellSession {
             tracing::trace!("session: sending backend_done_tx");
             let _ = handoff.backend_done_tx.send(());
 
-            // Wait for TUI to release terminal
+            // Wait for TUI to release terminal; capture its final render height.
+            // The height is the number of lines the TUI rendered to stderr and is
+            // used below to reposition the cursor after the scroll region is reset.
             tracing::trace!("session: waiting for terminal_ready_rx");
-            let _ = handoff.terminal_ready_rx.await;
-            tracing::trace!("session: terminal_ready_rx received");
-        }
+            let height = handoff.terminal_ready_rx.await.unwrap_or(0);
+            tracing::trace!("session: terminal_ready_rx received, tui_height={}", height);
+            height
+        } else {
+            0
+        };
 
         // Enter raw mode
         tracing::trace!("session: entering raw mode");
@@ -272,16 +277,22 @@ impl ShellSession {
         let mut stdout: Box<dyn Write + Send> = io.stdout.unwrap_or_else(|| Box::new(io::stdout()));
         let stdin_source: Box<dyn Read + Send> = io.stdin.unwrap_or_else(|| Box::new(io::stdin()));
 
-        // Save cursor position before resetting scroll region.
-        // Use DECSC (ESC 7) rather than DSR (ESC [6n) because terminals with shell
-        // integration (e.g. Ghostty) may intercept DSR and report a zone-relative
-        // row (e.g. 1) instead of the true screen row, causing the shell prompt to
-        // overwrite TUI output. DECSC operates on the actual cursor state and is
-        // not affected by shell-integration zone tracking.
-        // Disable origin mode first (ESC [?6l) so the saved position is in absolute
-        // screen coordinates, then save (ESC 7), then reset the scroll region (ESC [r)
-        // which would otherwise home the cursor to (1,1).
-        write!(stdout, "\x1b[?6l\x1b7\x1b[r")?;
+        // Disable origin mode and reset scroll region. DECSTBM (ESC [r) homes
+        // the cursor to (1,1), so we reposition it explicitly below.
+        // When the TUI ran, Ghostty (and potentially other terminals with shell
+        // integration) may move the cursor to row 1 during the raw→cooked→raw
+        // transition that occurs when restore_terminal() is called between TUI exit
+        // and this session taking over. Both DSR (ESC [6n) and DECSC (ESC 7) then
+        // capture this wrong row-1 position. Instead we use tui_height — the line
+        // count the TUI rendered to stderr — as a reliable proxy for the cursor row.
+        // When no TUI ran (tui_height == 0) we use DECSC/DECRC since there is no
+        // mode-transition interference in that path.
+        if tui_height > 0 {
+            write!(stdout, "\x1b[?6l\x1b[r")?;
+        } else {
+            // No TUI: save cursor before scroll region reset so DECRC can restore it.
+            write!(stdout, "\x1b[?6l\x1b7\x1b[r")?;
+        }
         stdout.flush()?;
 
         // Get terminal size without moving cursor (preserves TUI cursor position).
@@ -315,8 +326,28 @@ impl ShellSession {
             self.status_line.draw(&mut stdout, self.size.cols)?;
         }
 
-        // Restore cursor to where the TUI left it using DECRC (ESC 8).
-        write!(stdout, "\x1b8")?;
+        // Restore cursor to the correct row after scroll region setup.
+        if tui_height > 0 {
+            // TUI ran: position at the end of its output. The TUI rendered tui_height
+            // lines to stderr starting from the terminal top (after iocraft clears the
+            // screen for full-height canvases), so the shell prompt belongs at that row.
+            // Clamp to the last usable row (excluding the status line if present).
+            let max_row = if self.config.show_status_line {
+                self.size.rows.saturating_sub(1)
+            } else {
+                self.size.rows
+            };
+            let cursor_row = tui_height.min(max_row).max(1);
+            tracing::debug!(
+                "session: positioning cursor at row {} (tui_height={})",
+                cursor_row,
+                tui_height
+            );
+            write!(stdout, "\x1b[{};1H", cursor_row)?;
+        } else {
+            // No TUI: restore cursor saved by DECSC above.
+            write!(stdout, "\x1b8")?;
+        }
         stdout.flush()?;
 
         // Set up event channel
