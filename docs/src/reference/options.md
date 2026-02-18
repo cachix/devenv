@@ -32994,9 +32994,7 @@ one of “oneshot”, “process”
 
 
 
-Run this process task with sudo/elevated privileges.
-
-Only used when type = “process”.
+Run this task with sudo/elevated privileges.
 
 
 
