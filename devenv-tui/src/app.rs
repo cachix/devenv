@@ -12,6 +12,7 @@ use devenv_activity::{ActivityEvent, ActivityLevel};
 use devenv_processes::ProcessCommand;
 use iocraft::prelude::*;
 use std::io::{self, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
 use tokio::sync::{Notify, mpsc, watch};
 use tokio_shutdown::{Shutdown, Signal};
@@ -19,6 +20,10 @@ use tracing::debug;
 
 /// Original terminal settings saved before TUI enters raw mode.
 static ORIGINAL_TERMIOS: OnceLock<libc::termios> = OnceLock::new();
+
+/// Whether the TUI is currently in alternate screen mode (fullscreen expanded view).
+/// Used by restore_terminal() to conditionally emit LeaveAlternateScreen.
+static IN_ALTERNATE_SCREEN: AtomicBool = AtomicBool::new(false);
 
 /// Configuration for the TUI application.
 ///
@@ -397,8 +402,14 @@ pub fn restore_terminal() {
         unsafe { libc::tcsetattr(fd, libc::TCSANOW, original) };
     }
 
-    // Leave alternate screen (expanded log view uses fullscreen mode)
-    let _ = execute!(stderr, terminal::LeaveAlternateScreen);
+    // Leave alternate screen only if we actually entered it (expanded log view).
+    // Emitting LeaveAlternateScreen (ESC [?1049l) when NOT in alternate screen
+    // causes Ghostty to move the cursor to row 1, breaking the TUI→shell handoff.
+    // iocraft's StdTerminal::Drop handles LeaveAlternateScreen for the normal
+    // fullscreen exit path; this covers the panic/force-exit cases.
+    if IN_ALTERNATE_SCREEN.swap(false, Ordering::SeqCst) {
+        let _ = execute!(stderr, terminal::LeaveAlternateScreen);
+    }
 
     // Show cursor (TUI may have hidden it)
     let _ = execute!(stderr, cursor::Show);
@@ -635,7 +646,13 @@ async fn run_view(
                 }
             };
 
-            element.fullscreen().ignore_ctrl_c().await
+            // Mark that we're entering alternate screen so restore_terminal() can
+            // emit LeaveAlternateScreen if needed (e.g. on panic or force-exit).
+            // iocraft's StdTerminal::Drop handles it for the normal exit path.
+            IN_ALTERNATE_SCREEN.store(true, Ordering::SeqCst);
+            let result = element.fullscreen().ignore_ctrl_c().await;
+            IN_ALTERNATE_SCREEN.store(false, Ordering::SeqCst);
+            result
         }
     }
 }
