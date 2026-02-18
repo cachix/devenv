@@ -9,9 +9,9 @@ use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
 use crate::task_runner::PtyTaskRunner;
 use crate::terminal::RawModeGuard;
 use avt::Vt;
-use crossterm::{cursor, execute, terminal};
+use crossterm::terminal;
 use portable_pty::PtySize;
-use std::io::{self, IsTerminal, Read, Write};
+use std::io::{self, Read, Write};
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -269,56 +269,19 @@ impl ShellSession {
         let _raw_guard = RawModeGuard::new()?;
         tracing::trace!("session: raw mode active");
 
-        let injected_stdin = io.stdin.is_some();
         let mut stdout: Box<dyn Write + Send> = io.stdout.unwrap_or_else(|| Box::new(io::stdout()));
         let stdin_source: Box<dyn Read + Send> = io.stdin.unwrap_or_else(|| Box::new(io::stdin()));
 
-        // Query cursor position FIRST before any terminal resets.
-        // This tells us where TUI left the cursor after its final render.
-        // Skip when stdin is injected (not a real terminal) — the response comes
-        // via stdin, so this would hang if stdin is not a TTY.
-        let cursor_row = if !injected_stdin && io::stdin().is_terminal() {
-            write!(stdout, "\x1b[6n")?;
-            stdout.flush()?;
-
-            let mut response = Vec::new();
-            let mut stdin_real = io::stdin();
-            let mut buf = [0u8; 1];
-            loop {
-                match stdin_real.read(&mut buf) {
-                    Ok(0) => break, // EOF
-                    Ok(_) if buf[0] != 0 => {
-                        response.push(buf[0]);
-                        if buf[0] == b'R' {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
-                    _ => {}
-                }
-                if response.len() > 20 {
-                    break;
-                }
-            }
-
-            // Parse cursor row from response: ESC [ row ; col R
-            response
-                .iter()
-                .position(|&b| b == b'[')
-                .and_then(|start| {
-                    let s = String::from_utf8_lossy(
-                        &response[start + 1..response.len().saturating_sub(1)],
-                    );
-                    s.split(';').next()?.parse::<u16>().ok()
-                })
-                .unwrap_or(1)
-        } else {
-            1
-        };
-        tracing::debug!("session: cursor position after TUI: row {}", cursor_row);
-
-        // Reset terminal state from TUI: scroll region and origin mode
-        write!(stdout, "\x1b[r\x1b[?6l")?;
+        // Save cursor position before resetting scroll region.
+        // Use DECSC (ESC 7) rather than DSR (ESC [6n) because terminals with shell
+        // integration (e.g. Ghostty) may intercept DSR and report a zone-relative
+        // row (e.g. 1) instead of the true screen row, causing the shell prompt to
+        // overwrite TUI output. DECSC operates on the actual cursor state and is
+        // not affected by shell-integration zone tracking.
+        // Disable origin mode first (ESC [?6l) so the saved position is in absolute
+        // screen coordinates, then save (ESC 7), then reset the scroll region (ESC [r)
+        // which would otherwise home the cursor to (1,1).
+        write!(stdout, "\x1b[?6l\x1b7\x1b[r")?;
         stdout.flush()?;
 
         // Get terminal size without moving cursor (preserves TUI cursor position).
@@ -352,9 +315,8 @@ impl ShellSession {
             self.status_line.draw(&mut stdout, self.size.cols)?;
         }
 
-        // Position cursor where TUI left it (queried above).
-        // cursor_row is 1-based from terminal, MoveTo uses 0-based.
-        execute!(stdout, cursor::MoveTo(0, cursor_row.saturating_sub(1)))?;
+        // Restore cursor to where the TUI left it using DECRC (ESC 8).
+        write!(stdout, "\x1b8")?;
         stdout.flush()?;
 
         // Set up event channel
