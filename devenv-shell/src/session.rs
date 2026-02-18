@@ -87,7 +87,8 @@ pub enum SessionError {
 pub struct TuiHandoff {
     /// Signal when backend work is done (TUI can exit).
     pub backend_done_tx: oneshot::Sender<()>,
-    /// Wait for TUI to release terminal. Receives the TUI's final render height.
+    /// Wait for TUI to release terminal. Receives the cursor row (1-based) after
+    /// TUI exit, or 0 if unavailable (no TUI ran, or query failed).
     pub terminal_ready_rx: oneshot::Receiver<u16>,
     /// Optional channel to receive task execution requests.
     pub task_rx: Option<mpsc::Receiver<PtyTaskRequest>>,
@@ -258,12 +259,12 @@ impl ShellSession {
             tracing::trace!("session: sending backend_done_tx");
             let _ = handoff.backend_done_tx.send(());
 
-            // Wait for TUI to release terminal; capture its final render height.
-            // The height is the number of lines the TUI rendered to stderr and is
-            // used below to reposition the cursor after the scroll region is reset.
+            // Wait for TUI to release terminal; receive the cursor row queried in
+            // main.rs via DSR immediately after TUI exit and before restore_terminal().
+            // 0 means no TUI ran or the query failed.
             tracing::trace!("session: waiting for terminal_ready_rx");
             let height = handoff.terminal_ready_rx.await.unwrap_or(0);
-            tracing::trace!("session: terminal_ready_rx received, tui_height={}", height);
+            tracing::trace!("session: terminal_ready_rx received, cursor_row={}", height);
             height
         } else {
             0
@@ -277,20 +278,16 @@ impl ShellSession {
         let mut stdout: Box<dyn Write + Send> = io.stdout.unwrap_or_else(|| Box::new(io::stdout()));
         let stdin_source: Box<dyn Read + Send> = io.stdin.unwrap_or_else(|| Box::new(io::stdin()));
 
-        // Disable origin mode and reset scroll region. DECSTBM (ESC [r) homes
-        // the cursor to (1,1), so we reposition it explicitly below.
-        // When the TUI ran, Ghostty (and potentially other terminals with shell
-        // integration) may move the cursor to row 1 during the raw→cooked→raw
-        // transition that occurs when restore_terminal() is called between TUI exit
-        // and this session taking over. Both DSR (ESC [6n) and DECSC (ESC 7) then
-        // capture this wrong row-1 position. Instead we use tui_height — the line
-        // count the TUI rendered to stderr — as a reliable proxy for the cursor row.
-        // When no TUI ran (tui_height == 0) we use DECSC/DECRC since there is no
-        // mode-transition interference in that path.
+        // Disable origin mode, optionally save cursor, reset scroll region.
+        // DECSTBM (ESC [r) homes the cursor to (1,1), so we reposition below.
+        // When the TUI ran (tui_height > 0), the cursor row was queried via DSR
+        // in main.rs immediately after TUI exit and before restore_terminal(), so
+        // it reflects the true screen position. We position to it explicitly.
+        // When no TUI ran (tui_height == 0), no problematic ESC [?1049l was sent,
+        // so DECSC/DECRC works correctly for preserving the user's cursor position.
         if tui_height > 0 {
             write!(stdout, "\x1b[?6l\x1b[r")?;
         } else {
-            // No TUI: save cursor before scroll region reset so DECRC can restore it.
             write!(stdout, "\x1b[?6l\x1b7\x1b[r")?;
         }
         stdout.flush()?;
@@ -328,10 +325,9 @@ impl ShellSession {
 
         // Restore cursor to the correct row after scroll region setup.
         if tui_height > 0 {
-            // TUI ran: position at the end of its output. The TUI rendered tui_height
-            // lines to stderr starting from the terminal top (after iocraft clears the
-            // screen for full-height canvases), so the shell prompt belongs at that row.
-            // Clamp to the last usable row (excluding the status line if present).
+            // TUI ran: tui_height is the actual cursor row returned by DSR in main.rs,
+            // queried after TUI exit but before restore_terminal(). Clamp to the last
+            // usable row (excluding the status line if present).
             let max_row = if self.config.show_status_line {
                 self.size.rows.saturating_sub(1)
             } else {

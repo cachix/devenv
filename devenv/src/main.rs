@@ -10,11 +10,57 @@ use devenv::{
 use devenv_activity::ActivityLevel;
 use devenv_core::config::{self, Config, SecretspecConfig};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
+use std::io::IsTerminal;
 use std::{process::Command, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio_shutdown::Shutdown;
 use tracing::info;
+
+/// Query the terminal cursor row via DSR (ESC [6n), returning the 1-based row
+/// or 0 on failure.
+///
+/// Must be called while stdin is a TTY. Briefly enables raw mode so the
+/// response arrives character-by-character (in cooked mode it is held in
+/// the line buffer until a newline that never arrives).
+fn query_cursor_row() -> u16 {
+    use std::io::{Read, Write};
+
+    let _ = crossterm::terminal::enable_raw_mode();
+    // Send DSR to stderr (same terminal device as stdin, but avoids mixing
+    // with stdout which the session will use).
+    let _ = write!(std::io::stderr(), "\x1b[6n");
+    let _ = std::io::stderr().flush();
+
+    let mut response = Vec::new();
+    let mut stdin = std::io::stdin();
+    let mut buf = [0u8; 1];
+    loop {
+        match stdin.read(&mut buf) {
+            Ok(n) if n > 0 && buf[0] != 0 => {
+                response.push(buf[0]);
+                if buf[0] == b'R' {
+                    break;
+                }
+            }
+            _ => break,
+        }
+        if response.len() > 20 {
+            break;
+        }
+    }
+    let _ = crossterm::terminal::disable_raw_mode();
+
+    // Parse ESC [ row ; col R
+    response
+        .iter()
+        .position(|&b| b == b'[')
+        .and_then(|start| {
+            let s = String::from_utf8_lossy(&response[start + 1..response.len().saturating_sub(1)]);
+            s.split(';').next()?.parse::<u16>().ok()
+        })
+        .unwrap_or(0)
+}
 
 /// Create a tokio runtime with worker threads registered with Boehm GC.
 ///
@@ -204,8 +250,8 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Channel for process commands (restart, etc.) from TUI to process manager
     let (command_tx, command_rx) = tokio::sync::mpsc::channel::<ProcessCommand>(16);
 
-    // Channel for terminal handoff: signals ShellSession when TUI has released the terminal
-    // Passes the TUI's final render height for cursor positioning
+    // Channel for terminal handoff: signals ShellSession when TUI has released the terminal.
+    // Passes the cursor row (1-based) queried after TUI exits; 0 means unavailable.
     let (terminal_ready_tx, terminal_ready_rx) = tokio::sync::oneshot::channel::<u16>();
 
     // Devenv on background thread (own runtime with GC-registered workers)
@@ -243,11 +289,25 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
         .await
         .unwrap_or(0);
 
+    // Query the actual cursor row NOW — after the TUI's final render but
+    // BEFORE restore_terminal() which emits ESC [?1049l (LeaveAlternateScreen).
+    // In Ghostty, ESC [?1049l moves the cursor to row 1 even when not in
+    // alternate screen, so DSR queried after that call always returns 1.
+    // At this point the cursor is still at the correct position (end of TUI
+    // output), so DSR returns the right row.
+    let cursor_row = if tui_render_height > 0 && std::io::stdin().is_terminal() {
+        query_cursor_row()
+    } else {
+        0
+    };
+
     // Restore terminal to normal state (disable raw mode, show cursor)
     devenv_tui::app::restore_terminal();
 
-    // Signal backend that terminal is now available for shell, passing render height
-    let _ = terminal_ready_tx.send(tui_render_height);
+    // Signal backend that terminal is now available for shell.
+    // Passes the cursor row (1-based) so the session can position the prompt
+    // correctly below the TUI output; 0 means no TUI ran or query failed.
+    let _ = terminal_ready_tx.send(cursor_row);
 
     // Poll instead of blocking join() — a blocking join would stall the
     // single-threaded tokio event loop, preventing signal handlers from running.

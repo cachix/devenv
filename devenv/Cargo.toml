@@ -25,6 +25,7 @@ rand.workspace = true
 nix-conf-parser.workspace = true
 tokio-shutdown.workspace = true
 
+crossterm.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
 cli-table.workspace = true

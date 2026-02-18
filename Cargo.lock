@@ -1370,6 +1370,7 @@ dependencies = [
  "clap_complete",
  "cli-table",
  "console 0.16.2",
+ "crossterm 0.28.1",
  "devenv-activity",
  "devenv-cache-core",
  "devenv-core",
