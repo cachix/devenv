@@ -539,8 +539,10 @@ async fn run_devenv_inner(
             no_reload,
         } => {
             if no_reload {
-                // Run enterShell tasks first (TUI shows progress)
-                let task_exports = devenv.run_enter_shell_tasks().await?;
+                // Run enterShell tasks first (TUI shows progress).
+                // Exports are stored on self so prepare_shell() injects them
+                // into the bash script after the Nix shell env is applied.
+                devenv.run_enter_shell_tasks().await?;
 
                 // Signal TUI can exit now (tasks completed)
                 if let Some(tx) = backend_done_tx.take() {
@@ -548,15 +550,10 @@ async fn run_devenv_inner(
                 }
 
                 // Prepare shell (tasks already ran via Rust, Nix checks cliVersion >= 2.0)
-                let mut shell_config = match cmd {
+                let shell_config = match cmd {
                     Some(cmd) => devenv.prepare_exec(Some(cmd), args).await?,
                     None => devenv.shell().await?,
                 };
-
-                // Merge task-exported env vars (e.g., PATH with venv/bin) into the shell command
-                for (key, value) in task_exports {
-                    shell_config.command.env(key, value);
-                }
 
                 CommandResult::Exec(shell_config.command)
             } else {

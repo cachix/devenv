@@ -198,6 +198,11 @@ pub struct Devenv {
 
     // Shutdown handle for coordinated shutdown
     shutdown: Arc<tokio_shutdown::Shutdown>,
+
+    // Task-exported env vars (e.g., PATH with venv/bin, VIRTUAL_ENV) set by
+    // run_enter_shell_tasks(). Injected into the bash script by prepare_shell()
+    // so they take effect AFTER the Nix shell env is applied.
+    task_exports: std::sync::Mutex<HashMap<String, String>>,
 }
 
 /// Sanitize profile name to be filesystem-safe
@@ -357,6 +362,7 @@ impl Devenv {
             container_name: None,
             native_process_manager: Arc::new(OnceCell::new()),
             shutdown: options.shutdown,
+            task_exports: std::sync::Mutex::new(HashMap::new()),
         }
     }
 
@@ -590,6 +596,19 @@ impl Devenv {
             "#,
             shell_env
         };
+
+        // Inject task-exported env vars (e.g., PATH with venv/bin, VIRTUAL_ENV)
+        // after the Nix shell env is applied so they aren't overridden.
+        {
+            let exports = self.task_exports.lock().unwrap();
+            for (key, value) in exports.iter() {
+                script.push_str(&format!(
+                    "export {}={}\n",
+                    shell_escape::escape(std::borrow::Cow::Borrowed(key)),
+                    shell_escape::escape(std::borrow::Cow::Borrowed(value))
+                ));
+            }
+        }
 
         // Add command for non-interactive mode
         if let Some(cmd) = &cmd {
@@ -1218,7 +1237,10 @@ impl Devenv {
         // Note: Task failures are shown in the TUI/UI output, no need to bail here.
         // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
 
-        Ok(Self::collect_task_exports(&outputs))
+        let exports = Self::collect_task_exports(&outputs);
+        // Store on self so prepare_shell() can inject them into the bash script
+        *self.task_exports.lock().unwrap() = exports.clone();
+        Ok(exports)
     }
 
     /// Run enterShell tasks with a custom executor.
@@ -1271,7 +1293,10 @@ impl Devenv {
         // Note: Task failures are shown in the TUI output, no need to bail here.
         // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
 
-        Ok(Self::collect_task_exports(&outputs))
+        let exports = Self::collect_task_exports(&outputs);
+        // Store on self so prepare_shell() can inject them into the bash script
+        *self.task_exports.lock().unwrap() = exports.clone();
+        Ok(exports)
     }
 
     /// Get the shell environment as a map of environment variables.
@@ -1415,6 +1440,18 @@ impl Devenv {
             .in_activity(&phase1)
             .await?
         };
+
+        // ── Phase 1.5: Running enterShell tasks ───────────────────
+        // Run tasks like devenv:python:virtualenv that set up the environment
+        // (e.g., create venv, pip install, export PATH/VIRTUAL_ENV).
+        // In devenv 2.0+, these don't run via the bash enterShell hook.
+        // Exports are stored on self so prepare_shell() injects them into the
+        // bash script AFTER the Nix shell env is applied.
+        // When processes are present, up() calls run_enter_shell_tasks(),
+        // which also stores exports in self.task_exports for the test script.
+        if !has_processes {
+            self.run_enter_shell_tasks().await?;
+        }
 
         // ── Phase 2: Building tests ─────────────────────────────────
         let test_script = {
@@ -1643,36 +1680,14 @@ impl Devenv {
         // load_tasks() already has #[activity("Loading tasks")]
         let task_configs = self.load_tasks().await?;
 
-        // ── Phase 3: Running tasks ──────────────────────────────────
-        // Run enterShell tasks to set up task-exported env vars (e.g. venv PATH).
+        // ── Phase 3: Running enterShell tasks ───────────────────────
+        // Merge task-exported env vars (e.g., PATH with venv/bin) on top of
+        // the nix shell env. Task exports take precedence.
+        // Exports are also stored on self so prepare_shell() can inject them
+        // into the bash script (e.g. when called from test()).
         {
-            let verbosity = if self.global_options.quiet {
-                tasks::VerbosityLevel::Quiet
-            } else if self.global_options.verbose {
-                tasks::VerbosityLevel::Verbose
-            } else {
-                tasks::VerbosityLevel::Normal
-            };
-
-            let config = tasks::Config {
-                roots: vec!["devenv:enterShell".to_string()],
-                tasks: task_configs.clone(),
-                run_mode: devenv_tasks::RunMode::All,
-                runtime_dir: self.devenv_runtime.clone(),
-                cache_dir: self.devenv_dotfile.clone(),
-                sudo_context: None,
-                env: Default::default(),
-            };
-
-            let enter_shell_tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
-                .build()
-                .await?;
-
-            let outputs = enter_shell_tasks.run(false).await;
-
-            // Merge task-exported env vars (e.g., PATH with venv/bin) on top of
-            // the nix shell env. Task exports take precedence.
-            envs.extend(Self::collect_task_exports(&outputs));
+            let exports = self.run_enter_shell_tasks().await?;
+            envs.extend(exports);
         }
 
         // ── Phase 4: Running processes ──────────────────────────────
