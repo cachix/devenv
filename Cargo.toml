@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "devenv",
   "devenv-activity",
+  "devenv-caps",
   "devenv-activity-macros",
   "devenv-cache-core",
   "devenv-core",
@@ -36,6 +37,7 @@ devenv-activity-macros = { path = "devenv-activity-macros" }
 devenv-core = { path = "devenv-core" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-event-sources = { path = "devenv-event-sources" }
+devenv-caps = { path = "devenv-caps" }
 devenv-processes = { path = "devenv-processes" }
 devenv-run-tests = { path = "devenv-run-tests" }
 devenv-snix-backend = { path = "devenv-snix-backend" }
@@ -188,6 +190,11 @@ crossterm = "0.28.1"
 iocraft = { git = "https://github.com/sandydoo/iocraft", branch = "feat-configure-output" }
 # https://github.com/crossterm-rs/crossterm/pull/1026
 crossterm = { git = "https://github.com/sandydoo/crossterm", branch = "0.28-cachix" }
+# Fork with set_spawn_fn support for capability granting
+# https://github.com/watchexec/watchexec/pull/1013
+watchexec-supervisor = { git = "https://github.com/domenkozar/watchexec", branch = "feat/custom-child-trait" }
+watchexec-signals = { git = "https://github.com/domenkozar/watchexec", branch = "feat/custom-child-trait" }
+watchexec-events = { git = "https://github.com/domenkozar/watchexec", branch = "feat/custom-child-trait" }
 
 
 [profile.release]

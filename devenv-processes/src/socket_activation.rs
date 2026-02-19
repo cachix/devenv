@@ -1,5 +1,4 @@
 use miette::{IntoDiagnostic, Result, WrapErr};
-use nix::fcntl::{FcntlArg, FdFlag, fcntl};
 use process_wrap::tokio::{CommandWrap, CommandWrapper};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::net::SocketAddr;
@@ -304,8 +303,6 @@ impl CommandWrapper for ProcessSetupWrapper {
             command.pre_exec(move || {
                 use nix::libc;
                 use std::ffi::CString;
-                use std::os::fd::BorrowedFd;
-
                 // === Socket Activation PID ===
                 // Set LISTEN_PID to the actual child PID (getpid() returns child PID in pre_exec)
                 if has_socket_fds {
@@ -332,16 +329,17 @@ impl CommandWrapper for ProcessSetupWrapper {
                     }
 
                     if source_fd == target_fd {
-                        let borrowed = BorrowedFd::borrow_raw(target_fd);
-                        let flags = FdFlag::from_bits_truncate(
-                            fcntl(borrowed, FcntlArg::F_GETFD)
-                                .map_err(|_| std::io::Error::last_os_error())?,
-                        );
-                        let mut new_flags = flags;
-                        new_flags.remove(FdFlag::FD_CLOEXEC);
-                        if new_flags != flags {
-                            fcntl(borrowed, FcntlArg::F_SETFD(new_flags))
-                                .map_err(|_| std::io::Error::last_os_error())?;
+                        // Clear FD_CLOEXEC so the FD survives exec
+                        let flags = libc::fcntl(target_fd, libc::F_GETFD);
+                        if flags == -1 {
+                            return Err(std::io::Error::last_os_error());
+                        }
+                        if flags & libc::FD_CLOEXEC != 0 {
+                            if libc::fcntl(target_fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC)
+                                == -1
+                            {
+                                return Err(std::io::Error::last_os_error());
+                            }
                         }
                         continue;
                     }
@@ -350,16 +348,15 @@ impl CommandWrapper for ProcessSetupWrapper {
                         return Err(std::io::Error::last_os_error());
                     }
 
-                    let target_borrowed = BorrowedFd::borrow_raw(target_fd);
-                    let flags = FdFlag::from_bits_truncate(
-                        fcntl(target_borrowed, FcntlArg::F_GETFD)
-                            .map_err(|_| std::io::Error::last_os_error())?,
-                    );
-                    let mut new_flags = flags;
-                    new_flags.remove(FdFlag::FD_CLOEXEC);
-                    if new_flags != flags {
-                        fcntl(target_borrowed, FcntlArg::F_SETFD(new_flags))
-                            .map_err(|_| std::io::Error::last_os_error())?;
+                    // Clear FD_CLOEXEC on the dup'd target FD
+                    let flags = libc::fcntl(target_fd, libc::F_GETFD);
+                    if flags == -1 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    if flags & libc::FD_CLOEXEC != 0 {
+                        if libc::fcntl(target_fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) == -1 {
+                            return Err(std::io::Error::last_os_error());
+                        }
                     }
 
                     if source_fd != target_fd && is_valid_fd(source_fd) {
@@ -391,7 +388,6 @@ impl CommandWrapper for ProcessSetupWrapper {
 mod tests {
     use super::*;
     use nix::{libc, unistd};
-    use std::os::fd::BorrowedFd;
 
     #[test]
     fn test_activation_spec_builder() {
@@ -432,11 +428,10 @@ mod tests {
 
         // Check that FD_CLOEXEC is set in parent (for safety)
         unsafe {
-            let borrowed = BorrowedFd::borrow_raw(fd);
-            let flags = fcntl(borrowed, FcntlArg::F_GETFD).expect("Failed to get fd flags");
-            let fd_flags = FdFlag::from_bits_truncate(flags);
+            let flags = libc::fcntl(fd, libc::F_GETFD);
+            assert_ne!(flags, -1, "Failed to get fd flags");
             assert!(
-                fd_flags.contains(FdFlag::FD_CLOEXEC),
+                flags & libc::FD_CLOEXEC != 0,
                 "FD_CLOEXEC should be set in parent to prevent leaking to non-activated children"
             );
         }

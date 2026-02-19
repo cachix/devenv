@@ -68,6 +68,8 @@ pub struct StartOptions {
     pub env: HashMap<String, String>,
     /// Cancellation token for graceful shutdown coordination
     pub cancellation_token: Option<tokio_util::sync::CancellationToken>,
+    /// Path to the devenv-cap-server binary (Linux capability granting via sudo)
+    pub cap_server_binary: Option<std::path::PathBuf>,
 }
 
 /// Common interface for process managers

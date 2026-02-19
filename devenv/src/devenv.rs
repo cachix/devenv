@@ -39,7 +39,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::process;
 use tokio::sync::{OnceCell, RwLock, Semaphore};
-use tracing::{Instrument, debug, info, instrument, trace};
+use tracing::{Instrument, debug, info, instrument, trace, warn};
 
 // templates
 // Note: gitignore is stored without the dot to work around include_dir not including dotfiles
@@ -1688,6 +1688,37 @@ impl Devenv {
                 );
 
                 let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
+
+                // On Linux: check whether any process task needs capabilities, and if
+                // so authenticate sudo and locate the cap-server binary *before*
+                // task_configs is consumed.  This ensures the password prompt (if any)
+                // happens before the TUI takes over the terminal.
+                #[cfg(target_os = "linux")]
+                let cap_server_binary: Option<std::path::PathBuf> = {
+                    let needs_caps = task_configs
+                        .iter()
+                        .filter_map(|t| t.process.as_ref())
+                        .any(|p| !p.linux.capabilities.is_empty());
+
+                    if needs_caps {
+                        match devenv_caps::client::find_cap_server_binary() {
+                            Some(binary) => {
+                                devenv_caps::client::preflight_sudo_auth(&binary)?;
+                                Some(binary)
+                            }
+                            None => {
+                                warn!(
+                                    "devenv-cap-server not found; processes requiring \
+                                     capabilities will fall back to pre_exec"
+                                );
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    }
+                };
+
                 let config = tasks::Config {
                     tasks: task_configs,
                     roots,
@@ -1706,6 +1737,13 @@ impl Devenv {
                 .build()
                 .await
                 .map_err(|e| miette!("Failed to build task runner: {}", e))?;
+
+                // Pass the cap-server binary path to the process manager so that
+                // configure_spawn_via_cap_server() can use it when processes start.
+                #[cfg(target_os = "linux")]
+                if let Some(binary) = cap_server_binary {
+                    tasks_runner.process_manager.set_cap_server_binary(binary);
+                }
 
                 let command_rx = options.command_rx.take();
 
@@ -1767,6 +1805,7 @@ impl Devenv {
                 log_to_file: options.log_to_file,
                 env: envs,
                 cancellation_token: Some(self.shutdown.cancellation_token()),
+                cap_server_binary: None,
             };
 
             manager.start(start_options).await?;

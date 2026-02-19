@@ -41,6 +41,9 @@ pub enum ApiResponse {
     Error { message: String },
 }
 
+#[cfg(target_os = "linux")]
+use devenv_caps::client::{CapServer, CapServerConfig};
+
 use watchexec_supervisor::{
     Signal,
     job::{Job, start_job},
@@ -93,6 +96,25 @@ pub struct NativeProcessManager {
     shutdown: Arc<tokio::sync::Notify>,
     /// Parent activity for grouping all processes under "Starting processes"
     processes_activity: Arc<RwLock<Option<Activity>>>,
+    /// Cap-server handle (lazily initialized on first process needing Linux capabilities)
+    #[cfg(target_os = "linux")]
+    cap_server: Arc<std::sync::Mutex<Option<CapServer>>>,
+    /// Map from PID to exit-status oneshot senders (for cap-server-launched processes)
+    #[cfg(target_os = "linux")]
+    exit_senders: Arc<
+        std::sync::Mutex<
+            HashMap<u32, tokio::sync::oneshot::Sender<devenv_caps::protocol::ProcessExit>>,
+        >,
+    >,
+    /// Binary path for devenv-cap-server
+    #[cfg(target_os = "linux")]
+    cap_server_binary: std::sync::OnceLock<PathBuf>,
+    /// Whether the cap-server exit-status polling task has been started
+    #[cfg(target_os = "linux")]
+    polling_started: Arc<std::sync::atomic::AtomicBool>,
+    /// Signal for the polling task to stop
+    #[cfg(target_os = "linux")]
+    polling_shutdown: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl NativeProcessManager {
@@ -105,6 +127,16 @@ impl NativeProcessManager {
             state_dir,
             shutdown: Arc::new(tokio::sync::Notify::new()),
             processes_activity: Arc::new(RwLock::new(None)),
+            #[cfg(target_os = "linux")]
+            cap_server: Arc::new(std::sync::Mutex::new(None)),
+            #[cfg(target_os = "linux")]
+            exit_senders: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            #[cfg(target_os = "linux")]
+            cap_server_binary: std::sync::OnceLock::new(),
+            #[cfg(target_os = "linux")]
+            polling_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            #[cfg(target_os = "linux")]
+            polling_shutdown: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         })
     }
 
@@ -165,7 +197,7 @@ impl NativeProcessManager {
         let activity = builder.start();
 
         // Create notify socket if configured via ready.notify
-        let uses_notify = config.ready.as_ref().map_or(false, |r| r.notify);
+        let uses_notify = config.ready.as_ref().is_some_and(|r| r.notify);
         let notify_socket = if uses_notify {
             let socket = NotifySocket::new(&self.state_dir, &config.name).await?;
             info!(
@@ -200,7 +232,37 @@ impl NativeProcessManager {
         let has_sockets = !config.listen.is_empty();
         let has_caps = !config.linux.capabilities.is_empty();
 
-        if has_sockets || has_caps {
+        // On Linux, attempt to grant capabilities via the privileged cap-server.
+        #[cfg(target_os = "linux")]
+        let use_cap_server = if has_caps {
+            match self.configure_spawn_via_cap_server(&job, config).await {
+                Ok(()) => {
+                    if has_sockets {
+                        warn!(
+                            "Socket activation + capabilities via cap-server for '{}': \
+                             socket FDs will not be passed to the process",
+                            config.name
+                        );
+                    }
+                    true
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to use cap-server for '{}': {}; \
+                         falling back to pre_exec capabilities",
+                        config.name, e
+                    );
+                    false
+                }
+            }
+        } else {
+            false
+        };
+        #[cfg(not(target_os = "linux"))]
+        let use_cap_server = false;
+
+        // Fall back to socket activation and/or pre_exec capabilities when cap-server is not used.
+        if (has_sockets || has_caps) && !use_cap_server {
             let fds = if has_sockets {
                 info!("Setting up socket activation for {}", config.name);
                 let spec = activation_from_listen(&config.listen)?;
@@ -217,7 +279,7 @@ impl NativeProcessManager {
 
             if has_caps {
                 info!(
-                    "Setting up capabilities for {}: {:?}",
+                    "Setting up capabilities via pre_exec for {}: {:?}",
                     config.name, config.linux.capabilities
                 );
             }
@@ -279,6 +341,132 @@ impl NativeProcessManager {
 
         info!("Command '{}' started", config.name);
         Ok(job)
+    }
+
+    /// Set the path to the devenv-cap-server binary.
+    ///
+    /// Must be called before any process with capabilities is started.
+    #[cfg(target_os = "linux")]
+    pub fn set_cap_server_binary(&self, binary: PathBuf) {
+        let _ = self.cap_server_binary.set(binary);
+    }
+
+    /// Configure a job to spawn via the privileged cap-server (Linux only).
+    ///
+    /// Lazily initializes the cap-server on first use and starts the background
+    /// exit-status polling task. Sets a `spawn_fn` on the job that delegates
+    /// process creation to the cap-server, which grants the requested capabilities
+    /// before exec-ing the target command.
+    #[cfg(target_os = "linux")]
+    async fn configure_spawn_via_cap_server(
+        &self,
+        job: &Arc<Job>,
+        config: &ProcessConfig,
+    ) -> Result<()> {
+        // Require a binary path to have been configured.
+        let binary = self
+            .cap_server_binary
+            .get()
+            .ok_or_else(|| {
+                miette::miette!(
+                    "cap_server_binary not configured; cannot use cap-server for '{}'",
+                    config.name
+                )
+            })?
+            .clone();
+
+        // Lazily start the cap-server.
+        {
+            let mut cs = self.cap_server.lock().unwrap();
+            if cs.is_none() {
+                let cfg = CapServerConfig::current_user(binary);
+                *cs = Some(
+                    CapServer::start(&cfg)
+                        .into_diagnostic()
+                        .wrap_err("failed to start devenv-cap-server via sudo")?,
+                );
+                info!("Started devenv-cap-server");
+            }
+        }
+
+        // Start the exit-status polling task exactly once.
+        if !self
+            .polling_started
+            .swap(true, std::sync::atomic::Ordering::SeqCst)
+        {
+            let cap_server = self.cap_server.clone();
+            let exit_senders = self.exit_senders.clone();
+            let polling_shutdown = self.polling_shutdown.clone();
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    if polling_shutdown.load(std::sync::atomic::Ordering::Relaxed) {
+                        break;
+                    }
+                    let processes = {
+                        let mut cs = cap_server.lock().unwrap_or_else(|e| e.into_inner());
+                        match cs.as_mut() {
+                            Some(cs) => cs.poll().unwrap_or_default(),
+                            None => break,
+                        }
+                    };
+                    let mut senders = exit_senders.lock().unwrap_or_else(|e| e.into_inner());
+                    for ep in processes {
+                        if let Some(tx) = senders.remove(&ep.pid) {
+                            let _ = tx.send(ep.exit);
+                        }
+                    }
+                }
+            });
+        }
+
+        // Capture per-process state for the spawn closure.
+        let cap_names = config.linux.capabilities.clone();
+        let working_dir = config.cwd.clone().unwrap_or_else(|| PathBuf::from("."));
+        let env_map = config.env.clone();
+        let process_name = config.name.clone();
+        let command = config.exec.clone();
+        let args = config.args.clone();
+
+        let cap_server = self.cap_server.clone();
+        let exit_senders = self.exit_senders.clone();
+
+        info!(
+            "Setting up capabilities via cap-server for '{}': {:?}",
+            config.name, cap_names
+        );
+
+        // Install the spawn function — called once per process start/restart.
+        job.set_spawn_fn(move |_cmd_wrap| {
+            let mut cs = cap_server.lock().unwrap_or_else(|e| e.into_inner());
+            let cs = cs.as_mut().expect("cap_server initialized above");
+
+            let (exit_tx, exit_rx) =
+                tokio::sync::oneshot::channel::<devenv_caps::protocol::ProcessExit>();
+
+            let pid = cs
+                .launch(
+                    &process_name,
+                    &cap_names,
+                    &command,
+                    &args,
+                    &env_map,
+                    &working_dir,
+                )
+                .map_err(|e| std::io::Error::other(e.to_string()))?;
+
+            exit_senders
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(pid, exit_tx);
+
+            Ok(
+                Box::new(devenv_caps::child::CapServerChild::new(pid, exit_rx))
+                    as Box<dyn process_wrap::tokio::ChildWrapper>,
+            )
+        });
+
+        Ok(())
     }
 
     /// Stop a process by name
@@ -672,7 +860,15 @@ impl NativeProcessManager {
         configs: &HashMap<String, ProcessConfig>,
         process_names: &[String],
         env: &HashMap<String, String>,
+        cap_server_binary: Option<PathBuf>,
     ) -> Result<()> {
+        // Store the cap-server binary path for later use by start_command.
+        #[cfg(target_os = "linux")]
+        if let Some(binary) = cap_server_binary {
+            let _ = self.cap_server_binary.set(binary);
+        }
+        #[cfg(not(target_os = "linux"))]
+        let _ = cap_server_binary;
         let mut names_to_start: Vec<_> = if process_names.is_empty() {
             configs.keys().cloned().collect()
         } else {
@@ -833,6 +1029,7 @@ impl ProcessManager for NativeProcessManager {
             let process_configs = options.process_configs.clone();
             let process_names = options.processes.clone();
             let env = options.env.clone();
+            let cap_server_binary = options.cap_server_binary.clone();
 
             // Configure and start the daemon (execute() keeps parent alive)
             let daemonize = Daemonize::new().pid_file(&manager_pid_file);
@@ -868,7 +1065,12 @@ impl ProcessManager for NativeProcessManager {
                     let result = runtime.block_on(async {
                         let manager = Arc::new(NativeProcessManager::new(state_dir)?);
                         manager
-                            .start_processes(&process_configs, &process_names, &env)
+                            .start_processes(
+                                &process_configs,
+                                &process_names,
+                                &env,
+                                cap_server_binary,
+                            )
                             .await?;
                         manager.run().await
                     });
@@ -890,8 +1092,13 @@ impl ProcessManager for NativeProcessManager {
             }
         } else {
             // Start requested processes
-            self.start_processes(&options.process_configs, &options.processes, &options.env)
-                .await?;
+            self.start_processes(
+                &options.process_configs,
+                &options.processes,
+                &options.env,
+                options.cap_server_binary.clone(),
+            )
+            .await?;
 
             // Foreground mode - run the event loop
             info!("All processes started. Press Ctrl+C to stop.");
@@ -931,6 +1138,17 @@ impl ProcessManager for NativeProcessManager {
 
 impl Drop for NativeProcessManager {
     fn drop(&mut self) {
+        // Shut down the cap-server and its polling task (Linux only).
+        #[cfg(target_os = "linux")]
+        {
+            self.polling_shutdown
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            if let Ok(mut cs) = self.cap_server.lock() {
+                // Take the CapServer out and drop it, triggering CapServer::Drop
+                // which sends Shutdown to the root helper and waits for it to exit.
+                let _ = cs.take();
+            }
+        }
         let _ = std::fs::remove_file(self.api_socket_path());
         let _ = std::fs::remove_file(self.manager_pid_file());
     }
