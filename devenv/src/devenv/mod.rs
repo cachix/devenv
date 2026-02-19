@@ -38,7 +38,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::process;
 use tokio::sync::OnceCell;
-use tracing::{Instrument, debug, info, instrument};
+use tracing::{Instrument, debug, info, instrument, warn};
 
 pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
     include_str!("../../direnvrc").replace(
@@ -1599,6 +1599,36 @@ impl Devenv {
             );
 
             let bash = self.get_bash_path().await?;
+
+            // On Linux: check whether any process task needs capabilities, and if
+            // so authenticate sudo and locate the cap-server binary *before* the
+            // TUI takes over the terminal.
+            #[cfg(target_os = "linux")]
+            let cap_server_binary: Option<std::path::PathBuf> = {
+                let needs_caps = task_configs
+                    .iter()
+                    .filter_map(|t| t.process.as_ref())
+                    .any(|p| !p.linux.capabilities.is_empty());
+
+                if needs_caps {
+                    match devenv_caps::client::find_cap_server_binary() {
+                        Some(binary) => {
+                            devenv_caps::client::preflight_sudo_auth(&binary)?;
+                            Some(binary)
+                        }
+                        None => {
+                            warn!(
+                                "devenv-cap-server not found; processes requiring \
+                                 capabilities will fall back to pre_exec"
+                            );
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            };
+
             let config = self.make_task_config(roots, task_configs, task_mode, envs, bash)?;
 
             if options.daemon {
@@ -1612,6 +1642,13 @@ impl Devenv {
                     .build()
                     .await
                     .map_err(|e| miette!("Failed to build task runner: {}", e))?;
+
+            // Pass the cap-server binary path to the process manager so that
+            // configure_spawn_via_cap_server() can use it when processes start.
+            #[cfg(target_os = "linux")]
+            if let Some(binary) = cap_server_binary {
+                tasks_runner.process_manager().set_cap_server_binary(binary);
+            }
 
             // Start command processing before task execution so that
             // Ctrl-R works even while tasks are still running (e.g. when
@@ -1689,6 +1726,7 @@ impl Devenv {
                 log_to_file: options.log_to_file,
                 env: envs,
                 cancellation_token: Some(self.shutdown.cancellation_token()),
+                cap_server_binary: None,
             };
             manager.start(start_options).await?;
             Ok(RunMode::Detached)

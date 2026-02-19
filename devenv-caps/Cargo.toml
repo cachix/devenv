@@ -1,0 +1,27 @@
+[package]
+name = "devenv-caps"
+version = "0.1.0"
+edition = "2021"
+description = "Linux capability granting for devenv processes"
+license = "MIT"
+
+[[bin]]
+name = "devenv-cap-server"
+path = "src/bin/server.rs"
+
+[lib]
+name = "devenv_caps"
+path = "src/lib/mod.rs"
+
+[dependencies]
+capctl = "0.2"
+libc = "0.2"
+miette = { version = "7", features = ["fancy"] }
+which = "8"
+process-wrap = { version = "9.0", features = ["tokio1"] }
+rustix = { version = "1", features = ["process", "thread"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["sync"] }
+tracing = "0.1"

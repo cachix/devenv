@@ -31,6 +31,7 @@ portable-pty.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 caps.workspace = true
+devenv-caps.workspace = true
 
 [features]
 default = []
