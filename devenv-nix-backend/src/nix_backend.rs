@@ -1604,9 +1604,11 @@ impl NixBackend for NixRustBackend {
             locker = locker.old_lock_file(lock);
         }
 
-        // Mark specific input for update if provided
+        // Mark inputs for update
         if let Some(name) = input_name {
             locker = locker.update_input(name);
+        } else {
+            locker = locker.update_all();
         }
 
         // Apply input overrides from global_options
