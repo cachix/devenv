@@ -207,6 +207,30 @@ let
         };
       };
 
+      linux = lib.mkOption {
+        type = types.submodule {
+          options = {
+            capabilities = lib.mkOption {
+              type = types.listOf types.str;
+              default = [ ];
+              description = ''
+                Linux capabilities to add as ambient capabilities for this process
+                (e.g., "cap_net_admin", "cap_sys_admin").
+
+                Requires devenv 2.0+.
+              '';
+              example = [ "cap_net_admin" "cap_sys_admin" ];
+            };
+          };
+        };
+        default = { };
+        description = ''
+          Linux-specific process configuration.
+
+          Requires devenv 2.0+.
+        '';
+      };
+
       watch = lib.mkOption {
         type = types.submodule {
           options = {
