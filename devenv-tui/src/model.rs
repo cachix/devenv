@@ -1336,8 +1336,11 @@ impl ActivityModel {
         // Sort by id for consistent ordering
         all_children.sort_by_key(|a| a.id);
 
-        // For Task parents, always show all children without limits
-        if parent_is_task {
+        // For Task parents or process groups, always show all children without limits
+        let has_process_children = all_children
+            .iter()
+            .any(|a| matches!(a.variant, ActivityVariant::Process(_)));
+        if parent_is_task || has_process_children {
             return (all_children, total_count, 0);
         }
 
