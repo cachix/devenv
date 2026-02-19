@@ -7,9 +7,7 @@ use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
-#[cfg(target_os = "linux")]
-use crate::config::CapabilitySet;
-use crate::config::{LinuxCapabilities, ListenKind, ListenSpec};
+use crate::config::{ListenKind, ListenSpec};
 
 pub const SD_LISTEN_FDS_START: RawFd = 3;
 
@@ -234,12 +232,12 @@ pub fn activation_from_listen(listens: &[ListenSpec]) -> Result<ActivationSpec> 
 #[derive(Debug, Clone)]
 pub struct ProcessSetupWrapper {
     fds: Vec<RawFd>,
-    capabilities: LinuxCapabilities,
+    capabilities: Vec<String>,
 }
 
 impl ProcessSetupWrapper {
     /// Create a new process setup wrapper
-    pub fn new(fds: Vec<RawFd>, capabilities: LinuxCapabilities) -> Self {
+    pub fn new(fds: Vec<RawFd>, capabilities: Vec<String>) -> Self {
         Self { fds, capabilities }
     }
 
@@ -247,12 +245,12 @@ impl ProcessSetupWrapper {
     pub fn socket_activation(fds: Vec<RawFd>) -> Self {
         Self {
             fds,
-            capabilities: LinuxCapabilities::default(),
+            capabilities: Vec::new(),
         }
     }
 
     /// Create wrapper for capabilities only
-    pub fn capabilities(capabilities: LinuxCapabilities) -> Self {
+    pub fn capabilities(capabilities: Vec<String>) -> Self {
         Self {
             fds: Vec::new(),
             capabilities,
@@ -282,9 +280,7 @@ impl CommandWrapper for ProcessSetupWrapper {
         // Parse capabilities upfront (before fork) so errors are reported early
         #[cfg(target_os = "linux")]
         let parsed_caps: Vec<caps::Capability> = {
-            let capabilities = &self.capabilities;
-            capabilities
-                .add
+            self.capabilities
                 .iter()
                 .map(|name| {
                     // Normalize: add CAP_ prefix if not present
@@ -302,13 +298,6 @@ impl CommandWrapper for ProcessSetupWrapper {
         // Capabilities are silently ignored on non-Linux platforms
         #[cfg(not(target_os = "linux"))]
         let _ = &self.capabilities;
-
-        #[cfg(target_os = "linux")]
-        let cap_sets = if self.capabilities.sets.is_empty() {
-            vec![CapabilitySet::Ambient]
-        } else {
-            self.capabilities.sets.clone()
-        };
 
         // Use pre_exec to set up FDs, capabilities, and LISTEN_PID
         unsafe {
@@ -379,33 +368,15 @@ impl CommandWrapper for ProcessSetupWrapper {
                 }
 
                 // === Capabilities Setup (Linux only) ===
+                // Capabilities are applied as ambient (inheritable first, then ambient)
+                // so they are inherited by child processes.
                 #[cfg(target_os = "linux")]
                 for cap in &parsed_caps {
-                    for set in &cap_sets {
-                        let result = match set {
-                            CapabilitySet::Ambient => {
-                                // Ambient requires inheritable first
-                                caps::raise(None, caps::CapSet::Inheritable, *cap)
-                                    .and_then(|_| caps::raise(None, caps::CapSet::Ambient, *cap))
-                            }
-                            CapabilitySet::Effective => {
-                                caps::raise(None, caps::CapSet::Effective, *cap)
-                            }
-                            CapabilitySet::Inheritable => {
-                                caps::raise(None, caps::CapSet::Inheritable, *cap)
-                            }
-                            CapabilitySet::Permitted => {
-                                caps::raise(None, caps::CapSet::Permitted, *cap)
-                            }
-                            CapabilitySet::Bounding => {
-                                // Bounding can only be dropped, not raised
-                                Ok(())
-                            }
-                        };
-                        result.map_err(|e| {
+                    caps::raise(None, caps::CapSet::Inheritable, *cap)
+                        .and_then(|_| caps::raise(None, caps::CapSet::Ambient, *cap))
+                        .map_err(|e| {
                             std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
                         })?;
-                    }
                 }
 
                 Ok(())

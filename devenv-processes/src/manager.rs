@@ -198,7 +198,7 @@ impl NativeProcessManager {
 
         // Setup socket activation and/or capabilities if configured
         let has_sockets = !config.listen.is_empty();
-        let has_caps = !config.linux.capabilities.add.is_empty();
+        let has_caps = !config.linux.capabilities.is_empty();
 
         if has_sockets || has_caps {
             let fds = if has_sockets {
@@ -218,7 +218,7 @@ impl NativeProcessManager {
             if has_caps {
                 info!(
                     "Setting up capabilities for {}: {:?}",
-                    config.name, config.linux.capabilities.add
+                    config.name, config.linux.capabilities
                 );
             }
 

@@ -190,34 +190,12 @@ fn default_failure() -> u32 {
     3
 }
 
-/// Linux capability sets
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CapabilitySet {
-    Ambient,
-    Permitted,
-    Effective,
-    Inheritable,
-    Bounding,
-}
-
-/// Linux capabilities configuration
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct LinuxCapabilities {
-    /// Capabilities to add (e.g., "net_bind_service", "sys_ptrace")
-    #[serde(default)]
-    pub add: Vec<String>,
-    /// Which capability sets to apply (default: ambient)
-    #[serde(default)]
-    pub sets: Vec<CapabilitySet>,
-}
-
 /// Linux-specific process configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LinuxConfig {
-    /// Linux capabilities configuration
+    /// Linux capabilities to add as ambient (e.g., "net_bind_service", "sys_ptrace")
     #[serde(default)]
-    pub capabilities: LinuxCapabilities,
+    pub capabilities: Vec<String>,
 }
 
 /// Process configuration
