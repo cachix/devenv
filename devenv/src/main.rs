@@ -408,11 +408,15 @@ async fn run_devenv(
 
     // If --from is provided, create a new input and add it to imports
     if let Some(ref from) = cli.global_options.from {
-        // Convert to absolute path if it's a local filesystem path
-        let url = if std::path::Path::new(from).exists() {
-            // It's a local path - prefix with "path:" and make it absolute
-            let abs_path =
-                std::fs::canonicalize(from).unwrap_or_else(|_| std::path::PathBuf::from(from));
+        let url = if let Some(path_str) = from.strip_prefix("path:") {
+            // Resolve relative paths to absolute and canonicalize
+            let path = std::path::Path::new(path_str);
+            let full_path = if path.is_relative() {
+                std::env::current_dir().unwrap_or_default().join(path)
+            } else {
+                path.to_path_buf()
+            };
+            let abs_path = std::fs::canonicalize(&full_path).unwrap_or(full_path);
             format!("path:{}", abs_path.display())
         } else {
             // It's a flake input reference (e.g., "nixpkgs", "github:org/repo")
