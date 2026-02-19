@@ -96,6 +96,7 @@ pub fn view(
                     log_line_count: model.get_log_line_count(activity.id),
                     completed,
                     cached,
+                    render_context,
                 })) {
                     ActivityItem
                 }
@@ -189,6 +190,8 @@ struct ActivityRenderContext {
     completed: Option<bool>,
     /// Whether this activity's result was cached
     cached: bool,
+    /// Whether this is the final render before exit
+    render_context: RenderContext,
 }
 
 /// Helper to build activity prefix with hierarchy and status indicator.
@@ -220,6 +223,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         log_line_count,
         completed,
         cached,
+        render_context,
     } = &*ctx;
 
     // Calculate elapsed time - use stored duration for completed activities, skip for queued
@@ -614,7 +618,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_depth(*depth)
                     .with_empty_message("→ no output yet (press 'e' to expand)");
-                if process_failed {
+                if process_failed && *render_context == RenderContext::Final {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
                 } else if !is_selected {
                     component = component.with_max_lines(LOG_VIEWPORT_SHOW_OUTPUT);
