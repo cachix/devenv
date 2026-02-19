@@ -508,11 +508,18 @@ mod tests {
             .write_all(b"runtime modified")
             .expect("write");
 
-        let event = tokio::time::timeout(WATCH_TIMEOUT, watcher.recv())
-            .await
-            .expect("timeout")
-            .expect("event");
-
-        assert_eq!(event.path, runtime_file);
+        // On macOS, notify's FSEvents backend restarts the entire stream
+        // when a new path is added, which replays historical events for
+        // already-watched paths. Drain until we see the runtime file.
+        let deadline = tokio::time::Instant::now() + WATCH_TIMEOUT;
+        loop {
+            let remaining = deadline - tokio::time::Instant::now();
+            match tokio::time::timeout(remaining, watcher.recv()).await {
+                Ok(Some(e)) if e.path == runtime_file => break,
+                Ok(Some(_)) => continue,
+                Ok(None) => panic!("watcher channel closed before runtime file event"),
+                Err(_) => panic!("timeout waiting for runtime file change event"),
+            }
+        }
     }
 }
