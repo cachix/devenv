@@ -29,6 +29,11 @@ on:
         required: false
         type: string
 
+      only:
+        description: "Only run specific examples (passed to --only flag)"
+        required: false
+        type: string
+
 jobs:
   generate-examples:
     runs-on: [self-hosted, linux]
@@ -62,10 +67,16 @@ jobs:
 
       - name: Fetch examples to run
         id: set-examples
+        env:
+          ONLY: ${{ inputs.only }}
         # Get test metadata filtered for current system
         run: |
           set -euxo pipefail
-          examples=$(devenv-run-tests generate-json examples)
+          if [ -n "$ONLY" ]; then
+            examples=$(devenv-run-tests generate-json examples | jq -c "[.[] | select(.name == \"$ONLY\")]")
+          else
+            examples=$(devenv-run-tests generate-json examples)
+          fi
           echo "examples=$examples" >> $GITHUB_OUTPUT
 
   examples:

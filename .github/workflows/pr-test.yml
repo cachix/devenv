@@ -15,6 +15,10 @@ on:
         required: true
         default: 'main'
         type: string
+      only:
+        description: 'Only run specific tests (passed to --only flag)'
+        required: false
+        type: string
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref }}"
@@ -43,3 +47,4 @@ jobs:
       system: ${{ matrix.system }}
       runs-on: ${{ matrix.runs-on }}
       ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
+      only: ${{ inputs.only }}

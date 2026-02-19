@@ -23,6 +23,11 @@ on:
         required: false
         type: string
 
+      only:
+        description: "Only run specific tests (passed to --only flag)"
+        required: false
+        type: string
+
 jobs:
   build:
     uses: ./.github/workflows/build.yml
@@ -41,6 +46,7 @@ jobs:
       runs-on: ${{ inputs.runs-on }}
       ref: ${{ inputs.ref }}
       nixpkgs-input: ${{ inputs.nixpkgs-input }}
+      only: ${{ inputs.only }}
 
   examples:
     needs: [build, test]
@@ -52,3 +58,4 @@ jobs:
       runs-on: ${{ inputs.runs-on }}
       ref: ${{ inputs.ref }}
       nixpkgs-input: ${{ inputs.nixpkgs-input }}
+      only: ${{ inputs.only }}

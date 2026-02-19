@@ -29,6 +29,11 @@ on:
         required: false
         type: string
 
+      only:
+        description: "Only run specific tests (passed to --only flag)"
+        required: false
+        type: string
+
 jobs:
   tests:
     runs-on: ${{ fromJSON(inputs.runs-on) }}
@@ -71,7 +76,14 @@ jobs:
         run: devenv ${{ steps.override-args.outputs.args }} test
 
       - name: Run tests
-        run: devenv-run-tests run tests ${{ steps.override-args.outputs.args }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          args=()
+          if [ -n "$ONLY" ]; then
+            args+=(--only "$ONLY")
+          fi
+          devenv-run-tests run tests ${{ steps.override-args.outputs.args }} "${args[@]}"
 
 
   direnv:
