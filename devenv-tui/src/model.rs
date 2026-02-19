@@ -1184,11 +1184,8 @@ impl ActivityModel {
                         summary.failed_tasks += 1
                     }
                 },
-                (ActivityVariant::Process(proc), NixActivityState::Active) => {
-                    if proc.status == ProcessStatus::Running || proc.status == ProcessStatus::Ready
-                    {
-                        summary.running_processes += 1;
-                    }
+                (ActivityVariant::Process(_), _) => {
+                    summary.running_processes += 1;
                 }
                 _ => {}
             }
