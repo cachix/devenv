@@ -60,4 +60,4 @@ jobs:
       # nextest runs each test in a separate process, avoiding Nix C++ FFI global state issues
       - name: Run integration tests
         run: |
-          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo nextest run -j 2 -p devenv-nix-backend -p devenv-reload -p devenv-shell
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv --system ${{ inputs.system }} shell -- cargo nextest run -j 2 -p devenv-nix-backend -p devenv-reload -p devenv-shell

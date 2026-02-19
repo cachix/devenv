@@ -39,7 +39,7 @@ jobs:
           - system: aarch64-darwin
             runs-on: '["self-hosted", "macOS", "ARM64"]'
           - system: x86_64-darwin
-            runs-on: '["macos-15-intel"]'
+            runs-on: '["self-hosted", "macOS", "ARM64"]'
 
     uses: ./.github/workflows/build.yml
     secrets: inherit
