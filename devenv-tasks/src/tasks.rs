@@ -764,6 +764,7 @@ impl Tasks {
             let completed_tasks_clone = Arc::clone(&completed_tasks);
             let executor_clone = Arc::clone(&self.executor);
             let refresh_task_cache = self.refresh_task_cache;
+            let shell_env = self.env.clone();
 
             running_tasks.spawn(move || {
                 // Clone for use inside the async block; the original is borrowed by in_activity
@@ -785,6 +786,7 @@ impl Tasks {
                                 task_activity_id,
                                 executor_clone.as_ref(),
                                 refresh_task_cache,
+                                &shell_env,
                             )
                             .await
                         {

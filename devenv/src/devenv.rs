@@ -1072,14 +1072,6 @@ impl Devenv {
         // Capture the shell environment to ensure tasks run with proper devenv setup
         let envs = self.capture_shell_environment().await?;
 
-        // Set environment variables in the current process
-        // This ensures that tasks have access to all devenv environment variables
-        for (key, value) in &envs {
-            unsafe {
-                std::env::set_var(key, value);
-            }
-        }
-
         let mut tasks = self.load_tasks().await?;
 
         // If --show-output flag is present, enable output for all tasks
@@ -1196,14 +1188,9 @@ impl Devenv {
             Some(e) => e,
             None => self.capture_shell_environment().await?,
         };
-        for (key, value) in &envs {
-            unsafe {
-                std::env::set_var(key, value);
-            }
-        }
 
         let task_configs = self.load_tasks().await?;
-        self.run_enter_shell_tasks_inner(task_configs, executor)
+        self.run_enter_shell_tasks_inner(task_configs, executor, envs)
             .await
     }
 
@@ -1214,6 +1201,7 @@ impl Devenv {
         &self,
         task_configs: Vec<tasks::TaskConfig>,
         executor: Option<Arc<dyn tasks::TaskExecutor>>,
+        envs: HashMap<String, String>,
     ) -> Result<HashMap<String, String>> {
         let verbosity = if self.global_options.quiet {
             tasks::VerbosityLevel::Quiet
@@ -1230,7 +1218,7 @@ impl Devenv {
             runtime_dir: self.devenv_runtime.clone(),
             cache_dir: self.devenv_dotfile.clone(),
             sudo_context: None,
-            env: Default::default(),
+            env: envs,
         };
 
         let has_custom_executor = executor.is_some();
@@ -1601,13 +1589,7 @@ impl Devenv {
         // When called from test(), dev_env_cache is already populated and envs are
         // passed in, so we skip the activity to avoid a duplicate "Configuring shell".
         let mut envs = if self.dev_env_cache.get().is_some() && options.envs.is_some() {
-            let envs = options.envs.unwrap().clone();
-            for (key, value) in &envs {
-                unsafe {
-                    std::env::set_var(key, value);
-                }
-            }
-            envs
+            options.envs.unwrap().clone()
         } else {
             let phase1 = Activity::operation("Configuring shell")
                 .parent(None)
@@ -1632,13 +1614,6 @@ impl Devenv {
                     self.capture_shell_environment().await?
                 };
 
-                // Set env vars in current process for task execution
-                for (key, value) in &envs {
-                    unsafe {
-                        std::env::set_var(key, value);
-                    }
-                }
-
                 Ok::<HashMap<String, String>, miette::Report>(envs)
             }
             .in_activity(&phase1)
@@ -1657,7 +1632,7 @@ impl Devenv {
         // Reuse task_configs from Phase 2 to avoid a redundant load_tasks() call.
         {
             let exports = self
-                .run_enter_shell_tasks_inner(task_configs.clone(), None)
+                .run_enter_shell_tasks_inner(task_configs.clone(), None, envs.clone())
                 .await?;
             envs.extend(exports);
         }

@@ -112,8 +112,13 @@ impl TaskState {
     fn prepare_env(
         &self,
         outputs: &BTreeMap<String, serde_json::Value>,
+        shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<(BTreeMap<String, String>, tempfile::NamedTempFile)> {
-        let mut env = BTreeMap::new();
+        // Start with shell env as the base layer
+        let mut env: BTreeMap<String, String> = shell_env
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         // Set DEVENV_TASK_INPUT
         if let Some(input) = &self.task.input {
@@ -172,8 +177,9 @@ impl TaskState {
         &self,
         cmd: &str,
         outputs: &BTreeMap<String, serde_json::Value>,
+        shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<(Command, tempfile::NamedTempFile)> {
-        let (env, outputs_file) = self.prepare_env(outputs)?;
+        let (env, outputs_file) = self.prepare_env(outputs, shell_env)?;
 
         // If we dropped privileges but have sudo context, restore sudo for the task
         let mut command = if let Some(_ctx) = &self.sudo_context {
@@ -403,6 +409,7 @@ impl TaskState {
         activity_id: u64,
         executor: &dyn TaskExecutor,
         refresh_task_cache: bool,
+        shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<TaskCompleted> {
         // Create the Activity with the pre-assigned ID - this emits Task::Start
         let task_activity = Activity::task_with_id(activity_id);
@@ -416,6 +423,7 @@ impl TaskState {
             &task_activity,
             executor,
             refresh_task_cache,
+            shell_env,
         )
         .in_activity(&task_activity)
         .await
@@ -430,6 +438,7 @@ impl TaskState {
         task_activity: &Activity,
         executor: &dyn TaskExecutor,
         refresh_task_cache: bool,
+        shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<TaskCompleted> {
         tracing::debug!(
             "Running task '{}' with exec_if_modified: {:?}, status: {}",
@@ -459,7 +468,7 @@ impl TaskState {
                 };
 
                 let (mut command, _) = self
-                    .prepare_command(cmd, outputs)
+                    .prepare_command(cmd, outputs, shell_env)
                     .wrap_err("Failed to prepare status command")?;
 
                 // Create a Command activity for the status check (automatically parented to task_activity)
@@ -581,7 +590,7 @@ impl TaskState {
 
         // Prepare environment and output file
         let (env, outputs_file) = self
-            .prepare_env(outputs)
+            .prepare_env(outputs, shell_env)
             .wrap_err("Failed to prepare task environment")?;
 
         // Build execution context

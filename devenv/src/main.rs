@@ -839,15 +839,9 @@ async fn run_reload_shell(
     let use_pty_tasks = cmd.is_none();
     if !use_pty_tasks {
         // Run enterShell tasks with subprocess executor (like --no-reload mode)
-        let task_exports = devenv.run_enter_shell_tasks().await?;
-
-        // Merge task-exported env vars (e.g., PATH with venv/bin) into the current process
-        // so they're inherited by the shell session
-        for (key, value) in task_exports {
-            unsafe {
-                std::env::set_var(&key, &value);
-            }
-        }
+        // Task exports are stored in devenv.task_exports and injected into the
+        // shell script by prepare_shell().
+        let _task_exports = devenv.run_enter_shell_tasks().await?;
     }
 
     // Create reload config - watch files will be populated from eval cache
