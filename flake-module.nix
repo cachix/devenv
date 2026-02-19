@@ -52,17 +52,23 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
         let
           deprecate = name: value: lib.warn "The package '${name}' is deprecated. Use the corresponding `devenv <cmd>` commands." value;
         in
-        lib.concatMapAttrs
-          (shellName: devenv:
-            # TODO(sander): container support is undocumented and is specific to flake-parts, ie. the CLI shim doesn't support this.
-            # Official support is complicated by `getInput` throwing errors and Nix not being able to properly try/catch errors with `tryEval`.
-            # Until this is fixed, these outputs will remain.
-            (lib.concatMapAttrs
-              (containerName: container:
-                { "${shellPrefix shellName}container-${containerName}" = container.derivation; }
+        lib.optionalAttrs (lib.hasSuffix "-linux" system)
+          (
+            lib.concatMapAttrs
+              (shellName: devenv:
+                # TODO(sander): container support is undocumented and is specific to flake-parts, ie. the CLI shim doesn't support this.
+                # Official support is complicated by `getInput` throwing errors and Nix not being able to properly try/catch errors with `tryEval`.
+                # Until this is fixed, these outputs will remain.
+                lib.concatMapAttrs
+                  (containerName: container:
+                    { "${shellPrefix shellName}container-${containerName}" = container.derivation; }
+                  )
+                  devenv.containers
               )
-              devenv.containers
-            ) // lib.mapAttrs deprecate {
+              config.devenv.shells
+          ) // lib.concatMapAttrs
+          (shellName: devenv:
+            lib.mapAttrs deprecate {
               "${shellPrefix shellName}devenv-up" = devenv.procfileScript;
               "${shellPrefix shellName}devenv-test" = devenv.test;
             }
