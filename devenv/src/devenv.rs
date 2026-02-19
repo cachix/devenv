@@ -1177,20 +1177,44 @@ impl Devenv {
     /// This runs tasks via Rust (not bash hook) to enable TUI progress reporting.
     /// Task failures are logged as warnings but don't prevent shell entry.
     pub async fn run_enter_shell_tasks(&self) -> Result<HashMap<String, String>> {
+        self.run_enter_shell_tasks_with_executor(None, None).await
+    }
+
+    /// Run enterShell tasks with a custom executor and optional pre-captured shell env.
+    /// Used for running tasks inside a PTY for hot-reload mode, or from test() which
+    /// already captured envs in Phase 1.
+    /// Task failures are logged as warnings but don't prevent shell entry.
+    pub async fn run_enter_shell_tasks_with_executor(
+        &self,
+        executor: Option<Arc<dyn tasks::TaskExecutor>>,
+        pre_captured_envs: Option<HashMap<String, String>>,
+    ) -> Result<HashMap<String, String>> {
         self.assemble(false).await?;
 
-        // Capture the shell environment to ensure tasks run with proper devenv setup
-        let envs = self.capture_shell_environment().await?;
-
-        // Set environment variables in the current process
+        // Use pre-captured envs if provided (e.g. from test() Phase 1), otherwise capture fresh.
+        let envs = match pre_captured_envs {
+            Some(e) => e,
+            None => self.capture_shell_environment().await?,
+        };
         for (key, value) in &envs {
             unsafe {
                 std::env::set_var(key, value);
             }
         }
 
-        let tasks_config = self.load_tasks().await?;
+        let task_configs = self.load_tasks().await?;
+        self.run_enter_shell_tasks_inner(task_configs, executor)
+            .await
+    }
 
+    /// Core logic for running enterShell tasks with a pre-loaded task config.
+    /// Accepts an optional custom executor (e.g., PTY executor for hot-reload mode).
+    /// Stores task-exported env vars on self so prepare_shell() can inject them.
+    async fn run_enter_shell_tasks_inner(
+        &self,
+        task_configs: Vec<tasks::TaskConfig>,
+        executor: Option<Arc<dyn tasks::TaskExecutor>>,
+    ) -> Result<HashMap<String, String>> {
         let verbosity = if self.global_options.quiet {
             tasks::VerbosityLevel::Quiet
         } else if self.global_options.verbose {
@@ -1201,7 +1225,7 @@ impl Devenv {
 
         let config = tasks::Config {
             roots: vec!["devenv:enterShell".to_string()],
-            tasks: tasks_config,
+            tasks: task_configs,
             run_mode: devenv_tasks::RunMode::All,
             runtime_dir: self.devenv_runtime.clone(),
             cache_dir: self.devenv_dotfile.clone(),
@@ -1209,13 +1233,17 @@ impl Devenv {
             env: Default::default(),
         };
 
-        let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
-            .build()
-            .await?;
+        let has_custom_executor = executor.is_some();
+        let mut builder = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown));
+        if let Some(exec) = executor {
+            builder = builder.with_executor(exec);
+        }
+        let tasks = builder.build().await?;
 
-        // In TUI mode, skip TasksUi to avoid corrupting the TUI display
-        // TUI captures activity events directly via the channel initialized in main.rs
-        let outputs = if self.global_options.tui {
+        // Custom executor implies PTY/TUI mode; otherwise respect the tui flag.
+        // In TUI mode, skip TasksUi to avoid corrupting the TUI display —
+        // the TUI captures activity events directly via the channel in main.rs.
+        let outputs = if has_custom_executor || self.global_options.tui {
             tasks.run(false).await
         } else {
             // Shell mode - initialize activity channel for TasksUi
@@ -1235,62 +1263,6 @@ impl Devenv {
         };
 
         // Note: Task failures are shown in the TUI/UI output, no need to bail here.
-        // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
-
-        let exports = Self::collect_task_exports(&outputs);
-        // Store on self so prepare_shell() can inject them into the bash script
-        *self.task_exports.lock().unwrap() = exports.clone();
-        Ok(exports)
-    }
-
-    /// Run enterShell tasks with a custom executor.
-    /// Used for running tasks inside a PTY for hot-reload mode.
-    /// Task failures are logged as warnings but don't prevent shell entry.
-    pub async fn run_enter_shell_tasks_with_executor(
-        &self,
-        executor: Arc<dyn tasks::TaskExecutor>,
-    ) -> Result<HashMap<String, String>> {
-        self.assemble(false).await?;
-
-        // Capture the shell environment to ensure tasks run with proper devenv setup
-        let envs = self.capture_shell_environment().await?;
-
-        // Set environment variables in the current process
-        for (key, value) in &envs {
-            unsafe {
-                std::env::set_var(key, value);
-            }
-        }
-
-        let tasks_config = self.load_tasks().await?;
-
-        let verbosity = if self.global_options.quiet {
-            tasks::VerbosityLevel::Quiet
-        } else if self.global_options.verbose {
-            tasks::VerbosityLevel::Verbose
-        } else {
-            tasks::VerbosityLevel::Normal
-        };
-
-        let config = tasks::Config {
-            roots: vec!["devenv:enterShell".to_string()],
-            tasks: tasks_config,
-            run_mode: devenv_tasks::RunMode::All,
-            runtime_dir: self.devenv_runtime.clone(),
-            cache_dir: self.devenv_dotfile.clone(),
-            sudo_context: None,
-            env: Default::default(),
-        };
-
-        let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
-            .with_executor(executor)
-            .build()
-            .await?;
-
-        // In TUI mode, run without TasksUi (TUI captures activity events directly)
-        let outputs = tasks.run(false).await;
-
-        // Note: Task failures are shown in the TUI output, no need to bail here.
         // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
 
         let exports = Self::collect_task_exports(&outputs);
@@ -1420,7 +1392,7 @@ impl Devenv {
 
         // ── Phase 1: Configuring shell ──────────────────────────────
         // Assemble with testing enabled, build dev environment, cache it,
-        // check for processes, and capture shell env vars for up().
+        // check for processes, and capture shell env vars.
         let (has_processes, envs) = {
             let phase1 = Activity::operation("Configuring shell")
                 .parent(None)
@@ -1430,32 +1402,29 @@ impl Devenv {
                 let dev_env = self.get_dev_environment_inner(false).await?;
                 let _ = self.dev_env_cache.set(dev_env);
                 let has_processes = self.has_processes().await?;
-                let envs = if has_processes {
-                    Some(self.capture_shell_environment().await?)
-                } else {
-                    None
-                };
-                Ok::<(bool, Option<HashMap<String, String>>), miette::Report>((has_processes, envs))
+                let envs = self.capture_shell_environment().await?;
+                Ok::<(bool, HashMap<String, String>), miette::Report>((has_processes, envs))
             }
             .in_activity(&phase1)
             .await?
         };
 
-        // ── Phase 1.5: Running enterShell tasks ───────────────────
+        // ── Phase 2: Running enterShell tasks ─────────────────────
         // Run tasks like devenv:python:virtualenv that set up the environment
         // (e.g., create venv, pip install, export PATH/VIRTUAL_ENV).
         // In devenv 2.0+, these don't run via the bash enterShell hook.
         // Exports are stored on self so prepare_shell() injects them into the
         // bash script AFTER the Nix shell env is applied.
-        // When processes are present, up() calls run_enter_shell_tasks(),
-        // which also stores exports in self.task_exports for the test script.
+        // When processes are present, up() (Phase 4) calls run_enter_shell_tasks_inner()
+        // as part of its startup sequence, storing exports in self.task_exports.
         if !has_processes {
-            self.run_enter_shell_tasks().await?;
+            self.run_enter_shell_tasks_with_executor(None, Some(envs.clone()))
+                .await?;
         }
 
-        // ── Phase 2: Building tests ─────────────────────────────────
+        // ── Phase 3: Building tests ─────────────────────────────────
         let test_script = {
-            let phase2 = Activity::operation("Building tests").parent(None).start();
+            let phase3 = Activity::operation("Building tests").parent(None).start();
             async {
                 let gc_root = self.devenv_dot_gc.join("test");
                 let test_script = self
@@ -1464,14 +1433,14 @@ impl Devenv {
                     .await?;
                 Ok::<String, miette::Report>(test_script[0].to_string_lossy().to_string())
             }
-            .in_activity(&phase2)
+            .in_activity(&phase3)
             .await?
         };
 
-        // ── Phase 3: Starting processes (if needed) ─────────────────
+        // ── Phase 4: Starting processes (if needed) ─────────────────
         if has_processes {
             let options = ProcessOptions {
-                envs: envs.as_ref(),
+                envs: Some(&envs),
                 detach: true,
                 log_to_file: false,
                 strict_ports: false,
@@ -1480,13 +1449,13 @@ impl Devenv {
             self.up(vec![], options).await?;
         }
 
-        // ── Phase 4: Running tests ──────────────────────────────────
+        // ── Phase 5: Running tests ──────────────────────────────────
         // prepare_shell will use cached dev_env, avoiding redundant activity wrapping.
         let result = self
             .run_in_shell(test_script, &[], Some("Running tests"))
             .await?;
 
-        // ── Phase 5: Stopping processes ─────────────────────────────
+        // ── Phase 6: Stopping processes ─────────────────────────────
         if has_processes {
             self.down().await?;
         }
@@ -1685,8 +1654,11 @@ impl Devenv {
         // the nix shell env. Task exports take precedence.
         // Exports are also stored on self so prepare_shell() can inject them
         // into the bash script (e.g. when called from test()).
+        // Reuse task_configs from Phase 2 to avoid a redundant load_tasks() call.
         {
-            let exports = self.run_enter_shell_tasks().await?;
+            let exports = self
+                .run_enter_shell_tasks_inner(task_configs.clone(), None)
+                .await?;
             envs.extend(exports);
         }
 

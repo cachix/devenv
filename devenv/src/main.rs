@@ -924,7 +924,9 @@ async fn run_reload_shell(
 
                 let executor = Arc::new(PtyExecutor::new(task_tx));
                 let devenv = devenv_for_tasks.lock().await;
-                let result = devenv.run_enter_shell_tasks_with_executor(executor).await;
+                let result = devenv
+                    .run_enter_shell_tasks_with_executor(Some(executor), None)
+                    .await;
                 drop(devenv);
                 result
             })
