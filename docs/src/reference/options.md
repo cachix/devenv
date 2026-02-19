@@ -22558,6 +22558,64 @@ string
 
 
 
+## processes.\<name>.linux
+
+
+
+Linux-specific process configuration.
+
+Requires devenv 2.0+.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.linux.capabilities
+
+
+
+Linux capabilities to add as ambient capabilities for this process
+(e.g., “cap_net_admin”, “cap_sys_admin”).
+
+Requires devenv 2.0+.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "cap_net_admin"
+  "cap_sys_admin"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
 ## processes.\<name>.listen
 
 
