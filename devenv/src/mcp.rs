@@ -62,7 +62,7 @@ impl DevenvMcpServer {
         let devenv = Devenv::new(devenv_options).await;
 
         // Assemble once for all operations
-        devenv.assemble(true).await?;
+        devenv.assemble().await?;
 
         // Fetch and cache packages
         {
@@ -527,7 +527,7 @@ mod tests {
             ..Default::default()
         };
         let devenv = Devenv::new(devenv_options).await;
-        devenv.assemble(true).await.unwrap();
+        devenv.assemble().await.unwrap();
 
         let packages = server.fetch_packages_with_devenv(&devenv).await;
 
@@ -603,7 +603,7 @@ mod tests {
             ..Default::default()
         };
         let devenv = Devenv::new(devenv_options).await;
-        devenv.assemble(true).await.unwrap();
+        devenv.assemble().await.unwrap();
 
         let options = server.fetch_options_with_devenv(&devenv).await;
 

@@ -74,6 +74,7 @@ pub struct DevenvOptions {
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
     pub shutdown: Arc<tokio_shutdown::Shutdown>,
+    pub is_testing: bool,
 }
 
 impl DevenvOptions {
@@ -85,6 +86,7 @@ impl DevenvOptions {
             devenv_root: None,
             devenv_dotfile: None,
             shutdown,
+            is_testing: false,
         }
     }
 }
@@ -98,6 +100,7 @@ impl Default for DevenvOptions {
             devenv_root: None,
             devenv_dotfile: None,
             shutdown: tokio_shutdown::Shutdown::new(),
+            is_testing: false,
         }
     }
 }
@@ -158,6 +161,7 @@ pub struct Devenv {
     pub config: Arc<RwLock<Config>>,
     pub shell_settings: ShellSettings,
     pub global_options: GlobalOptions,
+    pub is_testing: bool,
 
     pub nix: Arc<Box<dyn NixBackend>>,
 
@@ -168,6 +172,9 @@ pub struct Devenv {
     devenv_home_gc: PathBuf,
     devenv_tmp: PathBuf,
     devenv_runtime: PathBuf,
+
+    // Container name for container builds, set before assemble
+    container_name: std::sync::Mutex<Option<String>>,
 
     // Whether assemble has been run.
     // Assemble creates critical runtime directories and files.
@@ -193,9 +200,6 @@ pub struct Devenv {
     // Port allocator shared with NixBackend for holding port reservations
     port_allocator: Arc<PortAllocator>,
 
-    // TODO: make private.
-    // Pass as an arg or have a setter.
-    pub container_name: Option<String>,
 
     // Native process manager started in-process (for detach mode used by test())
     native_process_manager: Arc<OnceCell<Arc<processes::NativeProcessManager>>>,
@@ -349,6 +353,7 @@ impl Devenv {
             config: Arc::new(RwLock::new(options.config)),
             shell_settings,
             global_options,
+            is_testing: options.is_testing,
             devenv_root,
             devenv_dotfile,
             devenv_dot_gc,
@@ -356,6 +361,7 @@ impl Devenv {
             devenv_tmp,
             devenv_runtime,
             nix: Arc::new(nix),
+            container_name: std::sync::Mutex::new(None),
             assembled: Arc::new(AtomicBool::new(false)),
             assemble_lock: Arc::new(Semaphore::new(1)),
             has_processes: Arc::new(OnceCell::new()),
@@ -364,7 +370,6 @@ impl Devenv {
             secretspec_resolved,
             nix_args_string: Arc::new(OnceCell::new()),
             port_allocator,
-            container_name: None,
             native_process_manager: Arc::new(OnceCell::new()),
             shutdown: options.shutdown,
             task_exports: std::sync::Mutex::new(HashMap::new()),
@@ -771,7 +776,7 @@ impl Devenv {
 
         // Assemble is required for changelog.show_new() which builds changelog.json
         // Allow assemble to fail gracefully - changelogs are informational only
-        match self.assemble(false).await {
+        match self.assemble().await {
             Ok(_) => {
                 // Show new changelogs (if any)
                 let changelog = crate::changelog::Changelog::new(&**self.nix, &self.paths());
@@ -789,11 +794,9 @@ impl Devenv {
     }
 
     #[activity(format!("{name} container"), kind = build)]
-    pub async fn container_build(&mut self, name: &str) -> Result<String> {
-        // This container name is passed to the flake as an argument and tells the module system
-        // that we're 1. building a container 2. which container we're building.
-        self.container_name = Some(name.to_string());
-        self.assemble(false).await?;
+    pub async fn container_build(&self, name: &str) -> Result<String> {
+        *self.container_name.lock().unwrap() = Some(name.to_string());
+        self.assemble().await?;
 
         let sanitized_name = sanitize_container_name(name);
         let gc_root = self
@@ -825,7 +828,7 @@ impl Devenv {
     }
 
     pub async fn container_copy(
-        &mut self,
+        &self,
         name: &str,
         copy_args: &[String],
         registry: Option<&str>,
@@ -875,7 +878,7 @@ impl Devenv {
     }
 
     pub async fn container_run(
-        &mut self,
+        &self,
         name: &str,
         copy_args: &[String],
     ) -> Result<ShellCommand> {
@@ -901,7 +904,7 @@ impl Devenv {
     }
 
     pub async fn repl(&self) -> Result<()> {
-        self.assemble(false).await?;
+        self.assemble().await?;
         self.nix.repl().await?;
         Ok(())
     }
@@ -930,7 +933,7 @@ impl Devenv {
 
     #[activity("Searching options and packages")]
     pub async fn search(&self, name: &str) -> Result<()> {
-        self.assemble(false).await?;
+        self.assemble().await?;
 
         // Run both searches concurrently
         let (options_results, package_results) =
@@ -1054,7 +1057,7 @@ impl Devenv {
         cli_inputs: Vec<String>,
         input_json: Option<String>,
     ) -> Result<String> {
-        self.assemble(false).await?;
+        self.assemble().await?;
         if roots.is_empty() {
             bail!("No tasks specified.");
         }
@@ -1144,7 +1147,7 @@ impl Devenv {
     }
 
     pub async fn tasks_list(&self) -> Result<String> {
-        self.assemble(false).await?;
+        self.assemble().await?;
 
         let tasks = self.load_tasks().await?;
 
@@ -1171,7 +1174,7 @@ impl Devenv {
         executor: Option<Arc<dyn tasks::TaskExecutor>>,
         pre_captured_envs: Option<HashMap<String, String>>,
     ) -> Result<HashMap<String, String>> {
-        self.assemble(false).await?;
+        self.assemble().await?;
 
         // Use pre-captured envs if provided (e.g. from test() Phase 1), otherwise capture fresh.
         let envs = match pre_captured_envs {
@@ -1372,7 +1375,7 @@ impl Devenv {
                 .parent(None)
                 .start();
             async {
-                self.assemble(true).await?;
+                self.assemble().await?;
                 let dev_env = self.get_dev_environment_inner(false).await?;
                 let _ = self.dev_env_cache.set(dev_env);
                 let has_processes = self.has_processes().await?;
@@ -1444,14 +1447,14 @@ impl Devenv {
     }
 
     pub async fn info(&self) -> Result<String> {
-        self.assemble(false).await?;
+        self.assemble().await?;
         self.nix.metadata().await
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<Vec<(String, PathBuf)>> {
         let activity = Activity::operation("Building").start();
         async move {
-            self.assemble(false).await?;
+            self.assemble().await?;
 
             fn flatten_object(prefix: &str, value: &serde_json::Value) -> Vec<String> {
                 match value {
@@ -1539,7 +1542,7 @@ impl Devenv {
     pub async fn eval(&self, attributes: &[String]) -> Result<String> {
         let activity = Activity::operation("Evaluating").start();
         async move {
-            self.assemble(false).await?;
+            self.assemble().await?;
 
             let mut results = serde_json::Map::new();
 
@@ -1581,7 +1584,7 @@ impl Devenv {
                 .parent(None)
                 .start();
             async {
-                self.assemble(false).await?;
+                self.assemble().await?;
                 if !self.has_processes().await? {
                     message(
                         ActivityLevel::Error,
@@ -1811,7 +1814,7 @@ impl Devenv {
 
     /// Assemble the devenv environment and return the serialized NixArgs string.
     /// The returned string can be used with `import bootstrap/default.nix <args>`.
-    pub async fn assemble(&self, is_testing: bool) -> Result<String> {
+    pub async fn assemble(&self) -> Result<String> {
         let processes_running = self.processes_running().await;
         self.port_allocator.set_allow_in_use(processes_running);
 
@@ -2011,6 +2014,7 @@ impl Devenv {
         let lock_fingerprint = self.nix.lock_fingerprint().await?;
 
         // Create the Nix arguments struct
+        let container_name = self.container_name.lock().unwrap().clone();
         let nixpkgs_config = config.nixpkgs_config(&self.global_options.system);
         let args = NixArgs {
             version: crate_version!(),
@@ -2024,9 +2028,9 @@ impl Devenv {
             devenv_dotfile_path: &dotfile_relative_path,
             devenv_tmpdir: &self.devenv_tmp,
             devenv_runtime: &self.devenv_runtime,
-            devenv_istesting: is_testing,
+            devenv_istesting: self.is_testing,
             devenv_direnvrc_latest_version: *DIRENVRC_VERSION,
-            container_name: self.container_name.as_deref(),
+            container_name: container_name.as_deref(),
             active_profiles,
             cli_options,
             hostname: hostname.as_deref(),
@@ -2057,7 +2061,7 @@ impl Devenv {
     /// Called directly by `up()` (which creates its own "Configuring shell" activity)
     /// and by `get_dev_environment()` (which wraps with `#[activity]`).
     async fn get_dev_environment_inner(&self, json: bool) -> Result<DevEnv> {
-        self.assemble(false).await?;
+        self.assemble().await?;
 
         let gc_root = self.devenv_dot_gc.join("shell");
         let span = tracing::debug_span!("evaluating_dev_env");
