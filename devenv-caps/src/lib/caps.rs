@@ -82,9 +82,13 @@ pub fn is_allowed(cap: Cap) -> bool {
 }
 
 /// Get human-readable info for a capability (for TUI display).
+///
+/// Accepts names with or without `cap_`/`CAP_` prefix (e.g., both
+/// `"net_bind_service"` and `"CAP_NET_BIND_SERVICE"` work).
 pub fn info_for(name: &str) -> Option<&'static CapInfo> {
     let normalized = name.to_lowercase().replace('-', "_");
-    ALLOWED.iter().find(|info| info.name == normalized)
+    let stripped = normalized.strip_prefix("cap_").unwrap_or(&normalized);
+    ALLOWED.iter().find(|info| info.name == stripped)
 }
 
 /// List all allowed capabilities with descriptions.
@@ -130,5 +134,22 @@ mod tests {
     fn reject_dac_read_search() {
         let names = vec!["dac_read_search".to_string()];
         assert!(parse_and_validate(&names).is_err());
+    }
+
+    #[test]
+    fn info_for_with_cap_prefix() {
+        let info = info_for("CAP_NET_ADMIN").unwrap();
+        assert_eq!(info.name, "net_admin");
+    }
+
+    #[test]
+    fn info_for_without_prefix() {
+        let info = info_for("net_admin").unwrap();
+        assert_eq!(info.name, "net_admin");
+    }
+
+    #[test]
+    fn info_for_unknown_returns_none() {
+        assert!(info_for("CAP_SYS_ADMIN").is_none());
     }
 }
