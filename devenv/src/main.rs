@@ -179,13 +179,8 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     }));
 
     // In reload shell mode, backend_done is just a handoff signal; don't trigger global shutdown.
-    let shutdown_on_backend_done = !matches!(
-        &cli.command,
-        Some(Commands::Shell {
-            no_reload: false,
-            ..
-        })
-    );
+    let shutdown_on_backend_done = !matches!(&cli.command, Some(Commands::Shell { .. }))
+        || !cli.global_options.reload;
 
     // Shutdown coordination
     // Signal handlers catch external signals (SIGINT from `kill`, SIGTERM, etc.)
@@ -434,12 +429,17 @@ async fn run_devenv(
         config.imports.push("from".to_string());
     }
 
+    // Resolve settings from CLI + Config (pure functions, no mutation).
+    let shell_settings =
+        devenv_core::config::ShellSettings::resolve(&cli.global_options, &config);
+
     // Merge CLI overrides into config: clean, impure, profiles, secretspec.
     // After this, Config is the source of truth for these settings.
     config.apply_cli_overrides(&mut cli.global_options);
 
     let mut options = devenv::DevenvOptions {
         config,
+        shell_settings: Some(shell_settings),
         global_options: Some(cli.global_options),
         devenv_root: None,
         devenv_dotfile: None,
@@ -519,12 +519,8 @@ async fn run_devenv_inner(
     let mut backend_done_tx = Some(backend_done_tx);
 
     let result = match command {
-        Commands::Shell {
-            cmd,
-            ref args,
-            no_reload,
-        } => {
-            if no_reload {
+        Commands::Shell { cmd, ref args } => {
+            if !devenv.shell_settings.reload {
                 // Run enterShell tasks first (TUI shows progress).
                 // Exports are stored on self so prepare_shell() injects them
                 // into the bash script after the Nix shell env is applied.
@@ -809,7 +805,7 @@ async fn run_reload_shell(
     // This must happen while TUI is active since get_dev_environment has #[activity].
     let initial_env_script = devenv.print_dev_env(false).await?;
     let bash_path = devenv.get_bash_path().await?;
-    let clean = devenv.config.read().await.clean.clone().unwrap_or_default();
+    let clean = devenv.shell_settings.clean.clone();
 
     // Get eval cache info from original devenv (after print_dev_env set it up)
     let eval_cache_pool = devenv.eval_cache_pool().cloned();
@@ -839,6 +835,7 @@ async fn run_reload_shell(
     // We need to create a new Devenv instance since we can't move the reference
     let devenv_options = DevenvOptions {
         config,
+        shell_settings: Some(devenv.shell_settings.clone()),
         global_options: Some(devenv.global_options.clone()),
         devenv_root: Some(root),
         devenv_dotfile: Some(dotfile.clone()),
