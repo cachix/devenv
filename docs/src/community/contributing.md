@@ -16,33 +16,26 @@ We have a rule that new features need to come with documentation and tests (`dev
    `nix build .#devenv` which allows to run development version of devenv outside
    of source code directory by calling `<PATH-TO-DEVENV-SOURCE-CODE>/result/bin/devenv`.
 
-## Creating development project
-
-1. `mkdir devenv-project && cd devenv-project`
-
-2. `<PATH-TO-DEVENV-SOURCE-CODE>/result/bin/devenv init`
-
-3. Add devenv input pointing to local source directory to `devenv.yaml` under `inputs`
-
-    ```
-    inputs:
-      ...
-      devenv:
-        url: path:<PATH-TO-DEVENV-SOURCE-CODE>?dir=src/modules
-    ```
-
-4. `<PATH-TO-DEVENV-SOURCE-CODE>/result/bin/devenv update`
-
-    Now, that `devenv.yaml` is pointing to the local version of `src/modules`, changes made in `src/modules` will be picked up immediately on next shell activation. (No need to rebuild the binary.)
-
 ## Repository structure
 
-- The `devenv` CLI is in `devenv/src/main.rs`.
-- All modules related to `devenv.nix` are in `src/modules/`.
-- Examples are automatically tested on CI and are the best way to work on developing new modules, see `examples/` and `tests/`
-- Documentation is in `docs/`.
-- To run a development server, run `devenv up`.
-- To run a test from `examples/` or `tests/`, run `<PATH-TO-DEVENV-SOURCE-CODE>/result/bin/devenv-run-tests --only <name>`.
+- The project is a Cargo workspace with multiple crates:
+  - `devenv/` - Main CLI binary. Entry point is `devenv/src/main.rs`, command dispatch in `devenv/src/devenv.rs`, CLI definitions in `devenv/src/cli.rs`.
+  - `devenv-core/` - Shared types: configuration parsing, `NixBackend` trait, global options.
+  - `devenv-tasks/` - DAG-based task execution with caching and parallel execution.
+  - `devenv-eval-cache/` - SQLite-based Nix evaluation cache.
+  - `devenv-tui/` - Terminal UI for build progress.
+  - `devenv-run-tests/` - Integration test harness.
+- All Nix modules related to `devenv.nix` are in `src/modules/` (`languages/`, `services/`, `integrations/`, `process-managers/`). New modules placed in these directories are auto-discovered.
+- Examples are automatically tested on CI and are the best way to work on developing new modules, see `examples/` and `tests/`.
+- Documentation is in `docs/`. To run a documentation dev server, run `devenv up`.
+- To run a test from `examples/` or `tests/`, run `devenv-run-tests run tests --only <name>`.
+
+## Building and testing the CLI
+
+- `cargo build` - Build the CLI.
+- `cargo test` or `cargo nextest run` - Run unit tests.
+- `cargo fmt` - Format code.
+- `cargo clippy` - Lint code.
 
 ## Adding changelogs for breaking and behavior changes
 
@@ -73,6 +66,10 @@ Each changelog entry requires:
 - `description`: A markdown-formatted detailed description of the change and any migration steps
 
 Changelogs are deduplicated based on date and title, so you can safely update the description without affecting deduplication. Users can view all relevant changelogs with the `devenv changelogs` command.
+
+## Contributing service improvements
+
+To add a new service module under `src/modules/services/`, follow the [`create-service` skill](https://github.com/cachix/devenv/blob/main/.agents/skills/create-service/SKILL.md). It documents the conventions for port allocation, readiness probes, socket activation, and setup tasks.
 
 ## Contributing language improvements
 

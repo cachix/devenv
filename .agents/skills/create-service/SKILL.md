@@ -12,9 +12,8 @@ This skill guides the creation of new service modules under `src/modules/service
 
 1. Research the service: default port, package name in nixpkgs, config file format, socket activation support, systemd notify/watchdog support
 2. Read existing modules in `src/modules/services/` for reference (e.g., `memcached.nix` for simple, `redis.nix` for medium, `minio.nix` for complex)
-3. Create `src/modules/services/<name>.nix` following the patterns below
-4. Register the module in `src/modules/services.nix`
-5. Add a test under `tests/` or `examples/`
+3. Create `src/modules/services/<name>.nix` following the patterns below (auto-discovered)
+4. Add a test under `tests/`
 
 ## Unix Sockets Preferred
 
@@ -203,7 +202,3 @@ configFile = pkgs.writeText "<name>.conf" ''
 format = pkgs.formats.ini { };
 configFile = format.generate "<name>.conf" cfg.settings;
 ```
-
-### Registration
-
-After creating the module, register it in `src/modules/services.nix`.
