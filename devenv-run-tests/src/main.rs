@@ -67,7 +67,7 @@ struct GenerateJsonArgs {
 enum TestStatus {
     Passed,
     Failed,
-    Skipped(String),
+    Skipped,
 }
 
 struct TestResult {
@@ -273,10 +273,10 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         }
 
         if test_info.config.should_skip_for_system(&current_system) {
-            let reason = format!("unsupported system {current_system}");
+            eprintln!("Skipping {name} (unsupported system {current_system})");
             test_results.push(TestResult {
                 name: name.clone(),
-                status: TestStatus::Skipped(reason),
+                status: TestStatus::Skipped,
             });
             return false;
         }
@@ -630,10 +630,7 @@ async fn run_tests(args: &RunArgs) -> Result<()> {
                 num_failed += 1;
                 eprintln!("{}: Failed", result.name);
             }
-            TestStatus::Skipped(reason) => {
-                num_skipped += 1;
-                eprintln!("{}: Skipped ({reason})", result.name);
-            }
+            TestStatus::Skipped => num_skipped += 1,
         }
     }
 
