@@ -5,6 +5,7 @@ pub mod lsp;
 pub mod mcp;
 pub mod nix_log_bridge;
 pub mod reload;
+pub(crate) mod shell_env;
 pub mod tracing;
 pub use devenv_processes as processes;
 mod util;

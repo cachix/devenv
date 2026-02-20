@@ -8,6 +8,7 @@
 //! the files from the current evaluation, not stale data from previous sessions.
 
 use crate::Devenv;
+use devenv_core::config::Clean;
 use devenv_reload::{BuildContext, BuildError, CommandBuilder, ShellBuilder};
 use devenv_shell::dialect::{BashDialect, RcfileContext, ShellDialect};
 use std::sync::Arc;
@@ -28,6 +29,8 @@ pub struct DevenvShellBuilder {
     initial_env_script: String,
     /// Pre-computed bash path
     bash_path: String,
+    /// Resolved clean config (already merged from CLI and devenv.yaml)
+    clean: Clean,
     /// Dotfile directory path
     dotfile: std::path::PathBuf,
     /// Eval cache pool (from original devenv, to query file inputs for watching)
@@ -40,8 +43,9 @@ impl DevenvShellBuilder {
     /// Create a new DevenvShellBuilder.
     ///
     /// The provided Devenv instance will be used for all builds.
-    /// The `initial_env_script` and `bash_path` are pre-computed while TUI is active
-    /// to avoid deadlocks (get_dev_environment has #[activity] which needs TUI).
+    /// The `initial_env_script`, `bash_path`, and `clean` are read from the
+    /// already-merged config before the coordinator starts (to avoid deadlocks
+    /// with the TUI and async locks).
     /// The `eval_cache_pool` and `shell_cache_key` are from the original devenv
     /// (needed because the new devenv instance hasn't done assemble() yet).
     pub fn new(
@@ -51,6 +55,7 @@ impl DevenvShellBuilder {
         args: Vec<String>,
         initial_env_script: String,
         bash_path: String,
+        clean: Clean,
         dotfile: std::path::PathBuf,
         eval_cache_pool: Option<sqlx::SqlitePool>,
         shell_cache_key: Option<devenv_eval_cache::EvalCacheKey>,
@@ -62,6 +67,7 @@ impl DevenvShellBuilder {
             args,
             initial_env_script,
             bash_path,
+            clean,
             dotfile,
             eval_cache_pool,
             shell_cache_key,
@@ -122,6 +128,9 @@ impl ShellBuilder for DevenvShellBuilder {
                     reload_file.to_string_lossy().to_string(),
                 );
             }
+
+            // Apply clean/keep env filtering and standard shell env vars
+            crate::shell_env::apply_shell_env(&mut cmd_builder, bash, &self.clean);
 
             // Add watch paths from eval cache
             self.handle.block_on(async {
