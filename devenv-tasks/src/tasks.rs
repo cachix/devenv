@@ -200,15 +200,45 @@ impl Tasks {
                 TaskStatus::ProcessReady => status.running += 1,
                 TaskStatus::Completed(completed) => match completed {
                     TaskCompleted::Success(_, _) => status.succeeded += 1,
-                    TaskCompleted::Failed(_, _) => status.failed += 1,
+                    TaskCompleted::Failed(_, _) => {
+                        status.failed += 1;
+                        if self.is_soft_failure(index) {
+                            status.soft_failed += 1;
+                        }
+                    }
                     TaskCompleted::Skipped(_) => status.skipped += 1,
-                    TaskCompleted::DependencyFailed => status.dependency_failed += 1,
+                    TaskCompleted::DependencyFailed => {
+                        status.dependency_failed += 1;
+                        if self.is_soft_failure(index) {
+                            status.soft_dependency_failed += 1;
+                        }
+                    }
                     TaskCompleted::Cancelled(_) => status.cancelled += 1,
                 },
             }
         }
 
         status
+    }
+
+    /// Check if a failed task at `index` is a "soft" failure.
+    ///
+    /// A failure is soft if:
+    /// 1. The task is NOT a root task, AND
+    /// 2. The task has at least one outgoing edge (someone depends on it), AND
+    /// 3. ALL outgoing edges use `DependencyKind::Complete`
+    fn is_soft_failure(&self, index: &NodeIndex) -> bool {
+        if self.roots.contains(index) {
+            return false;
+        }
+        let outgoing: Vec<_> = self
+            .graph
+            .edges_directed(*index, petgraph::Direction::Outgoing)
+            .collect();
+        !outgoing.is_empty()
+            && outgoing
+                .iter()
+                .all(|e| *e.weight() == DependencyKind::Complete)
     }
 
     fn resolve_namespace_roots(
@@ -885,7 +915,7 @@ impl Tasks {
         // Check completion status and mark orchestration activity accordingly
         let status = self.get_completion_status().await;
 
-        if status.failed > 0 || status.dependency_failed > 0 {
+        if status.has_failures() {
             orchestration_activity.fail();
         } else if status.cancelled > 0 {
             orchestration_activity.cancel();

@@ -3694,6 +3694,191 @@ async fn test_chained_soft_dependencies() -> Result<(), Error> {
     Ok(())
 }
 
+/// Test that has_failures() returns false when only @complete dependencies fail
+#[tokio::test]
+async fn test_soft_failure_no_exit_code() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let failing_script = create_script("#!/bin/sh\nexit 1")?;
+    let success_script = create_script("#!/bin/sh\necho ok")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["sf:root"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "sf:will-fail",
+                    "command": failing_script.to_str().unwrap()
+                },
+                {
+                    "name": "sf:root",
+                    "after": ["sf:will-fail@complete"],
+                    "command": success_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    tasks.run(false).await;
+
+    let status = tasks.get_completion_status().await;
+    assert_eq!(status.failed, 1);
+    assert_eq!(status.soft_failed, 1);
+    assert!(
+        !status.has_failures(),
+        "soft @complete failure should not count as a hard failure"
+    );
+
+    Ok(())
+}
+
+/// Test that has_failures() returns true when @ready dependencies fail
+#[tokio::test]
+async fn test_hard_failure_exit_code() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let failing_script = create_script("#!/bin/sh\nexit 1")?;
+    let success_script = create_script("#!/bin/sh\necho ok")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["hf:root"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "hf:will-fail",
+                    "command": failing_script.to_str().unwrap()
+                },
+                {
+                    "name": "hf:root",
+                    "after": ["hf:will-fail@ready"],
+                    "command": success_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    tasks.run(false).await;
+
+    let status = tasks.get_completion_status().await;
+    assert_eq!(status.failed, 1);
+    assert_eq!(status.soft_failed, 0);
+    assert_eq!(status.dependency_failed, 1);
+    assert_eq!(status.soft_dependency_failed, 0);
+    assert!(
+        status.has_failures(),
+        "@ready failure should count as a hard failure"
+    );
+
+    Ok(())
+}
+
+/// Test mixed case: @complete failure is soft, @ready failure is hard
+#[tokio::test]
+async fn test_mixed_soft_and_hard_failure_exit_code() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let failing_script = create_script("#!/bin/sh\nexit 1")?;
+    let success_script = create_script("#!/bin/sh\necho ok")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["mf:root"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "mf:soft-fail",
+                    "command": failing_script.to_str().unwrap()
+                },
+                {
+                    "name": "mf:hard-fail",
+                    "command": failing_script.to_str().unwrap()
+                },
+                {
+                    "name": "mf:root",
+                    "after": ["mf:soft-fail@complete", "mf:hard-fail@ready"],
+                    "command": success_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    tasks.run(false).await;
+
+    let status = tasks.get_completion_status().await;
+    // mf:soft-fail is soft (only @complete edges out), mf:hard-fail is hard (@ready edge out)
+    assert_eq!(status.failed, 2);
+    assert_eq!(status.soft_failed, 1);
+    assert!(
+        status.has_failures(),
+        "mix with @ready failure should count as hard failure"
+    );
+
+    Ok(())
+}
+
+/// Test that a root task failure is never soft, even if it has @complete edges
+#[tokio::test]
+async fn test_root_failure_never_soft() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let failing_script = create_script("#!/bin/sh\nexit 1")?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["rf:root"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "rf:root",
+                    "command": failing_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    tasks.run(false).await;
+
+    let status = tasks.get_completion_status().await;
+    assert_eq!(status.failed, 1);
+    assert_eq!(status.soft_failed, 0);
+    assert!(
+        status.has_failures(),
+        "root task failure should always be hard"
+    );
+
+    Ok(())
+}
+
 fn create_script(script: &str) -> std::io::Result<tempfile::TempPath> {
     let mut temp_file = tempfile::Builder::new()
         .prefix("script")
