@@ -125,26 +125,18 @@ impl PtyTaskRunner {
         // so these commands won't appear in user's shell history.
         let full_cmd = format!("{}\n", cmd_parts.join("; "));
 
-        // Write command to PTY
+        // Write command to PTY in a background task so reading can start
+        // immediately. The PTY kernel buffer is only ~4-16KB on macOS; if the
+        // command string (with inline exports) exceeds that, a synchronous
+        // write_all would deadlock because bash echoes input back and nobody
+        // is draining the read side.
         tracing::trace!("execute: writing command to PTY:\n{}", full_cmd);
-        if let Err(e) = self.pty.write_all(full_cmd.as_bytes()) {
-            let _ = request.response_tx.send(PtyTaskResult {
-                success: false,
-                stdout_lines: Vec::new(),
-                stderr_lines: Vec::new(),
-                error: Some(format!("Failed to write to PTY: {}", e)),
-            });
-            return;
-        }
-        if let Err(e) = self.pty.flush() {
-            let _ = request.response_tx.send(PtyTaskResult {
-                success: false,
-                stdout_lines: Vec::new(),
-                stderr_lines: Vec::new(),
-                error: Some(format!("Failed to flush PTY: {}", e)),
-            });
-            return;
-        }
+        let pty_write = Arc::clone(&self.pty);
+        let cmd_bytes = full_cmd.into_bytes();
+        let write_handle = tokio::task::spawn_blocking(move || {
+            pty_write.write_all(&cmd_bytes)?;
+            pty_write.flush()
+        });
 
         // Read PTY output until we see the end marker
         let mut output_buffer = String::new();
@@ -218,6 +210,15 @@ impl PtyTaskRunner {
                 if started {
                     stdout_lines.push((Instant::now(), line));
                 }
+            }
+        }
+
+        // Check if the background write succeeded
+        if error_msg.is_none() {
+            match write_handle.await {
+                Ok(Err(e)) => error_msg = Some(format!("Failed to write to PTY: {e}")),
+                Err(e) => error_msg = Some(format!("PTY write task panicked: {e}")),
+                Ok(Ok(())) => {}
             }
         }
 
@@ -477,25 +478,18 @@ impl PtyTaskRunner {
         // Prefix with space to prevent command from being saved to shell history
         let full_cmd = format!(" {}\n", cmd_parts.join("; "));
 
+        // Write command to PTY in a background task so reading can start
+        // immediately. The PTY kernel buffer is only ~4-16KB on macOS; if the
+        // command string (with inline exports) exceeds that, a synchronous
+        // write_all would deadlock because bash echoes input back and nobody
+        // is draining the read side.
         tracing::trace!("execute_with_vt: writing command to PTY:\n{}", full_cmd);
-        if let Err(e) = self.pty.write_all(full_cmd.as_bytes()) {
-            let _ = request.response_tx.send(PtyTaskResult {
-                success: false,
-                stdout_lines: Vec::new(),
-                stderr_lines: Vec::new(),
-                error: Some(format!("Failed to write to PTY: {}", e)),
-            });
-            return;
-        }
-        if let Err(e) = self.pty.flush() {
-            let _ = request.response_tx.send(PtyTaskResult {
-                success: false,
-                stdout_lines: Vec::new(),
-                stderr_lines: Vec::new(),
-                error: Some(format!("Failed to flush PTY: {}", e)),
-            });
-            return;
-        }
+        let pty_write = Arc::clone(&self.pty);
+        let cmd_bytes = full_cmd.into_bytes();
+        let write_handle = tokio::task::spawn_blocking(move || {
+            pty_write.write_all(&cmd_bytes)?;
+            pty_write.flush()
+        });
 
         let mut output_buffer = String::new();
         let mut stdout_lines = Vec::new();
@@ -567,6 +561,15 @@ impl PtyTaskRunner {
                 if started {
                     stdout_lines.push((Instant::now(), line));
                 }
+            }
+        }
+
+        // Check if the background write succeeded
+        if error_msg.is_none() {
+            match write_handle.await {
+                Ok(Err(e)) => error_msg = Some(format!("Failed to write to PTY: {e}")),
+                Err(e) => error_msg = Some(format!("PTY write task panicked: {e}")),
+                Ok(Ok(())) => {}
             }
         }
 

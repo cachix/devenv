@@ -58,6 +58,7 @@ pub trait TaskExecutor: Send + Sync {
         callback: &dyn OutputCallback,
         cancellation: CancellationToken,
     ) -> ExecutionResult;
+
 }
 
 /// Default executor that spawns commands as subprocesses.
