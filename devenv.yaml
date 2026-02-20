@@ -5,7 +5,7 @@ inputs:
 
   # Use the local development modules
   devenv:
-    url: path:.?dir=src/modules
+    url: .?dir=src/modules
 
   nix:
     url: github:cachix/nix/devenv-2.32
