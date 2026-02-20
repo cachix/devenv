@@ -270,42 +270,57 @@ impl TuiApp {
                 Some(req) = pause_fut => {
                     // The `select!` just cancelled `run_view`, which drops
                     // iocraft's Terminal (disabling raw mode and showing the
-                    // cursor).  The TUI content remains on screen.
+                    // cursor).  The TUI content remains on the main screen.
                     //
-                    // Strategy: leave TUI visible, let the backend print the
-                    // sudo prompt below it, then clear the screen and let
-                    // the TUI re-render from scratch.
+                    // Strategy: switch to the alternate screen for the sudo
+                    // prompt.  The main screen (with TUI) is preserved by
+                    // the terminal.  When we leave the alternate screen the
+                    // original content is restored exactly.
 
-                    // Ensure cooked mode so the user can type their password.
                     restore_terminal();
 
                     let mut stderr = io::stderr();
-                    let _ = execute!(stderr, cursor::Show);
+
+                    // Enter the alternate screen — main screen is preserved.
+                    let _ = execute!(
+                        stderr,
+                        terminal::EnterAlternateScreen,
+                        cursor::Show,
+                        cursor::MoveTo(0, 0),
+                    );
 
                     // Tell the requester the terminal is ready for interaction.
                     let _ = req.ready_tx.send(());
 
                     // Wait until the interactive work (sudo prompt) is done.
-                    // If the sender is dropped (error), don't resume the TUI —
-                    // the error message is already on screen in cooked mode.
+                    // If the sender is dropped (error), the alternate screen
+                    // stays — the error message is visible.
                     if req.done_rx.await.is_err() {
-                        // The requester hit an error (e.g. sudo auth failed).
-                        // The error is visible on the terminal.  Skip the
-                        // final TUI render so we don't overwrite it.
+                        // Leave alternate screen so the error is visible on
+                        // the main screen, then exit the TUI loop.
+                        let _ = execute!(stderr, terminal::LeaveAlternateScreen);
                         skip_final_render = true;
                         break;
                     }
 
-                    // Clear the entire visible screen (CSI 2J) and move
-                    // cursor home.  We use ClearType::All instead of
-                    // FromCursorDown because terminal scrolling from the
-                    // sudo output can leave MoveTo(0,0) pointing at a
-                    // stale scrollback position.
-                    let _ = execute!(
-                        stderr,
-                        terminal::Clear(terminal::ClearType::All),
-                        cursor::MoveTo(0, 0),
-                    );
+                    // Leave the alternate screen — original TUI output is
+                    // restored by the terminal.
+                    let _ = execute!(stderr, terminal::LeaveAlternateScreen);
+
+                    // The cursor is now where it was before we entered the
+                    // alternate screen (bottom of the stale TUI render).
+                    // Move it to the TOP of the TUI area so iocraft's first
+                    // render overwrites the stale content in place.
+                    let tui_height = ui_state
+                        .read()
+                        .map(|ui| ui.last_render_height)
+                        .unwrap_or(0);
+                    if tui_height > 0 {
+                        let _ = execute!(
+                            stderr,
+                            cursor::MoveToPreviousLine(tui_height),
+                        );
+                    }
 
                     save_terminal_state();
                 }
