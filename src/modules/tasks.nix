@@ -364,6 +364,16 @@ let
                   default = { };
                   description = "File watching configuration for automatic process restarts.";
                 };
+
+                linux.capabilities = lib.mkOption {
+                  type = types.listOf types.str;
+                  default = [ ];
+                  description = ''
+                    Linux capabilities to grant this process (e.g., "net_bind_service").
+
+                    Only used when type = "process".
+                  '';
+                };
               };
             };
             default = { };

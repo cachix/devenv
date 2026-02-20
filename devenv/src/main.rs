@@ -391,6 +391,10 @@ fn run(ctx: RunContext) -> Result<()> {
     let (command_tx, command_rx) = tokio::sync::mpsc::channel::<ProcessCommand>(16);
     let (terminal_ready_tx, terminal_ready_rx) = tokio::sync::oneshot::channel::<u16>();
 
+    // Channel for temporarily pausing the TUI (e.g., sudo password prompt)
+    let (terminal_pause_tx, terminal_pause_rx) =
+        tokio::sync::mpsc::channel::<devenv_tui::TerminalPauseRequest>(1);
+
     // Backend on dedicated thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
     let backend_done_clone = backend_done.clone();
@@ -407,6 +411,7 @@ fn run(ctx: RunContext) -> Result<()> {
                     backend_done_clone,
                     Some(terminal_ready_rx),
                     Some(command_rx),
+                    Some(terminal_pause_tx),
                 )
                 .await;
 
@@ -437,6 +442,7 @@ fn run(ctx: RunContext) -> Result<()> {
             rt.block_on(async {
                 devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
                     .with_command_sender(command_tx)
+                    .with_terminal_pause(terminal_pause_rx)
                     .filter_level(filter_level)
                     // When a command needs terminal handoff, don't shut down on backend_done —
                     // it's used as a handoff signal (eval done), not a completion signal
@@ -448,6 +454,7 @@ fn run(ctx: RunContext) -> Result<()> {
         }
         Renderer::Console(activity_rx) => {
             drop(command_tx);
+            drop(terminal_pause_rx);
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
@@ -463,6 +470,7 @@ fn run(ctx: RunContext) -> Result<()> {
         }
         Renderer::None => {
             drop(command_tx);
+            drop(terminal_pause_rx);
             0
         }
     };
@@ -570,6 +578,7 @@ async fn run_backend(
     backend_done: Arc<tokio::sync::Notify>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
+    terminal_pause_tx: Option<tokio::sync::mpsc::Sender<devenv_tui::TerminalPauseRequest>>,
 ) -> DevenvOutput {
     let RunContext {
         command,
@@ -762,8 +771,15 @@ async fn run_backend(
     }
 
     // All other commands
-    let result =
-        dispatch_command(&devenv, command, verbosity, command_rx, config_strict_ports).await;
+    let result = dispatch_command(
+        &devenv,
+        command,
+        verbosity,
+        command_rx,
+        terminal_pause_tx,
+        config_strict_ports,
+    )
+    .await;
 
     // Drain cleanup (e.g. cachix push finalization) while the TUI is
     // still rendering, so its activity stays visible to the user.
@@ -827,6 +843,7 @@ async fn dispatch_command(
     command: Commands,
     verbosity: devenv::tasks::VerbosityLevel,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
+    terminal_pause_tx: Option<tokio::sync::mpsc::Sender<devenv_tui::TerminalPauseRequest>>,
     config_strict_ports: bool,
 ) -> Result<CommandResult> {
     match command {
@@ -926,6 +943,7 @@ async fn dispatch_command(
                 log_to_file: up_args.detach,
                 strict_ports,
                 command_rx,
+                terminal_pause_tx,
                 daemon: up_args.detach,
             };
             match devenv
@@ -996,6 +1014,7 @@ async fn dispatch_command(
                 log_to_file: detach,
                 strict_ports: config_strict_ports,
                 command_rx,
+                terminal_pause_tx,
                 daemon: detach,
             };
             match devenv
