@@ -8,7 +8,7 @@ use devenv_cache_core::compute_string_hash;
 use devenv_core::{
     cachix::{CachixManager, CachixPaths},
     cli::GlobalOptions,
-    config::{Config, NixBackendType},
+    config::{Config, NixBackendType, ShellSettings},
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
     nix_backend::{DevenvPaths, NixBackend, Options},
     ports::PortAllocator,
@@ -69,6 +69,7 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
 #[derive(Debug)]
 pub struct DevenvOptions {
     pub config: Config,
+    pub shell_settings: Option<ShellSettings>,
     pub global_options: Option<GlobalOptions>,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
@@ -79,6 +80,7 @@ impl DevenvOptions {
     pub fn new(shutdown: Arc<tokio_shutdown::Shutdown>) -> Self {
         Self {
             config: Config::default(),
+            shell_settings: None,
             global_options: None,
             devenv_root: None,
             devenv_dotfile: None,
@@ -91,6 +93,7 @@ impl Default for DevenvOptions {
     fn default() -> Self {
         Self {
             config: Config::default(),
+            shell_settings: None,
             global_options: None,
             devenv_root: None,
             devenv_dotfile: None,
@@ -153,6 +156,7 @@ impl std::error::Error for SecretsNeedPrompting {}
 
 pub struct Devenv {
     pub config: Arc<RwLock<Config>>,
+    pub shell_settings: ShellSettings,
     pub global_options: GlobalOptions,
 
     pub nix: Arc<Box<dyn NixBackend>>,
@@ -240,8 +244,8 @@ impl Devenv {
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
 
-        // Get global_options early to access profiles for state directory isolation
         let global_options = options.global_options.unwrap_or_default();
+        let shell_settings = options.shell_settings.unwrap_or_default();
 
         // Compute profile-aware dotfile path for state isolation
         let base_devenv_dotfile = options
@@ -249,7 +253,7 @@ impl Devenv {
             .map(|p| p.to_path_buf())
             .unwrap_or(devenv_root.join(".devenv"));
         let devenv_dotfile =
-            if let Some(suffix) = compute_profile_dir_suffix(&global_options.profile) {
+            if let Some(suffix) = compute_profile_dir_suffix(&shell_settings.profiles) {
                 base_devenv_dotfile.join(suffix)
             } else {
                 base_devenv_dotfile
@@ -343,6 +347,7 @@ impl Devenv {
 
         Self {
             config: Arc::new(RwLock::new(options.config)),
+            shell_settings,
             global_options,
             devenv_root,
             devenv_dotfile,
@@ -647,8 +652,7 @@ impl Devenv {
             }
         }
 
-        let clean = self.config.read().await.clean.clone().unwrap_or_default();
-        crate::shell_env::apply_shell_env(&mut shell_cmd, &bash, &clean);
+        crate::shell_env::apply_shell_env(&mut shell_cmd, &bash, &self.shell_settings.clean);
 
         Ok(shell_cmd)
     }
@@ -1318,14 +1322,10 @@ impl Devenv {
             }
         }
 
-        let config_clean = self.config.read().await.clean.clone().unwrap_or_default();
         let mut envs: HashMap<String, String> = {
             let vars = std::env::vars();
-            if self.global_options.clean.is_some() || config_clean.enabled {
-                let keep = match &self.global_options.clean {
-                    Some(clean) => clean,
-                    None => &config_clean.keep,
-                };
+            if self.shell_settings.clean.enabled {
+                let keep = &self.shell_settings.clean.keep;
                 vars.filter(|(key, _)| !keep.contains(key)).collect()
             } else {
                 vars.collect()
@@ -2001,7 +2001,7 @@ impl Devenv {
                     secrets: resolved.secrets.clone(),
                 });
 
-        let active_profiles = &config.profiles;
+        let active_profiles = &self.shell_settings.profiles;
 
         // Parse CLI options into structured format with typed values
         let cli_options = CliOptionsConfig(parse_cli_options(&self.global_options.option)?);

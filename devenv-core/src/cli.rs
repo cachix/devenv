@@ -259,6 +259,23 @@ pub struct GlobalOptions {
     pub option: Vec<String>,
 
     #[arg(
+        long,
+        global = true,
+        help = "Enable auto-reload when config files change (default).",
+        default_value_t = true,
+        overrides_with = "no_reload"
+    )]
+    pub reload: bool,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Disable auto-reload when config files change.",
+        overrides_with = "reload"
+    )]
+    pub no_reload: bool,
+
+    #[arg(
         short = 'P',
         long,
         global = true,
@@ -320,6 +337,8 @@ impl Default for GlobalOptions {
             nix_option: vec![],
             override_input: vec![],
             option: vec![],
+            reload: true,
+            no_reload: false,
             profile: vec![],
             secretspec_provider: None,
             secretspec_profile: None,
@@ -338,6 +357,10 @@ impl GlobalOptions {
 
         if self.no_tui {
             self.tui = false;
+        }
+
+        if self.no_reload {
+            self.reload = false;
         }
 
         // Disable TUI in CI environments or when not running in a TTY

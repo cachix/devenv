@@ -185,12 +185,12 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(merge = schematic::merge::replace)]
     pub profile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[setting(merge = schematic::merge::replace)]
+    pub reload: Option<bool>,
     /// Git repository root path (not serialized, computed during load)
     #[serde(skip)]
     pub git_root: Option<PathBuf>,
-    /// Resolved active profiles (not serialized, computed by apply_cli_overrides)
-    #[serde(skip)]
-    pub profiles: Vec<String>,
 }
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -202,6 +202,67 @@ pub struct SecretspecConfig {
     pub profile: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub provider: Option<String>,
+}
+
+/// Resolved shell settings.
+///
+/// Produced by `ShellSettings::resolve(&GlobalOptions, &Config)` as a pure function.
+/// Consumers read from this instead of merging CLI + Config ad-hoc.
+#[derive(Clone, Debug)]
+pub struct ShellSettings {
+    pub clean: Clean,
+    pub profiles: Vec<String>,
+    pub reload: bool,
+}
+
+impl Default for ShellSettings {
+    fn default() -> Self {
+        Self {
+            clean: Clean::default(),
+            profiles: Vec::new(),
+            reload: true,
+        }
+    }
+}
+
+impl ShellSettings {
+    /// Resolve shell settings from CLI and config sources.
+    ///
+    /// Precedence: CLI > Config > Default.
+    pub fn resolve(cli: &crate::cli::GlobalOptions, config: &Config) -> Self {
+        // clean: CLI --clean takes precedence over config
+        let clean = if let Some(ref keep) = cli.clean {
+            Clean {
+                enabled: true,
+                keep: keep.clone(),
+            }
+        } else {
+            config.clean.clone().unwrap_or_default()
+        };
+
+        // profiles: CLI --profile takes precedence over config
+        let profiles = if !cli.profile.is_empty() {
+            cli.profile.clone()
+        } else if let Some(ref profile) = config.profile {
+            vec![profile.clone()]
+        } else {
+            Vec::new()
+        };
+
+        // reload: CLI --no-reload (resolved to reload=false) takes precedence.
+        // When CLI reload is true (default), fall through to config.
+        let reload = if !cli.reload {
+            false
+        } else {
+            config.reload.unwrap_or(true)
+        };
+
+        Self {
+            clean,
+            profiles,
+            reload,
+        }
+    }
 }
 
 // TODO: https://github.com/moonrepo/schematic/issues/105
@@ -795,15 +856,6 @@ impl Config {
             });
         }
 
-        // profiles: CLI --profile takes precedence over config
-        self.profiles = if !global_options.profile.is_empty() {
-            global_options.profile.clone()
-        } else if let Some(ref profile) = self.profile {
-            vec![profile.clone()]
-        } else {
-            Vec::new()
-        };
-
         // secretspec: CLI overrides
         if global_options.secretspec_provider.is_some()
             || global_options.secretspec_profile.is_some()
@@ -1206,5 +1258,112 @@ inputs:
             "Should not be converted to relative path with ../, got: {}",
             url
         );
+    }
+
+    #[test]
+    fn shell_settings_cli_clean_overrides_config() {
+        let cli = crate::cli::GlobalOptions {
+            clean: Some(vec!["PATH".into()]),
+            ..Default::default()
+        };
+        let config = Config {
+            clean: Some(Clean {
+                enabled: true,
+                keep: vec!["HOME".into()],
+            }),
+            ..Default::default()
+        };
+        let settings = ShellSettings::resolve(&cli, &config);
+        assert!(settings.clean.enabled);
+        assert_eq!(settings.clean.keep, vec!["PATH"]);
+    }
+
+    #[test]
+    fn shell_settings_config_clean_used_when_cli_absent() {
+        let cli = crate::cli::GlobalOptions::default();
+        let config = Config {
+            clean: Some(Clean {
+                enabled: true,
+                keep: vec!["HOME".into()],
+            }),
+            ..Default::default()
+        };
+        let settings = ShellSettings::resolve(&cli, &config);
+        assert!(settings.clean.enabled);
+        assert_eq!(settings.clean.keep, vec!["HOME"]);
+    }
+
+    #[test]
+    fn shell_settings_clean_defaults_to_disabled() {
+        let cli = crate::cli::GlobalOptions::default();
+        let config = Config::default();
+        let settings = ShellSettings::resolve(&cli, &config);
+        assert!(!settings.clean.enabled);
+    }
+
+    #[test]
+    fn shell_settings_cli_profiles_override_config() {
+        let cli = crate::cli::GlobalOptions {
+            profile: vec!["dev".into()],
+            ..Default::default()
+        };
+        let config = Config {
+            profile: Some("prod".into()),
+            ..Default::default()
+        };
+        let settings = ShellSettings::resolve(&cli, &config);
+        assert_eq!(settings.profiles, vec!["dev"]);
+    }
+
+    #[test]
+    fn shell_settings_config_profile_used_when_cli_absent() {
+        let cli = crate::cli::GlobalOptions::default();
+        let config = Config {
+            profile: Some("prod".into()),
+            ..Default::default()
+        };
+        let settings = ShellSettings::resolve(&cli, &config);
+        assert_eq!(settings.profiles, vec!["prod"]);
+    }
+
+    #[test]
+    fn shell_settings_no_profiles_by_default() {
+        let cli = crate::cli::GlobalOptions::default();
+        let config = Config::default();
+        let settings = ShellSettings::resolve(&cli, &config);
+        assert!(settings.profiles.is_empty());
+    }
+
+    #[test]
+    fn shell_settings_reload_defaults_to_true() {
+        let cli = crate::cli::GlobalOptions::default();
+        let config = Config::default();
+        let settings = ShellSettings::resolve(&cli, &config);
+        assert!(settings.reload);
+    }
+
+    #[test]
+    fn shell_settings_cli_no_reload_overrides_config() {
+        let cli = crate::cli::GlobalOptions {
+            reload: false,
+            ..Default::default()
+        };
+        let config = Config {
+            reload: Some(true),
+            ..Default::default()
+        };
+        let settings = ShellSettings::resolve(&cli, &config);
+        assert!(!settings.reload);
+    }
+
+    #[test]
+    fn shell_settings_config_reload_false_respected() {
+        let cli = crate::cli::GlobalOptions::default();
+        let config = Config {
+            reload: Some(false),
+            ..Default::default()
+        };
+        let settings = ShellSettings::resolve(&cli, &config);
+        assert!(!settings.reload);
     }
 }
