@@ -10,7 +10,7 @@ This skill guides the creation of new service modules under `src/modules/service
 
 ## Process
 
-1. Research the service: default port, package name in nixpkgs, config file format, health check method
+1. Research the service: default port, package name in nixpkgs, config file format, socket activation support, systemd notify/watchdog support
 2. Read existing modules in `src/modules/services/` for reference (e.g., `memcached.nix` for simple, `redis.nix` for medium, `minio.nix` for complex)
 3. Create `src/modules/services/<name>.nix` following the patterns below
 4. Register the module in `src/modules/services.nix`
@@ -78,12 +78,8 @@ in
       ports.main.allocate = basePort;
       exec = "exec ${cfg.package}/bin/<binary> <args>";
 
-      ready = {
-        exec = "<health-check-command>";
-        initial_delay = 2;
-        probe_timeout = 4;
-        failure_threshold = 5;
-      };
+      # Only needed for non-TCP health checks (see Readiness Probes below)
+      # ready = { ... };
     };
   };
 }
@@ -123,25 +119,74 @@ env.<NAME>_RUNTIME = config.env.DEVENV_RUNTIME + "/<name>";  # runtime/socket fi
 
 ### Readiness Probes
 
-Choose the appropriate health check method:
+The native process manager automatically creates a TCP ready probe for the first allocated port or listen socket. For most TCP services, **no explicit `ready` block is needed** — just allocating a port is sufficient.
 
-- **TCP services**: `echo | ${pkgs.netcat}/bin/nc <host> <port>`
-- **HTTP services**: `${pkgs.curl}/bin/curl -f http://<host>:<port>/health`
-- **CLI tools**: Use the service's own client (e.g., `redis-cli ping`, `pg_isready`)
+Only add an explicit `ready` block when you need a custom health check:
 
-### Start Scripts
+- **HTTP health endpoint**: `ready.http.get = { host = cfg.bind; port = allocatedPort; path = "/health"; };`
+- **CLI tools**: `ready.exec = "${cfg.package}/bin/<client> ping";` (e.g., `redis-cli ping`, `pg_isready`)
+- **Multi-step checks**: `ready.exec` with a script that verifies initialization beyond port availability
 
-For services needing initialization, use `pkgs.writeShellScriptBin`:
+### Socket Activation
+
+When a service supports systemd socket activation (`LISTEN_FDS`/`LISTEN_PID`), prefer it over port allocation. Socket activation eliminates race conditions (the socket is listening before the process starts) and enables zero-downtime restarts.
 
 ```nix
-startScript = pkgs.writeShellScriptBin "start-<name>" ''
-  set -euo pipefail
-  mkdir -p "$<NAME>_DATA"
-  exec ${cfg.package}/bin/<binary> <args>
-'';
-# ...
-processes.<name>.exec = "${startScript}/bin/start-<name>";
+processes.<name> = {
+  exec = "exec ${cfg.package}/bin/<binary> <args>";
+
+  listen = [
+    # TCP socket
+    { name = "http"; kind = "tcp"; address = "${cfg.bind}:${toString allocatedPort}"; }
+    # Unix socket
+    { name = "main"; kind = "unix_stream"; path = "${config.env.DEVENV_RUNTIME}/<name>/<name>.sock"; mode = 384; } # 0o600
+  ];
+};
 ```
+
+The supervisor auto-probes TCP listen sockets for readiness (higher priority than allocated ports). Check if the service supports socket activation by looking for `LISTEN_FDS` or `SD_LISTEN_FDS_START` in its documentation.
+
+### Systemd Notify and Watchdog
+
+When a service supports the systemd notify protocol (`sd_notify(3)`), use it for precise readiness signaling instead of TCP probing. The process receives `NOTIFY_SOCKET` and sends `READY=1` when fully initialized.
+
+```nix
+processes.<name> = {
+  exec = "exec ${cfg.package}/bin/<binary> <args>";
+  ready.notify = true;
+};
+```
+
+For long-running services that support watchdog, enable it so the supervisor can detect hangs and restart automatically. The process must send periodic `WATCHDOG=1` pings.
+
+```nix
+processes.<name> = {
+  exec = "exec ${cfg.package}/bin/<binary> <args>";
+  ready.notify = true;
+  watchdog = {
+    usec = 30000000; # 30 seconds
+    require_ready = true; # only enforce after READY=1
+  };
+};
+```
+
+Check the service's documentation for `Type=notify`, `WatchdogSec=`, or `sd_notify` support.
+
+### Setup and Cleanup Tasks
+
+When a service needs initialization (e.g., creating data directories, initializing databases) or cleanup, use tasks instead of wrapping the process exec in a startup script. Tasks are cached, run in the correct order via the DAG, and are visible in the TUI.
+
+```nix
+tasks."devenv:<name>:setup" = {
+  exec = ''
+    mkdir -p "$<NAME>_DATA"
+    # any other initialization
+  '';
+  before = [ "devenv:processes:<name>" ];
+};
+```
+
+Use `before` to ensure the task runs before the process starts. The process `exec` should remain a simple `exec` into the service binary — no shell wrapper needed.
 
 ### Configuration Files
 
