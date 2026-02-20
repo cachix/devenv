@@ -247,10 +247,6 @@ pub fn preflight_sudo_auth(binary: &Path) -> Result<()> {
 
     // Need a password — only prompt when we have a TTY.
     if std::io::stderr().is_terminal() {
-        eprintln!(
-            "Some processes require Linux capabilities and need elevated privileges.\n\
-             Please enter your sudo password:"
-        );
         let ok = Command::new("sudo")
             .arg("-v") // refresh cached credentials
             .status()

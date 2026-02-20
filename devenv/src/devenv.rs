@@ -1703,41 +1703,80 @@ impl Devenv {
                 // the user can type their password.
                 #[cfg(target_os = "linux")]
                 let cap_server_binary: Option<std::path::PathBuf> = {
-                    let needs_caps = task_configs
+                    // Collect processes that need capabilities (name → caps list).
+                    let cap_requests: Vec<(&str, &[String])> = task_configs
                         .iter()
-                        .filter_map(|t| t.process.as_ref())
-                        .any(|p| !p.linux.capabilities.is_empty());
+                        .filter_map(|t| {
+                            let caps = &t.process.as_ref()?.linux.capabilities;
+                            if caps.is_empty() {
+                                None
+                            } else {
+                                // Strip "devenv:processes:" prefix for display.
+                                let name =
+                                    t.name.strip_prefix("devenv:processes:").unwrap_or(&t.name);
+                                Some((name, caps.as_slice()))
+                            }
+                        })
+                        .collect();
 
-                    if needs_caps {
+                    if !cap_requests.is_empty() {
                         match devenv_caps::client::find_cap_server_binary() {
                             Some(binary) => {
                                 if devenv_caps::client::can_sudo_noninteractive(&binary) {
                                     // NOPASSWD or cached session — no prompt needed.
                                     Some(binary)
-                                } else if let Some(ref pause_tx) = options.terminal_pause_tx {
-                                    // Need a password — ask the TUI to step aside.
-                                    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
-                                    let (done_tx, done_rx) = tokio::sync::oneshot::channel();
-                                    let req =
-                                        devenv_tui::TerminalPauseRequest { ready_tx, done_rx };
-                                    if pause_tx.send(req).await.is_ok() {
-                                        // Wait for the TUI to clear and restore the terminal.
-                                        let _ = ready_rx.await;
-                                        let auth_result =
-                                            devenv_caps::client::preflight_sudo_auth(&binary);
-                                        // Signal the TUI to resume (drop or send).
-                                        let _ = done_tx.send(());
-                                        auth_result?;
-                                        Some(binary)
+                                } else {
+                                    // Build a summary of what capabilities are requested.
+                                    let print_cap_summary = || {
+                                        eprintln!(
+                                            "\n{} process(es) require Linux capabilities:\n",
+                                            cap_requests.len()
+                                        );
+                                        for (name, caps) in &cap_requests {
+                                            for cap in *caps {
+                                                let upper = cap.to_uppercase();
+                                                let display_cap =
+                                                    upper.strip_prefix("CAP_").unwrap_or(&upper);
+                                                let desc = devenv_caps::caps::info_for(cap)
+                                                    .map(|i| i.description)
+                                                    .unwrap_or("(not in allowlist)");
+                                                eprintln!(
+                                                    "  {:<20} {:<24} {}",
+                                                    name, display_cap, desc
+                                                );
+                                            }
+                                        }
+                                        eprintln!();
+                                    };
+
+                                    if let Some(ref pause_tx) = options.terminal_pause_tx {
+                                        // Need a password — ask the TUI to step aside.
+                                        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+                                        let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+                                        let req =
+                                            devenv_tui::TerminalPauseRequest { ready_tx, done_rx };
+                                        if pause_tx.send(req).await.is_ok() {
+                                            // Wait for the TUI to clear and restore the terminal.
+                                            let _ = ready_rx.await;
+                                            print_cap_summary();
+                                            let auth_result =
+                                                devenv_caps::client::preflight_sudo_auth(&binary);
+                                            // Signal the TUI to resume (drop or send).
+                                            let _ = done_tx.send(());
+                                            auth_result?;
+                                            Some(binary)
+                                        } else {
+                                            // TUI is gone — fall through to direct prompt.
+                                            print_cap_summary();
+                                            devenv_caps::client::preflight_sudo_auth(&binary)?;
+                                            Some(binary)
+                                        }
                                     } else {
-                                        // TUI is gone — fall through to direct prompt.
+                                        // No TUI (legacy/tracing mode) — prompt directly.
+                                        print_cap_summary();
                                         devenv_caps::client::preflight_sudo_auth(&binary)?;
                                         Some(binary)
                                     }
-                                } else {
-                                    // No TUI (legacy/tracing mode) — prompt directly.
-                                    devenv_caps::client::preflight_sudo_auth(&binary)?;
-                                    Some(binary)
                                 }
                             }
                             None => {
