@@ -647,22 +647,8 @@ impl Devenv {
             }
         }
 
-        let config_clean = self.config.read().await.clean.clone().unwrap_or_default();
-        if self.global_options.clean.is_some() || config_clean.enabled {
-            let keep = match &self.global_options.clean {
-                Some(clean) => clean,
-                None => &config_clean.keep,
-            };
-
-            let filtered_env = std::env::vars().filter(|(k, _)| keep.contains(k));
-            shell_cmd.env_clear().envs(filtered_env);
-        }
-
-        shell_cmd.env("SHELL", &bash);
-
-        // Pass command args to the shell as DEVENV_CMDLINE
-        let cmdline = std::env::args().skip(1).collect::<Vec<_>>().join(" ");
-        shell_cmd.env("DEVENV_CMDLINE", cmdline);
+        let clean = self.config.read().await.clean.clone().unwrap_or_default();
+        crate::shell_env::apply_shell_env(&mut shell_cmd, &bash, &clean);
 
         Ok(shell_cmd)
     }
@@ -2023,15 +2009,7 @@ impl Devenv {
                     secrets: resolved.secrets.clone(),
                 });
 
-        // Determine active profiles: CLI overrides YAML
-        // If CLI profiles are specified, use those. Otherwise, use YAML profile if set.
-        let active_profiles = if !self.global_options.profile.is_empty() {
-            self.global_options.profile.clone()
-        } else if let Some(yaml_profile) = &config.profile {
-            vec![yaml_profile.clone()]
-        } else {
-            Vec::new()
-        };
+        let active_profiles = &config.profiles;
 
         // Parse CLI options into structured format with typed values
         let cli_options = CliOptionsConfig(parse_cli_options(&self.global_options.option)?);
@@ -2057,7 +2035,7 @@ impl Devenv {
             devenv_istesting: is_testing,
             devenv_direnvrc_latest_version: *DIRENVRC_VERSION,
             container_name: self.container_name.as_deref(),
-            active_profiles: &active_profiles,
+            active_profiles,
             cli_options,
             hostname: hostname.as_deref(),
             username: username.as_deref(),

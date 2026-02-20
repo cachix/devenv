@@ -8,7 +8,7 @@ use devenv::{
     tracing as devenv_tracing,
 };
 use devenv_activity::ActivityLevel;
-use devenv_core::config::{self, Config, SecretspecConfig};
+use devenv_core::config::{self, Config};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use std::{process::Command, sync::Arc, time::Duration};
 use tempfile::TempDir;
@@ -371,7 +371,7 @@ impl DevenvOutput {
 
 /// Setup devenv and run the command.
 async fn run_devenv(
-    cli: Cli,
+    mut cli: Cli,
     shutdown: Arc<Shutdown>,
     backend_done_tx: tokio::sync::oneshot::Sender<()>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
@@ -434,23 +434,9 @@ async fn run_devenv(
         config.imports.push("from".to_string());
     }
 
-    // Apply secretspec CLI overrides
-    if cli.global_options.secretspec_provider.is_some()
-        || cli.global_options.secretspec_profile.is_some()
-    {
-        let secretspec = config.secretspec.get_or_insert(SecretspecConfig {
-            enable: false,
-            profile: None,
-            provider: None,
-        });
-        secretspec.enable = true;
-        if let Some(ref provider) = cli.global_options.secretspec_provider {
-            secretspec.provider = Some(provider.clone());
-        }
-        if let Some(ref profile) = cli.global_options.secretspec_profile {
-            secretspec.profile = Some(profile.clone());
-        }
-    }
+    // Merge CLI overrides into config: clean, impure, profiles, secretspec.
+    // After this, Config is the source of truth for these settings.
+    config.apply_cli_overrides(&mut cli.global_options);
 
     let mut options = devenv::DevenvOptions {
         config,
@@ -823,6 +809,7 @@ async fn run_reload_shell(
     // This must happen while TUI is active since get_dev_environment has #[activity].
     let initial_env_script = devenv.print_dev_env(false).await?;
     let bash_path = devenv.get_bash_path().await?;
+    let clean = devenv.config.read().await.clean.clone().unwrap_or_default();
 
     // Get eval cache info from original devenv (after print_dev_env set it up)
     let eval_cache_pool = devenv.eval_cache_pool().cloned();
@@ -875,6 +862,7 @@ async fn run_reload_shell(
         args,
         initial_env_script,
         bash_path,
+        clean,
         dotfile,
         eval_cache_pool,
         shell_cache_key,
