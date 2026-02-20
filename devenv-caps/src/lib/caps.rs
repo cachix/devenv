@@ -52,6 +52,26 @@ const ALLOWED: &[CapInfo] = &[
         name: "sys_resource",
         description: "Override resource limits (e.g. open file descriptors)",
     },
+    CapInfo {
+        cap: Cap::SYS_ADMIN,
+        name: "sys_admin",
+        description: "Perform system administration operations (e.g. mount, namespaces)",
+    },
+    CapInfo {
+        cap: Cap::CHOWN,
+        name: "chown",
+        description: "Change file ownership",
+    },
+    CapInfo {
+        cap: Cap::DAC_OVERRIDE,
+        name: "dac_override",
+        description: "Bypass file read, write, and execute permission checks",
+    },
+    CapInfo {
+        cap: Cap::FOWNER,
+        name: "fowner",
+        description: "Bypass permission checks requiring file owner match",
+    },
 ];
 
 /// Parse a capability name (without `cap_` prefix) into a `Cap`.
@@ -119,8 +139,15 @@ mod tests {
 
     #[test]
     fn reject_disallowed() {
-        let names = vec!["sys_admin".to_string()];
+        let names = vec!["sys_ptrace".to_string()];
         assert!(parse_and_validate(&names).is_err());
+    }
+
+    #[test]
+    fn accept_sys_admin() {
+        let names = vec!["sys_admin".to_string()];
+        let caps = parse_and_validate(&names).unwrap();
+        assert_eq!(caps.len(), 1);
     }
 
     #[test]
@@ -149,7 +176,13 @@ mod tests {
     }
 
     #[test]
+    fn info_for_sys_admin() {
+        let info = info_for("CAP_SYS_ADMIN").unwrap();
+        assert_eq!(info.name, "sys_admin");
+    }
+
+    #[test]
     fn info_for_unknown_returns_none() {
-        assert!(info_for("CAP_SYS_ADMIN").is_none());
+        assert!(info_for("CAP_SYS_PTRACE").is_none());
     }
 }

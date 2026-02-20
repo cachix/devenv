@@ -1756,15 +1756,25 @@ impl Devenv {
                                         let req =
                                             devenv_tui::TerminalPauseRequest { ready_tx, done_rx };
                                         if pause_tx.send(req).await.is_ok() {
-                                            // Wait for the TUI to clear and restore the terminal.
+                                            // Wait for the TUI to pause and restore cooked mode.
                                             let _ = ready_rx.await;
                                             print_cap_summary();
-                                            let auth_result =
-                                                devenv_caps::client::preflight_sudo_auth(&binary);
-                                            // Signal the TUI to resume (drop or send).
-                                            let _ = done_tx.send(());
-                                            auth_result?;
-                                            Some(binary)
+                                            match devenv_caps::client::preflight_sudo_auth(&binary)
+                                            {
+                                                Ok(()) => {
+                                                    // Signal the TUI to resume rendering.
+                                                    let _ = done_tx.send(());
+                                                    Some(binary)
+                                                }
+                                                Err(e) => {
+                                                    // Auth failed.  The terminal is still in
+                                                    // cooked mode (TUI paused).  Drop done_tx
+                                                    // so the TUI exits without re-rendering
+                                                    // over the error message.
+                                                    drop(done_tx);
+                                                    return Err(e);
+                                                }
+                                            }
                                         } else {
                                             // TUI is gone — fall through to direct prompt.
                                             print_cap_summary();
