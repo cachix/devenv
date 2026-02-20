@@ -112,6 +112,9 @@ pub struct ProcessOptions<'a> {
     pub strict_ports: bool,
     /// Command receiver for process control (restart, etc.)
     pub command_rx: Option<tokio::sync::mpsc::Receiver<processes::ProcessCommand>>,
+    /// Sender for requesting the TUI to temporarily pause so the terminal
+    /// can be used for interactive I/O (e.g., sudo password prompt).
+    pub terminal_pause_tx: Option<tokio::sync::mpsc::Sender<devenv_tui::TerminalPauseRequest>>,
 }
 
 /// A shell command ready to be executed.
@@ -1433,6 +1436,7 @@ impl Devenv {
                 log_to_file: false,
                 strict_ports: false,
                 command_rx: None,
+                terminal_pause_tx: None,
             };
             self.up(vec![], options).await?;
         }
@@ -1691,8 +1695,12 @@ impl Devenv {
 
                 // On Linux: check whether any process task needs capabilities, and if
                 // so authenticate sudo and locate the cap-server binary *before*
-                // task_configs is consumed.  This ensures the password prompt (if any)
-                // happens before the TUI takes over the terminal.
+                // task_configs is consumed.
+                //
+                // When NOPASSWD is configured (or credentials are cached), the
+                // non-interactive check succeeds without any terminal I/O, so
+                // the TUI is undisturbed.  Otherwise we ask the TUI to pause so
+                // the user can type their password.
                 #[cfg(target_os = "linux")]
                 let cap_server_binary: Option<std::path::PathBuf> = {
                     let needs_caps = task_configs
@@ -1703,8 +1711,34 @@ impl Devenv {
                     if needs_caps {
                         match devenv_caps::client::find_cap_server_binary() {
                             Some(binary) => {
-                                devenv_caps::client::preflight_sudo_auth(&binary)?;
-                                Some(binary)
+                                if devenv_caps::client::can_sudo_noninteractive(&binary) {
+                                    // NOPASSWD or cached session — no prompt needed.
+                                    Some(binary)
+                                } else if let Some(ref pause_tx) = options.terminal_pause_tx {
+                                    // Need a password — ask the TUI to step aside.
+                                    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+                                    let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+                                    let req =
+                                        devenv_tui::TerminalPauseRequest { ready_tx, done_rx };
+                                    if pause_tx.send(req).await.is_ok() {
+                                        // Wait for the TUI to clear and restore the terminal.
+                                        let _ = ready_rx.await;
+                                        let auth_result =
+                                            devenv_caps::client::preflight_sudo_auth(&binary);
+                                        // Signal the TUI to resume (drop or send).
+                                        let _ = done_tx.send(());
+                                        auth_result?;
+                                        Some(binary)
+                                    } else {
+                                        // TUI is gone — fall through to direct prompt.
+                                        devenv_caps::client::preflight_sudo_auth(&binary)?;
+                                        Some(binary)
+                                    }
+                                } else {
+                                    // No TUI (legacy/tracing mode) — prompt directly.
+                                    devenv_caps::client::preflight_sudo_auth(&binary)?;
+                                    Some(binary)
+                                }
                             }
                             None => {
                                 warn!(

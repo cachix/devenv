@@ -53,6 +53,20 @@ impl Default for TuiConfig {
     }
 }
 
+/// Request to temporarily pause the TUI so the terminal can be used
+/// for interactive I/O (e.g., a sudo password prompt).
+///
+/// The sender provides a `ready_tx` oneshot that the TUI signals once it
+/// has cleared its output and restored cooked mode.  The sender then
+/// performs its interactive work and drops `done_tx` (or sends `()`) to
+/// tell the TUI to resume rendering.
+pub struct TerminalPauseRequest {
+    /// TUI sends `()` here after clearing output and restoring the terminal.
+    pub ready_tx: tokio::sync::oneshot::Sender<()>,
+    /// TUI awaits this; sender drops or sends `()` when interactive work is done.
+    pub done_rx: tokio::sync::oneshot::Receiver<()>,
+}
+
 /// Builder for creating and running the TUI application.
 pub struct TuiApp {
     config: TuiConfig,
@@ -60,6 +74,7 @@ pub struct TuiApp {
     shutdown: Arc<Shutdown>,
     command_tx: Option<mpsc::Sender<ProcessCommand>>,
     shutdown_on_backend_done: bool,
+    pause_rx: Option<mpsc::Receiver<TerminalPauseRequest>>,
 }
 
 impl TuiApp {
@@ -74,6 +89,7 @@ impl TuiApp {
             shutdown,
             command_tx: None,
             shutdown_on_backend_done: true,
+            pause_rx: None,
         }
     }
 
@@ -118,6 +134,16 @@ impl TuiApp {
     /// Disable for shell reload handoff where the backend must keep running.
     pub fn shutdown_on_backend_done(mut self, enabled: bool) -> Self {
         self.shutdown_on_backend_done = enabled;
+        self
+    }
+
+    /// Set a receiver for terminal pause requests.
+    ///
+    /// When a pause request arrives the TUI clears its output, restores
+    /// cooked mode, and signals readiness. Once the interactive work is
+    /// done (the sender drops or sends on `done_tx`), the TUI resumes.
+    pub fn with_terminal_pause(mut self, rx: mpsc::Receiver<TerminalPauseRequest>) -> Self {
+        self.pause_rx = Some(rx);
         self
     }
 
@@ -216,8 +242,19 @@ impl TuiApp {
         // UiState is only modified by the UI thread.
         let ui_state = Arc::new(RwLock::new(UiState::new()));
 
+        let mut pause_rx = self.pause_rx;
+
         // Main loop - runs until shutdown (either Ctrl+C or event processor signals completion)
         loop {
+            // Build an optional future that resolves when a pause request arrives.
+            // When no pause_rx was provided this future is never ready.
+            let pause_fut = async {
+                match pause_rx.as_mut() {
+                    Some(rx) => rx.recv().await,
+                    None => std::future::pending().await,
+                }
+            };
+
             tokio::select! {
                 _ = shutdown.wait_for_shutdown() => {
                     break;
@@ -227,6 +264,38 @@ impl TuiApp {
                     if changed.is_err() || *exit_rx.borrow() {
                         break;
                     }
+                }
+
+                Some(req) = pause_fut => {
+                    // Clear TUI output so the interactive prompt is visible.
+                    {
+                        let ui = ui_state.read().unwrap();
+                        let lines_to_clear = ui.last_render_height;
+                        if lines_to_clear > 0 {
+                            let mut stderr = io::stderr();
+                            let _ = execute!(
+                                stderr,
+                                cursor::MoveToPreviousLine(lines_to_clear),
+                                terminal::Clear(terminal::ClearType::FromCursorDown)
+                            );
+                        }
+                    }
+
+                    // Restore cooked mode so the user can type.
+                    restore_terminal();
+
+                    // Tell the requester the terminal is ready.
+                    let _ = req.ready_tx.send(());
+
+                    // Wait until the interactive work is done.
+                    let _ = req.done_rx.await;
+
+                    // Re-save terminal state before iocraft re-enters raw mode
+                    // on the next iteration (render_loop call).
+                    save_terminal_state();
+
+                    // The next loop iteration enters run_view → render_loop which
+                    // will re-enable raw mode and resume rendering.
                 }
 
                 _ = run_view(

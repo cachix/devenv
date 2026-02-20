@@ -263,6 +263,18 @@ let
         '';
       };
 
+      linux.capabilities = lib.mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        description = ''
+          Linux capabilities to grant this process (e.g., "net_bind_service").
+
+          The process will be launched through the cap-server with these ambient
+          capabilities. Requires sudo and devenv 2.0+ on Linux.
+        '';
+        example = [ "net_bind_service" ];
+      };
+
     };
   });
 
@@ -424,6 +436,7 @@ in
               ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
               watch = process.watch;
               watchdog = process.watchdog;
+              linux.capabilities = process.linux.capabilities;
             };
           })
           enabledProcesses;

@@ -208,6 +208,10 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Passes the TUI's final render height for cursor positioning
     let (terminal_ready_tx, terminal_ready_rx) = tokio::sync::oneshot::channel::<u16>();
 
+    // Channel for temporarily pausing the TUI (e.g., sudo password prompt)
+    let (terminal_pause_tx, terminal_pause_rx) =
+        tokio::sync::mpsc::channel::<devenv_tui::TerminalPauseRequest>(1);
+
     // Devenv on background thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
     let devenv_thread = std::thread::spawn(move || {
@@ -220,6 +224,7 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
                 backend_done_tx,
                 Some(terminal_ready_rx),
                 Some(command_rx),
+                Some(terminal_pause_tx),
             )
             .await;
 
@@ -237,6 +242,7 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Runs until backend signals completion, then drains remaining events
     let tui_render_height = devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
         .with_command_sender(command_tx)
+        .with_terminal_pause(terminal_pause_rx)
         .filter_level(filter_level)
         .shutdown_on_backend_done(shutdown_on_backend_done)
         .run(backend_done_rx)
@@ -298,7 +304,7 @@ fn run_with_legacy_cli(cli: Cli) -> Result<()> {
         let (backend_done_tx, _) = tokio::sync::oneshot::channel();
 
         // Don't race with shutdown - let run_devenv handle shutdown via cancellation token
-        run_devenv(cli, shutdown.clone(), backend_done_tx, None, None).await
+        run_devenv(cli, shutdown.clone(), backend_done_tx, None, None, None).await
     });
 
     match devenv_output.try_launch_debugger() {
@@ -323,7 +329,7 @@ fn run_with_tracing(cli: Cli) -> Result<()> {
         let (backend_done_tx, _) = tokio::sync::oneshot::channel();
 
         // Don't race with shutdown - let run_devenv handle shutdown via cancellation token
-        run_devenv(cli, shutdown.clone(), backend_done_tx, None, None).await
+        run_devenv(cli, shutdown.clone(), backend_done_tx, None, None, None).await
     });
 
     match devenv_output.try_launch_debugger() {
@@ -376,6 +382,7 @@ async fn run_devenv(
     backend_done_tx: tokio::sync::oneshot::Sender<()>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
+    terminal_pause_tx: Option<tokio::sync::mpsc::Sender<devenv_tui::TerminalPauseRequest>>,
 ) -> DevenvOutput {
     // Command is guaranteed to exist (Version/Direnvrc handled in main)
     let command = cli.command.clone().expect("Command should exist");
@@ -506,6 +513,7 @@ async fn run_devenv(
         backend_done_tx,
         terminal_ready_rx,
         command_rx,
+        terminal_pause_tx,
     )
     .await;
 
@@ -528,6 +536,7 @@ async fn run_devenv_inner(
     backend_done_tx: tokio::sync::oneshot::Sender<()>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
+    terminal_pause_tx: Option<tokio::sync::mpsc::Sender<devenv_tui::TerminalPauseRequest>>,
 ) -> Result<CommandResult> {
     // Wrap in Option so shell commands can consume it, others send at end
     let mut backend_done_tx = Some(backend_done_tx);
@@ -672,6 +681,7 @@ async fn run_devenv_inner(
                 log_to_file: detach,
                 strict_ports,
                 command_rx,
+                terminal_pause_tx,
             };
             match devenv.up(processes, options).await? {
                 RunMode::Detached => CommandResult::Done,

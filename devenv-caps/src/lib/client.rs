@@ -216,6 +216,20 @@ pub fn find_cap_server_binary() -> Option<PathBuf> {
     which::which("devenv-cap-server").ok()
 }
 
+/// Check whether `sudo` can run the given binary without a password prompt.
+///
+/// Returns `true` when NOPASSWD is configured or a cached sudo session
+/// exists. This is safe to call while the TUI is active (no terminal I/O).
+pub fn can_sudo_noninteractive(binary: &Path) -> bool {
+    Command::new("sudo")
+        .args(["-n", "--"])
+        .arg(binary)
+        .arg("--check")
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
 /// Ensure `sudo` can run `devenv-cap-server` without interaction.
 ///
 /// Tries a non-interactive check first (`sudo -n --check`).  If that fails
@@ -227,17 +241,7 @@ pub fn find_cap_server_binary() -> Option<PathBuf> {
 pub fn preflight_sudo_auth(binary: &Path) -> Result<()> {
     use std::io::IsTerminal;
 
-    // Non-interactive — succeeds when NOPASSWD is configured or the sudo
-    // session is already cached.
-    let no_passwd_ok = Command::new("sudo")
-        .args(["-n", "--"])
-        .arg(binary)
-        .arg("--check")
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-
-    if no_passwd_ok {
+    if can_sudo_noninteractive(binary) {
         return Ok(());
     }
 
