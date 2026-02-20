@@ -111,6 +111,10 @@ fn build_wrapper_script(
 
     let mut cmd = String::new();
 
+    if config.use_sudo {
+        write!(cmd, "sudo -E ").unwrap();
+    }
+
     write!(cmd, "{}", config.exec).unwrap();
 
     for arg in &config.args {

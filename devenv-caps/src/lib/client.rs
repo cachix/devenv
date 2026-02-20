@@ -216,6 +216,58 @@ pub fn find_cap_server_binary() -> Option<PathBuf> {
     which::which("devenv-cap-server").ok()
 }
 
+/// Check whether `sudo` can run without a password prompt (general purpose).
+///
+/// Returns `true` when NOPASSWD is configured or a cached sudo session
+/// exists. This is safe to call while the TUI is active (no terminal I/O).
+pub fn can_sudo_noninteractive_general() -> bool {
+    Command::new("sudo")
+        .args(["-n", "true"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Ensure `sudo` can run without interaction (general purpose).
+///
+/// Tries a non-interactive check first (`sudo -n true`). If that fails
+/// and a TTY is available, prompts via `sudo -v` to refresh the cached
+/// session. If neither works, returns an actionable error.
+///
+/// Call this once before starting tasks that need sudo, ideally before
+/// the TUI takes over the terminal so the password prompt is clean.
+pub fn preflight_sudo_auth_general() -> Result<()> {
+    use std::io::IsTerminal;
+
+    if can_sudo_noninteractive_general() {
+        return Ok(());
+    }
+
+    // Need a password — only prompt when we have a TTY.
+    if std::io::stderr().is_terminal() {
+        let ok = Command::new("sudo")
+            .arg("-v") // refresh cached credentials
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+
+        if ok {
+            return Ok(());
+        }
+    }
+
+    bail!(
+        "sudo authentication failed.\n\
+         \n\
+         Some tasks/processes are configured with useSudo = true and need\n\
+         elevated privileges to run.\n\
+         \n\
+         Run `sudo -v` before starting devenv to cache your credentials."
+    )
+}
+
 /// Check whether `sudo` can run the given binary without a password prompt.
 ///
 /// Returns `true` when NOPASSWD is configured or a cached sudo session

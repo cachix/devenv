@@ -130,6 +130,7 @@ let
               env = config.env;
               cwd = config.cwd;
               show_output = config.showOutput;
+              use_sudo = config.useSudo;
               process = {
                 ready = config.ready;
                 restart = config.restart;
@@ -348,6 +349,12 @@ let
 
               Only used when type = "process".
             '';
+          };
+
+          useSudo = lib.mkOption {
+            type = types.bool;
+            default = false;
+            description = "Run this task under sudo.";
           };
 
         };

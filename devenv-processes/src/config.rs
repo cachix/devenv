@@ -232,4 +232,7 @@ pub struct ProcessConfig {
     /// Linux-specific configuration
     #[serde(default)]
     pub linux: LinuxConfig,
+    /// Whether to run this process under sudo
+    #[serde(default)]
+    pub use_sudo: bool,
 }

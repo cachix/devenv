@@ -275,6 +275,12 @@ let
         example = [ "net_bind_service" ];
       };
 
+      useSudo = lib.mkOption {
+        type = types.bool;
+        default = false;
+        description = "Run this process under sudo.";
+      };
+
     };
   });
 
@@ -437,6 +443,7 @@ in
               watch = process.watch;
               watchdog = process.watchdog;
               linux.capabilities = process.linux.capabilities;
+              useSudo = process.useSudo;
             };
           })
           enabledProcesses;

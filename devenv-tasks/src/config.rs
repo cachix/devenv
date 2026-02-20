@@ -28,6 +28,9 @@ pub struct TaskConfig {
     /// Environment variables to set for this task
     #[serde(default)]
     pub env: std::collections::HashMap<String, String>,
+    /// Whether to run this task under sudo
+    #[serde(default)]
+    pub use_sudo: bool,
     /// Process-specific configuration (only used when type = "process")
     #[serde(default)]
     pub process: Option<ProcessConfig>,

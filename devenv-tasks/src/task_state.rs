@@ -181,9 +181,8 @@ impl TaskState {
     ) -> Result<(Command, tempfile::NamedTempFile)> {
         let (env, outputs_file) = self.prepare_env(outputs, shell_env)?;
 
-        // If we dropped privileges but have sudo context, restore sudo for the task
-        let mut command = if let Some(_ctx) = &self.sudo_context {
-            // Wrap with sudo to restore elevated privileges
+        // Wrap with sudo if the task requires it (per-task use_sudo or global sudo context)
+        let mut command = if self.task.use_sudo || self.sudo_context.is_some() {
             let mut sudo_cmd = Command::new("sudo");
             // Use -E to preserve environment variables
             // The command here is a store path to a task script, not an arbitrary shell command.
@@ -292,6 +291,9 @@ impl TaskState {
                 ..Default::default()
             }
         };
+
+        // Propagate task-level use_sudo to process config
+        config.use_sudo = self.task.use_sudo;
 
         // Merge devenv shell environment into process config
         // Task-level env takes precedence over shell env,
@@ -598,7 +600,7 @@ impl TaskState {
             command: cmd,
             cwd: self.task.cwd.as_deref(),
             env,
-            use_sudo: self.sudo_context.is_some(),
+            use_sudo: self.task.use_sudo || self.sudo_context.is_some(),
             output_file_path: outputs_file.path(),
         };
 

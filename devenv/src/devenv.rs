@@ -1802,6 +1802,57 @@ impl Devenv {
                     }
                 };
 
+                // Check whether any task/process needs sudo (use_sudo = true).
+                // If so, authenticate before task_configs is consumed.
+                {
+                    let sudo_tasks: Vec<(&str, Option<&str>)> = task_configs
+                        .iter()
+                        .filter(|t| t.use_sudo)
+                        .map(|t| {
+                            let name = t.name.strip_prefix("devenv:processes:").unwrap_or(&t.name);
+                            let cmd = t.command.as_deref();
+                            (name, cmd)
+                        })
+                        .collect();
+
+                    if !sudo_tasks.is_empty()
+                        && !devenv_caps::client::can_sudo_noninteractive_general()
+                    {
+                        let print_sudo_summary = || {
+                            eprintln!("\n{} task(s) require sudo:\n", sudo_tasks.len());
+                            for (name, cmd) in &sudo_tasks {
+                                eprintln!("  {:<20} {}", name, cmd.unwrap_or("(no command)"));
+                            }
+                            eprintln!();
+                        };
+
+                        if let Some(ref pause_tx) = options.terminal_pause_tx {
+                            let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+                            let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+                            let req = devenv_tui::TerminalPauseRequest { ready_tx, done_rx };
+                            if pause_tx.send(req).await.is_ok() {
+                                let _ = ready_rx.await;
+                                print_sudo_summary();
+                                match devenv_caps::client::preflight_sudo_auth_general() {
+                                    Ok(()) => {
+                                        let _ = done_tx.send(());
+                                    }
+                                    Err(e) => {
+                                        drop(done_tx);
+                                        return Err(e);
+                                    }
+                                }
+                            } else {
+                                print_sudo_summary();
+                                devenv_caps::client::preflight_sudo_auth_general()?;
+                            }
+                        } else {
+                            print_sudo_summary();
+                            devenv_caps::client::preflight_sudo_auth_general()?;
+                        }
+                    }
+                }
+
                 let config = tasks::Config {
                     tasks: task_configs,
                     roots,
