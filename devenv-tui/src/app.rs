@@ -293,6 +293,7 @@ impl TuiApp {
         let ui_state = Arc::new(RwLock::new(UiState::new()));
 
         let mut pause_rx = self.pause_rx;
+        let mut skip_final_render = false;
 
         // Main loop - runs until backend signals completion via exit_flag.
         // The render loop exits cooperatively: the component checks exit_flag
@@ -330,45 +331,46 @@ impl TuiApp {
                 }
 
                 Some(req) = pause_fut => {
-                    // Clear TUI output so the interactive prompt is visible.
-                    {
-                        let ui = ui_state.read().unwrap();
-                        if let Ok(model_guard) = activity_model.read() {
-                            let (terminal_width, _) =
-                                crossterm::terminal::size().unwrap_or((80, 24));
-                            let mut measure = element! {
-                                View(width: terminal_width) {
-                                    #(vec![view(&model_guard, &ui, RenderContext::Normal, None, false).into()])
-                                }
-                            };
-                            let lines_to_clear =
-                                measure.render(Some(terminal_width as usize)).height() as u16;
-                            if lines_to_clear > 0 {
-                                let mut stderr = io::stderr();
-                                let _ = execute!(
-                                    stderr,
-                                    cursor::MoveToPreviousLine(lines_to_clear),
-                                    terminal::Clear(terminal::ClearType::FromCursorDown)
-                                );
-                            }
-                        }
-                    }
+                    // The `select!` just cancelled `run_view`, which drops
+                    // iocraft's Terminal (disabling raw mode and showing the
+                    // cursor).  The TUI content remains on screen.
+                    //
+                    // Strategy: leave TUI visible, let the backend print the
+                    // sudo prompt below it, then clear the screen and let
+                    // the TUI re-render from scratch.
 
-                    // Restore cooked mode so the user can type.
+                    // Ensure cooked mode so the user can type their password.
                     restore_terminal();
 
-                    // Tell the requester the terminal is ready.
+                    let mut stderr = io::stderr();
+                    let _ = execute!(stderr, cursor::Show);
+
+                    // Tell the requester the terminal is ready for interaction.
                     let _ = req.ready_tx.send(());
 
-                    // Wait until the interactive work is done.
-                    let _ = req.done_rx.await;
+                    // Wait until the interactive work (sudo prompt) is done.
+                    // If the sender is dropped (error), don't resume the TUI —
+                    // the error message is already on screen in cooked mode.
+                    if req.done_rx.await.is_err() {
+                        // The requester hit an error (e.g. sudo auth failed).
+                        // The error is visible on the terminal.  Skip the
+                        // final TUI render so we don't overwrite it.
+                        skip_final_render = true;
+                        break;
+                    }
 
-                    // Re-save terminal state before iocraft re-enters raw mode
-                    // on the next iteration (render_loop call).
+                    // Clear the entire visible screen (CSI 2J) and move
+                    // cursor home.  We use ClearType::All instead of
+                    // FromCursorDown because terminal scrolling from the
+                    // sudo output can leave MoveTo(0,0) pointing at a
+                    // stale scrollback position.
+                    let _ = execute!(
+                        stderr,
+                        terminal::Clear(terminal::ClearType::All),
+                        cursor::MoveTo(0, 0),
+                    );
+
                     save_terminal_state();
-
-                    // The next loop iteration enters run_view → render_loop which
-                    // will re-enable raw mode and resume rendering.
                 }
             }
         }
@@ -379,7 +381,11 @@ impl TuiApp {
 
         // Final render pass to ensure all drained events are displayed.
         // Clear previous inline render, then render final state.
+        // On pause error (e.g. sudo auth failed): skip — error is on screen
         let mut final_render_height: u16 = 0;
+        if skip_final_render {
+            return Ok(final_render_height);
+        }
         {
             let ui = ui_state.read().unwrap();
             if let Ok(model_guard) = activity_model.read() {

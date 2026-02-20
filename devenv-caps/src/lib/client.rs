@@ -225,6 +225,7 @@ pub fn can_sudo_noninteractive(binary: &Path) -> bool {
         .args(["-n", "--"])
         .arg(binary)
         .arg("--check")
+        .stderr(std::process::Stdio::null())
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
