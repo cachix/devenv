@@ -163,6 +163,7 @@ let
               env = config.env;
               cwd = config.cwd;
               show_output = config.showOutput;
+              use_sudo = config.useSudo;
               inherit (config) process;
             };
             description = "Internal configuration for the task.";
@@ -378,6 +379,12 @@ let
             };
             default = { };
             description = "Process-specific configuration. Only used when type = \"process\".";
+          };
+
+          useSudo = lib.mkOption {
+            type = types.bool;
+            default = false;
+            description = "Run this task under sudo.";
           };
 
         };

@@ -1622,8 +1622,7 @@ impl Devenv {
                             None
                         } else {
                             // Strip "devenv:processes:" prefix for display.
-                            let name =
-                                t.name.strip_prefix("devenv:processes:").unwrap_or(&t.name);
+                            let name = t.name.strip_prefix("devenv:processes:").unwrap_or(&t.name);
                             Some((name, caps.as_slice()))
                         }
                     })
@@ -1669,8 +1668,7 @@ impl Devenv {
                                         // Wait for the TUI to pause and restore cooked mode.
                                         let _ = ready_rx.await;
                                         print_cap_summary();
-                                        match devenv_caps::client::preflight_sudo_auth(&binary)
-                                        {
+                                        match devenv_caps::client::preflight_sudo_auth(&binary) {
                                             Ok(()) => {
                                                 // Signal the TUI to resume rendering.
                                                 let _ = done_tx.send(());

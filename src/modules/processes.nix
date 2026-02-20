@@ -303,6 +303,12 @@ let
         '';
       };
 
+      useSudo = lib.mkOption {
+        type = types.bool;
+        default = false;
+        description = "Run this process under sudo.";
+      };
+
     };
 
     config = lib.mkIf (implementation == "process-compose") {
@@ -479,6 +485,7 @@ in
               after = process.after;
               before = process.before;
               showOutput = true;
+              useSudo = process.useSudo;
               process = {
                 start.enable = process.start.enable;
                 ready = process.ready;

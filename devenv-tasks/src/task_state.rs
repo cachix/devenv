@@ -392,6 +392,9 @@ impl TaskState {
             ..base
         };
 
+        // Propagate task-level use_sudo to process config
+        config.use_sudo = self.task.use_sudo;
+
         // Merge devenv shell environment into process config
         // Task-level env takes precedence over shell env,
         // process-specific env takes precedence over both
@@ -495,7 +498,7 @@ impl TaskState {
                     command: cmd,
                     cwd: self.task.cwd.as_deref(),
                     env,
-                    use_sudo: self.sudo_context.is_some(),
+                    use_sudo: self.task.use_sudo || self.sudo_context.is_some(),
                     output_file_path: std::path::Path::new("/dev/null"),
                     exports_file_path: exports_file.path(),
                 };
@@ -610,7 +613,7 @@ impl TaskState {
             command: cmd,
             cwd: self.task.cwd.as_deref(),
             env,
-            use_sudo: self.sudo_context.is_some(),
+            use_sudo: self.task.use_sudo || self.sudo_context.is_some(),
             output_file_path: outputs_file.path(),
             exports_file_path: exports_file.path(),
         };

@@ -374,15 +374,25 @@ impl TuiApp {
                     // alternate screen (bottom of the stale TUI render).
                     // Move it to the TOP of the TUI area so iocraft's first
                     // render overwrites the stale content in place.
-                    let tui_height = ui_state
-                        .read()
-                        .map(|ui| ui.last_render_height)
-                        .unwrap_or(0);
-                    if tui_height > 0 {
-                        let _ = execute!(
-                            stderr,
-                            cursor::MoveToPreviousLine(tui_height),
-                        );
+                    if let (Ok(ui), Ok(model_guard)) =
+                        (ui_state.read(), activity_model.read())
+                    {
+                        let (terminal_width, _) =
+                            crossterm::terminal::size().unwrap_or((80, 24));
+                        let mut measure = element! {
+                            View(width: terminal_width) {
+                                #(vec![view(&model_guard, &ui, RenderContext::Normal, None, false).into()])
+                            }
+                        };
+                        let tui_height = measure
+                            .render(Some(terminal_width as usize))
+                            .height() as u16;
+                        if tui_height > 0 {
+                            let _ = execute!(
+                                stderr,
+                                cursor::MoveToPreviousLine(tui_height),
+                            );
+                        }
                     }
 
                     save_terminal_state();

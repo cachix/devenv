@@ -75,9 +75,15 @@ pub fn build_command(
         env.insert("WATCHDOG_USEC".to_string(), usec.to_string());
     }
 
+    let exec = if config.use_sudo {
+        format!("sudo -E {}", config.exec)
+    } else {
+        config.exec.clone()
+    };
+
     let program = Program::Shell {
         shell: Shell::new("bash"),
-        command: config.exec.clone(),
+        command: exec,
         args: config.args.clone(),
     };
 
