@@ -42,7 +42,7 @@ Consider using the Flake integration when:
 | Faster evaluation (lazy trees) | :material-check: | :material-close: |
 | Evaluation caching | :material-check: | :material-close: |
 | Pure evaluation | :material-check: | :material-close: (`impure` by default) |
-| Export as a flake | :material-close: | :material-check: |
+| Cross-project references | :material-check: | :material-check: |
 | secretspec.dev | :material-check: | :material-close: |
 | Running processes when testing | :material-check: | :material-close: |
 

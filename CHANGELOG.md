@@ -42,6 +42,7 @@ This is a major release with significant architectural changes. devenv 2.0 intro
 - **`devenv container --registry` option is removed** from `container run`.
 - **`git-hooks` input is no longer included by default.** If you use `git-hooks.hooks`, add the input explicitly in your `devenv.yaml`.
 - **The `devenv-generate` crate is removed** from the workspace.
+- **`devenv test` no longer overrides `.devenv` by default.** The `.devenv` directory is preserved across test runs to allow eval cache to persist. Use `--override-dotfile` to opt-in to temporary directory isolation. The `--dont-override-dotfile` flag is kept as a hidden no-op for backward compatibility.
 
 ### New Features
 
