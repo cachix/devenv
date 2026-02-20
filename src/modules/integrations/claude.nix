@@ -593,7 +593,7 @@ in
 
   config = lib.mkIf cfg.enable {
     files = lib.mkMerge [
-      { "${settingsPath}".json = settingsContent; }
+      { "${cfg.settingsPath}".json = settingsContent; }
 
       # MCP configuration file
       (lib.mkIf (cfg.mcpServers != { }) {
