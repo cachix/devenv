@@ -31,20 +31,17 @@ use tracing::{debug, info, warn};
 /// rather than storing them in shared state.
 pub struct SnixBackend {
     #[allow(dead_code)]
-    inputs: BTreeMap<String, Input>,
-    #[allow(dead_code)]
     nix_settings: NixSettings,
-    #[allow(dead_code)] // Will be used when more functionality is implemented
+    #[allow(dead_code)]
     cache_settings: CacheSettings,
-    #[allow(dead_code)] // Will be used when more functionality is implemented
+    #[allow(dead_code)]
     paths: DevenvPaths,
-    #[allow(dead_code)] // Will be used when cachix integration is implemented
+    #[allow(dead_code)]
     cachix_manager: Arc<CachixManager>,
 }
 
 impl SnixBackend {
     pub async fn new(
-        inputs: BTreeMap<String, Input>,
         nix_settings: NixSettings,
         cache_settings: CacheSettings,
         paths: DevenvPaths,
@@ -54,7 +51,6 @@ impl SnixBackend {
         info!("Initializing Snix backend");
 
         Ok(Self {
-            inputs,
             nix_settings,
             cache_settings,
             paths,
@@ -174,8 +170,11 @@ impl NixBackend for SnixBackend {
         bail!("eval() is not yet fully implemented for SnixBackend")
     }
 
-    async fn update(&self, _input_name: &Option<String>) -> Result<()> {
-        // TODO: Implement flake update functionality
+    async fn update(
+        &self,
+        _input_name: &Option<String>,
+        _inputs: &BTreeMap<String, Input>,
+    ) -> Result<()> {
         bail!("Flake update is not yet implemented for Snix backend")
     }
 

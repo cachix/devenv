@@ -92,7 +92,6 @@ pub struct NixRustBackend {
     pub cache_settings: CacheSettings,
     pub override_input: Vec<String>,
     pub paths: DevenvPaths,
-    pub inputs: BTreeMap<String, Input>,
 
     // Path to extracted bootstrap directory (lives for duration of backend)
     bootstrap_path: PathBuf,
@@ -238,7 +237,6 @@ impl NixRustBackend {
     /// * `port_allocator` - Port allocator for managing automatic port allocation during evaluation
     pub fn new(
         paths: DevenvPaths,
-        inputs: BTreeMap<String, Input>,
         nixpkgs_config: NixpkgsConfig,
         nix_settings: NixSettings,
         cache_settings: CacheSettings,
@@ -426,7 +424,6 @@ impl NixRustBackend {
             cache_settings,
             override_input,
             paths,
-            inputs,
             bootstrap_path,
             nixpkgs_config_path,
             nix_log_bridge: log_bridge,
@@ -838,7 +835,7 @@ impl NixRustBackend {
     /// 3. If out of sync, automatically refreshes the locks by calling update()
     ///
     /// This matches the behavior of flakes - locks are automatically created/updated as needed.
-    async fn validate_lock_file(&self) -> Result<()> {
+    async fn validate_lock_file(&self, inputs: &BTreeMap<String, Input>) -> Result<()> {
         use crate::{create_flake_inputs, load_lock_file};
 
         let fetch_settings = &self.fetchers_settings;
@@ -847,7 +844,7 @@ impl NixRustBackend {
 
         // If lock file doesn't exist, create it
         if !lock_file_path.exists() {
-            return self.update(&None).await;
+            return self.update(&None, inputs).await;
         }
 
         // Load existing lock file
@@ -859,12 +856,12 @@ impl NixRustBackend {
             Some(lock) => lock,
             None => {
                 // Lock file is invalid/empty - regenerate it
-                return self.update(&None).await;
+                return self.update(&None, inputs).await;
             }
         };
 
         // Convert devenv inputs to flake inputs
-        let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, &self.inputs)
+        let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, inputs)
             .to_miette()
             .wrap_err("Failed to create flake inputs")?;
 
@@ -899,12 +896,12 @@ impl NixRustBackend {
             Ok(new_lock) => {
                 if new_lock.has_changes(&old_lock).to_miette()? {
                     tracing::debug!("Lock validation found changes, updating lock");
-                    return self.update(&None).await;
+                    return self.update(&None, inputs).await;
                 }
             }
             Err(e) => {
                 tracing::debug!("Lock validation failed: {e}, updating lock");
-                return self.update(&None).await;
+                return self.update(&None, inputs).await;
             }
         }
 
@@ -1114,7 +1111,7 @@ impl NixBackend for NixRustBackend {
 
         // Validate lock file once during assembly
         // This ensures all subsequent evaluations have a valid lock to work with
-        self.validate_lock_file().await?;
+        self.validate_lock_file(args.devenv_inputs).await?;
 
         // Configure cachix substituters and start daemon if push is configured
         if let Some(cachix_config) = self.get_cachix_config().await? {
@@ -1566,15 +1563,19 @@ impl NixBackend for NixRustBackend {
         }
     }
 
-    async fn update(&self, input_name: &Option<String>) -> Result<()> {
+    async fn update(
+        &self,
+        input_name: &Option<String>,
+        inputs: &BTreeMap<String, Input>,
+    ) -> Result<()> {
         use crate::{create_flake_inputs, load_lock_file, write_lock_file};
 
         // Use settings created during backend initialization - ensures consistency
         let fetch_settings = &self.fetchers_settings;
         let flake_settings = &self.flake_settings;
 
-        // Convert devenv inputs to flake inputs using Config and base_dir directly
-        let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, &self.inputs)
+        // Convert devenv inputs to flake inputs
+        let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, inputs)
             .to_miette()
             .wrap_err("Failed to create flake inputs")?;
 
@@ -1671,9 +1672,6 @@ impl NixBackend for NixRustBackend {
         // Get metadata: list inputs from lock file and evaluate config.info
         use crate::load_lock_file;
 
-        // Validate lock file before reading metadata
-        self.validate_lock_file().await?;
-
         // PART 1: Format inputs from lock file using FFI iterator
         let lock_file_path = self.paths.root.join("devenv.lock");
         let inputs_section = if lock_file_path.exists() {
@@ -1716,9 +1714,6 @@ impl NixBackend for NixRustBackend {
         // Search through pkgs from bootstrap/default.nix for packages matching the query
         // Uses the nix search C API which handles recurseForDerivations logic
         // Respects overlays, locked versions, and devenv configuration
-
-        // Validate lock file before searching
-        self.validate_lock_file().await?;
 
         let activity = Activity::evaluate("Searching packages")
             .level(ActivityLevel::Info)

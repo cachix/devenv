@@ -341,7 +341,6 @@ impl Devenv {
             NixBackendType::Nix => Box::new(
                 devenv_nix_backend::nix_backend::NixRustBackend::new(
                     paths,
-                    options.config.inputs.clone(),
                     nixpkgs_config,
                     nix_settings.clone(),
                     cache_settings.clone(),
@@ -357,7 +356,6 @@ impl Devenv {
             #[cfg(feature = "snix")]
             NixBackendType::Snix => Box::new(
                 devenv_snix_backend::SnixBackend::new(
-                    options.config.inputs.clone(),
                     nix_settings.clone(),
                     cache_settings.clone(),
                     paths,
@@ -795,7 +793,11 @@ impl Devenv {
         };
 
         let activity = Activity::operation(&msg).start();
-        self.nix.update(input_name).in_activity(&activity).await?;
+        let config = self.config.read().await;
+        self.nix
+            .update(input_name, &config.inputs)
+            .in_activity(&activity)
+            .await?;
 
         // Assemble is required for changelog.show_new() which builds changelog.json
         // Allow assemble to fail gracefully - changelogs are informational only
