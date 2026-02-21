@@ -70,6 +70,7 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
 pub struct DevenvOptions {
     pub config: Config,
     pub shell_settings: Option<ShellSettings>,
+    pub secret_settings: Option<devenv_core::SecretSettings>,
     pub global_options: Option<GlobalOptions>,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
@@ -82,6 +83,7 @@ impl DevenvOptions {
         Self {
             config: Config::default(),
             shell_settings: None,
+            secret_settings: None,
             global_options: None,
             devenv_root: None,
             devenv_dotfile: None,
@@ -96,6 +98,7 @@ impl Default for DevenvOptions {
         Self {
             config: Config::default(),
             shell_settings: None,
+            secret_settings: None,
             global_options: None,
             devenv_root: None,
             devenv_dotfile: None,
@@ -160,6 +163,7 @@ impl std::error::Error for SecretsNeedPrompting {}
 pub struct Devenv {
     pub config: Arc<RwLock<Config>>,
     pub shell_settings: ShellSettings,
+    pub secret_settings: devenv_core::SecretSettings,
     pub global_options: GlobalOptions,
     pub is_testing: bool,
 
@@ -250,6 +254,7 @@ impl Devenv {
 
         let global_options = options.global_options.unwrap_or_default();
         let shell_settings = options.shell_settings.unwrap_or_default();
+        let secret_settings = options.secret_settings.unwrap_or_default();
 
         // Compute profile-aware dotfile path for state isolation
         let base_devenv_dotfile = options
@@ -352,6 +357,7 @@ impl Devenv {
         Self {
             config: Arc::new(RwLock::new(options.config)),
             shell_settings,
+            secret_settings,
             global_options,
             is_testing: options.is_testing,
             devenv_root,
@@ -1878,12 +1884,13 @@ impl Devenv {
 
         // Check for secretspec.toml and load secrets
         let secretspec_path = self.devenv_root.join("secretspec.toml");
-        let secretspec_config_exists = config.secretspec.is_some();
-        let secretspec_enabled = config
+        let secretspec_config_exists = self.secret_settings.secretspec.is_some();
+        let secretspec_enabled = self
+            .secret_settings
             .secretspec
             .as_ref()
             .map(|c| c.enable)
-            .unwrap_or(false); // Default to false if secretspec config is not present
+            .unwrap_or(false);
 
         if secretspec_path.exists() {
             // Log warning when secretspec.toml exists but is not configured
@@ -1907,15 +1914,16 @@ impl Devenv {
             }
 
             if secretspec_enabled {
-                // Get profile and provider from devenv.yaml config
-                let (profile, provider) = if let Some(ref secretspec_config) = config.secretspec {
-                    (
-                        secretspec_config.profile.clone(),
-                        secretspec_config.provider.clone(),
-                    )
-                } else {
-                    (None, None)
-                };
+                // Get profile and provider from resolved secret settings
+                let (profile, provider) =
+                    if let Some(ref secretspec_config) = self.secret_settings.secretspec {
+                        (
+                            secretspec_config.profile.clone(),
+                            secretspec_config.provider.clone(),
+                        )
+                    } else {
+                        (None, None)
+                    };
 
                 // Load and validate secrets using SecretSpec API
                 let mut secrets = secretspec::Secrets::load()
