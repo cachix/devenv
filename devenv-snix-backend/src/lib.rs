@@ -4,9 +4,10 @@
 //! as an alternative to the traditional C++ Nix binary.
 
 use async_trait::async_trait;
+use devenv_core::config::Input;
 use devenv_core::{
-    CacheSettings, CachixManager, Config, DevEnvOutput, DevenvPaths, NixArgs, NixBackend,
-    NixSettings, Options, SearchResults,
+    CacheSettings, CachixManager, DevEnvOutput, DevenvPaths, NixArgs, NixBackend, NixSettings,
+    Options, SearchResults,
 };
 use miette::{Result, bail};
 use snix_build::buildservice::{BuildService, DummyBuildService};
@@ -16,6 +17,7 @@ use snix_glue::snix_io::SnixIO;
 use snix_glue::snix_store_io::SnixStoreIO;
 use snix_store::nar::{NarCalculationService, SimpleRenderer};
 use snix_store::pathinfoservice::from_addr as pathinfo_from_addr;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -28,9 +30,9 @@ use tracing::{debug, info, warn};
 /// multi-threaded sharing. This backend creates fresh evaluator instances per operation
 /// rather than storing them in shared state.
 pub struct SnixBackend {
-    #[allow(dead_code)] // Will be used when more functionality is implemented
-    config: Config,
-    #[allow(dead_code)] // Will be used when more functionality is implemented
+    #[allow(dead_code)]
+    inputs: BTreeMap<String, Input>,
+    #[allow(dead_code)]
     nix_settings: NixSettings,
     #[allow(dead_code)] // Will be used when more functionality is implemented
     cache_settings: CacheSettings,
@@ -42,7 +44,7 @@ pub struct SnixBackend {
 
 impl SnixBackend {
     pub async fn new(
-        config: Config,
+        inputs: BTreeMap<String, Input>,
         nix_settings: NixSettings,
         cache_settings: CacheSettings,
         paths: DevenvPaths,
@@ -50,10 +52,9 @@ impl SnixBackend {
         _pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
     ) -> Result<Self> {
         info!("Initializing Snix backend");
-        // Note: Snix backend doesn't use eval cache at the moment
 
         Ok(Self {
-            config,
+            inputs,
             nix_settings,
             cache_settings,
             paths,

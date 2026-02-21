@@ -335,11 +335,14 @@ impl Devenv {
         // Create port allocator shared with backend for holding port reservations
         let port_allocator = Arc::new(PortAllocator::new());
 
+        let nixpkgs_config = options.config.nixpkgs_config(&nix_settings.system);
+
         let nix: Box<dyn NixBackend> = match backend_type {
             NixBackendType::Nix => Box::new(
                 devenv_nix_backend::nix_backend::NixRustBackend::new(
                     paths,
-                    options.config.clone(),
+                    options.config.inputs.clone(),
+                    nixpkgs_config,
                     nix_settings.clone(),
                     cache_settings.clone(),
                     global_options.override_input.clone(),
@@ -354,7 +357,7 @@ impl Devenv {
             #[cfg(feature = "snix")]
             NixBackendType::Snix => Box::new(
                 devenv_snix_backend::SnixBackend::new(
-                    options.config.clone(),
+                    options.config.inputs.clone(),
                     nix_settings.clone(),
                     cache_settings.clone(),
                     paths,
@@ -2055,7 +2058,9 @@ impl Devenv {
             username: username.as_deref(),
             git_root: git_root.as_deref(),
             secretspec: secretspec_data.as_ref(),
-            devenv_config: &config,
+            devenv_inputs: &config.inputs,
+            devenv_imports: &config.imports,
+            impure: self.nix_settings.impure,
             nixpkgs_config,
             lock_fingerprint: &lock_fingerprint,
         };

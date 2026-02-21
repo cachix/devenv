@@ -19,7 +19,7 @@ use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
 use devenv_cache_core::compute_string_hash;
 use devenv_core::PortAllocator;
 use devenv_core::cachix::{CachixCacheInfo, CachixConfig, CachixManager};
-use devenv_core::config::Config;
+use devenv_core::config::{Input, NixpkgsConfig};
 use devenv_core::nix_args::NixArgs;
 use devenv_core::nix_backend::{
     DevEnvOutput, DevenvPaths, NixBackend, Options, PackageSearchResult, SearchResults,
@@ -92,7 +92,7 @@ pub struct NixRustBackend {
     pub cache_settings: CacheSettings,
     pub override_input: Vec<String>,
     pub paths: DevenvPaths,
-    pub config: Config,
+    pub inputs: BTreeMap<String, Input>,
 
     // Path to extracted bootstrap directory (lives for duration of backend)
     bootstrap_path: PathBuf,
@@ -238,7 +238,8 @@ impl NixRustBackend {
     /// * `port_allocator` - Port allocator for managing automatic port allocation during evaluation
     pub fn new(
         paths: DevenvPaths,
-        config: Config,
+        inputs: BTreeMap<String, Input>,
+        nixpkgs_config: NixpkgsConfig,
         nix_settings: NixSettings,
         cache_settings: CacheSettings,
         override_input: Vec<String>,
@@ -302,10 +303,9 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to create fetchers settings")?;
 
-        // Generate merged nixpkgs config and write to temp file for NIXPKGS_CONFIG env var
+        // Write pre-computed nixpkgs config to temp file for NIXPKGS_CONFIG env var
         // Wrap in a let expression that adds allowUnfreePredicate (a Nix function)
         // Note: NIXPKGS_CONFIG expects a file path, not inline Nix content
-        let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
         let nixpkgs_config_base = ser_nix::to_string(&nixpkgs_config)
             .map_err(|e| miette::miette!("Failed to serialize nixpkgs config: {}", e))?;
         let nixpkgs_config_nix = format!(
@@ -426,7 +426,7 @@ impl NixRustBackend {
             cache_settings,
             override_input,
             paths,
-            config,
+            inputs,
             bootstrap_path,
             nixpkgs_config_path,
             nix_log_bridge: log_bridge,
@@ -864,7 +864,7 @@ impl NixRustBackend {
         };
 
         // Convert devenv inputs to flake inputs
-        let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, &self.config)
+        let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, &self.inputs)
             .to_miette()
             .wrap_err("Failed to create flake inputs")?;
 
@@ -1574,7 +1574,7 @@ impl NixBackend for NixRustBackend {
         let flake_settings = &self.flake_settings;
 
         // Convert devenv inputs to flake inputs using Config and base_dir directly
-        let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, &self.config)
+        let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, &self.inputs)
             .to_miette()
             .wrap_err("Failed to create flake inputs")?;
 
