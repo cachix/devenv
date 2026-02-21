@@ -204,6 +204,44 @@ pub struct SecretspecConfig {
     pub provider: Option<String>,
 }
 
+/// Resolved secret management settings.
+///
+/// Produced by `SecretSettings::resolve(&GlobalOptions, &Config)` as a pure function.
+/// Consumers read from this instead of merging CLI + Config ad-hoc.
+#[derive(Clone, Debug, Default)]
+pub struct SecretSettings {
+    pub secretspec: Option<SecretspecConfig>,
+}
+
+impl SecretSettings {
+    /// Resolve secret settings from CLI and config sources.
+    ///
+    /// Precedence: CLI > Config > Default.
+    /// If either CLI field (`secretspec_provider` or `secretspec_profile`) is present,
+    /// merge into config's SecretspecConfig (or create one) with `enable: true`.
+    pub fn resolve(cli: &crate::cli::GlobalOptions, config: &Config) -> Self {
+        let has_cli_override =
+            cli.secretspec_provider.is_some() || cli.secretspec_profile.is_some();
+
+        let secretspec = if has_cli_override {
+            let base = config.secretspec.clone().unwrap_or(SecretspecConfig {
+                enable: false,
+                profile: None,
+                provider: None,
+            });
+            Some(SecretspecConfig {
+                enable: true,
+                provider: cli.secretspec_provider.clone().or(base.provider),
+                profile: cli.secretspec_profile.clone().or(base.profile),
+            })
+        } else {
+            config.secretspec.clone()
+        };
+
+        Self { secretspec }
+    }
+}
+
 /// Resolved shell settings.
 ///
 /// Produced by `ShellSettings::resolve(&GlobalOptions, &Config)` as a pure function.
@@ -1365,5 +1403,107 @@ inputs:
         };
         let settings = ShellSettings::resolve(&cli, &config);
         assert!(!settings.reload);
+    }
+
+    #[test]
+    fn secret_settings_cli_provider_overrides_config() {
+        let cli = crate::cli::GlobalOptions {
+            secretspec_provider: Some("aws".into()),
+            ..Default::default()
+        };
+        let config = Config {
+            secretspec: Some(SecretspecConfig {
+                enable: true,
+                provider: Some("gcp".into()),
+                profile: None,
+            }),
+            ..Default::default()
+        };
+        let settings = SecretSettings::resolve(&cli, &config);
+        let sc = settings.secretspec.unwrap();
+        assert!(sc.enable);
+        assert_eq!(sc.provider, Some("aws".into()));
+    }
+
+    #[test]
+    fn secret_settings_cli_profile_overrides_config() {
+        let cli = crate::cli::GlobalOptions {
+            secretspec_profile: Some("staging".into()),
+            ..Default::default()
+        };
+        let config = Config {
+            secretspec: Some(SecretspecConfig {
+                enable: true,
+                provider: Some("gcp".into()),
+                profile: Some("prod".into()),
+            }),
+            ..Default::default()
+        };
+        let settings = SecretSettings::resolve(&cli, &config);
+        let sc = settings.secretspec.unwrap();
+        assert!(sc.enable);
+        assert_eq!(sc.profile, Some("staging".into()));
+        assert_eq!(sc.provider, Some("gcp".into()));
+    }
+
+    #[test]
+    fn secret_settings_config_used_when_cli_absent() {
+        let cli = crate::cli::GlobalOptions::default();
+        let config = Config {
+            secretspec: Some(SecretspecConfig {
+                enable: true,
+                provider: Some("gcp".into()),
+                profile: Some("prod".into()),
+            }),
+            ..Default::default()
+        };
+        let settings = SecretSettings::resolve(&cli, &config);
+        let sc = settings.secretspec.unwrap();
+        assert!(sc.enable);
+        assert_eq!(sc.provider, Some("gcp".into()));
+        assert_eq!(sc.profile, Some("prod".into()));
+    }
+
+    #[test]
+    fn secret_settings_cli_enables_when_config_absent() {
+        let cli = crate::cli::GlobalOptions {
+            secretspec_provider: Some("aws".into()),
+            ..Default::default()
+        };
+        let config = Config::default();
+        let settings = SecretSettings::resolve(&cli, &config);
+        let sc = settings.secretspec.unwrap();
+        assert!(sc.enable);
+        assert_eq!(sc.provider, Some("aws".into()));
+        assert_eq!(sc.profile, None);
+    }
+
+    #[test]
+    fn secret_settings_none_when_both_absent() {
+        let cli = crate::cli::GlobalOptions::default();
+        let config = Config::default();
+        let settings = SecretSettings::resolve(&cli, &config);
+        assert!(settings.secretspec.is_none());
+    }
+
+    #[test]
+    fn secret_settings_cli_preserves_config_fields_not_overridden() {
+        let cli = crate::cli::GlobalOptions {
+            secretspec_provider: Some("aws".into()),
+            ..Default::default()
+        };
+        let config = Config {
+            secretspec: Some(SecretspecConfig {
+                enable: false,
+                provider: None,
+                profile: Some("prod".into()),
+            }),
+            ..Default::default()
+        };
+        let settings = SecretSettings::resolve(&cli, &config);
+        let sc = settings.secretspec.unwrap();
+        assert!(sc.enable);
+        assert_eq!(sc.provider, Some("aws".into()));
+        assert_eq!(sc.profile, Some("prod".into()));
     }
 }

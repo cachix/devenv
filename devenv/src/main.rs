@@ -447,15 +447,17 @@ async fn run_devenv(
     // Resolve settings from CLI + Config (pure functions, no mutation).
     let shell_settings =
         devenv_core::config::ShellSettings::resolve(&cli.global_options, &config);
+    let secret_settings =
+        devenv_core::config::SecretSettings::resolve(&cli.global_options, &config);
 
-    // Merge CLI overrides into config: clean, impure, profiles, secretspec.
-    // After this, Config is the source of truth for these settings.
+    // Merge CLI overrides into config: impure, clean.
     config.apply_cli_overrides(&mut cli.global_options);
 
     let is_testing = matches!(&command, Commands::Test { .. });
     let mut options = devenv::DevenvOptions {
         config,
         shell_settings: Some(shell_settings),
+        secret_settings: Some(secret_settings),
         global_options: Some(cli.global_options),
         devenv_root: None,
         devenv_dotfile: None,
