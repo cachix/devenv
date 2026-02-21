@@ -1,9 +1,10 @@
-{ pkgs
-, self
-, lib
-, config
-, inputs
-, ...
+{
+  pkgs,
+  self,
+  lib,
+  config,
+  inputs,
+  ...
 }:
 
 let
@@ -47,19 +48,18 @@ let
 
   githooksSubmodule =
     if git-hooks != null then
-      lib.types.submoduleWith
-        {
-          modules = [
-            (git-hooks + "/modules/all-modules.nix")
-            {
-              rootSrc = self;
-              package = lib.mkDefault pkgs.prek;
-              tools = import (git-hooks + "/nix/call-tools.nix") pkgs;
-            }
-          ];
-          specialArgs = { inherit pkgs; };
-          shorthandOnlyDefinesConfig = true;
-        }
+      lib.types.submoduleWith {
+        modules = [
+          (git-hooks + "/modules/all-modules.nix")
+          {
+            rootSrc = self;
+            package = lib.mkDefault pkgs.prek;
+            tools = import (git-hooks + "/nix/call-tools.nix") pkgs;
+          }
+        ];
+        specialArgs = { inherit pkgs; };
+        shorthandOnlyDefinesConfig = true;
+      }
     else
       defaultModule;
 
@@ -143,8 +143,71 @@ in
                 exit 0
               fi
 
+              did_install_hooks=0
+              hooks_path_needs_restore=0
+              worktree_config_needs_restore=0
+
+              restore_hooks_path() {
+                if [ "$hooks_path_needs_restore" -eq 1 ]; then
+                  if [ "$previous_hooks_path_set" -eq 1 ]; then
+                    ${git} config "$config_scope" core.hooksPath "$previous_hooks_path" || true
+                  else
+                    ${git} config "$config_scope" --unset-all core.hooksPath || true
+                  fi
+                fi
+
+                if [ "$worktree_config_needs_restore" -eq 1 ]; then
+                  if [ "$previous_worktree_config_set" -eq 1 ]; then
+                    ${git} config --local extensions.worktreeConfig "$previous_worktree_config" || true
+                  else
+                    ${git} config --local --unset-all extensions.worktreeConfig || true
+                  fi
+                fi
+              }
+
+              trap restore_hooks_path EXIT
+
+              setup_hooks_path() {
+                GIT_WC=$(${git} rev-parse --show-toplevel)
+                git_dir_abs=$(${git} -C "$GIT_WC" rev-parse --path-format=absolute --git-dir)
+                common_dir_abs=$(${git} -C "$GIT_WC" rev-parse --path-format=absolute --git-common-dir)
+                common_dir=$(${git} -C "$GIT_WC" rev-parse --path-format=relative --git-common-dir)
+                common_is_bare=$(${git} config --file "$common_dir_abs/config" --bool core.bare || true)
+
+                # In linked worktrees, store hooksPath in worktree-local config so
+                # each worktree resolves the relative path against its own root.
+                config_scope="--local"
+                hooks_path="$common_dir/hooks"
+
+                previous_worktree_config_set=0
+                previous_worktree_config=""
+                if previous_worktree_config=$(${git} config --local --bool --get extensions.worktreeConfig 2>/dev/null); then
+                  previous_worktree_config_set=1
+                fi
+
+                if [ "$git_dir_abs" != "$common_dir_abs" ] && [ "$common_is_bare" != "true" ]; then
+                  ${git} config --local extensions.worktreeConfig true
+                  worktree_config_needs_restore=1
+                  config_scope="--worktree"
+                elif [ "$git_dir_abs" != "$common_dir_abs" ] && [ "$common_is_bare" = "true" ]; then
+                  hooks_path="$common_dir_abs/hooks"
+                fi
+
+                previous_hooks_path_set=0
+                previous_hooks_path=""
+                if previous_hooks_path=$(${git} config "$config_scope" --get core.hooksPath 2>/dev/null); then
+                  previous_hooks_path_set=1
+                fi
+
+                hooks_path_needs_restore=1
+                ${git} config "$config_scope" core.hooksPath ""
+              }
+
               # Install hooks for configured stages
               if [ -z "${lib.concatStringsSep " " installStages}" ]; then
+                did_install_hooks=1
+                setup_hooks_path
+
                 # Default: install pre-commit hook
                 ${executable} install -c ${configPath}
               else
@@ -154,13 +217,29 @@ in
                       # Skip manual stage - it's not a git hook
                       ;;
                     commit|merge-commit|push)
+                      if [ "$did_install_hooks" -eq 0 ]; then
+                        did_install_hooks=1
+                        setup_hooks_path
+                      fi
+
                       ${executable} install -c ${configPath} -t "pre-$stage"
                       ;;
                     *)
+                      if [ "$did_install_hooks" -eq 0 ]; then
+                        did_install_hooks=1
+                        setup_hooks_path
+                      fi
+
                       ${executable} install -c ${configPath} -t "$stage"
                       ;;
                   esac
                 done
+              fi
+
+              if [ "$did_install_hooks" -eq 1 ]; then
+                ${git} config "$config_scope" core.hooksPath "$hooks_path"
+                hooks_path_needs_restore=0
+                worktree_config_needs_restore=0
               fi
             '';
           after = [ "devenv:files" ];
