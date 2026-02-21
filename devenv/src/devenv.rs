@@ -7,11 +7,11 @@ use devenv_activity::{Activity, ActivityLevel, activity, message};
 use devenv_cache_core::compute_string_hash;
 use devenv_core::{
     cachix::{CachixManager, CachixPaths},
-    cli::GlobalOptions,
-    config::{Config, NixBackendType, ShellSettings},
+    config::{Config, NixBackendType},
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
     nix_backend::{DevenvPaths, NixBackend, Options},
     ports::PortAllocator,
+    settings::{CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings},
 };
 use devenv_shell::dialect::{BashDialect, ShellDialect};
 use include_dir::{Dir, include_dir};
@@ -69,11 +69,15 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
 #[derive(Debug)]
 pub struct DevenvOptions {
     pub config: Config,
-    pub nix_settings: Option<devenv_core::NixSettings>,
+    pub nix_settings: Option<NixSettings>,
     pub shell_settings: Option<ShellSettings>,
-    pub cache_settings: Option<devenv_core::CacheSettings>,
-    pub secret_settings: Option<devenv_core::SecretSettings>,
-    pub global_options: Option<GlobalOptions>,
+    pub cache_settings: Option<CacheSettings>,
+    pub secret_settings: Option<SecretSettings>,
+    pub input_overrides: InputOverrides,
+    pub from_external: bool,
+    pub tui: bool,
+    pub verbose: bool,
+    pub quiet: bool,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
     pub shutdown: Arc<tokio_shutdown::Shutdown>,
@@ -88,7 +92,11 @@ impl DevenvOptions {
             shell_settings: None,
             cache_settings: None,
             secret_settings: None,
-            global_options: None,
+            input_overrides: InputOverrides::default(),
+            from_external: false,
+            tui: true,
+            verbose: false,
+            quiet: false,
             devenv_root: None,
             devenv_dotfile: None,
             shutdown,
@@ -105,7 +113,11 @@ impl Default for DevenvOptions {
             shell_settings: None,
             cache_settings: None,
             secret_settings: None,
-            global_options: None,
+            input_overrides: InputOverrides::default(),
+            from_external: false,
+            tui: true,
+            verbose: false,
+            quiet: false,
             devenv_root: None,
             devenv_dotfile: None,
             shutdown: tokio_shutdown::Shutdown::new(),
@@ -168,11 +180,15 @@ impl std::error::Error for SecretsNeedPrompting {}
 
 pub struct Devenv {
     pub config: Arc<RwLock<Config>>,
-    pub nix_settings: devenv_core::NixSettings,
+    pub nix_settings: NixSettings,
     pub shell_settings: ShellSettings,
-    pub cache_settings: devenv_core::CacheSettings,
-    pub secret_settings: devenv_core::SecretSettings,
-    pub global_options: GlobalOptions,
+    pub cache_settings: CacheSettings,
+    pub secret_settings: SecretSettings,
+    pub input_overrides: InputOverrides,
+    pub from_external: bool,
+    pub tui: bool,
+    pub verbose: bool,
+    pub quiet: bool,
     pub is_testing: bool,
 
     pub nix: Arc<Box<dyn NixBackend>>,
@@ -259,7 +275,6 @@ impl Devenv {
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
 
-        let global_options = options.global_options.unwrap_or_default();
         let nix_settings = options.nix_settings.unwrap_or_default();
         let shell_settings = options.shell_settings.unwrap_or_default();
         let cache_settings = options.cache_settings.unwrap_or_default();
@@ -344,7 +359,7 @@ impl Devenv {
                     nixpkgs_config,
                     nix_settings.clone(),
                     cache_settings.clone(),
-                    global_options.override_input.clone(),
+                    options.input_overrides.override_input.clone(),
                     cachix_manager.clone(),
                     options.shutdown.clone(),
                     Some(eval_cache_pool.clone()),
@@ -373,7 +388,11 @@ impl Devenv {
             shell_settings,
             cache_settings,
             secret_settings,
-            global_options,
+            input_overrides: options.input_overrides,
+            from_external: options.from_external,
+            tui: options.tui,
+            verbose: options.verbose,
+            quiet: options.quiet,
             is_testing: options.is_testing,
             devenv_root,
             devenv_dotfile,
@@ -1108,10 +1127,9 @@ impl Devenv {
             }
         }
 
-        // Convert global options to verbosity level
-        let verbosity = if self.global_options.quiet {
+        let verbosity = if self.quiet {
             tasks::VerbosityLevel::Quiet
-        } else if self.global_options.verbose {
+        } else if self.verbose {
             tasks::VerbosityLevel::Verbose
         } else {
             tasks::VerbosityLevel::Normal
@@ -1141,7 +1159,7 @@ impl Devenv {
 
         // In TUI mode, skip TasksUi to avoid corrupting the TUI display
         // TUI captures activity events directly via the channel initialized in main.rs
-        let (status, outputs) = if self.global_options.tui {
+        let (status, outputs) = if self.tui {
             let outputs = tasks.run(false).await;
             let status = tasks.get_completion_status().await;
             (status, outputs)
@@ -1218,9 +1236,9 @@ impl Devenv {
         executor: Option<Arc<dyn tasks::TaskExecutor>>,
         envs: HashMap<String, String>,
     ) -> Result<HashMap<String, String>> {
-        let verbosity = if self.global_options.quiet {
+        let verbosity = if self.quiet {
             tasks::VerbosityLevel::Quiet
-        } else if self.global_options.verbose {
+        } else if self.verbose {
             tasks::VerbosityLevel::Verbose
         } else {
             tasks::VerbosityLevel::Normal
@@ -1247,7 +1265,7 @@ impl Devenv {
         // Custom executor implies PTY/TUI mode; otherwise respect the tui flag.
         // In TUI mode, skip TasksUi to avoid corrupting the TUI display —
         // the TUI captures activity events directly via the channel in main.rs.
-        let outputs = if has_custom_executor || self.global_options.tui {
+        let outputs = if has_custom_executor || self.tui {
             tasks.run(false).await
         } else {
             // Shell mode - initialize activity channel for TasksUi
@@ -1858,8 +1876,8 @@ impl Devenv {
         let _permit = self.assemble_lock.acquire().await.unwrap();
 
         // Skip devenv.nix existence check if --option or --from is provided
-        if self.global_options.option.is_empty()
-            && self.global_options.from.is_none()
+        if self.input_overrides.nix_module_options.is_empty()
+            && !self.from_external
             && !self.devenv_root.join("devenv.nix").exists()
         {
             bail!(indoc::indoc! {"
@@ -1963,7 +1981,7 @@ impl Devenv {
                 // Validate secrets
                 // In TUI mode, validate first and signal if prompting is needed (TUI will be stopped)
                 // In non-TUI mode, just validate silently
-                let validated_secrets = if self.global_options.tui {
+                let validated_secrets = if self.tui {
                     match secrets.validate()? {
                         Ok(validated) => validated,
                         Err(e) => {
@@ -2038,7 +2056,8 @@ impl Devenv {
         let active_profiles = &self.shell_settings.profiles;
 
         // Parse CLI options into structured format with typed values
-        let cli_options = CliOptionsConfig(parse_cli_options(&self.global_options.option)?);
+        let cli_options =
+            CliOptionsConfig(parse_cli_options(&self.input_overrides.nix_module_options)?);
 
         // Compute lock fingerprint for eval-cache invalidation
         // This includes narHashes from local path inputs that aren't stored in devenv.lock
@@ -2052,8 +2071,8 @@ impl Devenv {
             is_development_version: crate::is_development_version(),
             system: &self.nix_settings.system,
             devenv_root: &self.devenv_root,
-            skip_local_src: self.global_options.from.is_some()
-                || (!self.global_options.option.is_empty()
+            skip_local_src: self.from_external
+                || (!self.input_overrides.nix_module_options.is_empty()
                     && !self.devenv_root.join("devenv.nix").exists()),
             devenv_dotfile: &self.devenv_dotfile,
             devenv_dotfile_path: &dotfile_relative_path,

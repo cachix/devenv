@@ -123,7 +123,7 @@ fn main() -> Result<()> {
     match &cli.command {
         None | Some(Commands::Version) => {
             let version = crate_version!();
-            let system = &cli.global_options.system;
+            let system = &cli.nix_cli.system;
             match build_rev() {
                 Some(rev) => println!("devenv {version}+{rev} ({system})"),
                 None => println!("devenv {version} ({system})"),
@@ -152,9 +152,9 @@ fn main() -> Result<()> {
             | Some(Commands::PrintPaths) // print output directly, no TUI needed
     );
 
-    if cli.global_options.use_tracing_mode() {
+    if cli.cli_options.use_tracing_mode() {
         run_with_tracing(cli)
-    } else if force_legacy_cli || cli.global_options.use_legacy_cli() {
+    } else if force_legacy_cli || cli.cli_options.use_legacy_cli() {
         run_with_legacy_cli(cli)
     } else {
         run_with_tui(cli)
@@ -171,12 +171,12 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     let level = cli.get_log_level();
     devenv_tracing::init_tracing(
         level,
-        cli.global_options.trace_format,
-        cli.global_options.trace_output.as_ref(),
+        cli.cli_options.trace_format,
+        cli.cli_options.trace_output.as_ref(),
     );
 
     // Determine TUI filter level based on verbose flag
-    let filter_level = if cli.global_options.verbose {
+    let filter_level = if cli.cli_options.verbose {
         ActivityLevel::Debug
     } else {
         ActivityLevel::Info
@@ -195,7 +195,7 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
 
     // In reload shell mode, backend_done is just a handoff signal; don't trigger global shutdown.
     let shutdown_on_backend_done =
-        !matches!(&cli.command, Some(Commands::Shell { .. })) || !cli.global_options.reload;
+        !matches!(&cli.command, Some(Commands::Shell { .. })) || !cli.shell_cli.reload;
 
     // Shutdown coordination
     // Signal handlers catch external signals (SIGINT from `kill`, SIGTERM, etc.)
@@ -302,7 +302,7 @@ fn run_with_legacy_cli(cli: Cli) -> Result<()> {
         shutdown.install_signals().await;
 
         let level = cli.get_log_level();
-        devenv_tracing::init_cli_tracing(level, cli.global_options.trace_output.as_ref());
+        devenv_tracing::init_cli_tracing(level, cli.cli_options.trace_output.as_ref());
 
         // No TUI in legacy mode - create dummy channel (drop receiver immediately)
         let (backend_done_tx, _) = tokio::sync::oneshot::channel();
@@ -325,8 +325,8 @@ fn run_with_tracing(cli: Cli) -> Result<()> {
         let level = cli.get_log_level();
         devenv_tracing::init_tracing(
             level,
-            cli.global_options.trace_format,
-            cli.global_options.trace_output.as_ref(),
+            cli.cli_options.trace_format,
+            cli.cli_options.trace_output.as_ref(),
         );
 
         // No TUI in tracing mode - create dummy channel (drop receiver immediately)
@@ -389,7 +389,7 @@ async fn run_devenv(
 ) -> DevenvOutput {
     // Command is guaranteed to exist (Version/Direnvrc handled in main)
     let command = cli.command.clone().expect("Command should exist");
-    let nix_debugger = cli.global_options.nix_debugger;
+    let nix_debugger = cli.nix_cli.nix_debugger;
 
     // Helper to create output without debugger context
     let output = |result| DevenvOutput {
@@ -402,7 +402,7 @@ async fn run_devenv(
         Err(e) => return output(Err(e)),
     };
 
-    for input in cli.global_options.override_input.chunks_exact(2) {
+    for input in cli.input_overrides.override_input.chunks_exact(2) {
         if let Err(e) = config
             .override_input_url(&input[0].clone(), &input[1].clone())
             .wrap_err_with(|| {
@@ -417,7 +417,8 @@ async fn run_devenv(
     }
 
     // If --from is provided, create a new input and add it to imports
-    if let Some(ref from) = cli.global_options.from {
+    let from_external = cli.from.is_some();
+    if let Some(ref from) = cli.from {
         let url = if let Some(path_str) = from.strip_prefix("path:") {
             // Resolve relative paths to absolute and canonicalize
             let path = std::path::Path::new(path_str);
@@ -445,11 +446,10 @@ async fn run_devenv(
     }
 
     // Resolve settings from CLI + Config (pure functions, no mutation).
-    let nix_settings = devenv_core::config::NixSettings::resolve(&cli.global_options, &config);
-    let shell_settings = devenv_core::config::ShellSettings::resolve(&cli.global_options, &config);
-    let cache_settings = devenv_core::config::CacheSettings::resolve(&cli.global_options);
-    let secret_settings =
-        devenv_core::config::SecretSettings::resolve(&cli.global_options, &config);
+    let nix_settings = devenv_core::NixSettings::resolve(cli.nix_cli, &config);
+    let shell_settings = devenv_core::ShellSettings::resolve(cli.shell_cli, &config);
+    let cache_settings = devenv_core::CacheSettings::resolve(cli.cache_cli);
+    let secret_settings = devenv_core::SecretSettings::resolve(cli.secret_cli, &config);
 
     let is_testing = matches!(&command, Commands::Test { .. });
     let mut options = devenv::DevenvOptions {
@@ -458,7 +458,11 @@ async fn run_devenv(
         shell_settings: Some(shell_settings),
         cache_settings: Some(cache_settings),
         secret_settings: Some(secret_settings),
-        global_options: Some(cli.global_options),
+        input_overrides: cli.input_overrides,
+        from_external,
+        tui: cli.cli_options.tui,
+        verbose: cli.cli_options.verbose,
+        quiet: cli.cli_options.quiet,
         devenv_root: None,
         devenv_dotfile: None,
         shutdown: shutdown.clone(),

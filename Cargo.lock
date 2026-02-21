@@ -1422,6 +1422,7 @@ dependencies = [
  "sqlx",
  "tempfile",
  "termimad",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-shutdown",
  "tokio-stream",
