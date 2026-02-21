@@ -1,10 +1,192 @@
 use crate::tracing as devenv_tracing;
 use clap::{Parser, Subcommand, crate_version};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
-use devenv_core::GlobalOptions;
 use devenv_tasks::RunMode;
+use std::env;
 use std::ffi::OsStr;
+use std::io::{self, IsTerminal};
 use std::path::PathBuf;
+use std::str::FromStr;
+
+// --- Trace types (moved from devenv-core) ---
+
+#[derive(clap::ValueEnum, Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TraceFormat {
+    /// A verbose structured log format used for debugging (default).
+    Full,
+    /// A JSON log format used for machine consumption.
+    #[default]
+    Json,
+    /// A pretty human-readable log format used for debugging.
+    Pretty,
+}
+
+/// Deprecated: use TraceFormat instead.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LegacyLogFormat {
+    #[default]
+    Cli,
+    TracingFull,
+    TracingPretty,
+    TracingJson,
+}
+
+impl TryFrom<LegacyLogFormat> for TraceFormat {
+    type Error = ();
+
+    fn try_from(format: LegacyLogFormat) -> Result<Self, Self::Error> {
+        match format {
+            LegacyLogFormat::TracingFull => Ok(TraceFormat::Full),
+            LegacyLogFormat::TracingJson => Ok(TraceFormat::Json),
+            LegacyLogFormat::TracingPretty => Ok(TraceFormat::Pretty),
+            LegacyLogFormat::Cli => Err(()),
+        }
+    }
+}
+
+/// Specifies where trace output should be written.
+///
+/// Accepts the following formats:
+/// - `stdout` - write to standard output
+/// - `stderr` - write to standard error
+/// - `file:/path/to/file` - write to the specified file path
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum TraceOutput {
+    #[default]
+    Stderr,
+    Stdout,
+    File(PathBuf),
+}
+
+impl FromStr for TraceOutput {
+    type Err = ParseTraceOutputError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "stderr" => Ok(TraceOutput::Stderr),
+            "stdout" => Ok(TraceOutput::Stdout),
+            s if s.starts_with("file:") => Ok(TraceOutput::File(PathBuf::from(&s[5..]))),
+            _ => Err(ParseTraceOutputError::UnsupportedFormat(s.to_string())),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ParseTraceOutputError {
+    #[error("unsupported trace output format '{0}', expected 'stdout', 'stderr', or 'file:<path>'")]
+    UnsupportedFormat(String),
+}
+
+// --- CLI-only options ---
+
+#[derive(clap::Args, Clone, Debug)]
+pub struct CliOptions {
+    #[arg(
+        short = 'V',
+        long,
+        global = true,
+        help = "Print version information",
+        long_help = "Print version information and exit"
+    )]
+    pub version: bool,
+
+    #[arg(short, long, global = true, help = "Enable additional debug logs.")]
+    pub verbose: bool,
+
+    #[arg(
+        short,
+        long,
+        global = true,
+        conflicts_with = "verbose",
+        help = "Silence all logs"
+    )]
+    pub quiet: bool,
+
+    #[arg(
+        long,
+        global = true,
+        env = "DEVENV_TUI",
+        help = "Enable the interactive terminal interface.",
+        default_value_t = true,
+        overrides_with = "no_tui"
+    )]
+    pub tui: bool,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Disable the interactive terminal interface.",
+        overrides_with = "tui"
+    )]
+    pub no_tui: bool,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Deprecated: use --trace-format instead.",
+        value_enum,
+        hide = true
+    )]
+    pub log_format: Option<LegacyLogFormat>,
+
+    #[arg(
+        long,
+        global = true,
+        env = "DEVENV_TRACE_OUTPUT",
+        help = "Enable tracing and set the output destination: stdout, stderr, or file:<path>. Tracing is disabled by default."
+    )]
+    pub trace_output: Option<TraceOutput>,
+
+    #[arg(
+        long,
+        global = true,
+        env = "DEVENV_TRACE_FORMAT",
+        help = "Set the trace output format. Only takes effect when tracing is enabled via --trace-output.",
+        default_value_t,
+        value_enum
+    )]
+    pub trace_format: TraceFormat,
+}
+
+impl CliOptions {
+    /// Resolve conflicting/derived options.
+    pub fn resolve_overrides(&mut self) {
+        if self.no_tui {
+            self.tui = false;
+        }
+
+        // Disable TUI in CI environments or when not running in a TTY
+        if self.tui {
+            let is_ci = env::var_os("CI").is_some();
+            let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
+            if is_ci || !is_tty {
+                self.tui = false;
+            }
+        }
+
+        // Handle deprecated --log-format (except Cli which is handled separately)
+        if let Some(format) = self.log_format {
+            eprintln!("Warning: --log-format is deprecated, use --trace-format instead");
+            if let Ok(trace_format) = format.try_into() {
+                self.trace_format = trace_format;
+            }
+        }
+    }
+
+    /// Returns true if tracing-only mode should be used.
+    pub fn use_tracing_mode(&self) -> bool {
+        matches!(
+            self.trace_output,
+            Some(TraceOutput::Stdout) | Some(TraceOutput::Stderr)
+        )
+    }
+
+    /// Returns true if legacy CLI mode should be used (instead of TUI).
+    pub fn use_legacy_cli(&self) -> bool {
+        !self.tui || self.log_format == Some(LegacyLogFormat::Cli)
+    }
+}
 
 /// Complete task names by reading from .devenv/task-names.txt cache file.
 /// Walks up from current directory to find the project root.
@@ -59,21 +241,67 @@ pub struct Cli {
     pub command: Option<Commands>,
 
     #[command(flatten)]
-    pub global_options: GlobalOptions,
+    pub cli_options: CliOptions,
+
+    #[command(flatten)]
+    pub nix_cli: devenv_core::NixCliOptions,
+
+    #[command(flatten)]
+    pub cache_cli: devenv_core::CacheCliOptions,
+
+    #[command(flatten)]
+    pub shell_cli: devenv_core::ShellCliOptions,
+
+    #[command(flatten)]
+    pub secret_cli: devenv_core::SecretCliOptions,
+
+    #[command(flatten)]
+    pub input_overrides: devenv_core::InputOverrides,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Source for devenv.nix (flake input reference or path)",
+        long_help = "Source for devenv.nix.\n\nCan be either a filesystem path (with path: prefix) or a flake input reference.\n\nExamples:\n  --from github:cachix/devenv\n  --from github:cachix/devenv?dir=examples/simple\n  --from path:/absolute/path/to/project\n  --from path:./relative/path"
+    )]
+    pub from: Option<String>,
+
+    /// Disable the evaluation cache. Sets `eval_cache` to false.
+    #[arg(
+        long,
+        global = true,
+        overrides_with = "eval_cache",
+        help = "Disable caching of Nix evaluation results."
+    )]
+    pub no_eval_cache: bool,
+
+    #[arg(
+        long,
+        global = true,
+        overrides_with = "reload",
+        help = "Disable auto-reload when config files change."
+    )]
+    pub no_reload: bool,
 }
 
 impl Cli {
     /// Parse the CLI arguments with clap and resolve any conflicting options.
     pub fn parse_and_resolve_options() -> Self {
         let mut cli = Self::parse();
-        cli.global_options.resolve_overrides();
+        cli.cli_options.resolve_overrides();
+        if cli.no_eval_cache {
+            cli.cache_cli.eval_cache = false;
+        }
+        if cli.no_reload {
+            cli.shell_cli.reload = false;
+        }
         cli
     }
 
     pub fn get_log_level(&self) -> devenv_tracing::Level {
-        if self.global_options.verbose {
+        if self.cli_options.verbose {
             devenv_tracing::Level::Debug
-        } else if self.global_options.quiet {
+        } else if self.cli_options.quiet {
             devenv_tracing::Level::Silent
         } else {
             devenv_tracing::Level::default()

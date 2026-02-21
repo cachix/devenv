@@ -6,7 +6,7 @@ mod span_timings;
 use devenv_layer::{DevenvFormat, DevenvLayer};
 use span_ids::{SpanContext, SpanIdLayer};
 
-pub use devenv_core::cli::{TraceFormat, TraceOutput};
+pub use crate::cli::{TraceFormat, TraceOutput};
 pub use human_duration::HumanReadableDuration;
 
 use json_subscriber::JsonLayer;

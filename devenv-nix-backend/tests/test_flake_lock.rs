@@ -1,8 +1,8 @@
 //! Integration tests for flake locking functionality
 
 use devenv_core::{
-    CacheSettings, CliOptionsConfig, Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend,
-    NixSettings, PortAllocator,
+    CacheCliOptions, CacheSettings, CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend,
+    NixCliOptions, NixSettings, PortAllocator,
 };
 use devenv_nix_backend::{load_lock_file, nix_backend::NixRustBackend};
 use devenv_nix_backend_macros::nix_test;
@@ -139,12 +139,12 @@ async fn test_create_flake_inputs() {
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
     // Use offline mode to skip cachix config evaluation in assemble()
     // This test focuses on lock file creation, not cachix configuration
-    let global_options = GlobalOptions {
+    let nix_cli = NixCliOptions {
         offline: true,
-        ..GlobalOptions::default()
+        ..Default::default()
     };
-    let nix_settings = NixSettings::resolve(&global_options, &config);
-    let cache_settings = CacheSettings::resolve(&global_options);
+    let nix_settings = NixSettings::resolve(nix_cli, &config);
+    let cache_settings = CacheSettings::resolve(CacheCliOptions::default());
     let nixpkgs_config = config.nixpkgs_config(get_current_system());
     let backend = NixRustBackend::new(
         paths.clone(),
@@ -222,13 +222,12 @@ async fn test_selective_input_update() {
 
     // Create NixBackend
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    let defaults = GlobalOptions::default();
     let nixpkgs_config = config.nixpkgs_config(get_current_system());
     let backend = NixRustBackend::new(
         paths,
         nixpkgs_config,
-        NixSettings::resolve(&defaults, &Config::default()),
-        CacheSettings::resolve(&defaults),
+        NixSettings::resolve(NixCliOptions::default(), &Config::default()),
+        CacheSettings::resolve(CacheCliOptions::default()),
         Vec::new(),
         cachix_manager,
         Shutdown::new(),
@@ -302,13 +301,12 @@ async fn test_full_workflow() {
 
     // 3. Create NixBackend
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    let defaults = GlobalOptions::default();
     let nixpkgs_config = config.nixpkgs_config(get_current_system());
     let backend = NixRustBackend::new(
         paths,
         nixpkgs_config,
-        NixSettings::resolve(&defaults, &Config::default()),
-        CacheSettings::resolve(&defaults),
+        NixSettings::resolve(NixCliOptions::default(), &Config::default()),
+        CacheSettings::resolve(CacheCliOptions::default()),
         Vec::new(),
         cachix_manager,
         Shutdown::new(),
@@ -412,13 +410,12 @@ async fn test_relative_path_with_parent_dir_in_path() {
 
     // Create NixBackend
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    let defaults = GlobalOptions::default();
     let nixpkgs_config = config.nixpkgs_config(get_current_system());
     let backend = NixRustBackend::new(
         paths,
         nixpkgs_config,
-        NixSettings::resolve(&defaults, &Config::default()),
-        CacheSettings::resolve(&defaults),
+        NixSettings::resolve(NixCliOptions::default(), &Config::default()),
+        CacheSettings::resolve(CacheCliOptions::default()),
         Vec::new(),
         cachix_manager,
         Shutdown::new(),
