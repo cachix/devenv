@@ -381,7 +381,7 @@ impl DevenvOutput {
 
 /// Setup devenv and run the command.
 async fn run_devenv(
-    mut cli: Cli,
+    cli: Cli,
     shutdown: Arc<Shutdown>,
     backend_done_tx: tokio::sync::oneshot::Sender<()>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
@@ -450,9 +450,6 @@ async fn run_devenv(
     let cache_settings = devenv_core::config::CacheSettings::resolve(&cli.global_options);
     let secret_settings =
         devenv_core::config::SecretSettings::resolve(&cli.global_options, &config);
-
-    // Merge CLI overrides into config: impure, clean.
-    config.apply_cli_overrides(&mut cli.global_options);
 
     let is_testing = matches!(&command, Commands::Test { .. });
     let mut options = devenv::DevenvOptions {
