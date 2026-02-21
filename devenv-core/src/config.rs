@@ -242,6 +242,55 @@ impl SecretSettings {
     }
 }
 
+/// Resolved Nix build settings.
+///
+/// Produced by `NixSettings::resolve(&GlobalOptions, &Config)` as a pure function.
+/// Controls how the Nix evaluator and builder behave.
+#[derive(Clone, Debug)]
+pub struct NixSettings {
+    pub impure: bool,
+    pub system: String,
+    pub max_jobs: u8,
+    pub cores: u8,
+    pub offline: bool,
+    pub nix_option: Vec<String>,
+    pub nix_debugger: bool,
+}
+
+impl Default for NixSettings {
+    fn default() -> Self {
+        let defaults = crate::cli::NixBuildDefaults::compute();
+        Self {
+            impure: false,
+            system: crate::cli::default_system(),
+            max_jobs: defaults.max_jobs,
+            cores: defaults.cores,
+            offline: false,
+            nix_option: Vec::new(),
+            nix_debugger: false,
+        }
+    }
+}
+
+impl NixSettings {
+    /// Resolve Nix build settings from CLI and config sources.
+    ///
+    /// Precedence: CLI > Config > Default.
+    /// `impure` uses OR semantics: either CLI or Config can enable it.
+    /// All other fields are CLI-only today.
+    pub fn resolve(cli: &crate::cli::GlobalOptions, config: &Config) -> Self {
+        Self {
+            impure: cli.impure || config.impure,
+            system: cli.system.clone(),
+            max_jobs: cli.max_jobs,
+            cores: cli.cores,
+            offline: cli.offline,
+            nix_option: cli.nix_option.clone(),
+            nix_debugger: cli.nix_debugger,
+        }
+    }
+}
+
 /// Resolved cache settings.
 ///
 /// Produced by `CacheSettings::resolve(&GlobalOptions)` as a pure function.
@@ -1568,5 +1617,82 @@ inputs:
         let settings = CacheSettings::resolve(&cli);
         assert!(settings.refresh_eval_cache);
         assert!(settings.refresh_task_cache);
+    }
+
+    #[test]
+    fn nix_settings_defaults() {
+        let cli = crate::cli::GlobalOptions::default();
+        let config = Config::default();
+        let settings = NixSettings::resolve(&cli, &config);
+        assert!(!settings.impure);
+        assert!(!settings.offline);
+        assert!(!settings.nix_debugger);
+        assert!(settings.nix_option.is_empty());
+    }
+
+    #[test]
+    fn nix_settings_impure_from_cli() {
+        let cli = crate::cli::GlobalOptions {
+            impure: true,
+            ..Default::default()
+        };
+        let config = Config::default();
+        let settings = NixSettings::resolve(&cli, &config);
+        assert!(settings.impure);
+    }
+
+    #[test]
+    fn nix_settings_impure_from_config() {
+        let cli = crate::cli::GlobalOptions::default();
+        let config = Config {
+            impure: true,
+            ..Default::default()
+        };
+        let settings = NixSettings::resolve(&cli, &config);
+        assert!(settings.impure);
+    }
+
+    #[test]
+    fn nix_settings_impure_is_or() {
+        let cli = crate::cli::GlobalOptions {
+            impure: false,
+            ..Default::default()
+        };
+        let config = Config {
+            impure: true,
+            ..Default::default()
+        };
+        let settings = NixSettings::resolve(&cli, &config);
+        assert!(settings.impure);
+    }
+
+    #[test]
+    fn nix_settings_system_from_cli() {
+        let cli = crate::cli::GlobalOptions {
+            system: "x86_64-linux".into(),
+            ..Default::default()
+        };
+        let config = Config::default();
+        let settings = NixSettings::resolve(&cli, &config);
+        assert_eq!(settings.system, "x86_64-linux");
+    }
+
+    #[test]
+    fn nix_settings_cli_fields() {
+        let cli = crate::cli::GlobalOptions {
+            max_jobs: 4,
+            cores: 2,
+            offline: true,
+            nix_option: vec!["sandbox".into(), "false".into()],
+            nix_debugger: true,
+            ..Default::default()
+        };
+        let config = Config::default();
+        let settings = NixSettings::resolve(&cli, &config);
+        assert_eq!(settings.max_jobs, 4);
+        assert_eq!(settings.cores, 2);
+        assert!(settings.offline);
+        assert_eq!(settings.nix_option, vec!["sandbox", "false"]);
+        assert!(settings.nix_debugger);
     }
 }

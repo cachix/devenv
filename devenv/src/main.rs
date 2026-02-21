@@ -445,6 +445,7 @@ async fn run_devenv(
     }
 
     // Resolve settings from CLI + Config (pure functions, no mutation).
+    let nix_settings = devenv_core::config::NixSettings::resolve(&cli.global_options, &config);
     let shell_settings = devenv_core::config::ShellSettings::resolve(&cli.global_options, &config);
     let cache_settings = devenv_core::config::CacheSettings::resolve(&cli.global_options);
     let secret_settings =
@@ -456,6 +457,7 @@ async fn run_devenv(
     let is_testing = matches!(&command, Commands::Test { .. });
     let mut options = devenv::DevenvOptions {
         config,
+        nix_settings: Some(nix_settings),
         shell_settings: Some(shell_settings),
         cache_settings: Some(cache_settings),
         secret_settings: Some(secret_settings),
