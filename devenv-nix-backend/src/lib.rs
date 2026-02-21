@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
-use devenv_core::config::Config;
+use devenv_core::config::Input;
 use nix_bindings_fetchers::FetchersSettings;
 use nix_bindings_flake::{
     FlakeInput, FlakeInputs, FlakeReference, FlakeReferenceParseFlags, FlakeSettings, LockFile,
 };
 use nix_bindings_store::store::Store;
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Once;
 
@@ -88,11 +89,11 @@ pub mod cachix_daemon;
 /// # Arguments
 /// * `fetch_settings` - Fetcher configuration
 /// * `flake_settings` - Flake configuration
-/// * `config` - Devenv configuration
+/// * `inputs` - Input specifications from devenv.yaml
 pub fn create_flake_inputs(
     fetch_settings: &FetchersSettings,
     flake_settings: &FlakeSettings,
-    config: &Config,
+    inputs: &BTreeMap<String, Input>,
 ) -> Result<FlakeInputs> {
     let mut flake_inputs = FlakeInputs::new()?;
 
@@ -101,7 +102,7 @@ pub fn create_flake_inputs(
     parse_flags.set_preserve_relative_paths(true)?;
 
     // Convert each devenv input to a FlakeInput
-    for (name, input) in config.inputs.iter() {
+    for (name, input) in inputs.iter() {
         let mut flake_input = if let Some(url) = &input.url {
             let (flake_ref, _fragment) = FlakeReference::parse_with_fragment(
                 fetch_settings,
@@ -175,7 +176,7 @@ pub fn create_flake_inputs(
     }
 
     // Add nixpkgs as a default input if not already specified
-    if !config.inputs.contains_key("nixpkgs") {
+    if !inputs.contains_key("nixpkgs") {
         let nixpkgs_url = "github:cachix/devenv-nixpkgs/rolling";
         let (flake_ref, _fragment) = FlakeReference::parse_with_fragment(
             fetch_settings,
@@ -188,7 +189,7 @@ pub fn create_flake_inputs(
     }
 
     // Add devenv as a default input if not already specified
-    if !config.inputs.contains_key("devenv") {
+    if !inputs.contains_key("devenv") {
         let devenv_url = "github:cachix/devenv?dir=src/modules";
         let (flake_ref, _fragment) = FlakeReference::parse_with_fragment(
             fetch_settings,

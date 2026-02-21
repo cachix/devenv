@@ -4,12 +4,12 @@
 //! when assembling the devenv environment. The struct is serialized to Nix syntax
 //! using the `ser_nix` crate and inserted into the flake template.
 
-use crate::config::{Config, NixpkgsConfig};
+use crate::config::{Input, NixpkgsConfig};
 use miette::{Result, miette};
 use ser_nix::NixLiteral;
 use serde::Serialize;
 use serde::ser::{SerializeMap, Serializer};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 /// A parsed CLI option with path and typed value
@@ -333,9 +333,17 @@ pub struct NixArgs<'a> {
     /// SecretSpec resolved data (profile, provider, secrets)
     pub secretspec: Option<&'a SecretspecData>,
 
-    /// devenv.yaml configuration (inputs, imports, nixpkgs settings, etc.)
-    /// Serialized by ser_nix into a Nix attrset
-    pub devenv_config: &'a Config,
+    /// Input specifications from devenv.yaml, used by bootstrapLib.nix for overlay extraction.
+    /// Named `devenv_inputs` (not `inputs`) to avoid collision with the resolved flake inputs
+    /// that bootstrapLib.nix receives via its `{ inputs }` parameter.
+    pub devenv_inputs: &'a BTreeMap<String, Input>,
+
+    /// Import paths from devenv.yaml, used by bootstrapLib.nix for module resolution.
+    pub devenv_imports: &'a [String],
+
+    /// Whether impure mode is enabled (resolved from CLI + Config).
+    /// Included in NixArgs so it participates in the eval-cache key.
+    pub impure: bool,
 
     /// Pre-merged nixpkgs configuration for the target system.
     /// This is computed by Config::nixpkgs_config() in Rust to avoid
@@ -352,6 +360,7 @@ pub struct NixArgs<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Config;
     use std::path::PathBuf;
 
     /// Helper function to check key-value pairs in Nix serialized output.
@@ -400,7 +409,9 @@ mod tests {
             username,                  // Some value
             git_root: Some(&git_root), // Some value with Path type
             secretspec: None,          // None value
-            devenv_config: &test_config,
+            devenv_inputs: &test_config.inputs,
+            devenv_imports: &test_config.imports,
+            impure: false,
             nixpkgs_config,
             lock_fingerprint,
         };
@@ -505,7 +516,9 @@ mod tests {
             username: None,
             git_root: None,
             secretspec: None,
-            devenv_config: &test_config,
+            devenv_inputs: &test_config.inputs,
+            devenv_imports: &test_config.imports,
+            impure: false,
             nixpkgs_config,
             lock_fingerprint: "",
         };

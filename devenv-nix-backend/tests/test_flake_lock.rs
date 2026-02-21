@@ -65,7 +65,9 @@ impl TestNixArgs {
             username: None,
             git_root: None,
             secretspec: None,
-            devenv_config: config,
+            devenv_inputs: &config.inputs,
+            devenv_imports: &config.imports,
+            impure: false,
             nixpkgs_config,
             lock_fingerprint: "",
         }
@@ -144,9 +146,11 @@ async fn test_create_flake_inputs() {
     };
     let nix_settings = NixSettings::resolve(&global_options, &config);
     let cache_settings = CacheSettings::resolve(&global_options);
+    let nixpkgs_config = config.nixpkgs_config(get_current_system());
     let backend = NixRustBackend::new(
         paths.clone(),
-        config.clone(),
+        config.inputs.clone(),
+        nixpkgs_config,
         nix_settings,
         cache_settings,
         Vec::new(),

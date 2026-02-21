@@ -40,7 +40,8 @@ rec {
     , cli_options ? [ ]
     , skip_local_src ? false
     , secretspec ? null
-    , devenv_config ? { }
+    , devenv_inputs ? { }
+    , devenv_imports ? [ ]
     , nixpkgs_config ? { }
     , lock_fingerprint ? null
     , primops ? { }
@@ -50,8 +51,7 @@ rec {
       lib = nixpkgs.lib;
       targetSystem = system;
 
-      # devenv configuration is passed from the Rust backend
-      overlays = lib.flatten (lib.mapAttrsToList getOverlays (devenv_config.inputs or { }));
+      overlays = lib.flatten (lib.mapAttrsToList getOverlays devenv_inputs);
 
       # Helper to create pkgs for a given system with nixpkgs_config
       mkPkgsForSystem =
@@ -180,10 +180,9 @@ rec {
             containers.${container_name}.isBuilding = true;
           })
         ]
-        ++ (lib.flatten (map importModule (devenv_config.imports or [ ])))
+        ++ (lib.flatten (map importModule devenv_imports))
         ++ (if !skip_local_src then (importModule (devenv_root + "/devenv.nix")) else [ ])
         ++ [
-          (devenv_config.devenv or { })
           (
             let
               localPath = devenv_root + "/devenv.local.nix";

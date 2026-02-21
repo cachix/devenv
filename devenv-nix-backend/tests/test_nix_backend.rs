@@ -78,9 +78,11 @@ fn create_backend(
     let nix_settings = NixSettings::resolve(&global_options, &config);
     let cache_settings = CacheSettings::resolve(&global_options);
     let override_input = global_options.override_input.clone();
+    let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
     NixRustBackend::new(
         paths,
-        config,
+        config.inputs,
+        nixpkgs_config,
         nix_settings,
         cache_settings,
         override_input,
@@ -138,7 +140,9 @@ impl TestNixArgs {
             username: None,
             git_root: None,
             secretspec: None,
-            devenv_config: config,
+            devenv_inputs: &config.inputs,
+            devenv_imports: &config.imports,
+            impure: false,
             nixpkgs_config,
             lock_fingerprint: "",
         }
@@ -199,12 +203,14 @@ fn setup_isolated_test_env(
     let nix_settings = NixSettings::resolve(&global_options, &config);
     let cache_settings = CacheSettings::resolve(&global_options);
     let override_input = global_options.override_input.clone();
+    let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
 
     // Create backend with default project_root (project directory)
     let port_allocator = Arc::new(PortAllocator::new());
     let backend = NixRustBackend::new(
         paths.clone(),
-        config.clone(),
+        config.inputs.clone(),
+        nixpkgs_config,
         nix_settings,
         cache_settings,
         override_input,
