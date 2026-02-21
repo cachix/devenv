@@ -953,48 +953,6 @@ impl Config {
         Ok(())
     }
 
-    /// Merge CLI overrides into this config so it becomes the single source
-    /// of truth for all settings that can be specified in both `devenv.yaml`
-    /// and on the command line.
-    ///
-    /// For `impure`, the merged value is also written back to
-    /// `global_options` because the nix backend reads it from there.
-    pub fn apply_cli_overrides(&mut self, global_options: &mut crate::cli::GlobalOptions) {
-        // impure: either source enables it.
-        // Back-propagate to global_options because the nix backend reads from there.
-        if global_options.impure {
-            self.impure = true;
-        } else if self.impure {
-            global_options.impure = true;
-        }
-
-        // clean: CLI --clean takes precedence over config
-        if let Some(ref keep) = global_options.clean {
-            self.clean = Some(Clean {
-                enabled: true,
-                keep: keep.clone(),
-            });
-        }
-
-        // secretspec: CLI overrides
-        if global_options.secretspec_provider.is_some()
-            || global_options.secretspec_profile.is_some()
-        {
-            let secretspec = self.secretspec.get_or_insert(SecretspecConfig {
-                enable: false,
-                profile: None,
-                provider: None,
-            });
-            secretspec.enable = true;
-            if let Some(ref provider) = global_options.secretspec_provider {
-                secretspec.provider = Some(provider.clone());
-            }
-            if let Some(ref profile) = global_options.secretspec_profile {
-                secretspec.profile = Some(profile.clone());
-            }
-        }
-    }
-
     pub async fn write(&self) -> Result<()> {
         let yaml = serde_yaml::to_string(&self)
             .into_diagnostic()
