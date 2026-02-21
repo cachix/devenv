@@ -148,7 +148,6 @@ async fn test_create_flake_inputs() {
     let nixpkgs_config = config.nixpkgs_config(get_current_system());
     let backend = NixRustBackend::new(
         paths.clone(),
-        config.inputs.clone(),
         nixpkgs_config,
         nix_settings,
         cache_settings,
@@ -172,7 +171,7 @@ async fn test_create_flake_inputs() {
         .expect("Failed to assemble backend");
 
     // Call update() which enables flakes and creates flake inputs
-    let result = backend.update(&None).await;
+    let result = backend.update(&None, &config.inputs).await;
 
     assert!(
         result.is_ok(),
@@ -224,9 +223,10 @@ async fn test_selective_input_update() {
     // Create NixBackend
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
     let defaults = GlobalOptions::default();
+    let nixpkgs_config = config.nixpkgs_config(get_current_system());
     let backend = NixRustBackend::new(
         paths,
-        config,
+        nixpkgs_config,
         NixSettings::resolve(&defaults, &Config::default()),
         CacheSettings::resolve(&defaults),
         Vec::new(),
@@ -240,7 +240,7 @@ async fn test_selective_input_update() {
 
     // First, create an initial lock (update all inputs)
     backend
-        .update(&None)
+        .update(&None, &config.inputs)
         .await
         .expect("Failed to create initial lock");
 
@@ -260,7 +260,7 @@ async fn test_selective_input_update() {
 
     // Now update only nixpkgs
     backend
-        .update(&Some("nixpkgs".to_string()))
+        .update(&Some("nixpkgs".to_string()), &config.inputs)
         .await
         .expect("Failed to update nixpkgs");
 
@@ -303,9 +303,10 @@ async fn test_full_workflow() {
     // 3. Create NixBackend
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
     let defaults = GlobalOptions::default();
+    let nixpkgs_config = config.nixpkgs_config(get_current_system());
     let backend = NixRustBackend::new(
         paths,
-        config,
+        nixpkgs_config,
         NixSettings::resolve(&defaults, &Config::default()),
         CacheSettings::resolve(&defaults),
         Vec::new(),
@@ -319,7 +320,7 @@ async fn test_full_workflow() {
 
     // 4. Update all inputs (creates lock file)
     backend
-        .update(&None)
+        .update(&None, &config.inputs)
         .await
         .expect("Failed to update inputs");
 
@@ -412,9 +413,10 @@ async fn test_relative_path_with_parent_dir_in_path() {
     // Create NixBackend
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
     let defaults = GlobalOptions::default();
+    let nixpkgs_config = config.nixpkgs_config(get_current_system());
     let backend = NixRustBackend::new(
         paths,
-        config,
+        nixpkgs_config,
         NixSettings::resolve(&defaults, &Config::default()),
         CacheSettings::resolve(&defaults),
         Vec::new(),
@@ -429,7 +431,7 @@ async fn test_relative_path_with_parent_dir_in_path() {
     // Update should resolve the relative path correctly
     // Before the fix, this would fail because `..` in the path portion was resolved
     // relative to the wrong base directory
-    let result = backend.update(&None).await;
+    let result = backend.update(&None, &config.inputs).await;
 
     assert!(
         result.is_ok(),

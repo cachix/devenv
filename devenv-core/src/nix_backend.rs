@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use crate::config::Input;
 use crate::nix_args::NixArgs;
 
 /// Output of dev_env evaluation.
@@ -116,7 +117,11 @@ pub trait NixBackend: Send + Sync {
     async fn eval(&self, attributes: &[&str]) -> Result<String>;
 
     /// Update flake inputs
-    async fn update(&self, input_name: &Option<String>) -> Result<()>;
+    async fn update(
+        &self,
+        input_name: &Option<String>,
+        inputs: &BTreeMap<String, Input>,
+    ) -> Result<()>;
 
     /// Get flake metadata
     async fn metadata(&self) -> Result<String>;

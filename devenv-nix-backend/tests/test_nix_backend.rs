@@ -102,7 +102,6 @@ fn create_backend(
     let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
     NixRustBackend::new(
         paths,
-        config.inputs,
         nixpkgs_config,
         nix_settings,
         cache_settings,
@@ -230,7 +229,6 @@ fn setup_isolated_test_env(
     let port_allocator = Arc::new(PortAllocator::new());
     let backend = NixRustBackend::new(
         paths.clone(),
-        config.inputs.clone(),
         nixpkgs_config,
         nix_settings,
         cache_settings,
@@ -302,7 +300,7 @@ async fn test_backend_update_all_inputs() {
         .expect("Failed to assemble");
 
     // Update all inputs
-    let result = backend.update(&None).await;
+    let result = backend.update(&None, &config.inputs).await;
     assert!(result.is_ok(), "Update should succeed: {:?}", result.err());
 
     // Verify lock file was created in temp directory
@@ -330,10 +328,15 @@ async fn test_backend_update_specific_input() {
         .expect("Failed to assemble");
 
     // First create an initial lock
-    backend.update(&None).await.expect("Initial update failed");
+    backend
+        .update(&None, &config.inputs)
+        .await
+        .expect("Initial update failed");
 
     // Now update just nixpkgs
-    let result = backend.update(&Some("nixpkgs".to_string())).await;
+    let result = backend
+        .update(&Some("nixpkgs".to_string()), &config.inputs)
+        .await;
     assert!(
         result.is_ok(),
         "Selective update should succeed: {:?}",
@@ -682,7 +685,10 @@ async fn test_metadata_after_update() {
     println!("Backend assembled");
 
     // Update first
-    backend.update(&None).await.expect("Failed to update");
+    backend
+        .update(&None, &config.inputs)
+        .await
+        .expect("Failed to update");
     println!("Updated inputs");
 
     // Then call metadata
@@ -716,7 +722,7 @@ async fn test_full_backend_workflow() {
 
     // 3. Update inputs
     backend
-        .update(&None)
+        .update(&None, &config.inputs)
         .await
         .expect("Failed to update inputs");
     println!("Updated all inputs");
@@ -764,7 +770,7 @@ async fn test_backend_update_with_input_overrides() {
         .expect("Failed to assemble");
 
     // Update with overrides
-    let result = backend.update(&None).await;
+    let result = backend.update(&None, &config.inputs).await;
     assert!(
         result.is_ok(),
         "Update with overrides should succeed: {:?}",
@@ -816,7 +822,7 @@ async fn test_backend_update_with_multiple_overrides() {
         .expect("Failed to assemble");
 
     // Update with multiple overrides
-    let result = backend.update(&None).await;
+    let result = backend.update(&None, &config.inputs).await;
     assert!(
         result.is_ok(),
         "Update with multiple overrides should succeed: {:?}",
@@ -1252,11 +1258,11 @@ async fn test_update_with_invalid_override_input() {
     // chunks_exact(2) will ignore the remainder, so this is safe
     global_options.override_input = vec!["nixpkgs".to_string()];
 
-    let (_temp_dir, _cwd_guard, backend, _paths, _config) =
+    let (_temp_dir, _cwd_guard, backend, _paths, config) =
         setup_isolated_test_env(yaml, None, global_options);
 
     // Update should succeed - malformed override is ignored (no assemble needed for update-only tests)
-    let result = backend.update(&None).await;
+    let result = backend.update(&None, &config.inputs).await;
     assert!(
         result.is_ok(),
         "update() should succeed even with malformed override_input: {:?}",
@@ -1525,12 +1531,12 @@ async fn test_update_lock_file_already_exists() {
     url: github:cachix/git-hooks.nix
 "#;
 
-    let (_temp_dir, _cwd_guard, backend, _paths, _config) =
+    let (_temp_dir, _cwd_guard, backend, _paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
 
     // Create initial lock (no assemble needed for update-only tests)
     backend
-        .update(&None)
+        .update(&None, &config.inputs)
         .await
         .expect("Failed to create initial lock");
 
@@ -1551,7 +1557,7 @@ async fn test_update_lock_file_already_exists() {
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
     // Call update again - should update in place
-    let result = backend.update(&None).await;
+    let result = backend.update(&None, &config.inputs).await;
     assert!(
         result.is_ok(),
         "Second update() should succeed: {:?}",
@@ -2176,7 +2182,10 @@ async fn test_workflow_build_then_incremental_update() {
         .expect("Failed to assemble");
 
     // Initial update and build
-    backend.update(&None).await.expect("Initial update failed");
+    backend
+        .update(&None, &config.inputs)
+        .await
+        .expect("Initial update failed");
 
     let result1 = backend.build(&["shell"], None, None).await;
     assert!(
@@ -2189,7 +2198,7 @@ async fn test_workflow_build_then_incremental_update() {
 
     // Incremental update (update just one input)
     backend
-        .update(&Some("nixpkgs".to_string()))
+        .update(&Some("nixpkgs".to_string()), &config.inputs)
         .await
         .expect("Incremental update failed");
 
@@ -2307,11 +2316,11 @@ async fn test_update_with_many_inputs() {
     url: github:numtide/flake-utils
 "#;
 
-    let (_temp_dir, _cwd_guard, backend, _paths, _config) =
+    let (_temp_dir, _cwd_guard, backend, _paths, config) =
         setup_isolated_test_env(yaml_content, None, GlobalOptions::default());
 
     // Update with 6 inputs (no assemble needed for update-only tests)
-    let result = backend.update(&None).await;
+    let result = backend.update(&None, &config.inputs).await;
     assert!(
         result.is_ok(),
         "update() should succeed with many inputs: {:?}",
@@ -2367,11 +2376,11 @@ async fn test_update_with_nested_input_follows() {
         follows: /systems
 "#;
 
-    let (_temp_dir, _cwd_guard, backend, _paths, _config) =
+    let (_temp_dir, _cwd_guard, backend, _paths, config) =
         setup_isolated_test_env(yaml_content, None, GlobalOptions::default());
 
     // Update with "follows" references (no assemble needed for update-only tests)
-    let result = backend.update(&None).await;
+    let result = backend.update(&None, &config.inputs).await;
     assert!(
         result.is_ok(),
         "update() should succeed with nested input follows: {:?}",
