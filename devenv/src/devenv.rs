@@ -1299,12 +1299,17 @@ impl Devenv {
                 )
             })?;
 
-        // Run script and capture its environment exports
-        // We need to let enterShell tasks run to ensure the complete environment is captured
-        // (e.g., Python virtualenv setup adds .devenv/state/venv/bin to PATH)
-        let output = self
+        // Run script and capture the Nix shell environment variables.
+        // Skip the legacy shellHook task runner (devenv-tasks run devenv:enterShell)
+        // because the 2.0+ Rust code runs enterShell tasks separately via
+        // run_enter_shell_tasks_inner(). Running them inside this subprocess would
+        // be redundant and, worse, a @complete task failure there would cause the
+        // subprocess to exit non-zero, aborting the environment capture.
+        let mut cmd = self
             .prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
-            .await?
+            .await?;
+        cmd.env("DEVENV_SKIP_TASKS", "1");
+        let output = cmd
             .output()
             .await
             .into_diagnostic()

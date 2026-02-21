@@ -73,6 +73,10 @@ pub struct TasksStatus {
     pub skipped: usize,
     pub dependency_failed: usize,
     pub cancelled: usize,
+    /// Tasks that failed but are exclusively `@complete` (soft) dependencies
+    pub soft_failed: usize,
+    /// Tasks marked DependencyFailed whose root cause is exclusively a soft failure
+    pub soft_dependency_failed: usize,
 }
 
 impl Default for TasksStatus {
@@ -92,6 +96,8 @@ impl TasksStatus {
             skipped: 0,
             dependency_failed: 0,
             cancelled: 0,
+            soft_failed: 0,
+            soft_dependency_failed: 0,
         }
     }
 
@@ -100,9 +106,10 @@ impl TasksStatus {
         self.pending == 0 && self.running == 0
     }
 
-    /// Check if any tasks failed
+    /// Check if any tasks failed (excluding soft `@complete`-only failures)
     pub fn has_failures(&self) -> bool {
-        self.failed > 0 || self.dependency_failed > 0
+        (self.failed - self.soft_failed) > 0
+            || (self.dependency_failed - self.soft_dependency_failed) > 0
     }
 
     /// Get total number of tasks
