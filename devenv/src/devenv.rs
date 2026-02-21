@@ -8,7 +8,7 @@ use devenv_cache_core::compute_string_hash;
 use devenv_core::{
     cachix::{CachixManager, CachixPaths},
     cli::GlobalOptions,
-    config::{Config, NixBackendType},
+    config::{Clean, Config, NixBackendType, SandboxConfig},
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
     nix_backend::{DevenvPaths, NixBackend, Options},
     ports::PortAllocator,
@@ -563,17 +563,50 @@ impl Devenv {
             &owned_dev_env.output
         };
 
-        let bash = match self.nix.get_bash(false).await {
-            Err(e) => {
-                trace!("Failed to get bash: {}. Rebuilding.", e);
-                self.nix.get_bash(true).await?
-            }
-            Ok(bash) => bash,
+        let (config_clean, config_sandbox) = {
+            let config = self.config.read().await;
+            (
+                config.clean.clone().unwrap_or_default(),
+                config.sandbox.clone().unwrap_or_default(),
+            )
         };
 
-        let mut shell_cmd = process::Command::new(&bash);
+        let bash = self.get_or_rebuild_executable("bash", "bash").await?;
 
-        // The Nix output ends with "exec bash" which would start a new shell without
+        let script = self.build_shell_script(&output, cmd, args)?;
+        let script_path = self.write_shell_script(&script)?;
+
+        let mut shell_cmd = if config_sandbox.enable {
+            self.create_sandboxed_command(&config_sandbox, &config_clean, &bash).await?
+        } else {
+            let mut cmd = process::Command::new(&bash);
+            self.apply_bash_environment(&mut cmd, &config_clean, &bash);
+            cmd
+        };
+
+        self.add_bash_args(&mut shell_cmd, &script_path, cmd);
+
+        Ok(shell_cmd)
+    }
+
+    async fn get_or_rebuild_executable(&self, package: &str, exe: &str) -> Result<PathBuf> {
+        match self.nix.get_executable(package, exe, false).await {
+            Ok(path) => Ok(path),
+            Err(e) => {
+                trace!("Failed to get {}: {}. Rebuilding.", package, e);
+                self.nix.get_executable(package, exe, true).await
+            }
+        }
+        .map(|p| PathBuf::from(p))
+    }
+
+    fn build_shell_script(
+        &self,
+        output: &[u8],
+        cmd: &Option<String>,
+        args: &[String],
+    ) -> Result<String> {
+	// The Nix output ends with "exec bash" which would start a new shell without
         // the devenv environment. Strip it for ALL modes - we handle shell execution ourselves.
         let output_str = String::from_utf8_lossy(&output);
         let shell_env = output_str
@@ -611,7 +644,7 @@ impl Devenv {
         }
 
         // Add command for non-interactive mode
-        if let Some(cmd) = &cmd {
+        if let Some(cmd) = cmd {
             let command = format!(
                 "\nexec {} {}",
                 cmd,
@@ -623,48 +656,244 @@ impl Devenv {
             script.push_str(&command);
         }
 
+        Ok(script)
+    }
+
+    fn write_shell_script(&self, script: &str) -> Result<PathBuf> {
         // Write shell script to a content-addressed file
         // Using content hash in filename allows eval cache to track it properly while
         // avoiding race conditions between parallel sessions (same content = same file)
-        let script_hash = &compute_string_hash(&script)[..16];
+        let script_hash = &compute_string_hash(script)[..16];
         let script_path = self
             .devenv_dotfile
             .join(format!("shell-{}.sh", script_hash));
-        std::fs::write(&script_path, &script).expect("Failed to write shell script");
+
+        std::fs::write(&script_path, script).expect("Failed to write shell script");
         std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
             .expect("Failed to set permissions");
 
-        match cmd {
-            Some(_) => {
-                shell_cmd.arg(&script_path);
+        Ok(script_path)
+    }
+
+    async fn create_sandboxed_command(
+        &self,
+        config_sandbox: &SandboxConfig,
+        config_clean: &Clean,
+        bash: &Path,
+    ) -> Result<process::Command> {
+        let bwrap = self
+            .get_or_rebuild_executable("pkgs.bubblewrap", "bwrap")
+            .await?;
+
+        let mut bwrap = process::Command::new(&bwrap);
+        bwrap.arg("--new-session");
+        bwrap.arg("--die-with-parent");
+        bwrap.arg("--unshare-all");
+
+        let net = config_sandbox.network.clone().unwrap_or_default();
+        if net.enable {
+            bwrap.arg("--share-net");
+            if net.host_resolv {
+                bwrap.args(&["--ro-bind-try", "/etc/resolv.conf", "/etc/resolv.conf"]);
             }
-            None => {
-                let dialect = BashDialect;
-                let interactive_args = dialect.interactive_args();
-                shell_cmd.args(&interactive_args.prefix);
-                shell_cmd.arg(&script_path);
-                shell_cmd.args(&interactive_args.suffix);
+            if net.host_certs {
+                // TODO: support other than NixOS distributions
+                bwrap.args(&["--ro-bind-try", "/etc/ssl", "/etc/ssl"]);
+                bwrap.args(&["--ro-bind-try", "/etc/static/ssl", "/etc/static/ssl"]);
             }
         }
 
-        let config_clean = self.config.read().await.clean.clone().unwrap_or_default();
         if self.global_options.clean.is_some() || config_clean.enabled {
-            let keep = match &self.global_options.clean {
-                Some(clean) => clean,
-                None => &config_clean.keep,
+            bwrap.arg("--clearenv");
+
+            let keep = self
+                .global_options
+                .clean
+                .as_ref()
+                .unwrap_or(&config_clean.keep);
+            for (k, v) in std::env::vars().filter(|(k, _)| keep.contains(k)) {
+                bwrap.arg("--setenv").arg(&k).arg(&v);
+            }
+        }
+
+        bwrap.arg("--setenv").arg("SHELL").arg(bash);
+        let cmdline = std::env::args().skip(1).collect::<Vec<_>>().join(" ");
+        bwrap.arg("--setenv").arg("DEVENV_CMDLINE").arg(cmdline);
+
+        let sandbox_root = self.devenv_dotfile.join("sandbox");
+        let overlays_dir = sandbox_root.join("overlay");
+        let state_dir = sandbox_root.join("state");
+
+        let mut late_bindings = Vec::new();
+
+        for m in &config_sandbox.mounts {
+            use devenv_core::config::BindMountMode;
+
+            let src_expanded = util::expand_path(&m.path);
+
+            let mount_point = if let Some(dest_path) = m.dest.as_deref() {
+                util::expand_path(dest_path)
+            } else {
+                src_expanded.clone()
             };
 
+            let src = if m.canonicalize {
+                match std::fs::canonicalize(&src_expanded) {
+                    Ok(path) => path.to_string_lossy().into_owned(),
+                    Err(_) if m.optional => continue,
+                    Err(e) => bail!(
+                        "Unable to canonicalize sandbox mount point path '{}': {}",
+                        m.path,
+                        e
+                    ),
+                }
+            } else {
+                src_expanded
+            };
+
+            let args = match m.mode.clone().unwrap_or_default() {
+                BindMountMode::Overlay => {
+                    let src_dir_hash = &compute_string_hash(&src)[..16];
+                    let overlay_rw_dir = overlays_dir.join(src_dir_hash);
+                    let overlay_work_dir = overlays_dir.join(format!("{src_dir_hash}-work"));
+
+                    if !std::fs::exists(&overlay_work_dir)
+                        .expect("check if sandbox overlay directory exists")
+                    {
+                        std::fs::create_dir_all(&overlay_rw_dir)
+                            .expect("created sandbox overlay directory");
+                        std::fs::create_dir(&overlay_work_dir)
+                            .expect("created sandbox overlay work directory");
+                    }
+                    vec![
+                        "--overlay-src".to_owned(),
+                        src,
+                        "--overlay".to_owned(),
+                        overlay_rw_dir.to_string_lossy().into_owned(),
+                        overlay_work_dir.to_string_lossy().into_owned(),
+                        mount_point,
+                    ]
+                }
+                BindMountMode::OverlayTmpfs => {
+                    vec![
+                        "--overlay-src".to_owned(),
+                        src,
+                        "--tmp-overlay".to_owned(),
+                        mount_point,
+                    ]
+                }
+                BindMountMode::OverlayRo => {
+                    vec![
+                        "--overlay-src".to_owned(),
+                        src,
+                        "--ro-overlay".to_owned(),
+                        mount_point,
+                    ]
+                }
+                BindMountMode::Tmpfs => {
+                    vec!["--tmpfs".to_owned(), mount_point]
+                }
+                mode @ (BindMountMode::ReadOnly
+                | BindMountMode::ReadWrite
+                | BindMountMode::Device) => {
+                    let cli_mode = match mode {
+                        BindMountMode::ReadOnly => "--ro-bind",
+                        BindMountMode::ReadWrite => "--bind",
+                        BindMountMode::Device => "--dev-bind",
+                        _ => unreachable!(),
+                    };
+
+                    let cli_mode = if m.optional {
+                        format!("{cli_mode}-try")
+                    } else {
+                        cli_mode.to_owned()
+                    };
+
+                    vec![cli_mode, src, mount_point]
+                }
+                BindMountMode::StateDir => {
+                    let src_dir_hash = &compute_string_hash(&src)[..16];
+                    let src_state_dir = state_dir.join(src_dir_hash);
+
+                    if !std::fs::exists(&src_state_dir)
+                        .expect("check if sandbox state directory exists")
+                    {
+                        std::fs::create_dir_all(&src_state_dir)
+                            .expect("created sandbox state directory");
+                    }
+                    vec![
+                        "--bind".to_owned(),
+                        src_state_dir.to_string_lossy().into_owned(),
+                        mount_point,
+                    ]
+                }
+            };
+
+            if m.late {
+                late_bindings.extend(args);
+            } else {
+                bwrap.args(args);
+            }
+        }
+
+        bwrap.arg("--ro-bind").args(&[bash, bash]);
+
+        bwrap.args(&["--tmpfs", "/tmp"]);
+        bwrap.args(&["--proc", "/proc"]);
+        bwrap.arg("--bind").args(&[self.root(), self.root()]);
+        bwrap.arg("--tmpfs").arg(&sandbox_root);
+        bwrap.arg("--tmpfs").arg(&self.devenv_runtime);
+        bwrap.args(late_bindings);
+
+        bwrap.arg("--chdir").arg(&self.root());
+
+        bwrap.arg("--");
+        bwrap.arg(bash);
+
+        Ok(bwrap)
+    }
+
+    fn apply_bash_environment(
+        &self,
+        shell_cmd: &mut process::Command,
+        config_clean: &Clean,
+        bash: &Path,
+    ) {
+        if self.global_options.clean.is_some() || config_clean.enabled {
+            let keep = self
+                .global_options
+                .clean
+                .as_ref()
+                .unwrap_or(&config_clean.keep);
             let filtered_env = std::env::vars().filter(|(k, _)| keep.contains(k));
             shell_cmd.env_clear().envs(filtered_env);
         }
 
-        shell_cmd.env("SHELL", &bash);
+        shell_cmd.env("SHELL", bash);
 
         // Pass command args to the shell as DEVENV_CMDLINE
         let cmdline = std::env::args().skip(1).collect::<Vec<_>>().join(" ");
         shell_cmd.env("DEVENV_CMDLINE", cmdline);
+    }
 
-        Ok(shell_cmd)
+    fn add_bash_args(
+        &self,
+        command: &mut process::Command,
+        script_path: &Path,
+        cmd: &Option<String>,
+    ) {
+        match cmd {
+            Some(_) => {
+                command.arg(script_path);
+            }
+            None => {
+                let dialect = BashDialect;
+                let interactive_args = dialect.interactive_args();
+                command.args(&interactive_args.prefix);
+                command.arg(script_path);
+                command.args(&interactive_args.suffix);
+            }
+        }
     }
 
     /// Prepare to launch an interactive shell.
@@ -1277,7 +1506,7 @@ impl Devenv {
     }
 
     async fn capture_shell_environment(&self) -> Result<HashMap<String, String>> {
-        let temp_dir = tempfile::TempDir::with_prefix("devenv-env")
+        let temp_dir = tempfile::TempDir::with_prefix_in("devenv-env-", &self.devenv_tmp)
             .into_diagnostic()
             .wrap_err("Failed to create temporary directory for environment capture")?;
 

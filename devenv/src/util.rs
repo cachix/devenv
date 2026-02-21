@@ -71,3 +71,24 @@ pub fn write_file_with_lock<P: AsRef<Path>, S: AsRef<str>>(path: P, content: S) 
         Ok(false)
     }
 }
+
+pub fn expand_path(path: &str) -> String {
+    let mut expanded = path.to_string();
+
+    let re_braces = regex::Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap();
+    let re_simple = regex::Regex::new(r"\$([A-Za-z_][A-Za-z0-9_]*)").unwrap();
+
+    expanded = re_braces
+        .replace_all(&expanded, |caps: &regex::Captures| {
+            std::env::var(&caps[1]).unwrap_or_default()
+        })
+        .into_owned();
+
+    expanded = re_simple
+        .replace_all(&expanded, |caps: &regex::Captures| {
+            std::env::var(&caps[1]).unwrap_or_default()
+        })
+        .into_owned();
+
+    expanded
+}
