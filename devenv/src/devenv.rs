@@ -70,6 +70,7 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
 pub struct DevenvOptions {
     pub config: Config,
     pub shell_settings: Option<ShellSettings>,
+    pub cache_settings: Option<devenv_core::CacheSettings>,
     pub secret_settings: Option<devenv_core::SecretSettings>,
     pub global_options: Option<GlobalOptions>,
     pub devenv_root: Option<PathBuf>,
@@ -83,6 +84,7 @@ impl DevenvOptions {
         Self {
             config: Config::default(),
             shell_settings: None,
+            cache_settings: None,
             secret_settings: None,
             global_options: None,
             devenv_root: None,
@@ -98,6 +100,7 @@ impl Default for DevenvOptions {
         Self {
             config: Config::default(),
             shell_settings: None,
+            cache_settings: None,
             secret_settings: None,
             global_options: None,
             devenv_root: None,
@@ -163,6 +166,7 @@ impl std::error::Error for SecretsNeedPrompting {}
 pub struct Devenv {
     pub config: Arc<RwLock<Config>>,
     pub shell_settings: ShellSettings,
+    pub cache_settings: devenv_core::CacheSettings,
     pub secret_settings: devenv_core::SecretSettings,
     pub global_options: GlobalOptions,
     pub is_testing: bool,
@@ -203,7 +207,6 @@ pub struct Devenv {
 
     // Port allocator shared with NixBackend for holding port reservations
     port_allocator: Arc<PortAllocator>,
-
 
     // Native process manager started in-process (for detach mode used by test())
     native_process_manager: Arc<OnceCell<Arc<processes::NativeProcessManager>>>,
@@ -254,6 +257,7 @@ impl Devenv {
 
         let global_options = options.global_options.unwrap_or_default();
         let shell_settings = options.shell_settings.unwrap_or_default();
+        let cache_settings = options.cache_settings.unwrap_or_default();
         let secret_settings = options.secret_settings.unwrap_or_default();
 
         // Compute profile-aware dotfile path for state isolation
@@ -357,6 +361,7 @@ impl Devenv {
         Self {
             config: Arc::new(RwLock::new(options.config)),
             shell_settings,
+            cache_settings,
             secret_settings,
             global_options,
             is_testing: options.is_testing,
@@ -883,11 +888,7 @@ impl Devenv {
         .await
     }
 
-    pub async fn container_run(
-        &self,
-        name: &str,
-        copy_args: &[String],
-    ) -> Result<ShellCommand> {
+    pub async fn container_run(&self, name: &str, copy_args: &[String]) -> Result<ShellCommand> {
         self.container_copy(name, copy_args, Some("docker-daemon:"))
             .await?;
 
@@ -1119,7 +1120,7 @@ impl Devenv {
         }
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
-            .with_refresh_task_cache(self.global_options.refresh_task_cache)
+            .with_refresh_task_cache(self.cache_settings.refresh_task_cache)
             .build()
             .await?;
 
@@ -1865,7 +1866,7 @@ impl Devenv {
             })?;
 
         // Initialize eval-cache database (framework layer concern, used by backends)
-        if self.global_options.eval_cache {
+        if self.cache_settings.eval_cache {
             self.eval_cache_pool
                 .get_or_try_init(|| async {
                     let db_path = self.devenv_dotfile.join("nix-eval-cache.db");

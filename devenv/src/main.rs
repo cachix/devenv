@@ -194,8 +194,8 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     }));
 
     // In reload shell mode, backend_done is just a handoff signal; don't trigger global shutdown.
-    let shutdown_on_backend_done = !matches!(&cli.command, Some(Commands::Shell { .. }))
-        || !cli.global_options.reload;
+    let shutdown_on_backend_done =
+        !matches!(&cli.command, Some(Commands::Shell { .. })) || !cli.global_options.reload;
 
     // Shutdown coordination
     // Signal handlers catch external signals (SIGINT from `kill`, SIGTERM, etc.)
@@ -445,8 +445,8 @@ async fn run_devenv(
     }
 
     // Resolve settings from CLI + Config (pure functions, no mutation).
-    let shell_settings =
-        devenv_core::config::ShellSettings::resolve(&cli.global_options, &config);
+    let shell_settings = devenv_core::config::ShellSettings::resolve(&cli.global_options, &config);
+    let cache_settings = devenv_core::config::CacheSettings::resolve(&cli.global_options);
     let secret_settings =
         devenv_core::config::SecretSettings::resolve(&cli.global_options, &config);
 
@@ -457,6 +457,7 @@ async fn run_devenv(
     let mut options = devenv::DevenvOptions {
         config,
         shell_settings: Some(shell_settings),
+        cache_settings: Some(cache_settings),
         secret_settings: Some(secret_settings),
         global_options: Some(cli.global_options),
         devenv_root: None,
@@ -521,18 +522,12 @@ async fn run_devenv(
             terminal_ready_rx,
         }) => {
             // Reload shell consumes devenv by value — no second instance needed
-            let result = run_reload_shell(
-                devenv,
-                cmd,
-                args,
-                backend_done_tx,
-                terminal_ready_rx,
-            )
-            .await
-            .map(|exit_code| match exit_code {
-                Some(code) => CommandResult::ExitCode(code as i32),
-                None => CommandResult::Done,
-            });
+            let result = run_reload_shell(devenv, cmd, args, backend_done_tx, terminal_ready_rx)
+                .await
+                .map(|exit_code| match exit_code {
+                    Some(code) => CommandResult::ExitCode(code as i32),
+                    None => CommandResult::Done,
+                });
             output(result)
         }
         Ok(InnerResult::Done(cmd_result)) => output(Ok(cmd_result)),

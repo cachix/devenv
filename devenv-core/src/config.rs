@@ -242,6 +242,39 @@ impl SecretSettings {
     }
 }
 
+/// Resolved cache settings.
+///
+/// Produced by `CacheSettings::resolve(&GlobalOptions)` as a pure function.
+#[derive(Clone, Debug)]
+pub struct CacheSettings {
+    pub eval_cache: bool,
+    pub refresh_eval_cache: bool,
+    pub refresh_task_cache: bool,
+}
+
+impl Default for CacheSettings {
+    fn default() -> Self {
+        Self {
+            eval_cache: true,
+            refresh_eval_cache: false,
+            refresh_task_cache: false,
+        }
+    }
+}
+
+impl CacheSettings {
+    /// Resolve cache settings from CLI source.
+    ///
+    /// All cache settings are CLI-only today (no config file counterpart).
+    pub fn resolve(cli: &crate::cli::GlobalOptions) -> Self {
+        Self {
+            eval_cache: cli.eval_cache,
+            refresh_eval_cache: cli.refresh_eval_cache,
+            refresh_task_cache: cli.refresh_task_cache,
+        }
+    }
+}
+
 /// Resolved shell settings.
 ///
 /// Produced by `ShellSettings::resolve(&GlobalOptions, &Config)` as a pure function.
@@ -1505,5 +1538,35 @@ inputs:
         assert!(sc.enable);
         assert_eq!(sc.provider, Some("aws".into()));
         assert_eq!(sc.profile, Some("prod".into()));
+    }
+
+    #[test]
+    fn cache_settings_defaults() {
+        let cli = crate::cli::GlobalOptions::default();
+        let settings = CacheSettings::resolve(&cli);
+        assert!(settings.eval_cache);
+        assert!(!settings.refresh_eval_cache);
+        assert!(!settings.refresh_task_cache);
+    }
+
+    #[test]
+    fn cache_settings_no_eval_cache() {
+        let mut cli = crate::cli::GlobalOptions::default();
+        cli.no_eval_cache = true;
+        cli.resolve_overrides();
+        let settings = CacheSettings::resolve(&cli);
+        assert!(!settings.eval_cache);
+    }
+
+    #[test]
+    fn cache_settings_refresh_flags() {
+        let cli = crate::cli::GlobalOptions {
+            refresh_eval_cache: true,
+            refresh_task_cache: true,
+            ..Default::default()
+        };
+        let settings = CacheSettings::resolve(&cli);
+        assert!(settings.refresh_eval_cache);
+        assert!(settings.refresh_task_cache);
     }
 }
