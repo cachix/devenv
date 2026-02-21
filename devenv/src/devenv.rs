@@ -340,7 +340,9 @@ impl Devenv {
                 devenv_nix_backend::nix_backend::NixRustBackend::new(
                     paths,
                     options.config.clone(),
-                    global_options.clone(),
+                    nix_settings.clone(),
+                    cache_settings.clone(),
+                    global_options.override_input.clone(),
                     cachix_manager.clone(),
                     options.shutdown.clone(),
                     Some(eval_cache_pool.clone()),
@@ -353,7 +355,8 @@ impl Devenv {
             NixBackendType::Snix => Box::new(
                 devenv_snix_backend::SnixBackend::new(
                     options.config.clone(),
-                    global_options.clone(),
+                    nix_settings.clone(),
+                    cache_settings.clone(),
                     paths,
                     cachix_manager,
                     Some(eval_cache_pool.clone()),

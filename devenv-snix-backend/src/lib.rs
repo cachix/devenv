@@ -5,8 +5,8 @@
 
 use async_trait::async_trait;
 use devenv_core::{
-    CachixManager, Config, DevEnvOutput, DevenvPaths, GlobalOptions, NixArgs, NixBackend, Options,
-    SearchResults,
+    CacheSettings, CachixManager, Config, DevEnvOutput, DevenvPaths, NixArgs, NixBackend,
+    NixSettings, Options, SearchResults,
 };
 use miette::{Result, bail};
 use snix_build::buildservice::{BuildService, DummyBuildService};
@@ -31,7 +31,9 @@ pub struct SnixBackend {
     #[allow(dead_code)] // Will be used when more functionality is implemented
     config: Config,
     #[allow(dead_code)] // Will be used when more functionality is implemented
-    global_options: GlobalOptions,
+    nix_settings: NixSettings,
+    #[allow(dead_code)] // Will be used when more functionality is implemented
+    cache_settings: CacheSettings,
     #[allow(dead_code)] // Will be used when more functionality is implemented
     paths: DevenvPaths,
     #[allow(dead_code)] // Will be used when cachix integration is implemented
@@ -41,7 +43,8 @@ pub struct SnixBackend {
 impl SnixBackend {
     pub async fn new(
         config: Config,
-        global_options: GlobalOptions,
+        nix_settings: NixSettings,
+        cache_settings: CacheSettings,
         paths: DevenvPaths,
         cachix_manager: Arc<CachixManager>,
         _pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
@@ -51,7 +54,8 @@ impl SnixBackend {
 
         Ok(Self {
             config,
-            global_options,
+            nix_settings,
+            cache_settings,
             paths,
             cachix_manager,
         })
