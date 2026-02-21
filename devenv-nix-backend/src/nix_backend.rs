@@ -17,7 +17,6 @@ use tokio_shutdown::Shutdown;
 
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
 use devenv_cache_core::compute_string_hash;
-use devenv_core::GlobalOptions;
 use devenv_core::PortAllocator;
 use devenv_core::cachix::{CachixCacheInfo, CachixConfig, CachixManager};
 use devenv_core::config::Config;
@@ -26,6 +25,7 @@ use devenv_core::nix_backend::{
     DevEnvOutput, DevenvPaths, NixBackend, Options, PackageSearchResult, SearchResults,
 };
 use devenv_core::nix_log_bridge::{EvalActivityGuard, NixLogBridge};
+use devenv_core::{CacheSettings, NixSettings};
 use devenv_eval_cache::{
     CacheError, CachedEval, CachingConfig, CachingEvalService, CachingEvalState, ResourceManager,
 };
@@ -88,7 +88,9 @@ impl Default for ProjectRoot {
 /// ordered at the end so C++ destructors run in the correct dependency order:
 /// caching_eval_state → eval_state → store → settings → activity_logger → _gc_registration
 pub struct NixRustBackend {
-    pub global_options: GlobalOptions,
+    pub nix_settings: NixSettings,
+    pub cache_settings: CacheSettings,
+    pub override_input: Vec<String>,
     pub paths: DevenvPaths,
     pub config: Config,
 
@@ -222,12 +224,13 @@ impl<'a> std::ops::DerefMut for EvalSession<'a> {
 }
 
 impl NixRustBackend {
-    /// Create a new NixRustBackend with initialized Nix FFI components with GlobalOptions
+    /// Create a new NixRustBackend with initialized Nix FFI components
     ///
     /// # Arguments
     /// * `paths` - DevenvPaths containing root, dotfile, and cache directories
     /// * `config` - Devenv configuration
-    /// * `global_options` - Global Nix options (offline mode, max jobs, etc.)
+    /// * `nix_settings` - Resolved Nix build settings (offline mode, max jobs, etc.)
+    /// * `cache_settings` - Resolved cache settings (eval cache, refresh flags)
     /// * `cachix_manager` - CachixManager for handling binary cache configuration
     /// * `shutdown` - Shutdown coordinator for graceful cleanup of cachix daemon
     /// * `eval_cache_pool` - Optional eval cache database pool from framework layer
@@ -236,7 +239,9 @@ impl NixRustBackend {
     pub fn new(
         paths: DevenvPaths,
         config: Config,
-        global_options: GlobalOptions,
+        nix_settings: NixSettings,
+        cache_settings: CacheSettings,
+        override_input: Vec<String>,
         cachix_manager: Arc<CachixManager>,
         shutdown: Arc<Shutdown>,
         eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
@@ -259,8 +264,8 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to enable experimental features")?;
 
-        // Apply other global settings
-        Self::apply_global_options(&global_options)?;
+        // Apply Nix settings (offline, max-jobs, cores, system, impure, etc.)
+        Self::apply_nix_settings(&nix_settings)?;
 
         // Apply cachix global settings BEFORE store creation (e.g., netrc-file path)
         let cachix_global_settings = cachix_manager
@@ -300,7 +305,7 @@ impl NixRustBackend {
         // Generate merged nixpkgs config and write to temp file for NIXPKGS_CONFIG env var
         // Wrap in a let expression that adds allowUnfreePredicate (a Nix function)
         // Note: NIXPKGS_CONFIG expects a file path, not inline Nix content
-        let nixpkgs_config = config.nixpkgs_config(&global_options.system);
+        let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
         let nixpkgs_config_base = ser_nix::to_string(&nixpkgs_config)
             .map_err(|e| miette::miette!("Failed to serialize nixpkgs config: {}", e))?;
         let nixpkgs_config_nix = format!(
@@ -355,7 +360,7 @@ impl NixRustBackend {
             .wrap_err("Failed to build eval state")?;
 
         // Enable Nix debugger if requested
-        if global_options.nix_debugger {
+        if nix_settings.nix_debugger {
             eval_state
                 .enable_debugger()
                 .to_miette()
@@ -417,7 +422,9 @@ impl NixRustBackend {
         });
 
         let backend = Self {
-            global_options,
+            nix_settings,
+            cache_settings,
+            override_input,
             paths,
             config,
             bootstrap_path,
@@ -628,14 +635,14 @@ impl NixRustBackend {
             .wrap_err("Failed to evaluate devenv configuration")
     }
 
-    /// Apply GlobalOptions settings to the Nix environment
+    /// Apply resolved Nix settings to the Nix environment.
     ///
     /// This must be called BEFORE opening the Store or creating EvalState,
     /// as these settings affect how Nix initializes.
     ///
     /// THREAD SAFETY: The underlying Nix settings use global mutable state.
     /// This should only be called during single-threaded initialization.
-    fn apply_global_options(global_options: &GlobalOptions) -> Result<()> {
+    fn apply_nix_settings(nix_settings: &NixSettings) -> Result<()> {
         // Disable flake evaluation cache to avoid stale cache issues
         settings::set("eval-cache", "false")
             .to_miette()
@@ -652,7 +659,7 @@ impl NixRustBackend {
             .wrap_err("Failed to set http-connections")?;
 
         // offline mode: disable substituters and set file transfer timeouts
-        if global_options.offline {
+        if nix_settings.offline {
             settings::set("substituters", "")
                 .to_miette()
                 .wrap_err("Failed to set offline mode (substituters)")?;
@@ -664,31 +671,31 @@ impl NixRustBackend {
         }
 
         // max_jobs: set maximum concurrent builds
-        if global_options.max_jobs > 0 {
-            settings::set("max-jobs", &global_options.max_jobs.to_string())
+        if nix_settings.max_jobs > 0 {
+            settings::set("max-jobs", &nix_settings.max_jobs.to_string())
                 .to_miette()
                 .wrap_err("Failed to set max-jobs")?;
         }
 
         // cores: set CPU cores available per build
-        if global_options.cores > 0 {
-            settings::set("cores", &global_options.cores.to_string())
+        if nix_settings.cores > 0 {
+            settings::set("cores", &nix_settings.cores.to_string())
                 .to_miette()
                 .wrap_err("Failed to set cores")?;
         }
 
         // system: override the build system architecture
         // Skip default/placeholder values to avoid overriding with nonsense
-        if !global_options.system.is_empty()
-            && global_options.system != "unknown architecture-unknown OS"
+        if !nix_settings.system.is_empty()
+            && nix_settings.system != "unknown architecture-unknown OS"
         {
-            settings::set("system", &global_options.system)
+            settings::set("system", &nix_settings.system)
                 .to_miette()
                 .wrap_err("Failed to set system")?;
         }
 
         // impure: allow impure evaluation (relaxes hermeticity)
-        if global_options.impure {
+        if nix_settings.impure {
             settings::set("impure", "1")
                 .to_miette()
                 .wrap_err("Failed to set impure mode")?;
@@ -713,7 +720,7 @@ impl NixRustBackend {
 
         // nix_option: apply custom Nix configuration pairs
         // These are passed as pairs: ["key1", "value1", "key2", "value2", ...]
-        for pair in global_options.nix_option.chunks_exact(2) {
+        for pair in nix_settings.nix_option.chunks_exact(2) {
             let key = &pair[0];
             let value = &pair[1];
             settings::set(key, value)
@@ -728,7 +735,7 @@ impl NixRustBackend {
     ///
     /// Returns the cachix configuration if enabled, None otherwise.
     async fn get_cachix_config(&self) -> Result<Option<CachixCacheInfo>> {
-        if self.global_options.offline {
+        if self.nix_settings.offline {
             return Ok(None);
         }
 
@@ -1079,7 +1086,7 @@ impl NixBackend for NixRustBackend {
             let cached_eval = if let Some(ref pool_cell) = self.eval_cache_pool {
                 if let Some(pool) = pool_cell.get() {
                     let config = CachingConfig {
-                        force_refresh: self.global_options.refresh_eval_cache,
+                        force_refresh: self.cache_settings.refresh_eval_cache,
                         // NIXPKGS_CONFIG is already tracked via NixArgs.nixpkgs_config
                         excluded_envs: vec!["NIXPKGS_CONFIG".to_string()],
                         // The nixpkgs config file content is already reflected in the cache key
@@ -1611,31 +1618,29 @@ impl NixBackend for NixRustBackend {
             locker = locker.update_all();
         }
 
-        // Apply input overrides from global_options
+        // Apply input overrides
         // Note: overrides must live until after lock() is called
-        let overrides: Vec<(String, FlakeReference)> =
-            if !self.global_options.override_input.is_empty() {
-                let mut parse_flags = FlakeReferenceParseFlags::new(flake_settings).to_miette()?;
-                parse_flags.set_base_directory(base_dir_str).to_miette()?;
+        let overrides: Vec<(String, FlakeReference)> = if !self.override_input.is_empty() {
+            let mut parse_flags = FlakeReferenceParseFlags::new(flake_settings).to_miette()?;
+            parse_flags.set_base_directory(base_dir_str).to_miette()?;
 
-                self.global_options
-                    .override_input
-                    .chunks_exact(2)
-                    .map(|pair| {
-                        let (override_ref, _) = FlakeReference::parse_with_fragment(
-                            fetch_settings,
-                            flake_settings,
-                            &parse_flags,
-                            &pair[1],
-                        )?;
-                        Ok((pair[0].clone(), override_ref))
-                    })
-                    .collect::<anyhow::Result<Vec<_>>>()
-                    .to_miette()
-                    .wrap_err("Failed to parse input overrides")?
-            } else {
-                Vec::new()
-            };
+            self.override_input
+                .chunks_exact(2)
+                .map(|pair| {
+                    let (override_ref, _) = FlakeReference::parse_with_fragment(
+                        fetch_settings,
+                        flake_settings,
+                        &parse_flags,
+                        &pair[1],
+                    )?;
+                    Ok((pair[0].clone(), override_ref))
+                })
+                .collect::<anyhow::Result<Vec<_>>>()
+                .to_miette()
+                .wrap_err("Failed to parse input overrides")?
+        } else {
+            Vec::new()
+        };
 
         if !overrides.is_empty() {
             locker = locker.overrides(overrides.iter().map(|(name, ref_)| (name.clone(), ref_)));
@@ -1957,7 +1962,7 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to build eval state")?;
 
-        if self.global_options.nix_debugger {
+        if self.nix_settings.nix_debugger {
             eval_state
                 .enable_debugger()
                 .to_miette()

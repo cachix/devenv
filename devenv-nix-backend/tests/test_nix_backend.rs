@@ -6,8 +6,8 @@
 #![cfg(test)]
 
 use devenv_core::{
-    CliOptionsConfig, Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend, Options,
-    PortAllocator,
+    CacheSettings, CliOptionsConfig, Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend,
+    NixSettings, Options, PortAllocator,
 };
 use devenv_nix_backend::nix_backend::NixRustBackend;
 use devenv_nix_backend_macros::nix_test;
@@ -86,6 +86,31 @@ fn copy_fixture_lock(dest_dir: &std::path::Path) {
         .join("tests/fixtures/devenv.lock");
     let dest_lock = dest_dir.join("devenv.lock");
     std::fs::copy(&fixture_lock, &dest_lock).expect("Failed to copy fixture lock file");
+}
+
+/// Create a NixRustBackend from GlobalOptions, resolving settings internally.
+fn create_backend(
+    paths: DevenvPaths,
+    config: Config,
+    global_options: GlobalOptions,
+    cachix_manager: Arc<devenv_core::CachixManager>,
+    shutdown: Arc<Shutdown>,
+) -> miette::Result<NixRustBackend> {
+    let nix_settings = NixSettings::resolve(&global_options, &config);
+    let cache_settings = CacheSettings::resolve(&global_options);
+    let override_input = global_options.override_input.clone();
+    NixRustBackend::new(
+        paths,
+        config,
+        nix_settings,
+        cache_settings,
+        override_input,
+        cachix_manager,
+        shutdown,
+        None,
+        None,
+        Arc::new(PortAllocator::new()),
+    )
 }
 
 /// Helper struct to keep NixArgs and its owned values alive together
@@ -191,12 +216,19 @@ fn setup_isolated_test_env(
     // Create shutdown coordinator for cleanup
     let shutdown = Shutdown::new();
 
+    // Resolve settings from GlobalOptions
+    let nix_settings = NixSettings::resolve(&global_options, &config);
+    let cache_settings = CacheSettings::resolve(&global_options);
+    let override_input = global_options.override_input.clone();
+
     // Create backend with default project_root (project directory)
     let port_allocator = Arc::new(PortAllocator::new());
     let backend = NixRustBackend::new(
         paths.clone(),
         config.clone(),
-        global_options,
+        nix_settings,
+        cache_settings,
+        override_input,
         cachix_manager,
         shutdown,
         None,
@@ -801,15 +833,12 @@ async fn test_eval_nonexistent_attribute() {
     let paths = create_test_paths();
     let config = load_config_from_repo();
 
-    let backend = NixRustBackend::new(
+    let backend = create_backend(
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -1097,15 +1126,12 @@ async fn test_backend_creation_with_offline_mode() {
     let mut global_options = GlobalOptions::default();
     global_options.offline = true;
 
-    let _result = NixRustBackend::new(
+    let _result = create_backend(
         paths.clone(),
         config.clone(),
         global_options,
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
     );
 
     // TODO: Verify backend was created with offline mode
@@ -1123,15 +1149,12 @@ async fn test_backend_with_system_override() {
     let mut global_options = GlobalOptions::default();
     global_options.system = "aarch64-linux".to_string();
 
-    let _result = NixRustBackend::new(
+    let _result = create_backend(
         paths.clone(),
         config.clone(),
         global_options,
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
     );
 
     // TODO: Verify system override is applied
@@ -1149,15 +1172,12 @@ async fn test_backend_with_impure_mode() {
     let mut global_options = GlobalOptions::default();
     global_options.impure = true;
 
-    let _result = NixRustBackend::new(
+    let _result = create_backend(
         paths.clone(),
         config.clone(),
         global_options,
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
     );
 
     // TODO: Verify impure mode is enabled
@@ -1175,15 +1195,12 @@ async fn test_backend_with_custom_nix_options() {
     let mut global_options = GlobalOptions::default();
     global_options.nix_option = vec!["tarball-ttl".to_string(), "0".to_string()];
 
-    let _result = NixRustBackend::new(
+    let _result = create_backend(
         paths.clone(),
         config.clone(),
         global_options,
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
     );
 
     // TODO: Verify custom nix options are applied
@@ -1201,15 +1218,12 @@ async fn test_backend_with_nix_debugger_enabled() {
     let mut global_options = GlobalOptions::default();
     global_options.nix_debugger = true;
 
-    let _result = NixRustBackend::new(
+    let _result = create_backend(
         paths.clone(),
         config.clone(),
         global_options,
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
     );
 
     // TODO: Verify debugger is enabled
@@ -1261,15 +1275,12 @@ async fn test_eval_empty_attributes_array() {
     let paths = create_test_paths();
     let config = load_config_from_repo();
 
-    let backend = NixRustBackend::new(
+    let backend = create_backend(
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -1347,15 +1358,12 @@ async fn test_dev_env_bash_output_format() {
     let paths = create_test_paths();
     let config = load_config_from_repo();
 
-    let backend = NixRustBackend::new(
+    let backend = create_backend(
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -1382,15 +1390,12 @@ async fn test_dev_env_multiple_calls_same_gc_root() {
     let paths = create_test_paths();
     let config = load_config_from_repo();
 
-    let backend = NixRustBackend::new(
+    let backend = create_backend(
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -1418,15 +1423,12 @@ async fn test_dev_env_gc_root_already_exists_as_file() {
     let paths = create_test_paths();
     let config = load_config_from_repo();
 
-    let backend = NixRustBackend::new(
+    let backend = create_backend(
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
     backend
@@ -2264,15 +2266,12 @@ async fn test_backend_reuse_across_operations() {
     let paths = create_test_paths();
     let config = load_config_from_repo();
 
-    let _backend = NixRustBackend::new(
+    let _backend = create_backend(
         paths.clone(),
         config.clone(),
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
     )
     .expect("Failed to create backend");
 
@@ -2474,15 +2473,12 @@ async fn test_eval_state_mutex_under_concurrent_eval() {
 
     let cachix_manager = create_test_cachix_manager(&get_repo_root(), None);
     let backend = std::sync::Arc::new(
-        NixRustBackend::new(
+        create_backend(
             paths.clone(),
             config.clone(),
             GlobalOptions::default(),
             cachix_manager,
             Shutdown::new(),
-            None,
-            None,
-            Arc::new(PortAllocator::new()),
         )
         .expect("Failed to create backend"),
     );
