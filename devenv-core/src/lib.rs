@@ -16,7 +16,7 @@ pub mod resource;
 
 pub use cachix::{CachixCacheInfo, CachixManager, CachixPaths};
 pub use cli::{GlobalOptions, NixBuildDefaults, TraceFormat, default_system};
-pub use config::{CacheSettings, Config, SecretSettings, ShellSettings};
+pub use config::{CacheSettings, Config, NixSettings, SecretSettings, ShellSettings};
 pub use eval_op::{EvalOp, OpObserver};
 pub use internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 pub use nix_args::{CliOptionsConfig, NixArgs, SecretspecData};

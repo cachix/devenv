@@ -69,6 +69,7 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
 #[derive(Debug)]
 pub struct DevenvOptions {
     pub config: Config,
+    pub nix_settings: Option<devenv_core::NixSettings>,
     pub shell_settings: Option<ShellSettings>,
     pub cache_settings: Option<devenv_core::CacheSettings>,
     pub secret_settings: Option<devenv_core::SecretSettings>,
@@ -83,6 +84,7 @@ impl DevenvOptions {
     pub fn new(shutdown: Arc<tokio_shutdown::Shutdown>) -> Self {
         Self {
             config: Config::default(),
+            nix_settings: None,
             shell_settings: None,
             cache_settings: None,
             secret_settings: None,
@@ -99,6 +101,7 @@ impl Default for DevenvOptions {
     fn default() -> Self {
         Self {
             config: Config::default(),
+            nix_settings: None,
             shell_settings: None,
             cache_settings: None,
             secret_settings: None,
@@ -165,6 +168,7 @@ impl std::error::Error for SecretsNeedPrompting {}
 
 pub struct Devenv {
     pub config: Arc<RwLock<Config>>,
+    pub nix_settings: devenv_core::NixSettings,
     pub shell_settings: ShellSettings,
     pub cache_settings: devenv_core::CacheSettings,
     pub secret_settings: devenv_core::SecretSettings,
@@ -256,6 +260,7 @@ impl Devenv {
             .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
 
         let global_options = options.global_options.unwrap_or_default();
+        let nix_settings = options.nix_settings.unwrap_or_default();
         let shell_settings = options.shell_settings.unwrap_or_default();
         let cache_settings = options.cache_settings.unwrap_or_default();
         let secret_settings = options.secret_settings.unwrap_or_default();
@@ -360,6 +365,7 @@ impl Devenv {
 
         Self {
             config: Arc::new(RwLock::new(options.config)),
+            nix_settings,
             shell_settings,
             cache_settings,
             secret_settings,
@@ -822,7 +828,7 @@ impl Devenv {
                 _ => bail!("Unsupported container architecture for macOS: {host_arch}"),
             }
         } else {
-            &self.global_options.system
+            &self.nix_settings.system
         };
         let paths = self
             .nix
@@ -2032,11 +2038,11 @@ impl Devenv {
 
         // Create the Nix arguments struct
         let container_name = self.container_name.lock().unwrap().clone();
-        let nixpkgs_config = config.nixpkgs_config(&self.global_options.system);
+        let nixpkgs_config = config.nixpkgs_config(&self.nix_settings.system);
         let args = NixArgs {
             version: crate_version!(),
             is_development_version: crate::is_development_version(),
-            system: &self.global_options.system,
+            system: &self.nix_settings.system,
             devenv_root: &self.devenv_root,
             skip_local_src: self.global_options.from.is_some()
                 || (!self.global_options.option.is_empty()
