@@ -1,7 +1,7 @@
 use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
-    Devenv, RunMode,
+    Devenv, DevenvConfig, RunMode,
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
     processes::ProcessCommand,
     reload::DevenvShellBuilder,
@@ -551,7 +551,36 @@ async fn run_devenv(
         _ => None,
     };
 
-    let devenv = Devenv::new(options).await;
+    let config = DevenvConfig::new(options).await;
+
+    // Pre-assembly commands: these work even when devenv.nix is broken.
+    match &command {
+        Commands::Init { target } => {
+            return output(devenv::init(target).map(|_| CommandResult::Done));
+        }
+        Commands::Processes {
+            command: ProcessesCommand::Down {},
+        } => {
+            return match config.down().await {
+                Ok(_) => output(Ok(CommandResult::Done)),
+                Err(e) => output(Err(e)),
+            };
+        }
+        Commands::Processes {
+            command: ProcessesCommand::Wait { timeout },
+        } => {
+            return match config.wait_for_ready(Duration::from_secs(*timeout)).await {
+                Ok(_) => output(Ok(CommandResult::Done)),
+                Err(e) => output(Err(e)),
+            };
+        }
+        _ => {}
+    }
+
+    let devenv = match config.assemble().await {
+        Ok(d) => d,
+        Err(e) => return output(Err(e)),
+    };
 
     // Run the command
     let inner = run_devenv_inner(
@@ -672,10 +701,8 @@ async fn run_devenv_inner(
                 CommandResult::Exec(shell_config.command)
             }
         },
-        Commands::Init { target } => {
-            devenv.init(&target)?;
-            CommandResult::Done
-        }
+        // Init is early-dispatched in run_devenv before assembly
+        Commands::Init { .. } => unreachable!(),
         Commands::Generate => {
             miette::bail!(indoc::indoc! {"
                 The generate command has been removed.
@@ -750,18 +777,10 @@ async fn run_devenv_inner(
                 RunMode::Foreground(shell_command) => CommandResult::Exec(shell_command.command),
             }
         }
+        // Down and Wait are early-dispatched in run_devenv before assembly
         Commands::Processes {
-            command: ProcessesCommand::Down {},
-        } => {
-            devenv.down().await?;
-            CommandResult::Done
-        }
-        Commands::Processes {
-            command: ProcessesCommand::Wait { timeout },
-        } => {
-            devenv.wait_for_ready(Duration::from_secs(timeout)).await?;
-            CommandResult::Done
-        }
+            command: ProcessesCommand::Down {} | ProcessesCommand::Wait { .. },
+        } => unreachable!(),
         Commands::Tasks { command } => match command {
             TasksCommand::Run {
                 tasks,
@@ -786,11 +805,8 @@ async fn run_devenv_inner(
             devenv.changelogs().await?;
             CommandResult::Done
         }
-        // hidden
-        Commands::Assemble => {
-            devenv.assemble().await?;
-            CommandResult::Done
-        }
+        // hidden: already assembled at this point
+        Commands::Assemble => CommandResult::Done,
         Commands::PrintDevEnv { json } => {
             let output = devenv.print_dev_env(json).await?;
             CommandResult::Print(output)

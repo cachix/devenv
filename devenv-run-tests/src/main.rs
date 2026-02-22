@@ -1,5 +1,5 @@
 use clap::Parser;
-use devenv::{Config, Devenv, DevenvOptions, default_system, tracing as devenv_tracing};
+use devenv::{Config, DevenvConfig, DevenvOptions, default_system, tracing as devenv_tracing};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -397,7 +397,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             devenv_dotfile: Some(devenv_dotfile),
             ..Default::default()
         };
-        let devenv = Devenv::new(options).await;
+        let devenv = DevenvConfig::new(options).await.assemble().await?;
 
         eprintln!("  Running {dir_name}");
 

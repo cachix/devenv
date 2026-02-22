@@ -46,7 +46,7 @@ impl SnixBackend {
         cache_settings: CacheSettings,
         paths: DevenvPaths,
         cachix_manager: Arc<CachixManager>,
-        _pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
+        _pool: Option<sqlx::SqlitePool>,
     ) -> Result<Self> {
         info!("Initializing Snix backend");
 

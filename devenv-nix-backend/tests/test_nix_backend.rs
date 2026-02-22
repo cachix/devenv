@@ -480,7 +480,9 @@ async fn test_backend_build_with_gc_root() {
     let gc_root_base = temp_dir.path().join("result");
 
     // Build with GC root
-    let result = backend.build(&["shell"], None, Some(&gc_root_base), &[]).await;
+    let result = backend
+        .build(&["shell"], None, Some(&gc_root_base), &[])
+        .await;
 
     assert!(
         result.is_ok(),
@@ -897,7 +899,9 @@ async fn test_build_nonexistent_attribute() {
     copy_fixture_lock(temp_dir.path());
 
     // Try to build a nonexistent attribute - should return an error
-    let result = backend.build(&["nonexistent.package"], None, None, &[]).await;
+    let result = backend
+        .build(&["nonexistent.package"], None, None, &[])
+        .await;
 
     assert!(
         result.is_err(),
@@ -1492,7 +1496,9 @@ async fn test_build_gc_root_already_exists() {
     let gc_root_actual = temp_dir.path().join("result-shell");
 
     // First build to create the gc_root
-    let result1 = backend.build(&["shell"], None, Some(&gc_root_base), &[]).await;
+    let result1 = backend
+        .build(&["shell"], None, Some(&gc_root_base), &[])
+        .await;
     assert!(
         result1.is_ok(),
         "First build should succeed: {:?}",
@@ -1504,7 +1510,9 @@ async fn test_build_gc_root_already_exists() {
     );
 
     // Build again with same gc_root - Nix's add_perm_root should handle the existing symlink
-    let result2 = backend.build(&["shell"], None, Some(&gc_root_base), &[]).await;
+    let result2 = backend
+        .build(&["shell"], None, Some(&gc_root_base), &[])
+        .await;
 
     assert!(
         result2.is_ok(),
@@ -1913,7 +1921,9 @@ async fn test_gc_with_protected_gc_roots() {
     let gc_root_base = temp_dir.path().join("protected-result");
     // The build function appends the attribute name to the gc_root base path
     let gc_root_actual = temp_dir.path().join("protected-result-shell");
-    let build_result = backend.build(&["shell"], None, Some(&gc_root_base), &[]).await;
+    let build_result = backend
+        .build(&["shell"], None, Some(&gc_root_base), &[])
+        .await;
     assert!(
         build_result.is_ok(),
         "Build with gc_root should succeed: {:?}",
@@ -2248,7 +2258,9 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
     let gc_root2_actual = temp_dir.path().join("result2-shell");
 
     // Build first attribute with first gc_root
-    let result1 = backend.build(&["shell"], None, Some(&gc_root1_base), &[]).await;
+    let result1 = backend
+        .build(&["shell"], None, Some(&gc_root1_base), &[])
+        .await;
     assert!(
         result1.is_ok(),
         "First build should succeed: {:?}",
@@ -2256,7 +2268,9 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
     );
 
     // Build second attribute with second gc_root (same attribute, different gc_root)
-    let result2 = backend.build(&["shell"], None, Some(&gc_root2_base), &[]).await;
+    let result2 = backend
+        .build(&["shell"], None, Some(&gc_root2_base), &[])
+        .await;
     assert!(
         result2.is_ok(),
         "Second build should succeed: {:?}",

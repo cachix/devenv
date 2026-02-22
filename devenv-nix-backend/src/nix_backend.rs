@@ -104,8 +104,7 @@ pub struct NixRustBackend {
     nix_log_bridge: Arc<NixLogBridge>,
 
     // Optional eval cache pool from framework layer (shared with other backends)
-    // Note: Uses tokio::sync::OnceCell to match the framework layer type
-    eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
+    eval_cache_pool: Option<sqlx::SqlitePool>,
 
     // Flag to force cache bypass on next operation (for hot-reload)
     // Set by invalidate(), checked and cleared by dev_env()
@@ -241,7 +240,7 @@ impl NixRustBackend {
         cache_settings: CacheSettings,
         cachix_manager: Arc<CachixManager>,
         shutdown: Arc<Shutdown>,
-        eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
+        eval_cache_pool: Option<sqlx::SqlitePool>,
         store: Option<std::path::PathBuf>,
         port_allocator: Arc<PortAllocator>,
     ) -> Result<Self> {
@@ -1080,37 +1079,31 @@ impl NixBackend for NixRustBackend {
             let resource_manager = Arc::new(ResourceManager::new(self.port_allocator.clone()));
 
             // Create CachedEval wrapper
-            let cached_eval = if let Some(ref pool_cell) = self.eval_cache_pool {
-                if let Some(pool) = pool_cell.get() {
-                    let config = CachingConfig {
-                        force_refresh: self.cache_settings.refresh_eval_cache,
-                        // NIXPKGS_CONFIG is already tracked via NixArgs.nixpkgs_config
-                        excluded_envs: vec!["NIXPKGS_CONFIG".to_string()],
-                        // The nixpkgs config file content is already reflected in the cache key
-                        excluded_paths: vec![self.nixpkgs_config_path.clone()],
-                        ..Default::default()
-                    };
-                    let service = CachingEvalService::with_config(pool.clone(), config.clone());
-                    tracing::debug!(?config, "Eval caching enabled from framework pool");
-                    CachedEval::with_cache(service, self.nix_log_bridge.clone(), config)
-                        .with_resource_manager(resource_manager)
-                } else {
-                    tracing::debug!("Eval caching disabled (pool not ready)");
-                    CachedEval::without_cache(self.nix_log_bridge.clone())
-                }
+            let cached_eval = if let Some(ref pool) = self.eval_cache_pool {
+                let config = CachingConfig {
+                    force_refresh: self.cache_settings.refresh_eval_cache,
+                    // NIXPKGS_CONFIG is already tracked via NixArgs.nixpkgs_config
+                    excluded_envs: vec!["NIXPKGS_CONFIG".to_string()],
+                    // The nixpkgs config file content is already reflected in the cache key
+                    excluded_paths: vec![self.nixpkgs_config_path.clone()],
+                    ..Default::default()
+                };
+                let service = CachingEvalService::with_config(pool.clone(), config.clone());
+                tracing::debug!(?config, "Eval caching enabled from framework pool");
+                CachedEval::with_cache(service, self.nix_log_bridge.clone(), config)
+                    .with_resource_manager(resource_manager)
             } else {
                 tracing::debug!("Eval caching disabled (no pool configured)");
                 CachedEval::without_cache(self.nix_log_bridge.clone())
             };
 
             // Create unified CachingEvalState wrapper
-            let caching_eval_state =
-                CachingEvalState::new(
-                    self.eval_state.clone(),
-                    cached_eval,
-                    args_nix,
-                    self.port_allocator.clone(),
-                );
+            let caching_eval_state = CachingEvalState::new(
+                self.eval_state.clone(),
+                cached_eval,
+                args_nix,
+                self.port_allocator.clone(),
+            );
             self.caching_eval_state.set(caching_eval_state).ok();
         }
 

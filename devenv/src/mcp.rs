@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::devenv::{Devenv, DevenvOptions};
+use crate::devenv::{Devenv, DevenvConfig, DevenvOptions};
 use devenv_activity::Activity;
 use devenv_core::Options;
 use miette::Result;
@@ -46,10 +46,10 @@ impl DevenvMcpServer {
     async fn initialize(&self) -> Result<()> {
         info!("Initializing MCP server cache...");
 
-        let devenv = Devenv::new(self.options.clone()).await;
-
-        // Assemble once for all operations
-        devenv.assemble().await?;
+        let devenv = DevenvConfig::new(self.options.clone())
+            .await
+            .assemble()
+            .await?;
 
         // Fetch and cache packages
         {
