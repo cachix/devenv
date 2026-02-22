@@ -15,6 +15,7 @@
 //! Callers don't need to know whether caching is enabled - the interface is identical
 //! in both cases.
 
+use devenv_core::PortAllocator;
 use futures::future::join_all;
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::SqlitePool;
@@ -700,15 +701,17 @@ pub enum UncachedReason {
 /// - `eval_to_json()` for cached evaluation
 /// - `uncached(reason)` for explicit bypass with documented justification
 ///
-/// The wrapper stores a pre-computed hash of NixArgs for efficient cache
-/// key generation during evaluation.
+/// The wrapper stores the serialized NixArgs and a reference to the port
+/// allocator for dynamic cache key generation at eval time.
 pub struct CachingEvalState<E> {
     /// The underlying eval state (private - not directly accessible)
     eval_state: E,
     /// The caching wrapper
     cached_eval: CachedEval,
-    /// Pre-computed serialized NixArgs string for cache key generation
+    /// Serialized NixArgs string (without port allocation state)
     nix_args_str: String,
+    /// Port allocator for dynamic cache key computation
+    port_allocator: Arc<PortAllocator>,
 }
 
 impl<E> CachingEvalState<E> {
@@ -717,12 +720,19 @@ impl<E> CachingEvalState<E> {
     /// # Arguments
     /// * `eval_state` - The underlying evaluation state to wrap
     /// * `cached_eval` - The caching service wrapper
-    /// * `nix_args_str` - Pre-serialized NixArgs string for cache key generation
-    pub fn new(eval_state: E, cached_eval: CachedEval, nix_args_str: String) -> Self {
+    /// * `nix_args_str` - Serialized NixArgs string (without port allocation state)
+    /// * `port_allocator` - Port allocator for dynamic cache key computation
+    pub fn new(
+        eval_state: E,
+        cached_eval: CachedEval,
+        nix_args_str: String,
+        port_allocator: Arc<PortAllocator>,
+    ) -> Self {
         Self {
             eval_state,
             cached_eval,
             nix_args_str,
+            port_allocator,
         }
     }
 
@@ -737,8 +747,17 @@ impl<E> CachingEvalState<E> {
     }
 
     /// Create a cache key for the given attribute name.
+    ///
+    /// Port allocation state is included dynamically so that `test()` and `up()`
+    /// can enable port allocation after construction without invalidating a frozen key.
     pub fn cache_key(&self, attr_name: &str) -> crate::ffi_cache::EvalCacheKey {
-        crate::ffi_cache::EvalCacheKey::from_nix_args_str(&self.nix_args_str, attr_name)
+        let full_key = format!(
+            "{}:port_allocation={}:strict_ports={}",
+            self.nix_args_str,
+            self.port_allocator.is_enabled(),
+            self.port_allocator.is_strict(),
+        );
+        crate::ffi_cache::EvalCacheKey::from_nix_args_str(&full_key, attr_name)
     }
 
     /// Get uncached access for operations that must bypass caching.

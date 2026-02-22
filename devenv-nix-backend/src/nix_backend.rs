@@ -1062,12 +1062,6 @@ impl NixBackend for NixRustBackend {
         // Initialize caching eval state if not already set
         if self.caching_eval_state.get().is_none() {
             let args_nix = ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string());
-            let cache_key_args = format!(
-                "{}:port_allocation={}:strict_ports={}",
-                args_nix,
-                self.port_allocator.is_enabled(),
-                self.port_allocator.is_strict()
-            );
 
             // Unquote special Nix expressions that should be evaluated
             let args_nix_eval =
@@ -1111,7 +1105,12 @@ impl NixBackend for NixRustBackend {
 
             // Create unified CachingEvalState wrapper
             let caching_eval_state =
-                CachingEvalState::new(self.eval_state.clone(), cached_eval, cache_key_args);
+                CachingEvalState::new(
+                    self.eval_state.clone(),
+                    cached_eval,
+                    args_nix,
+                    self.port_allocator.clone(),
+                );
             self.caching_eval_state.set(caching_eval_state).ok();
         }
 
