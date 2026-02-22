@@ -151,7 +151,6 @@ impl TestNixArgs {
             devenv_runtime: &self.runtime,
             devenv_istesting: true,
             devenv_direnvrc_latest_version: 5,
-            container_name: None,
             active_profiles: &[],
             cli_options: CliOptionsConfig::default(),
             hostname: None,
@@ -365,7 +364,7 @@ async fn test_backend_eval_expression() {
     assert!(lock_path.exists(), "Lock file should be created");
 
     // Evaluate a simple attribute
-    let result = backend.eval(&["config.devenv.root"]).await;
+    let result = backend.eval(&["config.devenv.root"], &[]).await;
     assert!(result.is_ok(), "Eval should succeed: {:?}", result.err());
 
     let json_str = result.unwrap();
@@ -407,7 +406,7 @@ async fn test_backend_eval_multiple_attributes() {
 
     // Evaluate multiple attributes
     let result = backend
-        .eval(&["config.packages", "config.languages.rust.enable"])
+        .eval(&["config.packages", "config.languages.rust.enable"], &[])
         .await;
 
     assert!(
@@ -447,7 +446,7 @@ async fn test_backend_build_package() {
     copy_fixture_lock(temp_dir.path());
 
     // Build the devenv shell
-    let result = backend.build(&["shell"], None, None).await;
+    let result = backend.build(&["shell"], None, None, &[]).await;
 
     assert!(result.is_ok(), "Build should succeed: {:?}", result.err());
 
@@ -481,7 +480,7 @@ async fn test_backend_build_with_gc_root() {
     let gc_root_base = temp_dir.path().join("result");
 
     // Build with GC root
-    let result = backend.build(&["shell"], None, Some(&gc_root_base)).await;
+    let result = backend.build(&["shell"], None, Some(&gc_root_base), &[]).await;
 
     assert!(
         result.is_ok(),
@@ -728,7 +727,7 @@ async fn test_full_backend_workflow() {
 
     // 5. Build devenv shell
     let build_paths = backend
-        .build(&["shell"], None, None)
+        .build(&["shell"], None, None, &[])
         .await
         .expect("Failed to build");
     println!("Built shell: {:?}", build_paths);
@@ -856,7 +855,7 @@ async fn test_eval_nonexistent_attribute() {
         .expect("Failed to assemble");
 
     // Try to eval a nonexistent attribute - should return an error
-    let result = backend.eval(&["nonexistent.attribute.path"]).await;
+    let result = backend.eval(&["nonexistent.attribute.path"], &[]).await;
 
     assert!(
         result.is_err(),
@@ -898,7 +897,7 @@ async fn test_build_nonexistent_attribute() {
     copy_fixture_lock(temp_dir.path());
 
     // Try to build a nonexistent attribute - should return an error
-    let result = backend.build(&["nonexistent.package"], None, None).await;
+    let result = backend.build(&["nonexistent.package"], None, None, &[]).await;
 
     assert!(
         result.is_err(),
@@ -952,7 +951,7 @@ async fn test_build_with_syntax_error_in_nix() {
         format!("{:?}", e)
     } else {
         // Assemble succeeded, error should happen during eval
-        let result = backend.eval(&["shell"]).await;
+        let result = backend.eval(&["shell"], &[]).await;
         assert!(result.is_err(), "Eval should fail with syntax error");
         format!("{:?}", result.unwrap_err())
     };
@@ -1009,7 +1008,7 @@ async fn test_eval_error_includes_nix_details() {
     let error_msg = if let Err(e) = assemble_result {
         format!("{:?}", e)
     } else {
-        let result = backend.eval(&["packages"]).await;
+        let result = backend.eval(&["packages"], &[]).await;
         assert!(result.is_err(), "Eval should fail with undefined variable");
         format!("{:?}", result.unwrap_err())
     };
@@ -1307,7 +1306,7 @@ async fn test_eval_empty_attributes_array() {
         .expect("Failed to assemble");
 
     // Test eval(&[]) - should return empty JSON array
-    let result = backend.eval(&[]).await;
+    let result = backend.eval(&[], &[]).await;
 
     assert!(
         result.is_ok(),
@@ -1348,7 +1347,7 @@ async fn test_build_empty_attributes_array() {
         .expect("Failed to assemble");
 
     // Test build(&[], None, None) - should return empty vec
-    let result = backend.build(&[], None, None).await;
+    let result = backend.build(&[], None, None, &[]).await;
 
     assert!(
         result.is_ok(),
@@ -1493,7 +1492,7 @@ async fn test_build_gc_root_already_exists() {
     let gc_root_actual = temp_dir.path().join("result-shell");
 
     // First build to create the gc_root
-    let result1 = backend.build(&["shell"], None, Some(&gc_root_base)).await;
+    let result1 = backend.build(&["shell"], None, Some(&gc_root_base), &[]).await;
     assert!(
         result1.is_ok(),
         "First build should succeed: {:?}",
@@ -1505,7 +1504,7 @@ async fn test_build_gc_root_already_exists() {
     );
 
     // Build again with same gc_root - Nix's add_perm_root should handle the existing symlink
-    let result2 = backend.build(&["shell"], None, Some(&gc_root_base)).await;
+    let result2 = backend.build(&["shell"], None, Some(&gc_root_base), &[]).await;
 
     assert!(
         result2.is_ok(),
@@ -1851,7 +1850,7 @@ async fn test_gc_with_actual_nix_store_paths() {
     copy_fixture_lock(temp_dir.path());
 
     // Build a package to get actual store paths
-    let build_result = backend.build(&["shell"], None, None).await;
+    let build_result = backend.build(&["shell"], None, None, &[]).await;
     assert!(build_result.is_ok(), "Build should succeed");
 
     let built_paths = build_result.unwrap();
@@ -1914,7 +1913,7 @@ async fn test_gc_with_protected_gc_roots() {
     let gc_root_base = temp_dir.path().join("protected-result");
     // The build function appends the attribute name to the gc_root base path
     let gc_root_actual = temp_dir.path().join("protected-result-shell");
-    let build_result = backend.build(&["shell"], None, Some(&gc_root_base)).await;
+    let build_result = backend.build(&["shell"], None, Some(&gc_root_base), &[]).await;
     assert!(
         build_result.is_ok(),
         "Build with gc_root should succeed: {:?}",
@@ -1983,7 +1982,7 @@ async fn test_gc_computes_closure_correctly() {
     copy_fixture_lock(temp_dir.path());
 
     // Build the shell which has dependencies
-    let build_result = backend.build(&["shell"], None, None).await;
+    let build_result = backend.build(&["shell"], None, None, &[]).await;
     assert!(build_result.is_ok(), "Build should succeed");
 
     let built_paths = build_result.unwrap();
@@ -2037,7 +2036,7 @@ async fn test_gc_reports_bytes_freed() {
     copy_fixture_lock(temp_dir.path());
 
     // Build a package that will have some size
-    let build_result = backend.build(&["shell"], None, None).await;
+    let build_result = backend.build(&["shell"], None, None, &[]).await;
     assert!(build_result.is_ok(), "Build should succeed");
 
     let built_paths = build_result.unwrap();
@@ -2092,7 +2091,7 @@ async fn test_gc_with_mixed_store_and_temp_paths() {
     copy_fixture_lock(temp_dir.path());
 
     // Build a package to get actual store paths
-    let build_result = backend.build(&["shell"], None, None).await;
+    let build_result = backend.build(&["shell"], None, None, &[]).await;
     assert!(build_result.is_ok(), "Build should succeed");
 
     let built_paths = build_result.unwrap();
@@ -2189,7 +2188,7 @@ async fn test_workflow_build_then_incremental_update() {
         .await
         .expect("Initial update failed");
 
-    let result1 = backend.build(&["shell"], None, None).await;
+    let result1 = backend.build(&["shell"], None, None, &[]).await;
     assert!(
         result1.is_ok(),
         "Initial build should succeed: {:?}",
@@ -2205,7 +2204,7 @@ async fn test_workflow_build_then_incremental_update() {
         .expect("Incremental update failed");
 
     // Rebuild after incremental update
-    let result2 = backend.build(&["shell"], None, None).await;
+    let result2 = backend.build(&["shell"], None, None, &[]).await;
     assert!(
         result2.is_ok(),
         "Rebuild after incremental update should succeed: {:?}",
@@ -2249,7 +2248,7 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
     let gc_root2_actual = temp_dir.path().join("result2-shell");
 
     // Build first attribute with first gc_root
-    let result1 = backend.build(&["shell"], None, Some(&gc_root1_base)).await;
+    let result1 = backend.build(&["shell"], None, Some(&gc_root1_base), &[]).await;
     assert!(
         result1.is_ok(),
         "First build should succeed: {:?}",
@@ -2257,7 +2256,7 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
     );
 
     // Build second attribute with second gc_root (same attribute, different gc_root)
-    let result2 = backend.build(&["shell"], None, Some(&gc_root2_base)).await;
+    let result2 = backend.build(&["shell"], None, Some(&gc_root2_base), &[]).await;
     assert!(
         result2.is_ok(),
         "Second build should succeed: {:?}",
@@ -2455,7 +2454,7 @@ async fn test_build_multiple_attributes_single_call() {
 
     // Test build(&[attr1, attr2], ...) builds all attributes in one call
     // Note: Building the same attribute twice should work fine
-    let result = backend.build(&["shell", "shell"], None, None).await;
+    let result = backend.build(&["shell", "shell"], None, None, &[]).await;
 
     assert!(
         result.is_ok(),
@@ -2509,9 +2508,9 @@ async fn test_eval_state_mutex_under_concurrent_eval() {
         .expect("Failed to assemble");
 
     // Create three eval futures without awaiting them
-    let eval1 = backend.eval(&["config.devenv.root"]);
-    let eval2 = backend.eval(&["config.name"]);
-    let eval3 = backend.eval(&["config.devenv.cliVersion"]);
+    let eval1 = backend.eval(&["config.devenv.root"], &[]);
+    let eval2 = backend.eval(&["config.name"], &[]);
+    let eval3 = backend.eval(&["config.devenv.cliVersion"], &[]);
 
     // Await all three concurrently
     let (result1, result2, result3) = tokio::join!(eval1, eval2, eval3);
@@ -2566,9 +2565,9 @@ async fn test_concurrent_build_operations() {
 
     // Create multiple build futures without awaiting them
     // Using different attributes to test true concurrent building
-    let build1 = backend.build(&["shell"], None, None);
-    let build2 = backend.build(&["config.languages.python.package"], None, None);
-    let build3 = backend.build(&["config.languages.php.package"], None, None);
+    let build1 = backend.build(&["shell"], None, None, &[]);
+    let build2 = backend.build(&["config.languages.python.package"], None, None, &[]);
+    let build3 = backend.build(&["config.languages.php.package"], None, None, &[]);
 
     // Await all three builds concurrently
     let (result1, result2, result3) = tokio::join!(build1, build2, build3);

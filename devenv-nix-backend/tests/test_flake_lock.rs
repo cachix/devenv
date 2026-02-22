@@ -57,7 +57,6 @@ impl TestNixArgs {
             devenv_runtime: &self.runtime,
             devenv_istesting: true,
             devenv_direnvrc_latest_version: 5,
-            container_name: None,
             active_profiles: &[],
             cli_options: CliOptionsConfig::default(),
             hostname: None,
