@@ -47,7 +47,7 @@ pub const CHECKMARK: &str = "✓";
 pub const XMARK: &str = "✗";
 
 /// Current status state.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StatusState {
     /// Files that changed (shown during build/reload).
     pub changed_files: Vec<PathBuf>,
@@ -67,22 +67,6 @@ pub struct StatusState {
     build_start: Option<Instant>,
     /// Duration of the last completed build.
     pub build_duration: Option<std::time::Duration>,
-}
-
-impl Default for StatusState {
-    fn default() -> Self {
-        Self {
-            changed_files: Vec::new(),
-            building: false,
-            reload_ready: false,
-            error: None,
-            show_error: false,
-            paused: false,
-            watched_files: Vec::new(),
-            build_start: None,
-            build_duration: None,
-        }
-    }
 }
 
 impl StatusState {
@@ -373,7 +357,7 @@ impl StatusLine {
             let (duration_num, duration_unit) = self
                 .state
                 .build_duration
-                .map(|d| format_duration_parts(d))
+                .map(format_duration_parts)
                 .unwrap_or_default();
             let has_duration = !duration_num.is_empty();
             let keybind = if use_short { "^⌥r" } else { "Ctrl-Alt-R" };
@@ -417,7 +401,7 @@ impl StatusLine {
             let (duration_num, duration_unit) = self
                 .state
                 .build_duration
-                .map(|d| format_duration_parts(d))
+                .map(format_duration_parts)
                 .unwrap_or_default();
             let has_duration = !duration_num.is_empty();
             let error_keybind = if use_short { "^⌥e" } else { "Ctrl-Alt-E" };

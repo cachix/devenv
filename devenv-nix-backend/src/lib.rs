@@ -226,10 +226,10 @@ pub fn write_lock_file(lock_file: &LockFile, output_path: &Path) -> Result<()> {
     let lock_json = lock_file.to_string()?;
     // Compare with existing content to avoid updating mtime unnecessarily.
     // direnv watches devenv.lock and uses mtime to detect changes.
-    if let Ok(existing) = std::fs::read_to_string(output_path) {
-        if existing == lock_json {
-            return Ok(());
-        }
+    if let Ok(existing) = std::fs::read_to_string(output_path)
+        && existing == lock_json
+    {
+        return Ok(());
     }
     std::fs::write(output_path, &lock_json)
         .with_context(|| format!("Failed to write lock file to {}", output_path.display()))?;

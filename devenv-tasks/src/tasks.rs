@@ -297,15 +297,15 @@ impl Tasks {
                             .task
                             .process
                             .as_ref()
-                            .map_or(false, |p| p.ready.is_some());
-                        let has_listen = dep_task.task.process.as_ref().map_or(false, |p| {
+                            .is_some_and(|p| p.ready.is_some());
+                        let has_listen = dep_task.task.process.as_ref().is_some_and(|p| {
                             p.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
                         });
                         let has_ports = dep_task
                             .task
                             .process
                             .as_ref()
-                            .map_or(false, |p| !p.ports.is_empty());
+                            .is_some_and(|p| !p.ports.is_empty());
                         if !has_ready && !has_listen && !has_ports {
                             validation_errors.push(format!(
                                 "Task '{}' depends on '{}@ready' but process has no ready config, TCP listen config, or allocated ports. \
@@ -343,15 +343,15 @@ impl Tasks {
                             .task
                             .process
                             .as_ref()
-                            .map_or(false, |p| p.ready.is_some());
-                        let has_listen = task_state.task.process.as_ref().map_or(false, |p| {
+                            .is_some_and(|p| p.ready.is_some());
+                        let has_listen = task_state.task.process.as_ref().is_some_and(|p| {
                             p.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
                         });
                         let has_ports = task_state
                             .task
                             .process
                             .as_ref()
-                            .map_or(false, |p| !p.ports.is_empty());
+                            .is_some_and(|p| !p.ports.is_empty());
                         if !has_ready && !has_listen && !has_ports {
                             validation_errors.push(format!(
                                 "Process '{}' has tasks depending on it via @ready but has no ready config, TCP listen config, or allocated ports. \

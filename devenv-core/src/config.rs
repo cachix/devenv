@@ -837,13 +837,13 @@ impl Config {
     ///
     /// This matches the logic in bootstrapLib.nix's getPlatformConfig helper.
     pub fn nixpkgs_config(&self, system: &str) -> NixpkgsConfig {
-        // Start with defaults
-        let mut config = NixpkgsConfig::default();
-
         // Apply top-level settings (lowest priority for these fields)
-        config.allow_unfree = self.allow_unfree;
-        config.allow_broken = self.allow_broken;
-        config.permitted_insecure_packages = self.permitted_insecure_packages.clone();
+        let mut config = NixpkgsConfig {
+            allow_unfree: self.allow_unfree,
+            allow_broken: self.allow_broken,
+            permitted_insecure_packages: self.permitted_insecure_packages.clone(),
+            ..Default::default()
+        };
 
         // Apply base nixpkgs config (overrides top-level)
         if let Some(ref nixpkgs) = self.nixpkgs {

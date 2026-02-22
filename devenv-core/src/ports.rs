@@ -428,16 +428,16 @@ fn get_process_using_port(port: u16) -> String {
             ProtocolSocketInfo::Udp(udp) => udp.local_port,
         };
 
-        if local_port == port {
-            if let Some(&pid) = socket.associated_pids.first() {
-                // Try to get process name from /proc on Linux
-                #[cfg(target_os = "linux")]
-                if let Ok(name) = std::fs::read_to_string(format!("/proc/{}/comm", pid)) {
-                    return format!(" by {} (PID {})", name.trim(), pid);
-                }
-
-                return format!(" (PID {})", pid);
+        if local_port == port
+            && let Some(&pid) = socket.associated_pids.first()
+        {
+            // Try to get process name from /proc on Linux
+            #[cfg(target_os = "linux")]
+            if let Ok(name) = std::fs::read_to_string(format!("/proc/{}/comm", pid)) {
+                return format!(" by {} (PID {})", name.trim(), pid);
             }
+
+            return format!(" (PID {})", pid);
         }
     }
 

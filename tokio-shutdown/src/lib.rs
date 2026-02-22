@@ -230,10 +230,10 @@ impl Shutdown {
     /// to terminate with the correct exit code.
     pub fn exit_process(&self) -> ! {
         // Run pre-exit hook (e.g., restore terminal state) before killing the process
-        if let Ok(guard) = self.pre_exit_hook.lock() {
-            if let Some(hook) = guard.as_ref() {
-                hook();
-            }
+        if let Ok(guard) = self.pre_exit_hook.lock()
+            && let Some(hook) = guard.as_ref()
+        {
+            hook();
         }
 
         let signal = self.last_signal().unwrap_or(Signal::SIGTERM);

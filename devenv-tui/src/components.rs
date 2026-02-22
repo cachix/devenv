@@ -203,9 +203,7 @@ impl ActivityTextComponent {
             (Color::Reset, COLOR_SECONDARY, COLOR_HIERARCHY, None)
         } else if self.is_completed {
             (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        } else if depth == 0 {
-            (COLOR_ACTIVE, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        } else if matches!(self.variant, ActivityVariant::Process(_)) {
+        } else if depth == 0 || matches!(self.variant, ActivityVariant::Process(_)) {
             (COLOR_ACTIVE, COLOR_SECONDARY, COLOR_HIERARCHY, None)
         } else {
             (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)

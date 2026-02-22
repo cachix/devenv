@@ -190,14 +190,14 @@ impl TasksUi {
                     None
                 };
 
-                if let Some(name) = name {
-                    if self.verbosity != VerbosityLevel::Quiet {
-                        self.console_write_stderr(&format!(
-                            "{:17} {}",
-                            console::style("Running").blue().bold(),
-                            console::style(&name).bold()
-                        ));
-                    }
+                if let Some(name) = name
+                    && self.verbosity != VerbosityLevel::Quiet
+                {
+                    self.console_write_stderr(&format!(
+                        "{:17} {}",
+                        console::style("Running").blue().bold(),
+                        console::style(&name).bold()
+                    ));
                 }
             }
             TaskEvent::Complete { id, outcome, .. } => {

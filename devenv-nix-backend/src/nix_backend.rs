@@ -492,10 +492,10 @@ impl NixRustBackend {
             }
 
             // Skip writing if existing file already has the same content
-            if let Ok(existing) = std::fs::read(&target_path) {
-                if existing == file.contents() {
-                    continue;
-                }
+            if let Ok(existing) = std::fs::read(&target_path)
+                && existing == file.contents()
+            {
+                continue;
             }
 
             let mut output_file = std::fs::File::create(&target_path)

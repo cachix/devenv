@@ -193,11 +193,11 @@ impl ShellCoordinator {
                         }
                     };
 
-                    if let Some(old_hash) = file_hashes.get(&path) {
-                        if *old_hash == new_hash {
-                            tracing::debug!("File unchanged (same hash): {:?}", path);
-                            continue;
-                        }
+                    if let Some(old_hash) = file_hashes.get(&path)
+                        && *old_hash == new_hash
+                    {
+                        tracing::debug!("File unchanged (same hash): {:?}", path);
+                        continue;
                     }
 
                     // Update stored hash
