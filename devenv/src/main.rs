@@ -480,8 +480,8 @@ async fn run_devenv(
 
     // Resolve settings from CLI + Config (pure functions, no mutation).
     let nix_settings = devenv_core::NixSettings::resolve(cli.nix_cli, &config);
-    let shell_settings = devenv_core::ShellSettings::resolve(cli.shell_cli, &config);
-    let cache_settings = devenv_core::CacheSettings::resolve(cli.cache_cli);
+    let shell_settings = devenv_core::ShellSettings::resolve(cli.shell_cli, cli.no_reload, &config);
+    let cache_settings = devenv_core::CacheSettings::resolve(cli.cache_cli, cli.no_eval_cache);
     let secret_settings = devenv_core::SecretSettings::resolve(cli.secret_cli, &config);
     let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
 

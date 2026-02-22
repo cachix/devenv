@@ -289,12 +289,6 @@ impl Cli {
     pub fn parse_and_resolve_options() -> Self {
         let mut cli = Self::parse();
         cli.cli_options.resolve_overrides();
-        if cli.no_eval_cache {
-            cli.cache_cli.eval_cache = false;
-        }
-        if cli.no_reload {
-            cli.shell_cli.reload = false;
-        }
         cli
     }
 
