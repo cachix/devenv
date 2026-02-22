@@ -135,6 +135,16 @@ pub struct NixCliOptions {
         arg(
             long,
             global = true,
+            help = "Force a hermetic environment, overriding config."
+        )
+    )]
+    pub no_impure: bool,
+
+    #[cfg_attr(
+        feature = "clap",
+        arg(
+            long,
+            global = true,
             help = "Disable substituters and consider all previously downloaded files up-to-date."
         )
     )]
@@ -162,6 +172,7 @@ impl Default for NixCliOptions {
             cores: defaults.cores,
             system: default_system(),
             impure: false,
+            no_impure: false,
             offline: false,
             nix_option: Vec::new(),
             nix_debugger: false,
@@ -202,11 +213,11 @@ impl Default for NixSettings {
 impl NixSettings {
     /// Resolve Nix build settings from CLI and config sources.
     ///
-    /// `impure` uses OR semantics: either CLI or Config can enable it.
-    /// All other fields are CLI-only today.
+    /// `impure` uses CLI-wins semantics: `--impure`/`--no-impure` override config,
+    /// falling back to `config.impure` when neither flag is set.
     pub fn resolve(cli: NixCliOptions, config: &Config) -> Self {
         Self {
-            impure: cli.impure || config.impure,
+            impure: flag(cli.impure, cli.no_impure).unwrap_or(config.impure),
             system: cli.system,
             max_jobs: cli.max_jobs,
             cores: cli.cores,
@@ -252,11 +263,14 @@ pub struct CacheCliOptions {
 
     #[cfg_attr(
         feature = "clap",
-        arg(long, global = true, help = "Disable caching of Nix evaluation results.")
+        arg(
+            long,
+            global = true,
+            help = "Disable caching of Nix evaluation results."
+        )
     )]
     pub no_eval_cache: bool,
 }
-
 
 /// Resolved cache settings.
 #[derive(Clone, Debug)]
@@ -309,17 +323,24 @@ pub struct ShellCliOptions {
 
     #[cfg_attr(
         feature = "clap",
-        arg(long, global = true, help = "Enable auto-reload when config files change (default).")
+        arg(
+            long,
+            global = true,
+            help = "Enable auto-reload when config files change (default)."
+        )
     )]
     pub reload: bool,
 
     #[cfg_attr(
         feature = "clap",
-        arg(long, global = true, help = "Disable auto-reload when config files change.")
+        arg(
+            long,
+            global = true,
+            help = "Disable auto-reload when config files change."
+        )
     )]
     pub no_reload: bool,
 }
-
 
 /// Resolved shell settings.
 #[derive(Clone, Debug)]
@@ -491,9 +512,20 @@ mod tests {
     }
 
     #[test]
-    fn nix_settings_impure_is_or() {
+    fn nix_settings_impure_from_config_when_cli_not_set() {
+        let cli = NixCliOptions::default();
+        let config = Config {
+            impure: true,
+            ..Default::default()
+        };
+        let settings = NixSettings::resolve(cli, &config);
+        assert!(settings.impure);
+    }
+
+    #[test]
+    fn nix_settings_no_impure_overrides_config() {
         let cli = NixCliOptions {
-            impure: false,
+            no_impure: true,
             ..Default::default()
         };
         let config = Config {
@@ -501,7 +533,7 @@ mod tests {
             ..Default::default()
         };
         let settings = NixSettings::resolve(cli, &config);
-        assert!(settings.impure);
+        assert!(!settings.impure);
     }
 
     #[test]
