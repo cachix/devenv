@@ -165,28 +165,46 @@ impl std::fmt::Display for SecretsNeedPrompting {
 
 impl std::error::Error for SecretsNeedPrompting {}
 
-pub struct Devenv {
+/// Resolved configuration and paths for a devenv project.
+///
+/// Created by [`DevenvConfig::new()`] from [`DevenvOptions`].
+/// Holds everything needed before Nix evaluation: settings, resolved paths,
+/// and the shutdown handle.
+///
+/// Commands that must work even when `devenv.nix` is broken
+/// (`down`, `processes wait`) are implemented here.
+pub struct DevenvConfig {
     pub inputs: BTreeMap<String, Input>,
     pub imports: Vec<String>,
     pub git_root: Option<PathBuf>,
     pub nixpkgs_config: NixpkgsConfig,
+    pub backend: NixBackendType,
     pub nix_settings: NixSettings,
     pub shell_settings: ShellSettings,
     pub cache_settings: CacheSettings,
     pub secret_settings: SecretSettings,
     pub input_overrides: InputOverrides,
     pub from_external: bool,
-    is_testing: bool,
+    pub is_testing: bool,
+    pub shutdown: Arc<tokio_shutdown::Shutdown>,
 
-    pub nix: Arc<Box<dyn NixBackend>>,
-
-    // All kinds of paths
+    // Resolved paths
     devenv_root: PathBuf,
     devenv_dotfile: PathBuf,
     devenv_dot_gc: PathBuf,
     devenv_home_gc: PathBuf,
     devenv_tmp: PathBuf,
     devenv_runtime: PathBuf,
+}
+
+/// An assembled devenv environment, ready for Nix evaluation.
+///
+/// Implements [`Deref<Target = DevenvConfig>`] so all path accessors and
+/// pre-assembly methods are available on both types.
+pub struct Devenv {
+    config: DevenvConfig,
+
+    pub nix: Arc<Box<dyn NixBackend>>,
 
     // Whether assemble has been run.
     // Assemble creates critical runtime directories and files.
@@ -215,13 +233,17 @@ pub struct Devenv {
     // Native process manager started in-process (for detach mode used by test())
     native_process_manager: Arc<OnceCell<Arc<processes::NativeProcessManager>>>,
 
-    // Shutdown handle for coordinated shutdown
-    shutdown: Arc<tokio_shutdown::Shutdown>,
-
     // Task-exported env vars (e.g., PATH with venv/bin, VIRTUAL_ENV) set by
     // run_enter_shell_tasks(). Injected into the bash script by prepare_shell()
     // so they take effect AFTER the Nix shell env is applied.
     task_exports: std::sync::Mutex<HashMap<String, String>>,
+}
+
+impl std::ops::Deref for Devenv {
+    type Target = DevenvConfig;
+    fn deref(&self) -> &DevenvConfig {
+        &self.config
+    }
 }
 
 /// Sanitize profile name to be filesystem-safe
@@ -245,13 +267,12 @@ fn compute_profile_dir_suffix(profiles: &[String]) -> Option<String> {
     }
 }
 
-impl Devenv {
+impl DevenvConfig {
     pub async fn new(options: DevenvOptions) -> Self {
         let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv");
         let devenv_home = xdg_dirs
             .get_data_home()
             .expect("Failed to get home directory");
-        let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
         let devenv_home_gc = devenv_home.join("gc");
 
         let devenv_root = options
@@ -259,10 +280,7 @@ impl Devenv {
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
 
-        let nix_settings = options.nix_settings;
         let shell_settings = options.shell_settings;
-        let cache_settings = options.cache_settings;
-        let secret_settings = options.secret_settings;
 
         // Compute profile-aware dotfile path for state isolation
         let base_devenv_dotfile = options
@@ -306,90 +324,26 @@ impl Devenv {
             .await
             .expect("Failed to create DEVENV_HOME_GC directory");
 
-        // Create DevenvPaths struct
-        let paths = DevenvPaths {
-            root: devenv_root.clone(),
-            dotfile: devenv_dotfile.clone(),
-            dot_gc: devenv_dot_gc.clone(),
-            home_gc: devenv_home_gc.clone(),
-        };
-
-        // Create CachixPaths for Nix backend
-        let cachix_paths = CachixPaths {
-            trusted_keys: cachix_trusted_keys,
-            netrc: devenv_dotfile.join("netrc"),
-            daemon_socket: None,
-        };
-        let cachix_manager = Arc::new(CachixManager::new(cachix_paths));
-
-        // Create shared secretspec_resolved Arc to share between Devenv and Nix
-        let secretspec_resolved = Arc::new(OnceCell::new());
-
-        // Create eval-cache pool (framework layer concern, used by backends)
-        let eval_cache_pool = Arc::new(OnceCell::new());
-
-        // Create port allocator shared with backend for holding port reservations
-        let port_allocator = Arc::new(PortAllocator::new());
-
-        let nix: Box<dyn NixBackend> = match options.backend {
-            NixBackendType::Nix => Box::new(
-                devenv_nix_backend::nix_backend::NixRustBackend::new(
-                    paths,
-                    options.nixpkgs_config.clone(),
-                    nix_settings.clone(),
-                    cache_settings.clone(),
-                    cachix_manager.clone(),
-                    options.shutdown.clone(),
-                    Some(eval_cache_pool.clone()),
-                    None,
-                    port_allocator.clone(),
-                )
-                .expect("Failed to initialize Nix backend"),
-            ),
-            #[cfg(feature = "snix")]
-            NixBackendType::Snix => Box::new(
-                devenv_snix_backend::SnixBackend::new(
-                    nix_settings.clone(),
-                    cache_settings.clone(),
-                    paths,
-                    cachix_manager,
-                    Some(eval_cache_pool.clone()),
-                )
-                .await
-                .expect("Failed to initialize Snix backend"),
-            ),
-        };
-
         Self {
             inputs: options.inputs,
             imports: options.imports,
             git_root: options.git_root,
             nixpkgs_config: options.nixpkgs_config,
-            nix_settings,
+            backend: options.backend,
+            nix_settings: options.nix_settings,
             shell_settings,
-            cache_settings,
-            secret_settings,
+            cache_settings: options.cache_settings,
+            secret_settings: options.secret_settings,
             input_overrides: options.input_overrides,
             from_external: options.from_external,
             is_testing: options.is_testing,
+            shutdown: options.shutdown,
             devenv_root,
             devenv_dotfile,
             devenv_dot_gc,
             devenv_home_gc,
             devenv_tmp,
             devenv_runtime,
-            nix: Arc::new(nix),
-            assembled: Arc::new(AtomicBool::new(false)),
-            assemble_lock: Arc::new(Semaphore::new(1)),
-            has_processes: Arc::new(OnceCell::new()),
-            dev_env_cache: Arc::new(OnceCell::new()),
-            eval_cache_pool,
-            secretspec_resolved,
-            nix_args_string: Arc::new(OnceCell::new()),
-            port_allocator,
-            native_process_manager: Arc::new(OnceCell::new()),
-            shutdown: options.shutdown,
-            task_exports: std::sync::Mutex::new(HashMap::new()),
         }
     }
 
@@ -460,6 +414,118 @@ impl Devenv {
     /// Get the path to the .devenv/state directory
     pub fn devenv_state_dir(&self) -> PathBuf {
         self.devenv_dotfile.join("state")
+    }
+
+    pub async fn down(&self) -> Result<()> {
+        let manager: Box<dyn processes::ProcessManager> = if self.native_manager_pid_file().exists()
+        {
+            // Native process manager is running
+            let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
+            Box::new(processes::NativeProcessManager::new(runtime_dir)?)
+        } else if self.processes_pid().exists() {
+            // Process-compose is running
+            // We don't need the procfile_script for stopping, just use a dummy path
+            Box::new(processes::ProcessComposeManager::new(
+                PathBuf::new(),
+                self.devenv_dotfile.clone(),
+            ))
+        } else {
+            bail!("No processes running");
+        };
+
+        manager.stop().await
+    }
+
+    pub async fn wait_for_ready(&self, timeout: std::time::Duration) -> Result<()> {
+        if self.native_manager_pid_file().exists() {
+            let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
+            let socket_path = runtime_dir.join("native.sock");
+            tokio::time::timeout(
+                timeout,
+                processes::NativeProcessManager::wait_for_ready(&socket_path),
+            )
+            .await
+            .map_err(|_| miette!("Timed out waiting for processes to be ready"))?
+        } else if self.processes_pid().exists() {
+            bail!("'devenv processes wait' is not yet supported for the process-compose backend")
+        } else {
+            bail!("No processes running")
+        }
+    }
+}
+
+impl Devenv {
+    pub async fn new(options: DevenvOptions) -> Self {
+        let config = DevenvConfig::new(options).await;
+
+        let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv");
+        let devenv_home = xdg_dirs
+            .get_data_home()
+            .expect("Failed to get home directory");
+        let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
+
+        let paths = config.paths();
+
+        // Create CachixPaths for Nix backend
+        let cachix_paths = CachixPaths {
+            trusted_keys: cachix_trusted_keys,
+            netrc: config.devenv_dotfile.join("netrc"),
+            daemon_socket: None,
+        };
+        let cachix_manager = Arc::new(CachixManager::new(cachix_paths));
+
+        // Create shared secretspec_resolved Arc to share between Devenv and Nix
+        let secretspec_resolved = Arc::new(OnceCell::new());
+
+        // Create eval-cache pool (framework layer concern, used by backends)
+        let eval_cache_pool = Arc::new(OnceCell::new());
+
+        // Create port allocator shared with backend for holding port reservations
+        let port_allocator = Arc::new(PortAllocator::new());
+
+        let nix: Box<dyn NixBackend> = match config.backend {
+            NixBackendType::Nix => Box::new(
+                devenv_nix_backend::nix_backend::NixRustBackend::new(
+                    paths,
+                    config.nixpkgs_config.clone(),
+                    config.nix_settings.clone(),
+                    config.cache_settings.clone(),
+                    cachix_manager.clone(),
+                    config.shutdown.clone(),
+                    Some(eval_cache_pool.clone()),
+                    None,
+                    port_allocator.clone(),
+                )
+                .expect("Failed to initialize Nix backend"),
+            ),
+            #[cfg(feature = "snix")]
+            NixBackendType::Snix => Box::new(
+                devenv_snix_backend::SnixBackend::new(
+                    config.nix_settings.clone(),
+                    config.cache_settings.clone(),
+                    paths,
+                    cachix_manager,
+                    Some(eval_cache_pool.clone()),
+                )
+                .await
+                .expect("Failed to initialize Snix backend"),
+            ),
+        };
+
+        Self {
+            config,
+            nix: Arc::new(nix),
+            assembled: Arc::new(AtomicBool::new(false)),
+            assemble_lock: Arc::new(Semaphore::new(1)),
+            has_processes: Arc::new(OnceCell::new()),
+            dev_env_cache: Arc::new(OnceCell::new()),
+            eval_cache_pool,
+            secretspec_resolved,
+            nix_args_string: Arc::new(OnceCell::new()),
+            port_allocator,
+            native_process_manager: Arc::new(OnceCell::new()),
+            task_exports: std::sync::Mutex::new(HashMap::new()),
+        }
     }
 
     /// Get the eval cache database pool, if initialized.
@@ -1791,47 +1857,13 @@ impl Devenv {
     }
 
     pub async fn down(&self) -> Result<()> {
-        // In-process native manager (started by test() or up(detach=true))
+        // Stop in-process native manager if running
         if let Some(manager) = self.native_process_manager.get() {
             manager.stop_all().await?;
             return Ok(());
         }
-
-        // Determine which manager is running and create appropriate instance
-        let manager: Box<dyn processes::ProcessManager> = if self.native_manager_pid_file().exists()
-        {
-            // Native process manager is running
-            let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
-            Box::new(processes::NativeProcessManager::new(runtime_dir)?)
-        } else if self.processes_pid().exists() {
-            // Process-compose is running
-            // We don't need the procfile_script for stopping, just use a dummy path
-            Box::new(processes::ProcessComposeManager::new(
-                PathBuf::new(),
-                self.devenv_dotfile.clone(),
-            ))
-        } else {
-            bail!("No processes running");
-        };
-
-        manager.stop().await
-    }
-
-    pub async fn wait_for_ready(&self, timeout: std::time::Duration) -> Result<()> {
-        if self.native_manager_pid_file().exists() {
-            let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
-            let socket_path = runtime_dir.join("native.sock");
-            tokio::time::timeout(
-                timeout,
-                processes::NativeProcessManager::wait_for_ready(&socket_path),
-            )
-            .await
-            .map_err(|_| miette!("Timed out waiting for processes to be ready"))?
-        } else if self.processes_pid().exists() {
-            bail!("'devenv processes wait' is not yet supported for the process-compose backend")
-        } else {
-            bail!("No processes running")
-        }
+        // Fall back to PID file cleanup
+        self.config.down().await
     }
 
     /// Assemble the devenv environment and return the serialized NixArgs string.
