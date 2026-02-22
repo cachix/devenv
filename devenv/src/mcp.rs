@@ -3,7 +3,6 @@
 use crate::devenv::{Devenv, DevenvOptions};
 use devenv_activity::Activity;
 use devenv_core::Options;
-use devenv_core::config::{Input, NixBackendType, NixpkgsConfig};
 use miette::Result;
 use rmcp::handler::server::tool::{ToolCallContext, ToolRouter};
 use rmcp::handler::server::wrapper::Parameters;
@@ -18,20 +17,14 @@ use rmcp::{ErrorData as McpError, RoleServer, ServerHandler, ServiceExt, tool, t
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 #[derive(Clone)]
 struct DevenvMcpServer {
-    inputs: BTreeMap<String, Input>,
-    imports: Vec<String>,
-    git_root: Option<PathBuf>,
-    nixpkgs_config: NixpkgsConfig,
-    backend: NixBackendType,
+    options: DevenvOptions,
     cache: Arc<RwLock<McpCache>>,
-    devenv_root: Option<PathBuf>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -43,18 +36,9 @@ struct McpCache {
 
 impl DevenvMcpServer {
     fn new(options: DevenvOptions) -> Self {
-        Self::new_with_root(options, None)
-    }
-
-    fn new_with_root(options: DevenvOptions, devenv_root: Option<PathBuf>) -> Self {
         Self {
-            inputs: options.inputs,
-            imports: options.imports,
-            git_root: options.git_root,
-            nixpkgs_config: options.nixpkgs_config,
-            backend: options.backend,
+            options,
             cache: Arc::new(RwLock::new(McpCache::default())),
-            devenv_root,
             tool_router: Self::tool_router(),
         }
     }
@@ -62,17 +46,7 @@ impl DevenvMcpServer {
     async fn initialize(&self) -> Result<()> {
         info!("Initializing MCP server cache...");
 
-        // Create a single Devenv instance for all operations
-        let devenv_options = DevenvOptions {
-            inputs: self.inputs.clone(),
-            imports: self.imports.clone(),
-            git_root: self.git_root.clone(),
-            nixpkgs_config: self.nixpkgs_config.clone(),
-            backend: self.backend.clone(),
-            devenv_root: self.devenv_root.clone(),
-            ..Default::default()
-        };
-        let devenv = Devenv::new(devenv_options).await;
+        let devenv = Devenv::new(self.options.clone()).await;
 
         // Assemble once for all operations
         devenv.assemble().await?;
@@ -531,17 +505,12 @@ mod tests {
 
         let devenv_root = Some(temp_dir.path().to_path_buf());
         let options = DevenvOptions {
-            devenv_root: devenv_root.clone(),
-            ..Default::default()
-        };
-        let server = DevenvMcpServer::new_with_root(options, devenv_root.clone());
-
-        // Create Devenv and assemble
-        let devenv_options = DevenvOptions {
             devenv_root,
             ..Default::default()
         };
-        let devenv = Devenv::new(devenv_options).await;
+        let server = DevenvMcpServer::new(options.clone());
+
+        let devenv = Devenv::new(options).await;
         devenv.assemble().await.unwrap();
 
         let packages = server.fetch_packages_with_devenv(&devenv).await;
@@ -609,17 +578,12 @@ mod tests {
 
         let devenv_root = Some(temp_dir.path().to_path_buf());
         let options = DevenvOptions {
-            devenv_root: devenv_root.clone(),
-            ..Default::default()
-        };
-        let server = DevenvMcpServer::new_with_root(options, devenv_root.clone());
-
-        // Create Devenv and assemble
-        let devenv_options = DevenvOptions {
             devenv_root,
             ..Default::default()
         };
-        let devenv = Devenv::new(devenv_options).await;
+        let server = DevenvMcpServer::new(options.clone());
+
+        let devenv = Devenv::new(options).await;
         devenv.assemble().await.unwrap();
 
         let options = server.fetch_options_with_devenv(&devenv).await;

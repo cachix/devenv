@@ -66,7 +66,7 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
         .unwrap_or(0)
 });
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct DevenvOptions {
     pub inputs: BTreeMap<String, Input>,
     pub imports: Vec<String>,
