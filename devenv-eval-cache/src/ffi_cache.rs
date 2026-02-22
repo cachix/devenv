@@ -115,10 +115,10 @@ impl EvalInputCollector {
     /// This is called by `NixLogBridge` when it detects input operations
     /// during evaluation.
     pub fn push(&self, op: EvalOp) {
-        if self.is_active() {
-            if let Ok(mut ops) = self.ops.lock() {
-                ops.push(op);
-            }
+        if self.is_active()
+            && let Ok(mut ops) = self.ops.lock()
+        {
+            ops.push(op);
         }
     }
 

@@ -465,23 +465,19 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     }
                     KeyCode::Char('r') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                         // Restart selected process
-                        if let Some(ref tx) = command_tx.as_ref() {
-                            if let Ok(ui) = ui_state.read()
-                                && let Some(activity_id) = ui.selected_activity
+                        if let Some(tx) = command_tx.as_ref()
+                            && let Ok(ui) = ui_state.read()
+                            && let Some(activity_id) = ui.selected_activity
+                        {
+                            // Get the process name from the activity
+                            if let Ok(model) = activity_model.read()
+                                && let Some(activity) = model.get_activity(activity_id)
+                                && matches!(
+                                    activity.variant,
+                                    crate::model::ActivityVariant::Process(_)
+                                )
                             {
-                                // Get the process name from the activity
-                                if let Ok(model) = activity_model.read() {
-                                    if let Some(activity) = model.get_activity(activity_id) {
-                                        if matches!(
-                                            activity.variant,
-                                            crate::model::ActivityVariant::Process(_)
-                                        ) {
-                                            let _ = tx.try_send(ProcessCommand::Restart(
-                                                activity.name.clone(),
-                                            ));
-                                        }
-                                    }
-                                }
+                                let _ = tx.try_send(ProcessCommand::Restart(activity.name.clone()));
                             }
                         }
                     }

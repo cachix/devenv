@@ -261,15 +261,13 @@ impl ServerHandler for DevenvMcpServer {
         }))
     }
 
-    fn call_tool(
+    async fn call_tool(
         &self,
         request: CallToolRequestParam,
         context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
-        async move {
-            let tool_context = ToolCallContext::new(self, request, context);
-            self.tool_router.call(tool_context).await
-        }
+    ) -> Result<CallToolResult, McpError> {
+        let tool_context = ToolCallContext::new(self, request, context);
+        self.tool_router.call(tool_context).await
     }
 }
 

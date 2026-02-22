@@ -165,7 +165,7 @@ impl NativeProcessManager {
         let activity = builder.start();
 
         // Create notify socket if configured via ready.notify
-        let uses_notify = config.ready.as_ref().map_or(false, |r| r.notify);
+        let uses_notify = config.ready.as_ref().is_some_and(|r| r.notify);
         let notify_socket = if uses_notify {
             let socket = NotifySocket::new(&self.state_dir, &config.name).await?;
             info!(

@@ -406,16 +406,15 @@ impl Devenv {
     }
 
     async fn processes_running(&self) -> bool {
-        if self.processes_pid().exists() {
-            if let Ok(pid_str) = fs::read_to_string(self.processes_pid()).await {
-                if let Ok(pid) = pid_str.trim().parse::<i32>() {
-                    match signal::kill(Pid::from_raw(pid), None) {
-                        Ok(_) => return true,
-                        Err(nix::errno::Errno::EPERM) => return true,
-                        Err(nix::errno::Errno::ESRCH) => {}
-                        Err(_) => {}
-                    }
-                }
+        if self.processes_pid().exists()
+            && let Ok(pid_str) = fs::read_to_string(self.processes_pid()).await
+            && let Ok(pid) = pid_str.trim().parse::<i32>()
+        {
+            match signal::kill(Pid::from_raw(pid), None) {
+                Ok(_) => return true,
+                Err(nix::errno::Errno::EPERM) => return true,
+                Err(nix::errno::Errno::ESRCH) => {}
+                Err(_) => {}
             }
         }
 
@@ -427,15 +426,14 @@ impl Devenv {
             return false;
         }
 
-        match tokio::time::timeout(
-            std::time::Duration::from_millis(200),
-            UnixStream::connect(&socket_path),
+        matches!(
+            tokio::time::timeout(
+                std::time::Duration::from_millis(200),
+                UnixStream::connect(&socket_path),
+            )
+            .await,
+            Ok(Ok(_))
         )
-        .await
-        {
-            Ok(Ok(_)) => true,
-            _ => false,
-        }
     }
 
     pub fn paths(&self) -> DevenvPaths {
@@ -597,7 +595,7 @@ impl Devenv {
 
         // The Nix output ends with "exec bash" which would start a new shell without
         // the devenv environment. Strip it for ALL modes - we handle shell execution ourselves.
-        let output_str = String::from_utf8_lossy(&output);
+        let output_str = String::from_utf8_lossy(output);
         let shell_env = output_str
             .trim_end()
             .trim_end_matches("exec bash")
@@ -1657,7 +1655,8 @@ impl Devenv {
         drop(self.port_allocator.take_reservations());
 
         // Check which process manager to use
-        let implementation = {
+
+        {
             let phase4 = Activity::operation("Running processes")
                 .parent(None)
                 .start();
@@ -1788,9 +1787,7 @@ impl Devenv {
             // ProcessComposeManager foreground mode uses exec() and never returns here.
             // In detached mode, we reach here.
             Ok::<RunMode, miette::Report>(RunMode::Detached)
-        };
-
-        implementation
+        }
     }
 
     pub async fn down(&self) -> Result<()> {
@@ -2344,7 +2341,7 @@ fn merge_task_input(
     }
 }
 
-fn format_tasks_tree(tasks: &Vec<tasks::TaskConfig>) -> String {
+fn format_tasks_tree(tasks: &[tasks::TaskConfig]) -> String {
     use std::fmt::Write;
 
     let mut output = String::new();

@@ -60,17 +60,14 @@ pub fn view(
                 NixActivityState::Completed { success: false, .. }
             )
         );
-        let activity_logs = if let ActivityVariant::Task(ref task_data) = activity.variant
-            && (task_data.show_output || task_failed)
-        {
-            model.get_build_logs(activity.id).cloned()
-        } else if devenv_failed {
-            model.get_build_logs(activity.id).cloned()
-        } else if matches!(activity.variant, ActivityVariant::Process(_)) {
-            model.get_build_logs(activity.id).cloned()
-        } else if let ActivityVariant::Message(ref msg_data) = activity.variant
-            && msg_data.details.is_some()
-        {
+        let show_activity_logs = devenv_failed
+            || match &activity.variant {
+                ActivityVariant::Task(task_data) => task_data.show_output || task_failed,
+                ActivityVariant::Process(_) => true,
+                ActivityVariant::Message(msg_data) => msg_data.details.is_some(),
+                _ => false,
+            };
+        let activity_logs = if show_activity_logs {
             model.get_build_logs(activity.id).cloned()
         } else if is_selected {
             selected_logs.cloned()

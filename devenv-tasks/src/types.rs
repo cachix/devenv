@@ -25,6 +25,7 @@ pub enum DependencyKind {
     /// Wait for task to be ready/healthy (default, hard dependency).
     /// - For oneshot tasks: wait for successful completion
     /// - For process tasks: wait for ProcessReady state
+    ///
     /// Propagates failure: if the dependency fails, this task fails too.
     #[default]
     Ready,

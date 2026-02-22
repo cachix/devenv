@@ -510,12 +510,11 @@ impl ActivityModel {
                         | EvalOp::ReadFile { .. }
                         | EvalOp::PathExists { .. }
                 );
-                if is_file_read {
-                    if let Some(activity) = self.activities.get_mut(&id) {
-                        if let ActivityVariant::Evaluating(eval) = &mut activity.variant {
-                            eval.files_evaluated += 1;
-                        }
-                    }
+                if is_file_read
+                    && let Some(activity) = self.activities.get_mut(&id)
+                    && let ActivityVariant::Evaluating(eval) = &mut activity.variant
+                {
+                    eval.files_evaluated += 1;
                 }
             }
         }
@@ -531,12 +530,14 @@ impl ActivityModel {
                 let mut additional: HashMap<u64, Vec<u64>> = HashMap::new();
 
                 for (parent_id, child_id) in edges {
-                    if primary_parents.contains_key(&child_id) {
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        primary_parents.entry(child_id)
+                    {
+                        // First edge - set as primary parent
+                        e.insert(parent_id);
+                    } else {
                         // Already has primary parent, add as additional
                         additional.entry(child_id).or_default().push(parent_id);
-                    } else {
-                        // First edge - set as primary parent
-                        primary_parents.insert(child_id, parent_id);
                     }
                 }
 
@@ -643,10 +644,10 @@ impl ActivityModel {
             }
             Process::Complete { id, outcome, .. } => {
                 // Update status to Stopped before completing
-                if let Some(activity) = self.activities.get_mut(&id) {
-                    if let ActivityVariant::Process(ref mut proc) = activity.variant {
-                        proc.status = ProcessStatus::Stopped;
-                    }
+                if let Some(activity) = self.activities.get_mut(&id)
+                    && let ActivityVariant::Process(ref mut proc) = activity.variant
+                {
+                    proc.status = ProcessStatus::Stopped;
                 }
                 self.handle_activity_complete(id, outcome);
             }
@@ -870,18 +871,17 @@ impl ActivityModel {
                     )
             });
 
-            if has_cached_child {
-                if let Some(activity) = self.activities.get_mut(&id)
-                    && let NixActivityState::Completed {
-                        success, duration, ..
-                    } = activity.state
-                {
-                    activity.state = NixActivityState::Completed {
-                        success,
-                        cached: true,
-                        duration,
-                    };
-                }
+            if has_cached_child
+                && let Some(activity) = self.activities.get_mut(&id)
+                && let NixActivityState::Completed {
+                    success, duration, ..
+                } = activity.state
+            {
+                activity.state = NixActivityState::Completed {
+                    success,
+                    cached: true,
+                    duration,
+                };
             }
         }
     }

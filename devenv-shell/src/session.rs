@@ -115,18 +115,10 @@ impl Default for SessionConfig {
 
 /// Injectable I/O for the shell session.
 /// When fields are None, real stdin/stdout are used.
+#[derive(Default)]
 pub struct SessionIo {
     pub stdin: Option<Box<dyn std::io::Read + Send>>,
     pub stdout: Option<Box<dyn std::io::Write + Send>>,
-}
-
-impl Default for SessionIo {
-    fn default() -> Self {
-        Self {
-            stdin: None,
-            stdout: None,
-        }
-    }
 }
 
 /// Internal events for the shell session event loop.
@@ -327,15 +319,15 @@ impl ShellSession {
         // writer) instead of crossterm::terminal::size() which always uses the
         // process's controlling terminal. That would make this work correctly even
         // with injected I/O and remove the need for the config.size guard.
-        if self.config.size.is_none() {
-            if let Ok((cols, rows)) = terminal::size() {
-                self.size = PtySize {
-                    rows,
-                    cols,
-                    pixel_width: 0,
-                    pixel_height: 0,
-                };
-            }
+        if self.config.size.is_none()
+            && let Ok((cols, rows)) = terminal::size()
+        {
+            self.size = PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            };
         }
         tracing::debug!(
             "session: terminal size: {}x{}",
@@ -554,16 +546,16 @@ impl ShellSession {
             // Check for terminal resize periodically (not on every event)
             if last_resize_check.elapsed() > Duration::from_millis(500) {
                 last_resize_check = std::time::Instant::now();
-                if let Ok((cols, _rows)) = terminal::size() {
-                    if cols != self.size.cols {
-                        self.size.cols = cols;
-                        let _ = coordinator_tx
-                            .send(ShellEvent::Resize {
-                                cols: self.size.cols,
-                                rows: self.size.rows,
-                            })
-                            .await;
-                    }
+                if let Ok((cols, _rows)) = terminal::size()
+                    && cols != self.size.cols
+                {
+                    self.size.cols = cols;
+                    let _ = coordinator_tx
+                        .send(ShellEvent::Resize {
+                            cols: self.size.cols,
+                            rows: self.size.rows,
+                        })
+                        .await;
                 }
             }
         }

@@ -10,7 +10,7 @@ use devenv_cache_core::{
 use glob::{MatchOptions, glob_with};
 use serde_json::Value;
 use sqlx::Row;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tracing::{debug, warn};
 
@@ -54,7 +54,7 @@ pub struct TaskCache {
 
 impl TaskCache {
     /// Create a new TaskCache with the given cache directory.
-    pub async fn new(cache_dir: &PathBuf) -> CacheResult<Self> {
+    pub async fn new(cache_dir: &Path) -> CacheResult<Self> {
         let db_path = cache_dir.join("tasks.db");
         Self::with_db_path(db_path).await
     }

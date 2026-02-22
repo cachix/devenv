@@ -355,12 +355,10 @@ impl TaskState {
                     let engine = base64::engine::general_purpose::STANDARD;
                     if let (Ok(var_bytes), Ok(val_bytes)) =
                         (engine.decode(var_b64), engine.decode(val_b64))
-                    {
-                        if let (Ok(var), Ok(val)) =
+                        && let (Ok(var), Ok(val)) =
                             (String::from_utf8(var_bytes), String::from_utf8(val_bytes))
-                        {
-                            exports.insert(var, serde_json::Value::String(val));
-                        }
+                    {
+                        exports.insert(var, serde_json::Value::String(val));
                     }
                 }
             }
@@ -377,10 +375,10 @@ impl TaskState {
             .unwrap_or_else(|| serde_json::json!({}));
 
         // Ensure devenv.env structure exists
-        if !output.get("devenv").is_some() {
+        if output.get("devenv").is_none() {
             output["devenv"] = serde_json::json!({});
         }
-        if !output["devenv"].get("env").is_some() {
+        if output["devenv"].get("env").is_none() {
             output["devenv"]["env"] = serde_json::json!({});
         }
 
