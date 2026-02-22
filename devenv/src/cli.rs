@@ -130,6 +130,7 @@ pub struct CliOptions {
     #[arg(
         long,
         global = true,
+        help_heading = "Tracing",
         env = "DEVENV_TRACE_OUTPUT",
         help = "Enable tracing and set the output destination: stdout, stderr, or file:<path>. Tracing is disabled by default."
     )]
@@ -138,6 +139,7 @@ pub struct CliOptions {
     #[arg(
         long,
         global = true,
+        help_heading = "Tracing",
         env = "DEVENV_TRACE_FORMAT",
         help = "Set the trace output format. Only takes effect when tracing is enabled via --trace-output.",
         default_value_t,
@@ -237,21 +239,6 @@ pub struct Cli {
     #[command(flatten)]
     pub cli_options: CliOptions,
 
-    #[command(flatten)]
-    pub nix_cli: devenv_core::NixCliOptions,
-
-    #[command(flatten)]
-    pub cache_cli: devenv_core::CacheCliOptions,
-
-    #[command(flatten)]
-    pub shell_cli: devenv_core::ShellCliOptions,
-
-    #[command(flatten)]
-    pub secret_cli: devenv_core::SecretCliOptions,
-
-    #[command(flatten)]
-    pub input_overrides: devenv_core::InputOverrides,
-
     #[arg(
         long,
         global = true,
@@ -259,6 +246,21 @@ pub struct Cli {
         long_help = "Source for devenv.nix.\n\nCan be either a filesystem path (with path: prefix) or a flake input reference.\n\nExamples:\n  --from github:cachix/devenv\n  --from github:cachix/devenv?dir=examples/simple\n  --from path:/absolute/path/to/project\n  --from path:./relative/path"
     )]
     pub from: Option<String>,
+
+    #[command(flatten)]
+    pub input_overrides: devenv_core::InputOverrides,
+
+    #[command(flatten)]
+    pub nix_cli: devenv_core::NixCliOptions,
+
+    #[command(flatten)]
+    pub shell_cli: devenv_core::ShellCliOptions,
+
+    #[command(flatten)]
+    pub cache_cli: devenv_core::CacheCliOptions,
+
+    #[command(flatten)]
+    pub secret_cli: devenv_core::SecretCliOptions,
 }
 
 impl Cli {
