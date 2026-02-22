@@ -240,12 +240,20 @@ pub struct CacheCliOptions {
         arg(
             long,
             global = true,
-            help = "Cache the results of Nix evaluation (default).",
-            hide = true,
-            long_help = "Cache the results of Nix evaluation (deprecated, on by default). Use --no-eval-cache to disable caching.",
+            help = "Enable caching of Nix evaluation results (default)."
         )
     )]
     pub eval_cache: bool,
+
+    #[cfg_attr(
+        feature = "clap",
+        arg(
+            long,
+            global = true,
+            help = "Disable caching of Nix evaluation results."
+        )
+    )]
+    pub no_eval_cache: bool,
 
     #[cfg_attr(
         feature = "clap",
@@ -262,16 +270,6 @@ pub struct CacheCliOptions {
         arg(long, global = true, help = "Force a refresh of the task cache.")
     )]
     pub refresh_task_cache: bool,
-
-    #[cfg_attr(
-        feature = "clap",
-        arg(
-            long,
-            global = true,
-            help = "Disable caching of Nix evaluation results."
-        )
-    )]
-    pub no_eval_cache: bool,
 }
 
 /// Resolved cache settings.
