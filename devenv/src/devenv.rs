@@ -38,7 +38,7 @@ use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::process;
-use tokio::sync::{OnceCell, RwLock, Semaphore};
+use tokio::sync::{OnceCell, Semaphore};
 use tracing::{Instrument, debug, info, instrument, trace};
 
 // templates
@@ -75,9 +75,6 @@ pub struct DevenvOptions {
     pub secret_settings: Option<SecretSettings>,
     pub input_overrides: InputOverrides,
     pub from_external: bool,
-    pub tui: bool,
-    pub verbose: bool,
-    pub quiet: bool,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
     pub shutdown: Arc<tokio_shutdown::Shutdown>,
@@ -94,9 +91,6 @@ impl DevenvOptions {
             secret_settings: None,
             input_overrides: InputOverrides::default(),
             from_external: false,
-            tui: true,
-            verbose: false,
-            quiet: false,
             devenv_root: None,
             devenv_dotfile: None,
             shutdown,
@@ -115,9 +109,6 @@ impl Default for DevenvOptions {
             secret_settings: None,
             input_overrides: InputOverrides::default(),
             from_external: false,
-            tui: true,
-            verbose: false,
-            quiet: false,
             devenv_root: None,
             devenv_dotfile: None,
             shutdown: tokio_shutdown::Shutdown::new(),
@@ -179,16 +170,13 @@ impl std::fmt::Display for SecretsNeedPrompting {
 impl std::error::Error for SecretsNeedPrompting {}
 
 pub struct Devenv {
-    pub config: Arc<RwLock<Config>>,
+    pub config: Config,
     pub nix_settings: NixSettings,
     pub shell_settings: ShellSettings,
     pub cache_settings: CacheSettings,
     pub secret_settings: SecretSettings,
     pub input_overrides: InputOverrides,
     pub from_external: bool,
-    pub tui: bool,
-    pub verbose: bool,
-    pub quiet: bool,
     pub is_testing: bool,
 
     pub nix: Arc<Box<dyn NixBackend>>,
@@ -383,16 +371,13 @@ impl Devenv {
         };
 
         Self {
-            config: Arc::new(RwLock::new(options.config)),
+            config: options.config,
             nix_settings,
             shell_settings,
             cache_settings,
             secret_settings,
             input_overrides: options.input_overrides,
             from_external: options.from_external,
-            tui: options.tui,
-            verbose: options.verbose,
-            quiet: options.quiet,
             is_testing: options.is_testing,
             devenv_root,
             devenv_dotfile,
@@ -566,15 +551,6 @@ impl Devenv {
             }
         }
 
-        Ok(())
-    }
-
-    pub async fn inputs_add(&self, name: &str, url: &str, follows: &[String]) -> Result<()> {
-        {
-            let mut config = self.config.write().await;
-            config.add_input(name, url, follows)?;
-            config.write().await?;
-        }
         Ok(())
     }
 
@@ -812,9 +788,8 @@ impl Devenv {
         };
 
         let activity = Activity::operation(&msg).start();
-        let config = self.config.read().await;
         self.nix
-            .update(input_name, &config.inputs)
+            .update(input_name, &self.config.inputs)
             .in_activity(&activity)
             .await?;
 
@@ -1096,6 +1071,8 @@ impl Devenv {
         show_output: bool,
         cli_inputs: Vec<String>,
         input_json: Option<String>,
+        verbosity: tasks::VerbosityLevel,
+        tui: bool,
     ) -> Result<String> {
         self.assemble().await?;
         if roots.is_empty() {
@@ -1127,14 +1104,6 @@ impl Devenv {
             }
         }
 
-        let verbosity = if self.quiet {
-            tasks::VerbosityLevel::Quiet
-        } else if self.verbose {
-            tasks::VerbosityLevel::Verbose
-        } else {
-            tasks::VerbosityLevel::Normal
-        };
-
         let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
         let config = tasks::Config {
             roots,
@@ -1158,7 +1127,7 @@ impl Devenv {
 
         // In TUI mode, skip TasksUi to avoid corrupting the TUI display
         // TUI captures activity events directly via the channel initialized in main.rs
-        let (status, outputs) = if self.tui {
+        let (status, outputs) = if tui {
             let outputs = tasks.run(false).await;
             let status = tasks.get_completion_status().await;
             (status, outputs)
@@ -1200,8 +1169,13 @@ impl Devenv {
     /// Run enterShell tasks and return env vars exported by tasks (e.g., PATH with venv/bin).
     /// This runs tasks via Rust (not bash hook) to enable TUI progress reporting.
     /// Task failures are logged as warnings but don't prevent shell entry.
-    pub async fn run_enter_shell_tasks(&self) -> Result<HashMap<String, String>> {
-        self.run_enter_shell_tasks_with_executor(None, None).await
+    pub async fn run_enter_shell_tasks(
+        &self,
+        verbosity: tasks::VerbosityLevel,
+        tui: bool,
+    ) -> Result<HashMap<String, String>> {
+        self.run_enter_shell_tasks_with_executor(None, None, verbosity, tui)
+            .await
     }
 
     /// Run enterShell tasks with a custom executor and optional pre-captured shell env.
@@ -1212,6 +1186,8 @@ impl Devenv {
         &self,
         executor: Option<Arc<dyn tasks::TaskExecutor>>,
         pre_captured_envs: Option<HashMap<String, String>>,
+        verbosity: tasks::VerbosityLevel,
+        tui: bool,
     ) -> Result<HashMap<String, String>> {
         self.assemble().await?;
 
@@ -1222,7 +1198,7 @@ impl Devenv {
         };
 
         let task_configs = self.load_tasks().await?;
-        self.run_enter_shell_tasks_inner(task_configs, executor, envs)
+        self.run_enter_shell_tasks_inner(task_configs, executor, envs, verbosity, tui)
             .await
     }
 
@@ -1234,15 +1210,9 @@ impl Devenv {
         task_configs: Vec<tasks::TaskConfig>,
         executor: Option<Arc<dyn tasks::TaskExecutor>>,
         envs: HashMap<String, String>,
+        verbosity: tasks::VerbosityLevel,
+        tui: bool,
     ) -> Result<HashMap<String, String>> {
-        let verbosity = if self.quiet {
-            tasks::VerbosityLevel::Quiet
-        } else if self.verbose {
-            tasks::VerbosityLevel::Verbose
-        } else {
-            tasks::VerbosityLevel::Normal
-        };
-
         let config = tasks::Config {
             roots: vec!["devenv:enterShell".to_string()],
             tasks: task_configs,
@@ -1263,7 +1233,7 @@ impl Devenv {
         // Custom executor implies PTY/TUI mode; otherwise respect the tui flag.
         // In TUI mode, skip TasksUi to avoid corrupting the TUI display —
         // the TUI captures activity events directly via the channel in main.rs.
-        let outputs = if has_custom_executor || self.tui {
+        let outputs = if has_custom_executor || tui {
             tasks.run(false).await
         } else {
             // Shell mode - initialize activity channel for TasksUi
@@ -1401,7 +1371,7 @@ impl Devenv {
         envs
     }
 
-    pub async fn test(&self) -> Result<()> {
+    pub async fn test(&self, verbosity: tasks::VerbosityLevel, tui: bool) -> Result<()> {
         // Enable port allocation before assemble so that ports resolved
         // during Nix evaluation (e.g. in enterTest) are properly allocated.
         self.port_allocator.set_enabled(true);
@@ -1434,7 +1404,7 @@ impl Devenv {
         // When processes are present, up() (Phase 4) calls run_enter_shell_tasks_inner()
         // as part of its startup sequence, storing exports in self.task_exports.
         if !has_processes {
-            self.run_enter_shell_tasks_with_executor(None, Some(envs.clone()))
+            self.run_enter_shell_tasks_with_executor(None, Some(envs.clone()), verbosity, tui)
                 .await?;
         }
 
@@ -1462,7 +1432,7 @@ impl Devenv {
                 strict_ports: false,
                 command_rx: None,
             };
-            self.up(vec![], options).await?;
+            self.up(vec![], options, verbosity, tui).await?;
         }
 
         // ── Phase 5: Running tests ──────────────────────────────────
@@ -1607,6 +1577,8 @@ impl Devenv {
         &self,
         processes: Vec<String>,
         mut options: ProcessOptions<'a>,
+        verbosity: tasks::VerbosityLevel,
+        tui: bool,
     ) -> Result<RunMode> {
         // Set strict port mode before assemble (which triggers port allocation)
         self.port_allocator.set_strict(options.strict_ports);
@@ -1660,7 +1632,13 @@ impl Devenv {
         // Reuse task_configs from Phase 2 to avoid a redundant load_tasks() call.
         {
             let exports = self
-                .run_enter_shell_tasks_inner(task_configs.clone(), None, envs.clone())
+                .run_enter_shell_tasks_inner(
+                    task_configs.clone(),
+                    None,
+                    envs.clone(),
+                    verbosity,
+                    tui,
+                )
                 .await?;
             envs.extend(exports);
         }
@@ -1883,12 +1861,11 @@ impl Devenv {
             miette::miette!("Failed to create {}: {}", self.devenv_dot_gc.display(), e)
         })?;
 
-        let config = self.config.read().await;
         // TODO: superceded by eval caching.
         // Remove once direnvrc migration is implemented.
         util::write_file_with_lock(
             self.devenv_dotfile.join("imports.txt"),
-            config.imports.join("\n"),
+            self.config.imports.join("\n"),
         )?;
 
         fs::create_dir_all(&self.devenv_runtime)
@@ -1970,29 +1947,18 @@ impl Devenv {
                     secrets.set_profile(profile_str);
                 }
 
-                // Validate secrets
-                // In TUI mode, validate first and signal if prompting is needed (TUI will be stopped)
-                // In non-TUI mode, just validate silently
-                let validated_secrets = if self.tui {
-                    match secrets.validate()? {
-                        Ok(validated) => validated,
-                        Err(e) => {
-                            // Signal that we need to prompt for secrets after TUI stops
-                            return Err(SecretsNeedPrompting {
-                                provider: provider.clone(),
-                                profile: profile.clone(),
-                                missing: e.missing_required,
-                            }
-                            .into());
+                // Validate secrets — return SecretsNeedPrompting on missing secrets.
+                // The caller (main.rs) decides whether to prompt interactively or fail.
+                let validated_secrets = match secrets.validate()? {
+                    Ok(validated) => validated,
+                    Err(e) => {
+                        return Err(SecretsNeedPrompting {
+                            provider: provider.clone(),
+                            profile: profile.clone(),
+                            missing: e.missing_required,
                         }
+                        .into());
                     }
-                } else {
-                    secrets.validate()?.map_err(|e| {
-                        miette!(
-                            "Missing required secrets: {}\n\nRun `devenv shell` to enter the secrets interactively.",
-                            e.missing_required.join(", ")
-                        )
-                    })?
                 };
 
                 // Store resolved secrets in OnceCell for Nix to use
@@ -2033,7 +1999,7 @@ impl Devenv {
         ));
 
         // Get git repository root from config (already detected during config load)
-        let git_root = config.git_root.clone();
+        let git_root = self.config.git_root.clone();
 
         // Convert secretspec::Resolved to SecretspecData if available
         let secretspec_data: Option<SecretspecData> =
@@ -2057,7 +2023,7 @@ impl Devenv {
 
         // Create the Nix arguments struct
         let container_name = self.container_name.lock().unwrap().clone();
-        let nixpkgs_config = config.nixpkgs_config(&self.nix_settings.system);
+        let nixpkgs_config = self.config.nixpkgs_config(&self.nix_settings.system);
         let args = NixArgs {
             version: crate_version!(),
             is_development_version: crate::is_development_version(),
@@ -2079,8 +2045,8 @@ impl Devenv {
             username: username.as_deref(),
             git_root: git_root.as_deref(),
             secretspec: secretspec_data.as_ref(),
-            devenv_inputs: &config.inputs,
-            devenv_imports: &config.imports,
+            devenv_inputs: &self.config.inputs,
+            devenv_imports: &self.config.imports,
             impure: self.nix_settings.impure,
             nixpkgs_config,
             lock_fingerprint: &lock_fingerprint,

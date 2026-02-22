@@ -313,7 +313,7 @@ fn run_with_legacy_cli(cli: Cli) -> Result<()> {
 
     match devenv_output.try_launch_debugger() {
         DebuggerResult::Launched(result) => result,
-        DebuggerResult::NotLaunched(result) => result?.exec(),
+        DebuggerResult::NotLaunched(result) => handle_secrets_or_exec(result),
     }
 }
 
@@ -338,7 +338,7 @@ fn run_with_tracing(cli: Cli) -> Result<()> {
 
     match devenv_output.try_launch_debugger() {
         DebuggerResult::Launched(result) => result,
-        DebuggerResult::NotLaunched(result) => result?.exec(),
+        DebuggerResult::NotLaunched(result) => handle_secrets_or_exec(result),
     }
 }
 
@@ -379,6 +379,24 @@ impl DevenvOutput {
     }
 }
 
+/// Handle SecretsNeedPrompting errors by prompting interactively, otherwise exec.
+fn handle_secrets_or_exec(result: Result<CommandResult>) -> Result<()> {
+    match result {
+        Err(err) => {
+            if let Some(secrets_err) = err.downcast_ref::<devenv::SecretsNeedPrompting>() {
+                CommandResult::PromptSecrets {
+                    provider: secrets_err.provider.clone(),
+                    profile: secrets_err.profile.clone(),
+                }
+                .exec()
+            } else {
+                Err(err)
+            }
+        }
+        Ok(cmd_result) => cmd_result.exec(),
+    }
+}
+
 /// Setup devenv and run the command.
 async fn run_devenv(
     cli: Cli,
@@ -413,6 +431,21 @@ async fn run_devenv(
             })
         {
             return output(Err(e));
+        }
+    }
+
+    // Early-dispatch commands that only need Config (no Devenv construction required)
+    if let Some(Commands::Inputs { command }) = &cli.command {
+        match command {
+            InputsCommand::Add { name, url, follows } => {
+                if let Err(e) = config.add_input(name, url, follows) {
+                    return output(Err(e));
+                }
+                if let Err(e) = config.write().await {
+                    return output(Err(e));
+                }
+                return output(Ok(CommandResult::Done));
+            }
         }
     }
 
@@ -451,6 +484,16 @@ async fn run_devenv(
     let cache_settings = devenv_core::CacheSettings::resolve(cli.cache_cli);
     let secret_settings = devenv_core::SecretSettings::resolve(cli.secret_cli, &config);
 
+    // Construct UI parameters from CLI options (kept out of the library)
+    let verbosity = if cli.cli_options.quiet {
+        devenv::tasks::VerbosityLevel::Quiet
+    } else if cli.cli_options.verbose {
+        devenv::tasks::VerbosityLevel::Verbose
+    } else {
+        devenv::tasks::VerbosityLevel::Normal
+    };
+    let tui = cli.cli_options.tui;
+
     let is_testing = matches!(&command, Commands::Test { .. });
     let mut options = devenv::DevenvOptions {
         config,
@@ -460,9 +503,6 @@ async fn run_devenv(
         secret_settings: Some(secret_settings),
         input_overrides: cli.input_overrides,
         from_external,
-        tui: cli.cli_options.tui,
-        verbose: cli.cli_options.verbose,
-        quiet: cli.cli_options.quiet,
         devenv_root: None,
         devenv_dotfile: None,
         shutdown: shutdown.clone(),
@@ -514,6 +554,8 @@ async fn run_devenv(
         backend_done_tx,
         terminal_ready_rx,
         command_rx,
+        verbosity,
+        tui,
     )
     .await;
 
@@ -525,12 +567,20 @@ async fn run_devenv(
             terminal_ready_rx,
         }) => {
             // Reload shell consumes devenv by value — no second instance needed
-            let result = run_reload_shell(devenv, cmd, args, backend_done_tx, terminal_ready_rx)
-                .await
-                .map(|exit_code| match exit_code {
-                    Some(code) => CommandResult::ExitCode(code as i32),
-                    None => CommandResult::Done,
-                });
+            let result = run_reload_shell(
+                devenv,
+                cmd,
+                args,
+                backend_done_tx,
+                terminal_ready_rx,
+                verbosity,
+                tui,
+            )
+            .await
+            .map(|exit_code| match exit_code {
+                Some(code) => CommandResult::ExitCode(code as i32),
+                None => CommandResult::Done,
+            });
             output(result)
         }
         Ok(InnerResult::Done(cmd_result)) => output(Ok(cmd_result)),
@@ -554,6 +604,8 @@ async fn run_devenv_inner(
     backend_done_tx: tokio::sync::oneshot::Sender<()>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
+    verbosity: devenv::tasks::VerbosityLevel,
+    tui: bool,
 ) -> Result<InnerResult> {
     // Wrap in Option so shell commands can consume it, others send at end
     let mut backend_done_tx = Some(backend_done_tx);
@@ -564,7 +616,7 @@ async fn run_devenv_inner(
                 // Run enterShell tasks first (TUI shows progress).
                 // Exports are stored on self so prepare_shell() injects them
                 // into the bash script after the Nix shell env is applied.
-                devenv.run_enter_shell_tasks().await?;
+                devenv.run_enter_shell_tasks(verbosity, tui).await?;
 
                 // Signal TUI can exit now (tasks completed)
                 if let Some(tx) = backend_done_tx.take() {
@@ -591,7 +643,7 @@ async fn run_devenv_inner(
             }
         }
         Commands::Test { .. } => {
-            devenv.test().await?;
+            devenv.test(verbosity, tui).await?;
             CommandResult::Done
         }
         Commands::Container { command } => match command {
@@ -687,7 +739,7 @@ async fn run_devenv_inner(
                 strict_ports,
                 command_rx,
             };
-            match devenv.up(processes, options).await? {
+            match devenv.up(processes, options, verbosity, tui).await? {
                 RunMode::Detached => CommandResult::Done,
                 RunMode::Foreground(shell_command) => CommandResult::Exec(shell_command.command),
             }
@@ -713,7 +765,7 @@ async fn run_devenv_inner(
                 input_json,
             } => {
                 let output = devenv
-                    .tasks_run(tasks, mode, show_output, input, input_json)
+                    .tasks_run(tasks, mode, show_output, input, input_json, verbosity, tui)
                     .await?;
                 CommandResult::Print(format!("{output}\n"))
             }
@@ -722,12 +774,8 @@ async fn run_devenv_inner(
                 CommandResult::Print(format!("{output}\n"))
             }
         },
-        Commands::Inputs { command } => match command {
-            InputsCommand::Add { name, url, follows } => {
-                devenv.inputs_add(&name, &url, &follows).await?;
-                CommandResult::Done
-            }
-        },
+        // inputs add is early-dispatched in run_devenv before Devenv construction
+        Commands::Inputs { .. } => unreachable!(),
         Commands::Changelogs {} => {
             devenv.changelogs().await?;
             CommandResult::Done
@@ -762,8 +810,8 @@ async fn run_devenv_inner(
             CommandResult::Print(output)
         }
         Commands::Mcp { http } => {
-            let config = devenv.config.read().await.clone();
-            devenv::mcp::run_mcp_server(config, http.map(|p| p.unwrap_or(8080))).await?;
+            devenv::mcp::run_mcp_server(devenv.config.clone(), http.map(|p| p.unwrap_or(8080)))
+                .await?;
             CommandResult::Done
         }
         Commands::Lsp { print_config } => {
@@ -822,6 +870,8 @@ async fn run_reload_shell(
     args: Vec<String>,
     backend_done_tx: tokio::sync::oneshot::Sender<()>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
+    verbosity: devenv::tasks::VerbosityLevel,
+    tui: bool,
 ) -> Result<Option<u32>> {
     use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
     use devenv_tasks::PtyExecutor;
@@ -853,7 +903,7 @@ async fn run_reload_shell(
         // Run enterShell tasks with subprocess executor (like --no-reload mode)
         // Task exports are stored in devenv.task_exports and injected into the
         // shell script by prepare_shell().
-        let _task_exports = devenv.run_enter_shell_tasks().await?;
+        let _task_exports = devenv.run_enter_shell_tasks(verbosity, tui).await?;
     }
 
     // Create reload config - watch files will be populated from eval cache
@@ -923,7 +973,7 @@ async fn run_reload_shell(
                 let executor = Arc::new(PtyExecutor::new(task_tx));
                 let devenv = devenv_for_tasks.lock().await;
                 let result = devenv
-                    .run_enter_shell_tasks_with_executor(Some(executor), None)
+                    .run_enter_shell_tasks_with_executor(Some(executor), None, verbosity, tui)
                     .await;
                 drop(devenv);
                 result
