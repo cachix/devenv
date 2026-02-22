@@ -251,10 +251,11 @@ impl Default for CacheSettings {
 impl CacheSettings {
     /// Resolve cache settings from CLI source.
     ///
+    /// `no_eval_cache` is the negation flag (`--no-eval-cache`) that overrides `eval_cache`.
     /// All cache settings are CLI-only today (no config file counterpart).
-    pub fn resolve(cli: CacheCliOptions) -> Self {
+    pub fn resolve(cli: CacheCliOptions, no_eval_cache: bool) -> Self {
         Self {
-            eval_cache: cli.eval_cache,
+            eval_cache: cli.eval_cache && !no_eval_cache,
             refresh_eval_cache: cli.refresh_eval_cache,
             refresh_task_cache: cli.refresh_task_cache,
         }
@@ -323,8 +324,9 @@ impl Default for ShellSettings {
 impl ShellSettings {
     /// Resolve shell settings from CLI and config sources.
     ///
+    /// `no_reload` is the negation flag (`--no-reload`) that overrides `reload`.
     /// Precedence: CLI > Config > Default.
-    pub fn resolve(cli: ShellCliOptions, config: &Config) -> Self {
+    pub fn resolve(cli: ShellCliOptions, no_reload: bool, config: &Config) -> Self {
         let clean = if let Some(keep) = cli.clean {
             Clean {
                 enabled: true,
@@ -342,7 +344,7 @@ impl ShellSettings {
             Vec::new()
         };
 
-        let reload = if !cli.reload {
+        let reload = if no_reload || !cli.reload {
             false
         } else {
             config.reload.unwrap_or(true)
@@ -525,7 +527,7 @@ mod tests {
     #[test]
     fn cache_settings_defaults() {
         let cli = CacheCliOptions::default();
-        let settings = CacheSettings::resolve(cli);
+        let settings = CacheSettings::resolve(cli, false);
         assert!(settings.eval_cache);
         assert!(!settings.refresh_eval_cache);
         assert!(!settings.refresh_task_cache);
@@ -537,7 +539,14 @@ mod tests {
             eval_cache: false,
             ..Default::default()
         };
-        let settings = CacheSettings::resolve(cli);
+        let settings = CacheSettings::resolve(cli, false);
+        assert!(!settings.eval_cache);
+    }
+
+    #[test]
+    fn cache_settings_no_eval_cache_overrides() {
+        let cli = CacheCliOptions::default();
+        let settings = CacheSettings::resolve(cli, true);
         assert!(!settings.eval_cache);
     }
 
@@ -548,7 +557,7 @@ mod tests {
             refresh_task_cache: true,
             ..Default::default()
         };
-        let settings = CacheSettings::resolve(cli);
+        let settings = CacheSettings::resolve(cli, false);
         assert!(settings.refresh_eval_cache);
         assert!(settings.refresh_task_cache);
     }
@@ -566,7 +575,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(cli, false, &config);
         assert!(settings.clean.enabled);
         assert_eq!(settings.clean.keep, vec!["PATH"]);
     }
@@ -581,7 +590,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(cli, false, &config);
         assert!(settings.clean.enabled);
         assert_eq!(settings.clean.keep, vec!["HOME"]);
     }
@@ -590,7 +599,7 @@ mod tests {
     fn shell_settings_clean_defaults_to_disabled() {
         let cli = ShellCliOptions::default();
         let config = Config::default();
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(cli, false, &config);
         assert!(!settings.clean.enabled);
     }
 
@@ -604,7 +613,7 @@ mod tests {
             profile: Some("prod".into()),
             ..Default::default()
         };
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(cli, false, &config);
         assert_eq!(settings.profiles, vec!["dev"]);
     }
 
@@ -615,7 +624,7 @@ mod tests {
             profile: Some("prod".into()),
             ..Default::default()
         };
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(cli, false, &config);
         assert_eq!(settings.profiles, vec!["prod"]);
     }
 
@@ -623,7 +632,7 @@ mod tests {
     fn shell_settings_no_profiles_by_default() {
         let cli = ShellCliOptions::default();
         let config = Config::default();
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(cli, false, &config);
         assert!(settings.profiles.is_empty());
     }
 
@@ -631,7 +640,7 @@ mod tests {
     fn shell_settings_reload_defaults_to_true() {
         let cli = ShellCliOptions::default();
         let config = Config::default();
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(cli, false, &config);
         assert!(settings.reload);
     }
 
@@ -645,7 +654,18 @@ mod tests {
             reload: Some(true),
             ..Default::default()
         };
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(cli, false, &config);
+        assert!(!settings.reload);
+    }
+
+    #[test]
+    fn shell_settings_no_reload_flag_overrides_config() {
+        let cli = ShellCliOptions::default();
+        let config = Config {
+            reload: Some(true),
+            ..Default::default()
+        };
+        let settings = ShellSettings::resolve(cli, true, &config);
         assert!(!settings.reload);
     }
 
@@ -656,7 +676,7 @@ mod tests {
             reload: Some(false),
             ..Default::default()
         };
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(cli, false, &config);
         assert!(!settings.reload);
     }
 

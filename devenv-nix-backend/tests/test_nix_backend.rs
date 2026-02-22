@@ -77,7 +77,7 @@ fn create_backend(
     shutdown: Arc<Shutdown>,
 ) -> miette::Result<NixRustBackend> {
     let nix_settings = NixSettings::resolve(nix_cli, &config);
-    let cache_settings = CacheSettings::resolve(CacheCliOptions::default());
+    let cache_settings = CacheSettings::resolve(CacheCliOptions::default(), false);
     let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
     NixRustBackend::new(
         paths,
@@ -200,7 +200,7 @@ fn setup_isolated_test_env(
     let shutdown = Shutdown::new();
 
     let nix_settings = NixSettings::resolve(nix_cli, &config);
-    let cache_settings = CacheSettings::resolve(CacheCliOptions::default());
+    let cache_settings = CacheSettings::resolve(CacheCliOptions::default(), false);
     let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
 
     // Create backend with default project_root (project directory)
