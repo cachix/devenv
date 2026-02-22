@@ -117,10 +117,14 @@ pub trait NixBackend: Send + Sync {
     async fn eval(&self, attributes: &[&str]) -> Result<String>;
 
     /// Update flake inputs
+    ///
+    /// `override_input` contains name/URL pairs (alternating elements) that override
+    /// specific inputs during locking, even if the lock file is otherwise up-to-date.
     async fn update(
         &self,
         input_name: &Option<String>,
         inputs: &BTreeMap<String, Input>,
+        override_input: &[String],
     ) -> Result<()>;
 
     /// Get flake metadata

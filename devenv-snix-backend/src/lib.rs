@@ -174,6 +174,7 @@ impl NixBackend for SnixBackend {
         &self,
         _input_name: &Option<String>,
         _inputs: &BTreeMap<String, Input>,
+        _override_input: &[String],
     ) -> Result<()> {
         bail!("Flake update is not yet implemented for Snix backend")
     }
