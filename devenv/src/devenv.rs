@@ -205,7 +205,7 @@ pub struct Devenv {
     devenv_runtime: PathBuf,
 
     // Container name for container builds, set before assemble
-    container_name: std::sync::Mutex<Option<String>>,
+    container_name: std::sync::OnceLock<String>,
 
     // Whether assemble has been run.
     // Assemble creates critical runtime directories and files.
@@ -399,7 +399,7 @@ impl Devenv {
             devenv_tmp,
             devenv_runtime,
             nix: Arc::new(nix),
-            container_name: std::sync::Mutex::new(None),
+            container_name: std::sync::OnceLock::new(),
             assembled: Arc::new(AtomicBool::new(false)),
             assemble_lock: Arc::new(Semaphore::new(1)),
             has_processes: Arc::new(OnceCell::new()),
@@ -827,7 +827,7 @@ impl Devenv {
 
     #[activity(format!("{name} container"), kind = build)]
     pub async fn container_build(&self, name: &str) -> Result<String> {
-        *self.container_name.lock().unwrap() = Some(name.to_string());
+        let _ = self.container_name.set(name.to_string());
         self.assemble().await?;
 
         let sanitized_name = sanitize_container_name(name);
@@ -2040,7 +2040,7 @@ impl Devenv {
         let lock_fingerprint = self.nix.lock_fingerprint().await?;
 
         // Create the Nix arguments struct
-        let container_name = self.container_name.lock().unwrap().clone();
+        let container_name = self.container_name.get();
         let args = NixArgs {
             version: crate_version!(),
             is_development_version: crate::is_development_version(),
@@ -2055,7 +2055,7 @@ impl Devenv {
             devenv_runtime: &self.devenv_runtime,
             devenv_istesting: self.is_testing,
             devenv_direnvrc_latest_version: *DIRENVRC_VERSION,
-            container_name: container_name.as_deref(),
+            container_name: container_name.map(String::as_str),
             active_profiles,
             cli_options,
             hostname: hostname.as_deref(),
