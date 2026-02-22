@@ -311,9 +311,6 @@ pub struct NixArgs<'a> {
     /// Latest direnvrc version number available
     pub devenv_direnvrc_latest_version: u8,
 
-    /// Container name if building/running a container, otherwise null
-    pub container_name: Option<&'a str>,
-
     /// List of active profiles to enable
     pub active_profiles: &'a [String],
 
@@ -382,7 +379,6 @@ mod tests {
         let tmpdir = PathBuf::from("/tmp");
         let runtime = PathBuf::from("/tmp/runtime");
         let git_root = PathBuf::from("/home/user");
-        let container_name = Some("my-container");
         let profiles = vec!["frontend".to_string(), "backend".to_string()];
         let username = Some("testuser");
 
@@ -402,7 +398,6 @@ mod tests {
             devenv_runtime: &runtime,
             devenv_istesting: false,
             devenv_direnvrc_latest_version: 5,
-            container_name,
             active_profiles: &profiles,
             cli_options,
             hostname: None,            // None value
@@ -441,10 +436,6 @@ mod tests {
         );
 
         // Verify Some optional fields are present
-        assert!(
-            contains_key_value(&serialized, "container_name", "\"my-container\""),
-            "container_name (Some) key-value pair not found"
-        );
         assert!(
             contains_key_value(&serialized, "username", "\"testuser\""),
             "username (Some) key-value pair not found"
@@ -509,7 +500,6 @@ mod tests {
             devenv_runtime: &runtime,
             devenv_istesting: false,
             devenv_direnvrc_latest_version: 5,
-            container_name: None,
             active_profiles: &profiles,
             cli_options,
             hostname: None,

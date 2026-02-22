@@ -150,13 +150,14 @@ impl NixBackend for SnixBackend {
         _attributes: &[&str],
         _options: Option<Options>,
         _gc_root: Option<&Path>,
+        _extra_modules: &[&str],
     ) -> Result<Vec<PathBuf>> {
         // TODO: This requires implementing the build functionality
         // using snix_glue::snix_build
         bail!("Build functionality is not yet implemented for Snix backend")
     }
 
-    async fn eval(&self, attributes: &[&str]) -> Result<String> {
+    async fn eval(&self, attributes: &[&str], _extra_modules: &[&str]) -> Result<String> {
         // Convert attributes to a Nix expression
         let _expr = if attributes.is_empty() {
             "{ }".to_string()

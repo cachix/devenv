@@ -111,10 +111,11 @@ pub trait NixBackend: Send + Sync {
         attributes: &[&str],
         options: Option<Options>,
         gc_root: Option<&Path>,
+        extra_modules: &[&str],
     ) -> Result<Vec<PathBuf>>;
 
     /// Evaluate a Nix expression
-    async fn eval(&self, attributes: &[&str]) -> Result<String>;
+    async fn eval(&self, attributes: &[&str], extra_modules: &[&str]) -> Result<String>;
 
     /// Update flake inputs
     ///

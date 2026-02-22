@@ -104,6 +104,7 @@ impl<'a> Changelog<'a> {
                     &["devenv.config.changelog.json"],
                     Some(options),
                     Some(&gc_root),
+                    &[],
                 )
                 .await?
         };

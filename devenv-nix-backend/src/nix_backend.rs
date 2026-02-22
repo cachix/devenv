@@ -532,6 +532,7 @@ impl NixRustBackend {
     fn eval_import_with_primops(
         &self,
         eval_state: &mut EvalState,
+        extra_modules: &[&str],
     ) -> Result<nix_bindings_expr::value::Value> {
         let args_nix = self
             .cached_args_nix_eval
@@ -605,13 +606,21 @@ impl NixRustBackend {
                 .wrap_err("Failed to create empty primops attrset")?
         };
 
-        // 5. Build override: { primops = { allocatePort = <primop>; }; }
+        // 5. Build override: { primops = ...; extra_modules = [...]; }
+        let modules_nix = format!("[{}]", extra_modules.join(" "));
+        let modules_value = eval_state
+            .eval_from_string(&modules_nix, self.paths.root.to_str().unwrap_or("."))
+            .to_miette()
+            .wrap_err("Failed to evaluate extra_modules list")?;
         let override_attrs = eval_state
-            .new_value_attrs(vec![("primops".to_string(), primops_attrset)])
+            .new_value_attrs(vec![
+                ("primops".to_string(), primops_attrset),
+                ("extra_modules".to_string(), modules_value),
+            ])
             .to_miette()
             .wrap_err("Failed to create override attrset")?;
 
-        // 6. Merge base args with primops override: baseArgs // { primops = ...; }
+        // 6. Merge base args with primops override: baseArgs // { primops = ...; extra_modules = [...]; }
         let merge_fn = eval_state
             .eval_from_string("a: b: a // b", "<primop-injection>")
             .to_miette()
@@ -747,7 +756,7 @@ impl NixRustBackend {
             caching_state
                 .cached_eval()
                 .eval(&cache_key, &activity, || async {
-                    self.eval_attr_uncached("config.cachix", "config.cachix", &activity)
+                    self.eval_attr_uncached("config.cachix", "config.cachix", &activity, &[])
                 })
                 .await
         }
@@ -1333,7 +1342,7 @@ impl NixBackend for NixRustBackend {
                 .wrap_err("Debugger REPL failed")?
         } else {
             // Load default.nix with primops into the REPL scope
-            let devenv_attrs = self.eval_import_with_primops(&mut eval_state)?;
+            let devenv_attrs = self.eval_import_with_primops(&mut eval_state, &[])?;
 
             // Create a ValMap to inject variables into the REPL scope
             let mut env = nix_cmd::ValMap::new()
@@ -1378,6 +1387,7 @@ impl NixBackend for NixRustBackend {
         attributes: &[&str],
         _options: Option<Options>,
         gc_root: Option<&Path>,
+        extra_modules: &[&str],
     ) -> Result<Vec<PathBuf>> {
         // Build derivations and return output paths with transparent caching
         // Caches output store paths per attribute to skip redundant builds
@@ -1393,11 +1403,20 @@ impl NixBackend for NixRustBackend {
             .get()
             .expect("assemble() must be called first");
 
+        // Own extra_modules to allow capture in closures
+        let extra_modules_owned: Vec<String> =
+            extra_modules.iter().map(|s| s.to_string()).collect();
+
         let mut output_paths = Vec::new();
 
         for attr_path in attributes {
-            // Cache key includes ":build" suffix to distinguish from eval cache
-            let cache_key = caching_state.cache_key(&format!("{}:build", attr_path));
+            // Cache key includes ":build" suffix and extra_modules to distinguish cache entries
+            let cache_key_attr = if extra_modules_owned.is_empty() {
+                format!("{}:build", attr_path)
+            } else {
+                format!("{}[{}]:build", attr_path, extra_modules_owned.join(":"))
+            };
+            let cache_key = caching_state.cache_key(&cache_key_attr);
 
             // Check cache for existing build output path
             let cached_path: Option<String> = if let Some(service) =
@@ -1454,11 +1473,14 @@ impl NixBackend for NixRustBackend {
             } else {
                 // Cache miss or invalid path - do full build
                 let attr_path = attr_path.to_string();
+                let extra_owned = extra_modules_owned.clone();
                 let (path, _) = async {
                     caching_state
                         .cached_eval()
                         .eval_typed::<String, _, _>(&cache_key, &activity, || async {
-                            self.build_attr_uncached(&attr_path, &activity)
+                            let extra_refs: Vec<&str> =
+                                extra_owned.iter().map(|s| s.as_str()).collect();
+                            self.build_attr_uncached(&attr_path, &activity, &extra_refs)
                         })
                         .await
                 }
@@ -1513,7 +1535,7 @@ impl NixBackend for NixRustBackend {
         Ok(output_paths)
     }
 
-    async fn eval(&self, attributes: &[&str]) -> Result<String> {
+    async fn eval(&self, attributes: &[&str], extra_modules: &[&str]) -> Result<String> {
         // Evaluate Nix expressions and return JSON
         // Evaluates attributes from default.nix with transparent caching
         // Note: Lock file validation is done in assemble(), which must be called first
@@ -1523,25 +1545,43 @@ impl NixBackend for NixRustBackend {
             .get()
             .expect("assemble() must be called first");
 
+        // Own extra_modules to allow capture in closures
+        let extra_modules_owned: Vec<String> =
+            extra_modules.iter().map(|s| s.to_string()).collect();
+
         let mut results = Vec::new();
 
         for attr_path in attributes {
             // Parse attribute path - remove leading ".#" if present
             let clean_path = attr_path.trim_start_matches(".#");
 
-            let cache_key = caching_state.cache_key(clean_path);
+            // Include extra_modules in cache key so different module sets get separate entries
+            let cache_key_attr = if extra_modules_owned.is_empty() {
+                clean_path.to_string()
+            } else {
+                format!("{}[{}]", clean_path, extra_modules_owned.join(":"))
+            };
+            let cache_key = caching_state.cache_key(&cache_key_attr);
             let activity = Activity::evaluate("Evaluating Nix")
                 .level(ActivityLevel::Info)
                 .start();
 
             let attr_path_owned = attr_path.to_string();
             let clean_path_owned = clean_path.to_string();
+            let extra_owned = extra_modules_owned.clone();
 
             let (json_str, _cache_hit) = async {
                 caching_state
                     .cached_eval()
                     .eval(&cache_key, &activity, || async {
-                        self.eval_attr_uncached(&attr_path_owned, &clean_path_owned, &activity)
+                        let extra_refs: Vec<&str> =
+                            extra_owned.iter().map(|s| s.as_str()).collect();
+                        self.eval_attr_uncached(
+                            &attr_path_owned,
+                            &clean_path_owned,
+                            &activity,
+                            &extra_refs,
+                        )
                     })
                     .await
             }
@@ -1688,7 +1728,7 @@ impl NixBackend for NixRustBackend {
 
         // PART 2: Evaluate config.info from default.nix (with transparent caching)
         // Use self.eval() which handles caching automatically
-        let info_str = match self.eval(&["config.info"]).await {
+        let info_str = match self.eval(&["config.info"], &[]).await {
             Ok(json_str) => {
                 // config.info is a string, so the JSON is a quoted string
                 // Parse it to extract the actual string value
@@ -1719,7 +1759,7 @@ impl NixBackend for NixRustBackend {
         let mut eval_state = self.eval_session(&activity)?;
 
         // Import default.nix with primops to get the configured pkgs
-        let devenv = self.eval_import_with_primops(&mut eval_state)?;
+        let devenv = self.eval_import_with_primops(&mut eval_state, &[])?;
 
         // Extract the pkgs attribute from the devenv output
         let pkgs = self.enriched(
@@ -1867,7 +1907,7 @@ impl NixBackend for NixRustBackend {
 
         // Cache miss or refresh requested - use build() which handles everything
         let paths = self
-            .build(&["bash"], None, Some(&gc_root_base))
+            .build(&["bash"], None, Some(&gc_root_base), &[])
             .await
             .wrap_err("Failed to build bash attribute from default.nix")?;
 
@@ -2075,11 +2115,12 @@ impl NixRustBackend {
         attr_path: &str,
         clean_path: &str,
         activity: &Activity,
+        extra_modules: &[&str],
     ) -> Result<String> {
         let mut eval_state = self.eval_session(activity)?;
 
         // Import default.nix with primops to get the attribute set
-        let root_attrs = self.eval_import_with_primops(&mut eval_state)?;
+        let root_attrs = self.eval_import_with_primops(&mut eval_state, extra_modules)?;
 
         // Navigate to the attribute using the Nix API
         let value = self.enriched(
@@ -2121,7 +2162,7 @@ impl NixRustBackend {
     fn build_shell_uncached(&self, activity: &Activity) -> Result<CachedShellPaths> {
         let mut eval_state = self.eval_session(activity)?;
 
-        let devenv = self.eval_import_with_primops(&mut eval_state)?;
+        let devenv = self.eval_import_with_primops(&mut eval_state, &[])?;
 
         // Get the shell derivation from devenv.shell
         let shell_drv = self.enriched(
@@ -2198,10 +2239,15 @@ impl NixRustBackend {
     /// Build a single attribute without caching.
     ///
     /// This is the pure build logic extracted for use with transparent caching.
-    fn build_attr_uncached(&self, attr_path: &str, activity: &Activity) -> Result<String> {
+    fn build_attr_uncached(
+        &self,
+        attr_path: &str,
+        activity: &Activity,
+        extra_modules: &[&str],
+    ) -> Result<String> {
         let mut eval_state = self.eval_session(activity)?;
 
-        let root_attrs = self.eval_import_with_primops(&mut eval_state)?;
+        let root_attrs = self.eval_import_with_primops(&mut eval_state, extra_modules)?;
 
         // Navigate to the attribute and force evaluation
         let value = self.enriched(

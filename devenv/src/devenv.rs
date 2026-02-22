@@ -188,9 +188,6 @@ pub struct Devenv {
     devenv_tmp: PathBuf,
     devenv_runtime: PathBuf,
 
-    // Container name for container builds, set before assemble
-    container_name: std::sync::OnceLock<String>,
-
     // Whether assemble has been run.
     // Assemble creates critical runtime directories and files.
     assembled: Arc<AtomicBool>,
@@ -382,7 +379,6 @@ impl Devenv {
             devenv_tmp,
             devenv_runtime,
             nix: Arc::new(nix),
-            container_name: std::sync::OnceLock::new(),
             assembled: Arc::new(AtomicBool::new(false)),
             assemble_lock: Arc::new(Semaphore::new(1)),
             has_processes: Arc::new(OnceCell::new()),
@@ -812,7 +808,10 @@ impl Devenv {
 
     #[activity(format!("{name} container"), kind = build)]
     pub async fn container_build(&self, name: &str) -> Result<String> {
-        let _ = self.container_name.set(name.to_string());
+        // Validate container name to prevent Nix string interpolation issues
+        if name.contains('"') || name.contains('\\') || name.contains("${") {
+            bail!("Container name contains invalid characters: {name}");
+        }
         self.assemble().await?;
 
         let sanitized_name = sanitize_container_name(name);
@@ -830,6 +829,11 @@ impl Devenv {
         } else {
             &self.nix_settings.system
         };
+
+        // Pass container context as an eval-time extra module so assemble() stays generic
+        let container_module = format!(
+            r#"{{ lib, ... }}: {{ container.isBuilding = lib.mkForce true; containers."{name}".isBuilding = true; }}"#
+        );
         let paths = self
             .nix
             .build(
@@ -838,6 +842,7 @@ impl Devenv {
                 )],
                 None,
                 Some(&gc_root),
+                &[&container_module],
             )
             .await?;
         let container_store_path = paths[0].to_string_lossy().to_string();
@@ -864,6 +869,7 @@ impl Devenv {
                     &[&format!("devenv.config.containers.{name}.copyScript")],
                     None,
                     Some(&gc_root),
+                    &[],
                 )
                 .await?;
             let copy_script = &paths[0];
@@ -908,6 +914,7 @@ impl Devenv {
                 &[&format!("devenv.config.containers.{name}.dockerRun")],
                 None,
                 Some(&gc_root),
+                &[],
             )
             .await?;
 
@@ -976,7 +983,7 @@ impl Devenv {
         };
         let options = self
             .nix
-            .build(&["optionsJSON"], Some(build_options), None)
+            .build(&["optionsJSON"], Some(build_options), None, &[])
             .await?;
         let options_path = options[0]
             .join("share")
@@ -1029,7 +1036,7 @@ impl Devenv {
         let value = self
             .has_processes
             .get_or_try_init(|| async {
-                let processes = self.nix.eval(&["devenv.config.processes"]).await?;
+                let processes = self.nix.eval(&["devenv.config.processes"], &[]).await?;
                 Ok::<bool, miette::Report>(processes.trim() != "{}")
             })
             .await?;
@@ -1041,7 +1048,7 @@ impl Devenv {
         let tasks_json_file = {
             let gc_root = self.devenv_dot_gc.join("task-config");
             self.nix
-                .build(&["devenv.config.task.config"], None, Some(&gc_root))
+                .build(&["devenv.config.task.config"], None, Some(&gc_root), &[])
                 .await?
         };
         // parse tasks config
@@ -1413,7 +1420,7 @@ impl Devenv {
                 let gc_root = self.devenv_dot_gc.join("test");
                 let test_script = self
                     .nix
-                    .build(&["devenv.config.test"], None, Some(&gc_root))
+                    .build(&["devenv.config.test"], None, Some(&gc_root), &[])
                     .await?;
                 Ok::<String, miette::Report>(test_script[0].to_string_lossy().to_string())
             }
@@ -1489,7 +1496,7 @@ impl Devenv {
 
             let attributes: Vec<String> = if attributes.is_empty() {
                 // construct dotted names of all attributes that we need to build
-                let build_output = self.nix.eval(&["build"]).await?;
+                let build_output = self.nix.eval(&["build"], &[]).await?;
                 serde_json::from_str::<serde_json::Value>(&build_output)
                     .map_err(|e| miette::miette!("Failed to parse build output: {}", e))?
                     .as_object()
@@ -1502,7 +1509,7 @@ impl Devenv {
                 let mut flattened = Vec::new();
                 for attr in attributes {
                     // Try to get from build.{attr} first (for output types that need flattening)
-                    let eval_result = self.nix.eval(&[&format!("build.{attr}")]).await;
+                    let eval_result = self.nix.eval(&[&format!("build.{attr}")], &[]).await;
                     match eval_result {
                         Ok(eval_output) => {
                             let value: serde_json::Value = serde_json::from_str(&eval_output)
@@ -1536,6 +1543,7 @@ impl Devenv {
                     &full_attrs.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
                     None,
                     None,
+                    &[],
                 )
                 .await?;
 
@@ -1555,7 +1563,7 @@ impl Devenv {
 
             for attr in attributes {
                 let full_attr = format!("devenv.config.{attr}");
-                let eval_output = self.nix.eval(&[&full_attr]).await?;
+                let eval_output = self.nix.eval(&[&full_attr], &[]).await?;
                 let value: serde_json::Value = serde_json::from_str(&eval_output).map_err(|e| {
                     miette::miette!("Failed to parse eval output for {}: {}", attr, e)
                 })?;
@@ -1655,7 +1663,7 @@ impl Devenv {
                 .start();
             let impl_result = async {
                 self.nix
-                    .eval(&["devenv.config.process.manager.implementation"])
+                    .eval(&["devenv.config.process.manager.implementation"], &[])
                     .await
             }
             .in_activity(&phase4)
@@ -1752,7 +1760,7 @@ impl Devenv {
                     let gc_root = self.devenv_dot_gc.join("procfilescript");
                     let paths = self
                         .nix
-                        .build(&["devenv.config.procfileScript"], None, Some(&gc_root))
+                        .build(&["devenv.config.procfileScript"], None, Some(&gc_root), &[])
                         .await?;
                     Ok::<PathBuf, miette::Report>(paths[0].clone())
                 }
@@ -2016,7 +2024,6 @@ impl Devenv {
         let lock_fingerprint = self.nix.lock_fingerprint().await?;
 
         // Create the Nix arguments struct
-        let container_name = self.container_name.get();
         let args = NixArgs {
             version: crate_version!(),
             is_development_version: crate::is_development_version(),
@@ -2031,7 +2038,6 @@ impl Devenv {
             devenv_runtime: &self.devenv_runtime,
             devenv_istesting: self.is_testing,
             devenv_direnvrc_latest_version: *DIRENVRC_VERSION,
-            container_name: container_name.map(String::as_str),
             active_profiles,
             cli_options,
             hostname: hostname.as_deref(),

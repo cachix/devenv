@@ -33,7 +33,6 @@ rec {
     , devenv_runtime
     , devenv_istesting ? false
     , devenv_direnvrc_latest_version
-    , container_name ? null
     , active_profiles ? [ ]
     , hostname
     , username
@@ -46,6 +45,7 @@ rec {
     , nixpkgs_config ? { }
     , lock_fingerprint ? null
     , primops ? { }
+    , extra_modules ? [ ]
     }:
     let
       inherit (inputs) nixpkgs;
@@ -176,11 +176,8 @@ rec {
               ];
             }
           )
-          (lib.optionalAttrs (container_name != null) {
-            container.isBuilding = lib.mkForce true;
-            containers.${container_name}.isBuilding = true;
-          })
         ]
+        ++ extra_modules
         ++ (lib.flatten (map importModule devenv_imports))
         ++ (if !skip_local_src then (importModule (devenv_root + "/devenv.nix")) else [ ])
         ++ [
