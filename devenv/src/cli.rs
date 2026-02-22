@@ -13,7 +13,7 @@ use std::str::FromStr;
 #[derive(clap::ValueEnum, Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TraceFormat {
-    /// A verbose structured log format used for debugging (default).
+    /// A verbose structured log format used for debugging.
     Full,
     /// A JSON log format used for machine consumption.
     #[default]
