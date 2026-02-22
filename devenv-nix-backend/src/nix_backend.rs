@@ -90,7 +90,6 @@ impl Default for ProjectRoot {
 pub struct NixRustBackend {
     pub nix_settings: NixSettings,
     pub cache_settings: CacheSettings,
-    pub override_input: Vec<String>,
     pub paths: DevenvPaths,
 
     // Path to extracted bootstrap directory (lives for duration of backend)
@@ -240,7 +239,6 @@ impl NixRustBackend {
         nixpkgs_config: NixpkgsConfig,
         nix_settings: NixSettings,
         cache_settings: CacheSettings,
-        override_input: Vec<String>,
         cachix_manager: Arc<CachixManager>,
         shutdown: Arc<Shutdown>,
         eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
@@ -422,7 +420,6 @@ impl NixRustBackend {
         let backend = Self {
             nix_settings,
             cache_settings,
-            override_input,
             paths,
             bootstrap_path,
             nixpkgs_config_path,
@@ -844,7 +841,7 @@ impl NixRustBackend {
 
         // If lock file doesn't exist, create it
         if !lock_file_path.exists() {
-            return self.update(&None, inputs).await;
+            return self.update(&None, inputs, &[]).await;
         }
 
         // Load existing lock file
@@ -856,7 +853,7 @@ impl NixRustBackend {
             Some(lock) => lock,
             None => {
                 // Lock file is invalid/empty - regenerate it
-                return self.update(&None, inputs).await;
+                return self.update(&None, inputs, &[]).await;
             }
         };
 
@@ -896,12 +893,12 @@ impl NixRustBackend {
             Ok(new_lock) => {
                 if new_lock.has_changes(&old_lock).to_miette()? {
                     tracing::debug!("Lock validation found changes, updating lock");
-                    return self.update(&None, inputs).await;
+                    return self.update(&None, inputs, &[]).await;
                 }
             }
             Err(e) => {
                 tracing::debug!("Lock validation failed: {e}, updating lock");
-                return self.update(&None, inputs).await;
+                return self.update(&None, inputs, &[]).await;
             }
         }
 
@@ -1567,6 +1564,7 @@ impl NixBackend for NixRustBackend {
         &self,
         input_name: &Option<String>,
         inputs: &BTreeMap<String, Input>,
+        override_input: &[String],
     ) -> Result<()> {
         use crate::{create_flake_inputs, load_lock_file, write_lock_file};
 
@@ -1621,11 +1619,11 @@ impl NixBackend for NixRustBackend {
 
         // Apply input overrides
         // Note: overrides must live until after lock() is called
-        let overrides: Vec<(String, FlakeReference)> = if !self.override_input.is_empty() {
+        let overrides: Vec<(String, FlakeReference)> = if !override_input.is_empty() {
             let mut parse_flags = FlakeReferenceParseFlags::new(flake_settings).to_miette()?;
             parse_flags.set_base_directory(base_dir_str).to_miette()?;
 
-            self.override_input
+            override_input
                 .chunks_exact(2)
                 .map(|pair| {
                     let (override_ref, _) = FlakeReference::parse_with_fragment(

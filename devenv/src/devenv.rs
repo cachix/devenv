@@ -357,7 +357,6 @@ impl Devenv {
                     options.nixpkgs_config.clone(),
                     nix_settings.clone(),
                     cache_settings.clone(),
-                    options.input_overrides.override_input.clone(),
                     cachix_manager.clone(),
                     options.shutdown.clone(),
                     Some(eval_cache_pool.clone()),
@@ -802,7 +801,11 @@ impl Devenv {
 
         let activity = Activity::operation(&msg).start();
         self.nix
-            .update(input_name, &self.inputs)
+            .update(
+                input_name,
+                &self.inputs,
+                &self.input_overrides.override_input,
+            )
             .in_activity(&activity)
             .await?;
 
