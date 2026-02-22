@@ -265,23 +265,6 @@ pub struct Cli {
         long_help = "Source for devenv.nix.\n\nCan be either a filesystem path (with path: prefix) or a flake input reference.\n\nExamples:\n  --from github:cachix/devenv\n  --from github:cachix/devenv?dir=examples/simple\n  --from path:/absolute/path/to/project\n  --from path:./relative/path"
     )]
     pub from: Option<String>,
-
-    /// Disable the evaluation cache. Sets `eval_cache` to false.
-    #[arg(
-        long,
-        global = true,
-        overrides_with = "eval_cache",
-        help = "Disable caching of Nix evaluation results."
-    )]
-    pub no_eval_cache: bool,
-
-    #[arg(
-        long,
-        global = true,
-        overrides_with = "reload",
-        help = "Disable auto-reload when config files change."
-    )]
-    pub no_reload: bool,
 }
 
 impl Cli {

@@ -194,8 +194,9 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     }));
 
     // In reload shell mode, backend_done is just a handoff signal; don't trigger global shutdown.
-    let shutdown_on_backend_done =
-        !matches!(&cli.command, Some(Commands::Shell { .. })) || !cli.shell_cli.reload;
+    let shutdown_on_backend_done = !matches!(&cli.command, Some(Commands::Shell { .. }))
+        || !cli.shell_cli.reload
+        || cli.shell_cli.no_reload;
 
     // Shutdown coordination
     // Signal handlers catch external signals (SIGINT from `kill`, SIGTERM, etc.)
@@ -422,7 +423,7 @@ async fn run_devenv(
 
     for input in cli.input_overrides.override_input.chunks_exact(2) {
         if let Err(e) = config
-            .override_input_url(&input[0].clone(), &input[1].clone())
+            .override_input_url(&input[0], &input[1])
             .wrap_err_with(|| {
                 format!(
                     "Failed to override input {} with URL {}",
@@ -480,8 +481,8 @@ async fn run_devenv(
 
     // Resolve settings from CLI + Config (pure functions, no mutation).
     let nix_settings = devenv_core::NixSettings::resolve(cli.nix_cli, &config);
-    let shell_settings = devenv_core::ShellSettings::resolve(cli.shell_cli, cli.no_reload, &config);
-    let cache_settings = devenv_core::CacheSettings::resolve(cli.cache_cli, cli.no_eval_cache);
+    let shell_settings = devenv_core::ShellSettings::resolve(cli.shell_cli, &config);
+    let cache_settings = devenv_core::CacheSettings::resolve(cli.cache_cli);
     let secret_settings = devenv_core::SecretSettings::resolve(cli.secret_cli, &config);
     let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
 
