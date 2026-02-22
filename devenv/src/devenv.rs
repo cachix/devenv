@@ -192,7 +192,7 @@ pub struct Devenv {
     pub secret_settings: SecretSettings,
     pub input_overrides: InputOverrides,
     pub from_external: bool,
-    pub is_testing: bool,
+    is_testing: bool,
 
     pub nix: Arc<Box<dyn NixBackend>>,
 
