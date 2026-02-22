@@ -100,6 +100,7 @@ impl<T> Combine for Vec<T> {
 // --- Nix ---
 
 #[cfg_attr(feature = "clap", derive(clap::Args))]
+#[cfg_attr(feature = "clap", command(next_help_heading = "Nix Options"))]
 #[derive(Clone, Debug)]
 pub struct NixCliOptions {
     #[cfg_attr(feature = "clap", arg(short = 'j', long,
@@ -231,6 +232,7 @@ impl NixSettings {
 // --- Cache ---
 
 #[cfg_attr(feature = "clap", derive(clap::Args))]
+#[cfg_attr(feature = "clap", command(next_help_heading = "Cache Options"))]
 #[derive(Clone, Debug, Default)]
 pub struct CacheCliOptions {
     #[cfg_attr(
@@ -306,6 +308,7 @@ impl CacheSettings {
 // --- Shell ---
 
 #[cfg_attr(feature = "clap", derive(clap::Args))]
+#[cfg_attr(feature = "clap", command(next_help_heading = "Shell Options"))]
 #[derive(Clone, Debug, Default)]
 pub struct ShellCliOptions {
     #[cfg_attr(feature = "clap", arg(short, long, global = true,
@@ -392,6 +395,7 @@ impl ShellSettings {
 // --- Secrets ---
 
 #[cfg_attr(feature = "clap", derive(clap::Args))]
+#[cfg_attr(feature = "clap", command(next_help_heading = "Secretspec Options"))]
 #[derive(Clone, Debug, Default)]
 pub struct SecretCliOptions {
     #[cfg_attr(
@@ -455,6 +459,7 @@ impl SecretSettings {
 // --- Input overrides ---
 
 #[cfg_attr(feature = "clap", derive(clap::Args))]
+#[cfg_attr(feature = "clap", command(next_help_heading = "Input Overrides"))]
 #[derive(Clone, Debug, Default)]
 pub struct InputOverrides {
     #[cfg_attr(feature = "clap", arg(short, long, global = true,
