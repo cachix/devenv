@@ -2,7 +2,8 @@
 
 use crate::devenv::{Devenv, DevenvOptions};
 use devenv_activity::Activity;
-use devenv_core::{Config, Options};
+use devenv_core::Options;
+use devenv_core::config::{Input, NixBackendType, NixpkgsConfig};
 use miette::Result;
 use rmcp::handler::server::tool::{ToolCallContext, ToolRouter};
 use rmcp::handler::server::wrapper::Parameters;
@@ -24,7 +25,11 @@ use tracing::{info, warn};
 
 #[derive(Clone)]
 struct DevenvMcpServer {
-    config: Config,
+    inputs: BTreeMap<String, Input>,
+    imports: Vec<String>,
+    git_root: Option<PathBuf>,
+    nixpkgs_config: NixpkgsConfig,
+    backend: NixBackendType,
     cache: Arc<RwLock<McpCache>>,
     devenv_root: Option<PathBuf>,
     tool_router: ToolRouter<Self>,
@@ -37,13 +42,17 @@ struct McpCache {
 }
 
 impl DevenvMcpServer {
-    fn new(config: Config) -> Self {
-        Self::new_with_root(config, None)
+    fn new(options: DevenvOptions) -> Self {
+        Self::new_with_root(options, None)
     }
 
-    fn new_with_root(config: Config, devenv_root: Option<PathBuf>) -> Self {
+    fn new_with_root(options: DevenvOptions, devenv_root: Option<PathBuf>) -> Self {
         Self {
-            config,
+            inputs: options.inputs,
+            imports: options.imports,
+            git_root: options.git_root,
+            nixpkgs_config: options.nixpkgs_config,
+            backend: options.backend,
             cache: Arc::new(RwLock::new(McpCache::default())),
             devenv_root,
             tool_router: Self::tool_router(),
@@ -55,7 +64,11 @@ impl DevenvMcpServer {
 
         // Create a single Devenv instance for all operations
         let devenv_options = DevenvOptions {
-            config: self.config.clone(),
+            inputs: self.inputs.clone(),
+            imports: self.imports.clone(),
+            git_root: self.git_root.clone(),
+            nixpkgs_config: self.nixpkgs_config.clone(),
+            backend: self.backend.clone(),
             devenv_root: self.devenv_root.clone(),
             ..Default::default()
         };
@@ -341,10 +354,10 @@ impl DevenvMcpServer {
     }
 }
 
-pub async fn run_mcp_server(config: Config, http_port: Option<u16>) -> Result<()> {
+pub async fn run_mcp_server(options: DevenvOptions, http_port: Option<u16>) -> Result<()> {
     info!("Starting devenv MCP server");
 
-    let server = DevenvMcpServer::new(config);
+    let server = DevenvMcpServer::new(options);
 
     // Initialize cache in background thread (Nix FFI futures are not Send)
     // Server starts immediately, tools return empty results until cache is ready
@@ -516,14 +529,16 @@ mod tests {
         // Create temporary directory with test devenv configuration
         let temp_dir = create_test_devenv_dir().await.unwrap();
 
-        let config = Config::default();
-        let server =
-            DevenvMcpServer::new_with_root(config.clone(), Some(temp_dir.path().to_path_buf()));
+        let devenv_root = Some(temp_dir.path().to_path_buf());
+        let options = DevenvOptions {
+            devenv_root: devenv_root.clone(),
+            ..Default::default()
+        };
+        let server = DevenvMcpServer::new_with_root(options, devenv_root.clone());
 
         // Create Devenv and assemble
         let devenv_options = DevenvOptions {
-            config,
-            devenv_root: Some(temp_dir.path().to_path_buf()),
+            devenv_root,
             ..Default::default()
         };
         let devenv = Devenv::new(devenv_options).await;
@@ -592,14 +607,16 @@ mod tests {
         // Create temporary directory with test devenv configuration
         let temp_dir = create_test_devenv_dir().await.unwrap();
 
-        let config = Config::default();
-        let server =
-            DevenvMcpServer::new_with_root(config.clone(), Some(temp_dir.path().to_path_buf()));
+        let devenv_root = Some(temp_dir.path().to_path_buf());
+        let options = DevenvOptions {
+            devenv_root: devenv_root.clone(),
+            ..Default::default()
+        };
+        let server = DevenvMcpServer::new_with_root(options, devenv_root.clone());
 
         // Create Devenv and assemble
         let devenv_options = DevenvOptions {
-            config,
-            devenv_root: Some(temp_dir.path().to_path_buf()),
+            devenv_root,
             ..Default::default()
         };
         let devenv = Devenv::new(devenv_options).await;

@@ -42,6 +42,7 @@ rec {
     , secretspec ? null
     , devenv_inputs ? { }
     , devenv_imports ? [ ]
+    , impure ? false
     , nixpkgs_config ? { }
     , lock_fingerprint ? null
     , primops ? { }

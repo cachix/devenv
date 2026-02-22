@@ -483,6 +483,7 @@ async fn run_devenv(
     let shell_settings = devenv_core::ShellSettings::resolve(cli.shell_cli, &config);
     let cache_settings = devenv_core::CacheSettings::resolve(cli.cache_cli);
     let secret_settings = devenv_core::SecretSettings::resolve(cli.secret_cli, &config);
+    let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
 
     // Construct UI parameters from CLI options (kept out of the library)
     let verbosity = if cli.cli_options.quiet {
@@ -496,7 +497,11 @@ async fn run_devenv(
 
     let is_testing = matches!(&command, Commands::Test { .. });
     let mut options = devenv::DevenvOptions {
-        config,
+        inputs: config.inputs,
+        imports: config.imports,
+        git_root: config.git_root,
+        nixpkgs_config,
+        backend: config.backend,
         nix_settings: Some(nix_settings),
         shell_settings: Some(shell_settings),
         cache_settings: Some(cache_settings),
@@ -810,8 +815,15 @@ async fn run_devenv_inner(
             CommandResult::Print(output)
         }
         Commands::Mcp { http } => {
-            devenv::mcp::run_mcp_server(devenv.config.clone(), http.map(|p| p.unwrap_or(8080)))
-                .await?;
+            let mcp_options = devenv::DevenvOptions {
+                inputs: devenv.inputs.clone(),
+                imports: devenv.imports.clone(),
+                git_root: devenv.git_root.clone(),
+                nixpkgs_config: devenv.nixpkgs_config.clone(),
+                backend: Default::default(),
+                ..Default::default()
+            };
+            devenv::mcp::run_mcp_server(mcp_options, http.map(|p| p.unwrap_or(8080))).await?;
             CommandResult::Done
         }
         Commands::Lsp { print_config } => {
