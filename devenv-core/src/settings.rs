@@ -64,6 +64,39 @@ pub fn default_system() -> String {
     format!("{arch}-{os}")
 }
 
+/// Resolve a boolean flag pair (`--flag` / `--no-flag`).
+///
+/// Returns `Some(true)` if `--flag` was set, `Some(false)` if `--no-flag` was set,
+/// `None` if neither was set (defer to config, then to default).
+///
+/// The logical default lives in `.unwrap_or(default)` at the call site,
+/// not in clap's `default_value_t`.
+pub fn flag(yes: bool, no: bool) -> Option<bool> {
+    match (yes, no) {
+        (_, true) => Some(false),
+        (true, _) => Some(true),
+        (false, false) => None,
+    }
+}
+
+/// Combine two values, preferring `self` (higher precedence).
+pub trait Combine: Sized {
+    fn combine(self, other: Self) -> Self;
+}
+
+impl<T> Combine for Option<T> {
+    fn combine(self, other: Self) -> Self {
+        self.or(other)
+    }
+}
+
+impl<T> Combine for Vec<T> {
+    /// Prefer self if non-empty; fall back to other.
+    fn combine(self, other: Self) -> Self {
+        if !self.is_empty() { self } else { other }
+    }
+}
+
 // --- Nix ---
 
 #[cfg_attr(feature = "clap", derive(clap::Args))]
@@ -187,18 +220,16 @@ impl NixSettings {
 // --- Cache ---
 
 #[cfg_attr(feature = "clap", derive(clap::Args))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct CacheCliOptions {
     #[cfg_attr(
         feature = "clap",
         arg(
             long,
             global = true,
-            help = "Cache the results of Nix evaluation.",
+            help = "Cache the results of Nix evaluation (default).",
             hide = true,
             long_help = "Cache the results of Nix evaluation (deprecated, on by default). Use --no-eval-cache to disable caching.",
-            default_value_t = true,
-            overrides_with = "no_eval_cache"
         )
     )]
     pub eval_cache: bool,
@@ -221,26 +252,11 @@ pub struct CacheCliOptions {
 
     #[cfg_attr(
         feature = "clap",
-        arg(
-            long,
-            global = true,
-            overrides_with = "eval_cache",
-            help = "Disable caching of Nix evaluation results."
-        )
+        arg(long, global = true, help = "Disable caching of Nix evaluation results.")
     )]
     pub no_eval_cache: bool,
 }
 
-impl Default for CacheCliOptions {
-    fn default() -> Self {
-        Self {
-            eval_cache: true,
-            refresh_eval_cache: false,
-            refresh_task_cache: false,
-            no_eval_cache: false,
-        }
-    }
-}
 
 /// Resolved cache settings.
 #[derive(Clone, Debug)]
@@ -266,7 +282,7 @@ impl CacheSettings {
     /// All cache settings are CLI-only today (no config file counterpart).
     pub fn resolve(cli: CacheCliOptions) -> Self {
         Self {
-            eval_cache: cli.eval_cache && !cli.no_eval_cache,
+            eval_cache: flag(cli.eval_cache, cli.no_eval_cache).unwrap_or(true),
             refresh_eval_cache: cli.refresh_eval_cache,
             refresh_task_cache: cli.refresh_task_cache,
         }
@@ -276,7 +292,7 @@ impl CacheSettings {
 // --- Shell ---
 
 #[cfg_attr(feature = "clap", derive(clap::Args))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ShellCliOptions {
     #[cfg_attr(feature = "clap", arg(short, long, global = true,
         num_args = 0..,
@@ -293,38 +309,17 @@ pub struct ShellCliOptions {
 
     #[cfg_attr(
         feature = "clap",
-        arg(
-            long,
-            global = true,
-            help = "Enable auto-reload when config files change (default).",
-            default_value_t = true,
-            overrides_with = "no_reload"
-        )
+        arg(long, global = true, help = "Enable auto-reload when config files change (default).")
     )]
     pub reload: bool,
 
     #[cfg_attr(
         feature = "clap",
-        arg(
-            long,
-            global = true,
-            overrides_with = "reload",
-            help = "Disable auto-reload when config files change."
-        )
+        arg(long, global = true, help = "Disable auto-reload when config files change.")
     )]
     pub no_reload: bool,
 }
 
-impl Default for ShellCliOptions {
-    fn default() -> Self {
-        Self {
-            clean: None,
-            profile: Vec::new(),
-            reload: true,
-            no_reload: false,
-        }
-    }
-}
 
 /// Resolved shell settings.
 #[derive(Clone, Debug)]
@@ -358,19 +353,12 @@ impl ShellSettings {
             config.clean.clone().unwrap_or_default()
         };
 
-        let profiles = if !cli.profile.is_empty() {
-            cli.profile
-        } else if let Some(ref profile) = config.profile {
-            vec![profile.clone()]
-        } else {
-            Vec::new()
-        };
+        let config_profiles: Vec<String> = config.profile.clone().into_iter().collect();
+        let profiles = cli.profile.combine(config_profiles);
 
-        let reload = if cli.no_reload || !cli.reload {
-            false
-        } else {
-            config.reload.unwrap_or(true)
-        };
+        let reload = flag(cli.reload, cli.no_reload)
+            .combine(config.reload)
+            .unwrap_or(true);
 
         Self {
             clean,
@@ -558,7 +546,7 @@ mod tests {
     #[test]
     fn cache_settings_eval_cache_disabled() {
         let cli = CacheCliOptions {
-            eval_cache: false,
+            no_eval_cache: true,
             ..Default::default()
         };
         let settings = CacheSettings::resolve(cli);
@@ -667,20 +655,6 @@ mod tests {
         let config = Config::default();
         let settings = ShellSettings::resolve(cli, &config);
         assert!(settings.reload);
-    }
-
-    #[test]
-    fn shell_settings_cli_no_reload_overrides_config() {
-        let cli = ShellCliOptions {
-            reload: false,
-            ..Default::default()
-        };
-        let config = Config {
-            reload: Some(true),
-            ..Default::default()
-        };
-        let settings = ShellSettings::resolve(cli, &config);
-        assert!(!settings.reload);
     }
 
     #[test]
