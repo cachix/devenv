@@ -145,7 +145,7 @@ async fn test_create_flake_inputs() {
         ..Default::default()
     };
     let nix_settings = NixSettings::resolve(nix_cli, &config);
-    let cache_settings = CacheSettings::resolve(CacheCliOptions::default(), false);
+    let cache_settings = CacheSettings::resolve(CacheCliOptions::default());
     let nixpkgs_config = config.nixpkgs_config(get_current_system());
     let backend = NixRustBackend::new(
         paths.clone(),
@@ -227,7 +227,7 @@ async fn test_selective_input_update() {
         paths,
         nixpkgs_config,
         NixSettings::resolve(NixCliOptions::default(), &Config::default()),
-        CacheSettings::resolve(CacheCliOptions::default(), false),
+        CacheSettings::resolve(CacheCliOptions::default()),
         cachix_manager,
         Shutdown::new(),
         None,
@@ -305,7 +305,7 @@ async fn test_full_workflow() {
         paths,
         nixpkgs_config,
         NixSettings::resolve(NixCliOptions::default(), &Config::default()),
-        CacheSettings::resolve(CacheCliOptions::default(), false),
+        CacheSettings::resolve(CacheCliOptions::default()),
         cachix_manager,
         Shutdown::new(),
         None,
@@ -413,7 +413,7 @@ async fn test_relative_path_with_parent_dir_in_path() {
         paths,
         nixpkgs_config,
         NixSettings::resolve(NixCliOptions::default(), &Config::default()),
-        CacheSettings::resolve(CacheCliOptions::default(), false),
+        CacheSettings::resolve(CacheCliOptions::default()),
         cachix_manager,
         Shutdown::new(),
         None,

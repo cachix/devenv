@@ -109,23 +109,7 @@ impl DevenvOptions {
 
 impl Default for DevenvOptions {
     fn default() -> Self {
-        Self {
-            inputs: BTreeMap::new(),
-            imports: Vec::new(),
-            git_root: None,
-            nixpkgs_config: NixpkgsConfig::default(),
-            backend: NixBackendType::default(),
-            nix_settings: NixSettings::default(),
-            shell_settings: ShellSettings::default(),
-            cache_settings: CacheSettings::default(),
-            secret_settings: SecretSettings::default(),
-            input_overrides: InputOverrides::default(),
-            from_external: false,
-            devenv_root: None,
-            devenv_dotfile: None,
-            shutdown: tokio_shutdown::Shutdown::new(),
-            is_testing: false,
-        }
+        Self::new(tokio_shutdown::Shutdown::new())
     }
 }
 
