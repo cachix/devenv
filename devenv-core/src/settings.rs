@@ -17,8 +17,15 @@ pub struct NixBuildDefaults {
     pub cores: u8,
 }
 
+static NIX_BUILD_DEFAULTS: std::sync::LazyLock<NixBuildDefaults> =
+    std::sync::LazyLock::new(NixBuildDefaults::compute);
+
 impl NixBuildDefaults {
-    pub fn compute() -> Self {
+    pub fn defaults() -> &'static Self {
+        &NIX_BUILD_DEFAULTS
+    }
+
+    fn compute() -> Self {
         let total_cores = std::thread::available_parallelism()
             .unwrap_or_else(|e| {
                 error!("Failed to get number of logical CPUs: {}", e);
@@ -66,14 +73,14 @@ pub struct NixCliOptions {
         global = true,
         env = "DEVENV_MAX_JOBS",
         help = "Maximum number of Nix builds to run concurrently.",
-        default_value_t = NixBuildDefaults::compute().max_jobs))]
+        default_value_t = NixBuildDefaults::defaults().max_jobs))]
     pub max_jobs: u8,
 
     #[cfg_attr(feature = "clap", arg(short = 'u', long,
         global = true,
         env = "DEVENV_CORES",
         help = "Number of CPU cores available to each build.",
-        default_value_t = NixBuildDefaults::compute().cores))]
+        default_value_t = NixBuildDefaults::defaults().cores))]
     pub cores: u8,
 
     #[cfg_attr(feature = "clap", arg(short, long, global = true, default_value_t = default_system()))]
@@ -116,7 +123,7 @@ pub struct NixCliOptions {
 
 impl Default for NixCliOptions {
     fn default() -> Self {
-        let defaults = NixBuildDefaults::compute();
+        let defaults = NixBuildDefaults::defaults();
         Self {
             max_jobs: defaults.max_jobs,
             cores: defaults.cores,
@@ -146,7 +153,7 @@ pub struct NixSettings {
 
 impl Default for NixSettings {
     fn default() -> Self {
-        let defaults = NixBuildDefaults::compute();
+        let defaults = NixBuildDefaults::defaults();
         Self {
             impure: false,
             system: default_system(),
