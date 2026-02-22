@@ -107,17 +107,14 @@ pub struct CliOptions {
         long,
         global = true,
         env = "DEVENV_TUI",
-        help = "Enable the interactive terminal interface.",
-        default_value_t = true,
-        overrides_with = "no_tui"
+        help = "Enable the interactive terminal interface (default when interactive)."
     )]
     pub tui: bool,
 
     #[arg(
         long,
         global = true,
-        help = "Disable the interactive terminal interface.",
-        overrides_with = "tui"
+        help = "Disable the interactive terminal interface."
     )]
     pub no_tui: bool,
 
@@ -152,18 +149,15 @@ pub struct CliOptions {
 impl CliOptions {
     /// Resolve conflicting/derived options.
     pub fn resolve_overrides(&mut self) {
-        if self.no_tui {
-            self.tui = false;
-        }
-
-        // Disable TUI in CI environments or when not running in a TTY
-        if self.tui {
-            let is_ci = env::var_os("CI").is_some();
-            let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
-            if is_ci || !is_tty {
-                self.tui = false;
+        self.tui = match devenv_core::flag(self.tui, self.no_tui) {
+            Some(v) => v,
+            // Default: enable TUI only when running interactively outside CI.
+            None => {
+                let is_ci = env::var_os("CI").is_some();
+                let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
+                !is_ci && is_tty
             }
-        }
+        };
 
         // Handle deprecated --log-format (except Cli which is handled separately)
         if let Some(format) = self.log_format {
