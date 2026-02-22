@@ -7,7 +7,7 @@ use devenv_activity::{Activity, ActivityLevel, activity, message};
 use devenv_cache_core::compute_string_hash;
 use devenv_core::{
     cachix::{CachixManager, CachixPaths},
-    config::{Config, NixBackendType},
+    config::{Input, NixBackendType, NixpkgsConfig},
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
     nix_backend::{DevenvPaths, NixBackend, Options},
     ports::PortAllocator,
@@ -68,7 +68,11 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
 
 #[derive(Debug)]
 pub struct DevenvOptions {
-    pub config: Config,
+    pub inputs: BTreeMap<String, Input>,
+    pub imports: Vec<String>,
+    pub git_root: Option<PathBuf>,
+    pub nixpkgs_config: NixpkgsConfig,
+    pub backend: NixBackendType,
     pub nix_settings: Option<NixSettings>,
     pub shell_settings: Option<ShellSettings>,
     pub cache_settings: Option<CacheSettings>,
@@ -84,7 +88,11 @@ pub struct DevenvOptions {
 impl DevenvOptions {
     pub fn new(shutdown: Arc<tokio_shutdown::Shutdown>) -> Self {
         Self {
-            config: Config::default(),
+            inputs: BTreeMap::new(),
+            imports: Vec::new(),
+            git_root: None,
+            nixpkgs_config: NixpkgsConfig::default(),
+            backend: NixBackendType::default(),
             nix_settings: None,
             shell_settings: None,
             cache_settings: None,
@@ -102,7 +110,11 @@ impl DevenvOptions {
 impl Default for DevenvOptions {
     fn default() -> Self {
         Self {
-            config: Config::default(),
+            inputs: BTreeMap::new(),
+            imports: Vec::new(),
+            git_root: None,
+            nixpkgs_config: NixpkgsConfig::default(),
+            backend: NixBackendType::default(),
             nix_settings: None,
             shell_settings: None,
             cache_settings: None,
@@ -170,7 +182,10 @@ impl std::fmt::Display for SecretsNeedPrompting {
 impl std::error::Error for SecretsNeedPrompting {}
 
 pub struct Devenv {
-    pub config: Config,
+    pub inputs: BTreeMap<String, Input>,
+    pub imports: Vec<String>,
+    pub git_root: Option<PathBuf>,
+    pub nixpkgs_config: NixpkgsConfig,
     pub nix_settings: NixSettings,
     pub shell_settings: ShellSettings,
     pub cache_settings: CacheSettings,
@@ -310,9 +325,6 @@ impl Devenv {
             .await
             .expect("Failed to create DEVENV_HOME_GC directory");
 
-        // Determine backend type from config
-        let backend_type = options.config.backend.clone();
-
         // Create DevenvPaths struct
         let paths = DevenvPaths {
             root: devenv_root.clone(),
@@ -338,13 +350,11 @@ impl Devenv {
         // Create port allocator shared with backend for holding port reservations
         let port_allocator = Arc::new(PortAllocator::new());
 
-        let nixpkgs_config = options.config.nixpkgs_config(&nix_settings.system);
-
-        let nix: Box<dyn NixBackend> = match backend_type {
+        let nix: Box<dyn NixBackend> = match options.backend {
             NixBackendType::Nix => Box::new(
                 devenv_nix_backend::nix_backend::NixRustBackend::new(
                     paths,
-                    nixpkgs_config,
+                    options.nixpkgs_config.clone(),
                     nix_settings.clone(),
                     cache_settings.clone(),
                     options.input_overrides.override_input.clone(),
@@ -371,7 +381,10 @@ impl Devenv {
         };
 
         Self {
-            config: options.config,
+            inputs: options.inputs,
+            imports: options.imports,
+            git_root: options.git_root,
+            nixpkgs_config: options.nixpkgs_config,
             nix_settings,
             shell_settings,
             cache_settings,
@@ -789,7 +802,7 @@ impl Devenv {
 
         let activity = Activity::operation(&msg).start();
         self.nix
-            .update(input_name, &self.config.inputs)
+            .update(input_name, &self.inputs)
             .in_activity(&activity)
             .await?;
 
@@ -1873,7 +1886,7 @@ impl Devenv {
         // Remove once direnvrc migration is implemented.
         util::write_file_with_lock(
             self.devenv_dotfile.join("imports.txt"),
-            self.config.imports.join("\n"),
+            self.imports.join("\n"),
         )?;
 
         fs::create_dir_all(&self.devenv_runtime)
@@ -2006,9 +2019,6 @@ impl Devenv {
                 .to_string_lossy()
         ));
 
-        // Get git repository root from config (already detected during config load)
-        let git_root = self.config.git_root.clone();
-
         // Convert secretspec::Resolved to SecretspecData if available
         let secretspec_data: Option<SecretspecData> =
             self.secretspec_resolved
@@ -2031,7 +2041,6 @@ impl Devenv {
 
         // Create the Nix arguments struct
         let container_name = self.container_name.lock().unwrap().clone();
-        let nixpkgs_config = self.config.nixpkgs_config(&self.nix_settings.system);
         let args = NixArgs {
             version: crate_version!(),
             is_development_version: crate::is_development_version(),
@@ -2051,12 +2060,12 @@ impl Devenv {
             cli_options,
             hostname: hostname.as_deref(),
             username: username.as_deref(),
-            git_root: git_root.as_deref(),
+            git_root: self.git_root.as_deref(),
             secretspec: secretspec_data.as_ref(),
-            devenv_inputs: &self.config.inputs,
-            devenv_imports: &self.config.imports,
+            devenv_inputs: &self.inputs,
+            devenv_imports: &self.imports,
             impure: self.nix_settings.impure,
-            nixpkgs_config,
+            nixpkgs_config: self.nixpkgs_config.clone(),
             lock_fingerprint: &lock_fingerprint,
         };
 

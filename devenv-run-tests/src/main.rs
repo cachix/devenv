@@ -1,5 +1,5 @@
 use clap::Parser;
-use devenv::{Config, Devenv, DevenvOptions, tracing as devenv_tracing};
+use devenv::{Config, Devenv, DevenvOptions, default_system, tracing as devenv_tracing};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -386,8 +386,13 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             )
             .wrap_err("Failed to add devenv input")?;
 
+        let nixpkgs_config = config.nixpkgs_config(&default_system());
         let options = DevenvOptions {
-            config,
+            inputs: config.inputs,
+            imports: config.imports,
+            git_root: config.git_root,
+            nixpkgs_config,
+            backend: config.backend,
             devenv_root: Some(devenv_root.clone()),
             devenv_dotfile: Some(devenv_dotfile),
             ..Default::default()
