@@ -73,10 +73,10 @@ pub struct DevenvOptions {
     pub git_root: Option<PathBuf>,
     pub nixpkgs_config: NixpkgsConfig,
     pub backend: NixBackendType,
-    pub nix_settings: Option<NixSettings>,
-    pub shell_settings: Option<ShellSettings>,
-    pub cache_settings: Option<CacheSettings>,
-    pub secret_settings: Option<SecretSettings>,
+    pub nix_settings: NixSettings,
+    pub shell_settings: ShellSettings,
+    pub cache_settings: CacheSettings,
+    pub secret_settings: SecretSettings,
     pub input_overrides: InputOverrides,
     pub from_external: bool,
     pub devenv_root: Option<PathBuf>,
@@ -93,10 +93,10 @@ impl DevenvOptions {
             git_root: None,
             nixpkgs_config: NixpkgsConfig::default(),
             backend: NixBackendType::default(),
-            nix_settings: None,
-            shell_settings: None,
-            cache_settings: None,
-            secret_settings: None,
+            nix_settings: NixSettings::default(),
+            shell_settings: ShellSettings::default(),
+            cache_settings: CacheSettings::default(),
+            secret_settings: SecretSettings::default(),
             input_overrides: InputOverrides::default(),
             from_external: false,
             devenv_root: None,
@@ -115,10 +115,10 @@ impl Default for DevenvOptions {
             git_root: None,
             nixpkgs_config: NixpkgsConfig::default(),
             backend: NixBackendType::default(),
-            nix_settings: None,
-            shell_settings: None,
-            cache_settings: None,
-            secret_settings: None,
+            nix_settings: NixSettings::default(),
+            shell_settings: ShellSettings::default(),
+            cache_settings: CacheSettings::default(),
+            secret_settings: SecretSettings::default(),
             input_overrides: InputOverrides::default(),
             from_external: false,
             devenv_root: None,
@@ -278,10 +278,10 @@ impl Devenv {
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
 
-        let nix_settings = options.nix_settings.unwrap_or_default();
-        let shell_settings = options.shell_settings.unwrap_or_default();
-        let cache_settings = options.cache_settings.unwrap_or_default();
-        let secret_settings = options.secret_settings.unwrap_or_default();
+        let nix_settings = options.nix_settings;
+        let shell_settings = options.shell_settings;
+        let cache_settings = options.cache_settings;
+        let secret_settings = options.secret_settings;
 
         // Compute profile-aware dotfile path for state isolation
         let base_devenv_dotfile = options
