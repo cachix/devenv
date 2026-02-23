@@ -1112,6 +1112,7 @@ impl Devenv {
             cache_dir: self.devenv_dotfile.clone(),
             sudo_context: None,
             env: envs,
+            ignore_process_deps: false,
         };
 
         if let Ok(config_value) = devenv_activity::SerdeValue::from_serialize(&config) {
@@ -1219,6 +1220,7 @@ impl Devenv {
             cache_dir: self.devenv_dotfile.clone(),
             sudo_context: None,
             env: envs,
+            ignore_process_deps: false,
         };
 
         let has_custom_executor = executor.is_some();
@@ -1701,6 +1703,7 @@ impl Devenv {
                     cache_dir: self.devenv_dotfile.clone(),
                     sudo_context: None,
                     env: envs,
+                    ignore_process_deps: false,
                 };
 
                 let tasks_runner = tasks::Tasks::builder(

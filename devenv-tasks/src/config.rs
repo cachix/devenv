@@ -63,6 +63,11 @@ pub struct Config {
     /// Environment variables to pass to processes
     #[serde(skip, default)]
     pub env: std::collections::HashMap<String, String>,
+    /// When true, exclude non-root process-type tasks from the scheduled subgraph.
+    /// This prevents process duplication when process-compose manages process ordering
+    /// via depends_on while devenv-tasks handles non-process dependencies (migrations, etc).
+    #[serde(skip, default)]
+    pub ignore_process_deps: bool,
 }
 
 impl TryFrom<serde_json::Value> for Config {

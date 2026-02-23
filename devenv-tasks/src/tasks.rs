@@ -139,6 +139,7 @@ impl TasksBuilder {
             env: self.config.env,
             executor,
             refresh_task_cache: self.refresh_task_cache,
+            ignore_process_deps: self.config.ignore_process_deps,
         };
 
         tasks.resolve_dependencies(task_indices).await?;
@@ -176,6 +177,8 @@ pub struct Tasks {
     pub executor: Arc<dyn TaskExecutor>,
     /// Force a refresh of the task cache, skipping cache reads
     pub refresh_task_cache: bool,
+    /// When true, exclude non-root process-type tasks from the scheduled subgraph
+    pub ignore_process_deps: bool,
 }
 
 impl Tasks {
@@ -497,6 +500,26 @@ impl Tasks {
                         }
                     }
                 }
+            }
+        }
+
+        // When ignore_process_deps is set, remove non-root process-type tasks
+        // from the visited set. This prevents process duplication when process-compose
+        // manages process ordering via depends_on.
+        if self.ignore_process_deps {
+            let root_set: HashSet<NodeIndex> = self.roots.iter().cloned().collect();
+            let mut to_remove = Vec::new();
+            for &node in &visited {
+                if root_set.contains(&node) {
+                    continue;
+                }
+                let task_state = self.graph[node].read().await;
+                if task_state.task.r#type == TaskType::Process {
+                    to_remove.push(node);
+                }
+            }
+            for node in to_remove {
+                visited.remove(&node);
             }
         }
 
@@ -1108,6 +1131,166 @@ pub fn compute_hierarchy_edges<N, E>(
     }
 
     edges
+}
+
+#[cfg(test)]
+mod schedule_tests {
+    use super::*;
+    use crate::config::TaskConfig;
+
+    /// Helper to build a minimal Tasks struct for testing schedule().
+    /// Returns the TempDir alongside Tasks to keep the directory alive for the test.
+    async fn build_test_tasks(
+        task_configs: Vec<TaskConfig>,
+        roots: Vec<String>,
+        ignore_process_deps: bool,
+    ) -> (Tasks, tempfile::TempDir) {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache_dir = tmp.path().to_path_buf();
+        let runtime_dir = tmp.path().join("runtime");
+        std::fs::create_dir_all(&runtime_dir).unwrap();
+
+        let config = Config {
+            tasks: task_configs,
+            roots,
+            run_mode: RunMode::All,
+            runtime_dir,
+            cache_dir,
+            sudo_context: None,
+            env: HashMap::new(),
+            ignore_process_deps,
+        };
+
+        let shutdown = tokio_shutdown::Shutdown::new();
+        let tasks = Tasks::builder(config, VerbosityLevel::Normal, shutdown)
+            .build()
+            .await
+            .unwrap();
+        (tasks, tmp)
+    }
+
+    fn oneshot_task(name: &str, after: Vec<&str>) -> TaskConfig {
+        TaskConfig {
+            name: name.to_string(),
+            r#type: TaskType::Oneshot,
+            after: after.into_iter().map(String::from).collect(),
+            command: Some("true".to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn process_task(name: &str, after: Vec<&str>) -> TaskConfig {
+        TaskConfig {
+            name: name.to_string(),
+            r#type: TaskType::Process,
+            after: after.into_iter().map(String::from).collect(),
+            command: Some("true".to_string()),
+            ..Default::default()
+        }
+    }
+
+    /// Collect task names from the scheduled tasks_order.
+    async fn task_names(tasks: &Tasks) -> Vec<String> {
+        let mut names = Vec::new();
+        for idx in &tasks.tasks_order {
+            names.push(tasks.graph[*idx].read().await.task.name.clone());
+        }
+        names
+    }
+
+    #[tokio::test]
+    async fn ignore_process_deps_prunes_non_root_processes() {
+        // Graph: root process A depends on process B (non-root)
+        // With ignore_process_deps=true, B should be pruned from the subgraph
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                process_task("ns:proc:a", vec!["ns:proc:b@complete"]),
+                process_task("ns:proc:b", vec![]),
+            ],
+            vec!["ns:proc:a".to_string()],
+            true,
+        )
+        .await;
+
+        // Only root process A should remain
+        let names = task_names(&tasks).await;
+        assert_eq!(names, vec!["ns:proc:a"]);
+    }
+
+    #[tokio::test]
+    async fn ignore_process_deps_keeps_oneshot_deps() {
+        // Graph: root process A depends on oneshot B (migration)
+        // With ignore_process_deps=true, B should NOT be pruned
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                process_task("ns:proc:a", vec!["ns:task:migrate"]),
+                oneshot_task("ns:task:migrate", vec![]),
+            ],
+            vec!["ns:proc:a".to_string()],
+            true,
+        )
+        .await;
+
+        // Both should remain: root process A and oneshot migration
+        let names = task_names(&tasks).await;
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"ns:proc:a".to_string()));
+        assert!(names.contains(&"ns:task:migrate".to_string()));
+    }
+
+    #[tokio::test]
+    async fn ignore_process_deps_false_keeps_all() {
+        // Same graph but with ignore_process_deps=false: both should remain
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                process_task("ns:proc:a", vec!["ns:proc:b@complete"]),
+                process_task("ns:proc:b", vec![]),
+            ],
+            vec!["ns:proc:a".to_string()],
+            false,
+        )
+        .await;
+
+        assert_eq!(tasks.tasks_order.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn ignore_process_deps_keeps_root_processes() {
+        // Both A and B are roots — neither should be pruned even with ignore_process_deps
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                process_task("ns:proc:a", vec![]),
+                process_task("ns:proc:b", vec![]),
+            ],
+            vec!["ns:proc:a".to_string(), "ns:proc:b".to_string()],
+            true,
+        )
+        .await;
+
+        assert_eq!(tasks.tasks_order.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn ignore_process_deps_preserves_transitive_oneshot() {
+        // Graph: root process A -> process B (non-root) -> oneshot C
+        // B gets pruned, but C should still be in the subgraph
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                process_task("ns:proc:a", vec!["ns:proc:b@complete"]),
+                process_task("ns:proc:b", vec!["ns:task:setup"]),
+                oneshot_task("ns:task:setup", vec![]),
+            ],
+            vec!["ns:proc:a".to_string()],
+            true,
+        )
+        .await;
+
+        let names = task_names(&tasks).await;
+        assert!(names.contains(&"ns:proc:a".to_string()));
+        assert!(names.contains(&"ns:task:setup".to_string()));
+        assert!(!names.contains(&"ns:proc:b".to_string()));
+        assert_eq!(names.len(), 2);
+    }
 }
 
 #[cfg(test)]
