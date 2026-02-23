@@ -29,7 +29,7 @@ in
 
   processes.runserver = {
     exec = "exec python manage.py runserver";
-    process-compose.depends_on.postgres.condition = "process_healthy";
+    after = [ "devenv:processes:postgres" ];
   };
 
   enterTest = ''

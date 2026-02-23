@@ -18,10 +18,7 @@ in
     before = [ "devenv:processes:opentelemetry-collector" ];
   };
 
-  # Wait for clickhouse to come up
-  processes.opentelemetry-collector.process-compose = {
-    depends_on.clickhouse-server.condition = "process_healthy";
-  };
+  processes.opentelemetry-collector.after = [ "devenv:processes:clickhouse" ];
 
   services.opentelemetry-collector = {
     enable = true;
