@@ -8,8 +8,6 @@ use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-// --- Trace types (moved from devenv-core) ---
-
 #[derive(clap::ValueEnum, Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TraceFormat {

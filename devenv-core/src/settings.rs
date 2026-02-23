@@ -7,9 +7,7 @@
 
 use tracing::error;
 
-use crate::config::{Clean, Config, SecretspecConfig};
-
-// --- Utilities (moved from cli.rs) ---
+use crate::config::{Clean, Config, NixBackendType, SecretspecConfig};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NixBuildDefaults {
@@ -80,7 +78,7 @@ pub fn flag(yes: bool, no: bool) -> Option<bool> {
 }
 
 /// Combine two values, preferring `self` (higher precedence).
-pub trait Combine: Sized {
+pub(crate) trait Combine: Sized {
     fn combine(self, other: Self) -> Self;
 }
 
@@ -151,7 +149,7 @@ pub struct NixCliOptions {
     )]
     pub offline: bool,
 
-    #[cfg_attr(feature = "clap", arg(short = 'n', long, global = true, num_args = 2,
+    #[cfg_attr(feature = "clap", arg(long, global = true, num_args = 2,
         value_names = ["NAME", "VALUE"],
         value_delimiter = ' ',
         help = "Pass additional options to nix commands",
@@ -163,6 +161,18 @@ pub struct NixCliOptions {
         arg(long, global = true, help = "Enter the Nix debugger on failure.")
     )]
     pub nix_debugger: bool,
+
+    #[cfg_attr(
+        feature = "clap",
+        arg(
+            long,
+            global = true,
+            value_enum,
+            hide = true,
+            help = "Nix backend to use."
+        )
+    )]
+    pub backend: Option<NixBackendType>,
 }
 
 impl Default for NixCliOptions {
@@ -177,6 +187,7 @@ impl Default for NixCliOptions {
             offline: false,
             nix_option: Vec::new(),
             nix_debugger: false,
+            backend: None,
         }
     }
 }
@@ -194,6 +205,7 @@ pub struct NixSettings {
     pub offline: bool,
     pub nix_option: Vec<String>,
     pub nix_debugger: bool,
+    pub backend: NixBackendType,
 }
 
 impl Default for NixSettings {
@@ -207,6 +219,7 @@ impl Default for NixSettings {
             offline: false,
             nix_option: Vec::new(),
             nix_debugger: false,
+            backend: NixBackendType::default(),
         }
     }
 }
@@ -225,6 +238,7 @@ impl NixSettings {
             offline: cli.offline,
             nix_option: cli.nix_option,
             nix_debugger: cli.nix_debugger,
+            backend: cli.backend.unwrap_or(config.backend.clone()),
         }
     }
 }
@@ -375,7 +389,7 @@ impl ShellSettings {
             config.clean.clone().unwrap_or_default()
         };
 
-        let config_profiles: Vec<String> = config.profile.clone().into_iter().collect();
+        let config_profiles: Vec<String> = config.profile.iter().cloned().collect();
         let profiles = cli.profile.combine(config_profiles);
 
         let reload = flag(cli.reload, cli.no_reload)
@@ -429,20 +443,20 @@ impl SecretSettings {
     /// Resolve secret settings from CLI and config sources.
     ///
     /// Precedence: CLI > Config > Default.
-    /// If either CLI field is present, merge into config's SecretspecConfig
-    /// (or create one) with `enable: true`.
+    /// If CLI fields are present, they override the matching config fields.
+    /// When no config exists, `enable` defaults to `true` so the user can
+    /// pass `--secretspec-provider` without also adding secretspec config.
+    /// When config explicitly sets `enable: false`, that value is preserved.
     pub fn resolve(cli: SecretCliOptions, config: &Config) -> Self {
         let has_cli_override =
             cli.secretspec_provider.is_some() || cli.secretspec_profile.is_some();
 
         let secretspec = if has_cli_override {
-            let base = config.secretspec.clone().unwrap_or(SecretspecConfig {
-                enable: false,
-                profile: None,
-                provider: None,
-            });
+            let base = config.secretspec.clone().unwrap_or_default();
+            // Enable by default when no config exists; preserve explicit config value otherwise.
+            let enable = config.secretspec.as_ref().map_or(true, |c| c.enable);
             Some(SecretspecConfig {
-                enable: true,
+                enable,
                 provider: cli.secretspec_provider.or(base.provider),
                 profile: cli.secretspec_profile.or(base.profile),
             })
@@ -505,17 +519,6 @@ mod tests {
 
     #[test]
     fn nix_settings_impure_from_config() {
-        let cli = NixCliOptions::default();
-        let config = Config {
-            impure: true,
-            ..Default::default()
-        };
-        let settings = NixSettings::resolve(cli, &config);
-        assert!(settings.impure);
-    }
-
-    #[test]
-    fn nix_settings_impure_from_config_when_cli_not_set() {
         let cli = NixCliOptions::default();
         let config = Config {
             impure: true,
@@ -799,7 +802,7 @@ mod tests {
     }
 
     #[test]
-    fn secret_settings_cli_preserves_config_fields_not_overridden() {
+    fn secret_settings_cli_preserves_config_enable_false() {
         let cli = SecretCliOptions {
             secretspec_provider: Some("aws".into()),
             ..Default::default()
@@ -814,7 +817,8 @@ mod tests {
         };
         let settings = SecretSettings::resolve(cli, &config);
         let sc = settings.secretspec.unwrap();
-        assert!(sc.enable);
+        // Config's explicit enable: false is preserved even when CLI overrides are provided.
+        assert!(!sc.enable);
         assert_eq!(sc.provider, Some("aws".into()));
         assert_eq!(sc.profile, Some("prod".into()));
     }

@@ -72,7 +72,6 @@ pub struct DevenvOptions {
     pub imports: Vec<String>,
     pub git_root: Option<PathBuf>,
     pub nixpkgs_config: NixpkgsConfig,
-    pub backend: NixBackendType,
     pub nix_settings: NixSettings,
     pub shell_settings: ShellSettings,
     pub cache_settings: CacheSettings,
@@ -92,7 +91,6 @@ impl DevenvOptions {
             imports: Vec::new(),
             git_root: None,
             nixpkgs_config: NixpkgsConfig::default(),
-            backend: NixBackendType::default(),
             nix_settings: NixSettings::default(),
             shell_settings: ShellSettings::default(),
             cache_settings: CacheSettings::default(),
@@ -259,7 +257,6 @@ impl Devenv {
 
         let devenv_root = options
             .devenv_root
-            .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
 
         let nix_settings = options.nix_settings;
@@ -270,8 +267,7 @@ impl Devenv {
         // Compute profile-aware dotfile path for state isolation
         let base_devenv_dotfile = options
             .devenv_dotfile
-            .map(|p| p.to_path_buf())
-            .unwrap_or(devenv_root.join(".devenv"));
+            .unwrap_or_else(|| devenv_root.join(".devenv"));
         let devenv_dotfile =
             if let Some(suffix) = compute_profile_dir_suffix(&shell_settings.profiles) {
                 base_devenv_dotfile.join(suffix)
@@ -334,7 +330,7 @@ impl Devenv {
         // Create port allocator shared with backend for holding port reservations
         let port_allocator = Arc::new(PortAllocator::new());
 
-        let nix: Box<dyn NixBackend> = match options.backend {
+        let nix: Box<dyn NixBackend> = match nix_settings.backend {
             NixBackendType::Nix => Box::new(
                 devenv_nix_backend::nix_backend::NixRustBackend::new(
                     paths,

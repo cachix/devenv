@@ -13,6 +13,7 @@ const YAML_CONFIG: &str = "devenv.yaml";
 const YAML_LOCAL_CONFIG: &str = "devenv.local.yaml";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, schematic::Schematic)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[serde(rename_all = "lowercase")]
 #[derive(Default)]
 pub enum NixBackendType {

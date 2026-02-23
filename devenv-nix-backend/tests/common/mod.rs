@@ -1,8 +1,13 @@
 //! Common test utilities shared across test files
 
 use devenv_core::cachix::{CachixManager, CachixPaths};
+use devenv_core::{
+    CacheCliOptions, CacheSettings, Config, DevenvPaths, NixCliOptions, NixSettings, PortAllocator,
+};
+use devenv_nix_backend::nix_backend::NixRustBackend;
 use std::path::Path;
 use std::sync::Arc;
+use tokio_shutdown::Shutdown;
 
 /// Get the current Nix system string based on architecture and OS
 pub fn get_current_system() -> &'static str {
@@ -29,4 +34,28 @@ pub fn create_test_cachix_manager(
         daemon_socket,
     };
     Arc::new(CachixManager::new(cachix_paths))
+}
+
+/// Create a `NixRustBackend` from `NixCliOptions`, resolving settings internally.
+pub fn create_backend(
+    paths: DevenvPaths,
+    config: Config,
+    nix_cli: NixCliOptions,
+    cachix_manager: Arc<CachixManager>,
+    shutdown: Arc<Shutdown>,
+) -> miette::Result<NixRustBackend> {
+    let nix_settings = NixSettings::resolve(nix_cli, &config);
+    let cache_settings = CacheSettings::resolve(CacheCliOptions::default());
+    let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
+    NixRustBackend::new(
+        paths,
+        nixpkgs_config,
+        nix_settings,
+        cache_settings,
+        cachix_manager,
+        shutdown,
+        None,
+        None,
+        Arc::new(PortAllocator::new()),
+    )
 }

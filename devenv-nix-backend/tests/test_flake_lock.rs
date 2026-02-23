@@ -1,10 +1,7 @@
 #![cfg(feature = "test-nix-store")]
 //! Integration tests for flake locking functionality
 
-use devenv_core::{
-    CacheCliOptions, CacheSettings, CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend,
-    NixCliOptions, NixSettings, PortAllocator,
-};
+use devenv_core::{CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixCliOptions};
 use devenv_nix_backend::{load_lock_file, nix_backend::NixRustBackend};
 use devenv_nix_backend_macros::nix_test;
 use nix_bindings_fetchers::FetchersSettings;
@@ -16,8 +13,7 @@ use tokio_shutdown::Shutdown;
 
 // Import shared test utilities
 mod common;
-use common::create_test_cachix_manager;
-use common::get_current_system;
+use common::{create_backend, create_test_cachix_manager, get_current_system};
 
 /// Helper struct to keep NixArgs and its owned values alive together
 struct TestNixArgs {
@@ -144,19 +140,12 @@ async fn test_create_flake_inputs() {
         offline: true,
         ..Default::default()
     };
-    let nix_settings = NixSettings::resolve(nix_cli, &config);
-    let cache_settings = CacheSettings::resolve(CacheCliOptions::default());
-    let nixpkgs_config = config.nixpkgs_config(get_current_system());
-    let backend = NixRustBackend::new(
+    let backend = create_backend(
         paths.clone(),
-        nixpkgs_config,
-        nix_settings,
-        cache_settings,
+        config.clone(),
+        nix_cli,
         cachix_manager,
-        Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
+        Arc::new(Shutdown::new()),
     )
     .expect("Failed to create backend");
 
@@ -220,19 +209,13 @@ async fn test_selective_input_update() {
     // Load config from devenv.yaml
     let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
 
-    // Create NixBackend
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    let nixpkgs_config = config.nixpkgs_config(get_current_system());
-    let backend = NixRustBackend::new(
+    let backend = create_backend(
         paths,
-        nixpkgs_config,
-        NixSettings::resolve(NixCliOptions::default(), &Config::default()),
-        CacheSettings::resolve(CacheCliOptions::default()),
+        config.clone(),
+        NixCliOptions::default(),
         cachix_manager,
-        Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
+        Arc::new(Shutdown::new()),
     )
     .expect("Failed to create backend");
 
@@ -298,19 +281,13 @@ async fn test_full_workflow() {
     // Load config from devenv.yaml
     let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
 
-    // 3. Create NixBackend
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    let nixpkgs_config = config.nixpkgs_config(get_current_system());
-    let backend = NixRustBackend::new(
+    let backend = create_backend(
         paths,
-        nixpkgs_config,
-        NixSettings::resolve(NixCliOptions::default(), &Config::default()),
-        CacheSettings::resolve(CacheCliOptions::default()),
+        config.clone(),
+        NixCliOptions::default(),
         cachix_manager,
-        Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
+        Arc::new(Shutdown::new()),
     )
     .expect("Failed to create backend");
 
@@ -406,19 +383,13 @@ async fn test_relative_path_with_parent_dir_in_path() {
     // Load config from devenv.yaml
     let config = Config::load_from(&inner_dir).expect("Failed to load config");
 
-    // Create NixBackend
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    let nixpkgs_config = config.nixpkgs_config(get_current_system());
-    let backend = NixRustBackend::new(
+    let backend = create_backend(
         paths,
-        nixpkgs_config,
-        NixSettings::resolve(NixCliOptions::default(), &Config::default()),
-        CacheSettings::resolve(CacheCliOptions::default()),
+        config.clone(),
+        NixCliOptions::default(),
         cachix_manager,
-        Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
+        Arc::new(Shutdown::new()),
     )
     .expect("Failed to create backend");
 

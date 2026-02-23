@@ -193,10 +193,11 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
         prev_hook(info);
     }));
 
-    // In reload shell mode, backend_done is just a handoff signal; don't trigger global shutdown.
-    let shutdown_on_backend_done = !matches!(&cli.command, Some(Commands::Shell { .. }))
-        || !cli.shell_cli.reload
-        || cli.shell_cli.no_reload;
+    // For shell commands, backend_done is a handoff signal when reload is active; keep TUI alive
+    // until the shutdown signal from the backend thread. When --no-reload is explicit, TUI can
+    // shut down immediately on backend_done. For all other commands, always shut down on done.
+    let shutdown_on_backend_done =
+        !matches!(&cli.command, Some(Commands::Shell { .. })) || cli.shell_cli.no_reload;
 
     // Shutdown coordination
     // Signal handlers catch external signals (SIGINT from `kill`, SIGTERM, etc.)
@@ -502,7 +503,6 @@ async fn run_devenv(
         imports: config.imports,
         git_root: config.git_root,
         nixpkgs_config,
-        backend: config.backend,
         nix_settings,
         shell_settings,
         cache_settings,
@@ -821,7 +821,6 @@ async fn run_devenv_inner(
                 imports: devenv.imports.clone(),
                 git_root: devenv.git_root.clone(),
                 nixpkgs_config: devenv.nixpkgs_config.clone(),
-                backend: Default::default(),
                 ..Default::default()
             };
             devenv::mcp::run_mcp_server(mcp_options, http.map(|p| p.unwrap_or(8080))).await?;

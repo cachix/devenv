@@ -5,8 +5,7 @@
 //! including input overrides via NixCliOptions.
 
 use devenv_core::{
-    CacheCliOptions, CacheSettings, CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend,
-    NixCliOptions, NixSettings, Options, PortAllocator,
+    CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixCliOptions, Options,
 };
 use devenv_nix_backend::nix_backend::NixRustBackend;
 use devenv_nix_backend_macros::nix_test;
@@ -36,8 +35,7 @@ impl Drop for CwdGuard {
 
 // Import shared test utilities
 mod common;
-use common::create_test_cachix_manager;
-use common::get_current_system;
+use common::{create_backend, create_test_cachix_manager, get_current_system};
 
 /// Create test paths directory structure within a base directory
 fn create_test_paths_in(base: &std::path::Path) -> DevenvPaths {
@@ -65,30 +63,6 @@ fn copy_fixture_lock(dest_dir: &std::path::Path) {
         .join("tests/fixtures/devenv.lock");
     let dest_lock = dest_dir.join("devenv.lock");
     std::fs::copy(&fixture_lock, &dest_lock).expect("Failed to copy fixture lock file");
-}
-
-/// Create a NixRustBackend from NixCliOptions, resolving settings internally.
-fn create_backend(
-    paths: DevenvPaths,
-    config: Config,
-    nix_cli: NixCliOptions,
-    cachix_manager: Arc<devenv_core::CachixManager>,
-    shutdown: Arc<Shutdown>,
-) -> miette::Result<NixRustBackend> {
-    let nix_settings = NixSettings::resolve(nix_cli, &config);
-    let cache_settings = CacheSettings::resolve(CacheCliOptions::default());
-    let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
-    NixRustBackend::new(
-        paths,
-        nixpkgs_config,
-        nix_settings,
-        cache_settings,
-        cachix_manager,
-        shutdown,
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
-    )
 }
 
 /// Helper struct to keep NixArgs and its owned values alive together
@@ -190,28 +164,14 @@ fn setup_isolated_test_env(
     // Load config (devenv.yaml should already contain nixpkgs)
     let config = Config::load_from(temp_path).expect("Failed to load config");
 
-    // Create cachix manager for the test
     let cachix_manager = create_test_cachix_manager(temp_path, None);
-
-    // Create shutdown coordinator for cleanup
-    let shutdown = Shutdown::new();
-
-    let nix_settings = NixSettings::resolve(nix_cli, &config);
-    let cache_settings = CacheSettings::resolve(CacheCliOptions::default());
-    let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
-
-    // Create backend with default project_root (project directory)
-    let port_allocator = Arc::new(PortAllocator::new());
-    let backend = NixRustBackend::new(
+    let shutdown = Arc::new(Shutdown::new());
+    let backend = create_backend(
         paths.clone(),
-        nixpkgs_config,
-        nix_settings,
-        cache_settings,
+        config.clone(),
+        nix_cli,
         cachix_manager,
         shutdown,
-        None,
-        None,
-        port_allocator,
     )
     .expect("Failed to create NixRustBackend");
 
