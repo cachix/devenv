@@ -22,7 +22,7 @@ use std::future::Future;
 use std::io;
 use std::sync::Arc;
 use std::time::SystemTime;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, trace, warn};
 
 use crate::db::{self, EnvInputRow, EvalRow, FileInputRow};
 use crate::eval_inputs::{
@@ -140,7 +140,7 @@ impl CachingEvalService {
         // Update timestamp
         db::update_eval_updated_at(&self.pool, eval_row.id).await?;
 
-        info!(
+        debug!(
             key_hash = %key.key_hash,
             attr_name = %key.attr_name,
             "Cache hit"
