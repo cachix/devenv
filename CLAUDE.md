@@ -4,6 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Development Commands
 
+Use `devenv shell --no-reload` to get a shell with Rust and all dependencies installed.
+Prefix commands with `devenv shell --no-reload --` to run them directly.
+
 - **Build**: `cargo build`
 - **Run CLI**: `cargo run -- [args]`
 - **Build with Nix**: `nix build`
@@ -11,8 +14,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Lint**: `cargo clippy`
 - **Run all tests**: `devenv-run-tests run tests`
 - **Run single test**: `devenv-run-tests run tests --only <test_name>`
-- **Run unit tests**: `cargo test`
-- **Run with nextest**: `cargo nextest run` (better process isolation)
+- **Run unit tests**: `cargo nextest run`
+- **Run unit tests (single crate)**: `cargo nextest run -p <crate_name>`
+- **Run all unit tests (including feature-gated)**: `cargo nextest run --features devenv/test-all`
 
 ## Architecture Overview
 

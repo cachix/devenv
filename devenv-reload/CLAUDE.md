@@ -5,10 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build and Test Commands
 
 ```bash
-devenv shell              # Enter development environment
+devenv shell --no-reload  # Enter development environment
 cargo build               # Build the library
-cargo test                # Run all tests
-cargo test <test_name>    # Run a single test
+cargo nextest run         # Run unit tests
+cargo nextest run --features test-all  # Run all tests (including PTY tests)
 ```
 
 ## Architecture
