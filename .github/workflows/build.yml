@@ -53,11 +53,33 @@ jobs:
           devenv_path=$(nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv)
           echo "path=$devenv_path" >> $GITHUB_OUTPUT
 
-      # Only test crates excluded from the Nix build's check phase (package.nix):
-      # - devenv-nix-backend: needs Nix store access unavailable in Nix sandbox
-      # - devenv-reload: needs PTY (devpts) unavailable in Nix sandbox
-      # - devenv-shell: needs PTY (devpts) unavailable in Nix sandbox
+  extended-tests:
+    needs: [build]
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Cachix
+        uses: cachix/cachix-action@v16
+        with:
+          name: devenv
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      # Run feature-gated tests that can't run in the Nix sandbox (package.nix check phase):
+      # - test-nix-store: Nix store access (devenv-nix-backend)
+      # - test-pty: PTY/devpts (devenv-reload, devenv-shell)
+      # - test-mcp: MCP integration (devenv)
+      # - test-file-watcher: file watching (devenv-processes)
       # nextest runs each test in a separate process, avoiding Nix C++ FFI global state issues
       - name: Run integration tests
         run: |
-          ${{ steps.build-devenv.outputs.path }}/bin/devenv --system ${{ inputs.system }} shell -- cargo nextest run -j 2 -p devenv-nix-backend -p devenv-reload -p devenv-shell
+          ${{ needs.build.outputs.devenv-path }}/bin/devenv --system ${{ inputs.system }} shell -- cargo nextest run -j 4 --features devenv/test-all

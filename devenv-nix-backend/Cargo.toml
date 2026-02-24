@@ -41,3 +41,8 @@ tempfile.workspace = true
 devenv-nix-backend-macros.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
+
+[features]
+default = []
+test-all = ["test-nix-store"]
+test-nix-store = []

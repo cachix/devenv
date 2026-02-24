@@ -1,3 +1,5 @@
+#![cfg(feature = "test-pty")]
+
 use avt::Vt;
 use devenv_shell::{
     CommandBuilder, PtySize, SessionConfig, SessionIo, ShellCommand, ShellEvent, ShellSession,

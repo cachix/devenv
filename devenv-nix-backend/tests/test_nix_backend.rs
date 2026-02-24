@@ -1,9 +1,8 @@
+#![cfg(feature = "test-nix-store")]
 //! Tests for the NixBackend FFI implementation
 //!
 //! These tests verify the functionality of the Rust FFI-based NixBackend,
 //! including input overrides via GlobalOptions.
-
-#![cfg(test)]
 
 use devenv_core::{
     CliOptionsConfig, Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend, Options,

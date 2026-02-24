@@ -1,3 +1,5 @@
+#![cfg(feature = "test-pty")]
+
 use devenv_reload::{CommandBuilder, Pty};
 use portable_pty::PtySize;
 use std::time::Duration;

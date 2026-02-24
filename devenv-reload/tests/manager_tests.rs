@@ -1,3 +1,5 @@
+#![cfg(feature = "test-pty")]
+
 mod common;
 
 use common::{TestShellBuilder, create_temp_dir_with_files, modify_file};

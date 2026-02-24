@@ -94,9 +94,7 @@ rustPlatform.buildRustPackage {
 
   useNextest = true;
 
-  # Skip devenv-nix-backend tests in sandbox due to store permission restrictions
-  # Skip devenv-reload and devenv-shell tests in sandbox - requires PTY (devpts) which isn't available
-  cargoTestFlags = [ "--workspace" "--exclude" "devenv-nix-backend" "--exclude" "devenv-reload" "--exclude" "devenv-shell" ];
+  cargoTestFlags = [ "--workspace" ];
 
   postInstall =
     let

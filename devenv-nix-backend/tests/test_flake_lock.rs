@@ -1,3 +1,4 @@
+#![cfg(feature = "test-nix-store")]
 //! Integration tests for flake locking functionality
 
 use devenv_core::{
