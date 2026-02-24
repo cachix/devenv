@@ -1884,6 +1884,45 @@ impl NixBackend for NixRustBackend {
         ))
     }
 
+    async fn get_executable(
+        &self,
+        package: &str,
+        name: &str,
+        refresh_cached_output: bool,
+    ) -> Result<String> {
+        // Get package executable path for this system
+        let gc_root_base = self.paths.dotfile.join(package);
+        let gc_root_actual = self.paths.dotfile.join(format!("{package}-{name}"));
+
+        // Try cache first
+        if !refresh_cached_output
+            && gc_root_actual.exists()
+            && let Ok(cached_path) = std::fs::read_link(&gc_root_actual)
+        {
+            // Verify the path still exists in the store
+            if cached_path.exists() {
+                let path_str = cached_path.to_string_lossy().to_string();
+                return Ok(format!("{path_str}/bin/{name}"));
+            }
+        }
+
+        // Cache miss or refresh requested - use build() which handles everything
+        let paths = self
+            .build(&[package], None, Some(&gc_root_base))
+            .await
+            .wrap_err_with(|| format!("Failed to build {package} attribute from default.nix"))?;
+
+        if paths.is_empty() {
+            return Err(miette!("No output paths from {package} build"));
+        }
+
+        // Return the path to the bash executable
+        Ok(format!(
+            "{store_path}/bin/{name}",
+            store_path = paths[0].to_string_lossy()
+        ))
+    }
+
     async fn is_trusted_user(&self) -> Result<bool> {
         // Check if the current user is trusted by the Nix daemon/store
         // This is used to determine if we can safely add substituters
