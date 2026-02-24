@@ -416,10 +416,10 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    #[cfg(feature = "integration-tests")]
+    #[cfg(feature = "test-mcp")]
     use devenv_nix_backend_macros::nix_test;
 
-    #[cfg(feature = "integration-tests")]
+    #[cfg(feature = "test-mcp")]
     async fn create_test_devenv_dir() -> std::io::Result<tempfile::TempDir> {
         let temp_dir = tempfile::tempdir()?;
 
@@ -508,7 +508,7 @@ mod tests {
     // 3. Network access to fetch packages
 
     #[nix_test]
-    #[cfg(feature = "integration-tests")]
+    #[cfg(feature = "test-mcp")]
     #[cfg(not(target_os = "linux"))] // Disabled on Linux due to segfaults
     async fn test_fetch_packages_live() {
         use crate::devenv::{Devenv, DevenvOptions};
@@ -584,7 +584,7 @@ mod tests {
     }
 
     #[nix_test]
-    #[cfg(feature = "integration-tests")]
+    #[cfg(feature = "test-mcp")]
     #[cfg(not(target_os = "linux"))] // Disabled on Linux due to segfaults
     async fn test_fetch_options_live() {
         use crate::devenv::{Devenv, DevenvOptions};

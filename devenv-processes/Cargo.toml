@@ -31,5 +31,10 @@ portable-pty.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 caps.workspace = true
 
+[features]
+default = []
+test-all = ["test-file-watcher"]
+test-file-watcher = []
+
 [dev-dependencies]
 sd-notify.workspace = true

@@ -26,4 +26,3 @@ tempfile.workspace = true
 
 [features]
 default = []
-integration-tests = []

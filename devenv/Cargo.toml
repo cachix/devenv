@@ -90,7 +90,8 @@ devenv-nix-backend-macros.workspace = true
 
 [features]
 default = []
-integration-tests = []
+test-all = ["test-mcp", "devenv-processes/test-all"]
+test-mcp = []
 snix = [
   "dep:devenv-snix-backend",
   "dep:nix-compat",
