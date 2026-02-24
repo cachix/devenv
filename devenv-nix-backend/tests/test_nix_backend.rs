@@ -39,11 +39,6 @@ mod common;
 use common::create_test_cachix_manager;
 use common::get_current_system;
 
-/// Get the repo root directory (where Cargo.toml is) - for ignored tests only
-fn get_repo_root() -> std::path::PathBuf {
-    std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-}
-
 /// Create test paths directory structure within a base directory
 fn create_test_paths_in(base: &std::path::Path) -> DevenvPaths {
     let dotfile = base.join(".devenv");
@@ -61,21 +56,6 @@ fn create_test_paths_in(base: &std::path::Path) -> DevenvPaths {
         dot_gc,
         home_gc,
     }
-}
-
-/// Create test paths using repo root - for ignored tests only
-fn create_test_paths() -> DevenvPaths {
-    create_test_paths_in(&get_repo_root())
-}
-
-/// Load devenv config from a custom directory - for ignored tests only
-fn load_config(base: &std::path::Path) -> Config {
-    Config::load_from(base).expect("Failed to load config")
-}
-
-/// Load devenv config from repo root - for ignored tests only
-fn load_config_from_repo() -> Config {
-    load_config(&get_repo_root())
 }
 
 /// Copy fixture lock file to destination directory
@@ -796,21 +776,14 @@ async fn test_backend_update_with_multiple_overrides() {
 /// Test that eval() fails gracefully when evaluating an attribute that doesn't exist
 #[nix_test]
 async fn test_eval_nonexistent_attribute() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
-
-    let backend = NixRustBackend::new(
-        paths.clone(),
-        config.clone(),
-        GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
-    )
-    .expect("Failed to create backend");
+    let yaml = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+"#;
+    let (temp_dir, _cwd_guard, backend, paths, config) =
+        setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -819,6 +792,9 @@ async fn test_eval_nonexistent_attribute() {
         ))
         .await
         .expect("Failed to assemble");
+
+    // Use fixture lock file for evaluation
+    copy_fixture_lock(temp_dir.path());
 
     // Try to eval a nonexistent attribute - should return an error
     let result = backend.eval(&["nonexistent.attribute.path"]).await;
@@ -1122,21 +1098,14 @@ async fn test_update_with_invalid_override_input() {
 /// Test eval() with empty attributes array
 #[nix_test]
 async fn test_eval_empty_attributes_array() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
-
-    let backend = NixRustBackend::new(
-        paths.clone(),
-        config.clone(),
-        GlobalOptions::default(),
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-        None,
-        None,
-        Arc::new(PortAllocator::new()),
-    )
-    .expect("Failed to create backend");
+    let yaml = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+"#;
+    let (_temp_dir, _cwd_guard, backend, paths, config) =
+        setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -2199,24 +2168,16 @@ async fn test_build_multiple_attributes_single_call() {
 /// Test eval_state Mutex under concurrent eval calls
 #[nix_test]
 async fn test_eval_state_mutex_under_concurrent_eval() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
+    let yaml = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+"#;
+    let (temp_dir, _cwd_guard, backend, paths, config) =
+        setup_isolated_test_env(yaml, None, GlobalOptions::default());
 
-    let cachix_manager = create_test_cachix_manager(&get_repo_root(), None);
-    let backend = std::sync::Arc::new(
-        NixRustBackend::new(
-            paths.clone(),
-            config.clone(),
-            GlobalOptions::default(),
-            cachix_manager,
-            Shutdown::new(),
-            None,
-            None,
-            Arc::new(PortAllocator::new()),
-        )
-        .expect("Failed to create backend"),
-    );
+    let backend = std::sync::Arc::new(backend);
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -2225,6 +2186,9 @@ async fn test_eval_state_mutex_under_concurrent_eval() {
         ))
         .await
         .expect("Failed to assemble");
+
+    // Use fixture lock file for evaluation
+    copy_fixture_lock(temp_dir.path());
 
     // Create three eval futures without awaiting them
     let eval1 = backend.eval(&["config.devenv.root"]);
