@@ -782,7 +782,7 @@ impl Devenv {
             .update(
                 input_name,
                 &self.inputs,
-                &self.input_overrides.override_input,
+                &self.input_overrides.override_inputs,
             )
             .in_activity(&activity)
             .await?;

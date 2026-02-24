@@ -104,7 +104,7 @@ pub struct NixOptions {
     pub system: Option<String>,
     pub impure: Option<bool>,
     pub offline: Option<bool>,
-    pub nix_option: Vec<String>,
+    pub nix_options: Vec<String>,
     pub nix_debugger: Option<bool>,
     pub backend: Option<NixBackendType>,
 }
@@ -120,7 +120,7 @@ pub struct NixSettings {
     pub max_jobs: u8,
     pub cores: u8,
     pub offline: bool,
-    pub nix_option: Vec<String>,
+    pub nix_options: Vec<String>,
     pub nix_debugger: bool,
     pub backend: NixBackendType,
 }
@@ -134,7 +134,7 @@ impl Default for NixSettings {
             max_jobs: defaults.max_jobs,
             cores: defaults.cores,
             offline: false,
-            nix_option: Vec::new(),
+            nix_options: Vec::new(),
             nix_debugger: false,
             backend: NixBackendType::default(),
         }
@@ -154,7 +154,7 @@ impl NixSettings {
             max_jobs: options.max_jobs.unwrap_or(defaults.max_jobs),
             cores: options.cores.unwrap_or(defaults.cores),
             offline: options.offline.unwrap_or(false),
-            nix_option: options.nix_option,
+            nix_options: options.nix_options,
             nix_debugger: options.nix_debugger.unwrap_or(false),
             backend: options.backend.unwrap_or_else(|| config.backend.clone()),
         }
@@ -301,7 +301,7 @@ impl SecretSettings {
 
 #[derive(Clone, Debug, Default)]
 pub struct InputOverrides {
-    pub override_input: Vec<String>,
+    pub override_inputs: Vec<String>,
     pub nix_module_options: Vec<String>,
 }
 
@@ -318,7 +318,7 @@ mod tests {
         assert!(!settings.impure);
         assert!(!settings.offline);
         assert!(!settings.nix_debugger);
-        assert!(settings.nix_option.is_empty());
+        assert!(settings.nix_options.is_empty());
     }
 
     #[test]
@@ -374,7 +374,7 @@ mod tests {
             max_jobs: Some(4),
             cores: Some(2),
             offline: Some(true),
-            nix_option: vec!["sandbox".into(), "false".into()],
+            nix_options: vec!["sandbox".into(), "false".into()],
             nix_debugger: Some(true),
             ..Default::default()
         };
@@ -383,7 +383,7 @@ mod tests {
         assert_eq!(settings.max_jobs, 4);
         assert_eq!(settings.cores, 2);
         assert!(settings.offline);
-        assert_eq!(settings.nix_option, vec!["sandbox", "false"]);
+        assert_eq!(settings.nix_options, vec!["sandbox", "false"]);
         assert!(settings.nix_debugger);
     }
 

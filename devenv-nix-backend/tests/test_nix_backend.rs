@@ -685,7 +685,7 @@ async fn test_backend_update_with_input_overrides() {
     url: github:cachix/devenv/v1.0
 "#;
 
-    let override_input = vec![
+    let override_inputs = vec![
         "nixpkgs".to_string(),
         "github:NixOS/nixpkgs/nixos-unstable".to_string(),
     ];
@@ -703,7 +703,7 @@ async fn test_backend_update_with_input_overrides() {
 
     // Update with overrides
     let result = backend
-        .update(&None, &config.inputs, &override_input)
+        .update(&None, &config.inputs, &override_inputs)
         .await;
     assert!(
         result.is_ok(),
@@ -736,7 +736,7 @@ async fn test_backend_update_with_multiple_overrides() {
     url: github:oxalica/rust-overlay
 "#;
 
-    let override_input = vec![
+    let override_inputs = vec![
         "nixpkgs".to_string(),
         "github:NixOS/nixpkgs/nixos-unstable".to_string(),
         "devenv".to_string(),
@@ -756,7 +756,7 @@ async fn test_backend_update_with_multiple_overrides() {
 
     // Update with multiple overrides
     let result = backend
-        .update(&None, &config.inputs, &override_input)
+        .update(&None, &config.inputs, &override_inputs)
         .await;
     assert!(
         result.is_ok(),
@@ -1057,10 +1057,10 @@ async fn test_gc_with_invalid_store_paths() {
     );
 }
 
-/// Test update() with malformed override_input
+/// Test update() with malformed override_inputs
 /// Odd number of override elements are silently ignored (chunks_exact(2) behavior)
 #[nix_test]
-async fn test_update_with_invalid_override_input() {
+async fn test_update_with_invalid_override_inputs() {
     let yaml = r#"inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
@@ -1070,18 +1070,18 @@ async fn test_update_with_invalid_override_input() {
 
     // Odd number of elements - should be pairs
     // chunks_exact(2) will ignore the remainder, so this is safe
-    let override_input = vec!["nixpkgs".to_string()];
+    let override_inputs = vec!["nixpkgs".to_string()];
 
     let (_temp_dir, _cwd_guard, backend, _paths, config) =
         setup_isolated_test_env(yaml, None, NixOptions::default());
 
     // Update should succeed - malformed override is ignored (no assemble needed for update-only tests)
     let result = backend
-        .update(&None, &config.inputs, &override_input)
+        .update(&None, &config.inputs, &override_inputs)
         .await;
     assert!(
         result.is_ok(),
-        "update() should succeed even with malformed override_input: {:?}",
+        "update() should succeed even with malformed override_inputs: {:?}",
         result.err()
     );
 

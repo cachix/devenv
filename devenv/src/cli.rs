@@ -111,12 +111,12 @@ pub struct NixCliArgs {
     )]
     pub offline: bool,
 
-    #[arg(long, global = true, num_args = 2,
+    #[arg(long = "nix-option", global = true, num_args = 2,
         value_names = ["NAME", "VALUE"],
         value_delimiter = ' ',
         help = "Pass additional options to nix commands",
         long_help = "Pass additional options to nix commands.\n\nThese options are passed directly to Nix using the --option flag.\nSee `man nix.conf` for the full list of available options.\n\nExamples:\n  --nix-option sandbox false\n  --nix-option keep-outputs true\n  --nix-option system x86_64-darwin")]
-    pub nix_option: Vec<String>,
+    pub nix_options: Vec<String>,
 
     #[arg(long, global = true, help = "Enter the Nix debugger on failure.")]
     pub nix_debugger: bool,
@@ -139,7 +139,7 @@ impl From<NixCliArgs> for NixOptions {
             system: cli.system,
             impure: flag(cli.impure, cli.no_impure),
             offline: cli.offline.then_some(true),
-            nix_option: cli.nix_option,
+            nix_options: cli.nix_options,
             nix_debugger: cli.nix_debugger.then_some(true),
             backend: cli.backend,
         }
@@ -193,12 +193,12 @@ pub struct ShellCliArgs {
         help = "Ignore existing environment variables when entering the shell. Pass a list of comma-separated environment variables to let through.")]
     pub clean: Option<Vec<String>>,
 
-    #[arg(short = 'P', long, global = true,
+    #[arg(short = 'P', long = "profile", global = true,
         num_args = 1,
         action = clap::ArgAction::Append,
         help = "Activate one or more profiles defined in devenv.nix",
         long_help = "Activate one or more profiles defined in devenv.nix.\n\nProfiles allow you to define different configurations that can be merged with your base configuration.\n\nSee https://devenv.sh/profiles for more information.\n\nExamples:\n  --profile python-3.14\n  --profile backend --profile fast-startup")]
-    pub profile: Vec<String>,
+    pub profiles: Vec<String>,
 
     #[arg(
         long,
@@ -219,7 +219,7 @@ impl From<ShellCliArgs> for ShellOptions {
     fn from(cli: ShellCliArgs) -> Self {
         Self {
             clean: cli.clean,
-            profiles: cli.profile,
+            profiles: cli.profiles,
             reload: flag(cli.reload, cli.no_reload),
         }
     }
@@ -257,13 +257,13 @@ impl From<SecretCliArgs> for SecretOptions {
 #[derive(clap::Args, Clone, Debug, Default)]
 #[command(next_help_heading = "Input overrides")]
 pub struct InputOverrideCliArgs {
-    #[arg(short, long, global = true,
+    #[arg(short, long = "override-input", global = true,
         num_args = 2,
         value_names = ["NAME", "URI"],
         value_delimiter = ' ',
         help = "Override inputs in devenv.yaml",
         long_help = "Override inputs in devenv.yaml.\n\nExamples:\n  --override-input nixpkgs github:NixOS/nixpkgs/nixos-unstable\n  --override-input nixpkgs path:/path/to/local/nixpkgs")]
-    pub override_input: Vec<String>,
+    pub override_inputs: Vec<String>,
 
     #[arg(long = "option", short = 'O', global = true,
         num_args = 2,
@@ -276,7 +276,7 @@ pub struct InputOverrideCliArgs {
 impl From<InputOverrideCliArgs> for InputOverrides {
     fn from(cli: InputOverrideCliArgs) -> Self {
         Self {
-            override_input: cli.override_input,
+            override_inputs: cli.override_inputs,
             nix_module_options: cli.nix_module_options,
         }
     }

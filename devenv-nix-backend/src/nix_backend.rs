@@ -712,9 +712,9 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to set use-registries")?;
 
-        // nix_option: apply custom Nix configuration pairs
+        // nix_options: apply custom Nix configuration pairs
         // These are passed as pairs: ["key1", "value1", "key2", "value2", ...]
-        for pair in nix_settings.nix_option.chunks_exact(2) {
+        for pair in nix_settings.nix_options.chunks_exact(2) {
             let key = &pair[0];
             let value = &pair[1];
             settings::set(key, value)
@@ -1564,7 +1564,7 @@ impl NixBackend for NixRustBackend {
         &self,
         input_name: &Option<String>,
         inputs: &BTreeMap<String, Input>,
-        override_input: &[String],
+        override_inputs: &[String],
     ) -> Result<()> {
         use crate::{create_flake_inputs, load_lock_file, write_lock_file};
 
@@ -1619,11 +1619,11 @@ impl NixBackend for NixRustBackend {
 
         // Apply input overrides
         // Note: overrides must live until after lock() is called
-        let overrides: Vec<(String, FlakeReference)> = if !override_input.is_empty() {
+        let overrides: Vec<(String, FlakeReference)> = if !override_inputs.is_empty() {
             let mut parse_flags = FlakeReferenceParseFlags::new(flake_settings).to_miette()?;
             parse_flags.set_base_directory(base_dir_str).to_miette()?;
 
-            override_input
+            override_inputs
                 .chunks_exact(2)
                 .map(|pair| {
                     let (override_ref, _) = FlakeReference::parse_with_fragment(

@@ -44,12 +44,12 @@ struct RunArgs {
 
     #[clap(
         short,
-        long,
+        long = "override-input",
         number_of_values = 2,
         value_delimiter = ' ',
         help = "Override inputs in devenv.yaml."
     )]
-    override_input: Vec<String>,
+    override_inputs: Vec<String>,
 
     #[clap(value_parser, default_values = DEFAULT_DIRECTORIES)]
     directories: Vec<PathBuf>,
@@ -368,7 +368,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
 
         // Now load config from the current directory (which might be temp dir)
         let mut config = Config::load_from(&devenv_root)?;
-        for input in args.override_input.chunks_exact(2) {
+        for input in args.override_inputs.chunks_exact(2) {
             config
                 .override_input_url(&input[0], &input[1])
                 .wrap_err(format!(

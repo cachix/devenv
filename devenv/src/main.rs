@@ -438,7 +438,7 @@ async fn run_devenv(
 
     let input_overrides = devenv_core::InputOverrides::from(cli.input_overrides);
 
-    for input in input_overrides.override_input.chunks_exact(2) {
+    for input in input_overrides.override_inputs.chunks_exact(2) {
         if let Err(e) = config
             .override_input_url(&input[0], &input[1])
             .wrap_err_with(|| {
