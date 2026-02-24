@@ -228,16 +228,6 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "avt"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b485f400d02970694eed10e7080f994ad82eaf56a867d6671af5d5e184ed8ee6"
-dependencies = [
- "rgb",
- "unicode-width 0.1.14",
-]
-
-[[package]]
-name = "avt"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa0f99f7bcce0e99d842c94947f8d0ab5f6f3abc08424e1a4b58a8a7ae30f7c7"
@@ -1614,7 +1604,7 @@ name = "devenv-reload"
 version = "2.0.0"
 dependencies = [
  "anyhow",
- "avt 0.17.0",
+ "avt",
  "blake3",
  "devenv-activity",
  "devenv-event-sources",
@@ -1646,7 +1636,7 @@ dependencies = [
 name = "devenv-shell"
 version = "2.0.0"
 dependencies = [
- "avt 0.14.0",
+ "avt",
  "crossterm 0.28.1",
  "insta",
  "iocraft",

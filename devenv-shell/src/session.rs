@@ -3,6 +3,7 @@
 //! This module provides the main `ShellSession` type that orchestrates
 //! PTY lifecycle, terminal I/O, status line, and task execution.
 
+use crate::dec_mode::{DecModeEvent, DecModeScanner};
 use crate::protocol::{PtyTaskRequest, ShellCommand, ShellEvent};
 use crate::pty::{Pty, PtyError, get_terminal_size};
 use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
@@ -11,11 +12,78 @@ use crate::terminal::RawModeGuard;
 use avt::Vt;
 use crossterm::terminal;
 use portable_pty::PtySize;
+use std::fmt::Write as FmtWrite;
 use std::io::{self, IsTerminal, Read, Write};
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
+
+/// Render a VT line as a string with SGR escape sequences.
+///
+/// Equivalent to the `Line::dump()` method that was public in avt 0.14
+/// but made `pub(crate)` in 0.17.
+fn dump_line(line: &avt::Line) -> String {
+    let mut s = String::new();
+    for cells in line.chunks(|c1, c2| c1.pen() != c2.pen()) {
+        dump_pen(&mut s, cells[0].pen());
+        for cell in &cells {
+            s.push(cell.char());
+        }
+    }
+    s
+}
+
+fn dump_pen(s: &mut String, pen: &avt::Pen) {
+    s.push_str("\x1b[0");
+    if let Some(c) = pen.foreground() {
+        s.push(';');
+        dump_color(s, c, 30);
+    }
+    if let Some(c) = pen.background() {
+        s.push(';');
+        dump_color(s, c, 40);
+    }
+    if pen.is_bold() {
+        s.push_str(";1");
+    }
+    if pen.is_faint() {
+        s.push_str(";2");
+    }
+    if pen.is_italic() {
+        s.push_str(";3");
+    }
+    if pen.is_underline() {
+        s.push_str(";4");
+    }
+    if pen.is_blink() {
+        s.push_str(";5");
+    }
+    if pen.is_inverse() {
+        s.push_str(";7");
+    }
+    if pen.is_strikethrough() {
+        s.push_str(";9");
+    }
+    s.push('m');
+}
+
+fn dump_color(s: &mut String, color: avt::Color, base: u8) {
+    match color {
+        avt::Color::Indexed(c) if c < 8 => {
+            let _ = write!(s, "{}", base + c);
+        }
+        avt::Color::Indexed(c) if c < 16 => {
+            let _ = write!(s, "{}", base + 52 + c);
+        }
+        avt::Color::Indexed(c) => {
+            let _ = write!(s, "{}:5:{}", base + 8, c);
+        }
+        avt::Color::RGB(rgb) => {
+            let _ = write!(s, "{}:2:{}:{}:{}", base + 8, rgb.r, rgb.g, rgb.b);
+        }
+    }
+}
 
 /// Differential renderer that draws VT state to a bounded terminal region.
 ///
@@ -39,20 +107,17 @@ impl Renderer {
 
     /// Render changed VT lines to stdout. Skips lines that haven't changed.
     fn render(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
-        let view = vt.view();
-        for (row_idx, line) in view.iter().enumerate() {
+        for (row_idx, line) in vt.view().enumerate() {
             let cells = line.cells();
             if row_idx < self.prev_lines.len() && cells == &self.prev_lines[row_idx][..] {
                 continue;
             }
             write!(stdout, "\x1b[{};1H\x1b[2K", row_idx + 1)?;
-            stdout.write_all(line.dump().as_bytes())?;
+            stdout.write_all(dump_line(line).as_bytes())?;
             write!(stdout, "\x1b[0m")?;
-            // Update prev frame for this line
             if row_idx < self.prev_lines.len() {
                 self.prev_lines[row_idx] = cells.to_vec();
             } else {
-                // Grow prev_lines if needed
                 while self.prev_lines.len() < row_idx {
                     self.prev_lines.push(Vec::new());
                 }
@@ -96,12 +161,10 @@ impl Renderer {
 
     /// Full redraw of all VT lines (after resize or initialization).
     fn render_full(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
-        let view = vt.view();
         self.prev_lines.clear();
-        self.prev_lines.reserve(view.len());
-        for (row_idx, line) in view.iter().enumerate() {
+        for (row_idx, line) in vt.view().enumerate() {
             write!(stdout, "\x1b[{};1H\x1b[2K", row_idx + 1)?;
-            stdout.write_all(line.dump().as_bytes())?;
+            stdout.write_all(dump_line(line).as_bytes())?;
             write!(stdout, "\x1b[0m")?;
             self.prev_lines.push(line.cells().to_vec());
         }
@@ -296,7 +359,6 @@ impl ShellSession {
         let pty = Arc::new(Pty::spawn(initial_cmd, pty_size)?);
         let mut vt = Vt::builder()
             .size(pty_size.cols as usize, pty_size.rows as usize)
-            .resizable(true)
             .scrollback_limit(0)
             .build();
 
@@ -514,6 +576,10 @@ impl ShellSession {
     ) -> Result<Option<u32>, SessionError> {
         let spinner_interval = Duration::from_millis(SPINNER_INTERVAL_MS);
         let mut last_resize_check = std::time::Instant::now();
+        let mut scanner = DecModeScanner::new();
+        let mut in_alternate_screen = false;
+        // Track forwarded modes so we can clean them up on exit
+        let mut forwarded_mouse_modes: Vec<u16> = Vec::new();
 
         loop {
             // Use select! to handle both events and spinner animation
@@ -557,7 +623,6 @@ impl ShellSession {
                             state.show_error = !state.show_error;
                             if state.show_error {
                                 let error = state.error.clone().unwrap();
-                                // Inject error text into PTY so VT tracks it
                                 let mut error_text =
                                     String::from("\r\n\x1b[1;31mBuild error:\x1b[0m\r\n");
                                 for line in error.lines() {
@@ -576,7 +641,6 @@ impl ShellSession {
                                     content_rows,
                                 )?;
                             } else {
-                                // Clear screen via Ctrl-L to hide error output
                                 pty.write_all(&[0x0C])?;
                                 pty.flush()?;
                             }
@@ -593,6 +657,16 @@ impl ShellSession {
                 }
 
                 Event::PtyOutput(data) => {
+                    // Scan for DEC private mode sequences and forward them
+                    let was_in_alt = in_alternate_screen;
+                    Self::process_dec_events(
+                        &mut scanner,
+                        &data,
+                        &mut in_alternate_screen,
+                        &mut forwarded_mouse_modes,
+                        stdout,
+                    )?;
+
                     // Feed output into VT and track how many lines scrolled off
                     let mut total_scroll: usize = 0;
                     {
@@ -604,13 +678,24 @@ impl ShellSession {
                     while let Ok(event) = event_rx.try_recv() {
                         match event {
                             Event::PtyOutput(more) => {
+                                Self::process_dec_events(
+                                    &mut scanner,
+                                    &more,
+                                    &mut in_alternate_screen,
+                                    &mut forwarded_mouse_modes,
+                                    stdout,
+                                )?;
                                 let changes = vt.feed_str(&String::from_utf8_lossy(&more));
                                 total_scroll += changes.scrollback.count();
                             }
-                            Event::PtyExit => {
-                                // Render final state before exiting
+                            Event::PtyExit(exit_code) => {
+                                Self::cleanup_forwarded_modes(
+                                    in_alternate_screen,
+                                    &forwarded_mouse_modes,
+                                    stdout,
+                                )?;
                                 renderer.render(stdout, vt)?;
-                                return Ok(());
+                                return Ok(exit_code);
                             }
                             Event::Stdin(stdin_data) => {
                                 pty.write_all(&stdin_data)?;
@@ -622,9 +707,17 @@ impl ShellSession {
                         }
                     }
 
-                    // Scroll real terminal to push content into native scrollback, then render
-                    let content_rows = self.pty_size().rows;
-                    renderer.render_with_scroll(stdout, vt, total_scroll, content_rows)?;
+                    // Handle alternate screen transitions
+                    if was_in_alt != in_alternate_screen {
+                        renderer.invalidate();
+                    }
+
+                    if in_alternate_screen {
+                        renderer.render(stdout, vt)?;
+                    } else {
+                        let content_rows = self.pty_size().rows;
+                        renderer.render_with_scroll(stdout, vt, total_scroll, content_rows)?;
+                    }
                     if self.config.show_status_line {
                         self.status_line
                             .draw(stdout, self.size.cols, self.size.rows)?;
@@ -635,6 +728,11 @@ impl ShellSession {
                 }
 
                 Event::PtyExit(exit_code) => {
+                    Self::cleanup_forwarded_modes(
+                        in_alternate_screen,
+                        &forwarded_mouse_modes,
+                        stdout,
+                    )?;
                     return Ok(exit_code);
                 }
 
@@ -656,11 +754,10 @@ impl ShellSession {
                         };
                         let pty_size = self.pty_size();
                         let _ = pty.resize(pty_size);
-                        // Resize VT via xtwinops escape sequence
-                        vt.feed_str(&format!("\x1b[8;{};{}t", pty_size.rows, pty_size.cols));
+                        vt.resize(pty_size.cols as usize, pty_size.rows as usize);
                         renderer.invalidate();
                         renderer.render_full(stdout, vt)?;
-                        if self.config.show_status_line {
+                        if self.config.show_status_line && !in_alternate_screen {
                             self.status_line.draw(stdout, cols, rows)?;
                         }
                         let c = vt.cursor();
@@ -677,6 +774,7 @@ impl ShellSession {
             }
         }
 
+        Self::cleanup_forwarded_modes(in_alternate_screen, &forwarded_mouse_modes, stdout)?;
         Ok(None)
     }
 
@@ -748,6 +846,64 @@ impl ShellSession {
             }
         }
 
+        Ok(())
+    }
+
+    /// Scan raw PTY output for DEC private mode sequences, forward relevant
+    /// ones to the real terminal, and update alternate screen state.
+    fn process_dec_events(
+        scanner: &mut DecModeScanner,
+        data: &[u8],
+        in_alternate_screen: &mut bool,
+        forwarded_mouse_modes: &mut Vec<u16>,
+        stdout: &mut impl Write,
+    ) -> io::Result<()> {
+        for event in scanner.scan(data) {
+            if !event.has_forwarded_mode() {
+                continue;
+            }
+            stdout.write_all(event.raw_bytes())?;
+
+            if event.enters_alt_screen() {
+                *in_alternate_screen = true;
+            } else if event.exits_alt_screen() {
+                *in_alternate_screen = false;
+            }
+
+            // Track mouse modes for cleanup on exit
+            match &event {
+                DecModeEvent::Set { modes, .. } => {
+                    for &m in modes {
+                        if matches!(m, 1000 | 1002 | 1003 | 1005 | 1006 | 1015 | 2004 | 1004)
+                            && !forwarded_mouse_modes.contains(&m)
+                        {
+                            forwarded_mouse_modes.push(m);
+                        }
+                    }
+                }
+                DecModeEvent::Reset { modes, .. } => {
+                    forwarded_mouse_modes.retain(|m| !modes.contains(m));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Reset any forwarded DEC modes on exit so the terminal is left clean.
+    fn cleanup_forwarded_modes(
+        in_alternate_screen: bool,
+        forwarded_mouse_modes: &[u16],
+        stdout: &mut impl Write,
+    ) -> io::Result<()> {
+        if in_alternate_screen {
+            stdout.write_all(b"\x1b[?1049l")?;
+        }
+        for &mode in forwarded_mouse_modes {
+            write!(stdout, "\x1b[?{}l", mode)?;
+        }
+        if in_alternate_screen || !forwarded_mouse_modes.is_empty() {
+            stdout.flush()?;
+        }
         Ok(())
     }
 

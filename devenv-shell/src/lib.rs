@@ -4,6 +4,7 @@
 //! including PTY spawning, terminal handling, status line rendering,
 //! and task execution within the shell environment.
 
+mod dec_mode;
 pub mod dialect;
 mod protocol;
 mod pty;
