@@ -205,6 +205,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "test-nix-store")]
     fn test_logger_captures_activity() {
         // Initialize Nix
         nix_bindings_expr::eval_state::init().expect("Failed to initialize Nix");
