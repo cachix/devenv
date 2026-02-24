@@ -268,8 +268,10 @@ impl StatusLine {
         &self.state
     }
 
-    /// Draw the status line at the bottom of the terminal.
-    pub fn draw(&mut self, stdout: &mut impl Write, cols: u16) -> io::Result<()> {
+    /// Draw the status line at the given row of the terminal.
+    ///
+    /// The caller is responsible for repositioning the cursor after this call.
+    pub fn draw(&mut self, stdout: &mut impl Write, cols: u16, total_rows: u16) -> io::Result<()> {
         if !self.enabled {
             return Ok(());
         }
@@ -277,7 +279,7 @@ impl StatusLine {
         // Update spinner animation
         self.update_spinner();
 
-        // Build the status line content first (before any cursor movement)
+        // Build the status line content
         let mut element = self.build_element(cols);
         let canvas = element.render(Some(cols as usize));
         let mut content = Vec::new();
@@ -287,14 +289,10 @@ impl StatusLine {
             content.truncate(pos);
         }
 
-        // Write everything in one batch to minimize flicker:
-        // 1. Hide cursor, reset origin mode (DECOM off for absolute coords), save position
-        // 2. Move to status line (row 999) + clear + write content
-        // 3. Restore position + show cursor
-        // Using raw escape sequences to avoid multiple flushes from execute! macro
-        write!(stdout, "\x1b[?25l\x1b[?6l\x1b7\x1b[999;1H\x1b[2K")?;
+        // Move to the last row, clear it, write content
+        write!(stdout, "\x1b[{};1H\x1b[2K", total_rows)?;
         stdout.write_all(&content)?;
-        write!(stdout, "\x1b8\x1b[?25h")?;
+        write!(stdout, "\x1b[0m")?;
         stdout.flush()?;
 
         Ok(())

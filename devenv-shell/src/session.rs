@@ -9,7 +9,7 @@ use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
 use crate::task_runner::PtyTaskRunner;
 use crate::terminal::RawModeGuard;
 use avt::Vt;
-use crossterm::{cursor, execute, terminal};
+use crossterm::terminal;
 use portable_pty::PtySize;
 use std::io::{self, IsTerminal, Read, Write};
 use std::sync::Arc;
@@ -17,53 +17,117 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
-/// Set terminal scroll region (DECSTBM). Rows are 1-indexed.
-/// This restricts scrolling to the specified region, leaving other rows fixed.
-fn set_scroll_region(stdout: &mut impl Write, top: u16, bottom: u16) -> io::Result<()> {
-    write!(stdout, "\x1b[{};{}r", top, bottom)?;
-    stdout.flush()
+/// Differential renderer that draws VT state to a bounded terminal region.
+///
+/// Instead of passing raw PTY output to stdout (which conflicts with the status
+/// line's scroll region), this renderer mediates all terminal output through
+/// the VT state machine — similar to how tmux works.
+struct Renderer {
+    /// Previous frame for diffing — one line of cells per row.
+    prev_lines: Vec<Vec<avt::Cell>>,
+    /// Previous cursor position and visibility.
+    prev_cursor: (usize, usize, bool),
 }
 
-/// Reset scroll region to full terminal.
-fn reset_scroll_region(stdout: &mut impl Write) -> io::Result<()> {
-    write!(stdout, "\x1b[r")?;
-    stdout.flush()
-}
+impl Renderer {
+    fn new() -> Self {
+        Self {
+            prev_lines: Vec::new(),
+            prev_cursor: (0, 0, true),
+        }
+    }
 
-/// Check if data contains terminal clear/reset sequences.
-/// This detects: \x1b[2J (clear screen), \x1b[3J (clear scrollback), \x1bc (reset terminal)
-fn contains_clear_sequence(data: &[u8]) -> bool {
-    // Look for escape sequences that clear the terminal
-    let mut i = 0;
-    while i < data.len() {
-        if data[i] == 0x1b {
-            // ESC character
-            if i + 1 < data.len() {
-                match data[i + 1] {
-                    b'c' => return true, // ESC c = reset terminal
-                    b'[' => {
-                        // CSI sequence - look for 2J, 3J, or H followed by 2J
-                        let mut j = i + 2;
-                        while j < data.len() && (data[j].is_ascii_digit() || data[j] == b';') {
-                            j += 1;
-                        }
-                        if j < data.len() {
-                            // Check for clear screen sequences
-                            if data[j] == b'J' && j > i + 2 {
-                                let param = &data[i + 2..j];
-                                if param == b"2" || param == b"3" {
-                                    return true;
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
+    /// Render changed VT lines to stdout. Skips lines that haven't changed.
+    fn render(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+        let view = vt.view();
+        for (row_idx, line) in view.iter().enumerate() {
+            let cells = line.cells();
+            if row_idx < self.prev_lines.len() && cells == &self.prev_lines[row_idx][..] {
+                continue;
+            }
+            write!(stdout, "\x1b[{};1H\x1b[2K", row_idx + 1)?;
+            stdout.write_all(line.dump().as_bytes())?;
+            write!(stdout, "\x1b[0m")?;
+            // Update prev frame for this line
+            if row_idx < self.prev_lines.len() {
+                self.prev_lines[row_idx] = cells.to_vec();
+            } else {
+                // Grow prev_lines if needed
+                while self.prev_lines.len() < row_idx {
+                    self.prev_lines.push(Vec::new());
                 }
+                self.prev_lines.push(cells.to_vec());
             }
         }
-        i += 1;
+        self.update_cursor(stdout, vt)
     }
-    false
+
+    /// Scroll the real terminal to push content into native scrollback, then render.
+    ///
+    /// When the VT reports scrolled lines (via `Changes.scrollback`), we briefly set
+    /// a DECSTBM scroll region to protect the status line row, write newlines to scroll
+    /// the real terminal, then reset the region. This pushes content into the terminal's
+    /// native scrollback buffer — the same mechanism tmux uses.
+    fn render_with_scroll(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Vt,
+        scroll_count: usize,
+        content_rows: u16,
+    ) -> io::Result<()> {
+        if scroll_count > 0 && content_rows > 0 {
+            let effective = scroll_count.min(content_rows as usize);
+            // Set scroll region to content area (protects status line row below)
+            write!(stdout, "\x1b[1;{}r", content_rows)?;
+            write!(stdout, "\x1b[{};1H", content_rows)?;
+            let newlines = "\n".repeat(effective);
+            stdout.write_all(newlines.as_bytes())?;
+            // Reset scroll region to full terminal
+            write!(stdout, "\x1b[r")?;
+            // Shift prev_lines to match the scroll
+            if effective < self.prev_lines.len() {
+                self.prev_lines.drain(..effective);
+            } else {
+                self.prev_lines.clear();
+            }
+        }
+        self.render(stdout, vt)
+    }
+
+    /// Full redraw of all VT lines (after resize or initialization).
+    fn render_full(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+        let view = vt.view();
+        self.prev_lines.clear();
+        self.prev_lines.reserve(view.len());
+        for (row_idx, line) in view.iter().enumerate() {
+            write!(stdout, "\x1b[{};1H\x1b[2K", row_idx + 1)?;
+            stdout.write_all(line.dump().as_bytes())?;
+            write!(stdout, "\x1b[0m")?;
+            self.prev_lines.push(line.cells().to_vec());
+        }
+        self.update_cursor(stdout, vt)
+    }
+
+    /// Position the real terminal cursor to match the VT cursor.
+    fn update_cursor(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+        let cursor = vt.cursor();
+        let new_cursor = (cursor.col, cursor.row, cursor.visible);
+        if new_cursor != self.prev_cursor {
+            if cursor.visible && !self.prev_cursor.2 {
+                write!(stdout, "\x1b[?25h")?;
+            } else if !cursor.visible && self.prev_cursor.2 {
+                write!(stdout, "\x1b[?25l")?;
+            }
+            write!(stdout, "\x1b[{};{}H", cursor.row + 1, cursor.col + 1)?;
+            self.prev_cursor = new_cursor;
+        }
+        Ok(())
+    }
+
+    /// Mark all lines as stale so the next render redraws everything.
+    fn invalidate(&mut self) {
+        self.prev_lines.clear();
+    }
 }
 
 #[derive(Debug, Error)]
@@ -165,15 +229,6 @@ impl ShellSession {
         }
     }
 
-    /// Set up scroll region to reserve bottom row for status line.
-    fn setup_scroll_region(&self, stdout: &mut impl Write) -> io::Result<()> {
-        if self.config.show_status_line && self.size.rows > 1 {
-            set_scroll_region(stdout, 1, self.size.rows - 1)
-        } else {
-            Ok(())
-        }
-    }
-
     /// Create a new shell session with default configuration.
     pub fn with_defaults() -> Self {
         Self::new(SessionConfig::default())
@@ -231,7 +286,11 @@ impl ShellSession {
         // Reserve 1 row for status line if enabled
         let pty_size = self.pty_size();
         let pty = Arc::new(Pty::spawn(initial_cmd, pty_size)?);
-        let mut vt = Vt::new(pty_size.cols as usize, pty_size.rows as usize);
+        let mut vt = Vt::builder()
+            .size(pty_size.cols as usize, pty_size.rows as usize)
+            .resizable(true)
+            .scrollback_limit(0)
+            .build();
 
         // Handle TUI handoff if present
         if let Some(mut handoff) = handoff {
@@ -309,12 +368,7 @@ impl ShellSession {
         };
         tracing::debug!("session: cursor position after TUI: row {}", cursor_row);
 
-        // Reset terminal state from TUI: scroll region and origin mode
-        write!(stdout, "\x1b[r\x1b[?6l")?;
-        stdout.flush()?;
-
-        // Get terminal size without moving cursor (preserves TUI cursor position).
-        // Only query when no explicit size was configured (config.size is None).
+        // Get terminal size.
         // TODO: query the size from the actual stdout fd (e.g. TIOCGWINSZ on the
         // writer) instead of crossterm::terminal::size() which always uses the
         // process's controlling terminal. That would make this work correctly even
@@ -337,16 +391,16 @@ impl ShellSession {
         // Resize PTY to match current terminal size (minus status line row)
         let _ = pty.resize(self.pty_size());
 
-        // Set up scroll region to reserve bottom row for status line
+        // Initialize the renderer and do a full initial draw
+        let mut renderer = Renderer::new();
+        renderer.render_full(&mut stdout, &vt)?;
         if self.config.show_status_line {
-            self.setup_scroll_region(&mut stdout)?;
-            // Draw status line at absolute bottom (preserves TUI output above)
-            self.status_line.draw(&mut stdout, self.size.cols)?;
+            self.status_line
+                .draw(&mut stdout, self.size.cols, self.size.rows)?;
         }
-
-        // Position cursor where TUI left it (queried above).
-        // cursor_row is 1-based from terminal, MoveTo uses 0-based.
-        execute!(stdout, cursor::MoveTo(0, cursor_row.saturating_sub(1)))?;
+        // Position cursor after initial draw
+        let c = vt.cursor();
+        write!(stdout, "\x1b[{};{}H", c.row + 1, c.col + 1)?;
         stdout.flush()?;
 
         // Set up event channel
@@ -422,16 +476,13 @@ impl ShellSession {
             .event_loop(
                 &pty,
                 &mut vt,
+                &mut renderer,
                 &mut event_rx_internal,
                 &event_tx,
                 &mut stdout,
             )
             .await;
 
-        // Clean up - reset scroll region before exiting
-        if self.config.show_status_line {
-            let _ = reset_scroll_region(&mut stdout);
-        }
         let _ = pty.kill();
 
         let exit_code = exit_code?;
@@ -448,6 +499,7 @@ impl ShellSession {
         &mut self,
         pty: &Arc<Pty>,
         vt: &mut Vt,
+        renderer: &mut Renderer,
         event_rx: &mut mpsc::Receiver<Event>,
         coordinator_tx: &mpsc::Sender<ShellEvent>,
         stdout: &mut Box<dyn Write + Send>,
@@ -458,17 +510,19 @@ impl ShellSession {
         loop {
             // Use select! to handle both events and spinner animation
             let event = if self.status_line.state().building {
-                // When building, use a timeout to animate the spinner
                 tokio::select! {
                     event = event_rx.recv() => event,
                     _ = tokio::time::sleep(spinner_interval) => {
-                        // Redraw status line to animate spinner
-                        self.status_line.draw(stdout, self.size.cols)?;
+                        if self.config.show_status_line {
+                            self.status_line.draw(stdout, self.size.cols, self.size.rows)?;
+                            let c = vt.cursor();
+                            write!(stdout, "\x1b[{};{}H", c.row + 1, c.col + 1)?;
+                            stdout.flush()?;
+                        }
                         continue;
                     }
                 }
             } else {
-                // When not building, just wait for events
                 event_rx.recv().await
             };
 
@@ -495,18 +549,34 @@ impl ShellSession {
                             state.show_error = !state.show_error;
                             if state.show_error {
                                 let error = state.error.clone().unwrap();
-                                writeln!(stdout, "\r\n\x1b[1;31mBuild error:\x1b[0m\r")?;
+                                // Inject error text into PTY so VT tracks it
+                                let mut error_text =
+                                    String::from("\r\n\x1b[1;31mBuild error:\x1b[0m\r\n");
                                 for line in error.lines() {
-                                    writeln!(stdout, "  {}\r", line)?;
+                                    error_text.push_str(&format!("  {}\r\n", line));
                                 }
-                                writeln!(stdout, "\r")?;
-                                stdout.flush()?;
+                                error_text.push_str("\r\n");
+                                let scroll_count = {
+                                    let changes = vt.feed_str(&error_text);
+                                    changes.scrollback.count()
+                                };
+                                let content_rows = self.pty_size().rows;
+                                renderer.render_with_scroll(
+                                    stdout,
+                                    vt,
+                                    scroll_count,
+                                    content_rows,
+                                )?;
                             } else {
                                 // Clear screen via Ctrl-L to hide error output
                                 pty.write_all(&[0x0C])?;
                                 pty.flush()?;
                             }
-                            self.status_line.draw(stdout, self.size.cols)?;
+                            self.status_line
+                                .draw(stdout, self.size.cols, self.size.rows)?;
+                            let c = vt.cursor();
+                            write!(stdout, "\x1b[{};{}H", c.row + 1, c.col + 1)?;
+                            stdout.flush()?;
                         }
                         continue;
                     }
@@ -515,23 +585,45 @@ impl ShellSession {
                 }
 
                 Event::PtyOutput(data) => {
-                    // Write to stdout immediately
-                    stdout.write_all(&data)?;
-                    stdout.flush()?;
-
-                    // Feed to VT for state tracking (used during reload)
-                    vt.feed_str(&String::from_utf8_lossy(&data));
-
-                    // Check for terminal clear sequences and redraw status line
-                    if self.config.show_status_line && contains_clear_sequence(&data) {
-                        // Save cursor before scroll region setup (DECSTBM resets cursor to home)
-                        let _ = write!(stdout, "\x1b7");
-                        let _ = self.setup_scroll_region(stdout);
-                        // Restore cursor to where the shell left it
-                        let _ = write!(stdout, "\x1b8");
-                        let _ = stdout.flush();
-                        let _ = self.status_line.draw(stdout, self.size.cols);
+                    // Feed output into VT and track how many lines scrolled off
+                    let mut total_scroll: usize = 0;
+                    {
+                        let changes = vt.feed_str(&String::from_utf8_lossy(&data));
+                        total_scroll += changes.scrollback.count();
                     }
+
+                    // Batch: drain any additional pending PtyOutput events
+                    while let Ok(event) = event_rx.try_recv() {
+                        match event {
+                            Event::PtyOutput(more) => {
+                                let changes = vt.feed_str(&String::from_utf8_lossy(&more));
+                                total_scroll += changes.scrollback.count();
+                            }
+                            Event::PtyExit => {
+                                // Render final state before exiting
+                                renderer.render(stdout, vt)?;
+                                return Ok(());
+                            }
+                            Event::Stdin(stdin_data) => {
+                                pty.write_all(&stdin_data)?;
+                                pty.flush()?;
+                            }
+                            Event::Command(cmd) => {
+                                self.handle_command(cmd, stdout, vt, renderer)?;
+                            }
+                        }
+                    }
+
+                    // Scroll real terminal to push content into native scrollback, then render
+                    let content_rows = self.pty_size().rows;
+                    renderer.render_with_scroll(stdout, vt, total_scroll, content_rows)?;
+                    if self.config.show_status_line {
+                        self.status_line
+                            .draw(stdout, self.size.cols, self.size.rows)?;
+                    }
+                    let c = vt.cursor();
+                    write!(stdout, "\x1b[{};{}H", c.row + 1, c.col + 1)?;
+                    stdout.flush()?;
                 }
 
                 Event::PtyExit(exit_code) => {
@@ -539,17 +631,34 @@ impl ShellSession {
                 }
 
                 Event::Command(cmd) => {
-                    self.handle_command(cmd, stdout)?;
+                    self.handle_command(cmd, stdout, vt, renderer)?;
                 }
             }
 
-            // Check for terminal resize periodically (not on every event)
+            // Check for terminal resize periodically
             if last_resize_check.elapsed() > Duration::from_millis(500) {
                 last_resize_check = std::time::Instant::now();
-                if let Ok((cols, _rows)) = terminal::size()
-                    && cols != self.size.cols
+                if let Ok((cols, rows)) = terminal::size()
+                    && (cols != self.size.cols || rows != self.size.rows)
                 {
-                    self.size.cols = cols;
+                    self.size = PtySize {
+                        rows,
+                        cols,
+                        pixel_width: 0,
+                        pixel_height: 0,
+                    };
+                    let pty_size = self.pty_size();
+                    let _ = pty.resize(pty_size);
+                    // Resize VT via xtwinops escape sequence
+                    vt.feed_str(&format!("\x1b[8;{};{}t", pty_size.rows, pty_size.cols));
+                    renderer.invalidate();
+                    renderer.render_full(stdout, vt)?;
+                    if self.config.show_status_line {
+                        self.status_line.draw(stdout, cols, rows)?;
+                    }
+                    let c = vt.cursor();
+                    write!(stdout, "\x1b[{};{}H", c.row + 1, c.col + 1)?;
+                    stdout.flush()?;
                     let _ = coordinator_tx
                         .send(ShellEvent::Resize {
                             cols: self.size.cols,
@@ -568,16 +677,18 @@ impl ShellSession {
         &mut self,
         cmd: ShellCommand,
         stdout: &mut Box<dyn Write + Send>,
+        vt: &mut Vt,
+        renderer: &mut Renderer,
     ) -> Result<(), SessionError> {
         match cmd {
             ShellCommand::ReloadReady { changed_files } => {
                 self.status_line.state_mut().set_reload_ready(changed_files);
-                self.status_line.draw(stdout, self.size.cols)?;
+                self.draw_status_and_cursor(stdout, vt)?;
             }
 
             ShellCommand::Building { changed_files } => {
                 self.status_line.state_mut().set_building(changed_files);
-                self.status_line.draw(stdout, self.size.cols)?;
+                self.draw_status_and_cursor(stdout, vt)?;
             }
 
             ShellCommand::BuildFailed {
@@ -587,35 +698,37 @@ impl ShellSession {
                 self.status_line
                     .state_mut()
                     .set_build_failed(changed_files, error);
-                self.status_line.draw(stdout, self.size.cols)?;
+                self.draw_status_and_cursor(stdout, vt)?;
             }
 
             ShellCommand::ReloadApplied => {
                 self.status_line.state_mut().clear();
-                self.status_line.draw(stdout, self.size.cols)?;
+                self.draw_status_and_cursor(stdout, vt)?;
             }
 
             ShellCommand::WatchedFiles { files } => {
                 self.status_line.state_mut().set_watched_files(files);
-                self.status_line.draw(stdout, self.size.cols)?;
+                self.draw_status_and_cursor(stdout, vt)?;
             }
 
             ShellCommand::WatchingPaused { paused } => {
                 self.status_line.state_mut().set_paused(paused);
-                self.status_line.draw(stdout, self.size.cols)?;
+                self.draw_status_and_cursor(stdout, vt)?;
             }
 
             ShellCommand::PrintWatchedFiles { files } => {
-                // Print watched files list
-                writeln!(
-                    stdout,
-                    "\r\n\x1b[1mWatched files ({}):\x1b[0m\r",
-                    files.len()
-                )?;
+                // Inject watched files list into VT so it's tracked
+                let mut text = format!("\r\n\x1b[1mWatched files ({}):\x1b[0m\r\n", files.len());
                 for file in &files {
-                    writeln!(stdout, "  {}\r", file.display())?;
+                    text.push_str(&format!("  {}\r\n", file.display()));
                 }
-                stdout.flush()?;
+                let scroll_count = {
+                    let changes = vt.feed_str(&text);
+                    changes.scrollback.count()
+                };
+                let content_rows = self.pty_size().rows;
+                renderer.render_with_scroll(stdout, vt, scroll_count, content_rows)?;
+                self.draw_status_and_cursor(stdout, vt)?;
             }
 
             ShellCommand::Shutdown => {
@@ -627,6 +740,22 @@ impl ShellSession {
             }
         }
 
+        Ok(())
+    }
+
+    /// Draw status line and reposition cursor.
+    fn draw_status_and_cursor(
+        &mut self,
+        stdout: &mut Box<dyn Write + Send>,
+        vt: &Vt,
+    ) -> Result<(), SessionError> {
+        if self.config.show_status_line {
+            self.status_line
+                .draw(stdout, self.size.cols, self.size.rows)?;
+            let c = vt.cursor();
+            write!(stdout, "\x1b[{};{}H", c.row + 1, c.col + 1)?;
+            stdout.flush()?;
+        }
         Ok(())
     }
 }
