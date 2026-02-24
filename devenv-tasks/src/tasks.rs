@@ -139,6 +139,7 @@ impl TasksBuilder {
             env: self.config.env,
             executor,
             refresh_task_cache: self.refresh_task_cache,
+            ignore_process_deps: self.config.ignore_process_deps,
         };
 
         tasks.resolve_dependencies(task_indices).await?;
@@ -176,6 +177,8 @@ pub struct Tasks {
     pub executor: Arc<dyn TaskExecutor>,
     /// Force a refresh of the task cache, skipping cache reads
     pub refresh_task_cache: bool,
+    /// When true, exclude non-root process-type tasks from the scheduled subgraph
+    pub ignore_process_deps: bool,
 }
 
 impl Tasks {
@@ -226,7 +229,7 @@ impl Tasks {
     /// A failure is soft if:
     /// 1. The task is NOT a root task, AND
     /// 2. The task has at least one outgoing edge (someone depends on it), AND
-    /// 3. ALL outgoing edges use `DependencyKind::Complete`
+    /// 3. ALL outgoing edges use `DependencyKind::Completed`
     fn is_soft_failure(&self, index: &NodeIndex) -> bool {
         if self.roots.contains(index) {
             return false;
@@ -238,7 +241,7 @@ impl Tasks {
         !outgoing.is_empty()
             && outgoing
                 .iter()
-                .all(|e| *e.weight() == DependencyKind::Complete)
+                .all(|e| *e.weight() == DependencyKind::Completed)
     }
 
     fn resolve_namespace_roots(
@@ -310,14 +313,33 @@ impl Tasks {
                     let dep_task = &self.graph[*dep_idx].read().await;
 
                     // Resolve the dependency kind based on task type if not explicitly specified
-                    // Default: Ready for process tasks, Complete for oneshot tasks
+                    // Default: Ready for process tasks, Succeeded for oneshot tasks
                     let resolved_kind = dep_spec.kind.unwrap_or_else(|| {
                         if dep_task.task.r#type == TaskType::Process {
                             DependencyKind::Ready
                         } else {
-                            DependencyKind::Complete
+                            DependencyKind::Succeeded
                         }
                     });
+
+                    // Validate suffix is compatible with the dependency's task type
+                    match (dep_task.task.r#type, resolved_kind) {
+                        (TaskType::Oneshot, DependencyKind::Ready) => {
+                            validation_errors.push(format!(
+                                "Task '{}' depends on '{}@ready' but '{}' is a oneshot task. \
+                                 Oneshot tasks support @started, @succeeded, and @completed suffixes.",
+                                task_state.task.name, dep_spec.name, dep_spec.name
+                            ));
+                        }
+                        (TaskType::Process, DependencyKind::Succeeded) => {
+                            validation_errors.push(format!(
+                                "Task '{}' depends on '{}@succeeded' but '{}' is a process task. \
+                                 Process tasks support @started, @ready, and @completed suffixes.",
+                                task_state.task.name, dep_spec.name, dep_spec.name
+                            ));
+                        }
+                        _ => {}
+                    }
 
                     // Validate @ready dependencies on process tasks require ready or listen
                     if resolved_kind == DependencyKind::Ready
@@ -361,9 +383,28 @@ impl Tasks {
                         if task_state.task.r#type == TaskType::Process {
                             DependencyKind::Ready
                         } else {
-                            DependencyKind::Complete
+                            DependencyKind::Succeeded
                         }
                     });
+
+                    // Validate suffix is compatible with the current task's type
+                    match (task_state.task.r#type, resolved_kind) {
+                        (TaskType::Oneshot, DependencyKind::Ready) => {
+                            validation_errors.push(format!(
+                                "Task '{}' declares before '{}' with @ready but '{}' is a oneshot task. \
+                                 Oneshot tasks support @started, @succeeded, and @completed suffixes.",
+                                task_state.task.name, dep_spec.name, task_state.task.name
+                            ));
+                        }
+                        (TaskType::Process, DependencyKind::Succeeded) => {
+                            validation_errors.push(format!(
+                                "Task '{}' declares before '{}' with @succeeded but '{}' is a process task. \
+                                 Process tasks support @started, @ready, and @completed suffixes.",
+                                task_state.task.name, dep_spec.name, task_state.task.name
+                            ));
+                        }
+                        _ => {}
+                    }
 
                     // Validate @ready dependencies - current task must have ready or listen if it's a process
                     if resolved_kind == DependencyKind::Ready
@@ -500,6 +541,26 @@ impl Tasks {
             }
         }
 
+        // When ignore_process_deps is set, remove non-root process-type tasks
+        // from the visited set. This prevents process duplication when process-compose
+        // manages process ordering via depends_on.
+        if self.ignore_process_deps {
+            let root_set: HashSet<NodeIndex> = self.roots.iter().cloned().collect();
+            let mut to_remove = Vec::new();
+            for &node in &visited {
+                if root_set.contains(&node) {
+                    continue;
+                }
+                let task_state = self.graph[node].read().await;
+                if task_state.task.r#type == TaskType::Process {
+                    to_remove.push(node);
+                }
+            }
+            for node in to_remove {
+                visited.remove(&node);
+            }
+        }
+
         // Create nodes in the subgraph
         for &node in &visited {
             let new_node = subgraph.add_node(self.graph[node].clone());
@@ -626,31 +687,34 @@ impl Tasks {
                         let dep_status = &self.graph[dep_index].read().await.status;
 
                         let satisfied = match (dep_status, dep_kind) {
-                            // @ready dependencies
-                            (TaskStatus::ProcessReady, DependencyKind::Ready) => {
-                                // Process is ready and healthy
-                                true
-                            }
+                            // @started — satisfied once running (or beyond)
+                            (TaskStatus::Running(_), DependencyKind::Started) => true,
+                            (TaskStatus::ProcessReady, DependencyKind::Started) => true,
+                            (TaskStatus::Completed(_), DependencyKind::Started) => true,
+
+                            // @ready — process healthy or oneshot succeeded
+                            (TaskStatus::ProcessReady, DependencyKind::Ready) => true,
                             (
                                 TaskStatus::Completed(TaskCompleted::Success(_, _)),
                                 DependencyKind::Ready,
-                            ) => {
-                                // Oneshot task completed successfully
-                                true
-                            }
+                            ) => true,
                             (
                                 TaskStatus::Completed(TaskCompleted::Skipped(_)),
                                 DependencyKind::Ready,
-                            ) => {
-                                // Task was skipped (cached or no command)
-                                true
-                            }
+                            ) => true,
 
-                            // @complete dependencies
-                            (TaskStatus::Completed(_), DependencyKind::Complete) => {
-                                // Task has completed (any completion state)
-                                true
-                            }
+                            // @succeeded — exited with code 0
+                            (
+                                TaskStatus::Completed(TaskCompleted::Success(_, _)),
+                                DependencyKind::Succeeded,
+                            ) => true,
+                            (
+                                TaskStatus::Completed(TaskCompleted::Skipped(_)),
+                                DependencyKind::Succeeded,
+                            ) => true,
+
+                            // @completed — any completion (soft)
+                            (TaskStatus::Completed(_), DependencyKind::Completed) => true,
 
                             // Failure handling
                             (TaskStatus::Completed(completed), _) if completed.has_failed() => {
@@ -1108,6 +1172,166 @@ pub fn compute_hierarchy_edges<N, E>(
     }
 
     edges
+}
+
+#[cfg(test)]
+mod schedule_tests {
+    use super::*;
+    use crate::config::TaskConfig;
+
+    /// Helper to build a minimal Tasks struct for testing schedule().
+    /// Returns the TempDir alongside Tasks to keep the directory alive for the test.
+    async fn build_test_tasks(
+        task_configs: Vec<TaskConfig>,
+        roots: Vec<String>,
+        ignore_process_deps: bool,
+    ) -> (Tasks, tempfile::TempDir) {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache_dir = tmp.path().to_path_buf();
+        let runtime_dir = tmp.path().join("runtime");
+        std::fs::create_dir_all(&runtime_dir).unwrap();
+
+        let config = Config {
+            tasks: task_configs,
+            roots,
+            run_mode: RunMode::All,
+            runtime_dir,
+            cache_dir,
+            sudo_context: None,
+            env: HashMap::new(),
+            ignore_process_deps,
+        };
+
+        let shutdown = tokio_shutdown::Shutdown::new();
+        let tasks = Tasks::builder(config, VerbosityLevel::Normal, shutdown)
+            .build()
+            .await
+            .unwrap();
+        (tasks, tmp)
+    }
+
+    fn oneshot_task(name: &str, after: Vec<&str>) -> TaskConfig {
+        TaskConfig {
+            name: name.to_string(),
+            r#type: TaskType::Oneshot,
+            after: after.into_iter().map(String::from).collect(),
+            command: Some("true".to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn process_task(name: &str, after: Vec<&str>) -> TaskConfig {
+        TaskConfig {
+            name: name.to_string(),
+            r#type: TaskType::Process,
+            after: after.into_iter().map(String::from).collect(),
+            command: Some("true".to_string()),
+            ..Default::default()
+        }
+    }
+
+    /// Collect task names from the scheduled tasks_order.
+    async fn task_names(tasks: &Tasks) -> Vec<String> {
+        let mut names = Vec::new();
+        for idx in &tasks.tasks_order {
+            names.push(tasks.graph[*idx].read().await.task.name.clone());
+        }
+        names
+    }
+
+    #[tokio::test]
+    async fn ignore_process_deps_prunes_non_root_processes() {
+        // Graph: root process A depends on process B (non-root)
+        // With ignore_process_deps=true, B should be pruned from the subgraph
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                process_task("ns:proc:a", vec!["ns:proc:b@completed"]),
+                process_task("ns:proc:b", vec![]),
+            ],
+            vec!["ns:proc:a".to_string()],
+            true,
+        )
+        .await;
+
+        // Only root process A should remain
+        let names = task_names(&tasks).await;
+        assert_eq!(names, vec!["ns:proc:a"]);
+    }
+
+    #[tokio::test]
+    async fn ignore_process_deps_keeps_oneshot_deps() {
+        // Graph: root process A depends on oneshot B (migration)
+        // With ignore_process_deps=true, B should NOT be pruned
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                process_task("ns:proc:a", vec!["ns:task:migrate"]),
+                oneshot_task("ns:task:migrate", vec![]),
+            ],
+            vec!["ns:proc:a".to_string()],
+            true,
+        )
+        .await;
+
+        // Both should remain: root process A and oneshot migration
+        let names = task_names(&tasks).await;
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"ns:proc:a".to_string()));
+        assert!(names.contains(&"ns:task:migrate".to_string()));
+    }
+
+    #[tokio::test]
+    async fn ignore_process_deps_false_keeps_all() {
+        // Same graph but with ignore_process_deps=false: both should remain
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                process_task("ns:proc:a", vec!["ns:proc:b@completed"]),
+                process_task("ns:proc:b", vec![]),
+            ],
+            vec!["ns:proc:a".to_string()],
+            false,
+        )
+        .await;
+
+        assert_eq!(tasks.tasks_order.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn ignore_process_deps_keeps_root_processes() {
+        // Both A and B are roots — neither should be pruned even with ignore_process_deps
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                process_task("ns:proc:a", vec![]),
+                process_task("ns:proc:b", vec![]),
+            ],
+            vec!["ns:proc:a".to_string(), "ns:proc:b".to_string()],
+            true,
+        )
+        .await;
+
+        assert_eq!(tasks.tasks_order.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn ignore_process_deps_preserves_transitive_oneshot() {
+        // Graph: root process A -> process B (non-root) -> oneshot C
+        // B gets pruned, but C should still be in the subgraph
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                process_task("ns:proc:a", vec!["ns:proc:b@completed"]),
+                process_task("ns:proc:b", vec!["ns:task:setup"]),
+                oneshot_task("ns:task:setup", vec![]),
+            ],
+            vec!["ns:proc:a".to_string()],
+            true,
+        )
+        .await;
+
+        let names = task_names(&tasks).await;
+        assert!(names.contains(&"ns:proc:a".to_string()));
+        assert!(names.contains(&"ns:task:setup".to_string()));
+        assert!(!names.contains(&"ns:proc:b".to_string()));
+        assert_eq!(names.len(), 2);
+    }
 }
 
 #[cfg(test)]

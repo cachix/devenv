@@ -63,6 +63,11 @@ pub struct Config {
     /// Environment variables to pass to processes
     #[serde(skip, default)]
     pub env: std::collections::HashMap<String, String>,
+    /// When true, exclude non-root process-type tasks from the scheduled subgraph.
+    /// This prevents process duplication when process-compose manages process ordering
+    /// via depends_on while devenv-tasks handles non-process dependencies (migrations, etc).
+    #[serde(skip, default)]
+    pub ignore_process_deps: bool,
 }
 
 impl TryFrom<serde_json::Value> for Config {
@@ -77,12 +82,14 @@ impl TryFrom<serde_json::Value> for Config {
 ///
 /// Supported formats:
 /// - "task" -> DependencySpec { name: "task", kind: None } (use default based on task type)
+/// - "task@started" -> DependencySpec { name: "task", kind: Some(Started) }
 /// - "task@ready" -> DependencySpec { name: "task", kind: Some(Ready) }
-/// - "task@complete" -> DependencySpec { name: "task", kind: Some(Complete) }
+/// - "task@succeeded" -> DependencySpec { name: "task", kind: Some(Succeeded) }
+/// - "task@completed" -> DependencySpec { name: "task", kind: Some(Completed) }
 ///
 /// Default behavior (when kind is None):
 /// - For process tasks: wait for ready (@ready)
-/// - For oneshot tasks: wait for completion (@complete)
+/// - For oneshot tasks: wait for succeeded (@succeeded)
 ///
 /// Returns an error if the suffix is invalid or '@' appears in the middle of the name
 pub fn parse_dependency(dep: &str) -> Result<DependencySpec, Error> {
@@ -104,11 +111,13 @@ pub fn parse_dependency(dep: &str) -> Result<DependencySpec, Error> {
         }
 
         let kind = match suffix {
+            "started" => Some(DependencyKind::Started),
             "ready" => Some(DependencyKind::Ready),
-            "complete" => Some(DependencyKind::Complete),
+            "succeeded" => Some(DependencyKind::Succeeded),
+            "completed" => Some(DependencyKind::Completed),
             _ => {
                 return Err(Error::InvalidDependency(format!(
-                    "Invalid dependency '{}': suffix must be '@ready' or '@complete', got '@{}'",
+                    "Invalid dependency '{}': suffix must be '@started', '@ready', '@succeeded', or '@completed', got '@{}'",
                     dep, suffix
                 )));
             }
@@ -147,10 +156,24 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_dependency_complete_suffix() {
-        let spec = parse_dependency("postgres@complete").unwrap();
+    fn test_parse_dependency_started_suffix() {
+        let spec = parse_dependency("postgres@started").unwrap();
         assert_eq!(spec.name, "postgres");
-        assert_eq!(spec.kind, Some(DependencyKind::Complete));
+        assert_eq!(spec.kind, Some(DependencyKind::Started));
+    }
+
+    #[test]
+    fn test_parse_dependency_succeeded_suffix() {
+        let spec = parse_dependency("postgres@succeeded").unwrap();
+        assert_eq!(spec.name, "postgres");
+        assert_eq!(spec.kind, Some(DependencyKind::Succeeded));
+    }
+
+    #[test]
+    fn test_parse_dependency_completed_suffix() {
+        let spec = parse_dependency("postgres@completed").unwrap();
+        assert_eq!(spec.name, "postgres");
+        assert_eq!(spec.kind, Some(DependencyKind::Completed));
     }
 
     #[test]
@@ -161,7 +184,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("must be '@ready' or '@complete'")
+                .contains("must be '@started', '@ready', '@succeeded', or '@completed'")
         );
     }
 
@@ -179,7 +202,7 @@ mod tests {
 
     #[test]
     fn test_parse_dependency_empty_name() {
-        let result = parse_dependency("@complete");
+        let result = parse_dependency("@completed");
         assert!(result.is_err());
         assert!(
             result
@@ -191,8 +214,8 @@ mod tests {
 
     #[test]
     fn test_parse_dependency_with_namespace() {
-        let spec = parse_dependency("devenv:processes:postgres@complete").unwrap();
+        let spec = parse_dependency("devenv:processes:postgres@completed").unwrap();
         assert_eq!(spec.name, "devenv:processes:postgres");
-        assert_eq!(spec.kind, Some(DependencyKind::Complete));
+        assert_eq!(spec.kind, Some(DependencyKind::Completed));
     }
 }

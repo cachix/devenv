@@ -39,19 +39,19 @@ process-compose uses `depends_on` with conditions. The native manager uses `afte
 ```nix title="After"
 {
   processes.api.after = [
-    "devenv:processes:postgres"                # waits for readiness probe (= process_healthy)
-    "devenv:processes:migrations"              # waits for successful completion
-    "devenv:processes:cleanup@complete"         # waits for exit regardless of success
+    "devenv:processes:postgres"                  # waits for readiness probe (= process_healthy)
+    "devenv:processes:migrations@succeeded"      # waits for successful completion
+    "devenv:processes:cleanup@completed"          # waits for exit regardless of success
   ];
 }
 ```
 
 | process-compose condition | Native equivalent |
 |---|---|
-| `process_healthy` | `"devenv:processes:X"` (requires a `ready` probe on X) |
-| `process_completed_successfully` | `"devenv:processes:X"` |
-| `process_completed` | `"devenv:processes:X@complete"` |
-| `process_started` | No exact equivalent --- use `after` with a lightweight ready probe |
+| `process_started` | `"devenv:processes:X@started"` |
+| `process_healthy` | `"devenv:processes:X@ready"` or `"devenv:processes:X"` (default for processes; requires a `ready` probe on X) |
+| `process_completed_successfully` | `"devenv:processes:X@succeeded"` |
+| `process_completed` | `"devenv:processes:X@completed"` |
 
 #### Restart policy
 

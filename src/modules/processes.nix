@@ -32,6 +32,8 @@ let
     };
   });
 
+  parseProcessDep = import ./lib/parse-process-dep.nix { inherit lib; };
+
   processType = types.submodule ({ config, name, ... }: {
     options = {
       enable = lib.mkOption {
@@ -170,9 +172,10 @@ let
         description = ''
           Tasks that must be ready before this process starts.
           Use task names like "devenv:processes:postgres" or "myapp:setup".
-          Supports @ready (default) and @complete suffixes.
+          Supports @started, @ready (default for processes), and @completed suffixes for process dependencies.
+          Supports @started, @succeeded (default for tasks), and @completed suffixes for task dependencies.
         '';
-        example = [ "devenv:processes:postgres" "myapp:migrations@complete" ];
+        example = [ "devenv:processes:postgres" "myapp:migrations@succeeded" ];
       };
 
       before = lib.mkOption {
@@ -287,6 +290,19 @@ let
         '';
       };
 
+    };
+
+    config = lib.mkIf (implementation == "process-compose") {
+      process-compose.depends_on =
+        let
+          deps = lib.filter (x: x != null) (map parseProcessDep config.after);
+        in
+        lib.listToAttrs (map
+          (dep: {
+            name = dep.name;
+            value.condition = dep.pcCondition;
+          })
+          deps);
     };
   });
 
@@ -452,11 +468,16 @@ in
           })
           enabledProcesses;
 
-        # Provide the devenv-tasks command for each enabled process so process managers can use it
-        # to support before/after task dependencies
-        process.taskCommandsBase = lib.mapAttrs
-          (name: _: "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} devenv:processes:${name}")
-          enabledProcesses;
+        # Provide the devenv-tasks command for each enabled process so non-native process managers
+        # (process-compose, mprocs) can use it to run before/after task dependencies.
+        # Not used by the native manager (devenv 2.0+) which handles process tasks directly.
+        process.taskCommandsBase =
+          let
+            ignoreProcessDepsFlag = lib.optionalString (implementation != "native") " --ignore-process-deps";
+          in
+          lib.mapAttrs
+            (name: _: "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime}${ignoreProcessDepsFlag} devenv:processes:${name}")
+            enabledProcesses;
 
         # With exec prefix for proper signal handling (derived from base)
         process.taskCommands = lib.mapAttrs

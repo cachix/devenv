@@ -1112,6 +1112,7 @@ impl Devenv {
             cache_dir: self.devenv_dotfile.clone(),
             sudo_context: None,
             env: envs,
+            ignore_process_deps: false,
         };
 
         if let Ok(config_value) = devenv_activity::SerdeValue::from_serialize(&config) {
@@ -1219,6 +1220,7 @@ impl Devenv {
             cache_dir: self.devenv_dotfile.clone(),
             sudo_context: None,
             env: envs,
+            ignore_process_deps: false,
         };
 
         let has_custom_executor = executor.is_some();
@@ -1303,7 +1305,7 @@ impl Devenv {
         // Skip the legacy shellHook task runner (devenv-tasks run devenv:enterShell)
         // because the 2.0+ Rust code runs enterShell tasks separately via
         // run_enter_shell_tasks_inner(). Running them inside this subprocess would
-        // be redundant and, worse, a @complete task failure there would cause the
+        // be redundant and, worse, a @completed task failure there would cause the
         // subprocess to exit non-zero, aborting the environment capture.
         let mut cmd = self
             .prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
@@ -1701,6 +1703,7 @@ impl Devenv {
                     cache_dir: self.devenv_dotfile.clone(),
                     sudo_context: None,
                     env: envs,
+                    ignore_process_deps: false,
                 };
 
                 let tasks_runner = tasks::Tasks::builder(

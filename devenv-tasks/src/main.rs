@@ -36,6 +36,12 @@ enum Command {
 
         #[clap(long, help = "Runtime directory for process state")]
         runtime_dir: PathBuf,
+
+        #[clap(
+            long,
+            help = "Exclude non-root process tasks from the scheduled subgraph (used when process-compose manages process ordering)"
+        )]
+        ignore_process_deps: bool,
     },
     Export {
         #[clap()]
@@ -154,6 +160,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             task_file,
             cache_dir,
             runtime_dir,
+            ignore_process_deps,
         } => {
             let mut tasks: Vec<TaskConfig> = fetch_tasks(&task_file)?;
 
@@ -179,6 +186,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
                 cache_dir,
                 sudo_context: sudo_context.clone(),
                 env: std::env::vars().collect(),
+                ignore_process_deps,
             };
 
             let tasks = Tasks::builder(config, verbosity, Arc::clone(&shutdown))

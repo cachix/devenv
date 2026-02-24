@@ -169,10 +169,12 @@ let
               Here's a helpful mnemonic to remember: This task runs *after* these tasks.
 
               You can append a suffix to control dependency behavior:
-              - `task` or `task@ready` - wait for task to succeed (default, fails if dependency fails)
-              - `task@complete` - wait for task to finish (soft dependency, does NOT propagate failure)
+              - `task@started` - wait for task to begin execution
+              - `task` or `task@ready` - wait for task to be ready/healthy (default for processes, processes only)
+              - `task@succeeded` - wait for task to exit successfully (default for tasks, tasks only)
+              - `task@completed` - wait for task to finish, regardless of exit code (soft dependency)
 
-              Example: `after = [ "pnpm:install@complete" ];` allows this task to run
+              Example: `after = [ "pnpm:install@completed" ];` allows this task to run
               even if pnpm:install fails.
             '';
             default = [ ];
@@ -185,8 +187,10 @@ let
               Here's a helpful mnemonic to remember: This task runs *before* these tasks.
 
               You can append a suffix to control dependency behavior:
-              - `task` or `task@ready` - the dependent waits for this task to succeed (default)
-              - `task@complete` - the dependent waits for this task to finish (soft dependency)
+              - `task@started` - the dependent waits for this task to begin execution
+              - `task` or `task@ready` - the dependent waits for this task to be ready/healthy (default for processes, processes only)
+              - `task@succeeded` - the dependent waits for this task to exit successfully (default for tasks, tasks only)
+              - `task@completed` - the dependent waits for this task to finish (soft dependency)
             '';
             default = [ ];
           };
