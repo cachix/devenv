@@ -2,12 +2,11 @@
 //! Integration tests for flake locking functionality
 
 use devenv_core::{CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixOptions};
-use devenv_nix_backend::{load_lock_file, nix_backend::NixRustBackend};
+use devenv_nix_backend::load_lock_file;
 use devenv_nix_backend_macros::nix_test;
 use nix_bindings_fetchers::FetchersSettings;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use tempfile::TempDir;
 use tokio_shutdown::Shutdown;
 
@@ -145,7 +144,7 @@ async fn test_create_flake_inputs() {
         config.clone(),
         nix_cli,
         cachix_manager,
-        Arc::new(Shutdown::new()),
+        Shutdown::new(),
     )
     .expect("Failed to create backend");
 
@@ -215,7 +214,7 @@ async fn test_selective_input_update() {
         config.clone(),
         NixOptions::default(),
         cachix_manager,
-        Arc::new(Shutdown::new()),
+        Shutdown::new(),
     )
     .expect("Failed to create backend");
 
@@ -287,7 +286,7 @@ async fn test_full_workflow() {
         config.clone(),
         NixOptions::default(),
         cachix_manager,
-        Arc::new(Shutdown::new()),
+        Shutdown::new(),
     )
     .expect("Failed to create backend");
 
@@ -389,7 +388,7 @@ async fn test_relative_path_with_parent_dir_in_path() {
         config.clone(),
         NixOptions::default(),
         cachix_manager,
-        Arc::new(Shutdown::new()),
+        Shutdown::new(),
     )
     .expect("Failed to create backend");
 

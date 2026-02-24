@@ -10,7 +10,6 @@ use devenv_core::{
 use devenv_nix_backend::nix_backend::NixRustBackend;
 use devenv_nix_backend_macros::nix_test;
 use std::path::PathBuf;
-use std::sync::Arc;
 use tempfile::TempDir;
 use tokio_shutdown::Shutdown;
 
@@ -165,7 +164,7 @@ fn setup_isolated_test_env(
     let config = Config::load_from(temp_path).expect("Failed to load config");
 
     let cachix_manager = create_test_cachix_manager(temp_path, None);
-    let shutdown = Arc::new(Shutdown::new());
+    let shutdown = Shutdown::new();
     let backend = create_backend(
         paths.clone(),
         config.clone(),
@@ -703,7 +702,9 @@ async fn test_backend_update_with_input_overrides() {
         .expect("Failed to assemble");
 
     // Update with overrides
-    let result = backend.update(&None, &config.inputs, &override_input).await;
+    let result = backend
+        .update(&None, &config.inputs, &override_input)
+        .await;
     assert!(
         result.is_ok(),
         "Update with overrides should succeed: {:?}",
@@ -754,7 +755,9 @@ async fn test_backend_update_with_multiple_overrides() {
         .expect("Failed to assemble");
 
     // Update with multiple overrides
-    let result = backend.update(&None, &config.inputs, &override_input).await;
+    let result = backend
+        .update(&None, &config.inputs, &override_input)
+        .await;
     assert!(
         result.is_ok(),
         "Update with multiple overrides should succeed: {:?}",
@@ -1054,135 +1057,6 @@ async fn test_gc_with_invalid_store_paths() {
     );
 }
 
-// ============================================================================
-// NIX CLI OPTIONS CONFIGURATION TESTS
-// ============================================================================
-
-/// Create backend with offline mode and verify substituters are disabled
-#[nix_test]
-#[ignore]
-async fn test_backend_creation_with_offline_mode() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
-
-    let nix_cli = NixOptions {
-        offline: Some(true),
-        ..Default::default()
-    };
-
-    let _result = create_backend(
-        paths.clone(),
-        config.clone(),
-        nix_cli,
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-    );
-
-    // TODO: Verify backend was created with offline mode
-    todo!("Implement: test offline mode disables substituters")
-}
-
-/// Test system override in NixOptions
-#[nix_test]
-#[ignore]
-async fn test_backend_with_system_override() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
-
-    let nix_cli = NixOptions {
-        system: Some("aarch64-linux".to_string()),
-        ..Default::default()
-    };
-
-    let _result = create_backend(
-        paths.clone(),
-        config.clone(),
-        nix_cli,
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-    );
-
-    // TODO: Verify system override is applied
-    todo!("Implement: test system architecture override")
-}
-
-/// Test impure mode enables in NixOptions
-#[nix_test]
-#[ignore]
-async fn test_backend_with_impure_mode() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
-
-    let nix_cli = NixOptions {
-        impure: Some(true),
-        ..Default::default()
-    };
-
-    let _result = create_backend(
-        paths.clone(),
-        config.clone(),
-        nix_cli,
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-    );
-
-    // TODO: Verify impure mode is enabled
-    todo!("Implement: test impure evaluation mode")
-}
-
-/// Test custom nix_option key-value pairs
-#[nix_test]
-#[ignore]
-async fn test_backend_with_custom_nix_options() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
-
-    let nix_cli = NixOptions {
-        nix_option: vec!["tarball-ttl".to_string(), "0".to_string()],
-        ..Default::default()
-    };
-
-    let _result = create_backend(
-        paths.clone(),
-        config.clone(),
-        nix_cli,
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-    );
-
-    // TODO: Verify custom nix options are applied
-    todo!("Implement: test custom nix options")
-}
-
-/// Test nix_debugger option
-#[nix_test]
-#[ignore]
-async fn test_backend_with_nix_debugger_enabled() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
-
-    let nix_cli = NixOptions {
-        nix_debugger: Some(true),
-        ..Default::default()
-    };
-
-    let _result = create_backend(
-        paths.clone(),
-        config.clone(),
-        nix_cli,
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-    );
-
-    // TODO: Verify debugger is enabled
-    todo!("Implement: test nix debugger option")
-}
-
 /// Test update() with malformed override_input
 /// Odd number of override elements are silently ignored (chunks_exact(2) behavior)
 #[nix_test]
@@ -1202,7 +1076,9 @@ async fn test_update_with_invalid_override_input() {
         setup_isolated_test_env(yaml, None, NixOptions::default());
 
     // Update should succeed - malformed override is ignored (no assemble needed for update-only tests)
-    let result = backend.update(&None, &config.inputs, &override_input).await;
+    let result = backend
+        .update(&None, &config.inputs, &override_input)
+        .await;
     assert!(
         result.is_ok(),
         "update() should succeed even with malformed override_input: {:?}",
@@ -1296,107 +1172,6 @@ async fn test_build_empty_attributes_array() {
         "Building empty attributes should return empty vec, got: {:?}",
         paths
     );
-}
-
-/// Test dev_env() bash output format
-#[nix_test]
-#[ignore]
-async fn test_dev_env_bash_output_format() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
-
-    let backend = create_backend(
-        paths.clone(),
-        config.clone(),
-        NixOptions::default(),
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-    )
-    .expect("Failed to create backend");
-    backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(
-            &paths,
-            &config,
-            config.nixpkgs_config(get_current_system()),
-        ))
-        .await
-        .expect("Failed to assemble");
-
-    let gc_root = get_repo_root().join(".devenv/profile");
-
-    // TODO: Test dev_env(false, ...) returns bash script format
-    let _result = backend.dev_env(false, &gc_root).await;
-    todo!("Implement: test bash output format")
-}
-
-/// Test dev_env() multiple calls with same gc_root
-#[nix_test]
-#[ignore]
-async fn test_dev_env_multiple_calls_same_gc_root() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
-
-    let backend = create_backend(
-        paths.clone(),
-        config.clone(),
-        NixOptions::default(),
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-    )
-    .expect("Failed to create backend");
-    backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(
-            &paths,
-            &config,
-            config.nixpkgs_config(get_current_system()),
-        ))
-        .await
-        .expect("Failed to assemble");
-
-    let gc_root = get_repo_root().join(".devenv/profile");
-
-    // TODO: Call dev_env twice with same gc_root, verify both succeed
-    let _result1 = backend.dev_env(true, &gc_root).await;
-    let _result2 = backend.dev_env(true, &gc_root).await;
-    todo!("Implement: test multiple dev_env calls")
-}
-
-/// Test dev_env() when gc_root already exists as regular file
-#[nix_test]
-#[ignore]
-async fn test_dev_env_gc_root_already_exists_as_file() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
-
-    let backend = create_backend(
-        paths.clone(),
-        config.clone(),
-        NixOptions::default(),
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-    )
-    .expect("Failed to create backend");
-    backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(
-            &paths,
-            &config,
-            config.nixpkgs_config(get_current_system()),
-        ))
-        .await
-        .expect("Failed to assemble");
-
-    let gc_root = get_repo_root().join(".devenv/profile");
-
-    // Create a regular file at gc_root path
-    std::fs::create_dir_all(gc_root.parent().unwrap()).ok();
-    std::fs::write(&gc_root, "existing file content").expect("Failed to create file");
-
-    // TODO: Call dev_env and verify it replaces the file with symlink
-    let _result = backend.dev_env(true, &gc_root).await;
-    todo!("Implement: test gc_root file replacement")
 }
 
 /// Test build() when gc_root already exists as file/symlink
@@ -2207,27 +1982,6 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
     let paths2 = result2.unwrap();
     assert!(!paths1.is_empty(), "First build should return paths");
     assert!(!paths2.is_empty(), "Second build should return paths");
-}
-
-/// Test backend reuse across operations
-#[nix_test]
-#[ignore]
-async fn test_backend_reuse_across_operations() {
-    let _cwd_guard = CwdGuard::new(&get_repo_root());
-    let paths = create_test_paths();
-    let config = load_config_from_repo();
-
-    let _backend = create_backend(
-        paths.clone(),
-        config.clone(),
-        NixOptions::default(),
-        create_test_cachix_manager(&get_repo_root(), None),
-        Shutdown::new(),
-    )
-    .expect("Failed to create backend");
-
-    // TODO: Perform all operations with same backend instance -> verify state consistency
-    todo!("Implement: test backend reuse")
 }
 
 // ============================================================================
