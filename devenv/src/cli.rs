@@ -6,9 +6,7 @@ use devenv_core::settings::{
     CacheOptions, InputOverrides, NixOptions, SecretOptions, ShellOptions, flag,
 };
 use devenv_tasks::RunMode;
-use std::env;
 use std::ffi::OsStr;
-use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -22,29 +20,6 @@ pub enum TraceFormat {
     Json,
     /// A pretty human-readable log format used for debugging.
     Pretty,
-}
-
-/// Deprecated: use TraceFormat instead.
-#[derive(clap::ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum LegacyLogFormat {
-    #[default]
-    Cli,
-    TracingFull,
-    TracingPretty,
-    TracingJson,
-}
-
-impl TryFrom<LegacyLogFormat> for TraceFormat {
-    type Error = ();
-
-    fn try_from(format: LegacyLogFormat) -> Result<Self, Self::Error> {
-        match format {
-            LegacyLogFormat::TracingFull => Ok(TraceFormat::Full),
-            LegacyLogFormat::TracingJson => Ok(TraceFormat::Json),
-            LegacyLogFormat::TracingPretty => Ok(TraceFormat::Pretty),
-            LegacyLogFormat::Cli => Err(()),
-        }
-    }
 }
 
 /// Specifies where trace output should be written.
@@ -361,15 +336,6 @@ pub struct CliOptions {
     )]
     pub no_tui: bool,
 
-    #[arg(
-        long,
-        global = true,
-        help = "Deprecated: use --trace-format instead.",
-        value_enum,
-        hide = true
-    )]
-    pub log_format: Option<LegacyLogFormat>,
-
     #[arg(short, long, action = clap::ArgAction::Help, global = true, help = "Print help (see a summary with '-h')")]
     pub help: Option<bool>,
 
@@ -381,13 +347,6 @@ pub struct CliOptions {
         long_help = "Print version information and exit"
     )]
     pub version: bool,
-}
-
-impl CliOptions {
-    /// Returns true if legacy CLI mode should be used (instead of TUI).
-    pub fn use_legacy_cli(&self) -> bool {
-        !self.tui || self.log_format == Some(LegacyLogFormat::Cli)
-    }
 }
 
 impl TracingCliArgs {
@@ -485,31 +444,6 @@ pub struct Cli {
 }
 
 impl Cli {
-    /// Parse the CLI arguments with clap and resolve any conflicting options.
-    pub fn parse_args() -> Self {
-        let mut cli = Self::parse();
-
-        cli.cli_options.tui = match flag(cli.cli_options.tui, cli.cli_options.no_tui) {
-            Some(v) => v,
-            // Default: enable TUI only when running interactively outside CI.
-            None => {
-                let is_ci = env::var_os("CI").is_some();
-                let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
-                !is_ci && is_tty
-            }
-        };
-
-        // Handle deprecated --log-format
-        if let Some(format) = cli.cli_options.log_format {
-            eprintln!("Warning: --log-format is deprecated, use --trace-format instead");
-            if let Ok(trace_format) = format.try_into() {
-                cli.tracing_args.trace_format = trace_format;
-            }
-        }
-
-        cli
-    }
-
     pub fn get_log_level(&self) -> devenv_tracing::Level {
         if self.cli_options.verbose {
             devenv_tracing::Level::Debug

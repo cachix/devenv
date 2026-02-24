@@ -1,4 +1,4 @@
-use clap::{CommandFactory, crate_version};
+use clap::{CommandFactory, Parser, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
     Devenv, RunMode,
@@ -117,7 +117,17 @@ fn main() -> Result<()> {
         .completer("devenv")
         .complete();
 
-    let cli = Cli::parse_args();
+    let mut cli = Cli::parse();
+
+    // Resolve TUI flag: explicit --tui/--no-tui wins, otherwise default
+    // to TUI when running interactively outside CI.
+    cli.cli_options.tui = devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
+        .unwrap_or_else(|| {
+            let is_ci = std::env::var_os("CI").is_some();
+            let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdin())
+                && std::io::IsTerminal::is_terminal(&std::io::stderr());
+            !is_ci && is_tty
+        });
 
     // Handle commands that don't need a runtime
     match &cli.command {
@@ -143,7 +153,7 @@ fn main() -> Result<()> {
 
     // Determine which mode to run in:
     // - TUI mode: interactive terminal UI (default)
-    // - Legacy CLI mode: spinners and progress indicators (--no-tui or --log-format cli)
+    // - Legacy CLI mode: spinners and progress indicators (--no-tui)
     // - Tracing mode: when --trace-output is stdout/stderr (conflicts with TUI/CLI output)
     //
     // Some commands require specific modes regardless of user options:
@@ -158,7 +168,7 @@ fn main() -> Result<()> {
 
     if cli.tracing_args.use_tracing_mode() {
         run_with_tracing(cli)
-    } else if force_legacy_cli || cli.cli_options.use_legacy_cli() {
+    } else if force_legacy_cli || !cli.cli_options.tui {
         run_with_legacy_cli(cli)
     } else {
         run_with_tui(cli)

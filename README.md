@@ -116,16 +116,6 @@ Options:
   -q, --quiet
           Silence all logs
 
-      --log-format <LOG_FORMAT>
-          Configure the output format of the logs.
-          
-          [default: cli]
-
-          Possible values:
-          - cli:            The default human-readable log format used in the CLI
-          - tracing-full:   A verbose structured log format used for debugging
-          - tracing-pretty: A pretty human-readable log format used for debugging
-
   -j, --max-jobs <MAX_JOBS>
           Maximum number of Nix builds at any time.
           
