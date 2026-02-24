@@ -455,15 +455,15 @@ in
               cwd = process.cwd;
               after = process.after;
               before = process.before;
-              # Always show output for process tasks so process-compose can capture it
               showOutput = true;
-              # Process-specific configuration
-              ready = process.ready;
-              restart = process.restart;
-              listen = process.listen;
-              ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
-              watch = process.watch;
-              watchdog = process.watchdog;
+              process = {
+                ready = process.ready;
+                restart = process.restart;
+                listen = process.listen;
+                ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
+                watch = process.watch;
+                watchdog = process.watchdog;
+              };
             };
           })
           enabledProcesses;

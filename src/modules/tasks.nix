@@ -130,14 +130,7 @@ let
               env = config.env;
               cwd = config.cwd;
               show_output = config.showOutput;
-              process = {
-                ready = config.ready;
-                restart = config.restart;
-                listen = config.listen;
-                ports = config.ports;
-                watch = config.watch;
-                watchdog = config.watchdog;
-              };
+              inherit (config) process;
             };
             description = "Internal configuration for the task.";
           };
@@ -205,142 +198,129 @@ let
             description = "Working directory to run the task in. If not specified, the current working directory will be used.";
           };
 
-          ready = lib.mkOption {
-            type = types.nullOr readyType;
-            default = null;
-            description = "How to determine if this process task is ready to serve.";
-          };
-
-          # Process-specific configuration (only used when type = "process")
-          restart = lib.mkOption {
+          process = lib.mkOption {
             type = types.submodule {
               options = {
-                on = lib.mkOption {
-                  type = types.enum [ "never" "always" "on_failure" ];
-                  default = "on_failure";
-                  description = "When to restart: never, always, or on_failure.";
-                };
-                max = lib.mkOption {
-                  type = types.nullOr types.int;
-                  default = 5;
-                  description = "Maximum restart attempts. null = unlimited.";
-                };
-                window = lib.mkOption {
-                  type = types.nullOr types.ints.unsigned;
+                ready = lib.mkOption {
+                  type = types.nullOr readyType;
                   default = null;
-                  description = "Sliding window in seconds for restart rate limiting. null = lifetime limit.";
+                  description = "How to determine if this process task is ready to serve.";
+                };
+
+                restart = lib.mkOption {
+                  type = types.submodule {
+                    options = {
+                      on = lib.mkOption {
+                        type = types.enum [ "never" "always" "on_failure" ];
+                        default = "on_failure";
+                        description = "When to restart: never, always, or on_failure.";
+                      };
+                      max = lib.mkOption {
+                        type = types.nullOr types.int;
+                        default = 5;
+                        description = "Maximum restart attempts. null = unlimited.";
+                      };
+                      window = lib.mkOption {
+                        type = types.nullOr types.ints.unsigned;
+                        default = null;
+                        description = "Sliding window in seconds for restart rate limiting. null = lifetime limit.";
+                      };
+                    };
+                  };
+                  default = { };
+                  description = "Process restart policy.";
+                };
+
+                ports = lib.mkOption {
+                  type = types.attrsOf types.port;
+                  default = { };
+                  description = ''
+                    Allocated ports for this process (name -> port number).
+                    Populated automatically from process port allocation.
+                  '';
+                };
+
+                listen = lib.mkOption {
+                  type = types.listOf listenType;
+                  default = [ ];
+                  description = "Socket activation configuration for systemd-style socket passing.";
+                  example = [
+                    {
+                      name = "http";
+                      kind = "tcp";
+                      address = "127.0.0.1:8080";
+                    }
+                    {
+                      name = "admin";
+                      kind = "unix_stream";
+                      path = "$DEVENV_STATE/admin.sock";
+                      mode = 384; # 0o600
+                    }
+                  ];
+                };
+
+                watchdog = lib.mkOption {
+                  type = types.nullOr (types.submodule {
+                    options = {
+                      usec = lib.mkOption {
+                        type = types.int;
+                        description = "Watchdog interval in microseconds";
+                      };
+
+                      require_ready = lib.mkOption {
+                        type = types.bool;
+                        default = true;
+                        description = "Require READY=1 notification before enforcing watchdog";
+                      };
+                    };
+                  });
+                  default = null;
+                  description = "Systemd watchdog configuration.";
+                  example = lib.literalExpression ''
+                    {
+                      usec = 30000000; # 30 seconds
+                      require_ready = true;
+                    }
+                  '';
+                };
+
+                watch = lib.mkOption {
+                  type = types.submodule {
+                    options = {
+                      paths = lib.mkOption {
+                        type = types.listOf types.path;
+                        default = [ ];
+                        description = ''
+                          Paths to watch for changes (files or directories).
+                          When files in these paths change, the process will be restarted.
+                        '';
+                      };
+
+                      extensions = lib.mkOption {
+                        type = types.listOf types.str;
+                        default = [ ];
+                        description = ''
+                          File extensions to watch (e.g., "rs", "js", "py").
+                          If empty, all file extensions are watched.
+                        '';
+                      };
+
+                      ignore = lib.mkOption {
+                        type = types.listOf types.str;
+                        default = [ ];
+                        description = ''
+                          Glob patterns to ignore (e.g., ".git", "target", "*.log").
+                        '';
+                      };
+                    };
+                  };
+                  default = { };
+                  description = "File watching configuration for automatic process restarts.";
                 };
               };
             };
             default = { };
-            description = "Process restart policy. Only used when type = \"process\".";
-          };
-
-          ports = lib.mkOption {
-            type = types.attrsOf types.port;
-            default = { };
-            description = ''
-              Allocated ports for this process (name -> port number).
-              Populated automatically from process port allocation.
-
-              Only used when type = "process".
-            '';
-          };
-
-          listen = lib.mkOption {
-            type = types.listOf listenType;
-            default = [ ];
-            description = ''
-              Socket activation configuration for systemd-style socket passing.
-
-              Only used when type = "process".
-            '';
-            example = [
-              {
-                name = "http";
-                kind = "tcp";
-                address = "127.0.0.1:8080";
-              }
-              {
-                name = "admin";
-                kind = "unix_stream";
-                path = "$DEVENV_STATE/admin.sock";
-                mode = 384; # 0o600
-              }
-            ];
-          };
-
-          watchdog = lib.mkOption {
-            type = types.nullOr (types.submodule {
-              options = {
-                usec = lib.mkOption {
-                  type = types.int;
-                  description = "Watchdog interval in microseconds";
-                };
-
-                require_ready = lib.mkOption {
-                  type = types.bool;
-                  default = true;
-                  description = "Require READY=1 notification before enforcing watchdog";
-                };
-              };
-            });
-            default = null;
-            description = ''
-              Systemd watchdog configuration.
-
-              Only used when type = "process".
-            '';
-            example = lib.literalExpression ''
-              {
-                usec = 30000000; # 30 seconds
-                require_ready = true;
-              }
-            '';
-          };
-
-          watch = lib.mkOption {
-            type = types.submodule {
-              options = {
-                paths = lib.mkOption {
-                  type = types.listOf types.path;
-                  default = [ ];
-                  description = ''
-                    Paths to watch for changes (files or directories).
-                    When files in these paths change, the process will be restarted.
-
-                    Only used when type = "process".
-                  '';
-                };
-
-                extensions = lib.mkOption {
-                  type = types.listOf types.str;
-                  default = [ ];
-                  description = ''
-                    File extensions to watch (e.g., "rs", "js", "py").
-                    If empty, all file extensions are watched.
-
-                    Only used when type = "process".
-                  '';
-                };
-
-                ignore = lib.mkOption {
-                  type = types.listOf types.str;
-                  default = [ ];
-                  description = ''
-                    Glob patterns to ignore (e.g., ".git", "target", "*.log").
-
-                    Only used when type = "process".
-                  '';
-                };
-              };
-            };
-            default = { };
-            description = ''
-              File watching configuration for automatic process restarts.
-
-              Only used when type = "process".
-            '';
+            description = "Process-specific configuration. Only used when type = \"process\".";
           };
 
         };
