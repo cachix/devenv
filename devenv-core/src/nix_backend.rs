@@ -52,6 +52,8 @@ pub struct Options {
     pub cache_output: bool,
     /// Force a refresh of the cached output.
     pub refresh_cached_output: bool,
+    /// Maximum number of results to return (for search). None means unlimited.
+    pub max_results: Option<usize>,
     /// Extra flags to pass to nix commands.
     pub nix_flags: &'static [&'static str],
 }
@@ -63,6 +65,7 @@ impl Default for Options {
             bail_on_error: true,
             cache_output: false,
             refresh_cached_output: false,
+            max_results: Some(100),
             nix_flags: &[
                 "--show-trace",
                 "--extra-experimental-features",

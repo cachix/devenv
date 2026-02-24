@@ -88,10 +88,11 @@ impl DevenvMcpServer {
     async fn fetch_packages_with_devenv(&self, devenv: &Devenv) -> Result<Vec<PackageInfo>> {
         info!("Fetching available packages from nixpkgs...");
 
-        // Search for common/popular packages
-        // Note: Using ".*" would match all packages but causes resource exhaustion
-        // with the FFI backend due to GC pressure. Use a reasonable search term instead.
-        let search_results = devenv.nix.search("cachix", None).await?;
+        let search_options = Options {
+            max_results: None,
+            ..Default::default()
+        };
+        let search_results = devenv.nix.search(".*", Some(search_options)).await?;
 
         let packages: Vec<PackageInfo> = search_results
             .into_iter()

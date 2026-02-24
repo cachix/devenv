@@ -1708,7 +1708,7 @@ impl NixBackend for NixRustBackend {
         }
     }
 
-    async fn search(&self, name: &str, _options: Option<Options>) -> Result<SearchResults> {
+    async fn search(&self, name: &str, options: Option<Options>) -> Result<SearchResults> {
         // Search through pkgs from bootstrap/default.nix for packages matching the query
         // Uses the nix search C API which handles recurseForDerivations logic
         // Respects overlays, locked versions, and devenv configuration
@@ -1749,10 +1749,10 @@ impl NixBackend for NixRustBackend {
 
         // Collect results using the search API
         let mut results: SearchResults = BTreeMap::new();
-        let max_results = 100;
+        let max_results = options.and_then(|o| o.max_results);
 
         search(&cursor, Some(&params), |result: SearchResult| {
-            if results.len() >= max_results {
+            if max_results.is_some_and(|max| results.len() >= max) {
                 return false; // Stop searching
             }
 
