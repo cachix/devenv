@@ -123,7 +123,7 @@ fn main() -> Result<()> {
     match &cli.command {
         None | Some(Commands::Version) => {
             let version = crate_version!();
-            let system = &cli.nix_cli.system;
+            let system = &cli.nix_args.system;
             match build_rev() {
                 Some(rev) => println!("devenv {version}+{rev} ({system})"),
                 None => println!("devenv {version} ({system})"),
@@ -197,7 +197,7 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // until the shutdown signal from the backend thread. When --no-reload is explicit, TUI can
     // shut down immediately on backend_done. For all other commands, always shut down on done.
     let shutdown_on_backend_done =
-        !matches!(&cli.command, Some(Commands::Shell { .. })) || cli.shell_cli.no_reload;
+        !matches!(&cli.command, Some(Commands::Shell { .. })) || cli.shell_args.no_reload;
 
     // Shutdown coordination
     // Signal handlers catch external signals (SIGINT from `kill`, SIGTERM, etc.)
@@ -409,7 +409,7 @@ async fn run_devenv(
 ) -> DevenvOutput {
     // Command is guaranteed to exist (Version/Direnvrc handled in main)
     let command = cli.command.clone().expect("Command should exist");
-    let nix_debugger = cli.nix_cli.nix_debugger;
+    let nix_debugger = cli.nix_args.nix_debugger;
 
     // Helper to create output without debugger context
     let output = |result| DevenvOutput {
@@ -422,7 +422,9 @@ async fn run_devenv(
         Err(e) => return output(Err(e)),
     };
 
-    for input in cli.input_overrides.override_input.chunks_exact(2) {
+    let input_overrides = devenv_core::InputOverrides::from(cli.input_overrides);
+
+    for input in input_overrides.override_input.chunks_exact(2) {
         if let Err(e) = config
             .override_input_url(&input[0], &input[1])
             .wrap_err_with(|| {
@@ -481,10 +483,18 @@ async fn run_devenv(
     }
 
     // Resolve settings from CLI + Config (pure functions, no mutation).
-    let nix_settings = devenv_core::NixSettings::resolve(cli.nix_cli, &config);
-    let shell_settings = devenv_core::ShellSettings::resolve(cli.shell_cli, &config);
-    let cache_settings = devenv_core::CacheSettings::resolve(cli.cache_cli);
-    let secret_settings = devenv_core::SecretSettings::resolve(cli.secret_cli, &config);
+    let nix_settings =
+        devenv_core::NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
+    let shell_settings = devenv_core::ShellSettings::resolve(
+        devenv_core::ShellOptions::from(cli.shell_args),
+        &config,
+    );
+    let cache_settings =
+        devenv_core::CacheSettings::resolve(devenv_core::CacheOptions::from(cli.cache_args));
+    let secret_settings = devenv_core::SecretSettings::resolve(
+        devenv_core::SecretOptions::from(cli.secret_args),
+        &config,
+    );
     let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
 
     // Construct UI parameters from CLI options (kept out of the library)
@@ -507,7 +517,7 @@ async fn run_devenv(
         shell_settings,
         cache_settings,
         secret_settings,
-        input_overrides: cli.input_overrides,
+        input_overrides,
         from_external,
         devenv_root: None,
         devenv_dotfile: None,

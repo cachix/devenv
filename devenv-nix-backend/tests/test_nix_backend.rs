@@ -2,10 +2,10 @@
 //! Tests for the NixBackend FFI implementation
 //!
 //! These tests verify the functionality of the Rust FFI-based NixBackend,
-//! including input overrides via NixCliOptions.
+//! including input overrides via NixOptions.
 
 use devenv_core::{
-    CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixCliOptions, Options,
+    CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixOptions, Options,
 };
 use devenv_nix_backend::nix_backend::NixRustBackend;
 use devenv_nix_backend_macros::nix_test;
@@ -135,7 +135,7 @@ impl TestNixArgs {
 fn setup_isolated_test_env(
     yaml_content: &str,
     nix_content: Option<&str>,
-    nix_cli: NixCliOptions,
+    nix_cli: NixOptions,
 ) -> (TempDir, CwdGuard, NixRustBackend, DevenvPaths, Config) {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let temp_path = temp_dir.path();
@@ -187,7 +187,7 @@ async fn test_backend_creation() {
     url: github:cachix/git-hooks.nix
 "#;
     let (_temp_dir, _cwd_guard, backend, _paths, _config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     assert_eq!(backend.name(), "nix");
 }
 
@@ -200,7 +200,7 @@ async fn test_backend_assemble() {
     url: github:cachix/git-hooks.nix
 "#;
     let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
 
     let test_args = TestNixArgs::new(&paths);
     let nix_args =
@@ -223,7 +223,7 @@ async fn test_backend_update_all_inputs() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -251,7 +251,7 @@ async fn test_backend_update_specific_input() {
     url: github:cachix/git-hooks.nix
 "#;
     let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -287,7 +287,7 @@ async fn test_backend_eval_expression() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -331,7 +331,7 @@ async fn test_backend_eval_multiple_attributes() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -372,7 +372,7 @@ async fn test_backend_build_package() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -404,7 +404,7 @@ async fn test_backend_build_with_gc_root() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -446,7 +446,7 @@ async fn test_backend_dev_env() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -481,7 +481,7 @@ async fn test_backend_metadata() {
     url: github:cachix/git-hooks.nix
 "#;
     let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -518,7 +518,7 @@ async fn test_backend_gc() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -577,7 +577,7 @@ async fn test_metadata_standalone() {
     url: github:cachix/git-hooks.nix
 "#;
     let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     println!("Created backend");
 
     backend
@@ -605,7 +605,7 @@ async fn test_metadata_after_update() {
     url: github:cachix/git-hooks.nix
 "#;
     let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     println!("Created backend");
 
     backend
@@ -640,7 +640,7 @@ async fn test_full_backend_workflow() {
     url: github:cachix/git-hooks.nix
 "#;
     let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     println!("Created NixRustBackend: {}", backend.name());
 
     // 2. Initialize
@@ -692,7 +692,7 @@ async fn test_backend_update_with_input_overrides() {
     ];
 
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -743,7 +743,7 @@ async fn test_backend_update_with_multiple_overrides() {
     ];
 
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -780,7 +780,7 @@ async fn test_eval_nonexistent_attribute() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -822,7 +822,7 @@ async fn test_build_nonexistent_attribute() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -870,7 +870,7 @@ async fn test_build_with_syntax_error_in_nix() {
 }"#;
 
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, Some(broken_nix), NixCliOptions::default());
+        setup_isolated_test_env(yaml, Some(broken_nix), NixOptions::default());
 
     // Use fixture lock file
     copy_fixture_lock(temp_dir.path());
@@ -930,7 +930,7 @@ async fn test_eval_error_includes_nix_details() {
 }"#;
 
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, Some(broken_nix), NixCliOptions::default());
+        setup_isolated_test_env(yaml, Some(broken_nix), NixOptions::default());
 
     // Use fixture lock file
     copy_fixture_lock(temp_dir.path());
@@ -983,7 +983,7 @@ async fn test_metadata_with_corrupted_lock_file() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -1029,7 +1029,7 @@ async fn test_gc_with_invalid_store_paths() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -1066,8 +1066,8 @@ async fn test_backend_creation_with_offline_mode() {
     let paths = create_test_paths();
     let config = load_config_from_repo();
 
-    let nix_cli = NixCliOptions {
-        offline: true,
+    let nix_cli = NixOptions {
+        offline: Some(true),
         ..Default::default()
     };
 
@@ -1083,7 +1083,7 @@ async fn test_backend_creation_with_offline_mode() {
     todo!("Implement: test offline mode disables substituters")
 }
 
-/// Test system override in NixCliOptions
+/// Test system override in NixOptions
 #[nix_test]
 #[ignore]
 async fn test_backend_with_system_override() {
@@ -1091,8 +1091,8 @@ async fn test_backend_with_system_override() {
     let paths = create_test_paths();
     let config = load_config_from_repo();
 
-    let nix_cli = NixCliOptions {
-        system: "aarch64-linux".to_string(),
+    let nix_cli = NixOptions {
+        system: Some("aarch64-linux".to_string()),
         ..Default::default()
     };
 
@@ -1108,7 +1108,7 @@ async fn test_backend_with_system_override() {
     todo!("Implement: test system architecture override")
 }
 
-/// Test impure mode enables in NixCliOptions
+/// Test impure mode enables in NixOptions
 #[nix_test]
 #[ignore]
 async fn test_backend_with_impure_mode() {
@@ -1116,8 +1116,8 @@ async fn test_backend_with_impure_mode() {
     let paths = create_test_paths();
     let config = load_config_from_repo();
 
-    let nix_cli = NixCliOptions {
-        impure: true,
+    let nix_cli = NixOptions {
+        impure: Some(true),
         ..Default::default()
     };
 
@@ -1141,8 +1141,8 @@ async fn test_backend_with_custom_nix_options() {
     let paths = create_test_paths();
     let config = load_config_from_repo();
 
-    let nix_cli = NixCliOptions {
-        nix_option: vec!["tarball-ttl".to_string(), "0".to_string()],
+    let nix_cli = NixOptions {
+        nix_option: Some(vec!["tarball-ttl".to_string(), "0".to_string()]),
         ..Default::default()
     };
 
@@ -1166,8 +1166,8 @@ async fn test_backend_with_nix_debugger_enabled() {
     let paths = create_test_paths();
     let config = load_config_from_repo();
 
-    let nix_cli = NixCliOptions {
-        nix_debugger: true,
+    let nix_cli = NixOptions {
+        nix_debugger: Some(true),
         ..Default::default()
     };
 
@@ -1199,7 +1199,7 @@ async fn test_update_with_invalid_override_input() {
     let override_input = vec!["nixpkgs".to_string()];
 
     let (_temp_dir, _cwd_guard, backend, _paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
 
     // Update should succeed - malformed override is ignored (no assemble needed for update-only tests)
     let result = backend.update(&None, &config.inputs, &override_input).await;
@@ -1230,7 +1230,7 @@ async fn test_eval_empty_attributes_array() {
     url: github:cachix/git-hooks.nix
 "#;
     let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -1271,7 +1271,7 @@ async fn test_build_empty_attributes_array() {
     url: github:cachix/git-hooks.nix
 "#;
     let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -1309,7 +1309,7 @@ async fn test_dev_env_bash_output_format() {
     let backend = create_backend(
         paths.clone(),
         config.clone(),
-        NixCliOptions::default(),
+        NixOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
     )
@@ -1341,7 +1341,7 @@ async fn test_dev_env_multiple_calls_same_gc_root() {
     let backend = create_backend(
         paths.clone(),
         config.clone(),
-        NixCliOptions::default(),
+        NixOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
     )
@@ -1374,7 +1374,7 @@ async fn test_dev_env_gc_root_already_exists_as_file() {
     let backend = create_backend(
         paths.clone(),
         config.clone(),
-        NixCliOptions::default(),
+        NixOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
     )
@@ -1409,7 +1409,7 @@ async fn test_build_gc_root_already_exists() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -1468,7 +1468,7 @@ async fn test_update_lock_file_already_exists() {
 "#;
 
     let (_temp_dir, _cwd_guard, backend, _paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
 
     // Create initial lock (no assemble needed for update-only tests)
     backend
@@ -1528,7 +1528,7 @@ async fn test_metadata_before_any_update() {
     url: github:cachix/git-hooks.nix
 "#;
     let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -1580,7 +1580,7 @@ async fn test_get_bash_returns_valid_path() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -1624,7 +1624,7 @@ async fn test_get_bash_caching_with_gc_root() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -1673,7 +1673,7 @@ async fn test_get_bash_with_refresh_cached_output() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -1717,7 +1717,7 @@ async fn test_get_bash_returns_executable() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -1771,7 +1771,7 @@ async fn test_gc_with_actual_nix_store_paths() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -1831,7 +1831,7 @@ async fn test_gc_with_protected_gc_roots() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -1903,7 +1903,7 @@ async fn test_gc_computes_closure_correctly() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -1957,7 +1957,7 @@ async fn test_gc_reports_bytes_freed() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -2012,7 +2012,7 @@ async fn test_gc_with_mixed_store_and_temp_paths() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -2107,7 +2107,7 @@ async fn test_workflow_build_then_incremental_update() {
     url: github:cachix/git-hooks.nix
 "#;
     let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -2163,7 +2163,7 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -2220,7 +2220,7 @@ async fn test_backend_reuse_across_operations() {
     let _backend = create_backend(
         paths.clone(),
         config.clone(),
-        NixCliOptions::default(),
+        NixOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
     )
@@ -2253,7 +2253,7 @@ async fn test_update_with_many_inputs() {
 "#;
 
     let (_temp_dir, _cwd_guard, backend, _paths, config) =
-        setup_isolated_test_env(yaml_content, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml_content, None, NixOptions::default());
 
     // Update with 6 inputs (no assemble needed for update-only tests)
     let result = backend.update(&None, &config.inputs, &[]).await;
@@ -2313,7 +2313,7 @@ async fn test_update_with_nested_input_follows() {
 "#;
 
     let (_temp_dir, _cwd_guard, backend, _paths, config) =
-        setup_isolated_test_env(yaml_content, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml_content, None, NixOptions::default());
 
     // Update with "follows" references (no assemble needed for update-only tests)
     let result = backend.update(&None, &config.inputs, &[]).await;
@@ -2374,7 +2374,7 @@ async fn test_build_multiple_attributes_single_call() {
 "#;
 
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixCliOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,
@@ -2480,7 +2480,7 @@ async fn test_concurrent_build_operations() {
 }"#;
 
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, Some(devenv_nix), NixCliOptions::default());
+        setup_isolated_test_env(yaml, Some(devenv_nix), NixOptions::default());
     backend
         .assemble(&TestNixArgs::new(&paths).to_nix_args(
             &paths,

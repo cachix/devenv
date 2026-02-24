@@ -25,6 +25,6 @@ pub use nix_backend::{
 pub use ports::{PortAllocation, PortAllocator, PortSpec};
 pub use resource::{ReplayError, ReplayableResource};
 pub use settings::{
-    CacheCliOptions, CacheSettings, InputOverrides, NixBuildDefaults, NixCliOptions, NixSettings,
-    SecretCliOptions, SecretSettings, ShellCliOptions, ShellSettings, default_system, flag,
+    CacheOptions, CacheSettings, InputOverrides, NixBuildDefaults, NixOptions, NixSettings,
+    SecretOptions, SecretSettings, ShellOptions, ShellSettings, default_system, flag,
 };

@@ -6,7 +6,6 @@ license.workspace = true
 
 [features]
 snix = []
-clap = ["dep:clap"]
 
 [dependencies]
 devenv-activity.workspace = true

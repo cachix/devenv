@@ -1,7 +1,7 @@
 #![cfg(feature = "test-nix-store")]
 //! Integration tests for flake locking functionality
 
-use devenv_core::{CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixCliOptions};
+use devenv_core::{CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixOptions};
 use devenv_nix_backend::{load_lock_file, nix_backend::NixRustBackend};
 use devenv_nix_backend_macros::nix_test;
 use nix_bindings_fetchers::FetchersSettings;
@@ -136,8 +136,8 @@ async fn test_create_flake_inputs() {
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
     // Use offline mode to skip cachix config evaluation in assemble()
     // This test focuses on lock file creation, not cachix configuration
-    let nix_cli = NixCliOptions {
-        offline: true,
+    let nix_cli = NixOptions {
+        offline: Some(true),
         ..Default::default()
     };
     let backend = create_backend(
@@ -213,7 +213,7 @@ async fn test_selective_input_update() {
     let backend = create_backend(
         paths,
         config.clone(),
-        NixCliOptions::default(),
+        NixOptions::default(),
         cachix_manager,
         Arc::new(Shutdown::new()),
     )
@@ -285,7 +285,7 @@ async fn test_full_workflow() {
     let backend = create_backend(
         paths,
         config.clone(),
-        NixCliOptions::default(),
+        NixOptions::default(),
         cachix_manager,
         Arc::new(Shutdown::new()),
     )
@@ -387,7 +387,7 @@ async fn test_relative_path_with_parent_dir_in_path() {
     let backend = create_backend(
         paths,
         config.clone(),
-        NixCliOptions::default(),
+        NixOptions::default(),
         cachix_manager,
         Arc::new(Shutdown::new()),
     )

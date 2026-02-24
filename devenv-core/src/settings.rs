@@ -1,9 +1,9 @@
-//! Per-concern CLI input structs and resolved settings.
+//! Per-concern option structs and resolved settings.
 //!
 //! Each concern follows the same pattern:
-//! - CLI input struct: `#[cfg_attr(feature = "clap", derive(clap::Args))]`
-//! - Resolved settings struct: plain Rust, no clap dependency
-//! - `resolve()`: takes CLI input by value, merges with Config
+//! - Options struct: all `Option<T>` fields, no clap dependency
+//! - Resolved settings struct: plain Rust with concrete types
+//! - `resolve()`: takes options by value, merges with Config
 
 use tracing::error;
 
@@ -97,104 +97,21 @@ impl<T> Combine for Vec<T> {
 
 // --- Nix ---
 
-#[cfg_attr(feature = "clap", derive(clap::Args))]
-#[cfg_attr(feature = "clap", command(next_help_heading = "Nix Options"))]
-#[derive(Clone, Debug)]
-pub struct NixCliOptions {
-    #[cfg_attr(feature = "clap", arg(short = 'j', long,
-        global = true,
-        env = "DEVENV_MAX_JOBS",
-        help = "Maximum number of Nix builds to run concurrently.",
-        default_value_t = NixBuildDefaults::defaults().max_jobs))]
-    pub max_jobs: u8,
-
-    #[cfg_attr(feature = "clap", arg(short = 'u', long,
-        global = true,
-        env = "DEVENV_CORES",
-        help = "Number of CPU cores available to each build.",
-        default_value_t = NixBuildDefaults::defaults().cores))]
-    pub cores: u8,
-
-    #[cfg_attr(feature = "clap", arg(short, long, global = true, default_value_t = default_system()))]
-    pub system: String,
-
-    #[cfg_attr(
-        feature = "clap",
-        arg(
-            short,
-            long,
-            global = true,
-            help = "Relax the hermeticity of the environment."
-        )
-    )]
-    pub impure: bool,
-
-    #[cfg_attr(
-        feature = "clap",
-        arg(
-            long,
-            global = true,
-            help = "Force a hermetic environment, overriding config."
-        )
-    )]
-    pub no_impure: bool,
-
-    #[cfg_attr(
-        feature = "clap",
-        arg(
-            long,
-            global = true,
-            help = "Disable substituters and consider all previously downloaded files up-to-date."
-        )
-    )]
-    pub offline: bool,
-
-    #[cfg_attr(feature = "clap", arg(long, global = true, num_args = 2,
-        value_names = ["NAME", "VALUE"],
-        value_delimiter = ' ',
-        help = "Pass additional options to nix commands",
-        long_help = "Pass additional options to nix commands.\n\nThese options are passed directly to Nix using the --option flag.\nSee `man nix.conf` for the full list of available options.\n\nExamples:\n  --nix-option sandbox false\n  --nix-option keep-outputs true\n  --nix-option system x86_64-darwin"))]
-    pub nix_option: Vec<String>,
-
-    #[cfg_attr(
-        feature = "clap",
-        arg(long, global = true, help = "Enter the Nix debugger on failure.")
-    )]
-    pub nix_debugger: bool,
-
-    #[cfg_attr(
-        feature = "clap",
-        arg(
-            long,
-            global = true,
-            value_enum,
-            hide = true,
-            help = "Nix backend to use."
-        )
-    )]
+#[derive(Clone, Debug, Default)]
+pub struct NixOptions {
+    pub max_jobs: Option<u8>,
+    pub cores: Option<u8>,
+    pub system: Option<String>,
+    pub impure: Option<bool>,
+    pub offline: Option<bool>,
+    pub nix_option: Option<Vec<String>>,
+    pub nix_debugger: Option<bool>,
     pub backend: Option<NixBackendType>,
-}
-
-impl Default for NixCliOptions {
-    fn default() -> Self {
-        let defaults = NixBuildDefaults::defaults();
-        Self {
-            max_jobs: defaults.max_jobs,
-            cores: defaults.cores,
-            system: default_system(),
-            impure: false,
-            no_impure: false,
-            offline: false,
-            nix_option: Vec::new(),
-            nix_debugger: false,
-            backend: None,
-        }
-    }
 }
 
 /// Resolved Nix build settings.
 ///
-/// Produced by `NixSettings::resolve(NixCliOptions, &Config)` as a pure function.
+/// Produced by `NixSettings::resolve(NixOptions, &Config)` as a pure function.
 /// Controls how the Nix evaluator and builder behave.
 #[derive(Clone, Debug)]
 pub struct NixSettings {
@@ -225,65 +142,32 @@ impl Default for NixSettings {
 }
 
 impl NixSettings {
-    /// Resolve Nix build settings from CLI and config sources.
+    /// Resolve Nix build settings from options and config sources.
     ///
-    /// `impure` uses CLI-wins semantics: `--impure`/`--no-impure` override config,
-    /// falling back to `config.impure` when neither flag is set.
-    pub fn resolve(cli: NixCliOptions, config: &Config) -> Self {
+    /// `impure` uses option-wins semantics: `Some(true)`/`Some(false)` override config,
+    /// falling back to `config.impure` when `None`.
+    pub fn resolve(options: NixOptions, config: &Config) -> Self {
+        let defaults = NixBuildDefaults::defaults();
         Self {
-            impure: flag(cli.impure, cli.no_impure).unwrap_or(config.impure),
-            system: cli.system,
-            max_jobs: cli.max_jobs,
-            cores: cli.cores,
-            offline: cli.offline,
-            nix_option: cli.nix_option,
-            nix_debugger: cli.nix_debugger,
-            backend: cli.backend.unwrap_or(config.backend.clone()),
+            impure: options.impure.unwrap_or(config.impure),
+            system: options.system.unwrap_or_else(default_system),
+            max_jobs: options.max_jobs.unwrap_or(defaults.max_jobs),
+            cores: options.cores.unwrap_or(defaults.cores),
+            offline: options.offline.unwrap_or(false),
+            nix_option: options.nix_option.unwrap_or_default(),
+            nix_debugger: options.nix_debugger.unwrap_or(false),
+            backend: options.backend.unwrap_or_else(|| config.backend.clone()),
         }
     }
 }
 
 // --- Cache ---
 
-#[cfg_attr(feature = "clap", derive(clap::Args))]
-#[cfg_attr(feature = "clap", command(next_help_heading = "Cache Options"))]
 #[derive(Clone, Debug, Default)]
-pub struct CacheCliOptions {
-    #[cfg_attr(
-        feature = "clap",
-        arg(
-            long,
-            global = true,
-            help = "Enable caching of Nix evaluation results (default)."
-        )
-    )]
-    pub eval_cache: bool,
-
-    #[cfg_attr(
-        feature = "clap",
-        arg(
-            long,
-            global = true,
-            help = "Disable caching of Nix evaluation results."
-        )
-    )]
-    pub no_eval_cache: bool,
-
-    #[cfg_attr(
-        feature = "clap",
-        arg(
-            long,
-            global = true,
-            help = "Force a refresh of the Nix evaluation cache."
-        )
-    )]
-    pub refresh_eval_cache: bool,
-
-    #[cfg_attr(
-        feature = "clap",
-        arg(long, global = true, help = "Force a refresh of the task cache.")
-    )]
-    pub refresh_task_cache: bool,
+pub struct CacheOptions {
+    pub eval_cache: Option<bool>,
+    pub refresh_eval_cache: Option<bool>,
+    pub refresh_task_cache: Option<bool>,
 }
 
 /// Resolved cache settings.
@@ -305,56 +189,25 @@ impl Default for CacheSettings {
 }
 
 impl CacheSettings {
-    /// Resolve cache settings from CLI source.
+    /// Resolve cache settings from options.
     ///
     /// All cache settings are CLI-only today (no config file counterpart).
-    pub fn resolve(cli: CacheCliOptions) -> Self {
+    pub fn resolve(options: CacheOptions) -> Self {
         Self {
-            eval_cache: flag(cli.eval_cache, cli.no_eval_cache).unwrap_or(true),
-            refresh_eval_cache: cli.refresh_eval_cache,
-            refresh_task_cache: cli.refresh_task_cache,
+            eval_cache: options.eval_cache.unwrap_or(true),
+            refresh_eval_cache: options.refresh_eval_cache.unwrap_or(false),
+            refresh_task_cache: options.refresh_task_cache.unwrap_or(false),
         }
     }
 }
 
 // --- Shell ---
 
-#[cfg_attr(feature = "clap", derive(clap::Args))]
-#[cfg_attr(feature = "clap", command(next_help_heading = "Shell Options"))]
 #[derive(Clone, Debug, Default)]
-pub struct ShellCliOptions {
-    #[cfg_attr(feature = "clap", arg(short, long, global = true,
-        num_args = 0..,
-        value_delimiter = ',',
-        help = "Ignore existing environment variables when entering the shell. Pass a list of comma-separated environment variables to let through."))]
+pub struct ShellOptions {
     pub clean: Option<Vec<String>>,
-
-    #[cfg_attr(feature = "clap", arg(short = 'P', long, global = true,
-        num_args = 1,
-        action = clap::ArgAction::Append,
-        help = "Activate one or more profiles defined in devenv.nix",
-        long_help = "Activate one or more profiles defined in devenv.nix.\n\nProfiles allow you to define different configurations that can be merged with your base configuration.\n\nSee https://devenv.sh/profiles for more information.\n\nExamples:\n  --profile python-3.14\n  --profile backend --profile fast-startup"))]
-    pub profile: Vec<String>,
-
-    #[cfg_attr(
-        feature = "clap",
-        arg(
-            long,
-            global = true,
-            help = "Enable auto-reload when config files change (default)."
-        )
-    )]
-    pub reload: bool,
-
-    #[cfg_attr(
-        feature = "clap",
-        arg(
-            long,
-            global = true,
-            help = "Disable auto-reload when config files change."
-        )
-    )]
-    pub no_reload: bool,
+    pub profiles: Option<Vec<String>>,
+    pub reload: Option<bool>,
 }
 
 /// Resolved shell settings.
@@ -376,11 +229,11 @@ impl Default for ShellSettings {
 }
 
 impl ShellSettings {
-    /// Resolve shell settings from CLI and config sources.
+    /// Resolve shell settings from options and config sources.
     ///
-    /// Precedence: CLI > Config > Default.
-    pub fn resolve(cli: ShellCliOptions, config: &Config) -> Self {
-        let clean = if let Some(keep) = cli.clean {
+    /// Precedence: Options > Config > Default.
+    pub fn resolve(options: ShellOptions, config: &Config) -> Self {
+        let clean = if let Some(keep) = options.clean {
             Clean {
                 enabled: true,
                 keep,
@@ -390,11 +243,12 @@ impl ShellSettings {
         };
 
         let config_profiles: Vec<String> = config.profile.iter().cloned().collect();
-        let profiles = cli.profile.combine(config_profiles);
+        let profiles = options
+            .profiles
+            .unwrap_or_default()
+            .combine(config_profiles);
 
-        let reload = flag(cli.reload, cli.no_reload)
-            .combine(config.reload)
-            .unwrap_or(true);
+        let reload = options.reload.combine(config.reload).unwrap_or(true);
 
         Self {
             clean,
@@ -406,30 +260,9 @@ impl ShellSettings {
 
 // --- Secrets ---
 
-#[cfg_attr(feature = "clap", derive(clap::Args))]
-#[cfg_attr(feature = "clap", command(next_help_heading = "Secretspec Options"))]
 #[derive(Clone, Debug, Default)]
-pub struct SecretCliOptions {
-    #[cfg_attr(
-        feature = "clap",
-        arg(
-            long,
-            global = true,
-            env = "SECRETSPEC_PROVIDER",
-            help = "Override the secretspec provider"
-        )
-    )]
+pub struct SecretOptions {
     pub secretspec_provider: Option<String>,
-
-    #[cfg_attr(
-        feature = "clap",
-        arg(
-            long,
-            global = true,
-            env = "SECRETSPEC_PROFILE",
-            help = "Override the secretspec profile"
-        )
-    )]
     pub secretspec_profile: Option<String>,
 }
 
@@ -440,25 +273,24 @@ pub struct SecretSettings {
 }
 
 impl SecretSettings {
-    /// Resolve secret settings from CLI and config sources.
+    /// Resolve secret settings from options and config sources.
     ///
-    /// Precedence: CLI > Config > Default.
-    /// If CLI fields are present, they override the matching config fields.
+    /// Precedence: Options > Config > Default.
+    /// If option fields are present, they override the matching config fields.
     /// When no config exists, `enable` defaults to `true` so the user can
     /// pass `--secretspec-provider` without also adding secretspec config.
     /// When config explicitly sets `enable: false`, that value is preserved.
-    pub fn resolve(cli: SecretCliOptions, config: &Config) -> Self {
-        let has_cli_override =
-            cli.secretspec_provider.is_some() || cli.secretspec_profile.is_some();
+    pub fn resolve(options: SecretOptions, config: &Config) -> Self {
+        let has_override =
+            options.secretspec_provider.is_some() || options.secretspec_profile.is_some();
 
-        let secretspec = if has_cli_override {
+        let secretspec = if has_override {
             let base = config.secretspec.clone().unwrap_or_default();
-            // Enable by default when no config exists; preserve explicit config value otherwise.
-            let enable = config.secretspec.as_ref().map_or(true, |c| c.enable);
+            let enable = config.secretspec.as_ref().is_none_or(|c| c.enable);
             Some(SecretspecConfig {
                 enable,
-                provider: cli.secretspec_provider.or(base.provider),
-                profile: cli.secretspec_profile.or(base.profile),
+                provider: options.secretspec_provider.or(base.provider),
+                profile: options.secretspec_profile.or(base.profile),
             })
         } else {
             config.secretspec.clone()
@@ -470,23 +302,9 @@ impl SecretSettings {
 
 // --- Input overrides ---
 
-#[cfg_attr(feature = "clap", derive(clap::Args))]
-#[cfg_attr(feature = "clap", command(next_help_heading = "Input Overrides"))]
 #[derive(Clone, Debug, Default)]
 pub struct InputOverrides {
-    #[cfg_attr(feature = "clap", arg(short, long, global = true,
-        num_args = 2,
-        value_names = ["NAME", "URI"],
-        value_delimiter = ' ',
-        help = "Override inputs in devenv.yaml",
-        long_help = "Override inputs in devenv.yaml.\n\nExamples:\n  --override-input nixpkgs github:NixOS/nixpkgs/nixos-unstable\n  --override-input nixpkgs path:/path/to/local/nixpkgs"))]
     pub override_input: Vec<String>,
-
-    #[cfg_attr(feature = "clap", arg(long = "option", short = 'O', global = true,
-        num_args = 2,
-        value_names = ["OPTION", "VALUE"],
-        help = "Override configuration options with typed values",
-        long_help = "Override configuration options with typed values.\n\nOPTION must include a type: <attribute>:<type>\nSupported types: string, int, float, bool, path, pkg, pkgs\n\nExamples:\n  --option languages.rust.channel:string beta\n  --option services.postgres.enable:bool true\n  --option languages.python.version:string 3.10\n  --option packages:pkgs \"ncdu git\""))]
     pub nix_module_options: Vec<String>,
 }
 
@@ -497,9 +315,9 @@ mod tests {
 
     #[test]
     fn nix_settings_defaults() {
-        let cli = NixCliOptions::default();
+        let options = NixOptions::default();
         let config = Config::default();
-        let settings = NixSettings::resolve(cli, &config);
+        let settings = NixSettings::resolve(options, &config);
         assert!(!settings.impure);
         assert!(!settings.offline);
         assert!(!settings.nix_debugger);
@@ -507,64 +325,64 @@ mod tests {
     }
 
     #[test]
-    fn nix_settings_impure_from_cli() {
-        let cli = NixCliOptions {
-            impure: true,
+    fn nix_settings_impure_from_options() {
+        let options = NixOptions {
+            impure: Some(true),
             ..Default::default()
         };
         let config = Config::default();
-        let settings = NixSettings::resolve(cli, &config);
+        let settings = NixSettings::resolve(options, &config);
         assert!(settings.impure);
     }
 
     #[test]
     fn nix_settings_impure_from_config() {
-        let cli = NixCliOptions::default();
+        let options = NixOptions::default();
         let config = Config {
             impure: true,
             ..Default::default()
         };
-        let settings = NixSettings::resolve(cli, &config);
+        let settings = NixSettings::resolve(options, &config);
         assert!(settings.impure);
     }
 
     #[test]
     fn nix_settings_no_impure_overrides_config() {
-        let cli = NixCliOptions {
-            no_impure: true,
+        let options = NixOptions {
+            impure: Some(false),
             ..Default::default()
         };
         let config = Config {
             impure: true,
             ..Default::default()
         };
-        let settings = NixSettings::resolve(cli, &config);
+        let settings = NixSettings::resolve(options, &config);
         assert!(!settings.impure);
     }
 
     #[test]
-    fn nix_settings_system_from_cli() {
-        let cli = NixCliOptions {
-            system: "x86_64-linux".into(),
+    fn nix_settings_system_from_options() {
+        let options = NixOptions {
+            system: Some("x86_64-linux".into()),
             ..Default::default()
         };
         let config = Config::default();
-        let settings = NixSettings::resolve(cli, &config);
+        let settings = NixSettings::resolve(options, &config);
         assert_eq!(settings.system, "x86_64-linux");
     }
 
     #[test]
-    fn nix_settings_cli_fields() {
-        let cli = NixCliOptions {
-            max_jobs: 4,
-            cores: 2,
-            offline: true,
-            nix_option: vec!["sandbox".into(), "false".into()],
-            nix_debugger: true,
+    fn nix_settings_option_fields() {
+        let options = NixOptions {
+            max_jobs: Some(4),
+            cores: Some(2),
+            offline: Some(true),
+            nix_option: Some(vec!["sandbox".into(), "false".into()]),
+            nix_debugger: Some(true),
             ..Default::default()
         };
         let config = Config::default();
-        let settings = NixSettings::resolve(cli, &config);
+        let settings = NixSettings::resolve(options, &config);
         assert_eq!(settings.max_jobs, 4);
         assert_eq!(settings.cores, 2);
         assert!(settings.offline);
@@ -574,8 +392,8 @@ mod tests {
 
     #[test]
     fn cache_settings_defaults() {
-        let cli = CacheCliOptions::default();
-        let settings = CacheSettings::resolve(cli);
+        let options = CacheOptions::default();
+        let settings = CacheSettings::resolve(options);
         assert!(settings.eval_cache);
         assert!(!settings.refresh_eval_cache);
         assert!(!settings.refresh_task_cache);
@@ -583,39 +401,29 @@ mod tests {
 
     #[test]
     fn cache_settings_eval_cache_disabled() {
-        let cli = CacheCliOptions {
-            no_eval_cache: true,
+        let options = CacheOptions {
+            eval_cache: Some(false),
             ..Default::default()
         };
-        let settings = CacheSettings::resolve(cli);
-        assert!(!settings.eval_cache);
-    }
-
-    #[test]
-    fn cache_settings_no_eval_cache_overrides() {
-        let cli = CacheCliOptions {
-            no_eval_cache: true,
-            ..Default::default()
-        };
-        let settings = CacheSettings::resolve(cli);
+        let settings = CacheSettings::resolve(options);
         assert!(!settings.eval_cache);
     }
 
     #[test]
     fn cache_settings_refresh_flags() {
-        let cli = CacheCliOptions {
-            refresh_eval_cache: true,
-            refresh_task_cache: true,
+        let options = CacheOptions {
+            refresh_eval_cache: Some(true),
+            refresh_task_cache: Some(true),
             ..Default::default()
         };
-        let settings = CacheSettings::resolve(cli);
+        let settings = CacheSettings::resolve(options);
         assert!(settings.refresh_eval_cache);
         assert!(settings.refresh_task_cache);
     }
 
     #[test]
-    fn shell_settings_cli_clean_overrides_config() {
-        let cli = ShellCliOptions {
+    fn shell_settings_options_clean_overrides_config() {
+        let options = ShellOptions {
             clean: Some(vec!["PATH".into()]),
             ..Default::default()
         };
@@ -626,14 +434,14 @@ mod tests {
             }),
             ..Default::default()
         };
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(options, &config);
         assert!(settings.clean.enabled);
         assert_eq!(settings.clean.keep, vec!["PATH"]);
     }
 
     #[test]
-    fn shell_settings_config_clean_used_when_cli_absent() {
-        let cli = ShellCliOptions::default();
+    fn shell_settings_config_clean_used_when_options_absent() {
+        let options = ShellOptions::default();
         let config = Config {
             clean: Some(Clean {
                 enabled: true,
@@ -641,88 +449,88 @@ mod tests {
             }),
             ..Default::default()
         };
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(options, &config);
         assert!(settings.clean.enabled);
         assert_eq!(settings.clean.keep, vec!["HOME"]);
     }
 
     #[test]
     fn shell_settings_clean_defaults_to_disabled() {
-        let cli = ShellCliOptions::default();
+        let options = ShellOptions::default();
         let config = Config::default();
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(options, &config);
         assert!(!settings.clean.enabled);
     }
 
     #[test]
-    fn shell_settings_cli_profiles_override_config() {
-        let cli = ShellCliOptions {
-            profile: vec!["dev".into()],
+    fn shell_settings_options_profiles_override_config() {
+        let options = ShellOptions {
+            profiles: Some(vec!["dev".into()]),
             ..Default::default()
         };
         let config = Config {
             profile: Some("prod".into()),
             ..Default::default()
         };
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(options, &config);
         assert_eq!(settings.profiles, vec!["dev"]);
     }
 
     #[test]
-    fn shell_settings_config_profile_used_when_cli_absent() {
-        let cli = ShellCliOptions::default();
+    fn shell_settings_config_profile_used_when_options_absent() {
+        let options = ShellOptions::default();
         let config = Config {
             profile: Some("prod".into()),
             ..Default::default()
         };
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(options, &config);
         assert_eq!(settings.profiles, vec!["prod"]);
     }
 
     #[test]
     fn shell_settings_no_profiles_by_default() {
-        let cli = ShellCliOptions::default();
+        let options = ShellOptions::default();
         let config = Config::default();
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(options, &config);
         assert!(settings.profiles.is_empty());
     }
 
     #[test]
     fn shell_settings_reload_defaults_to_true() {
-        let cli = ShellCliOptions::default();
+        let options = ShellOptions::default();
         let config = Config::default();
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(options, &config);
         assert!(settings.reload);
     }
 
     #[test]
-    fn shell_settings_no_reload_flag_overrides_config() {
-        let cli = ShellCliOptions {
-            no_reload: true,
+    fn shell_settings_no_reload_overrides_config() {
+        let options = ShellOptions {
+            reload: Some(false),
             ..Default::default()
         };
         let config = Config {
             reload: Some(true),
             ..Default::default()
         };
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(options, &config);
         assert!(!settings.reload);
     }
 
     #[test]
     fn shell_settings_config_reload_false_respected() {
-        let cli = ShellCliOptions::default();
+        let options = ShellOptions::default();
         let config = Config {
             reload: Some(false),
             ..Default::default()
         };
-        let settings = ShellSettings::resolve(cli, &config);
+        let settings = ShellSettings::resolve(options, &config);
         assert!(!settings.reload);
     }
 
     #[test]
-    fn secret_settings_cli_provider_overrides_config() {
-        let cli = SecretCliOptions {
+    fn secret_settings_options_provider_overrides_config() {
+        let options = SecretOptions {
             secretspec_provider: Some("aws".into()),
             ..Default::default()
         };
@@ -734,15 +542,15 @@ mod tests {
             }),
             ..Default::default()
         };
-        let settings = SecretSettings::resolve(cli, &config);
+        let settings = SecretSettings::resolve(options, &config);
         let sc = settings.secretspec.unwrap();
         assert!(sc.enable);
         assert_eq!(sc.provider, Some("aws".into()));
     }
 
     #[test]
-    fn secret_settings_cli_profile_overrides_config() {
-        let cli = SecretCliOptions {
+    fn secret_settings_options_profile_overrides_config() {
+        let options = SecretOptions {
             secretspec_profile: Some("staging".into()),
             ..Default::default()
         };
@@ -754,7 +562,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        let settings = SecretSettings::resolve(cli, &config);
+        let settings = SecretSettings::resolve(options, &config);
         let sc = settings.secretspec.unwrap();
         assert!(sc.enable);
         assert_eq!(sc.profile, Some("staging".into()));
@@ -762,8 +570,8 @@ mod tests {
     }
 
     #[test]
-    fn secret_settings_config_used_when_cli_absent() {
-        let cli = SecretCliOptions::default();
+    fn secret_settings_config_used_when_options_absent() {
+        let options = SecretOptions::default();
         let config = Config {
             secretspec: Some(SecretspecConfig {
                 enable: true,
@@ -772,7 +580,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        let settings = SecretSettings::resolve(cli, &config);
+        let settings = SecretSettings::resolve(options, &config);
         let sc = settings.secretspec.unwrap();
         assert!(sc.enable);
         assert_eq!(sc.provider, Some("gcp".into()));
@@ -780,13 +588,13 @@ mod tests {
     }
 
     #[test]
-    fn secret_settings_cli_enables_when_config_absent() {
-        let cli = SecretCliOptions {
+    fn secret_settings_options_enables_when_config_absent() {
+        let options = SecretOptions {
             secretspec_provider: Some("aws".into()),
             ..Default::default()
         };
         let config = Config::default();
-        let settings = SecretSettings::resolve(cli, &config);
+        let settings = SecretSettings::resolve(options, &config);
         let sc = settings.secretspec.unwrap();
         assert!(sc.enable);
         assert_eq!(sc.provider, Some("aws".into()));
@@ -795,15 +603,15 @@ mod tests {
 
     #[test]
     fn secret_settings_none_when_both_absent() {
-        let cli = SecretCliOptions::default();
+        let options = SecretOptions::default();
         let config = Config::default();
-        let settings = SecretSettings::resolve(cli, &config);
+        let settings = SecretSettings::resolve(options, &config);
         assert!(settings.secretspec.is_none());
     }
 
     #[test]
-    fn secret_settings_cli_preserves_config_enable_false() {
-        let cli = SecretCliOptions {
+    fn secret_settings_options_preserves_config_enable_false() {
+        let options = SecretOptions {
             secretspec_provider: Some("aws".into()),
             ..Default::default()
         };
@@ -815,9 +623,8 @@ mod tests {
             }),
             ..Default::default()
         };
-        let settings = SecretSettings::resolve(cli, &config);
+        let settings = SecretSettings::resolve(options, &config);
         let sc = settings.secretspec.unwrap();
-        // Config's explicit enable: false is preserved even when CLI overrides are provided.
         assert!(!sc.enable);
         assert_eq!(sc.provider, Some("aws".into()));
         assert_eq!(sc.profile, Some("prod".into()));

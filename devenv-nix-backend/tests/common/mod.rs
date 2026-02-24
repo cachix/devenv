@@ -2,7 +2,7 @@
 
 use devenv_core::cachix::{CachixManager, CachixPaths};
 use devenv_core::{
-    CacheCliOptions, CacheSettings, Config, DevenvPaths, NixCliOptions, NixSettings, PortAllocator,
+    CacheOptions, CacheSettings, Config, DevenvPaths, NixOptions, NixSettings, PortAllocator,
 };
 use devenv_nix_backend::nix_backend::NixRustBackend;
 use std::path::Path;
@@ -36,16 +36,16 @@ pub fn create_test_cachix_manager(
     Arc::new(CachixManager::new(cachix_paths))
 }
 
-/// Create a `NixRustBackend` from `NixCliOptions`, resolving settings internally.
+/// Create a `NixRustBackend` from `NixOptions`, resolving settings internally.
 pub fn create_backend(
     paths: DevenvPaths,
     config: Config,
-    nix_cli: NixCliOptions,
+    nix_cli: NixOptions,
     cachix_manager: Arc<CachixManager>,
     shutdown: Arc<Shutdown>,
 ) -> miette::Result<NixRustBackend> {
     let nix_settings = NixSettings::resolve(nix_cli, &config);
-    let cache_settings = CacheSettings::resolve(CacheCliOptions::default());
+    let cache_settings = CacheSettings::resolve(CacheOptions::default());
     let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
     NixRustBackend::new(
         paths,
