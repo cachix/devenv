@@ -367,6 +367,14 @@ impl ShellSession {
                 task_runner.run_with_vt(&mut task_rx, &mut vt).await?;
             }
 
+            // Clear VT so internal task output (env exports, markers, drain
+            // sentinels) is not rendered to the user. Send Ctrl-L so bash
+            // redraws a clean prompt; the response will arrive via the
+            // event loop.
+            vt.feed_str("\x1b[2J\x1b[H");
+            let _ = pty.write_all(&[0x0C]);
+            let _ = pty.flush();
+
             // Signal TUI that initial build is complete and we're ready for terminal
             tracing::trace!("session: sending backend_done_tx");
             let _ = handoff.backend_done_tx.send(());
