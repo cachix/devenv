@@ -486,7 +486,7 @@ pub struct Cli {
 
 impl Cli {
     /// Parse the CLI arguments with clap and resolve any conflicting options.
-    pub fn parse_and_resolve_options() -> Self {
+    pub fn parse_args() -> Self {
         let mut cli = Self::parse();
 
         cli.cli_options.tui = match flag(cli.cli_options.tui, cli.cli_options.no_tui) {

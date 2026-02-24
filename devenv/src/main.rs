@@ -117,7 +117,7 @@ fn main() -> Result<()> {
         .completer("devenv")
         .complete();
 
-    let cli = Cli::parse_and_resolve_options();
+    let cli = Cli::parse_args();
 
     // Handle commands that don't need a runtime
     match &cli.command {
