@@ -84,7 +84,7 @@ pub enum ParseTraceOutputError {
 // --- Domain CLI args (clap-derived, converted to *Options for resolve()) ---
 
 #[derive(clap::Args, Clone, Debug)]
-#[command(next_help_heading = "Nix Options")]
+#[command(next_help_heading = "Nix options")]
 pub struct NixCliArgs {
     #[arg(short = 'j', long,
         global = true,
@@ -162,7 +162,7 @@ impl From<NixCliArgs> for NixOptions {
 }
 
 #[derive(clap::Args, Clone, Debug)]
-#[command(next_help_heading = "Cache Options")]
+#[command(next_help_heading = "Cache options")]
 pub struct CacheCliArgs {
     #[arg(
         long,
@@ -200,7 +200,7 @@ impl From<CacheCliArgs> for CacheOptions {
 }
 
 #[derive(clap::Args, Clone, Debug)]
-#[command(next_help_heading = "Shell Options")]
+#[command(next_help_heading = "Shell options")]
 pub struct ShellCliArgs {
     #[arg(short, long, global = true,
         num_args = 0..,
@@ -245,7 +245,7 @@ impl From<ShellCliArgs> for ShellOptions {
 }
 
 #[derive(clap::Args, Clone, Debug, Default)]
-#[command(next_help_heading = "Secretspec Options")]
+#[command(next_help_heading = "Secretspec options")]
 pub struct SecretCliArgs {
     #[arg(
         long,
@@ -274,7 +274,7 @@ impl From<SecretCliArgs> for SecretOptions {
 }
 
 #[derive(clap::Args, Clone, Debug, Default)]
-#[command(next_help_heading = "Input Overrides")]
+#[command(next_help_heading = "Input overrides")]
 pub struct InputOverrideCliArgs {
     #[arg(short, long, global = true,
         num_args = 2,
@@ -304,16 +304,30 @@ impl From<InputOverrideCliArgs> for InputOverrides {
 // --- CLI-only options ---
 
 #[derive(clap::Args, Clone, Debug)]
-pub struct CliOptions {
+#[command(next_help_heading = "Tracing options")]
+pub struct TracingCliArgs {
     #[arg(
-        short = 'V',
         long,
         global = true,
-        help = "Print version information",
-        long_help = "Print version information and exit"
+        env = "DEVENV_TRACE_OUTPUT",
+        help = "Enable tracing and set the output destination: stdout, stderr, or file:<path>. Tracing is disabled by default."
     )]
-    pub version: bool,
+    pub trace_output: Option<TraceOutput>,
 
+    #[arg(
+        long,
+        global = true,
+        env = "DEVENV_TRACE_FORMAT",
+        help = "Set the trace output format. Only takes effect when tracing is enabled via --trace-output.",
+        default_value_t,
+        value_enum
+    )]
+    pub trace_format: TraceFormat,
+}
+
+#[derive(clap::Args, Clone, Debug)]
+#[command(next_help_heading = "Global options")]
+pub struct CliOptions {
     #[arg(short, long, global = true, help = "Enable additional debug logs.")]
     pub verbose: bool,
 
@@ -350,60 +364,33 @@ pub struct CliOptions {
     )]
     pub log_format: Option<LegacyLogFormat>,
 
-    #[arg(
-        long,
-        global = true,
-        help_heading = "Tracing",
-        env = "DEVENV_TRACE_OUTPUT",
-        help = "Enable tracing and set the output destination: stdout, stderr, or file:<path>. Tracing is disabled by default."
-    )]
-    pub trace_output: Option<TraceOutput>,
+    #[arg(short, long, action = clap::ArgAction::Help, global = true, help = "Print help (see a summary with '-h')")]
+    pub help: Option<bool>,
 
     #[arg(
+        short = 'V',
         long,
         global = true,
-        help_heading = "Tracing",
-        env = "DEVENV_TRACE_FORMAT",
-        help = "Set the trace output format. Only takes effect when tracing is enabled via --trace-output.",
-        default_value_t,
-        value_enum
+        help = "Print version information",
+        long_help = "Print version information and exit"
     )]
-    pub trace_format: TraceFormat,
+    pub version: bool,
 }
 
 impl CliOptions {
-    /// Resolve conflicting/derived options.
-    pub fn resolve_overrides(&mut self) {
-        self.tui = match flag(self.tui, self.no_tui) {
-            Some(v) => v,
-            // Default: enable TUI only when running interactively outside CI.
-            None => {
-                let is_ci = env::var_os("CI").is_some();
-                let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
-                !is_ci && is_tty
-            }
-        };
-
-        // Handle deprecated --log-format (except Cli which is handled separately)
-        if let Some(format) = self.log_format {
-            eprintln!("Warning: --log-format is deprecated, use --trace-format instead");
-            if let Ok(trace_format) = format.try_into() {
-                self.trace_format = trace_format;
-            }
-        }
+    /// Returns true if legacy CLI mode should be used (instead of TUI).
+    pub fn use_legacy_cli(&self) -> bool {
+        !self.tui || self.log_format == Some(LegacyLogFormat::Cli)
     }
+}
 
+impl TracingCliArgs {
     /// Returns true if tracing-only mode should be used.
     pub fn use_tracing_mode(&self) -> bool {
         matches!(
             self.trace_output,
             Some(TraceOutput::Stdout) | Some(TraceOutput::Stderr)
         )
-    }
-
-    /// Returns true if legacy CLI mode should be used (instead of TUI).
-    pub fn use_legacy_cli(&self) -> bool {
-        !self.tui || self.log_format == Some(LegacyLogFormat::Cli)
     }
 }
 
@@ -450,6 +437,7 @@ fn complete_task_names(current: &OsStr) -> Vec<CompletionCandidate> {
 #[command(
     name = "devenv",
     color = clap::ColorChoice::Auto,
+    disable_help_flag = true,
     // for --clean to work with subcommands
     subcommand_precedence_over_arg = true,
     dont_delimit_trailing_values = true,
@@ -459,12 +447,10 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    #[command(flatten)]
-    pub cli_options: CliOptions,
-
     #[arg(
         long,
         global = true,
+        help_heading = "Input overrides",
         help = "Source for devenv.nix (flake input reference or path)",
         long_help = "Source for devenv.nix.\n\nCan be either a filesystem path (with path: prefix) or a flake input reference.\n\nExamples:\n  --from github:cachix/devenv\n  --from github:cachix/devenv?dir=examples/simple\n  --from path:/absolute/path/to/project\n  --from path:./relative/path"
     )]
@@ -484,13 +470,37 @@ pub struct Cli {
 
     #[command(flatten)]
     pub secret_args: SecretCliArgs,
+
+    #[command(flatten)]
+    pub tracing_args: TracingCliArgs,
+
+    #[command(flatten)]
+    pub cli_options: CliOptions,
 }
 
 impl Cli {
     /// Parse the CLI arguments with clap and resolve any conflicting options.
     pub fn parse_and_resolve_options() -> Self {
         let mut cli = Self::parse();
-        cli.cli_options.resolve_overrides();
+
+        cli.cli_options.tui = match flag(cli.cli_options.tui, cli.cli_options.no_tui) {
+            Some(v) => v,
+            // Default: enable TUI only when running interactively outside CI.
+            None => {
+                let is_ci = env::var_os("CI").is_some();
+                let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
+                !is_ci && is_tty
+            }
+        };
+
+        // Handle deprecated --log-format
+        if let Some(format) = cli.cli_options.log_format {
+            eprintln!("Warning: --log-format is deprecated, use --trace-format instead");
+            if let Ok(trace_format) = format.try_into() {
+                cli.tracing_args.trace_format = trace_format;
+            }
+        }
+
         cli
     }
 

@@ -152,7 +152,7 @@ fn main() -> Result<()> {
             | Some(Commands::PrintPaths) // print output directly, no TUI needed
     );
 
-    if cli.cli_options.use_tracing_mode() {
+    if cli.tracing_args.use_tracing_mode() {
         run_with_tracing(cli)
     } else if force_legacy_cli || cli.cli_options.use_legacy_cli() {
         run_with_legacy_cli(cli)
@@ -171,8 +171,8 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     let level = cli.get_log_level();
     devenv_tracing::init_tracing(
         level,
-        cli.cli_options.trace_format,
-        cli.cli_options.trace_output.as_ref(),
+        cli.tracing_args.trace_format,
+        cli.tracing_args.trace_output.as_ref(),
     );
 
     // Determine TUI filter level based on verbose flag
@@ -304,7 +304,7 @@ fn run_with_legacy_cli(cli: Cli) -> Result<()> {
         shutdown.install_signals().await;
 
         let level = cli.get_log_level();
-        devenv_tracing::init_cli_tracing(level, cli.cli_options.trace_output.as_ref());
+        devenv_tracing::init_cli_tracing(level, cli.tracing_args.trace_output.as_ref());
 
         // No TUI in legacy mode - create dummy channel (drop receiver immediately)
         let (backend_done_tx, _) = tokio::sync::oneshot::channel();
@@ -327,8 +327,8 @@ fn run_with_tracing(cli: Cli) -> Result<()> {
         let level = cli.get_log_level();
         devenv_tracing::init_tracing(
             level,
-            cli.cli_options.trace_format,
-            cli.cli_options.trace_output.as_ref(),
+            cli.tracing_args.trace_format,
+            cli.tracing_args.trace_output.as_ref(),
         );
 
         // No TUI in tracing mode - create dummy channel (drop receiver immediately)
