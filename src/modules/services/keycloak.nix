@@ -548,7 +548,7 @@ in
       processes.keycloak-realm-export-all = mkIf (realmsExport != [ ]) {
         enable = false;
         exec = "${keycloak-realm-export-all}/bin/keycloak-realm-export-all";
-        after = [ "devenv:processes:keycloak@complete" ];
+        after = [ "devenv:processes:keycloak@completed" ];
       };
     };
 }

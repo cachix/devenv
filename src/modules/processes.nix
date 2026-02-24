@@ -172,9 +172,10 @@ let
         description = ''
           Tasks that must be ready before this process starts.
           Use task names like "devenv:processes:postgres" or "myapp:setup".
-          Supports @ready (default) and @complete suffixes.
+          Supports @started, @ready (default for processes), and @completed suffixes for process dependencies.
+          Supports @started, @succeeded (default for tasks), and @completed suffixes for task dependencies.
         '';
-        example = [ "devenv:processes:postgres" "myapp:migrations@complete" ];
+        example = [ "devenv:processes:postgres" "myapp:migrations@succeeded" ];
       };
 
       before = lib.mkOption {

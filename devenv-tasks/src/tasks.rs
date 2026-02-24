@@ -229,7 +229,7 @@ impl Tasks {
     /// A failure is soft if:
     /// 1. The task is NOT a root task, AND
     /// 2. The task has at least one outgoing edge (someone depends on it), AND
-    /// 3. ALL outgoing edges use `DependencyKind::Complete`
+    /// 3. ALL outgoing edges use `DependencyKind::Completed`
     fn is_soft_failure(&self, index: &NodeIndex) -> bool {
         if self.roots.contains(index) {
             return false;
@@ -241,7 +241,7 @@ impl Tasks {
         !outgoing.is_empty()
             && outgoing
                 .iter()
-                .all(|e| *e.weight() == DependencyKind::Complete)
+                .all(|e| *e.weight() == DependencyKind::Completed)
     }
 
     fn resolve_namespace_roots(
@@ -313,14 +313,33 @@ impl Tasks {
                     let dep_task = &self.graph[*dep_idx].read().await;
 
                     // Resolve the dependency kind based on task type if not explicitly specified
-                    // Default: Ready for process tasks, Complete for oneshot tasks
+                    // Default: Ready for process tasks, Succeeded for oneshot tasks
                     let resolved_kind = dep_spec.kind.unwrap_or_else(|| {
                         if dep_task.task.r#type == TaskType::Process {
                             DependencyKind::Ready
                         } else {
-                            DependencyKind::Complete
+                            DependencyKind::Succeeded
                         }
                     });
+
+                    // Validate suffix is compatible with the dependency's task type
+                    match (dep_task.task.r#type, resolved_kind) {
+                        (TaskType::Oneshot, DependencyKind::Ready) => {
+                            validation_errors.push(format!(
+                                "Task '{}' depends on '{}@ready' but '{}' is a oneshot task. \
+                                 Oneshot tasks support @started, @succeeded, and @completed suffixes.",
+                                task_state.task.name, dep_spec.name, dep_spec.name
+                            ));
+                        }
+                        (TaskType::Process, DependencyKind::Succeeded) => {
+                            validation_errors.push(format!(
+                                "Task '{}' depends on '{}@succeeded' but '{}' is a process task. \
+                                 Process tasks support @started, @ready, and @completed suffixes.",
+                                task_state.task.name, dep_spec.name, dep_spec.name
+                            ));
+                        }
+                        _ => {}
+                    }
 
                     // Validate @ready dependencies on process tasks require ready or listen
                     if resolved_kind == DependencyKind::Ready
@@ -364,9 +383,28 @@ impl Tasks {
                         if task_state.task.r#type == TaskType::Process {
                             DependencyKind::Ready
                         } else {
-                            DependencyKind::Complete
+                            DependencyKind::Succeeded
                         }
                     });
+
+                    // Validate suffix is compatible with the current task's type
+                    match (task_state.task.r#type, resolved_kind) {
+                        (TaskType::Oneshot, DependencyKind::Ready) => {
+                            validation_errors.push(format!(
+                                "Task '{}' declares before '{}' with @ready but '{}' is a oneshot task. \
+                                 Oneshot tasks support @started, @succeeded, and @completed suffixes.",
+                                task_state.task.name, dep_spec.name, task_state.task.name
+                            ));
+                        }
+                        (TaskType::Process, DependencyKind::Succeeded) => {
+                            validation_errors.push(format!(
+                                "Task '{}' declares before '{}' with @succeeded but '{}' is a process task. \
+                                 Process tasks support @started, @ready, and @completed suffixes.",
+                                task_state.task.name, dep_spec.name, task_state.task.name
+                            ));
+                        }
+                        _ => {}
+                    }
 
                     // Validate @ready dependencies - current task must have ready or listen if it's a process
                     if resolved_kind == DependencyKind::Ready
@@ -649,31 +687,34 @@ impl Tasks {
                         let dep_status = &self.graph[dep_index].read().await.status;
 
                         let satisfied = match (dep_status, dep_kind) {
-                            // @ready dependencies
-                            (TaskStatus::ProcessReady, DependencyKind::Ready) => {
-                                // Process is ready and healthy
-                                true
-                            }
+                            // @started — satisfied once running (or beyond)
+                            (TaskStatus::Running(_), DependencyKind::Started) => true,
+                            (TaskStatus::ProcessReady, DependencyKind::Started) => true,
+                            (TaskStatus::Completed(_), DependencyKind::Started) => true,
+
+                            // @ready — process healthy or oneshot succeeded
+                            (TaskStatus::ProcessReady, DependencyKind::Ready) => true,
                             (
                                 TaskStatus::Completed(TaskCompleted::Success(_, _)),
                                 DependencyKind::Ready,
-                            ) => {
-                                // Oneshot task completed successfully
-                                true
-                            }
+                            ) => true,
                             (
                                 TaskStatus::Completed(TaskCompleted::Skipped(_)),
                                 DependencyKind::Ready,
-                            ) => {
-                                // Task was skipped (cached or no command)
-                                true
-                            }
+                            ) => true,
 
-                            // @complete dependencies
-                            (TaskStatus::Completed(_), DependencyKind::Complete) => {
-                                // Task has completed (any completion state)
-                                true
-                            }
+                            // @succeeded — exited with code 0
+                            (
+                                TaskStatus::Completed(TaskCompleted::Success(_, _)),
+                                DependencyKind::Succeeded,
+                            ) => true,
+                            (
+                                TaskStatus::Completed(TaskCompleted::Skipped(_)),
+                                DependencyKind::Succeeded,
+                            ) => true,
+
+                            // @completed — any completion (soft)
+                            (TaskStatus::Completed(_), DependencyKind::Completed) => true,
 
                             // Failure handling
                             (TaskStatus::Completed(completed), _) if completed.has_failed() => {
@@ -1204,7 +1245,7 @@ mod schedule_tests {
         // With ignore_process_deps=true, B should be pruned from the subgraph
         let (tasks, _tmp) = build_test_tasks(
             vec![
-                process_task("ns:proc:a", vec!["ns:proc:b@complete"]),
+                process_task("ns:proc:a", vec!["ns:proc:b@completed"]),
                 process_task("ns:proc:b", vec![]),
             ],
             vec!["ns:proc:a".to_string()],
@@ -1243,7 +1284,7 @@ mod schedule_tests {
         // Same graph but with ignore_process_deps=false: both should remain
         let (tasks, _tmp) = build_test_tasks(
             vec![
-                process_task("ns:proc:a", vec!["ns:proc:b@complete"]),
+                process_task("ns:proc:a", vec!["ns:proc:b@completed"]),
                 process_task("ns:proc:b", vec![]),
             ],
             vec!["ns:proc:a".to_string()],
@@ -1276,7 +1317,7 @@ mod schedule_tests {
         // B gets pruned, but C should still be in the subgraph
         let (tasks, _tmp) = build_test_tasks(
             vec![
-                process_task("ns:proc:a", vec!["ns:proc:b@complete"]),
+                process_task("ns:proc:a", vec!["ns:proc:b@completed"]),
                 process_task("ns:proc:b", vec!["ns:task:setup"]),
                 oneshot_task("ns:task:setup", vec![]),
             ],

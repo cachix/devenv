@@ -27,7 +27,7 @@ $ devenv up
 
 ## Dependencies
 
-Processes can depend on other processes using `after` and `before`:
+Processes can depend on other processes and tasks using `after` and `before`:
 
 ```nix title="devenv.nix"
 {
@@ -42,7 +42,19 @@ Processes can depend on other processes using `after` and `before`:
 }
 ```
 
-Use `@complete` to wait for a process to stop (soft dependency), or `@ready` (default) for readiness.
+Dependency suffixes control when a dependency is considered satisfied.
+
+For **process** dependencies:
+
+- `@started` — wait for the process to begin execution
+- `@ready` (default) — wait for the readiness probe to pass
+- `@completed` — wait for the process to finish, regardless of exit code (soft dependency, does not propagate failure)
+
+For **task** dependencies:
+
+- `@started` — wait for the task to begin execution
+- `@succeeded` (default) — wait for the task to exit with code 0
+- `@completed` — wait for the task to finish, regardless of exit code (soft dependency, does not propagate failure)
 
 ## Using Pre-built Services
 
