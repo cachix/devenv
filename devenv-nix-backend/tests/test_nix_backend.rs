@@ -1142,7 +1142,7 @@ async fn test_backend_with_custom_nix_options() {
     let config = load_config_from_repo();
 
     let nix_cli = NixOptions {
-        nix_option: Some(vec!["tarball-ttl".to_string(), "0".to_string()]),
+        nix_option: vec!["tarball-ttl".to_string(), "0".to_string()],
         ..Default::default()
     };
 

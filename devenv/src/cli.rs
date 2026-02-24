@@ -3,8 +3,7 @@ use clap::{Parser, Subcommand, crate_version};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use devenv_core::config::NixBackendType;
 use devenv_core::settings::{
-    CacheOptions, InputOverrides, NixBuildDefaults, NixOptions, SecretOptions, ShellOptions,
-    default_system, flag,
+    CacheOptions, InputOverrides, NixOptions, SecretOptions, ShellOptions, flag,
 };
 use devenv_tasks::RunMode;
 use std::env;
@@ -86,22 +85,34 @@ pub enum ParseTraceOutputError {
 #[derive(clap::Args, Clone, Debug)]
 #[command(next_help_heading = "Nix options")]
 pub struct NixCliArgs {
-    #[arg(short = 'j', long,
+    #[arg(
+        short = 'j',
+        long,
         global = true,
         env = "DEVENV_MAX_JOBS",
         help = "Maximum number of Nix builds to run concurrently.",
-        default_value_t = NixBuildDefaults::defaults().max_jobs)]
-    pub max_jobs: u8,
+        long_help = "Maximum number of Nix builds to run concurrently.\n\nDefaults to 1/4 of available CPU cores (minimum 1)."
+    )]
+    pub max_jobs: Option<u8>,
 
-    #[arg(short = 'u', long,
+    #[arg(
+        short = 'u',
+        long,
         global = true,
         env = "DEVENV_CORES",
         help = "Number of CPU cores available to each build.",
-        default_value_t = NixBuildDefaults::defaults().cores)]
-    pub cores: u8,
+        long_help = "Number of CPU cores available to each build.\n\nDefaults to available cores divided by max-jobs (minimum 1)."
+    )]
+    pub cores: Option<u8>,
 
-    #[arg(short, long, global = true, default_value_t = default_system())]
-    pub system: String,
+    #[arg(
+        short,
+        long,
+        global = true,
+        help = "Override the target system.",
+        long_help = "Override the target system.\n\nDefaults to the host system (e.g. aarch64-darwin, x86_64-linux)."
+    )]
+    pub system: Option<String>,
 
     #[arg(
         short,
@@ -147,14 +158,13 @@ pub struct NixCliArgs {
 
 impl From<NixCliArgs> for NixOptions {
     fn from(cli: NixCliArgs) -> Self {
-        let defaults = NixBuildDefaults::defaults();
         Self {
-            max_jobs: (cli.max_jobs != defaults.max_jobs).then_some(cli.max_jobs),
-            cores: (cli.cores != defaults.cores).then_some(cli.cores),
-            system: (cli.system != default_system()).then_some(cli.system),
+            max_jobs: cli.max_jobs,
+            cores: cli.cores,
+            system: cli.system,
             impure: flag(cli.impure, cli.no_impure),
             offline: cli.offline.then_some(true),
-            nix_option: (!cli.nix_option.is_empty()).then_some(cli.nix_option),
+            nix_option: cli.nix_option,
             nix_debugger: cli.nix_debugger.then_some(true),
             backend: cli.backend,
         }
@@ -234,11 +244,7 @@ impl From<ShellCliArgs> for ShellOptions {
     fn from(cli: ShellCliArgs) -> Self {
         Self {
             clean: cli.clean,
-            profiles: if cli.profile.is_empty() {
-                None
-            } else {
-                Some(cli.profile)
-            },
+            profiles: cli.profile,
             reload: flag(cli.reload, cli.no_reload),
         }
     }

@@ -104,7 +104,7 @@ pub struct NixOptions {
     pub system: Option<String>,
     pub impure: Option<bool>,
     pub offline: Option<bool>,
-    pub nix_option: Option<Vec<String>>,
+    pub nix_option: Vec<String>,
     pub nix_debugger: Option<bool>,
     pub backend: Option<NixBackendType>,
 }
@@ -154,7 +154,7 @@ impl NixSettings {
             max_jobs: options.max_jobs.unwrap_or(defaults.max_jobs),
             cores: options.cores.unwrap_or(defaults.cores),
             offline: options.offline.unwrap_or(false),
-            nix_option: options.nix_option.unwrap_or_default(),
+            nix_option: options.nix_option,
             nix_debugger: options.nix_debugger.unwrap_or(false),
             backend: options.backend.unwrap_or_else(|| config.backend.clone()),
         }
@@ -206,7 +206,7 @@ impl CacheSettings {
 #[derive(Clone, Debug, Default)]
 pub struct ShellOptions {
     pub clean: Option<Vec<String>>,
-    pub profiles: Option<Vec<String>>,
+    pub profiles: Vec<String>,
     pub reload: Option<bool>,
 }
 
@@ -243,10 +243,7 @@ impl ShellSettings {
         };
 
         let config_profiles: Vec<String> = config.profile.iter().cloned().collect();
-        let profiles = options
-            .profiles
-            .unwrap_or_default()
-            .combine(config_profiles);
+        let profiles = options.profiles.combine(config_profiles);
 
         let reload = options.reload.combine(config.reload).unwrap_or(true);
 
@@ -377,7 +374,7 @@ mod tests {
             max_jobs: Some(4),
             cores: Some(2),
             offline: Some(true),
-            nix_option: Some(vec!["sandbox".into(), "false".into()]),
+            nix_option: vec!["sandbox".into(), "false".into()],
             nix_debugger: Some(true),
             ..Default::default()
         };
@@ -465,7 +462,7 @@ mod tests {
     #[test]
     fn shell_settings_options_profiles_override_config() {
         let options = ShellOptions {
-            profiles: Some(vec!["dev".into()]),
+            profiles: vec!["dev".into()],
             ..Default::default()
         };
         let config = Config {

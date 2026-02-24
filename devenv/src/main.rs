@@ -123,7 +123,11 @@ fn main() -> Result<()> {
     match &cli.command {
         None | Some(Commands::Version) => {
             let version = crate_version!();
-            let system = &cli.nix_args.system;
+            let system = cli
+                .nix_args
+                .system
+                .clone()
+                .unwrap_or_else(devenv_core::settings::default_system);
             match build_rev() {
                 Some(rev) => println!("devenv {version}+{rev} ({system})"),
                 None => println!("devenv {version} ({system})"),
