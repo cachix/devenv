@@ -32996,13 +32996,32 @@ attribute set of anything
 
 
 
-## tasks.\<name>.listen
+## tasks.\<name>.process
+
+
+
+Process-specific configuration. Only used when type = “process”.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.listen
 
 
 
 Socket activation configuration for systemd-style socket passing.
-
-Only used when type = “process”.
 
 
 
@@ -33039,7 +33058,7 @@ list of (submodule)
 
 
 
-## tasks.\<name>.listen.\*.address
+## tasks.\<name>.process.listen.\*.address
 
 
 
@@ -33060,7 +33079,7 @@ null or string
 
 
 
-## tasks.\<name>.listen.\*.backlog
+## tasks.\<name>.process.listen.\*.backlog
 
 
 
@@ -33081,7 +33100,7 @@ null or signed integer
 
 
 
-## tasks.\<name>.listen.\*.kind
+## tasks.\<name>.process.listen.\*.kind
 
 
 
@@ -33097,7 +33116,7 @@ one of “tcp”, “unix_stream”
 
 
 
-## tasks.\<name>.listen.\*.mode
+## tasks.\<name>.process.listen.\*.mode
 
 
 
@@ -33118,7 +33137,7 @@ null or signed integer
 
 
 
-## tasks.\<name>.listen.\*.name
+## tasks.\<name>.process.listen.\*.name
 
 
 
@@ -33134,7 +33153,7 @@ string
 
 
 
-## tasks.\<name>.listen.\*.path
+## tasks.\<name>.process.listen.\*.path
 
 
 
@@ -33155,14 +33174,12 @@ null or string
 
 
 
-## tasks.\<name>.ports
+## tasks.\<name>.process.ports
 
 
 
 Allocated ports for this process (name -> port number).
 Populated automatically from process port allocation.
-
-Only used when type = “process”.
 
 
 
@@ -33179,7 +33196,7 @@ attribute set of 16 bit unsigned integer; between 0 and 65535 (both inclusive)
 
 
 
-## tasks.\<name>.ready
+## tasks.\<name>.process.ready
 
 
 
@@ -33200,7 +33217,7 @@ null or (submodule)
 
 
 
-## tasks.\<name>.ready.exec
+## tasks.\<name>.process.ready.exec
 
 
 
@@ -33226,7 +33243,7 @@ null or string
 
 
 
-## tasks.\<name>.ready.failure_threshold
+## tasks.\<name>.process.ready.failure_threshold
 
 
 
@@ -33247,7 +33264,7 @@ signed integer
 
 
 
-## tasks.\<name>.ready.http
+## tasks.\<name>.process.ready.http
 
 
 
@@ -33268,7 +33285,7 @@ submodule
 
 
 
-## tasks.\<name>.ready.http.get
+## tasks.\<name>.process.ready.http.get
 
 
 
@@ -33289,7 +33306,7 @@ null or (submodule)
 
 
 
-## tasks.\<name>.ready.http.get.host
+## tasks.\<name>.process.ready.http.get.host
 
 
 
@@ -33310,7 +33327,7 @@ string
 
 
 
-## tasks.\<name>.ready.http.get.path
+## tasks.\<name>.process.ready.http.get.path
 
 
 
@@ -33331,7 +33348,7 @@ string
 
 
 
-## tasks.\<name>.ready.http.get.port
+## tasks.\<name>.process.ready.http.get.port
 
 
 
@@ -33347,7 +33364,7 @@ Port to connect to.
 
 
 
-## tasks.\<name>.ready.http.get.scheme
+## tasks.\<name>.process.ready.http.get.scheme
 
 
 
@@ -33368,7 +33385,7 @@ string
 
 
 
-## tasks.\<name>.ready.initial_delay
+## tasks.\<name>.process.ready.initial_delay
 
 
 
@@ -33389,7 +33406,7 @@ signed integer
 
 
 
-## tasks.\<name>.ready.notify
+## tasks.\<name>.process.ready.notify
 
 
 
@@ -33411,7 +33428,7 @@ boolean
 
 
 
-## tasks.\<name>.ready.period
+## tasks.\<name>.process.ready.period
 
 
 
@@ -33432,7 +33449,7 @@ signed integer
 
 
 
-## tasks.\<name>.ready.probe_timeout
+## tasks.\<name>.process.ready.probe_timeout
 
 
 
@@ -33453,7 +33470,7 @@ signed integer
 
 
 
-## tasks.\<name>.ready.success_threshold
+## tasks.\<name>.process.ready.success_threshold
 
 
 
@@ -33474,7 +33491,7 @@ signed integer
 
 
 
-## tasks.\<name>.ready.timeout
+## tasks.\<name>.process.ready.timeout
 
 
 
@@ -33495,11 +33512,11 @@ null or (unsigned integer, meaning >=0)
 
 
 
-## tasks.\<name>.restart
+## tasks.\<name>.process.restart
 
 
 
-Process restart policy. Only used when type = “process”.
+Process restart policy.
 
 
 
@@ -33516,7 +33533,7 @@ submodule
 
 
 
-## tasks.\<name>.restart.max
+## tasks.\<name>.process.restart.max
 
 
 
@@ -33537,7 +33554,7 @@ null or signed integer
 
 
 
-## tasks.\<name>.restart.on
+## tasks.\<name>.process.restart.on
 
 
 
@@ -33558,7 +33575,7 @@ one of “never”, “always”, “on_failure”
 
 
 
-## tasks.\<name>.restart.window
+## tasks.\<name>.process.restart.window
 
 
 
@@ -33573,6 +33590,162 @@ null or (unsigned integer, meaning >=0)
 
 *Default:*
 ` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.watch
+
+
+
+File watching configuration for automatic process restarts.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.watch.extensions
+
+
+
+File extensions to watch (e.g., “rs”, “js”, “py”).
+If empty, all file extensions are watched.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.watch.ignore
+
+
+
+Glob patterns to ignore (e.g., “.git”, “target”, “\*.log”).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.watch.paths
+
+
+
+Paths to watch for changes (files or directories).
+When files in these paths change, the process will be restarted.
+
+
+
+*Type:*
+list of absolute path
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.watchdog
+
+
+
+Systemd watchdog configuration.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  usec = 30000000; # 30 seconds
+  require_ready = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.watchdog.require_ready
+
+
+
+Require READY=1 notification before enforcing watchdog
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.watchdog.usec
+
+
+
+Watchdog interval in microseconds
+
+
+
+*Type:*
+signed integer
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33639,172 +33812,6 @@ one of “oneshot”, “process”
 
 *Default:*
 ` "oneshot" `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
-
-
-
-## tasks.\<name>.watch
-
-
-
-File watching configuration for automatic process restarts.
-
-Only used when type = “process”.
-
-
-
-*Type:*
-submodule
-
-
-
-*Default:*
-` { } `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
-
-
-
-## tasks.\<name>.watch.extensions
-
-
-
-File extensions to watch (e.g., “rs”, “js”, “py”).
-If empty, all file extensions are watched.
-
-Only used when type = “process”.
-
-
-
-*Type:*
-list of string
-
-
-
-*Default:*
-` [ ] `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
-
-
-
-## tasks.\<name>.watch.ignore
-
-
-
-Glob patterns to ignore (e.g., “.git”, “target”, “\*.log”).
-
-Only used when type = “process”.
-
-
-
-*Type:*
-list of string
-
-
-
-*Default:*
-` [ ] `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
-
-
-
-## tasks.\<name>.watch.paths
-
-
-
-Paths to watch for changes (files or directories).
-When files in these paths change, the process will be restarted.
-
-Only used when type = “process”.
-
-
-
-*Type:*
-list of absolute path
-
-
-
-*Default:*
-` [ ] `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
-
-
-
-## tasks.\<name>.watchdog
-
-
-
-Systemd watchdog configuration.
-
-Only used when type = “process”.
-
-
-
-*Type:*
-null or (submodule)
-
-
-
-*Default:*
-` null `
-
-
-
-*Example:*
-
-```
-{
-  usec = 30000000; # 30 seconds
-  require_ready = true;
-}
-
-```
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
-
-
-
-## tasks.\<name>.watchdog.require_ready
-
-
-
-Require READY=1 notification before enforcing watchdog
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` true `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
-
-
-
-## tasks.\<name>.watchdog.usec
-
-
-
-Watchdog interval in microseconds
-
-
-
-*Type:*
-signed integer
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
