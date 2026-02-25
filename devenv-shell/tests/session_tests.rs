@@ -229,7 +229,6 @@ fn render(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String> {
     let mut vt = Vt::new(cols, rows);
     vt.feed_str(&String::from_utf8_lossy(stdout_bytes));
     vt.view()
-        .iter()
         .map(|line| line.text().trim_end().to_owned())
         .collect()
 }
