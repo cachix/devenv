@@ -219,6 +219,8 @@ impl TuiApp {
         // Main loop - runs until shutdown (either Ctrl+C or event processor signals completion)
         loop {
             tokio::select! {
+                biased;
+
                 _ = shutdown.wait_for_shutdown() => {
                     break;
                 }
@@ -371,16 +373,9 @@ pub fn save_terminal_state() {
 }
 
 /// Restore terminal to normal state.
-/// Call this after the TUI has exited to ensure the terminal is usable.
-/// Safe to call multiple times and from signal/panic contexts.
+/// Register this on panic to restore terminal state if the app crashes without running Drop.
 pub fn restore_terminal() {
     let mut stderr = io::stderr();
-
-    // Try crossterm's disable_raw_mode first as a best-effort fallback.
-    // This must come BEFORE tcsetattr so our saved original state has
-    // the final word (crossterm may not have the correct saved state if
-    // iocraft managed raw mode independently).
-    let _ = terminal::disable_raw_mode();
 
     // Restore original terminal settings saved before TUI started.
     // This is the authoritative restoration — it always restores the
@@ -400,9 +395,6 @@ pub fn restore_terminal() {
     // enhanced key codes, so they appear as literal escape sequences.
     // Sending PopKeyboardEnhancementFlags when enhancement isn't active is harmless.
     let _ = execute!(stderr, event::PopKeyboardEnhancementFlags);
-
-    // Leave alternate screen (expanded log view uses fullscreen mode)
-    let _ = execute!(stderr, terminal::LeaveAlternateScreen);
 
     // Show cursor (TUI may have hidden it)
     let _ = execute!(stderr, cursor::Show);
