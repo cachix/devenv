@@ -2,7 +2,7 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Building shell
+⠋ Building shell              [TIME]
   ✗ error: undefined variable 'pkgs'
 
                               ↑↓ nav

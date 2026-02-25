@@ -2,7 +2,7 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Building  hello-2.12 buildPhase
-⠋ Pushing to my-cache 3/7 → python-3.11.5
+⠋ Building  hello-2.12 buildPhase         [TIME]
+⠋ Pushing to my-cache 3/7 → python-3.11.5 [TIME]
 
- 0 of 1 builds                      ↑↓ nav
+ 0 of 1 builds                            ↑↓ nav

@@ -2,10 +2,10 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ test:root
-  └ ⠋ test:branch-a
-    └ ⠋ test:shared
-  └ ⠋ test:branch-b
-    └ ⠋ test:shared
+⠋ test:root         [TIME]
+  └ ⠋ test:branch-a [TIME]
+    └ ⠋ test:shared [TIME]
+  └ ⠋ test:branch-b [TIME]
+    └ ⠋ test:shared [TIME]
 
- 0 of 4 tas    ↑↓ nav
+ 0 of 4 tasks       ↑↓ nav

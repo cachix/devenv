@@ -2,7 +2,7 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Downloading Downloading nixpkgs
+⠋ Downloading Downloading nixpkgs                                  [TIME]
     ──────────────────────────────────────────────────5kB / 10kB at 50kB/s
 
  0 of 1 downloads                                                  ↑↓ nav

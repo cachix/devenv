@@ -1,22 +1,8 @@
+#![cfg(feature = "test-all")]
 //! TUI snapshot tests.
 //!
 //! These tests verify that when activity events are fed into the model,
 //! the TUI renders the expected output.
-
-/// Assert a snapshot with timing filters to avoid flaky tests.
-/// Normalizes elapsed times like "123ms" -> "0ms" and "1.2s" -> "0.0s".
-macro_rules! assert_tui_snapshot {
-    ($output:expr) => {
-        insta::with_settings!({
-            filters => vec![
-                (r"\d+ms", "0ms"),
-                (r"\d+\.\d+s", "0.0s"),
-            ]
-        }, {
-            insta::assert_snapshot!($output);
-        });
-    };
-}
 
 use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Evaluate, Fetch, FetchKind, Message,
@@ -87,7 +73,7 @@ fn task_start(id: u64) -> ActivityEvent {
 fn test_empty_model() {
     let (model, ui_state) = new_test_model();
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that a single build activity shows in the TUI.
@@ -114,7 +100,7 @@ fn test_single_build_activity() {
     model.apply_activity_event(phase_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that a download activity with progress shows in the TUI.
@@ -143,7 +129,7 @@ fn test_download_with_progress() {
     model.apply_activity_event(progress_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that a task activity shows in the TUI.
@@ -162,7 +148,7 @@ fn test_task_running() {
     model.apply_activity_event(task_start(1));
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that multiple concurrent activities show in the TUI.
@@ -214,7 +200,7 @@ fn test_multiple_activities() {
     model.apply_activity_event(task_start(3));
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test task status lifecycle: pending -> running -> success.
@@ -240,7 +226,7 @@ fn test_task_success() {
     model.apply_activity_event(complete_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test task failure shows in the TUI.
@@ -260,7 +246,7 @@ fn test_task_failed() {
     model.apply_activity_event(complete_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that failed tasks show logs even when show_output=false.
@@ -305,7 +291,7 @@ fn test_task_failed_shows_logs() {
     model.apply_activity_event(complete_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that task with show_output=true displays logs in the TUI.
@@ -337,7 +323,7 @@ fn test_task_show_output_true() {
     }));
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that task with show_output=false hides logs in the TUI.
@@ -369,7 +355,7 @@ fn test_task_show_output_false() {
     }));
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test evaluating activity shows in the TUI.
@@ -388,7 +374,7 @@ fn test_evaluating_activity() {
     model.apply_activity_event(event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test query activity shows in the TUI.
@@ -408,7 +394,7 @@ fn test_query_activity() {
     model.apply_activity_event(event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test fetch tree activity shows in the TUI.
@@ -428,7 +414,7 @@ fn test_fetch_tree_activity() {
     model.apply_activity_event(event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test download with substituter info shows in the TUI.
@@ -457,7 +443,7 @@ fn test_download_with_substituter() {
     model.apply_activity_event(progress_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that Nix evaluation with nested child activities (builds, fetches, downloads) shows hierarchy.
@@ -526,7 +512,7 @@ fn test_nested_evaluation_with_children() {
     model.apply_activity_event(nested_download_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that activity details are stored correctly.
@@ -546,7 +532,7 @@ fn test_activity_with_details() {
     model.apply_activity_event(parent_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test multiple parallel builds running concurrently.
@@ -612,7 +598,7 @@ fn test_multiple_parallel_builds() {
     }));
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test parallel downloads and builds happening simultaneously.
@@ -699,7 +685,7 @@ fn test_parallel_downloads_and_builds() {
     }));
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test indeterminate progress shows in the TUI.
@@ -726,7 +712,7 @@ fn test_indeterminate_progress() {
     model.apply_activity_event(progress_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test deep nesting (3+ levels) shows hierarchy correctly.
@@ -799,7 +785,7 @@ fn test_deep_nesting() {
     model.apply_activity_event(deep_fetch);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test many concurrent activities (stress test for rendering).
@@ -863,7 +849,7 @@ fn test_many_concurrent_activities() {
     }
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test mixed completed and active activities.
@@ -930,7 +916,7 @@ fn test_mixed_completed_and_active() {
     }));
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that standalone error messages (without parent) show in the TUI.
@@ -950,7 +936,7 @@ fn test_standalone_error_message() {
     model.apply_activity_event(error_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that multiple error messages show in the TUI.
@@ -980,7 +966,7 @@ fn test_multiple_error_messages() {
     model.apply_activity_event(error2);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that error messages with parent activities show as child activities.
@@ -1010,7 +996,7 @@ fn test_error_message_with_parent() {
     model.apply_activity_event(error_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that warning messages with parent activities show as child activities.
@@ -1040,7 +1026,7 @@ fn test_warning_message_with_parent() {
     model.apply_activity_event(warn_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test error messages alongside active builds.
@@ -1075,7 +1061,7 @@ fn test_error_with_active_builds() {
     model.apply_activity_event(error_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that error messages with details show expansion indicator.
@@ -1105,7 +1091,7 @@ fn test_error_message_with_details() {
     model.apply_activity_event(error_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that error messages without details don't show the [+] indicator.
@@ -1135,7 +1121,7 @@ fn test_error_message_without_details() {
     model.apply_activity_event(error_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that failed devenv operations show logs automatically (not just when selected).
@@ -1183,7 +1169,7 @@ fn test_devenv_failed_shows_logs() {
     model.apply_activity_event(complete_event);
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that a task with additional_parents appears under multiple parents.
@@ -1229,7 +1215,7 @@ fn test_task_additional_parents() {
 
     let output = render_to_string(&model, &ui_state);
     // The "build" task should appear under both test:unit and test:integration
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 #[test]
@@ -1330,7 +1316,7 @@ fn test_task_queued_state() {
 
     let output = render_to_string(&model, &ui_state);
     // First task should show as running, others should show as pending/queued
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that a task that completes without ever starting (skipped) shows correctly.
@@ -1357,7 +1343,7 @@ fn test_task_skipped_never_started() {
 
     let output = render_to_string(&model, &ui_state);
     // Task should show as skipped with zero duration
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that a task cancelled due to dependency failure shows correctly.
@@ -1401,7 +1387,7 @@ fn test_task_dependency_failed_never_started() {
     }));
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test task hierarchy with 3+ levels of nesting.
@@ -1453,7 +1439,7 @@ fn test_task_deep_nesting() {
 
     let output = render_to_string(&model, &ui_state);
     // Should show proper indentation for each nesting level
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test multiple tasks under the same parent render in consistent order.
@@ -1505,7 +1491,7 @@ fn test_task_multiple_under_same_parent() {
 
     let output = render_to_string(&model, &ui_state);
     // Children should appear under parent in consistent order
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test diamond dependency pattern where a shared dependency appears under multiple parents.
@@ -1563,7 +1549,7 @@ fn test_task_diamond_dependency() {
 
     let output = render_to_string(&model, &ui_state);
     // Shared task should appear under both branch-a and branch-b
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test that when activities overflow a small terminal, the bottom content
@@ -1652,7 +1638,7 @@ fn test_cachix_push_started() {
     }));
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test cachix push operation with progress updates showing path detail.
@@ -1678,7 +1664,7 @@ fn test_cachix_push_progress() {
     }));
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test cachix push operation completing successfully.
@@ -1710,7 +1696,7 @@ fn test_cachix_push_success() {
     }));
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test cachix push operation with failed paths shows error logs.
@@ -1764,7 +1750,7 @@ fn test_cachix_push_with_failures() {
     }));
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }
 
 /// Test cachix push alongside other activities (build + push concurrent).
@@ -1803,5 +1789,5 @@ fn test_cachix_push_alongside_build() {
     }));
 
     let output = render_to_string(&model, &ui_state);
-    assert_tui_snapshot!(output);
+    insta::assert_snapshot!(output);
 }

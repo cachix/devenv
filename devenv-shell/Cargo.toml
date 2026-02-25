@@ -35,7 +35,6 @@ strip-ansi-escapes = { workspace = true }
 libc = "0.2"
 
 [dev-dependencies]
-regex = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tokio-test = "0.4"
 tempfile = { workspace = true }
@@ -43,5 +42,6 @@ insta = { workspace = true }
 
 [features]
 default = []
-test-all = ["test-pty"]
+deterministic-tui = []
+test-all = ["test-pty", "deterministic-tui"]
 test-pty = []

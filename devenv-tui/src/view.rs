@@ -1,5 +1,5 @@
 use crate::{
-    components::{LOG_VIEWPORT_FAILED, LOG_VIEWPORT_SHOW_OUTPUT, format_elapsed_time, *},
+    components::{LOG_VIEWPORT_FAILED, LOG_VIEWPORT_SHOW_OUTPUT, *},
     model::{
         Activity, ActivityModel, ActivitySummary, ActivityVariant, NixActivityState, RenderContext,
         TaskDisplayStatus, TerminalSize, UiState,
@@ -1108,5 +1108,8 @@ fn build_summary_view_impl(
 
 /// Format a duration in a human-readable way
 pub fn format_duration(duration: Duration) -> String {
+    if cfg!(feature = "deterministic-tui") {
+        return "[TIME]".to_string();
+    }
     duration.human_duration().to_string()
 }

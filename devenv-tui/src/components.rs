@@ -19,6 +19,17 @@ pub struct SpinnerProps {
     pub color: Option<Color>,
 }
 
+#[cfg(feature = "deterministic-tui")]
+#[component]
+pub fn Spinner(_hooks: Hooks, props: &SpinnerProps) -> impl Into<AnyElement<'static>> {
+    let color = props.color.unwrap_or(COLOR_ACTIVE);
+
+    element! {
+        Text(content: SPINNER_FRAMES[0], color: color)
+    }
+}
+
+#[cfg(not(feature = "deterministic-tui"))]
 #[component]
 pub fn Spinner(mut hooks: Hooks, props: &SpinnerProps) -> impl Into<AnyElement<'static>> {
     let mut frame = hooks.use_state(|| 0usize);
@@ -75,6 +86,9 @@ pub const LOG_VIEWPORT_SHOW_OUTPUT: usize = 3;
 /// When `high_resolution` is true, shows ms for sub-second durations.
 /// When `high_resolution` is false, hides if < 300ms, otherwise shows x.xs resolution.
 pub fn format_elapsed_time(elapsed: Duration, high_resolution: bool) -> String {
+    if cfg!(feature = "deterministic-tui") {
+        return "[TIME]".to_string();
+    }
     let total_secs = elapsed.as_secs();
     if total_secs < 1 {
         if high_resolution {

@@ -1,6 +1,5 @@
 ---
 source: devenv-shell/tests/session_tests.rs
-assertion_line: 363
-expression: "rows[23]"
+expression: "&rows[23]"
 ---
- ✓ devenv ready in [TIME] | watching 2 files                     Ctrl-Alt-R reload
+ ✓ devenv ready in [TIME] | watching 2 files                  Ctrl-Alt-R reload

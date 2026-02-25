@@ -147,6 +147,9 @@ impl StatusState {
 /// Format duration for display, returning (number, unit) for separate coloring.
 /// E.g., ("250", "ms"), ("1.2", "s"), ("2m 30", "s")
 fn format_duration_parts(duration: std::time::Duration) -> (String, String) {
+    if cfg!(feature = "deterministic-tui") {
+        return ("[TIME]".to_string(), String::new());
+    }
     let total_secs = duration.as_secs();
     if total_secs < 1 {
         (format!("{}", duration.as_millis()), "ms".to_string())
@@ -236,6 +239,9 @@ impl StatusLine {
 
     /// Advance spinner animation if enough time has passed.
     fn update_spinner(&mut self) {
+        if cfg!(feature = "deterministic-tui") {
+            return;
+        }
         let elapsed = self.last_spinner_update.elapsed().as_millis() as u64;
         if elapsed >= SPINNER_INTERVAL_MS {
             self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();

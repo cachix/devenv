@@ -1,8 +1,7 @@
 ---
 source: devenv-tui/tests/tui_tests.rs
-assertion_line: 530
 expression: output
 ---
-⠋ Building shell → nix eval --json .#devenv.config
+⠋ Building shell → nix eval --json .#devenv.config [TIME]
 
-                                             ↑↓ nav
+                                                   ↑↓ nav

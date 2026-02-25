@@ -91,7 +91,14 @@ devenv-nix-backend-macros.workspace = true
 
 [features]
 default = []
-test-all = ["test-mcp", "devenv-processes/test-all", "devenv-nix-backend/test-all", "devenv-reload/test-all", "devenv-shell/test-all"]
+test-all = [
+  "test-mcp",
+  "devenv-processes/test-all",
+  "devenv-nix-backend/test-all",
+  "devenv-reload/test-all",
+  "devenv-shell/test-all",
+  "devenv-tui/test-all",
+]
 test-mcp = []
 snix = [
   "dep:devenv-snix-backend",

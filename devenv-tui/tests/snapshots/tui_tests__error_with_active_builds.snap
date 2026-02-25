@@ -2,6 +2,6 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Building  hello-2.12 buildPhase
+⠋ Building  hello-2.12 buildPhase [TIME]
 
- 0 of 1 builds              ↑↓ nav
+ 0 of 1 builds                    ↑↓ nav

@@ -2,9 +2,9 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ test:unit
-  └ ⠋ build
-⠋ test:integration
-  └ ⠋ build
+⠋ test:unit        [TIME]
+  └ ⠋ build        [TIME]
+⠋ test:integration [TIME]
+  └ ⠋ build        [TIME]
 
- 0 of 3 tas    ↑↓ nav
+ 0 of 3 tasks      ↑↓ nav

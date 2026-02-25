@@ -2,7 +2,7 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-✗ test:dependent failed 0ms
-  └ ✗ test:dep failed   0ms
+✗ test:dependent failed [TIME]
+  └ ✗ test:dep failed   [TIME]
 
- 0 of 2 tasks        ↑↓ nav
+ 0 of 2 tasks           ↑↓ nav

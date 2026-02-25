@@ -1,9 +1,8 @@
 ---
 source: devenv-tui/tests/tui_tests.rs
-assertion_line: 1271
 expression: output
 ---
-⠋ test:first
+⠋ test:first    [TIME]
 ⠋ test:second pending
 ⠋ test:third pending
 

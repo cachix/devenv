@@ -87,3 +87,8 @@ path = "src/bin/tui-replay.rs"
 
 [dev-dependencies]
 insta = { workspace = true }
+
+[features]
+default = []
+deterministic-tui = []
+test-all = ["deterministic-tui"]

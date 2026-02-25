@@ -85,6 +85,17 @@ Integration tests live in `tests/` and `examples/` directories. Each test is a d
   - `git_init: false` - Don't initialize git repo in temp dir
   - `supported_systems` / `broken_systems` - Platform filtering
 
+### Cargo Feature Flags
+
+- **`devenv/test-all`** — Enables all feature-gated unit tests across the workspace.
+  Propagates to `devenv-processes/test-all`, `devenv-nix-backend/test-all`, `devenv-reload/test-all`, `devenv-shell/test-all`, and `devenv-tui/test-all`.
+- **`devenv/test-mcp`** — Enables MCP-related tests.
+- **`devenv/snix`** — Enables the experimental Snix backend.
+- **`devenv-shell/test-pty`** — Enables PTY-based session tests (requires a real terminal).
+- **`deterministic-tui`** — Available on both `devenv-shell` and `devenv-tui`.
+  Replaces spinner animation and elapsed time formatting with static placeholders (`[TIME]`, fixed spinner frame) so that TUI snapshot tests produce deterministic output.
+  Enabled automatically by `test-all` on both crates.
+
 ## Adding New CLI Subcommands
 
 1. **Create implementation module** in `devenv/src/`:

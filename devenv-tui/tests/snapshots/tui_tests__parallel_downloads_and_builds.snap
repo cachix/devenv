@@ -2,13 +2,13 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Building  hello-2.12 buildPhase
-⠋ Building  curl-8.1.0 configurePhase
-⠋ Downloading openssl-3.0.0 from cache.nixos.org
+⠋ Building  hello-2.12 buildPhase                                  [TIME]
+⠋ Building  curl-8.1.0 configurePhase                              [TIME]
+⠋ Downloading openssl-3.0.0 from cache.nixos.org                   [TIME]
     ────────────────────────────────────────────────15MB / 30MB at 150MB/s
-⠋ Downloading glibc-2.37 from cache.nixos.org
+⠋ Downloading glibc-2.37 from cache.nixos.org                      [TIME]
     ──────────────────────────────────────────────────8MB / 10MB at 80MB/s
-⠋ Downloading python-3.11.5 from cache.nixos.org
+⠋ Downloading python-3.11.5 from cache.nixos.org                   [TIME]
     ──────────────────────────────────────────────────1MB / 50MB at 10MB/s
 
  0 of 2 builds  │  0 of 3 downloads                                ↑↓ nav

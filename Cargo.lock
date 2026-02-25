@@ -1643,7 +1643,6 @@ dependencies = [
  "iocraft",
  "libc",
  "portable-pty",
- "regex",
  "strip-ansi-escapes",
  "tempfile",
  "term_size",

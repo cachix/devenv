@@ -1,8 +1,7 @@
 ---
 source: devenv-tui/tests/tui_tests.rs
-assertion_line: 1298
 expression: output
 ---
-✓ test:skipped-task skipped 0ms
+✓ test:skipped-task skipped [TIME]
 
- 1 of 1 tasks            ↑↓ nav
+ 1 of 1 tasks               ↑↓ nav
