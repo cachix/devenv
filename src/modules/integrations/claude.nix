@@ -153,6 +153,11 @@ let
       SubagentStop = buildHooks "SubagentStop" (groupedHooks.SubagentStop or [ ]);
       PreCompact = buildHooks "PreCompact" (groupedHooks.PreCompact or [ ]);
       PermissionRequest = buildHooks "PermissionRequest" (groupedHooks.PermissionRequest or [ ]);
+      WorktreeCreate = buildHooks "WorktreeCreate" (groupedHooks.WorktreeCreate or [ ]);
+      WorktreeRemove = buildHooks "WorktreeRemove" (groupedHooks.WorktreeRemove or [ ]);
+      TeammateIdle = buildHooks "TeammateIdle" (groupedHooks.TeammateIdle or [ ]);
+      TaskCompleted = buildHooks "TaskCompleted" (groupedHooks.TaskCompleted or [ ]);
+      ConfigChange = buildHooks "ConfigChange" (groupedHooks.ConfigChange or [ ]);
     };
     inherit (cfg)
       apiKeyHelper
@@ -200,6 +205,11 @@ in
                 "SubagentStop"
                 "PreCompact"
                 "PermissionRequest"
+                "WorktreeCreate"
+                "WorktreeRemove"
+                "TeammateIdle"
+                "TaskCompleted"
+                "ConfigChange"
               ];
               default = "PostToolUse";
               description = ''
@@ -216,6 +226,11 @@ in
                 - SubagentStop: Runs when subagent tasks complete
                 - PreCompact: Runs before message compaction
                 - PermissionRequest: Runs when a permission is requested
+                - WorktreeCreate: Runs when a new worktree is created
+                - WorktreeRemove: Runs when a worktree is removed
+                - TeammateIdle: Runs when a teammate agent becomes idle
+                - TaskCompleted: Runs when a task is completed
+                - ConfigChange: Runs when configuration changes
               '';
             };
             matcher = lib.mkOption {
