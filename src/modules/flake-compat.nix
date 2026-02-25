@@ -92,7 +92,19 @@ let
   # `devenv tasks` helper command
   devenv-flake-tasks =
     pkgs.writeShellScriptBin "devenv-flake-tasks" ''
-      exec ${config.task.package}/bin/devenv-tasks "$@"
+      subcommand=$1
+      shift
+      case "$subcommand" in
+        run)
+          exec ${config.task.package}/bin/devenv-tasks run \
+            --cache-dir ${lib.escapeShellArg config.devenv.dotfile} \
+            --runtime-dir ${lib.escapeShellArg config.devenv.runtime} \
+            "$@"
+          ;;
+        *)
+          exec ${config.task.package}/bin/devenv-tasks "$subcommand" "$@"
+          ;;
+      esac
     '';
 
   devenvFlakeCompat = pkgs.symlinkJoin {
