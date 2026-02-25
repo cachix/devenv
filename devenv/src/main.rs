@@ -269,9 +269,6 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
         .await
         .unwrap_or(0);
 
-    // Restore terminal to normal state (disable raw mode, show cursor)
-    devenv_tui::app::restore_terminal();
-
     // Signal backend that terminal is now available for shell, passing render height
     let _ = terminal_ready_tx.send(tui_render_height);
 

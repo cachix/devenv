@@ -217,8 +217,5 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Restore terminal to normal state (disable raw mode, show cursor)
-    devenv_tui::app::restore_terminal();
-
     Ok(())
 }
