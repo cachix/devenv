@@ -2179,7 +2179,7 @@ async fn test_eval_state_mutex_under_concurrent_eval() {
     url: github:cachix/git-hooks.nix
 "#;
     let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, GlobalOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default());
 
     let backend = std::sync::Arc::new(backend);
     backend
