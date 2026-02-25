@@ -189,18 +189,23 @@ iocraft = { git = "https://github.com/sandydoo/iocraft", branch = "feat-configur
 # https://github.com/crossterm-rs/crossterm/pull/1026
 crossterm = { git = "https://github.com/sandydoo/crossterm", branch = "0.28-cachix" }
 
+# Improve performance of test runs
+[profile.dev.package]
+insta.opt-level = 3
+similar.opt-level = 3
 
+# A release build with full link-time optimization (slow)
 [profile.release]
 strip = "symbols"
 lto = "fat"
 
-# Fast release build without LTO
+# A fast release build without LTO
 # TODO: using underscores because of a normalization bug in buildRustPackage
 [profile.release_fast]
 inherits = "release"
 lto = false
 
-# Retain debug symbols in release builds for better backtraces
+# A fast release build that retains debug symbols for better backtraces
 [profile.release_with_debug]
 inherits = "release_fast"
 debug = true
