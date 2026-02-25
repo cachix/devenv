@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use miette::{IntoDiagnostic, Result, bail};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
+use std::collections::HashMap;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -50,6 +51,38 @@ impl ProcessComposeManager {
     /// Path to the wrapper script
     fn wrapper_script(&self) -> PathBuf {
         self.state_dir.join("processes")
+    }
+
+    /// Prepare the foreground command without exec'ing.
+    ///
+    /// Returns a `std::process::Command` ready to be exec'd by the caller
+    /// after terminal cleanup.
+    pub async fn prepare_foreground_command(
+        &self,
+        processes: &[String],
+        env: &HashMap<String, String>,
+    ) -> Result<std::process::Command> {
+        match pid::check_pid_file(&self.pid_file()).await? {
+            PidStatus::Running(pid) => {
+                bail!(
+                    "Processes already running with PID {}. Stop them first with: devenv processes down",
+                    pid
+                );
+            }
+            PidStatus::NotFound | PidStatus::StaleRemoved => {}
+        }
+
+        self.write_wrapper_script(processes, false).await?;
+
+        let wrapper = self.wrapper_script();
+        let mut cmd = std::process::Command::new("bash");
+        cmd.arg(&wrapper);
+
+        if !env.is_empty() {
+            cmd.env_clear().envs(env);
+        }
+
+        Ok(cmd)
     }
 
     /// Write the wrapper script that invokes process-compose
@@ -129,10 +162,7 @@ impl ProcessManager for ProcessComposeManager {
             }
             info!("Stop:      $ devenv processes stop");
         } else {
-            // Foreground mode: exec into the process
-            use std::os::unix::process::CommandExt;
-            let err = cmd.into_std().exec();
-            bail!("Failed to exec process-compose: {}", err);
+            bail!("foreground mode should use prepare_foreground_command() instead");
         }
 
         Ok(())

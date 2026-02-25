@@ -4,7 +4,7 @@ use crate::{
     view::view,
 };
 use crossterm::{
-    cursor, execute,
+    cursor, event, execute,
     style::{Color, ResetColor, SetForegroundColor},
     terminal,
 };
@@ -396,6 +396,15 @@ pub fn restore_terminal() {
         let fd = io::stdin().as_raw_fd();
         unsafe { libc::tcsetattr(fd, libc::TCSANOW, original) };
     }
+
+    // Pop keyboard enhancement flags if iocraft pushed them.
+    // iocraft enables the Kitty keyboard protocol (PushKeyboardEnhancementFlags)
+    // when entering raw mode on supported terminals. If the process exits without
+    // iocraft's Drop running (exec, force-exit, panic), the terminal is left in
+    // enhanced key reporting mode. The user's shell doesn't understand these
+    // enhanced key codes, so they appear as literal escape sequences.
+    // Sending PopKeyboardEnhancementFlags when enhancement isn't active is harmless.
+    let _ = execute!(stderr, event::PopKeyboardEnhancementFlags);
 
     // Leave alternate screen (expanded log view uses fullscreen mode)
     let _ = execute!(stderr, terminal::LeaveAlternateScreen);

@@ -19,6 +19,7 @@ use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use nix::sys::signal;
 use nix::unistd::Pid;
 use once_cell::sync::Lazy;
+use processes::ProcessManager as _;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
 use sha2::Digest;
@@ -1751,38 +1752,37 @@ impl Devenv {
             }
 
             // Non-native manager (process-compose)
-            let manager: Box<dyn processes::ProcessManager> = {
-                let procfile_script = async {
-                    let gc_root = self.devenv_dot_gc.join("procfilescript");
-                    let paths = self
-                        .nix
-                        .build(&["devenv.config.procfileScript"], None, Some(&gc_root))
-                        .await?;
-                    Ok::<PathBuf, miette::Report>(paths[0].clone())
-                }
-                .in_activity(&phase4)
-                .await?;
+            let procfile_script = async {
+                let gc_root = self.devenv_dot_gc.join("procfilescript");
+                let paths = self
+                    .nix
+                    .build(&["devenv.config.procfileScript"], None, Some(&gc_root))
+                    .await?;
+                Ok::<PathBuf, miette::Report>(paths[0].clone())
+            }
+            .in_activity(&phase4)
+            .await?;
 
-                Box::new(processes::ProcessComposeManager::new(
-                    procfile_script,
-                    self.devenv_dotfile.clone(),
-                ))
-            };
+            let manager =
+                processes::ProcessComposeManager::new(procfile_script, self.devenv_dotfile.clone());
 
-            let start_options = processes::StartOptions {
-                process_configs: HashMap::new(),
-                processes,
-                detach: options.detach,
-                log_to_file: options.log_to_file,
-                env: envs,
-                cancellation_token: Some(self.shutdown.cancellation_token()),
-            };
-
-            manager.start(start_options).await?;
-
-            // ProcessComposeManager foreground mode uses exec() and never returns here.
-            // In detached mode, we reach here.
-            Ok::<RunMode, miette::Report>(RunMode::Detached)
+            if options.detach {
+                let start_options = processes::StartOptions {
+                    process_configs: HashMap::new(),
+                    processes,
+                    detach: true,
+                    log_to_file: options.log_to_file,
+                    env: envs,
+                    cancellation_token: Some(self.shutdown.cancellation_token()),
+                };
+                manager.start(start_options).await?;
+                Ok::<RunMode, miette::Report>(RunMode::Detached)
+            } else {
+                let command = manager
+                    .prepare_foreground_command(&processes, &envs)
+                    .await?;
+                Ok(RunMode::Foreground(ShellCommand { command }))
+            }
         }
     }
 
