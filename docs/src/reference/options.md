@@ -1615,11 +1615,16 @@ The type of hook:
  - SubagentStop: Runs when subagent tasks complete
  - PreCompact: Runs before message compaction
  - PermissionRequest: Runs when a permission is requested
+ - WorktreeCreate: Runs when a new worktree is created
+ - WorktreeRemove: Runs when a worktree is removed
+ - TeammateIdle: Runs when a teammate agent becomes idle
+ - TaskCompleted: Runs when a task is completed
+ - ConfigChange: Runs when configuration changes
 
 
 
 *Type:*
-one of “PreToolUse”, “PostToolUse”, “PostToolUseFailure”, “Notification”, “UserPromptSubmit”, “SessionStart”, “SessionEnd”, “Stop”, “SubagentStart”, “SubagentStop”, “PreCompact”, “PermissionRequest”
+one of “PreToolUse”, “PostToolUse”, “PostToolUseFailure”, “Notification”, “UserPromptSubmit”, “SessionStart”, “SessionEnd”, “Stop”, “SubagentStart”, “SubagentStop”, “PreCompact”, “PermissionRequest”, “WorktreeCreate”, “WorktreeRemove”, “TeammateIdle”, “TaskCompleted”, “ConfigChange”
 
 
 
