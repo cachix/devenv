@@ -210,12 +210,21 @@ async fn test_stop_terminates_process() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_force_kill_after_timeout() {
     timeout(Duration::from_secs(20), async {
-        // Script that ignores SIGTERM
-        let script = r#"trap '' TERM; sleep 3600"#;
-        let job = run_shell_command(script).await;
+        let ctx = TestContext::new();
+        let ready_file = ctx.temp_path().join("ready.txt");
 
-        // Give trap time to set up
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        // Script that installs a SIGTERM-ignore trap, signals ready, then sleeps forever
+        let script = format!(
+            r#"trap '' TERM; echo ready > {}; sleep 3600"#,
+            ready_file.display()
+        );
+        let job = run_shell_command(&script).await;
+
+        // Wait for the trap to be installed (signaled by the ready file)
+        assert!(
+            wait_for_file(&ready_file, Duration::from_secs(5)).await,
+            "Script should signal ready after installing trap"
+        );
 
         // Stop with a short grace period
         let stop_start = std::time::Instant::now();
