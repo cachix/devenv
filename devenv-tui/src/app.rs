@@ -245,11 +245,8 @@ impl TuiApp {
         // This ensures all activity completion events are processed and visible.
         let _ = event_processor_handle.await;
 
-        // Final render pass to ensure all drained events are displayed
-        // This replaces the old is_done() check that triggered shutdown AFTER rendering
-        //
-        // On interrupt (Ctrl+C): clear the output so the user sees a clean terminal
-        // On normal completion: clear previous render, then render final state
+        // Final render pass to ensure all drained events are displayed.
+        // Clear previous inline render, then render final state.
         let mut final_render_height: u16 = 0;
         {
             let ui = ui_state.read().unwrap();
@@ -266,9 +263,7 @@ impl TuiApp {
                     );
                 }
 
-                // On interrupt, don't render final state (user wants to exit quickly)
-                // On normal completion, render the final state with all events processed
-                if shutdown.last_signal().is_none() {
+                {
                     // Collect standalone error messages (no parent) from message_log
                     let standalone_errors: Vec<_> = model_guard
                         .get_error_messages()
