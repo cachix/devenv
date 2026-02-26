@@ -95,6 +95,11 @@ struct Renderer {
     prev_lines: Vec<Vec<avt::Cell>>,
     /// Previous cursor position and visibility.
     prev_cursor: (usize, usize, bool),
+    /// Row offset for the initial phase after TUI handoff.
+    /// When > 0, VT row N maps to real terminal row (N + 1 + row_offset)
+    /// instead of (N + 1). Gradually consumed as VT content scrolls,
+    /// or reset to 0 immediately on terminal resize or alternate screen.
+    row_offset: u16,
 }
 
 impl Renderer {
@@ -102,17 +107,19 @@ impl Renderer {
         Self {
             prev_lines: Vec::new(),
             prev_cursor: (0, 0, true),
+            row_offset: 0,
         }
     }
 
     /// Render changed VT lines to stdout. Skips lines that haven't changed.
     fn render(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+        let offset = self.row_offset as usize;
         for (row_idx, line) in vt.view().enumerate() {
             let cells = line.cells();
             if row_idx < self.prev_lines.len() && cells == &self.prev_lines[row_idx][..] {
                 continue;
             }
-            write!(stdout, "\x1b[{};1H\x1b[2K", row_idx + 1)?;
+            write!(stdout, "\x1b[{};1H\x1b[2K", row_idx + 1 + offset)?;
             stdout.write_all(dump_line(line).as_bytes())?;
             write!(stdout, "\x1b[0m")?;
             if row_idx < self.prev_lines.len() {
@@ -161,9 +168,10 @@ impl Renderer {
 
     /// Full redraw of all VT lines (after resize or initialization).
     fn render_full(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+        let offset = self.row_offset as usize;
         self.prev_lines.clear();
         for (row_idx, line) in vt.view().enumerate() {
-            write!(stdout, "\x1b[{};1H\x1b[2K", row_idx + 1)?;
+            write!(stdout, "\x1b[{};1H\x1b[2K", row_idx + 1 + offset)?;
             stdout.write_all(dump_line(line).as_bytes())?;
             write!(stdout, "\x1b[0m")?;
             self.prev_lines.push(line.cells().to_vec());
@@ -173,6 +181,7 @@ impl Renderer {
 
     /// Position the real terminal cursor to match the VT cursor.
     fn update_cursor(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+        let offset = self.row_offset as usize;
         let cursor = vt.cursor();
         let new_cursor = (cursor.col, cursor.row, cursor.visible);
         if new_cursor != self.prev_cursor {
@@ -181,7 +190,12 @@ impl Renderer {
             } else if !cursor.visible && self.prev_cursor.2 {
                 write!(stdout, "\x1b[?25l")?;
             }
-            write!(stdout, "\x1b[{};{}H", cursor.row + 1, cursor.col + 1)?;
+            write!(
+                stdout,
+                "\x1b[{};{}H",
+                cursor.row + 1 + offset,
+                cursor.col + 1
+            )?;
             self.prev_cursor = new_cursor;
         }
         Ok(())
@@ -190,6 +204,18 @@ impl Renderer {
     /// Mark all lines as stale so the next render redraws everything.
     fn invalidate(&mut self) {
         self.prev_lines.clear();
+    }
+
+    /// Snapshot VT state into prev_lines without writing anything to stdout.
+    /// Used after TUI handoff to establish a baseline for diff rendering
+    /// while preserving existing terminal content.
+    fn sync(&mut self, vt: &Vt) {
+        self.prev_lines.clear();
+        for line in vt.view() {
+            self.prev_lines.push(line.cells().to_vec());
+        }
+        let cursor = vt.cursor();
+        self.prev_cursor = (cursor.col, cursor.row, cursor.visible);
     }
 }
 
@@ -368,12 +394,10 @@ impl ShellSession {
             }
 
             // Clear VT so internal task output (env exports, markers, drain
-            // sentinels) is not rendered to the user. Send Ctrl-L so bash
-            // redraws a clean prompt; the response will arrive via the
-            // event loop.
+            // sentinels) is not rendered to the user. The PTY resize later
+            // triggers SIGWINCH, which makes bash redraw the prompt without
+            // any clear-screen sequences.
             vt.feed_str("\x1b[2J\x1b[H");
-            let _ = pty.write_all(&[0x0C]);
-            let _ = pty.flush();
 
             // Signal TUI that initial build is complete and we're ready for terminal
             tracing::trace!("session: sending backend_done_tx");
@@ -458,19 +482,44 @@ impl ShellSession {
             self.size.cols,
             self.size.rows
         );
-        // Resize PTY to match current terminal size (minus status line row)
-        let _ = pty.resize(self.pty_size());
+        // Resize PTY/VT to match current terminal size.
+        // When offset > 0, shrink to fit in the available space below cursor_row
+        // so VT content doesn't overlap with the status line.
+        let row_offset = cursor_row.saturating_sub(1);
+        let pty_size = if row_offset > 0 {
+            let available_rows = self.pty_size().rows.saturating_sub(row_offset).max(1);
+            PtySize {
+                rows: available_rows,
+                cols: self.size.cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            }
+        } else {
+            self.pty_size()
+        };
+        let _ = pty.resize(pty_size);
+        vt.resize(pty_size.cols as usize, pty_size.rows as usize);
 
         // Initialize the renderer and do a full initial draw
         let mut renderer = Renderer::new();
-        renderer.render_full(&mut stdout, &vt)?;
+        if row_offset > 0 {
+            // Preserve existing screen content by offsetting VT rows below it.
+            // The prompt will appear at cursor_row. Old content stays visible
+            // until VT output fills the available space and triggers a scroll,
+            // at which point old content is pushed into native scrollback.
+            renderer.row_offset = row_offset;
+            renderer.sync(&vt);
+        } else {
+            renderer.render_full(&mut stdout, &vt)?;
+        }
         if self.config.show_status_line {
             self.status_line
                 .draw(&mut stdout, self.size.cols, self.size.rows)?;
         }
         // Position cursor after initial draw
         let c = vt.cursor();
-        write!(stdout, "\x1b[{};{}H", c.row + 1, c.col + 1)?;
+        let offset = renderer.row_offset as usize;
+        write!(stdout, "\x1b[{};{}H", c.row + 1 + offset, c.col + 1)?;
         stdout.flush()?;
 
         // Set up event channel
@@ -590,7 +639,8 @@ impl ShellSession {
                         if self.config.show_status_line {
                             self.status_line.draw(stdout, self.size.cols, self.size.rows)?;
                             let c = vt.cursor();
-                            write!(stdout, "\x1b[{};{}H", c.row + 1, c.col + 1)?;
+                            let offset = renderer.row_offset as usize;
+                            write!(stdout, "\x1b[{};{}H", c.row + 1 + offset, c.col + 1)?;
                             stdout.flush()?;
                         }
                         continue;
@@ -633,13 +683,17 @@ impl ShellSession {
                                     let changes = vt.feed_str(&error_text);
                                     changes.scrollback.count()
                                 };
-                                let content_rows = self.pty_size().rows;
-                                renderer.render_with_scroll(
-                                    stdout,
-                                    vt,
-                                    scroll_count,
-                                    content_rows,
-                                )?;
+                                if renderer.row_offset > 0 {
+                                    renderer.render(stdout, vt)?;
+                                } else {
+                                    let content_rows = self.pty_size().rows;
+                                    renderer.render_with_scroll(
+                                        stdout,
+                                        vt,
+                                        scroll_count,
+                                        content_rows,
+                                    )?;
+                                }
                             } else {
                                 pty.write_all(&[0x0C])?;
                                 pty.flush()?;
@@ -647,7 +701,8 @@ impl ShellSession {
                             self.status_line
                                 .draw(stdout, self.size.cols, self.size.rows)?;
                             let c = vt.cursor();
-                            write!(stdout, "\x1b[{};{}H", c.row + 1, c.col + 1)?;
+                            let offset = renderer.row_offset as usize;
+                            write!(stdout, "\x1b[{};{}H", c.row + 1 + offset, c.col + 1)?;
                             stdout.flush()?;
                         }
                         continue;
@@ -694,7 +749,13 @@ impl ShellSession {
                                     &forwarded_mouse_modes,
                                     stdout,
                                 )?;
-                                renderer.render(stdout, vt)?;
+                                let content_rows = self.pty_size().rows;
+                                renderer.render_with_scroll(
+                                    stdout,
+                                    vt,
+                                    total_scroll,
+                                    content_rows,
+                                )?;
                                 return Ok(exit_code);
                             }
                             Event::Stdin(stdin_data) => {
@@ -713,17 +774,68 @@ impl ShellSession {
                     }
 
                     if in_alternate_screen {
+                        // Alternate screen apps (vim, less) need the full terminal.
+                        // Immediately consume all offset so VT gets full size.
+                        if renderer.row_offset > 0 {
+                            renderer.row_offset = 0;
+                            let full_pty_size = self.pty_size();
+                            let _ = pty.resize(full_pty_size);
+                            vt.resize(full_pty_size.cols as usize, full_pty_size.rows as usize);
+                            renderer.invalidate();
+                        }
                         renderer.render(stdout, vt)?;
+                    } else if renderer.row_offset > 0 {
+                        if total_scroll > 0 {
+                            // Gradually consume offset: push old content rows
+                            // into scrollback and grow VT by the same amount.
+                            // This keeps the cursor near the bottom instead of
+                            // jumping to the middle on a sudden full expansion.
+                            let consumed = total_scroll.min(renderer.row_offset as usize);
+                            let remaining = total_scroll - consumed;
+                            let full_content_rows = self.pty_size().rows;
+
+                            // Push consumed rows of old content into scrollback
+                            write!(stdout, "\x1b[1;{}r", full_content_rows)?;
+                            write!(stdout, "\x1b[{};1H", full_content_rows)?;
+                            stdout.write_all("\n".repeat(consumed).as_bytes())?;
+                            write!(stdout, "\x1b[r")?;
+
+                            // Shrink offset and grow VT to match
+                            renderer.row_offset -= consumed as u16;
+                            let new_vt_rows = full_content_rows - renderer.row_offset;
+                            let new_pty_size = PtySize {
+                                rows: new_vt_rows,
+                                cols: self.size.cols,
+                                pixel_width: 0,
+                                pixel_height: 0,
+                            };
+                            let _ = pty.resize(new_pty_size);
+                            vt.resize(new_pty_size.cols as usize, new_pty_size.rows as usize);
+
+                            // Full repaint (DECSTBM scroll invalidated alignment)
+                            renderer.invalidate();
+                            renderer.render_with_scroll(
+                                stdout,
+                                vt,
+                                remaining,
+                                full_content_rows,
+                            )?;
+                        } else {
+                            // During offset phase, use plain render (no scroll regions)
+                            renderer.render(stdout, vt)?;
+                        }
                     } else {
                         let content_rows = self.pty_size().rows;
                         renderer.render_with_scroll(stdout, vt, total_scroll, content_rows)?;
                     }
+
                     if self.config.show_status_line {
                         self.status_line
                             .draw(stdout, self.size.cols, self.size.rows)?;
                     }
                     let c = vt.cursor();
-                    write!(stdout, "\x1b[{};{}H", c.row + 1, c.col + 1)?;
+                    let offset = renderer.row_offset as usize;
+                    write!(stdout, "\x1b[{};{}H", c.row + 1 + offset, c.col + 1)?;
                     stdout.flush()?;
                 }
 
@@ -753,6 +865,8 @@ impl ShellSession {
                         pixel_width: 0,
                         pixel_height: 0,
                     };
+                    // Terminal resize ends the offset phase
+                    renderer.row_offset = 0;
                     let pty_size = self.pty_size();
                     let _ = pty.resize(pty_size);
                     vt.resize(pty_size.cols as usize, pty_size.rows as usize);
@@ -789,12 +903,12 @@ impl ShellSession {
         match cmd {
             ShellCommand::ReloadReady { changed_files } => {
                 self.status_line.state_mut().set_reload_ready(changed_files);
-                self.draw_status_and_cursor(stdout, vt)?;
+                self.draw_status_and_cursor(stdout, vt, renderer)?;
             }
 
             ShellCommand::Building { changed_files } => {
                 self.status_line.state_mut().set_building(changed_files);
-                self.draw_status_and_cursor(stdout, vt)?;
+                self.draw_status_and_cursor(stdout, vt, renderer)?;
             }
 
             ShellCommand::BuildFailed {
@@ -804,22 +918,22 @@ impl ShellSession {
                 self.status_line
                     .state_mut()
                     .set_build_failed(changed_files, error);
-                self.draw_status_and_cursor(stdout, vt)?;
+                self.draw_status_and_cursor(stdout, vt, renderer)?;
             }
 
             ShellCommand::ReloadApplied => {
                 self.status_line.state_mut().clear();
-                self.draw_status_and_cursor(stdout, vt)?;
+                self.draw_status_and_cursor(stdout, vt, renderer)?;
             }
 
             ShellCommand::WatchedFiles { files } => {
                 self.status_line.state_mut().set_watched_files(files);
-                self.draw_status_and_cursor(stdout, vt)?;
+                self.draw_status_and_cursor(stdout, vt, renderer)?;
             }
 
             ShellCommand::WatchingPaused { paused } => {
                 self.status_line.state_mut().set_paused(paused);
-                self.draw_status_and_cursor(stdout, vt)?;
+                self.draw_status_and_cursor(stdout, vt, renderer)?;
             }
 
             ShellCommand::PrintWatchedFiles { files } => {
@@ -832,9 +946,13 @@ impl ShellSession {
                     let changes = vt.feed_str(&text);
                     changes.scrollback.count()
                 };
-                let content_rows = self.pty_size().rows;
-                renderer.render_with_scroll(stdout, vt, scroll_count, content_rows)?;
-                self.draw_status_and_cursor(stdout, vt)?;
+                if renderer.row_offset > 0 {
+                    renderer.render(stdout, vt)?;
+                } else {
+                    let content_rows = self.pty_size().rows;
+                    renderer.render_with_scroll(stdout, vt, scroll_count, content_rows)?;
+                }
+                self.draw_status_and_cursor(stdout, vt, renderer)?;
             }
 
             ShellCommand::Shutdown => {
@@ -912,12 +1030,14 @@ impl ShellSession {
         &mut self,
         stdout: &mut Box<dyn Write + Send>,
         vt: &Vt,
+        renderer: &Renderer,
     ) -> Result<(), SessionError> {
         if self.config.show_status_line {
             self.status_line
                 .draw(stdout, self.size.cols, self.size.rows)?;
             let c = vt.cursor();
-            write!(stdout, "\x1b[{};{}H", c.row + 1, c.col + 1)?;
+            let offset = renderer.row_offset as usize;
+            write!(stdout, "\x1b[{};{}H", c.row + 1 + offset, c.col + 1)?;
             stdout.flush()?;
         }
         Ok(())
