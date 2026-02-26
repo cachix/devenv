@@ -35,7 +35,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use tasks::{Tasks, TasksUi};
-use tokio::fs::{self, File};
+use tokio::fs;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::process;
@@ -1275,6 +1275,21 @@ impl Devenv {
         }
     }
 
+    fn parse_env_null_separated(content: &[u8]) -> Vec<(String, String)> {
+        let mut envs = Vec::new();
+        for entry in content.split(|&b| b == 0) {
+            if entry.is_empty() {
+                continue;
+            }
+            let entry_str = String::from_utf8_lossy(entry);
+            let mut parts = entry_str.splitn(2, '=');
+            if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
+                envs.push((key.to_string(), value.to_string()));
+            }
+        }
+        envs
+    }
+
     async fn capture_shell_environment(&self) -> Result<HashMap<String, String>> {
         let temp_dir = tempfile::TempDir::with_prefix("devenv-env")
             .into_diagnostic()
@@ -1283,7 +1298,7 @@ impl Devenv {
         let script_path = temp_dir.path().join("script");
         let env_path = temp_dir.path().join("env");
 
-        let script = format!("env > {}", env_path.to_string_lossy());
+        let script = format!("env -0 > {}", env_path.to_string_lossy());
         fs::write(&script_path, script)
             .await
             .into_diagnostic()
@@ -1319,22 +1334,16 @@ impl Devenv {
             miette::bail!("Shell environment capture failed: {}", stderr);
         }
 
-        // Parse the environment variables
-        let file = File::open(&env_path)
+        // Parse the null-separated environment variables (env -0 output).
+        // Using null separators correctly handles multiline values such as
+        // BASH_FUNC_* entries, which would be truncated by line-based parsing.
+        let content = fs::read(&env_path)
             .await
             .into_diagnostic()
             .wrap_err_with(|| {
-                format!("Failed to open environment file at {}", env_path.display())
+                format!("Failed to read environment file at {}", env_path.display())
             })?;
-        let reader = BufReader::new(file);
-        let mut shell_envs = Vec::new();
-        let mut lines = reader.lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            let mut parts = line.splitn(2, '=');
-            if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
-                shell_envs.push((key.to_string(), value.to_string()));
-            }
-        }
+        let shell_envs = Self::parse_env_null_separated(&content);
 
         let mut envs: HashMap<String, String> = {
             let vars = std::env::vars();
@@ -2646,5 +2655,52 @@ mod tests {
         assert_eq!(obj.get("existing").unwrap(), &serde_json::json!(1));
         assert_eq!(obj.get("override_me").unwrap(), &serde_json::json!("new"));
         assert_eq!(obj.get("added").unwrap(), &serde_json::json!(42));
+    }
+
+    #[test]
+    fn test_parse_env_null_separated_basic() {
+        let input = b"HOME=/home/user\0LANG=en_US.UTF-8\0";
+        let result = Devenv::parse_env_null_separated(input);
+        assert_eq!(
+            result,
+            vec![
+                ("HOME".to_string(), "/home/user".to_string()),
+                ("LANG".to_string(), "en_US.UTF-8".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_env_null_separated_multiline_value() {
+        let input =
+            b"SIMPLE=value\0BASH_FUNC_my_func%%=() { echo hello\n  echo world\n}\0OTHER=val\0";
+        let result = Devenv::parse_env_null_separated(input);
+        assert_eq!(
+            result,
+            vec![
+                ("SIMPLE".to_string(), "value".to_string()),
+                (
+                    "BASH_FUNC_my_func%%".to_string(),
+                    "() { echo hello\n  echo world\n}".to_string()
+                ),
+                ("OTHER".to_string(), "val".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_env_null_separated_empty() {
+        let result = Devenv::parse_env_null_separated(b"");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_env_null_separated_value_with_equals() {
+        let input = b"CONFIG=key=value=extra\0";
+        let result = Devenv::parse_env_null_separated(input);
+        assert_eq!(
+            result,
+            vec![("CONFIG".to_string(), "key=value=extra".to_string())]
+        );
     }
 }
