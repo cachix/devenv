@@ -1,7 +1,8 @@
 ---
 source: devenv-tui/tests/tui_tests.rs
+assertion_line: 397
 expression: output
 ---
-⠋ Querying  …fissin0h5ggzb0b2i5drbz-cargo-vendor-dir from some-cache.org [TIME]
+⠋ Querying  7xyndmr0mgfissin0h5ggzb0b2i5drbz-cargo-vendor-dir from some… [TIME]
 
  0 of 1 queries                                                          ↑↓ nav
