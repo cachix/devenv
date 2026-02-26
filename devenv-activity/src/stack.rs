@@ -30,7 +30,7 @@
 //! ```
 
 use std::cell::RefCell;
-use std::sync::OnceLock;
+use std::sync::Mutex;
 use tokio::sync::mpsc;
 use valuable::Valuable;
 
@@ -39,8 +39,11 @@ use crate::builders::next_id;
 use crate::events::{ActivityEvent, ActivityLevel, ExpectedCategory, Message, SetExpected};
 use crate::serde_valuable::SerdeValue;
 
-/// Global sender for activity events (installed by ActivityHandle::install())
-pub(crate) static ACTIVITY_SENDER: OnceLock<mpsc::UnboundedSender<ActivityEvent>> = OnceLock::new();
+/// Global sender for activity events (installed by ActivityHandle::install()).
+/// Uses Mutex<Option<...>> so it can be cleared when the receiver is dropped,
+/// allowing subsequent log/error calls to fall back to tracing.
+pub(crate) static ACTIVITY_SENDER: Mutex<Option<mpsc::UnboundedSender<ActivityEvent>>> =
+    Mutex::new(None);
 
 // Task-local stack for tracking current Activity IDs and levels (for parent detection and level inheritance).
 // Using task_local instead of thread_local to support async code where tasks
@@ -57,7 +60,8 @@ pub(crate) fn send_activity_event(event: ActivityEvent) {
     }
 
     // Send to channel for TUI
-    if let Some(tx) = ACTIVITY_SENDER.get() {
+    let tx = ACTIVITY_SENDER.lock().ok().and_then(|g| g.clone());
+    if let Some(tx) = tx {
         let _ = tx.send(event);
     }
 }
@@ -134,7 +138,12 @@ pub fn log_to_evaluate(id: u64, line: impl Into<String>) {
     use crate::events::Evaluate;
 
     let line = line.into();
-    if ACTIVITY_SENDER.get().is_none() {
+    if ACTIVITY_SENDER
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+        .is_none()
+    {
         tracing::info!("{}", line);
     }
     send_activity_event(ActivityEvent::Evaluate(Evaluate::Log {
@@ -186,7 +195,12 @@ pub fn log_to_task(id: u64, line: impl Into<String>, is_error: bool) {
     use crate::events::Task;
 
     let line = line.into();
-    if ACTIVITY_SENDER.get().is_none() {
+    if ACTIVITY_SENDER
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+        .is_none()
+    {
         if is_error {
             tracing::warn!("{}", line);
         } else {

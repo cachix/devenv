@@ -179,7 +179,7 @@ fn main() -> Result<()> {
 async fn run_with_tui(cli: Cli) -> Result<()> {
     // Initialize activity channel and register it
     let (activity_rx, activity_handle) = devenv_activity::init();
-    activity_handle.install();
+    let _activity_guard = activity_handle.install();
 
     // Initialize tracing
     let level = cli.get_log_level();

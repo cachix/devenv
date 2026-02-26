@@ -65,7 +65,7 @@ pub use builders::{
 };
 
 // Functions
-pub use handle::{ActivityHandle, init};
+pub use handle::{ActivityGuard, ActivityHandle, init};
 pub use serde_valuable::SerdeValue;
 pub use stack::{
     current_activity_id, current_activity_level, emit_task_hierarchy, log_to_evaluate, log_to_task,

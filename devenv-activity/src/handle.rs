@@ -35,11 +35,28 @@ pub struct ActivityHandle {
     tx: mpsc::UnboundedSender<ActivityEvent>,
 }
 
+/// Guard that clears the global activity sender on drop.
+/// Hold this for the lifetime of the activity channel's receiver.
+pub struct ActivityGuard;
+
+impl Drop for ActivityGuard {
+    fn drop(&mut self) {
+        if let Ok(mut sender) = ACTIVITY_SENDER.lock() {
+            *sender = None;
+        }
+    }
+}
+
 impl ActivityHandle {
     /// Install this handle's sender as the global activity event channel.
     /// After calling this, all Activity events will be sent to this channel.
-    pub fn install(self) {
-        let _ = ACTIVITY_SENDER.set(self.tx);
+    /// Returns an [`ActivityGuard`] that clears the sender when dropped,
+    /// allowing subsequent log/error calls to fall back to tracing.
+    pub fn install(self) -> ActivityGuard {
+        if let Ok(mut sender) = ACTIVITY_SENDER.lock() {
+            *sender = Some(self.tx);
+        }
+        ActivityGuard
     }
 }
 

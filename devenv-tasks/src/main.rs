@@ -195,7 +195,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
 
             // Initialize activity channel for TasksUi
             let (activity_rx, activity_handle) = devenv_activity::init();
-            activity_handle.install();
+            let _activity_guard = activity_handle.install();
 
             let tasks = Arc::new(tasks);
             let tasks_clone = Arc::clone(&tasks);

@@ -289,7 +289,12 @@ impl Activity {
     pub fn log(&self, line: impl Into<String>) {
         let _guard = self.span.enter();
         let line_str = line.into();
-        if ACTIVITY_SENDER.get().is_none() {
+        if ACTIVITY_SENDER
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+            .is_none()
+        {
             tracing::info!("{}", line_str);
         }
         let event = match self.activity_type {
@@ -337,7 +342,12 @@ impl Activity {
     pub fn error(&self, line: impl Into<String>) {
         let _guard = self.span.enter();
         let line_str = line.into();
-        if ACTIVITY_SENDER.get().is_none() {
+        if ACTIVITY_SENDER
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+            .is_none()
+        {
             tracing::warn!("{}", line_str);
         }
         let event = match self.activity_type {
