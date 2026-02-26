@@ -20,9 +20,13 @@ pub struct TestContext {
 
 impl TestContext {
     pub fn new() -> Self {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let state_dir = temp_dir.path().join("state");
-        std::fs::create_dir_all(&state_dir).expect("Failed to create state dir");
+        // Short prefix and no subdirectory to keep Unix socket paths under
+        // SUN_LEN (108). Nix build sandboxes set TMPDIR to ~64 char paths.
+        let temp_dir = tempfile::Builder::new()
+            .prefix("t")
+            .tempdir()
+            .expect("Failed to create temp dir");
+        let state_dir = temp_dir.path().to_path_buf();
         Self {
             temp_dir,
             state_dir,
