@@ -18,7 +18,7 @@ in
     before = [ "devenv:processes:opentelemetry-collector" ];
   };
 
-  processes.opentelemetry-collector.after = [ "devenv:processes:clickhouse" ];
+  processes.opentelemetry-collector.after = [ "devenv:processes:clickhouse-server" ];
 
   services.opentelemetry-collector = {
     enable = true;
