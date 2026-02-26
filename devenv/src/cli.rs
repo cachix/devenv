@@ -269,7 +269,7 @@ pub struct InputOverrideCliArgs {
         num_args = 2,
         value_names = ["OPTION:TYPE", "VALUE"],
         help = "Override configuration options with typed values",
-        long_help = "Override configuration options with typed values.\n\nOPTION must include a type: <attribute>:<type>\nSupported types: string, int, float, bool, path, pkg, pkgs\n\nExamples:\n  --option languages.rust.channel:string beta\n  --option services.postgres.enable:bool true\n  --option languages.python.version:string 3.10\n  --option packages:pkgs \"ncdu git\"")]
+        long_help = "Override configuration options with typed values.\n\nOPTION must include a type: <attribute>:<type>\nSupported types: string, int, float, bool, path, pkg, pkgs\n\nList types (pkgs) append to existing values by default.\nAdd a ! suffix to replace instead: pkgs!\n\nExamples:\n  --option languages.rust.channel:string beta\n  --option services.postgres.enable:bool true\n  --option languages.python.version:string 3.10\n  --option packages:pkgs \"ncdu git\"       (appends to packages)\n  --option packages:pkgs! \"ncdu git\"      (replaces all packages)")]
     pub nix_module_options: Vec<String>,
 }
 

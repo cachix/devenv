@@ -129,3 +129,6 @@ This is a major release with significant architectural changes. devenv 2.0 intro
 - Fixed profile state isolation in separate directories.
 - Fixed processes preventing infinite recursion when conditionally defining processes.
 - Fixed load-exports permission error when file is owned by a different user.
+- Fixed `-O packages:pkgs` replacing all packages instead of appending.
+  The `pkgs` type now appends to existing packages by default.
+  Use `pkgs!` to force-replace the entire list.

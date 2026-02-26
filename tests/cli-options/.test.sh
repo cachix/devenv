@@ -45,17 +45,36 @@ echo "$OUTPUT" | grep -E "TEST_PATH:.*/somepath" || {
   exit 1
 }
 
-# Test pkgs type
+# Test pkgs type (append mode - should keep existing packages)
 CMD_OUTPUT=$(devenv --option packages:pkgs "hello cowsay" shell which hello)
 if [ $? -ne 0 ]; then
   echo "ERROR: Expected 'hello' package to be available in shell via pkgs type"
   exit 1
 fi
 
-# Test if cowsay is also available
 CMD_OUTPUT=$(devenv --option packages:pkgs "hello cowsay" shell which cowsay)
 if [ $? -ne 0 ]; then
   echo "ERROR: Expected 'cowsay' package to be available in shell via pkgs type"
+  exit 1
+fi
+
+# Verify existing package from devenv.nix is still available (append, not replace)
+CMD_OUTPUT=$(devenv --option packages:pkgs "hello cowsay" shell which devenv-test-existing-pkg)
+if [ $? -ne 0 ]; then
+  echo "ERROR: Expected 'devenv-test-existing-pkg' to survive pkgs append"
+  exit 1
+fi
+
+# Test pkgs! type (force mode - should replace all packages)
+if devenv --option packages:pkgs! "hello" shell which devenv-test-existing-pkg &> /dev/null; then
+  echo "ERROR: Expected 'devenv-test-existing-pkg' to be removed by pkgs! force replace"
+  exit 1
+fi
+
+# Verify the forced package itself is available
+CMD_OUTPUT=$(devenv --option packages:pkgs! "hello" shell which hello)
+if [ $? -ne 0 ]; then
+  echo "ERROR: Expected 'hello' package to be available with pkgs! force replace"
   exit 1
 fi
 
