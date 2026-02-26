@@ -145,7 +145,7 @@
       '';
     }
     {
-      enterTest = ''
+      enterTest = lib.mkAfter ''
         if [ -f ./.test.sh ]; then
           echo "• Running .test.sh..."
           ./.test.sh

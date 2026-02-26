@@ -18,4 +18,8 @@
     '';
     after = [ "devenv:processes:server" ];
   };
+
+  enterTest = ''
+    export SERVER_HTTP_PORT=${toString config.processes.server.ports.http.value}
+  '';
 }
