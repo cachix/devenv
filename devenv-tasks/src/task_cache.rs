@@ -7,9 +7,9 @@ use devenv_cache_core::{
     file::TrackedFile,
     time,
 };
-use ignore::overrides::OverrideBuilder;
 use ignore::Match;
 use ignore::WalkBuilder;
+use ignore::overrides::OverrideBuilder;
 use serde_json::Value;
 use sqlx::Row;
 use std::collections::BTreeMap;
@@ -25,8 +25,6 @@ fn normalize_pattern_for_base_dir(pattern: &str, base_dir: &Path) -> String {
 
     let base_dir_str = base_dir.to_string_lossy();
     let stripped = if let Some(rest) = raw_pattern.strip_prefix(&format!("{}/", base_dir_str)) {
-        rest
-    } else if let Some(rest) = raw_pattern.strip_prefix(&format!("{}\\", base_dir_str)) {
         rest
     } else if raw_pattern == base_dir_str {
         "."
@@ -44,7 +42,6 @@ fn normalize_pattern_for_base_dir(pattern: &str, base_dir: &Path) -> String {
         || stripped == "."
         || stripped.starts_with('/')
         || stripped.contains('/')
-        || stripped.contains('\\')
     {
         stripped.to_string()
     } else {
@@ -56,6 +53,13 @@ fn normalize_pattern_for_base_dir(pattern: &str, base_dir: &Path) -> String {
     } else {
         stripped
     }
+}
+
+fn is_literal_pattern(pattern: &str) -> bool {
+    !pattern.contains('*')
+        && !pattern.contains('?')
+        && !pattern.contains('[')
+        && !pattern.contains('{')
 }
 
 /// Extract the base directory from a glob pattern.
@@ -126,15 +130,24 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
         return Vec::new();
     }
 
+    let mut results: Vec<String> = Vec::new();
     let mut groups: BTreeMap<PathBuf, Vec<&str>> = BTreeMap::new();
     for pattern in &positive_patterns {
+        if is_literal_pattern(pattern) && negation_patterns.is_empty() {
+            let path = Path::new(pattern);
+            if path.exists() {
+                if let Some(path_str) = path.to_str() {
+                    results.push(path_str.to_string());
+                }
+            }
+            continue;
+        }
+
         groups
             .entry(extract_base_dir(pattern).to_path_buf())
             .or_default()
             .push(*pattern);
     }
-
-    let mut results: Vec<String> = Vec::new();
 
     for (base_dir, positive_group) in groups {
         let mut overrides_builder = OverrideBuilder::new(&base_dir);
@@ -160,6 +173,7 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
                 continue;
             }
         };
+        let overrides_for_match = overrides.clone();
 
         let mut walk_builder = WalkBuilder::new(&base_dir);
         walk_builder
@@ -169,7 +183,8 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
             .git_global(false)
             .git_exclude(false)
             .parents(false)
-            .follow_links(true);
+            .follow_links(true)
+            .overrides(overrides);
 
         for entry in walk_builder.build() {
             let Ok(entry) = entry else {
@@ -177,8 +192,13 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
             };
 
             let is_dir = entry.file_type().is_some_and(|ft| ft.is_dir());
-            if matches!(overrides.matched(entry.path(), is_dir), Match::Whitelist(_)) {
-                results.push(entry.path().to_string_lossy().into_owned());
+            if matches!(
+                overrides_for_match.matched(entry.path(), is_dir),
+                Match::Whitelist(_)
+            ) {
+                if let Some(path_str) = entry.path().to_str() {
+                    results.push(path_str.to_string());
+                }
             }
         }
     }
