@@ -8,7 +8,8 @@ description = "Reusable event sources for devenv (file watcher, TCP probe, notif
 [dependencies]
 async-priority-channel.workspace = true
 miette.workspace = true
-tokio = { workspace = true, features = ["net"] }
+reqwest.workspace = true
+tokio = { workspace = true, features = ["net", "process"] }
 tracing.workspace = true
 watchexec.workspace = true
 watchexec-filterer-globset.workspace = true
