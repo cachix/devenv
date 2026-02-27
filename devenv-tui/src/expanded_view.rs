@@ -288,20 +288,6 @@ fn handle_key_event(
             }
         }
 
-        // Copy selection with Enter or y
-        KeyCode::Enter | KeyCode::Char('y') => {
-            if sel.has_selection {
-                if let (Some(anchor), Some(cursor)) = (sel.anchor, sel.cursor) {
-                    let selection = Selection::from_anchor_cursor(anchor, cursor);
-                    let text = extract_selected_text(sel.logs, &selection);
-                    if !text.is_empty() {
-                        copy_to_clipboard(&text);
-                    }
-                }
-                sel.clear();
-            }
-        }
-
         // Scroll down one line
         KeyCode::Down | KeyCode::Char('j') => {
             scroll_offset.set((scroll_offset.get() + 1).min(max_offset));
@@ -332,10 +318,21 @@ fn handle_key_event(
             scroll_offset.set(max_offset);
         }
 
-        // Ctrl+C to shutdown
+        // Ctrl+C: copy selection if active, otherwise shutdown
         KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-            shutdown.set_last_signal(Signal::SIGINT);
-            shutdown.shutdown();
+            if sel.has_selection {
+                if let (Some(anchor), Some(cursor)) = (sel.anchor, sel.cursor) {
+                    let selection = Selection::from_anchor_cursor(anchor, cursor);
+                    let text = extract_selected_text(sel.logs, &selection);
+                    if !text.is_empty() {
+                        copy_to_clipboard(&text);
+                    }
+                }
+                sel.clear();
+            } else {
+                shutdown.set_last_signal(Signal::SIGINT);
+                shutdown.shutdown();
+            }
         }
 
         _ => {}
@@ -491,7 +488,7 @@ fn render_expanded_view(
     // Build footer text - show copy hint when selection is active
     let footer_text = if selection.is_some() {
         format!(
-            "{} \u{2502} j/k:line  PgUp/PgDn:page  g/G:top/bottom  Enter:copy  Esc:deselect  q:back",
+            "{} \u{2502} j/k:line  PgUp/PgDn:page  g/G:top/bottom  Ctrl+C:copy  Esc:deselect  q:back",
             progress
         )
     } else {
