@@ -258,6 +258,7 @@ impl TaskState {
         manager: &Arc<NativeProcessManager>,
         parent_id: Option<u64>,
         env: &std::collections::HashMap<String, String>,
+        cancel: &tokio_util::sync::CancellationToken,
     ) -> Result<()> {
         let Some(cmd) = &self.task.command else {
             return Err(miette::miette!(
@@ -315,7 +316,7 @@ impl TaskState {
         // Wait for ready signal if notify is enabled or has listen sockets
         if requires_ready_wait {
             tracing::info!("Waiting for process {} to signal ready...", self.task.name);
-            manager.wait_ready(&config.name).await?;
+            manager.wait_ready(&config.name, cancel).await?;
             tracing::info!("Process {} signaled ready", self.task.name);
         }
 

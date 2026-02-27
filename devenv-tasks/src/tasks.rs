@@ -794,12 +794,13 @@ impl Tasks {
                 let process_manager_clone = self.process_manager.clone();
                 let parent_id = orchestration_activity.id();
                 let env = &self.env;
+                let cancel = self.shutdown.cancellation_token();
 
                 // Spawn the process using the process manager
                 match task_state_clone
                     .write()
                     .await
-                    .run_process(&process_manager_clone, Some(parent_id), env)
+                    .run_process(&process_manager_clone, Some(parent_id), env, &cancel)
                     .await
                 {
                     Ok(()) => {

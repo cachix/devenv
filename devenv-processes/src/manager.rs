@@ -11,6 +11,7 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
 /// Commands that can be sent to control processes
@@ -403,7 +404,10 @@ impl NativeProcessManager {
     }
 
     /// Wait for a process to become ready, avoiding missed early readiness signals.
-    pub async fn wait_ready(&self, name: &str) -> Result<()> {
+    ///
+    /// Respects the provided cancellation token so that shutdown (e.g. SIGINT) can
+    /// interrupt the wait instead of blocking indefinitely.
+    pub async fn wait_ready(&self, name: &str, cancel: &CancellationToken) -> Result<()> {
         let mut status_rx = {
             let jobs = self.jobs.read().await;
             let handle = jobs
@@ -416,13 +420,23 @@ impl NativeProcessManager {
             return Ok(());
         }
 
-        while status_rx.changed().await.is_ok() {
-            if status_rx.borrow().is_ready() {
-                return Ok(());
+        loop {
+            tokio::select! {
+                changed = status_rx.changed() => {
+                    match changed {
+                        Ok(()) => {
+                            if status_rx.borrow().is_ready() {
+                                return Ok(());
+                            }
+                        }
+                        Err(_) => bail!("Process {} ready state channel closed", name),
+                    }
+                }
+                _ = cancel.cancelled() => {
+                    bail!("Process {} readiness wait cancelled", name);
+                }
             }
         }
-
-        bail!("Process {} ready state channel closed", name);
     }
 
     /// Query the current state of a process.
