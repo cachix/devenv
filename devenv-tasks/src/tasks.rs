@@ -785,52 +785,65 @@ impl Tasks {
             };
 
             if is_process_task {
-                // Process task: spawn and transition to ProcessReady immediately
-                // Process activities are created as direct children of orchestration activity
+                // Process task: spawn into background so we don't block the scheduling
+                // loop. This lets independent processes start concurrently and allows
+                // non-dependent oneshot tasks to proceed immediately.
+                // The dependency system handles ordering: tasks that depend on this
+                // process will wait in their dependency check loop until the status
+                // transitions to ProcessReady.
 
                 let task_state_clone = Arc::clone(task_state);
                 let notify_finished_clone = Arc::clone(&self.notify_finished);
                 let notify_ui_clone = Arc::clone(&self.notify_ui);
                 let process_manager_clone = self.process_manager.clone();
                 let parent_id = orchestration_activity.id();
-                let env = &self.env;
+                let env = self.env.clone();
                 let cancel = self.shutdown.cancellation_token();
+                let orchestration_activity_clone = Arc::clone(&orchestration_activity);
+                let completed_tasks_clone = Arc::clone(&completed_tasks);
 
-                // Spawn the process using the process manager
-                match task_state_clone
-                    .write()
-                    .await
-                    .run_process(&process_manager_clone, Some(parent_id), env, &cancel)
-                    .await
-                {
-                    Ok(()) => {
-                        // Process is now running and ready
+                running_tasks.spawn(move || {
+                    // Clone for use inside the async block; the original is borrowed by in_activity
+                    let orchestration_activity_inner = Arc::clone(&orchestration_activity_clone);
+
+                    async move {
+                        match task_state_clone
+                            .write()
+                            .await
+                            .run_process(&process_manager_clone, Some(parent_id), &env, &cancel)
+                            .await
+                        {
+                            Ok(()) => {
+                                // Process is now running and ready
+                            }
+                            Err(e) => {
+                                // Failed to start process
+                                let mut task_state = task_state_clone.write().await;
+                                error!(
+                                    "Failed to start process task {}: {}",
+                                    task_state.task.name, e
+                                );
+                                task_state.status = TaskStatus::Completed(TaskCompleted::Failed(
+                                    std::time::Duration::ZERO,
+                                    TaskFailure {
+                                        stdout: Vec::new(),
+                                        stderr: Vec::new(),
+                                        error: format!("Failed to start process: {e}"),
+                                    },
+                                ));
+                            }
+                        }
+
+                        let done = completed_tasks_clone
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                            + 1;
+                        orchestration_activity_inner.progress(done, total_tasks, None);
+
                         notify_finished_clone.notify_one();
                         notify_ui_clone.notify_one();
                     }
-                    Err(e) => {
-                        // Failed to start process
-                        let mut task_state = task_state_clone.write().await;
-                        error!(
-                            "Failed to start process task {}: {}",
-                            task_state.task.name, e
-                        );
-                        task_state.status = TaskStatus::Completed(TaskCompleted::Failed(
-                            std::time::Duration::ZERO,
-                            TaskFailure {
-                                stdout: Vec::new(),
-                                stderr: Vec::new(),
-                                error: format!("Failed to start process: {e}"),
-                            },
-                        ));
-                        notify_finished_clone.notify_one();
-                        notify_ui_clone.notify_one();
-                    }
-                }
-
-                // Update orchestration progress once the process is started or failed.
-                let done = completed_tasks.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-                orchestration_activity.progress(done, total_tasks, None);
+                    .in_activity(&orchestration_activity_clone)
+                });
 
                 continue;
             }
