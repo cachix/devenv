@@ -109,7 +109,13 @@ fn extract_base_dir(pattern: &str) -> &Path {
 
     // Find the last path separator in the prefix to get the directory
     match prefix.rfind(std::path::MAIN_SEPARATOR) {
-        Some(last_sep) => Path::new(&pattern[..last_sep]),
+        Some(last_sep) => {
+            if last_sep == 0 {
+                Path::new(&pattern[..=last_sep])
+            } else {
+                Path::new(&pattern[..last_sep])
+            }
+        }
         None => {
             // No separator found - use current directory if pattern starts with special char,
             // otherwise the pattern itself might be a file/dir name
@@ -1127,6 +1133,10 @@ mod tests {
             extract_base_dir("/home/user/src/**/*.rs"),
             Path::new("/home/user/src")
         );
+
+        // Absolute patterns with top-level wildcard should keep root base dir
+        assert_eq!(extract_base_dir("/*.ts"), Path::new("/"));
+        assert_eq!(extract_base_dir("/nix*"), Path::new("/"));
 
         // Pattern starting with glob
         assert_eq!(extract_base_dir("**/*.ts"), Path::new("."));
