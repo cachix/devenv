@@ -80,6 +80,17 @@ fn build_wrapper_script(
     writeln!(script, "#!/bin/bash").unwrap();
     writeln!(script, "set -e").unwrap();
 
+    // Redirect all shell output (stdout/stderr) to log files early, so that
+    // bash's own diagnostics (e.g. "Segmentation fault", "Killed") go to the
+    // log files instead of the inherited stderr, which is the TUI's render target.
+    writeln!(
+        script,
+        "exec >> {} 2>> {}",
+        shell_escape::escape(stdout_log.to_string_lossy()),
+        shell_escape::escape(stderr_log.to_string_lossy())
+    )
+    .unwrap();
+
     if let Some(ref cwd) = config.cwd {
         writeln!(script, "cd {}", shell_escape::escape(cwd.to_string_lossy())).unwrap();
     }
@@ -117,14 +128,7 @@ fn build_wrapper_script(
         write!(cmd, " {}", shell_escape::escape(arg.into())).unwrap();
     }
 
-    writeln!(
-        script,
-        "{} >> {} 2>> {}",
-        cmd,
-        shell_escape::escape(stdout_log.to_string_lossy()),
-        shell_escape::escape(stderr_log.to_string_lossy())
-    )
-    .unwrap();
+    writeln!(script, "{}", cmd).unwrap();
 
     debug!("Generated wrapper script for {}: {}", config.name, script);
     script
