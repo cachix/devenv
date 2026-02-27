@@ -1,0 +1,4 @@
+# Devenv
+.devenv*
+devenv.local.nix
+node_modules
