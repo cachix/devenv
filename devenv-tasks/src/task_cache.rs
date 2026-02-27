@@ -62,6 +62,21 @@ fn is_literal_pattern(pattern: &str) -> bool {
         && !pattern.contains('{')
 }
 
+fn pattern_explicitly_targets_hidden_path(pattern: &str) -> bool {
+    let raw = pattern.strip_prefix('!').unwrap_or(pattern);
+    raw.starts_with('.') || raw.starts_with("/.") || raw.contains("/.")
+}
+
+fn has_hidden_component(path: &Path, base_dir: &Path) -> bool {
+    let relative = path.strip_prefix(base_dir).unwrap_or(path);
+    relative.components().any(|component| {
+        component
+            .as_os_str()
+            .to_str()
+            .is_some_and(|segment| segment.starts_with('.') && segment != "." && segment != "..")
+    })
+}
+
 /// Extract the base directory from a glob pattern.
 ///
 /// Returns the longest path prefix that doesn't contain glob special characters.
@@ -151,11 +166,17 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
 
     for (base_dir, positive_group) in groups {
         let mut overrides_builder = OverrideBuilder::new(&base_dir);
+        let mut hidden_overrides_builder = OverrideBuilder::new(&base_dir);
 
         for pattern in positive_group {
             let normalized = normalize_pattern_for_base_dir(pattern, &base_dir);
             if let Err(e) = overrides_builder.add(&normalized) {
                 warn!("Invalid glob pattern '{}': {}", normalized, e);
+            }
+            if pattern_explicitly_targets_hidden_path(&normalized) {
+                if let Err(e) = hidden_overrides_builder.add(&normalized) {
+                    warn!("Invalid hidden glob pattern '{}': {}", normalized, e);
+                }
             }
         }
 
@@ -163,6 +184,11 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
             let normalized = normalize_pattern_for_base_dir(pattern, &base_dir);
             if let Err(e) = overrides_builder.add(&normalized) {
                 warn!("Invalid glob pattern '{}': {}", normalized, e);
+            }
+            if pattern_explicitly_targets_hidden_path(&normalized) {
+                if let Err(e) = hidden_overrides_builder.add(&normalized) {
+                    warn!("Invalid hidden glob pattern '{}': {}", normalized, e);
+                }
             }
         }
 
@@ -174,6 +200,13 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
             }
         };
         let overrides_for_match = overrides.clone();
+        let hidden_overrides = match hidden_overrides_builder.build() {
+            Ok(hidden_overrides) => hidden_overrides,
+            Err(e) => {
+                warn!("Failed to build hidden ignore overrides: {}", e);
+                continue;
+            }
+        };
 
         let mut walk_builder = WalkBuilder::new(&base_dir);
         walk_builder
@@ -196,6 +229,15 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
                 overrides_for_match.matched(entry.path(), is_dir),
                 Match::Whitelist(_)
             ) {
+                if has_hidden_component(entry.path(), &base_dir)
+                    && !matches!(
+                        hidden_overrides.matched(entry.path(), is_dir),
+                        Match::Whitelist(_)
+                    )
+                {
+                    continue;
+                }
+
                 if let Some(path_str) = entry.path().to_str() {
                     results.push(path_str.to_string());
                 }
@@ -1053,6 +1095,28 @@ mod tests {
         let ts_matches = expand_glob_patterns(&[ts_pattern]);
         assert_eq!(ts_matches.len(), 1);
         assert!(ts_matches[0].ends_with("/src/a.ts"));
+    }
+
+    #[test]
+    fn test_expand_glob_patterns_requires_explicit_dot_for_hidden_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let base = temp_dir.path();
+
+        let src_dir = base.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+
+        std::fs::write(src_dir.join("visible.ts"), "visible").unwrap();
+        std::fs::write(src_dir.join(".hidden.ts"), "hidden").unwrap();
+
+        let wildcard_pattern = format!("{}/src/*.ts", base.display());
+        let wildcard_matches = expand_glob_patterns(&[wildcard_pattern]);
+        assert_eq!(wildcard_matches.len(), 1);
+        assert!(wildcard_matches[0].ends_with("/src/visible.ts"));
+
+        let explicit_dot_pattern = format!("{}/src/.*.ts", base.display());
+        let explicit_dot_matches = expand_glob_patterns(&[explicit_dot_pattern]);
+        assert_eq!(explicit_dot_matches.len(), 1);
+        assert!(explicit_dot_matches[0].ends_with("/src/.hidden.ts"));
     }
 
     #[test]
