@@ -49,3 +49,17 @@ impl Drop for TcpProbe {
         self.task.abort();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_tcp_probe_succeeds_when_port_is_open() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+
+        let mut probe = TcpProbe::spawn(addr, "test".to_string());
+        assert!(probe.recv().await.is_some());
+    }
+}

@@ -81,3 +81,43 @@ impl Drop for ExecProbe {
         self.task.abort();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_exec_probe_succeeds_on_exit_zero() {
+        let mut probe = ExecProbe::spawn(
+            "exit 0".to_string(),
+            "test".to_string(),
+            Duration::ZERO,
+            Duration::from_millis(50),
+            Duration::from_secs(5),
+        );
+
+        assert!(probe.recv().await.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_exec_probe_retries_until_success() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("gate");
+
+        // Probe checks for a file that does not exist yet
+        let cmd = format!("test -f {}", marker.display());
+
+        let mut probe = ExecProbe::spawn(
+            cmd,
+            "test-retry".to_string(),
+            Duration::ZERO,
+            Duration::from_millis(50),
+            Duration::from_secs(5),
+        );
+
+        // Create the marker file so the next probe attempt succeeds
+        tokio::fs::write(&marker, "").await.unwrap();
+
+        assert!(probe.recv().await.is_some());
+    }
+}
