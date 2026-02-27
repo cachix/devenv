@@ -316,8 +316,18 @@ impl NativeProcessManager {
         }
     }
 
+    /// Signal all supervisors to shut down gracefully.
+    ///
+    /// This wakes the supervisor loops so they exit before we abort their tasks.
+    pub fn shutdown_supervisors(&self) {
+        self.shutdown.notify_waiters();
+    }
+
     /// Stop all processes
     pub async fn stop_all(&self) -> Result<()> {
+        // Signal supervisors first so they exit gracefully
+        self.shutdown_supervisors();
+
         let jobs = self.jobs.read().await;
         let job_names: Vec<String> = jobs.keys().cloned().collect();
         drop(jobs); // Release the read lock
@@ -946,6 +956,8 @@ impl ProcessManager for NativeProcessManager {
 
 impl Drop for NativeProcessManager {
     fn drop(&mut self) {
+        // Signal supervisors to exit so they don't keep running after the manager is gone
+        self.shutdown_supervisors();
         let _ = std::fs::remove_file(self.api_socket_path());
         let _ = std::fs::remove_file(self.manager_pid_file());
     }
