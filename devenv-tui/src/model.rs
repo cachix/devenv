@@ -643,7 +643,18 @@ impl ActivityModel {
                 self.create_activity(id, name, parent, command, variant, level);
             }
             Process::Complete { id, outcome, .. } => {
-                // Update status to Stopped before completing
+                // Ignore stale Complete events from dropped activity clones
+                // (tailers, supervisor) if the process is still alive.
+                let is_alive = self.activities.get(&id).is_some_and(|a| match &a.variant {
+                    ActivityVariant::Process(proc) => {
+                        !matches!(proc.status, ProcessStatus::Stopped)
+                    }
+                    _ => false,
+                });
+                if is_alive {
+                    return;
+                }
+
                 if let Some(activity) = self.activities.get_mut(&id)
                     && let ActivityVariant::Process(ref mut proc) = activity.variant
                 {
@@ -661,8 +672,10 @@ impl ActivityModel {
                     if let ActivityVariant::Process(ref mut proc) = activity.variant {
                         proc.status = status;
                     }
-                    // Restarting status reactivates a failed/completed process
-                    if matches!(status, ProcessStatus::Restarting) {
+                    // Any non-Stopped status means the process is alive;
+                    // reactivate it (handles spurious Complete from supervisor
+                    // activity clone being dropped during restart).
+                    if !matches!(status, ProcessStatus::Stopped) {
                         activity.state = NixActivityState::Active;
                         activity.completed_at = None;
                     }
@@ -1057,9 +1070,12 @@ impl ActivityModel {
         self.get_display_activities()
             .into_iter()
             .filter(|da| {
-                self.build_logs
-                    .get(&da.activity.id)
-                    .is_some_and(|logs| !logs.is_empty())
+                // Processes are always selectable (so disabled ones can be started)
+                matches!(da.activity.variant, ActivityVariant::Process(_))
+                    || self
+                        .build_logs
+                        .get(&da.activity.id)
+                        .is_some_and(|logs| !logs.is_empty())
             })
             .filter_map(|da| {
                 let id = da.activity.id;

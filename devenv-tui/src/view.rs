@@ -194,12 +194,16 @@ struct ActivityRenderContext {
 /// Helper to build activity prefix with hierarchy and status indicator.
 /// - Top-level (depth == 0): [StatusIndicator]
 /// - Nested (depth > 0): [HierarchyPrefix][StatusIndicator]
-fn build_activity_prefix(depth: usize, completed: Option<bool>) -> Vec<AnyElement<'static>> {
+fn build_activity_prefix(
+    depth: usize,
+    completed: Option<bool>,
+    show_spinner: bool,
+) -> Vec<AnyElement<'static>> {
     let mut prefix = HierarchyPrefixComponent::new(depth).render();
 
     prefix.push(
         element!(View(margin_right: 1) {
-            StatusIndicator(completed: completed, show_spinner: true)
+            StatusIndicator(completed: completed, show_spinner: show_spinner)
         })
         .into_any(),
     );
@@ -254,7 +258,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             // For selected build activities, use custom multi-line rendering
             if *is_selected {
-                let prefix = build_activity_prefix(*depth, *completed);
+                let prefix = build_activity_prefix(*depth, *completed, true);
 
                 let main_line = ActivityTextComponent::new(
                     "building".to_string(),
@@ -273,7 +277,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
 
             // Non-selected build activities use normal rendering
-            let prefix = build_activity_prefix(*depth, *completed);
+            let prefix = build_activity_prefix(*depth, *completed, true);
 
             return ActivityTextComponent::new(
                 "building".to_string(),
@@ -324,7 +328,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     base_status
                 };
 
-            let prefix = build_activity_prefix(*depth, *completed);
+            let prefix = build_activity_prefix(*depth, *completed, true);
 
             let main_line = ActivityTextComponent::name_only(
                 activity.name.clone(),
@@ -381,7 +385,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             progress.current.unwrap_or(0).human_count_bytes()
                         )
                     });
-                    let prefix = build_activity_prefix(*depth, *completed);
+                    let prefix = build_activity_prefix(*depth, *completed, true);
 
                     return ActivityTextComponent::new(
                         "downloading".to_string(),
@@ -400,7 +404,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .substituter
                     .as_ref()
                     .map(|s| format!("from {}", s));
-                let prefix = build_activity_prefix(*depth, *completed);
+                let prefix = build_activity_prefix(*depth, *completed, true);
 
                 return ActivityTextComponent::new(
                     "downloading".to_string(),
@@ -415,7 +419,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
         }
         ActivityVariant::Copy => {
-            let prefix = build_activity_prefix(*depth, *completed);
+            let prefix = build_activity_prefix(*depth, *completed, true);
 
             return ActivityTextComponent::new(
                 "copying".to_string(),
@@ -433,7 +437,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .substituter
                 .as_ref()
                 .map(|s| format!("from {}", s));
-            let prefix = build_activity_prefix(*depth, *completed);
+            let prefix = build_activity_prefix(*depth, *completed, true);
 
             return ActivityTextComponent::new(
                 "querying".to_string(),
@@ -447,7 +451,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::FetchTree => {
-            let prefix = build_activity_prefix(*depth, *completed);
+            let prefix = build_activity_prefix(*depth, *completed, true);
 
             return ActivityTextComponent::new(
                 "fetching".to_string(),
@@ -471,7 +475,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             // For selected evaluation activities, show expandable file list
             if *is_selected && logs.is_some() {
-                let prefix = build_activity_prefix(*depth, *completed);
+                let prefix = build_activity_prefix(*depth, *completed, true);
 
                 let main_line = ActivityTextComponent::name_only(
                     activity.name.clone(),
@@ -488,7 +492,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .render_with_main_line(main_line);
             }
 
-            let prefix = build_activity_prefix(*depth, *completed);
+            let prefix = build_activity_prefix(*depth, *completed, true);
 
             return ActivityTextComponent::name_only(
                 activity.name.clone(),
@@ -501,7 +505,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::UserOperation => {
-            let prefix = build_activity_prefix(*depth, *completed);
+            let prefix = build_activity_prefix(*depth, *completed, true);
 
             return ActivityTextComponent::name_only(
                 activity.name.clone(),
@@ -513,7 +517,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Devenv => {
-            let prefix = build_activity_prefix(*depth, *completed);
+            let prefix = build_activity_prefix(*depth, *completed, true);
 
             // Show line count as suffix when active or failed with logs
             let suffix = if *completed == Some(true) {
@@ -566,6 +570,11 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             return main_line;
         }
         ActivityVariant::Process(process_data) => {
+            let is_active = matches!(
+                process_data.status,
+                ProcessStatus::Running | ProcessStatus::Restarting | ProcessStatus::Ready
+            );
+
             // Build status text with optional ports
             let status_str = match process_data.status {
                 ProcessStatus::Running => "running",
@@ -596,12 +605,22 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             let status_text = Some(format!("{}{}", status_str, ports_suffix));
 
-            let prefix = build_activity_prefix(*depth, *completed);
+            // Process prefix: spinner when running, no indicator when stopped
+            // but not yet completed, checkmark/X when completed.
+            let show_spinner = completed.is_none() && is_active;
+            let prefix = build_activity_prefix(*depth, *completed, show_spinner);
+
+            // Hide elapsed time for stopped processes that were never started
+            let process_elapsed = if !is_active && completed.is_none() {
+                String::new()
+            } else {
+                elapsed_str
+            };
 
             let main_line = ActivityTextComponent::new(
                 "".to_string(),
                 activity.name.clone(),
-                elapsed_str,
+                process_elapsed,
                 activity.variant.clone(),
             )
             .with_suffix(status_text)
@@ -780,7 +799,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
         }
         ActivityVariant::Unknown => {
-            let prefix = build_activity_prefix(*depth, *completed);
+            let prefix = build_activity_prefix(*depth, *completed, true);
 
             return ActivityTextComponent::new(
                 "unknown".to_string(),

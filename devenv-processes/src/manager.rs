@@ -17,7 +17,7 @@ use tracing::{debug, info, warn};
 /// Commands that can be sent to control processes
 #[derive(Debug, Clone)]
 pub enum ProcessCommand {
-    /// Restart a process by name
+    /// Restart a running process, or start a stopped process
     Restart(String),
 }
 
@@ -87,9 +87,16 @@ pub struct JobHandle {
     pub output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
 }
 
+/// A disabled process (visible in TUI as stopped, startable via restart)
+struct DisabledProcess {
+    config: ProcessConfig,
+    activity: Activity,
+}
+
 /// Native process manager using watchexec-supervisor
 pub struct NativeProcessManager {
     jobs: Arc<RwLock<HashMap<String, JobHandle>>>,
+    disabled: Arc<RwLock<HashMap<String, DisabledProcess>>>,
     state_dir: PathBuf,
     shutdown: Arc<tokio::sync::Notify>,
     /// Parent activity for grouping all processes under "Starting processes"
@@ -103,6 +110,7 @@ impl NativeProcessManager {
 
         Ok(Self {
             jobs: Arc::new(RwLock::new(HashMap::new())),
+            disabled: Arc::new(RwLock::new(HashMap::new())),
             state_dir,
             shutdown: Arc::new(tokio::sync::Notify::new()),
             processes_activity: Arc::new(RwLock::new(None)),
@@ -124,14 +132,15 @@ impl NativeProcessManager {
         self.state_dir.join("native.sock")
     }
 
-    /// Start a command with the given configuration
+    /// Start a command with the given configuration.
     ///
-    /// Returns a reference to the job's Arc for status checking.
+    /// If `start.enable` is false, the process is registered as disabled (visible
+    /// in TUI as stopped but not running) and `Ok(None)` is returned.
     pub async fn start_command(
         &self,
         config: &ProcessConfig,
         parent_id: Option<u64>,
-    ) -> Result<Arc<Job>> {
+    ) -> Result<Option<Arc<Job>>> {
         debug!("Starting command '{}': {}", config.name, config.exec);
 
         // Extract ports from listen config and allocated ports
@@ -164,6 +173,26 @@ impl NativeProcessManager {
             builder = builder.parent(Some(pid));
         }
         let activity = builder.start();
+
+        if !config.start.enable {
+            activity.set_status(ProcessStatus::Stopped);
+            self.disabled.write().await.insert(
+                config.name.clone(),
+                DisabledProcess {
+                    config: config.clone(),
+                    activity,
+                },
+            );
+            info!("Registered disabled process: {}", config.name);
+            return Ok(None);
+        }
+
+        self.launch(config, activity).await.map(Some)
+    }
+
+    /// Launch a process: sets up probes, sockets, supervisor, and log tailers.
+    async fn launch(&self, config: &ProcessConfig, activity: Activity) -> Result<Arc<Job>> {
+        activity.set_status(ProcessStatus::Running);
 
         // Create notify socket if configured via ready.notify
         let uses_notify = config.ready.as_ref().is_some_and(|r| r.notify);
@@ -290,7 +319,9 @@ impl NativeProcessManager {
         if let Some(handle) = jobs.remove(name) {
             debug!("Stopping process: {}", name);
 
-            // Stopping a process intentionally is not a failure
+            // Mark as stopped so the TUI accepts the upcoming Complete event
+            // (the model ignores Complete for processes not in Stopped status).
+            handle.resources.activity.set_status(ProcessStatus::Stopped);
             handle.resources.activity.reset();
 
             // Abort the supervisor task first to prevent restarts
@@ -323,7 +354,7 @@ impl NativeProcessManager {
         self.shutdown.notify_waiters();
     }
 
-    /// Stop all processes
+    /// Stop all processes and clear disabled entries
     pub async fn stop_all(&self) -> Result<()> {
         // Signal supervisors first so they exit gracefully
         self.shutdown_supervisors();
@@ -335,6 +366,10 @@ impl NativeProcessManager {
         for name in job_names {
             let _ = self.stop(&name).await; // Continue even if one fails
         }
+
+        // Clear disabled processes (their activities complete on drop)
+        self.disabled.write().await.clear();
+
         Ok(())
     }
 
@@ -405,6 +440,23 @@ impl NativeProcessManager {
 
         info!("Process {} restarted", name);
         Ok(())
+    }
+
+    /// Start a previously disabled process, reusing its existing TUI activity.
+    pub async fn start_disabled(&self, name: &str) -> Result<Arc<Job>> {
+        let DisabledProcess { config, activity } =
+            self.disabled.write().await.remove(name).ok_or_else(|| {
+                miette::miette!("Process {} not found in disabled processes", name)
+            })?;
+
+        // Reset the activity so it no longer shows as stopped
+        activity.reset();
+
+        info!("Starting disabled process: {}", name);
+        // Move the activity into launch (not clone) so the original is not
+        // dropped — Activity::drop sends Process::Complete which would
+        // immediately mark the process as stopped in the TUI.
+        self.launch(&config, activity).await
     }
 
     /// Get list of running processes
@@ -611,9 +663,9 @@ impl NativeProcessManager {
                 }
                 // Add a small sleep to avoid busy loop
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                    // Check if all jobs are still alive
                     let jobs = self.jobs.read().await;
-                    if jobs.is_empty() {
+                    let disabled = self.disabled.read().await;
+                    if jobs.is_empty() && disabled.is_empty() {
                         debug!("No jobs running, exiting");
                         break;
                     }
@@ -655,16 +707,25 @@ impl NativeProcessManager {
                 } => {
                     match cmd {
                         ProcessCommand::Restart(name) => {
-                            info!("Received restart command for process: {}", name);
-                            if let Err(e) = self.restart(&name).await {
-                                warn!("Failed to restart process {}: {}", name, e);
+                            let is_disabled = self.disabled.read().await.contains_key(&name);
+                            if is_disabled {
+                                info!("Starting disabled process: {}", name);
+                                if let Err(e) = self.start_disabled(&name).await {
+                                    warn!("Failed to start disabled process {}: {}", name, e);
+                                }
+                            } else {
+                                info!("Restarting process: {}", name);
+                                if let Err(e) = self.restart(&name).await {
+                                    warn!("Failed to restart process {}: {}", name, e);
+                                }
                             }
                         }
                     }
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {
                     let jobs = self.jobs.read().await;
-                    if jobs.is_empty() {
+                    let disabled = self.disabled.read().await;
+                    if jobs.is_empty() && disabled.is_empty() {
                         debug!("No jobs running, exiting");
                         break;
                     }

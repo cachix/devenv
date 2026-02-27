@@ -165,7 +165,7 @@ in
           inherit (process) watch;
         }
       )
-      (lib.filterAttrs (_: p: p.enable) config.processes);
+      config.processes;
 
     # Export process configurations as JSON for the native manager
     process.nativeConfigJson = pkgs.writeText "process-config.json" (builtins.toJSON (
@@ -174,7 +174,7 @@ in
           let
             native = cfg.processConfig.${name};
           in
-          removeAttrs process [ "enable" "process-compose" "ports" "notify" "ready" "restart" ] // {
+          removeAttrs process [ "process-compose" "ports" "notify" "ready" "restart" ] // {
             inherit name;
             inherit (native) watchdog;
             ready = native.ready;
@@ -190,7 +190,7 @@ in
             };
           }
         )
-        (lib.filterAttrs (_: p: p.enable) config.processes)
+        config.processes
     ));
 
     # The actual process manager command will be invoked from devenv.rs

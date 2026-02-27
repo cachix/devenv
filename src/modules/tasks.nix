@@ -201,6 +201,20 @@ let
           process = lib.mkOption {
             type = types.submodule {
               options = {
+                start = lib.mkOption {
+                  type = types.submodule {
+                    options = {
+                      enable = lib.mkOption {
+                        type = types.bool;
+                        default = true;
+                        description = "Whether to start this process automatically.";
+                      };
+                    };
+                  };
+                  default = { };
+                  description = "Auto-start configuration for this process.";
+                };
+
                 ready = lib.mkOption {
                   type = types.nullOr readyType;
                   default = null;

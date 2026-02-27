@@ -1728,7 +1728,9 @@ impl Devenv {
 
                 let command_rx = options.command_rx.take();
 
-                // Run process tasks under the Phase 4 activity
+                // Run process tasks under the Phase 4 activity.
+                // Disabled processes (start.enable = false) are handled by the
+                // process manager: they appear in the TUI as stopped.
                 let _outputs = tasks_runner
                     .run_with_parent_activity(Arc::new(phase4))
                     .await;

@@ -198,11 +198,26 @@ pub struct LinuxConfig {
     pub capabilities: Vec<String>,
 }
 
+/// Auto-start configuration for a process
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct StartConfig {
+    #[serde(default = "default_true")]
+    pub enable: bool,
+}
+
+impl Default for StartConfig {
+    fn default() -> Self {
+        Self { enable: true }
+    }
+}
+
 /// Process configuration
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProcessConfig {
     #[serde(default)]
     pub name: String,
+    #[serde(default)]
+    pub start: StartConfig,
     #[serde(default, rename = "type")]
     pub process_type: ProcessType,
     #[serde(default)]
@@ -232,4 +247,25 @@ pub struct ProcessConfig {
     /// Linux-specific configuration
     #[serde(default)]
     pub linux: LinuxConfig,
+}
+
+impl Default for ProcessConfig {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            start: StartConfig::default(),
+            process_type: ProcessType::default(),
+            exec: String::new(),
+            args: Vec::new(),
+            cwd: None,
+            env: HashMap::new(),
+            listen: Vec::new(),
+            ports: HashMap::new(),
+            ready: None,
+            restart: RestartConfig::default(),
+            watch: WatchConfig::default(),
+            watchdog: None,
+            linux: LinuxConfig::default(),
+        }
+    }
 }

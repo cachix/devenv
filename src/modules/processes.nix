@@ -35,11 +35,28 @@ let
   parseProcessDep = import ./lib/parse-process-dep.nix { inherit lib; };
 
   processType = types.submodule ({ config, name, ... }: {
+    imports = [
+      (lib.mkRenamedOptionModule [ "enable" ] [ "start" "enable" ])
+    ];
+
     options = {
-      enable = lib.mkOption {
-        type = types.bool;
-        default = true;
-        description = "Whether to start this process automatically with `devenv up`.";
+      start = lib.mkOption {
+        type = types.submodule {
+          options = {
+            enable = lib.mkOption {
+              type = types.bool;
+              default = true;
+              description = ''
+                Whether to start this process automatically with `devenv up`.
+
+                Disabled processes are still visible in the TUI as stopped
+                and can be started manually by selecting them and pressing Enter.
+              '';
+            };
+          };
+        };
+        default = { };
+        description = "Auto-start configuration for this process.";
       };
 
       exec = lib.mkOption {
@@ -441,10 +458,10 @@ in
 
     (lib.mkIf options.processes.isDefined (
       let
-        enabledProcesses = lib.filterAttrs (_: p: p.enable) config.processes;
+        enabledProcesses = lib.filterAttrs (_: p: p.start.enable) config.processes;
       in
       {
-        # Create tasks only for enabled processes (native manager discovers process tasks from this)
+        # Create tasks for all processes (native manager uses enable flag to decide auto-start)
         tasks = lib.mapAttrs'
           (name: process: {
             name = "devenv:processes:${name}";
@@ -457,6 +474,7 @@ in
               before = process.before;
               showOutput = true;
               process = {
+                start.enable = process.start.enable;
                 ready = process.ready;
                 restart = process.restart;
                 listen = process.listen;
@@ -466,7 +484,7 @@ in
               };
             };
           })
-          enabledProcesses;
+          config.processes;
 
         # Provide the devenv-tasks command for each enabled process so non-native process managers
         # (process-compose, mprocs) can use it to run before/after task dependencies.

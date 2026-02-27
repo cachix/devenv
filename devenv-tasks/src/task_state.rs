@@ -310,11 +310,12 @@ impl TaskState {
                 .any(|spec| spec.kind == ListenKind::Tcp)
             || !config.ports.is_empty();
 
-        // Start the process via the manager (which tracks it for shutdown)
-        manager.start_command(&config, parent_id).await?;
+        // Start the process via the manager (which tracks it for shutdown).
+        // Returns None for disabled processes (start.enable = false).
+        let started = manager.start_command(&config, parent_id).await?;
 
-        // Wait for ready signal if notify is enabled or has listen sockets
-        if requires_ready_wait {
+        // Wait for ready signal if the process was actually started
+        if started.is_some() && requires_ready_wait {
             tracing::info!("Waiting for process {} to signal ready...", self.task.name);
             manager.wait_ready(&config.name, cancel).await?;
             tracing::info!("Process {} signaled ready", self.task.name);
