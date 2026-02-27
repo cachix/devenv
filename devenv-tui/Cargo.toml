@@ -31,7 +31,7 @@ tracing-subscriber = { workspace = true }
 indexmap = { workspace = true }
 
 # Terminal state management
-libc = "0.2"
+rustix.workspace = true
 
 # Error handling
 thiserror = { workspace = true }

@@ -427,7 +427,17 @@ fn handle_mouse_event(
 /// This works in most modern terminals including over SSH.
 fn copy_to_clipboard(text: &str) {
     let encoded = base64::engine::general_purpose::STANDARD.encode(text);
-    // Write OSC 52 sequence to stderr (matches TUI output target)
+    // Write OSC 52 sequence to the TUI output target.
+    // Uses the tty fd when available since fd 2 may be redirected to /dev/null.
+    #[cfg(unix)]
+    {
+        if let Some(fd) = crate::app::tty_fd() {
+            let mut writer = crate::app::FdWriter(fd);
+            let _ = write!(writer, "\x1b]52;c;{}\x07", encoded);
+            let _ = writer.flush();
+            return;
+        }
+    }
     let _ = write!(std::io::stderr(), "\x1b]52;c;{}\x07", encoded);
     let _ = std::io::stderr().flush();
 }

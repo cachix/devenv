@@ -10,6 +10,7 @@ use devenv::{
 use devenv_activity::ActivityLevel;
 use devenv_core::config::{self, Config};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
+use std::os::unix::io::AsRawFd;
 use std::{process::Command, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::sync::Mutex;
@@ -196,14 +197,50 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
         ActivityLevel::Info
     };
 
+    // Open /dev/tty as a dedicated render target for the TUI. This separates
+    // TUI output from fd 2 (stderr), so stray writes from C code (Nix evaluator,
+    // Boehm GC diagnostics) don't corrupt the display.
+    let tty_file = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/tty")
+        .into_diagnostic()
+        .wrap_err("Failed to open /dev/tty for TUI rendering")?;
+    let tty_fd = tty_file.as_raw_fd();
+
+    // Store tty fd globally so panic/exit hooks can reach the terminal
+    devenv_tui::app::set_tty_fd(tty_fd);
+
+    // Redirect fd 2 (stderr) to /dev/null. C libraries (Nix, Boehm GC) write
+    // directly to fd 2, which would otherwise garble the TUI display.
+    // Save the original stderr fd so we can restore it after the TUI exits.
+    let saved_stderr = rustix::io::dup(rustix::stdio::stderr())
+        .into_diagnostic()
+        .wrap_err("Failed to dup stderr")?;
+    let saved_stderr_raw = saved_stderr.as_raw_fd();
+    {
+        let devnull = std::fs::OpenOptions::new()
+            .write(true)
+            .open("/dev/null")
+            .into_diagnostic()
+            .wrap_err("Failed to open /dev/null")?;
+        rustix::stdio::dup2_stderr(&devnull)
+            .into_diagnostic()
+            .wrap_err("Failed to redirect stderr")?;
+        // devnull File is dropped here, closing its fd, but fd 2 now points to /dev/null
+    }
+
     // Save terminal state before TUI enters raw mode, so we can restore it reliably
     devenv_tui::app::save_terminal_state();
 
     // Install panic hook to restore terminal state on panic.
     // Without this, a panic during TUI rendering leaves the terminal in raw mode.
+    // The hook also restores fd 2 so the panic message reaches the terminal.
     let prev_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         devenv_tui::app::restore_terminal();
+        // Restore stderr so panic output is visible
+        let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(saved_stderr_raw) };
+        let _ = rustix::stdio::dup2_stderr(borrowed);
         prev_hook(info);
     }));
 
@@ -263,11 +300,18 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Runs until backend signals completion, then drains remaining events
     let tui_render_height = devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
         .with_command_sender(command_tx)
+        .with_tty_fd(tty_fd)
         .filter_level(filter_level)
         .shutdown_on_backend_done(shutdown_on_backend_done)
         .run(backend_done_rx)
         .await
         .unwrap_or(0);
+
+    // Restore fd 2 to the original stderr now that the TUI is done.
+    // This ensures error messages from result.exec() (and miette reports)
+    // reach the terminal normally.
+    let _ = rustix::stdio::dup2_stderr(&saved_stderr);
+    drop(saved_stderr);
 
     // Signal backend that terminal is now available for shell, passing render height
     let _ = terminal_ready_tx.send(tui_render_height);

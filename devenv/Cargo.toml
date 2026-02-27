@@ -39,6 +39,7 @@ include_dir.workspace = true
 indoc.workspace = true
 miette.workspace = true
 nix.workspace = true
+rustix.workspace = true
 regex.workspace = true
 reqwest.workspace = true
 schemars.workspace = true

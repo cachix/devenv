@@ -17,8 +17,54 @@ use tokio::sync::{Notify, mpsc, watch};
 use tokio_shutdown::{Shutdown, Signal};
 use tracing::debug;
 
+#[cfg(unix)]
+use std::os::unix::io::RawFd;
+
 /// Original terminal settings saved before TUI enters raw mode.
-static ORIGINAL_TERMIOS: OnceLock<libc::termios> = OnceLock::new();
+static ORIGINAL_TERMIOS: OnceLock<rustix::termios::Termios> = OnceLock::new();
+
+/// TTY file descriptor for rendering, stored statically for panic/exit hooks.
+#[cfg(unix)]
+static TTY_FD: OnceLock<RawFd> = OnceLock::new();
+
+/// A non-owning writer to a raw file descriptor.
+///
+/// Does not close the fd on drop. The caller must ensure the fd outlives the writer.
+#[cfg(unix)]
+pub(crate) struct FdWriter(pub(crate) RawFd);
+
+#[cfg(unix)]
+impl io::Write for FdWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let fd = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(self.0) };
+        Ok(rustix::io::write(fd, buf)?)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Store the TTY fd for use by `restore_terminal` and other hooks.
+#[cfg(unix)]
+pub fn set_tty_fd(fd: RawFd) {
+    TTY_FD.get_or_init(|| fd);
+}
+
+/// Get the stored TTY fd, if one was set.
+#[cfg(unix)]
+pub(crate) fn tty_fd() -> Option<RawFd> {
+    TTY_FD.get().copied()
+}
+
+/// Create a writer targeting the TUI output.
+///
+/// When a tty fd is provided, writes go to that fd. Otherwise falls back to
+/// stderr (fd 2), matching the pre-tty behavior.
+#[cfg(unix)]
+fn tui_writer(tty_fd: Option<RawFd>) -> FdWriter {
+    FdWriter(tty_fd.unwrap_or(2))
+}
 
 /// Configuration for the TUI application.
 ///
@@ -60,6 +106,10 @@ pub struct TuiApp {
     shutdown: Arc<Shutdown>,
     command_tx: Option<mpsc::Sender<ProcessCommand>>,
     shutdown_on_backend_done: bool,
+    /// Optional TTY fd for rendering. When set, iocraft and crossterm output
+    /// goes to this fd instead of stderr, allowing fd 2 to be redirected.
+    #[cfg(unix)]
+    tty_fd: Option<RawFd>,
 }
 
 impl TuiApp {
@@ -74,12 +124,24 @@ impl TuiApp {
             shutdown,
             command_tx: None,
             shutdown_on_backend_done: true,
+            #[cfg(unix)]
+            tty_fd: None,
         }
     }
 
     /// Set the command sender for process control commands.
     pub fn with_command_sender(mut self, tx: mpsc::Sender<ProcessCommand>) -> Self {
         self.command_tx = Some(tx);
+        self
+    }
+
+    /// Set the TTY fd for rendering output.
+    ///
+    /// When set, iocraft renders to this fd instead of stderr, allowing fd 2
+    /// to be redirected to `/dev/null` to suppress stray C code output.
+    #[cfg(unix)]
+    pub fn with_tty_fd(mut self, fd: RawFd) -> Self {
+        self.tty_fd = Some(fd);
         self
     }
 
@@ -137,6 +199,10 @@ impl TuiApp {
         let shutdown = self.shutdown;
         let command_tx = self.command_tx;
         let shutdown_on_backend_done = self.shutdown_on_backend_done;
+        #[cfg(unix)]
+        let tty_fd: Option<i32> = self.tty_fd;
+        #[cfg(not(unix))]
+        let tty_fd: Option<i32> = None;
         let (exit_tx, mut exit_rx) = watch::channel(false);
 
         // Spawn event processor with batching for performance
@@ -239,6 +305,7 @@ impl TuiApp {
                     config.clone(),
                     command_tx.clone(),
                     &mut pre_expand_height,
+                    tty_fd,
                 ) => { }
             }
         }
@@ -249,6 +316,7 @@ impl TuiApp {
 
         // Final render pass to ensure all drained events are displayed.
         // Clear previous inline render, then render final state.
+        // Use tty writer so output reaches the terminal even when fd 2 is redirected.
         let mut final_render_height: u16 = 0;
         {
             let ui = ui_state.read().unwrap();
@@ -257,9 +325,12 @@ impl TuiApp {
                 let lines_to_clear = ui.last_render_height;
 
                 if lines_to_clear > 0 {
-                    let mut stderr = io::stderr();
+                    #[cfg(unix)]
+                    let mut out = tui_writer(tty_fd);
+                    #[cfg(not(unix))]
+                    let mut out = io::stderr();
                     let _ = execute!(
-                        stderr,
+                        out,
                         cursor::MoveToPreviousLine(lines_to_clear),
                         terminal::Clear(terminal::ClearType::FromCursorDown)
                     );
@@ -296,6 +367,9 @@ impl TuiApp {
                     };
                     let canvas = element.render(Some(terminal_width as usize));
                     final_render_height = canvas.height() as u16;
+                    #[cfg(unix)]
+                    let _ = canvas.write_ansi(tui_writer(tty_fd));
+                    #[cfg(not(unix))]
                     let _ = canvas.write_ansi(io::stderr());
 
                     // Print full error messages in red (not truncated by TUI width)
@@ -303,44 +377,47 @@ impl TuiApp {
                         || !activity_errors.is_empty()
                         || !failed_build_errors.is_empty();
                     if has_errors {
-                        let mut stderr = io::stderr();
-                        eprintln!();
+                        #[cfg(unix)]
+                        let mut out = tui_writer(tty_fd);
+                        #[cfg(not(unix))]
+                        let mut out = io::stderr();
+                        let _ = writeln!(out);
                         final_render_height += 1; // for the empty line
 
                         // Print standalone error messages (no parent activity)
                         for (text, details) in standalone_errors {
-                            let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
-                            eprintln!("{}", text);
+                            let _ = execute!(out, SetForegroundColor(Color::AnsiValue(160)));
+                            let _ = writeln!(out, "{}", text);
                             final_render_height += 1;
                             if let Some(details) = details {
                                 final_render_height += details.lines().count() as u16;
-                                eprintln!("{}", details);
+                                let _ = writeln!(out, "{}", details);
                             }
-                            let _ = execute!(stderr, ResetColor);
+                            let _ = execute!(out, ResetColor);
                         }
 
                         // Print error messages from Activity::Message variants
                         for (text, details) in activity_errors {
-                            let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
-                            eprintln!("{}", text);
+                            let _ = execute!(out, SetForegroundColor(Color::AnsiValue(160)));
+                            let _ = writeln!(out, "{}", text);
                             final_render_height += 1;
                             if let Some(details) = details {
                                 final_render_height += details.lines().count() as u16;
-                                eprintln!("{}", details);
+                                let _ = writeln!(out, "{}", details);
                             }
-                            let _ = execute!(stderr, ResetColor);
+                            let _ = execute!(out, ResetColor);
                         }
 
                         // Print build stderr (from failed or incomplete builds)
                         for (name, lines) in failed_build_errors {
-                            let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
-                            eprintln!("Build error: {}", name);
+                            let _ = execute!(out, SetForegroundColor(Color::AnsiValue(160)));
+                            let _ = writeln!(out, "Build error: {}", name);
                             final_render_height += 1;
                             for line in lines {
-                                eprintln!("  {}", line);
+                                let _ = writeln!(out, "  {}", line);
                                 final_render_height += 1;
                             }
-                            let _ = execute!(stderr, ResetColor);
+                            let _ = execute!(out, ResetColor);
                         }
                     }
                 }
@@ -360,13 +437,18 @@ impl TuiApp {
 pub fn save_terminal_state() {
     #[cfg(unix)]
     {
-        use std::os::unix::io::AsRawFd;
-        let fd = io::stdin().as_raw_fd();
-        if unsafe { libc::isatty(fd) } == 0 {
+        use std::os::unix::io::{AsRawFd, BorrowedFd};
+        // Prefer the dedicated tty fd (which always points to the real terminal)
+        // over stdin, since fd 0 might not be a terminal in some setups.
+        let raw_fd = TTY_FD
+            .get()
+            .copied()
+            .unwrap_or_else(|| io::stdin().as_raw_fd());
+        let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
+        if !rustix::termios::isatty(&fd) {
             return;
         }
-        let mut termios: libc::termios = unsafe { std::mem::zeroed() };
-        if unsafe { libc::tcgetattr(fd, &mut termios) } == 0 {
+        if let Ok(termios) = rustix::termios::tcgetattr(&fd) {
             ORIGINAL_TERMIOS.get_or_init(|| termios);
         }
     }
@@ -375,16 +457,29 @@ pub fn save_terminal_state() {
 /// Restore terminal to normal state.
 /// Register this on panic to restore terminal state if the app crashes without running Drop.
 pub fn restore_terminal() {
-    let mut stderr = io::stderr();
+    // Use the tty fd for writing escape sequences if available.
+    // During TUI, fd 2 (stderr) may be redirected to /dev/null, so we need
+    // the dedicated tty fd to reach the actual terminal.
+    #[cfg(unix)]
+    let mut writer: Box<dyn Write> = match TTY_FD.get().copied() {
+        Some(fd) => Box::new(FdWriter(fd)),
+        None => Box::new(io::stderr()),
+    };
+    #[cfg(not(unix))]
+    let mut writer: Box<dyn Write> = Box::new(io::stderr());
 
     // Restore original terminal settings saved before TUI started.
     // This is the authoritative restoration — it always restores the
     // exact terminal state from before the TUI was initialized.
     #[cfg(unix)]
     if let Some(original) = ORIGINAL_TERMIOS.get() {
-        use std::os::unix::io::AsRawFd;
-        let fd = io::stdin().as_raw_fd();
-        unsafe { libc::tcsetattr(fd, libc::TCSANOW, original) };
+        use std::os::unix::io::{AsRawFd, BorrowedFd};
+        let raw_fd = TTY_FD
+            .get()
+            .copied()
+            .unwrap_or_else(|| io::stdin().as_raw_fd());
+        let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
+        let _ = rustix::termios::tcsetattr(&fd, rustix::termios::OptionalActions::Now, original);
     }
 
     // Pop keyboard enhancement flags if iocraft pushed them.
@@ -394,13 +489,13 @@ pub fn restore_terminal() {
     // enhanced key reporting mode. The user's shell doesn't understand these
     // enhanced key codes, so they appear as literal escape sequences.
     // Sending PopKeyboardEnhancementFlags when enhancement isn't active is harmless.
-    let _ = execute!(stderr, event::PopKeyboardEnhancementFlags);
+    let _ = execute!(writer, event::PopKeyboardEnhancementFlags);
 
     // Show cursor (TUI may have hidden it)
-    let _ = execute!(stderr, cursor::Show);
+    let _ = execute!(writer, cursor::Show);
 
     // Ensure output is flushed
-    let _ = stderr.flush();
+    let _ = writer.flush();
 }
 
 /// Main TUI component (inline mode)
@@ -547,6 +642,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     rendered
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_view(
     activity_model: Arc<RwLock<ActivityModel>>,
     ui_state: Arc<RwLock<UiState>>,
@@ -555,6 +651,7 @@ async fn run_view(
     config: Arc<TuiConfig>,
     command_tx: Option<mpsc::Sender<ProcessCommand>>,
     pre_expand_height: &mut u16,
+    _tty_fd: Option<i32>,
 ) -> std::io::Result<()> {
     // Copy view_mode in a block to ensure the guard is dropped before any await
     let view_mode = {
@@ -565,9 +662,12 @@ async fn run_view(
     match view_mode {
         ViewMode::Main => {
             if *pre_expand_height > 0 {
-                let mut stderr = io::stderr();
+                #[cfg(unix)]
+                let mut out = tui_writer(_tty_fd);
+                #[cfg(not(unix))]
+                let mut out = io::stderr();
                 let _ = execute!(
-                    stderr,
+                    out,
                     cursor::MoveToPreviousLine(*pre_expand_height),
                     terminal::Clear(terminal::ClearType::FromCursorDown)
                 );
@@ -590,11 +690,18 @@ async fn run_view(
                 }
             };
 
-            element
-                .render_loop()
-                .output(Output::Stderr)
-                .ignore_ctrl_c()
-                .await
+            #[cfg(unix)]
+            let render_loop = {
+                let mut rl = element.render_loop().output(Output::Stderr).ignore_ctrl_c();
+                if let Some(fd) = _tty_fd {
+                    rl = rl.stderr(FdWriter(fd));
+                }
+                rl
+            };
+            #[cfg(not(unix))]
+            let render_loop = element.render_loop().output(Output::Stderr).ignore_ctrl_c();
+
+            render_loop.await
         }
         ViewMode::ExpandedLogs { activity_id } => {
             // Calculate height before switching to expanded view
@@ -627,7 +734,18 @@ async fn run_view(
                 }
             };
 
-            element.fullscreen().ignore_ctrl_c().await
+            #[cfg(unix)]
+            let render_loop = {
+                let mut rl = element.fullscreen().output(Output::Stderr).ignore_ctrl_c();
+                if let Some(fd) = _tty_fd {
+                    rl = rl.stderr(FdWriter(fd));
+                }
+                rl
+            };
+            #[cfg(not(unix))]
+            let render_loop = element.fullscreen().ignore_ctrl_c();
+
+            render_loop.await
         }
     }
 }

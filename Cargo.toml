@@ -153,6 +153,7 @@ watchexec-filterer-globset = "8.0"
 watchexec-supervisor = "5.0"
 signal-hook = "0.3"
 signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
+rustix = { version = "1", features = ["stdio", "termios"] }
 socket2 = "0.5"
 ctrlc = "3.4"
 process-wrap = { version = "9.0", features = ["tokio1"] }
