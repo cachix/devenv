@@ -88,7 +88,6 @@ fn connection_options(path: &Path) -> SqliteConnectOptions {
         .foreign_keys(true)
         .pragma("wal_autocheckpoint", "1000")
         .pragma("journal_size_limit", (64 * 1024 * 1024).to_string()) // 64 MB
-        .pragma("mmap_size", "134217728") // 128 MB
         .pragma("cache_size", "2000") // 2000 pages
 }
 
