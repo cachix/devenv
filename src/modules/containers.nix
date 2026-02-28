@@ -160,7 +160,7 @@ let
     };
   };
 
-  # <registry> <args>
+  # <container> <registry> <args>
   mkCopyScript = cfg: pkgs.writeShellScript "copy-container" ''
     set -e -o pipefail
 
@@ -168,7 +168,7 @@ let
     shift
 
     if [[ "$1" == false ]]; then
-      registry=${cfg.registry}
+      registry="${cfg.registry}"
     else
       registry="$1"
     fi
@@ -440,5 +440,18 @@ in
       devenv.root = lib.mkForce "${homeDir}";
       devenv.dotfile = lib.mkOverride 49 "${homeDir}/.devenv";
     })
+    {
+      tasks."devenv:container:copy" = {
+        exec = ''
+          copy_script=$(${pkgs.jq}/bin/jq -r '.copy_script' <<< "$DEVENV_TASK_INPUT")
+          spec=$(${pkgs.jq}/bin/jq -r '.spec' <<< "$DEVENV_TASK_INPUT")
+          registry=$(${pkgs.jq}/bin/jq -r '.registry' <<< "$DEVENV_TASK_INPUT")
+          readarray -t copy_args < <(${pkgs.jq}/bin/jq -r '.copy_args[]' <<< "$DEVENV_TASK_INPUT")
+
+          "$copy_script" "$spec" "$registry" "''${copy_args[@]}"
+        '';
+        showOutput = true;
+      };
+    }
   ];
 }

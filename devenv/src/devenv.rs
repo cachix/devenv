@@ -846,53 +846,91 @@ impl Devenv {
         name: &str,
         copy_args: &[String],
         registry: Option<&str>,
+        verbosity: tasks::VerbosityLevel,
+        tui: bool,
     ) -> Result<()> {
         let spec = self.container_build(name).await?;
 
-        let activity = Activity::operation("Copying container").start();
-        async move {
-            let sanitized_name = sanitize_container_name(name);
-            let gc_root = self
-                .devenv_dot_gc
-                .join(format!("container-{sanitized_name}-copy"));
-            let paths = self
-                .nix
-                .build(
-                    &[&format!("devenv.config.containers.{name}.copyScript")],
-                    None,
-                    Some(&gc_root),
-                )
-                .await?;
-            let copy_script = &paths[0];
-            let copy_script_string = &copy_script.to_string_lossy();
+        let sanitized_name = sanitize_container_name(name);
+        let gc_root = self
+            .devenv_dot_gc
+            .join(format!("container-{sanitized_name}-copy"));
+        let paths = self
+            .nix
+            .build(
+                &[&format!("devenv.config.containers.{name}.copyScript")],
+                None,
+                Some(&gc_root),
+            )
+            .await?;
+        let copy_script = paths[0].to_string_lossy().to_string();
 
-            let base_args = [spec, registry.unwrap_or("false").to_string()];
-            let command_args: Vec<String> = base_args
-                .into_iter()
-                .chain(copy_args.iter().map(|s| s.to_string()))
-                .collect();
+        let envs = self.capture_shell_environment().await?;
 
-            debug!("Running {copy_script_string} {}", command_args.join(" "));
+        let task_name = "devenv:container:copy";
+        let mut task_configs = self.load_tasks().await?;
 
-            let output = process::Command::new(copy_script)
-                .args(command_args)
-                .output()
-                .await
-                .expect("Failed to run copy script");
+        let task = task_configs
+            .iter_mut()
+            .find(|t| t.name == task_name)
+            .ok_or_else(|| miette!("Task {task_name} not found"))?;
 
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                bail!("Failed to copy container: {}", stderr)
-            } else {
-                Ok(())
-            }
+        task.input = Some(serde_json::json!({
+            "copy_script": copy_script,
+            "spec": spec,
+            "registry": registry.unwrap_or("false"),
+            "copy_args": copy_args,
+        }));
+
+        let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
+        let config = tasks::Config {
+            roots: vec![task_name.to_string()],
+            tasks: task_configs,
+            run_mode: devenv_tasks::RunMode::Single,
+            runtime_dir,
+            cache_dir: self.devenv_dotfile.clone(),
+            sudo_context: None,
+            env: envs,
+            ignore_process_deps: false,
+        };
+
+        let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
+            .with_refresh_task_cache(self.cache_settings.refresh_task_cache)
+            .build()
+            .await?;
+
+        let (status, _outputs) = if tui {
+            let outputs = tasks.run(false).await;
+            let status = tasks.get_completion_status().await;
+            (status, outputs)
+        } else {
+            let (activity_rx, activity_handle) = devenv_activity::init();
+            let _activity_guard = activity_handle.install();
+
+            let tasks = Arc::new(tasks);
+            let tasks_clone = Arc::clone(&tasks);
+
+            let run_handle = tokio::spawn(async move { tasks_clone.run(false).await });
+
+            let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
+            ui.run(run_handle).await?
+        };
+
+        if status.has_failures() {
+            bail!("Failed to copy container");
         }
-        .in_activity(&activity)
-        .await
+
+        Ok(())
     }
 
-    pub async fn container_run(&self, name: &str, copy_args: &[String]) -> Result<ShellCommand> {
-        self.container_copy(name, copy_args, Some("docker-daemon:"))
+    pub async fn container_run(
+        &self,
+        name: &str,
+        copy_args: &[String],
+        verbosity: tasks::VerbosityLevel,
+        tui: bool,
+    ) -> Result<ShellCommand> {
+        self.container_copy(name, copy_args, Some("docker-daemon:"), verbosity, tui)
             .await?;
 
         let sanitized_name = sanitize_container_name(name);

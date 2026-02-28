@@ -684,12 +684,14 @@ async fn run_devenv_inner(
                 registry,
             } => {
                 devenv
-                    .container_copy(&name, &copy_args, registry.as_deref())
+                    .container_copy(&name, &copy_args, registry.as_deref(), verbosity, tui)
                     .await?;
                 CommandResult::Done
             }
             ContainerCommand::Run { name, copy_args } => {
-                let shell_config = devenv.container_run(&name, &copy_args).await?;
+                let shell_config = devenv
+                    .container_run(&name, &copy_args, verbosity, tui)
+                    .await?;
                 CommandResult::Exec(shell_config.command)
             }
         },
