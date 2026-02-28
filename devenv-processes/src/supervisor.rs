@@ -274,8 +274,9 @@ pub fn spawn_supervisor(
                                             job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
                                             state.on_restart_complete(Instant::now());
                                             let count = state.restart_count();
+                                            let msg = format!("Restarted (attempt {count})");
                                             warn!("Process {} watchdog trigger, restarted (attempt {})", name, count);
-                                            activity.log(format!("Restarted (attempt {})", count));
+                                            activity.log(&msg);
                                             if let Some(ref address) = tcp_probe_address {
                                                 tcp_probe = Some(TcpProbe::spawn(address.clone(), name.clone()));
                                             }
@@ -336,8 +337,9 @@ pub fn spawn_supervisor(
                             job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
                             state.on_restart_complete(Instant::now());
                             let count = state.restart_count();
+                            let msg = format!("Restarted (attempt {count})");
                             info!("Restarted process {} (attempt {})", name, count);
-                            activity.log(format!("Restarted (attempt {})", count));
+                            activity.log(&msg);
                             respawn_probes!();
                         }
                         Action::GiveUp { reason } => {
@@ -380,11 +382,13 @@ pub fn spawn_supervisor(
 
                     match state.on_event(Event::ProcessExit { status: exit_status }, Instant::now()) {
                         Action::Restart => {
+                            activity.log(&format!("Process exited ({exit_status:?}), restarting"));
                             job.start().await;
                             state.on_restart_complete(Instant::now());
                             let count = state.restart_count();
+                            let msg = format!("Restarted (attempt {count})");
                             info!("Restarted process {} (attempt {})", name, count);
-                            activity.log(format!("Restarted (attempt {})", count));
+                            activity.log(&msg);
                             respawn_probes!();
                         }
                         Action::GiveUp { reason } => {

@@ -546,7 +546,7 @@ in
 
       # Process to start for exporting the above.
       processes.keycloak-realm-export-all = mkIf (realmsExport != [ ]) {
-        enable = false;
+        start.enable = false;
         exec = "${keycloak-realm-export-all}/bin/keycloak-realm-export-all";
         after = [ "devenv:processes:keycloak@completed" ];
       };

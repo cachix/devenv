@@ -74,6 +74,7 @@ pub struct ProcessResources {
     pub activity: Activity,
     pub notify_socket: Option<Arc<NotifySocket>>,
     pub status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
+    pub stderr_log: PathBuf,
 }
 
 /// Handle to a managed process job
@@ -264,6 +265,7 @@ impl NativeProcessManager {
         job.start().await;
 
         // Spawn file tailers to emit output to activity
+        let stderr_log = proc_cmd.stderr_log.clone();
         let stdout_tailer =
             crate::log_tailer::spawn_file_tailer(proc_cmd.stdout_log, activity.ref_handle(), false);
         let stderr_tailer =
@@ -293,6 +295,7 @@ impl NativeProcessManager {
             activity,
             notify_socket,
             status_tx,
+            stderr_log,
         };
 
         // Spawn supervision task

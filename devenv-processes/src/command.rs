@@ -109,6 +109,17 @@ fn build_wrapper_script(
         writeln!(script, "export WATCHDOG_USEC={}", usec).unwrap();
     }
 
+    // Redirect all subsequent stdout/stderr to log files so that every
+    // command in the exec block (including early echo statements before
+    // an `exec` call) is captured by the log tailer.
+    writeln!(
+        script,
+        "exec >> {} 2>> {}",
+        shell_escape::escape(stdout_log.to_string_lossy()),
+        shell_escape::escape(stderr_log.to_string_lossy())
+    )
+    .unwrap();
+
     let mut cmd = String::new();
 
     write!(cmd, "{}", config.exec).unwrap();
@@ -117,14 +128,7 @@ fn build_wrapper_script(
         write!(cmd, " {}", shell_escape::escape(arg.into())).unwrap();
     }
 
-    writeln!(
-        script,
-        "{} >> {} 2>> {}",
-        cmd,
-        shell_escape::escape(stdout_log.to_string_lossy()),
-        shell_escape::escape(stderr_log.to_string_lossy())
-    )
-    .unwrap();
+    writeln!(script, "{}", cmd).unwrap();
 
     debug!("Generated wrapper script for {}: {}", config.name, script);
     script

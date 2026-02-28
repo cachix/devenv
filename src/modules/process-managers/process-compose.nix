@@ -177,7 +177,7 @@ in
             (name: value:
               let
                 command =
-                  if !value.enable then value.exec
+                  if !value.start.enable then value.exec
                   else if value.process-compose.is_elevated or false
                   then config.process.taskCommandsBase.${name}
                   else config.process.taskCommands.${name};
@@ -228,7 +228,7 @@ in
               // typedProbe
               // pcAttrsWithBefore
               // { environment = envList ++ pcEnv; }
-              // lib.optionalAttrs (!value.enable) { disabled = true; }
+              // lib.optionalAttrs (!value.start.enable) { disabled = true; }
             )
             config.processes;
         };
