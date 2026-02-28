@@ -26,7 +26,7 @@ pub fn spawn_supervisor(
 ) -> JoinHandle<()> {
     let config = resources.config.clone();
     let job = resources.job.clone();
-    let activity = resources.activity.clone();
+    let activity = resources.activity.ref_handle();
     let notify_socket = resources.notify_socket.clone();
     let status_tx = resources.status_tx.clone();
     let name = config.name.clone();

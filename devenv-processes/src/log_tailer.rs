@@ -2,13 +2,13 @@ use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use devenv_activity::Activity;
+use devenv_activity::ActivityRef;
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
 use tokio::task::JoinHandle;
 use tracing::debug;
 
 /// Spawn a task that tails a log file and emits lines to an activity.
-pub fn spawn_file_tailer(path: PathBuf, activity: Activity, is_stderr: bool) -> JoinHandle<()> {
+pub fn spawn_file_tailer(path: PathBuf, activity: ActivityRef, is_stderr: bool) -> JoinHandle<()> {
     tokio::spawn(async move {
         // File is already created/truncated by start_command before job starts
         let file = match tokio::fs::File::open(&path).await {

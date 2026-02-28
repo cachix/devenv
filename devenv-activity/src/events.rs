@@ -336,6 +336,8 @@ pub enum Process {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Valuable)]
 #[serde(rename_all = "lowercase")]
 pub enum ProcessStatus {
+    /// Process has `start.enable = false`; registered but never launched.
+    Disabled,
     Running,
     Ready,
     Restarting,

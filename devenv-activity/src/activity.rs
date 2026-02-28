@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::ops::Deref;
+use std::sync::Arc;
 
 use tracing::Span;
 
@@ -36,7 +37,7 @@ pub struct Activity {
     id: u64,
     activity_type: ActivityType,
     level: ActivityLevel,
-    outcome: std::sync::Mutex<ActivityOutcome>,
+    outcome: Arc<std::sync::Mutex<ActivityOutcome>>,
 }
 
 impl Activity {
@@ -52,7 +53,7 @@ impl Activity {
             id,
             activity_type,
             level,
-            outcome: std::sync::Mutex::new(ActivityOutcome::Success),
+            outcome: Arc::new(std::sync::Mutex::new(ActivityOutcome::Success)),
         }
     }
 
@@ -397,6 +398,116 @@ impl Activity {
             }));
         }
     }
+
+    /// Create a non-owning reference handle.
+    ///
+    /// The returned `ActivityRef` shares the outcome with this `Activity`
+    /// and can log, set status, and mutate the outcome, but does NOT send
+    /// a `Complete` event when dropped.
+    pub fn ref_handle(&self) -> ActivityRef {
+        ActivityRef {
+            span: self.span.clone(),
+            id: self.id,
+            activity_type: self.activity_type,
+            outcome: self.outcome.clone(),
+        }
+    }
+}
+
+/// Non-owning handle to an activity.
+///
+/// Can log, set status, and mutate the shared outcome, but does NOT send
+/// a `Complete` event on drop (unlike `Activity`).
+#[derive(Clone)]
+pub struct ActivityRef {
+    span: Span,
+    id: u64,
+    activity_type: ActivityType,
+    outcome: Arc<std::sync::Mutex<ActivityOutcome>>,
+}
+
+impl ActivityRef {
+    /// Log a line
+    pub fn log(&self, line: impl Into<String>) {
+        let _guard = self.span.enter();
+        let line_str = line.into();
+        if ACTIVITY_SENDER
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+            .is_none()
+        {
+            tracing::info!("{}", line_str);
+        }
+        let event = match self.activity_type {
+            ActivityType::Process => ActivityEvent::Process(Process::Log {
+                id: self.id,
+                line: line_str,
+                is_error: false,
+                timestamp: Timestamp::now(),
+            }),
+            _ => return,
+        };
+        send_activity_event(event);
+    }
+
+    /// Log an error
+    pub fn error(&self, line: impl Into<String>) {
+        let _guard = self.span.enter();
+        let line_str = line.into();
+        if ACTIVITY_SENDER
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+            .is_none()
+        {
+            tracing::warn!("{}", line_str);
+        }
+        let event = match self.activity_type {
+            ActivityType::Process => ActivityEvent::Process(Process::Log {
+                id: self.id,
+                line: line_str,
+                is_error: true,
+                timestamp: Timestamp::now(),
+            }),
+            _ => return,
+        };
+        send_activity_event(event);
+    }
+
+    /// Set process status (for Process activities only)
+    pub fn set_status(&self, status: ProcessStatus) {
+        let _guard = self.span.enter();
+        if matches!(self.activity_type, ActivityType::Process) {
+            send_activity_event(ActivityEvent::Process(Process::Status {
+                id: self.id,
+                status,
+                timestamp: Timestamp::now(),
+            }));
+        }
+    }
+
+    /// Mark as failed
+    pub fn fail(&self) {
+        if let Ok(mut outcome) = self.outcome.lock() {
+            *outcome = ActivityOutcome::Failed;
+        }
+    }
+
+    /// Reset outcome to success (for restarting failed processes)
+    pub fn reset(&self) {
+        if let Ok(mut outcome) = self.outcome.lock() {
+            *outcome = ActivityOutcome::Success;
+        }
+    }
+}
+
+impl Deref for ActivityRef {
+    type Target = Span;
+
+    fn deref(&self) -> &Self::Target {
+        &self.span
+    }
 }
 
 impl Deref for Activity {
@@ -419,7 +530,7 @@ impl Clone for Activity {
             id: self.id,
             activity_type: self.activity_type,
             level: self.level,
-            outcome: std::sync::Mutex::new(outcome),
+            outcome: Arc::new(std::sync::Mutex::new(outcome)),
         }
     }
 }

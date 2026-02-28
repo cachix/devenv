@@ -50,7 +50,7 @@ pub use devenv_activity_macros::activity;
 pub use tracing_subscriber::Registry;
 
 // Core types
-pub use activity::{Activity, ActivityType};
+pub use activity::{Activity, ActivityRef, ActivityType};
 pub use events::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
     ExpectedCategory, Fetch, FetchKind, Message, Operation, Process, ProcessStatus, SetExpected,

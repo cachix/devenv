@@ -1,11 +1,11 @@
 use crate::{
     components::{LOG_VIEWPORT_FAILED, LOG_VIEWPORT_SHOW_OUTPUT, *},
     model::{
-        Activity, ActivityModel, ActivitySummary, ActivityVariant, NixActivityState, RenderContext,
-        TaskDisplayStatus, TerminalSize, UiState,
+        Activity, ActivityModel, ActivitySummary, ActivityVariant, NixActivityState,
+        ProcessLifecycle, RenderContext, TaskDisplayStatus, TerminalSize, UiState,
     },
 };
-use devenv_activity::{ActivityLevel, ProcessStatus};
+use devenv_activity::ActivityLevel;
 use human_repr::{HumanCount, HumanDuration};
 use iocraft::Context;
 use iocraft::components::ContextProvider;
@@ -571,16 +571,22 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
         ActivityVariant::Process(process_data) => {
             let is_active = matches!(
-                process_data.status,
-                ProcessStatus::Running | ProcessStatus::Restarting | ProcessStatus::Ready
+                process_data.lifecycle,
+                ProcessLifecycle::Starting
+                    | ProcessLifecycle::Running
+                    | ProcessLifecycle::Ready
+                    | ProcessLifecycle::Restarting
             );
 
             // Build status text with optional ports
-            let status_str = match process_data.status {
-                ProcessStatus::Running => "running",
-                ProcessStatus::Ready => "ready",
-                ProcessStatus::Restarting => "restarting",
-                ProcessStatus::Stopped => "stopped",
+            let status_str = match &process_data.lifecycle {
+                ProcessLifecycle::Disabled => "disabled",
+                ProcessLifecycle::Starting => "starting",
+                ProcessLifecycle::Running => "running",
+                ProcessLifecycle::Ready => "ready",
+                ProcessLifecycle::Restarting => "restarting",
+                ProcessLifecycle::Stopped { success: true } => "stopped",
+                ProcessLifecycle::Stopped { success: false } => "failed",
             };
 
             // Format ports: extract just the port numbers for brevity
@@ -610,8 +616,10 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let show_spinner = completed.is_none() && is_active;
             let prefix = build_activity_prefix(*depth, *completed, show_spinner);
 
-            // Hide elapsed time for stopped processes that were never started
-            let process_elapsed = if !is_active && completed.is_none() {
+            // Hide elapsed time for disabled/stopped processes that were never started
+            let process_elapsed = if matches!(process_data.lifecycle, ProcessLifecycle::Disabled)
+                || (!is_active && completed.is_none())
+            {
                 String::new()
             } else {
                 elapsed_str

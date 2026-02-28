@@ -87,16 +87,20 @@ pub struct JobHandle {
     pub output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
 }
 
-/// A disabled process (visible in TUI as stopped, startable via restart)
-struct DisabledProcess {
-    config: ProcessConfig,
-    activity: Activity,
+/// A managed process entry: either disabled (not running) or active (running).
+enum ProcessEntry {
+    /// Process has `start.enable = false`: visible in TUI but not launched.
+    Disabled {
+        config: ProcessConfig,
+        activity: Activity,
+    },
+    /// Process is running under supervision.
+    Active(JobHandle),
 }
 
 /// Native process manager using watchexec-supervisor
 pub struct NativeProcessManager {
-    jobs: Arc<RwLock<HashMap<String, JobHandle>>>,
-    disabled: Arc<RwLock<HashMap<String, DisabledProcess>>>,
+    processes: Arc<RwLock<HashMap<String, ProcessEntry>>>,
     state_dir: PathBuf,
     shutdown: Arc<tokio::sync::Notify>,
     /// Parent activity for grouping all processes under "Starting processes"
@@ -109,8 +113,7 @@ impl NativeProcessManager {
         std::fs::create_dir_all(&state_dir).into_diagnostic()?;
 
         Ok(Self {
-            jobs: Arc::new(RwLock::new(HashMap::new())),
-            disabled: Arc::new(RwLock::new(HashMap::new())),
+            processes: Arc::new(RwLock::new(HashMap::new())),
             state_dir,
             shutdown: Arc::new(tokio::sync::Notify::new()),
             processes_activity: Arc::new(RwLock::new(None)),
@@ -175,10 +178,10 @@ impl NativeProcessManager {
         let activity = builder.start();
 
         if !config.start.enable {
-            activity.set_status(ProcessStatus::Stopped);
-            self.disabled.write().await.insert(
+            activity.set_status(ProcessStatus::Disabled);
+            self.processes.write().await.insert(
                 config.name.clone(),
-                DisabledProcess {
+                ProcessEntry::Disabled {
                     config: config.clone(),
                     activity,
                 },
@@ -262,9 +265,9 @@ impl NativeProcessManager {
 
         // Spawn file tailers to emit output to activity
         let stdout_tailer =
-            crate::log_tailer::spawn_file_tailer(proc_cmd.stdout_log, activity.clone(), false);
+            crate::log_tailer::spawn_file_tailer(proc_cmd.stdout_log, activity.ref_handle(), false);
         let stderr_tailer =
-            crate::log_tailer::spawn_file_tailer(proc_cmd.stderr_log, activity.clone(), true);
+            crate::log_tailer::spawn_file_tailer(proc_cmd.stderr_log, activity.ref_handle(), true);
 
         // Create status channel for supervisor state observation
         let initial_status = crate::supervisor_state::JobStatus {
@@ -297,15 +300,15 @@ impl NativeProcessManager {
             crate::supervisor::spawn_supervisor(&resources, self.shutdown.clone());
 
         // Store the job handle
-        let mut jobs = self.jobs.write().await;
-        jobs.insert(
+        let mut processes = self.processes.write().await;
+        processes.insert(
             config.name.clone(),
-            JobHandle {
+            ProcessEntry::Active(JobHandle {
                 resources,
                 status_rx,
                 supervisor_task,
                 output_readers: Some((stdout_tailer, stderr_tailer)),
-            },
+            }),
         );
 
         info!("Command '{}' started", config.name);
@@ -314,36 +317,42 @@ impl NativeProcessManager {
 
     /// Stop a process by name
     pub async fn stop(&self, name: &str) -> Result<()> {
-        let mut jobs = self.jobs.write().await;
+        let mut processes = self.processes.write().await;
 
-        if let Some(handle) = jobs.remove(name) {
-            debug!("Stopping process: {}", name);
+        match processes.remove(name) {
+            Some(ProcessEntry::Active(handle)) => {
+                debug!("Stopping process: {}", name);
 
-            // Mark as stopped so the TUI accepts the upcoming Complete event
-            // (the model ignores Complete for processes not in Stopped status).
-            handle.resources.activity.set_status(ProcessStatus::Stopped);
-            handle.resources.activity.reset();
+                // Mark as stopped so the TUI shows the correct status
+                // before the Complete event arrives from Activity::drop.
+                handle.resources.activity.set_status(ProcessStatus::Stopped);
+                handle.resources.activity.reset();
 
-            // Abort the supervisor task first to prevent restarts
-            handle.supervisor_task.abort();
+                // Abort the supervisor task first to prevent restarts
+                handle.supervisor_task.abort();
 
-            // Abort output reader tasks
-            if let Some((stdout_reader, stderr_reader)) = handle.output_readers {
-                stdout_reader.abort();
-                stderr_reader.abort();
+                // Abort output reader tasks
+                if let Some((stdout_reader, stderr_reader)) = handle.output_readers {
+                    stdout_reader.abort();
+                    stderr_reader.abort();
+                }
+
+                // Send terminate signal with grace period
+                handle
+                    .resources
+                    .job
+                    .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
+                    .await;
+
+                info!("Process {} stopped", name);
+                Ok(())
             }
-
-            // Send terminate signal with grace period
-            handle
-                .resources
-                .job
-                .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
-                .await;
-
-            info!("Process {} stopped", name);
-            Ok(())
-        } else {
-            bail!("Process {} not found", name)
+            Some(entry @ ProcessEntry::Disabled { .. }) => {
+                // Put it back; disabled processes are not stoppable
+                processes.insert(name.to_string(), entry);
+                bail!("Process {} is disabled, cannot stop", name)
+            }
+            None => bail!("Process {} not found", name),
         }
     }
 
@@ -359,16 +368,25 @@ impl NativeProcessManager {
         // Signal supervisors first so they exit gracefully
         self.shutdown_supervisors();
 
-        let jobs = self.jobs.read().await;
-        let job_names: Vec<String> = jobs.keys().cloned().collect();
-        drop(jobs); // Release the read lock
+        let processes = self.processes.read().await;
+        let active_names: Vec<String> = processes
+            .iter()
+            .filter_map(|(name, entry)| match entry {
+                ProcessEntry::Active(_) => Some(name.clone()),
+                ProcessEntry::Disabled { .. } => None,
+            })
+            .collect();
+        drop(processes); // Release the read lock
 
-        for name in job_names {
+        for name in active_names {
             let _ = self.stop(&name).await; // Continue even if one fails
         }
 
         // Clear disabled processes (their activities complete on drop)
-        self.disabled.write().await.clear();
+        self.processes
+            .write()
+            .await
+            .retain(|_, entry| !matches!(entry, ProcessEntry::Disabled { .. }));
 
         Ok(())
     }
@@ -378,10 +396,14 @@ impl NativeProcessManager {
     /// This resets the restart count and activity state, respawns the supervision
     /// task if it exited (e.g., due to max restarts), and restarts the underlying job.
     pub async fn restart(&self, name: &str) -> Result<()> {
-        let mut jobs = self.jobs.write().await;
-        let handle = jobs
-            .get_mut(name)
-            .ok_or_else(|| miette::miette!("Process {} not running", name))?;
+        let mut processes = self.processes.write().await;
+        let handle = match processes.get_mut(name) {
+            Some(ProcessEntry::Active(h)) => h,
+            Some(ProcessEntry::Disabled { .. }) => {
+                bail!("Process {} is disabled, use start_disabled", name)
+            }
+            None => bail!("Process {} not running", name),
+        };
 
         // Reset activity state (unfail it) and set status to restarting
         handle.resources.activity.reset();
@@ -402,12 +424,12 @@ impl NativeProcessManager {
         handle.output_readers = Some((
             crate::log_tailer::spawn_file_tailer(
                 stdout_log,
-                handle.resources.activity.clone(),
+                handle.resources.activity.ref_handle(),
                 false,
             ),
             crate::log_tailer::spawn_file_tailer(
                 stderr_log,
-                handle.resources.activity.clone(),
+                handle.resources.activity.ref_handle(),
                 true,
             ),
         ));
@@ -444,10 +466,16 @@ impl NativeProcessManager {
 
     /// Start a previously disabled process, reusing its existing TUI activity.
     pub async fn start_disabled(&self, name: &str) -> Result<Arc<Job>> {
-        let DisabledProcess { config, activity } =
-            self.disabled.write().await.remove(name).ok_or_else(|| {
-                miette::miette!("Process {} not found in disabled processes", name)
-            })?;
+        let removed = self.processes.write().await.remove(name);
+        let (config, activity) = match removed {
+            Some(ProcessEntry::Disabled { config, activity }) => (config, activity),
+            Some(entry) => {
+                // Put it back
+                self.processes.write().await.insert(name.to_string(), entry);
+                bail!("Process {} is not disabled", name);
+            }
+            None => bail!("Process {} not found", name),
+        };
 
         // Reset the activity so it no longer shows as stopped
         activity.reset();
@@ -461,8 +489,14 @@ impl NativeProcessManager {
 
     /// Get list of running processes
     pub async fn list(&self) -> Vec<String> {
-        let jobs = self.jobs.read().await;
-        jobs.keys().cloned().collect()
+        let processes = self.processes.read().await;
+        processes
+            .iter()
+            .filter_map(|(name, entry)| match entry {
+                ProcessEntry::Active(_) => Some(name.clone()),
+                ProcessEntry::Disabled { .. } => None,
+            })
+            .collect()
     }
 
     /// Wait for a process to become ready, avoiding missed early readiness signals.
@@ -471,11 +505,14 @@ impl NativeProcessManager {
     /// interrupt the wait instead of blocking indefinitely.
     pub async fn wait_ready(&self, name: &str, cancel: &CancellationToken) -> Result<()> {
         let mut status_rx = {
-            let jobs = self.jobs.read().await;
-            let handle = jobs
-                .get(name)
-                .ok_or_else(|| miette::miette!("Process {} not found", name))?;
-            handle.status_rx.clone()
+            let processes = self.processes.read().await;
+            match processes.get(name) {
+                Some(ProcessEntry::Active(handle)) => handle.status_rx.clone(),
+                Some(ProcessEntry::Disabled { .. }) => {
+                    bail!("Process {} is disabled", name)
+                }
+                None => bail!("Process {} not found", name),
+            }
         };
 
         if status_rx.borrow().is_ready() {
@@ -503,9 +540,11 @@ impl NativeProcessManager {
 
     /// Query the current state of a process.
     pub async fn job_state(&self, name: &str) -> Option<crate::supervisor_state::JobStatus> {
-        let jobs = self.jobs.read().await;
-        jobs.get(name)
-            .map(|handle| handle.status_rx.borrow().clone())
+        let processes = self.processes.read().await;
+        match processes.get(name) {
+            Some(ProcessEntry::Active(handle)) => Some(handle.status_rx.borrow().clone()),
+            _ => None,
+        }
     }
 
     /// Start the API socket server for external queries (e.g., `devenv processes wait`).
@@ -515,7 +554,7 @@ impl NativeProcessManager {
     pub fn start_api_server(&self) -> Result<()> {
         let sock_path = self.api_socket_path();
         let _ = std::fs::remove_file(&sock_path);
-        let jobs = self.jobs.clone();
+        let processes = self.processes.clone();
 
         let listener = std::os::unix::net::UnixListener::bind(&sock_path)
             .into_diagnostic()
@@ -528,8 +567,8 @@ impl NativeProcessManager {
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {
-                        let jobs = jobs.clone();
-                        tokio::spawn(Self::handle_api_client(stream, jobs));
+                        let processes = processes.clone();
+                        tokio::spawn(Self::handle_api_client(stream, processes));
                     }
                     Err(e) => {
                         warn!("API accept error: {}", e);
@@ -545,7 +584,7 @@ impl NativeProcessManager {
     /// Handle a single API client connection.
     async fn handle_api_client(
         stream: tokio::net::UnixStream,
-        jobs: Arc<RwLock<HashMap<String, JobHandle>>>,
+        processes: Arc<RwLock<HashMap<String, ProcessEntry>>>,
     ) {
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
@@ -562,9 +601,15 @@ impl NativeProcessManager {
                     String,
                     tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
                 )> = {
-                    let jobs = jobs.read().await;
-                    jobs.iter()
-                        .map(|(name, handle)| (name.clone(), handle.status_rx.clone()))
+                    let processes = processes.read().await;
+                    processes
+                        .iter()
+                        .filter_map(|(name, entry)| match entry {
+                            ProcessEntry::Active(handle) => {
+                                Some((name.clone(), handle.status_rx.clone()))
+                            }
+                            ProcessEntry::Disabled { .. } => None,
+                        })
                         .collect()
                 };
 
@@ -663,9 +708,7 @@ impl NativeProcessManager {
                 }
                 // Add a small sleep to avoid busy loop
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                    let jobs = self.jobs.read().await;
-                    let disabled = self.disabled.read().await;
-                    if jobs.is_empty() && disabled.is_empty() {
+                    if self.processes.read().await.is_empty() {
                         debug!("No jobs running, exiting");
                         break;
                     }
@@ -707,7 +750,10 @@ impl NativeProcessManager {
                 } => {
                     match cmd {
                         ProcessCommand::Restart(name) => {
-                            let is_disabled = self.disabled.read().await.contains_key(&name);
+                            let is_disabled = matches!(
+                                self.processes.read().await.get(&name),
+                                Some(ProcessEntry::Disabled { .. })
+                            );
                             if is_disabled {
                                 info!("Starting disabled process: {}", name);
                                 if let Err(e) = self.start_disabled(&name).await {
@@ -723,9 +769,7 @@ impl NativeProcessManager {
                     }
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                    let jobs = self.jobs.read().await;
-                    let disabled = self.disabled.read().await;
-                    if jobs.is_empty() && disabled.is_empty() {
+                    if self.processes.read().await.is_empty() {
                         debug!("No jobs running, exiting");
                         break;
                     }
