@@ -117,13 +117,10 @@ fn extract_base_dir(pattern: &str) -> &Path {
             }
         }
         None => {
-            // No separator found - use current directory if pattern starts with special char,
-            // otherwise the pattern itself might be a file/dir name
-            if first_special == 0 {
-                Path::new(".")
-            } else {
-                Path::new(prefix)
-            }
+            // No separator before the first wildcard means the wildcard is in the first segment.
+            // Walk from cwd so patterns like `src*/*.ts` can match `src1/...`, `src2/...`, etc.
+            let _ = prefix;
+            Path::new(".")
         }
     }
 }
@@ -1141,6 +1138,8 @@ mod tests {
         // Pattern starting with glob
         assert_eq!(extract_base_dir("**/*.ts"), Path::new("."));
         assert_eq!(extract_base_dir("*.ts"), Path::new("."));
+        assert_eq!(extract_base_dir("src*/*.ts"), Path::new("."));
+        assert_eq!(extract_base_dir("foo?.nix"), Path::new("."));
 
         // Pattern with no glob - returns directory part since no separator after the prefix
         assert_eq!(extract_base_dir("/foo/bar/file.ts"), Path::new("/foo/bar"));
