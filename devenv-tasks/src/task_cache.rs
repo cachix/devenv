@@ -7,40 +7,248 @@ use devenv_cache_core::{
     file::TrackedFile,
     time,
 };
-use glob::{MatchOptions, glob_with};
+use ignore::Match;
+use ignore::WalkBuilder;
+use ignore::overrides::OverrideBuilder;
 use serde_json::Value;
 use sqlx::Row;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tracing::{debug, warn};
 
+fn normalize_pattern_for_base_dir(pattern: &str, base_dir: &Path) -> String {
+    let (negated, raw_pattern) = match pattern.strip_prefix('!') {
+        Some(rest) => (true, rest),
+        None => (false, pattern),
+    };
+
+    let base_dir_str = base_dir.to_string_lossy();
+    let stripped = if let Some(rest) = raw_pattern.strip_prefix(&format!("{}/", base_dir_str)) {
+        rest
+    } else if raw_pattern == base_dir_str {
+        "."
+    } else {
+        raw_pattern
+    };
+
+    // `ignore` treats patterns without a path separator as basename matches at any depth.
+    // After stripping the base directory, we can accidentally turn anchored patterns like
+    // `src/*.ts` into `*.ts`, which would match files in subdirectories too.
+    //
+    // Preserve the old glob expansion semantics by anchoring single-segment patterns
+    // to the base directory root.
+    let stripped = if stripped.is_empty()
+        || stripped == "."
+        || stripped.starts_with('/')
+        || stripped.contains('/')
+    {
+        stripped.to_string()
+    } else {
+        format!("/{}", stripped)
+    };
+
+    if negated {
+        format!("!{}", stripped)
+    } else {
+        stripped
+    }
+}
+
+fn is_literal_pattern(pattern: &str) -> bool {
+    !pattern.contains('*')
+        && !pattern.contains('?')
+        && !pattern.contains('[')
+        && !pattern.contains('{')
+}
+
+fn pattern_explicitly_targets_hidden_path(pattern: &str) -> bool {
+    let raw = pattern.strip_prefix('!').unwrap_or(pattern);
+    raw.starts_with('.') || raw.starts_with("/.") || raw.contains("/.")
+}
+
+fn has_hidden_component(path: &Path, base_dir: &Path) -> bool {
+    let relative = path.strip_prefix(base_dir).unwrap_or(path);
+    relative.components().any(|component| {
+        component
+            .as_os_str()
+            .to_str()
+            .is_some_and(|segment| segment.starts_with('.') && segment != "." && segment != "..")
+    })
+}
+
+/// Extract the base directory from a glob pattern.
+///
+/// Returns the longest path prefix that doesn't contain glob special characters.
+/// This is used to determine where to start walking the filesystem.
+fn extract_base_dir(pattern: &str) -> &Path {
+    // Find the first occurrence of any glob special character
+    let special_chars = ['*', '?', '[', '{'];
+    let first_special = pattern
+        .char_indices()
+        .find(|(_, c)| special_chars.contains(c))
+        .map(|(i, _)| i)
+        .unwrap_or(pattern.len());
+
+    // No glob characters - treat as a literal path and walk from its parent directory
+    if first_special == pattern.len() {
+        let path = Path::new(pattern);
+        if let Some(parent) = path.parent() {
+            if parent.as_os_str().is_empty() {
+                return Path::new(".");
+            }
+
+            return parent;
+        }
+
+        return Path::new(".");
+    }
+
+    // Get the substring up to the first special character
+    let prefix = &pattern[..first_special];
+
+    // Find the last path separator in the prefix to get the directory
+    match prefix.rfind(std::path::MAIN_SEPARATOR) {
+        Some(last_sep) => {
+            if last_sep == 0 {
+                Path::new(&pattern[..=last_sep])
+            } else {
+                Path::new(&pattern[..last_sep])
+            }
+        }
+        None => {
+            // No separator before the first wildcard means the wildcard is in the first segment.
+            // Walk from cwd so patterns like `src*/*.ts` can match `src1/...`, `src2/...`, etc.
+            let _ = prefix;
+            Path::new(".")
+        }
+    }
+}
+
 /// Expand glob patterns into actual file paths
 ///
-/// The expansion uses strict matching rules:
-/// - `case_sensitive: true` – patterns are case-sensitive (e.g. `*.RS` will not match `main.rs`)
-/// - `require_literal_separator: true` – path separators must appear literally in the pattern
-///   (e.g. `src**/*.rs` is invalid and will not match anything)
-/// - `require_literal_leading_dot: true` – a leading dot must be written explicitly
-///   (e.g. `*` will not match `.hidden`, you must use `.*` or `.hidden` directly)
+/// The expansion walks the filesystem starting from the base directory of each pattern
+/// and matches files against the glob patterns.
+///
+/// Negation patterns (starting with `!`) are supported to exclude paths:
+/// - `!**/node_modules/**` – excludes all paths containing node_modules
+/// - `!**/*.test.ts` – excludes all test files
+///
+/// Example: `["**/*.ts", "!**/node_modules/**"]` matches all TypeScript files
+/// except those in node_modules directories.
 pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
-    patterns
+    // Separate positive patterns from negation patterns
+    let (negation_patterns, positive_patterns): (Vec<&str>, Vec<&str>) = patterns
         .iter()
-        .flat_map(|pattern| {
-            glob_with(
-                pattern,
-                MatchOptions {
-                    case_sensitive: true,
-                    require_literal_separator: true,
-                    require_literal_leading_dot: true,
-                },
-            )
-            .ok()
-            .into_iter()
-            .flatten()
-            .filter_map(|path| path.ok())
-            .filter_map(|path| path.to_str().map(String::from))
-        })
-        .collect()
+        .map(|s| s.as_str())
+        .partition(|p| p.starts_with('!'));
+
+    // `exec_if_modified` requires at least one positive pattern.
+    if positive_patterns.is_empty() {
+        return Vec::new();
+    }
+
+    let mut results: Vec<String> = Vec::new();
+    let mut groups: BTreeMap<PathBuf, Vec<&str>> = BTreeMap::new();
+    for pattern in &positive_patterns {
+        if is_literal_pattern(pattern) && negation_patterns.is_empty() {
+            let path = Path::new(pattern);
+            if path.exists() {
+                if let Some(path_str) = path.to_str() {
+                    results.push(path_str.to_string());
+                }
+            }
+            continue;
+        }
+
+        groups
+            .entry(extract_base_dir(pattern).to_path_buf())
+            .or_default()
+            .push(*pattern);
+    }
+
+    for (base_dir, positive_group) in groups {
+        let mut overrides_builder = OverrideBuilder::new(&base_dir);
+        let mut hidden_overrides_builder = OverrideBuilder::new(&base_dir);
+
+        for pattern in positive_group {
+            let normalized = normalize_pattern_for_base_dir(pattern, &base_dir);
+            if let Err(e) = overrides_builder.add(&normalized) {
+                warn!("Invalid glob pattern '{}': {}", normalized, e);
+            }
+            if pattern_explicitly_targets_hidden_path(&normalized) {
+                if let Err(e) = hidden_overrides_builder.add(&normalized) {
+                    warn!("Invalid hidden glob pattern '{}': {}", normalized, e);
+                }
+            }
+        }
+
+        for pattern in &negation_patterns {
+            let normalized = normalize_pattern_for_base_dir(pattern, &base_dir);
+            if let Err(e) = overrides_builder.add(&normalized) {
+                warn!("Invalid glob pattern '{}': {}", normalized, e);
+            }
+            if pattern_explicitly_targets_hidden_path(&normalized) {
+                if let Err(e) = hidden_overrides_builder.add(&normalized) {
+                    warn!("Invalid hidden glob pattern '{}': {}", normalized, e);
+                }
+            }
+        }
+
+        let overrides = match overrides_builder.build() {
+            Ok(overrides) => overrides,
+            Err(e) => {
+                warn!("Failed to build ignore overrides: {}", e);
+                continue;
+            }
+        };
+        let overrides_for_match = overrides.clone();
+        let hidden_overrides = match hidden_overrides_builder.build() {
+            Ok(hidden_overrides) => hidden_overrides,
+            Err(e) => {
+                warn!("Failed to build hidden ignore overrides: {}", e);
+                continue;
+            }
+        };
+
+        let mut walk_builder = WalkBuilder::new(&base_dir);
+        walk_builder
+            .hidden(false)
+            .ignore(false)
+            .git_ignore(false)
+            .git_global(false)
+            .git_exclude(false)
+            .parents(false)
+            .follow_links(true)
+            .overrides(overrides);
+
+        for entry in walk_builder.build() {
+            let Ok(entry) = entry else {
+                continue;
+            };
+
+            let is_dir = entry.file_type().is_some_and(|ft| ft.is_dir());
+            if matches!(
+                overrides_for_match.matched(entry.path(), is_dir),
+                Match::Whitelist(_)
+            ) {
+                if has_hidden_component(entry.path(), &base_dir)
+                    && !matches!(
+                        hidden_overrides.matched(entry.path(), is_dir),
+                        Match::Whitelist(_)
+                    )
+                {
+                    continue;
+                }
+
+                if let Some(path_str) = entry.path().to_str() {
+                    results.push(path_str.to_string());
+                }
+            }
+        }
+    }
+
+    results
 }
 
 // Create a constant for embedded migrations
@@ -87,7 +295,7 @@ impl TaskCache {
             return Ok(false);
         }
 
-        // Expand all patterns using glob and collect results
+        // Expand all patterns and collect results
         let expanded_paths = expand_glob_patterns(files);
 
         // Check all files and track if any are modified
@@ -805,5 +1013,138 @@ mod tests {
                 .await
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn test_expand_glob_patterns_with_negation() {
+        let temp_dir = TempDir::new().unwrap();
+        let base = temp_dir.path();
+
+        // Create directory structure:
+        // base/
+        //   src/
+        //     main.ts
+        //     util.ts
+        //   node_modules/
+        //     package/
+        //       index.ts
+        //   test.ts
+
+        let src_dir = base.join("src");
+        let node_modules_dir = base.join("node_modules");
+        let package_dir = node_modules_dir.join("package");
+
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::create_dir_all(&package_dir).unwrap();
+
+        std::fs::write(src_dir.join("main.ts"), "main").unwrap();
+        std::fs::write(src_dir.join("util.ts"), "util").unwrap();
+        std::fs::write(package_dir.join("index.ts"), "index").unwrap();
+        std::fs::write(base.join("test.ts"), "test").unwrap();
+
+        // Test: all .ts files without negation
+        let pattern = format!("{}/**/*.ts", base.display());
+        let all_files = expand_glob_patterns(&[pattern.clone()]);
+        assert_eq!(all_files.len(), 4); // main.ts, util.ts, index.ts, test.ts (via **)
+
+        // Test: exclude node_modules
+        let negation = "!**/node_modules/**".to_string();
+        let filtered = expand_glob_patterns(&[pattern.clone(), negation]);
+        assert_eq!(filtered.len(), 3); // main.ts, util.ts, test.ts (excludes index.ts)
+        assert!(filtered.iter().all(|p| !p.contains("node_modules")));
+
+        // Test: multiple negation patterns
+        let negation1 = "!**/node_modules/**".to_string();
+        let negation2 = "!**/test.ts".to_string();
+        let filtered2 = expand_glob_patterns(&[pattern.clone(), negation1, negation2]);
+        assert_eq!(filtered2.len(), 2); // main.ts, util.ts only
+        assert!(filtered2.iter().all(|p| !p.contains("node_modules")));
+        assert!(filtered2.iter().all(|p| !p.ends_with("test.ts")));
+    }
+
+    #[test]
+    fn test_expand_glob_patterns_negation_only() {
+        // Test that negation-only patterns return empty (no positive patterns to match)
+        let result = expand_glob_patterns(&["!**/node_modules/**".to_string()]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_expand_glob_patterns_empty() {
+        let result = expand_glob_patterns(&[]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_expand_glob_patterns_preserves_depth_for_single_segment_patterns() {
+        let temp_dir = TempDir::new().unwrap();
+        let base = temp_dir.path();
+
+        let src_dir = base.join("src");
+        let src_sub_dir = src_dir.join("sub");
+        std::fs::create_dir_all(&src_sub_dir).unwrap();
+
+        std::fs::write(src_dir.join("foo.txt"), "root").unwrap();
+        std::fs::write(src_sub_dir.join("foo.txt"), "nested").unwrap();
+        std::fs::write(src_dir.join("a.ts"), "a").unwrap();
+        std::fs::write(src_sub_dir.join("b.ts"), "b").unwrap();
+
+        let foo_pattern = format!("{}/src/foo.txt", base.display());
+        let foo_matches = expand_glob_patterns(&[foo_pattern]);
+        assert_eq!(foo_matches.len(), 1);
+        assert!(foo_matches[0].ends_with("/src/foo.txt"));
+
+        let ts_pattern = format!("{}/src/*.ts", base.display());
+        let ts_matches = expand_glob_patterns(&[ts_pattern]);
+        assert_eq!(ts_matches.len(), 1);
+        assert!(ts_matches[0].ends_with("/src/a.ts"));
+    }
+
+    #[test]
+    fn test_expand_glob_patterns_requires_explicit_dot_for_hidden_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let base = temp_dir.path();
+
+        let src_dir = base.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+
+        std::fs::write(src_dir.join("visible.ts"), "visible").unwrap();
+        std::fs::write(src_dir.join(".hidden.ts"), "hidden").unwrap();
+
+        let wildcard_pattern = format!("{}/src/*.ts", base.display());
+        let wildcard_matches = expand_glob_patterns(&[wildcard_pattern]);
+        assert_eq!(wildcard_matches.len(), 1);
+        assert!(wildcard_matches[0].ends_with("/src/visible.ts"));
+
+        let explicit_dot_pattern = format!("{}/src/.*.ts", base.display());
+        let explicit_dot_matches = expand_glob_patterns(&[explicit_dot_pattern]);
+        assert_eq!(explicit_dot_matches.len(), 1);
+        assert!(explicit_dot_matches[0].ends_with("/src/.hidden.ts"));
+    }
+
+    #[test]
+    fn test_extract_base_dir() {
+        // Pattern with base directory
+        assert_eq!(extract_base_dir("/foo/bar/**/*.ts"), Path::new("/foo/bar"));
+        assert_eq!(
+            extract_base_dir("/home/user/src/**/*.rs"),
+            Path::new("/home/user/src")
+        );
+
+        // Absolute patterns with top-level wildcard should keep root base dir
+        assert_eq!(extract_base_dir("/*.ts"), Path::new("/"));
+        assert_eq!(extract_base_dir("/nix*"), Path::new("/"));
+
+        // Pattern starting with glob
+        assert_eq!(extract_base_dir("**/*.ts"), Path::new("."));
+        assert_eq!(extract_base_dir("*.ts"), Path::new("."));
+        assert_eq!(extract_base_dir("src*/*.ts"), Path::new("."));
+        assert_eq!(extract_base_dir("foo?.nix"), Path::new("."));
+
+        // Pattern with no glob - returns directory part since no separator after the prefix
+        assert_eq!(extract_base_dir("/foo/bar/file.ts"), Path::new("/foo/bar"));
+
+        // Pattern with glob in middle
+        assert_eq!(extract_base_dir("/foo/*/bar/*.ts"), Path::new("/foo"));
     }
 }

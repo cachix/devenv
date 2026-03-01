@@ -1687,7 +1687,7 @@ dependencies = [
  "devenv-processes",
  "devenv-shell",
  "devenv-tui",
- "glob",
+ "ignore",
  "miette",
  "nix 0.30.1",
  "petgraph 0.8.3",
@@ -1704,7 +1704,6 @@ dependencies = [
  "tokio-test",
  "tokio-util",
  "tracing",
- "walkdir",
 ]
 
 [[package]]
@@ -8425,7 +8424,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

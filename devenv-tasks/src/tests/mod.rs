@@ -3199,6 +3199,94 @@ echo "Command v2 executed"
     Ok(())
 }
 
+/// Test that command path changes invalidate cache even when exec_if_modified contains
+/// negation patterns that would otherwise match shell scripts.
+#[tokio::test]
+async fn test_exec_if_modified_command_change_with_negation() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let watched_file = tempfile::NamedTempFile::new()?;
+    let watched_file_path = watched_file.path().to_str().unwrap().to_string();
+    fs::write(&watched_file_path, "unchanged content").await?;
+
+    let task_name = format!(
+        "exec_mod:cmd_change_negated:{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
+
+    let command_script1 = create_script(
+        r#"#!/bin/sh
+echo '{"version": 1}' > $DEVENV_TASK_OUTPUT_FILE
+"#,
+    )?;
+    let command1 = command_script1.to_str().unwrap();
+
+    let command_script2 = create_script(
+        r#"#!/bin/sh
+echo '{"version": 2}' > $DEVENV_TASK_OUTPUT_FILE
+"#,
+    )?;
+    let command2 = command_script2.to_str().unwrap();
+
+    let config = |command: &str| {
+        Config::try_from(json!({
+            "roots": [task_name],
+            "run_mode": "all",
+            "tasks": [{
+                "name": task_name,
+                "command": command,
+                "exec_if_modified": [watched_file_path, "!**/*.sh"]
+            }]
+        }))
+        .unwrap()
+    };
+
+    let tasks1 = Tasks::builder(config(command1), VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
+    tasks1.run(false).await;
+    assert_matches!(
+        &tasks1.graph[tasks1.tasks_order[0]].read().await.status,
+        TaskStatus::Completed(TaskCompleted::Success(_, _))
+    );
+
+    let tasks2 = Tasks::builder(config(command1), VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
+    tasks2.run(false).await;
+    assert_matches!(
+        &tasks2.graph[tasks2.tasks_order[0]].read().await.status,
+        TaskStatus::Completed(TaskCompleted::Skipped(_))
+    );
+
+    let tasks3 = Tasks::builder(config(command2), VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+    let outputs3 = tasks3.run(false).await;
+    assert_matches!(
+        &tasks3.graph[tasks3.tasks_order[0]].read().await.status,
+        TaskStatus::Completed(TaskCompleted::Success(_, _))
+    );
+
+    assert_eq!(
+        outputs3
+            .0
+            .get(&task_name)
+            .and_then(|v| v.get("version"))
+            .and_then(|v| v.as_i64()),
+        Some(2)
+    );
+
+    Ok(())
+}
+
 /// Test that RunMode::All doesn't include unrelated tasks connected through shared prerequisites.
 ///
 /// This reproduces GitHub issue #2337 where tasks with `before = ["enterShell", "enterTest"]`
