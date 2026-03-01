@@ -52,6 +52,14 @@ let
       "nix-bindings-bindgen-raw-0.1.0" = "sha256-XtnN/Moc0OZES37NTmAeLzwkVFSinpZ4qHrMdGOaBdI=";
       "wu-manber-0.1.0" = "sha256-7YIttaQLfFC/32utojh2DyOHVsZiw8ul/z0lvOhAE/4=";
       "secretspec-0.7.2" = "sha256-vX4hbA1v7AsnNf+PoSzkKeMMkGlmR9GXAg75ggoSeVE=";
+      "ignore-files-3.0.5" = "sha256-TkGk2TkjVGsnRcypLGh+cFXxSI/6l936CwfKsCik+wQ=";
+      "project-origins-1.4.2" = "sha256-TkGk2TkjVGsnRcypLGh+cFXxSI/6l936CwfKsCik+wQ=";
+      "watchexec-8.1.2" = "sha256-TkGk2TkjVGsnRcypLGh+cFXxSI/6l936CwfKsCik+wQ=";
+      "watchexec-events-6.1.0" = "sha256-TkGk2TkjVGsnRcypLGh+cFXxSI/6l936CwfKsCik+wQ=";
+      "watchexec-filterer-globset-8.0.0" = "sha256-TkGk2TkjVGsnRcypLGh+cFXxSI/6l936CwfKsCik+wQ=";
+      "watchexec-filterer-ignore-7.0.0" = "sha256-TkGk2TkjVGsnRcypLGh+cFXxSI/6l936CwfKsCik+wQ=";
+      "watchexec-signals-5.0.1" = "sha256-TkGk2TkjVGsnRcypLGh+cFXxSI/6l936CwfKsCik+wQ=";
+      "watchexec-supervisor-5.1.0" = "sha256-TkGk2TkjVGsnRcypLGh+cFXxSI/6l936CwfKsCik+wQ=";
     };
   };
 in
