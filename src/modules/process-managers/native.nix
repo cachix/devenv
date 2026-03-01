@@ -174,7 +174,7 @@ in
           let
             native = cfg.processConfig.${name};
           in
-          removeAttrs process [ "process-compose" "ports" "notify" "ready" "restart" ] // {
+          removeAttrs process [ "process-compose" "ports" "notify" "ready" "restart" "enable" "after" "before" ] // {
             inherit name;
             inherit (native) watchdog;
             ready = native.ready;
