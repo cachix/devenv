@@ -74,6 +74,14 @@ jobs:
           name: devenv
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
+      # Rebuild devenv (Cachix cache hit) so the store path is available locally.
+      # The build job's output is just a path string that may have been garbage collected.
+      - name: Build devenv
+        id: build-devenv
+        run: |
+          devenv_path=$(nix build -L --print-out-paths --system ${{ inputs.system }} .#devenv)
+          echo "path=$devenv_path" >> $GITHUB_OUTPUT
+
       # Run feature-gated tests that can't run in the Nix sandbox (package.nix check phase):
       # - test-nix-store: Nix store access (devenv-nix-backend)
       # - test-pty: PTY/devpts (devenv-reload, devenv-shell)
@@ -82,4 +90,4 @@ jobs:
       # nextest runs each test in a separate process, avoiding Nix C++ FFI global state issues
       - name: Run integration tests
         run: |
-          ${{ needs.build.outputs.devenv-path }}/bin/devenv --system ${{ inputs.system }} shell -- cargo nextest run -j 4 --features devenv/test-all
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv --system ${{ inputs.system }} shell -- cargo nextest run -j 4 --features devenv/test-all
