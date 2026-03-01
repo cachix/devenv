@@ -52,6 +52,7 @@ let
       "nix-bindings-bindgen-raw-0.1.0" = "sha256-XtnN/Moc0OZES37NTmAeLzwkVFSinpZ4qHrMdGOaBdI=";
       "wu-manber-0.1.0" = "sha256-7YIttaQLfFC/32utojh2DyOHVsZiw8ul/z0lvOhAE/4=";
       "secretspec-0.7.2" = "sha256-vX4hbA1v7AsnNf+PoSzkKeMMkGlmR9GXAg75ggoSeVE=";
+
     };
   };
 in
