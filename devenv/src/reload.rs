@@ -253,7 +253,7 @@ impl ShellBuilder for DevenvShellBuilder {
                     Ok(inputs) => {
                         for input in inputs {
                             if input.path.exists() && !input.path.starts_with("/nix/store") {
-                                watcher.watch(&input.path);
+                                watcher.watch(&input.path).await;
                             }
                         }
                     }
@@ -289,7 +289,7 @@ impl DevenvShellBuilder {
                     tracing::debug!("Found {} file inputs for shell key", inputs.len());
                     for input in inputs {
                         if input.path.exists() && !input.path.starts_with("/nix/store") {
-                            ctx.watcher.watch(&input.path);
+                            ctx.watcher.watch(&input.path).await;
                         }
                     }
                     return;
@@ -309,7 +309,7 @@ impl DevenvShellBuilder {
                 tracing::debug!("Found {} total tracked files in eval cache", paths.len());
                 for path in paths {
                     if path.exists() && !path.starts_with("/nix/store") {
-                        ctx.watcher.watch(&path);
+                        ctx.watcher.watch(&path).await;
                     }
                 }
             }
