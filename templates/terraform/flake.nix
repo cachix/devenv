@@ -8,8 +8,8 @@
   };
 
   nixConfig = {
-    extra-substituters = "https://devenv.cachix.org https://nixpkgs-terraform.cachix.org";
-    extra-trusted-public-keys = "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= nixpkgs-terraform.cachix.org-1:8Sit092rIdAVENA3ZVeH9hzSiqI/jng6JiCrQ1Dmusw=";
+    extra-substituters = "https://nixpkgs-terraform.cachix.org";
+    extra-trusted-public-keys = "nixpkgs-terraform.cachix.org-1:8Sit092rIdAVENA3ZVeH9hzSiqI/jng6JiCrQ1Dmusw=";
   };
 
   outputs = { self, devenv, nixpkgs, systems, ... }@inputs:
