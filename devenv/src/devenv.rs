@@ -561,7 +561,11 @@ impl Devenv {
 
     pub async fn print_dev_env(&self, json: bool) -> Result<String> {
         let env = self.get_dev_environment(json).await?;
-        Ok(String::from_utf8(env.output).expect("Failed to convert env to utf-8"))
+        let output = String::from_utf8(env.output.clone()).expect("Failed to convert env to utf-8");
+        // Cache so that later callers (e.g. capture_shell_environment via
+        // prepare_shell) reuse the result instead of re-evaluating.
+        let _ = self.dev_env_cache.set(env);
+        Ok(output)
     }
 
     #[instrument(skip(self))]
