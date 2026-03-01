@@ -70,8 +70,12 @@ impl WatcherHandle {
             }
 
             if let Some(ref config) = self.config {
+                // Watch parent directories instead of individual files.
+                // macOS FSEvents requires directory paths; file paths
+                // may be silently ignored.
+                let dir_paths: HashSet<PathBuf> = paths.iter().map(|p| os_watch_dir(p)).collect();
                 config.pathset(
-                    paths
+                    dir_paths
                         .iter()
                         .map(|p| WatchedPath::non_recursive(p.as_path())),
                 );
@@ -85,6 +89,22 @@ impl WatcherHandle {
 
     pub fn watched_paths(&self) -> Vec<PathBuf> {
         self.watched_paths.lock().unwrap().iter().cloned().collect()
+    }
+}
+
+/// Resolve a watched path to a directory suitable for the OS watcher.
+///
+/// macOS FSEvents requires directory paths passed to FSEventStreamCreate;
+/// individual file paths may be silently ignored. This converts file
+/// paths to their parent directory on all platforms for consistency.
+fn os_watch_dir(p: &Path) -> PathBuf {
+    if p.is_dir() {
+        p.to_path_buf()
+    } else {
+        p.parent()
+            .filter(|d| !d.as_os_str().is_empty())
+            .map(|d| d.to_path_buf())
+            .unwrap_or_else(|| p.to_path_buf())
     }
 }
 
@@ -192,15 +212,26 @@ impl FileWatcher {
         // fs worker to finish registering OS watches.
         let mut fs_ready = wx_config.fs_ready();
 
-        if config.recursive {
-            wx_config.pathset(paths.iter().map(|p| p.as_path()));
-        } else {
-            wx_config.pathset(
-                paths
-                    .iter()
-                    .map(|p| WatchedPath::non_recursive(p.as_path())),
-            );
+        // Watch parent directories instead of individual files.
+        // macOS FSEvents requires directory paths passed to
+        // FSEventStreamCreate; file paths may be silently ignored.
+        {
+            let dir_paths: HashSet<PathBuf> = paths.iter().map(|p| os_watch_dir(p)).collect();
+            if config.recursive {
+                wx_config.pathset(dir_paths.iter().map(|p| p.as_path()));
+            } else {
+                wx_config.pathset(
+                    dir_paths
+                        .iter()
+                        .map(|p| WatchedPath::non_recursive(p.as_path())),
+                );
+            }
         }
+
+        // Clone before moving into handle; the filter task needs this
+        // to check whether events match actually watched paths (since
+        // we watch parent directories, not individual files).
+        let filter_watched = watched_paths.clone();
 
         let handle = WatcherHandle {
             watched_paths,
@@ -262,9 +293,15 @@ impl FileWatcher {
                     if !filterer.check_event(event, *priority).unwrap_or(true) {
                         continue;
                     }
+                    // Since we watch parent directories (for FSEvents
+                    // compatibility), filter events to only include
+                    // paths that match our actually watched files/dirs.
+                    let watched = filter_watched.lock().unwrap().clone();
                     for (path, _) in event.paths() {
                         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-                        let _ = watch_tx.try_send(FileChangeEvent { path: canonical });
+                        if watched.iter().any(|wp| canonical.starts_with(wp)) {
+                            let _ = watch_tx.try_send(FileChangeEvent { path: canonical });
+                        }
                     }
                 }
             }
