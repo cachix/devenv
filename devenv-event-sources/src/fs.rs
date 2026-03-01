@@ -97,8 +97,9 @@ impl Drop for FileWatcher {
 impl FileWatcher {
     /// Create a new file watcher.
     ///
-    /// Infallible: when paths is empty or setup fails internally,
-    /// `recv()` blocks forever.
+    /// Infallible: when setup fails internally, `recv()` blocks forever.
+    /// When paths is empty, the watcher starts idle but accepts new paths
+    /// at runtime via `WatcherHandle::watch()`.
     pub async fn new(config: FileWatcherConfig<'_>, name: &str) -> Self {
         let (tx, rx) = mpsc::channel::<FileChangeEvent>(100);
 
@@ -116,10 +117,6 @@ impl FileWatcher {
                     tasks: Vec::new(),
                 }
             };
-        }
-
-        if config.paths.is_empty() {
-            empty_watcher!();
         }
 
         // Canonicalize watch paths to resolve symlinks.
