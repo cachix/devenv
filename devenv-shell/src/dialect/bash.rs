@@ -24,7 +24,7 @@ impl ShellDialect for BashDialect {
     fn rcfile_content(&self, ctx: &RcfileContext) -> String {
         format!(
             r#"# Disable history during init so devenv internal commands don't pollute history.
-# The task runner will re-enable it when handing control to the user.
+# Re-enabled at the end of this rcfile after initialization is complete.
 set +o history
 
 # Environment diff helpers (always defined for tracking)
@@ -57,11 +57,8 @@ export PATH="$_DEVENV_PATH"
 # Hot-reload hook (keybinding and PROMPT_COMMAND integration)
 {reload_hook}
 
-# Open control pipe for out-of-band signaling to PTY task runner
-exec 3>"$DEVENV_CONTROL_FIFO"
-
-# Signal that shell initialization is complete
-echo '{{"type":"ready"}}' >&3
+# Re-enable history after init
+set -o history
 "#,
             env_diff_helpers = ctx.env_diff_helpers,
             env_script_path = ctx.env_script_path.to_string_lossy(),
@@ -242,14 +239,6 @@ fi
 "#,
             reload_file.to_string_lossy()
         )
-    }
-
-    fn disable_history(&self) -> &str {
-        "set +o history"
-    }
-
-    fn enable_history(&self) -> &str {
-        "set -o history"
     }
 
     fn user_rcfile(&self) -> Option<PathBuf> {

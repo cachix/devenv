@@ -14,7 +14,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 
 // Re-export protocol types from devenv-shell
-pub use devenv_shell::{PtyTaskRequest, PtyTaskResult, ShellCommand, ShellEvent};
+pub use devenv_shell::{ShellCommand, ShellEvent};
 
 /// Compute blake3 hash of file contents.
 /// Returns None if the file cannot be read.

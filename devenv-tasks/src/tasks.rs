@@ -1,6 +1,6 @@
 use crate::config::{Config, RunMode, parse_dependency};
 use crate::error::Error;
-use crate::executor::{SubprocessExecutor, TaskExecutor};
+use crate::executor::SubprocessExecutor;
 use crate::task_cache::TaskCache;
 use crate::task_state::TaskState;
 use crate::types::{
@@ -26,7 +26,6 @@ pub struct TasksBuilder {
     verbosity: VerbosityLevel,
     db_path: Option<PathBuf>,
     shutdown: Arc<tokio_shutdown::Shutdown>,
-    executor: Option<Arc<dyn TaskExecutor>>,
     refresh_task_cache: bool,
 }
 
@@ -42,7 +41,6 @@ impl TasksBuilder {
             verbosity,
             db_path: None,
             shutdown,
-            executor: None,
             refresh_task_cache: false,
         }
     }
@@ -50,12 +48,6 @@ impl TasksBuilder {
     /// Set the database path for task caching
     pub fn with_db_path(mut self, db_path: PathBuf) -> Self {
         self.db_path = Some(db_path);
-        self
-    }
-
-    /// Set a custom task executor (defaults to subprocess executor)
-    pub fn with_executor(mut self, executor: Arc<dyn TaskExecutor>) -> Self {
-        self.executor = Some(executor);
         self
     }
 
@@ -121,9 +113,6 @@ impl TasksBuilder {
         }
 
         let roots = Tasks::resolve_namespace_roots(&self.config.roots, &task_indices)?;
-        let executor = self
-            .executor
-            .unwrap_or_else(|| Arc::new(SubprocessExecutor::new()));
         let mut tasks = Tasks {
             roots,
             root_names: self.config.roots,
@@ -137,7 +126,7 @@ impl TasksBuilder {
             shutdown: self.shutdown,
             process_manager,
             env: self.config.env,
-            executor,
+            executor: SubprocessExecutor::new(),
             refresh_task_cache: self.refresh_task_cache,
             ignore_process_deps: self.config.ignore_process_deps,
         };
@@ -174,7 +163,7 @@ pub struct Tasks {
     pub process_manager: Arc<NativeProcessManager>,
     /// Environment variables to pass to processes
     pub env: HashMap<String, String>,
-    pub executor: Arc<dyn TaskExecutor>,
+    pub executor: SubprocessExecutor,
     /// Force a refresh of the task cache, skipping cache reads
     pub refresh_task_cache: bool,
     /// When true, exclude non-root process-type tasks from the scheduled subgraph
@@ -870,7 +859,6 @@ impl Tasks {
             let shutdown_clone = Arc::clone(&self.shutdown);
             let orchestration_activity_clone = Arc::clone(&orchestration_activity);
             let completed_tasks_clone = Arc::clone(&completed_tasks);
-            let executor_clone = Arc::clone(&self.executor);
             let refresh_task_cache = self.refresh_task_cache;
             let shell_env = self.env.clone();
 
@@ -892,7 +880,7 @@ impl Tasks {
                                 &cache,
                                 shutdown_clone.cancellation_token(),
                                 task_activity_id,
-                                executor_clone.as_ref(),
+                                &SubprocessExecutor,
                                 refresh_task_cache,
                                 &shell_env,
                             )

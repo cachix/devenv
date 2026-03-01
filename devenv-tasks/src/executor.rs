@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use std::collections::BTreeMap;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
@@ -40,27 +39,7 @@ impl OutputCallback for NoOpCallback {
     fn on_stderr(&self, _line: &str) {}
 }
 
-/// Trait for executing task commands.
-///
-/// This abstraction allows tasks to be executed either as subprocesses
-/// (the default) or within a PTY (for hot-reload shell integration).
-#[async_trait]
-pub trait TaskExecutor: Send + Sync {
-    /// Execute a command and return the result.
-    ///
-    /// # Arguments
-    /// * `ctx` - Execution context containing command and environment
-    /// * `callback` - Callback for streaming output lines
-    /// * `cancellation` - Token to signal cancellation
-    async fn execute(
-        &self,
-        ctx: ExecutionContext<'_>,
-        callback: &dyn OutputCallback,
-        cancellation: CancellationToken,
-    ) -> ExecutionResult;
-}
-
-/// Default executor that spawns commands as subprocesses.
+/// Executor that spawns task commands as subprocesses.
 pub struct SubprocessExecutor;
 
 impl SubprocessExecutor {
@@ -75,9 +54,8 @@ impl Default for SubprocessExecutor {
     }
 }
 
-#[async_trait]
-impl TaskExecutor for SubprocessExecutor {
-    async fn execute(
+impl SubprocessExecutor {
+    pub async fn execute(
         &self,
         ctx: ExecutionContext<'_>,
         callback: &dyn OutputCallback,
@@ -258,123 +236,6 @@ impl TaskExecutor for SubprocessExecutor {
                         .unwrap_or_else(|| "unknown".to_string())
                 ))
             },
-        }
-    }
-}
-
-/// Default executor singleton for when no custom executor is provided.
-static DEFAULT_EXECUTOR: std::sync::OnceLock<SubprocessExecutor> = std::sync::OnceLock::new();
-
-pub fn default_executor() -> &'static SubprocessExecutor {
-    DEFAULT_EXECUTOR.get_or_init(SubprocessExecutor::new)
-}
-
-/// Channel-based executor for running tasks through a PTY.
-///
-/// This executor sends task commands through a channel to a PTY runner,
-/// which executes them inside an interactive shell and returns results.
-///
-/// The PTY runner (typically in ShellRunner) handles:
-/// 1. Injecting commands with markers into PTY stdin
-/// 2. Capturing output until completion marker
-/// 3. Parsing exit code from the marker
-///
-/// This is useful for hot-reload mode where tasks need to run
-/// in the same environment as the interactive shell.
-pub struct PtyExecutor {
-    /// Channel to send task execution requests
-    command_tx: tokio::sync::mpsc::Sender<devenv_shell::PtyTaskRequest>,
-}
-
-impl PtyExecutor {
-    /// Create a new PTY executor with the given command channel.
-    ///
-    /// The channel should be connected to a PTY runner that handles
-    /// the actual command injection and output capture.
-    pub fn new(command_tx: tokio::sync::mpsc::Sender<devenv_shell::PtyTaskRequest>) -> Self {
-        Self { command_tx }
-    }
-}
-
-#[async_trait]
-impl TaskExecutor for PtyExecutor {
-    async fn execute(
-        &self,
-        ctx: ExecutionContext<'_>,
-        _callback: &dyn OutputCallback,
-        cancellation: CancellationToken,
-    ) -> ExecutionResult {
-        // Create a unique request ID
-        let id = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0);
-
-        // Create response channel
-        let (response_tx, response_rx) = tokio::sync::oneshot::channel();
-
-        // Build env with DEVENV_TASK_OUTPUT_FILE (same as SubprocessExecutor)
-        let mut env = ctx.env.clone();
-        env.insert(
-            "DEVENV_TASK_OUTPUT_FILE".to_string(),
-            ctx.output_file_path.to_string_lossy().to_string(),
-        );
-
-        // Build the request
-        let request = devenv_shell::PtyTaskRequest {
-            id,
-            command: ctx.command.to_string(),
-            env,
-            cwd: ctx.cwd.map(|s| s.to_string()),
-            response_tx,
-        };
-
-        // Send request to PTY runner
-        if self.command_tx.send(request).await.is_err() {
-            return ExecutionResult {
-                success: false,
-                stdout_lines: Vec::new(),
-                stderr_lines: Vec::new(),
-                error: Some("Failed to send command to PTY runner".to_string()),
-            };
-        }
-
-        // Wait for response or cancellation
-        tokio::select! {
-            result = response_rx => {
-                match result {
-                    Ok(pty_result) => {
-                        tracing::trace!(
-                            "PTY task result: success={}, error={:?}",
-                            pty_result.success,
-                            pty_result.error
-                        );
-                        ExecutionResult {
-                            success: pty_result.success,
-                            stdout_lines: pty_result.stdout_lines,
-                            stderr_lines: pty_result.stderr_lines,
-                            error: pty_result.error,
-                        }
-                    },
-                    Err(e) => {
-                        tracing::error!("PTY runner dropped response channel: {}", e);
-                        ExecutionResult {
-                            success: false,
-                            stdout_lines: Vec::new(),
-                            stderr_lines: Vec::new(),
-                            error: Some("PTY runner dropped response channel".to_string()),
-                        }
-                    },
-                }
-            }
-            _ = cancellation.cancelled() => {
-                ExecutionResult {
-                    success: false,
-                    stdout_lines: Vec::new(),
-                    stderr_lines: Vec::new(),
-                    error: Some("Task cancelled".to_string()),
-                }
-            }
         }
     }
 }

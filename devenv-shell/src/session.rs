@@ -1,14 +1,12 @@
 //! Shell session management.
 //!
 //! This module provides the main `ShellSession` type that orchestrates
-//! PTY lifecycle, terminal I/O, status line, and task execution.
+//! PTY lifecycle, terminal I/O, and status line rendering.
 
-use crate::control_pipe::ControlPipe;
 use crate::escape::{DecModeEvent, EscapeScanner, SequenceEvent};
-use crate::protocol::{PtyTaskRequest, ShellCommand, ShellEvent};
+use crate::protocol::{ShellCommand, ShellEvent};
 use crate::pty::{Pty, PtyError, get_terminal_size};
 use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
-use crate::task_runner::PtyTaskRunner;
 use crate::terminal::RawModeGuard;
 use crate::utf8_accumulator::Utf8Accumulator;
 use avt::Vt;
@@ -392,8 +390,6 @@ pub enum SessionError {
     ChannelClosed,
     #[error("unexpected command: expected Spawn, got {0}")]
     UnexpectedCommand(String),
-    #[error("task runner error: {0}")]
-    TaskRunner(#[from] crate::task_runner::TaskRunnerError),
 }
 
 /// Configuration for TUI handoff.
@@ -405,10 +401,6 @@ pub struct TuiHandoff {
     pub backend_done_tx: oneshot::Sender<()>,
     /// Wait for TUI to release terminal. Receives the TUI's final render height.
     pub terminal_ready_rx: oneshot::Receiver<u16>,
-    /// Optional channel to receive task execution requests.
-    pub task_rx: Option<mpsc::Receiver<PtyTaskRequest>>,
-    /// Optional channel to signal PTY is ready for tasks.
-    pub pty_ready_tx: Option<oneshot::Sender<()>>,
 }
 
 /// Shell session configuration.
@@ -448,7 +440,7 @@ enum Event {
 
 /// Interactive shell session with hot-reload support.
 ///
-/// Manages PTY lifecycle, terminal I/O, status line, and task execution.
+/// Manages PTY lifecycle, terminal I/O, and status line rendering.
 pub struct ShellSession {
     config: SessionConfig,
     size: PtySize,
@@ -511,7 +503,7 @@ impl ShellSession {
         io: SessionIo,
     ) -> Result<Option<u32>, SessionError> {
         // Wait for the initial Spawn command
-        let (mut initial_cmd, _watch_files) = match command_rx.recv().await {
+        let (initial_cmd, _watch_files) = match command_rx.recv().await {
             Some(ShellCommand::Spawn {
                 command,
                 watch_files,
@@ -535,22 +527,9 @@ impl ShellSession {
             }
         };
 
-        // Spawn PTY early so tasks can run in it (before TUI exits)
+        // Spawn PTY
         // Reserve 1 row for status line if enabled
         let pty_size = self.pty_size();
-
-        // Create control FIFO for out-of-band signaling between shell and task runner.
-        // Include timestamp nanos alongside PID to avoid stale file collisions
-        // (e.g. after SIGKILL where the Drop handler does not run and a new
-        // process reuses the same PID).
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        let fifo_path =
-            std::env::temp_dir().join(format!("devenv-ctrl-{}-{nanos}", std::process::id()));
-        let control_pipe = ControlPipe::create(fifo_path).map_err(SessionError::Io)?;
-        initial_cmd.env("DEVENV_CONTROL_FIFO", control_pipe.path());
 
         let pty = Arc::new(Pty::spawn(initial_cmd, pty_size)?);
         let mut vt = Vt::builder()
@@ -558,26 +537,8 @@ impl ShellSession {
             .scrollback_limit(self.size.rows as usize)
             .build();
 
-        // Open the read end of the control pipe (non-blocking, async reads via epoll)
-        let control_rx = control_pipe.into_receiver().map_err(SessionError::Io)?;
-
         // Handle TUI handoff if present
-        if let Some(mut handoff) = handoff {
-            // Run any tasks in the PTY (TUI still active, showing progress)
-            if let Some(mut task_rx) = handoff.task_rx.take() {
-                let mut task_runner = PtyTaskRunner::new(Arc::clone(&pty), control_rx);
-                let pty_ready_tx = handoff.pty_ready_tx.take();
-                task_runner
-                    .run_with_vt(&mut task_rx, &mut vt, pty_ready_tx)
-                    .await?;
-            } else if let Some(tx) = handoff.pty_ready_tx.take() {
-                let _ = tx.send(());
-            }
-
-            // Clear VT so internal task output (env exports, markers, drain
-            // fences) is not rendered to the user.
-            vt.feed_str("\x1b[2J\x1b[H");
-
+        if let Some(handoff) = handoff {
             // Signal TUI that initial build is complete and we're ready for terminal
             tracing::trace!("session: sending backend_done_tx");
             let _ = handoff.backend_done_tx.send(());

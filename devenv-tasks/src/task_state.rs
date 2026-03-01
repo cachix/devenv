@@ -1,6 +1,6 @@
 use crate::SudoContext;
 use crate::config::TaskConfig;
-use crate::executor::{ExecutionContext, OutputCallback, TaskExecutor};
+use crate::executor::{ExecutionContext, OutputCallback, SubprocessExecutor};
 use crate::task_cache::{TaskCache, expand_glob_patterns};
 use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
@@ -407,7 +407,7 @@ impl TaskState {
         cache: &TaskCache,
         cancellation: CancellationToken,
         activity_id: u64,
-        executor: &dyn TaskExecutor,
+        executor: &SubprocessExecutor,
         refresh_task_cache: bool,
         shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<TaskCompleted> {
@@ -436,7 +436,7 @@ impl TaskState {
         cache: &TaskCache,
         cancellation: CancellationToken,
         task_activity: &Activity,
-        executor: &dyn TaskExecutor,
+        executor: &SubprocessExecutor,
         refresh_task_cache: bool,
         shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<TaskCompleted> {

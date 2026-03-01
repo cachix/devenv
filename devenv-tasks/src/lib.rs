@@ -10,10 +10,7 @@ pub mod ui;
 
 pub use config::{Config, RunMode, TaskConfig};
 pub use error::Error;
-pub use executor::{
-    ExecutionContext, ExecutionResult, OutputCallback, PtyExecutor, SubprocessExecutor,
-    TaskExecutor, default_executor,
-};
+pub use executor::{ExecutionContext, ExecutionResult, OutputCallback, SubprocessExecutor};
 pub use privileges::SudoContext;
 pub use tasks::{Tasks, TasksBuilder, compute_display_hierarchy};
 pub use types::{
