@@ -381,7 +381,7 @@ in
     # Only set DEVENV_TASKS env var for flakes integration or pre-2.0 CLI,
     # where devenv-tasks is invoked via shell hooks and needs the env var.
     # For 2.0+, DEVENV_TASK_FILE is sufficient and avoids bloating the environment.
-    env.DEVENV_TASKS = lib.mkIf (config.devenv.cli.version == null || lib.versionOlder config.devenv.cli.version "2.0") (builtins.toJSON tasksJSON);
+    env.DEVENV_TASKS = lib.optionalString (config.devenv.cli.version == null || lib.versionOlder config.devenv.cli.version "2.0") (builtins.toJSON tasksJSON);
     env.DEVENV_TASK_FILE = config.task.config;
     task.config = (pkgs.formats.json { }).generate "tasks.json" tasksJSON;
 
