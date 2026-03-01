@@ -3,3 +3,4 @@ nav:
   - Monorepo: monorepo.md
   - Using with Flakes: using-with-flakes.md
   - Using with flake.parts: using-with-flake-parts.md
+  - Using with standard Nix: using-with-standard-nix.md
