@@ -143,6 +143,12 @@ in
                 exit 0
               fi
 
+              # git-hooks installation sets core.hooksPath to .git/hooks
+              # which doesn't work with prek (https://github.com/j178/prek/pull/1692), so unset it
+              if [ "$(${git} config --get core.hooksPath 2>/dev/null)" = ".git/hooks" ]; then
+                ${git} config --unset core.hooksPath
+              fi
+
               # Install hooks for configured stages
               if [ -z "${lib.concatStringsSep " " installStages}" ]; then
                 # Default: install pre-commit hook
