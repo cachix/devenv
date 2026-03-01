@@ -30878,6 +30878,214 @@ If port 0 is specified, Redis will not listen on a TCP socket and a unix socket 
 
 
 
+## services.rustfs.enable
+
+
+
+Whether to enable RustFS object storage.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
+
+
+
+## services.rustfs.package
+
+
+
+Which package of RustFS to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` rustfsInput.packages.${pkgs.stdenv.system}.default `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
+
+
+
+## services.rustfs.accessKey
+
+
+
+Access key for authentication (5 to 20 characters).
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "rustfsadmin" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
+
+
+
+## services.rustfs.bind
+
+
+
+The IP interface to bind to.
+` null ` means “all interfaces”.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
+
+
+
+## services.rustfs.consoleEnable
+
+
+
+Enable or disable the web console.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
+
+
+
+## services.rustfs.consolePort
+
+
+
+The TCP port for the web console.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` 9001 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
+
+
+
+## services.rustfs.extraEnvironment
+
+
+
+Additional environment variables to pass to RustFS.
+See the RustFS documentation for available options
+(e.g. ` RUSTFS_CORS_ALLOWED_ORIGINS `, ` RUSTFS_TLS_PATH `).
+
+
+
+*Type:*
+attribute set of string
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  RUSTFS_OBJECT_CACHE_ENABLE = "true";
+  RUSTFS_OBS_LOGGER_LEVEL = "debug";
+}
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
+
+
+
+## services.rustfs.port
+
+
+
+The TCP port for the S3 API.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` 9000 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
+
+
+
+## services.rustfs.secretKey
+
+
+
+Secret key for authentication (8 to 40 characters).
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "rustfsadmin" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
+
+
+
 ## services.sqld.enable
 
 
