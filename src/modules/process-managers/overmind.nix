@@ -25,7 +25,7 @@ in
 
     process.manager.command = lib.mkDefault ''
       ${lib.getExe cfg.package} start \
-        ${lib.cli.toGNUCommandLineShell {} config.process.manager.args} \
+        ${(lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell) {} config.process.manager.args} \
         "$@" &
     '';
 

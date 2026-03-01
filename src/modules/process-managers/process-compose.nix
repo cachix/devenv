@@ -148,7 +148,7 @@ in
 
         # Start a new process-compose server
         ${lib.getExe cfg.package} \
-          ${lib.cli.toGNUCommandLineShell { } config.process.manager.args} \
+          ${(lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell) { } config.process.manager.args} \
           -t="''${PC_TUI_ENABLED:-${lib.boolToString cfg.tui.enable}}" \
           up "$@" &
       '';
