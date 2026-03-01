@@ -3246,7 +3246,7 @@ dependencies = [
 [[package]]
 name = "iocraft"
 version = "0.7.18"
-source = "git+https://github.com/sandydoo/iocraft?branch=feat-configure-output#90013f04976b246be4e21cea0fcc49be6f0abc36"
+source = "git+https://github.com/sandydoo/iocraft?branch=feat-configure-output#2f30e735c3dd3f1d506c52db8b34d4157e7f7673"
 dependencies = [
  "bitflags 2.10.0",
  "crossterm 0.28.1",
@@ -3260,7 +3260,7 @@ dependencies = [
 [[package]]
 name = "iocraft-macros"
 version = "0.2.3"
-source = "git+https://github.com/sandydoo/iocraft?branch=feat-configure-output#90013f04976b246be4e21cea0fcc49be6f0abc36"
+source = "git+https://github.com/sandydoo/iocraft?branch=feat-configure-output#2f30e735c3dd3f1d506c52db8b34d4157e7f7673"
 dependencies = [
  "proc-macro2",
  "quote",
