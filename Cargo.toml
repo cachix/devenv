@@ -148,9 +148,9 @@ walkdir = "2.5"
 url = "2"
 human-repr = "1.1"
 insta = { version = "1.40", features = ["filters", "json"] }
-watchexec = "8.0"
-watchexec-filterer-globset = "8.0"
-watchexec-supervisor = "5.0"
+watchexec = { git = "https://github.com/domenkozar/watchexec.git", branch = "feat/fs-ready-cleanup" }
+watchexec-filterer-globset = { git = "https://github.com/domenkozar/watchexec.git", branch = "feat/fs-ready-cleanup" }
+watchexec-supervisor = { git = "https://github.com/domenkozar/watchexec.git", branch = "feat/fs-ready-cleanup" }
 signal-hook = "0.3"
 signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
 socket2 = "0.5"
