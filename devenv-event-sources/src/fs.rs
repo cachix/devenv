@@ -213,7 +213,16 @@ impl FileWatcher {
         // to avoid spawning its signal, keyboard, action, and error workers
         // that we don't need.
         let (ev_s, ev_r) = async_priority_channel::bounded(4096);
-        let (er_s, _er_r) = mpsc::channel(64);
+        let (er_s, mut er_r) = mpsc::channel(64);
+
+        // Task 0: log any runtime errors from the fs worker (e.g. failed
+        // watch registrations due to inotify limits).
+        let err_name = name.to_owned();
+        let err_task = tokio::spawn(async move {
+            while let Some(e) = er_r.recv().await {
+                warn!("fs watcher error for {}: {}", err_name, e);
+            }
+        });
 
         // Task 1: fs worker — watches files via notify, sends raw events.
         let fs_config = wx_config.clone();
@@ -272,7 +281,7 @@ impl FileWatcher {
             rx,
             _tx: tx,
             handle,
-            tasks: vec![fs_task, filter_task],
+            tasks: vec![fs_task, filter_task, err_task],
         }
     }
 
@@ -292,8 +301,19 @@ mod tests {
     use std::io::Write;
     use std::time::Duration;
     use tempfile::TempDir;
+    use tracing_subscriber::EnvFilter;
 
     const WATCH_TIMEOUT: Duration = Duration::from_secs(10);
+
+    fn init_test_tracing() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(
+                EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| EnvFilter::new("devenv_event_sources=warn,watchexec=warn")),
+            )
+            .with_test_writer()
+            .try_init();
+    }
 
     #[tokio::test]
     async fn test_detects_file_modification() {
@@ -332,6 +352,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_files() {
+        init_test_tracing();
         let temp_dir = TempDir::new().expect("create temp dir");
         let base = temp_dir.path().canonicalize().expect("canonicalize");
         let file1 = base.join("file1.nix");
@@ -490,6 +511,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_adds_path_at_runtime() {
+        init_test_tracing();
         let temp_dir = TempDir::new().expect("create temp dir");
         let base = temp_dir.path().canonicalize().expect("canonicalize");
         let initial_file = base.join("initial.nix");
