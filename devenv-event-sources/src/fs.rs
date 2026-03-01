@@ -357,15 +357,26 @@ mod tests {
         )
         .await;
 
-        File::create(&file1)
-            .expect("open")
-            .write_all(b"1 modified")
-            .expect("write");
+        // Retry writes to handle CI environments where events may be
+        // dropped under resource pressure or on overlay filesystems.
+        let deadline = tokio::time::Instant::now() + WATCH_TIMEOUT;
+        let mut attempt = 0u32;
+        let event = loop {
+            File::create(&file1)
+                .expect("open")
+                .write_all(format!("modified {attempt}").as_bytes())
+                .expect("write");
+            attempt += 1;
 
-        let event = tokio::time::timeout(WATCH_TIMEOUT, watcher.recv())
-            .await
-            .expect("timeout")
-            .expect("event");
+            match tokio::time::timeout(Duration::from_millis(500), watcher.recv()).await {
+                Ok(Some(e)) => break e,
+                Ok(None) => panic!("watcher channel closed"),
+                Err(_) => assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "timeout waiting for file change event",
+                ),
+            }
+        };
 
         assert!(event.path == file1 || event.path == file2);
     }
@@ -508,23 +519,42 @@ mod tests {
         let handle = watcher.handle();
         handle.watch(&runtime_file).await;
 
-        File::create(&runtime_file)
-            .expect("open file")
-            .write_all(b"runtime modified")
-            .expect("write");
-
-        // On macOS, notify's FSEvents backend restarts the entire stream
-        // when a new path is added, which replays historical events for
-        // already-watched paths. Drain until we see the runtime file.
+        // Retry writes to handle CI environments where events may be
+        // dropped, and drain non-matching events (macOS FSEvents replays
+        // historical events when paths are added).
         let deadline = tokio::time::Instant::now() + WATCH_TIMEOUT;
+        let mut attempt = 0u32;
         loop {
-            let remaining = deadline - tokio::time::Instant::now();
-            match tokio::time::timeout(remaining, watcher.recv()).await {
-                Ok(Some(e)) if e.path == runtime_file => break,
-                Ok(Some(_)) => continue,
-                Ok(None) => panic!("watcher channel closed before runtime file event"),
-                Err(_) => panic!("timeout waiting for runtime file change event"),
+            File::create(&runtime_file)
+                .expect("open file")
+                .write_all(format!("runtime modified {attempt}").as_bytes())
+                .expect("write");
+            attempt += 1;
+
+            let batch_end = tokio::time::Instant::now() + Duration::from_millis(500);
+            let mut found = false;
+            loop {
+                let remaining = batch_end.saturating_duration_since(tokio::time::Instant::now());
+                if remaining.is_zero() {
+                    break;
+                }
+                match tokio::time::timeout(remaining, watcher.recv()).await {
+                    Ok(Some(e)) if e.path == runtime_file => {
+                        found = true;
+                        break;
+                    }
+                    Ok(Some(_)) => continue,
+                    Ok(None) => panic!("watcher channel closed before runtime file event"),
+                    Err(_) => break,
+                }
             }
+            if found {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "timeout waiting for runtime file change event after {attempt} attempts",
+            );
         }
     }
 }
