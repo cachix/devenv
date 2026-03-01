@@ -68,6 +68,30 @@ impl WatcherHandle {
         }
     }
 
+    /// Adds a path to watch and waits for the OS watch to be registered.
+    pub async fn watch_async(&self, path: &Path) {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+
+        let mut ready = self.config.as_ref().map(|c| c.fs_ready());
+
+        {
+            let mut paths = self.watched_paths.lock().unwrap();
+            paths.insert(canonical);
+
+            if let Some(ref config) = self.config {
+                config.pathset(
+                    paths
+                        .iter()
+                        .map(|p| WatchedPath::non_recursive(p.as_path())),
+                );
+            }
+        }
+
+        if let Some(ref mut rx) = ready {
+            let _ = rx.changed().await;
+        }
+    }
+
     pub fn watched_paths(&self) -> Vec<PathBuf> {
         self.watched_paths.lock().unwrap().iter().cloned().collect()
     }
@@ -173,6 +197,10 @@ impl FileWatcher {
             }
         };
 
+        // Subscribe BEFORE setting the pathset so we can wait for the
+        // fs worker to finish registering OS watches.
+        let mut fs_ready = wx_config.fs_ready();
+
         if config.recursive {
             wx_config.pathset(paths.iter().map(|p| p.as_path()));
         } else {
@@ -251,11 +279,10 @@ impl FileWatcher {
             }
         });
 
-        // Yield so the spawned tasks get polled and the OS watcher starts.
-        // Without this, on a single-threaded runtime the spawns won't run
-        // until the caller's next await point, and early file changes
-        // would be missed.
-        tokio::task::yield_now().await;
+        // Wait for the fs worker to finish registering OS watches.
+        // Without this, file changes that happen immediately after
+        // construction could be missed.
+        let _ = fs_ready.changed().await;
 
         Self {
             rx,
@@ -495,10 +522,7 @@ mod tests {
         .await;
 
         let handle = watcher.handle();
-        handle.watch(&runtime_file);
-
-        // Let the fs worker pick up the new pathset and set up the notify watcher.
-        tokio::task::yield_now().await;
+        handle.watch_async(&runtime_file).await;
 
         File::create(&runtime_file)
             .expect("open file")

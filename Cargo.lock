@@ -3105,8 +3105,7 @@ dependencies = [
 [[package]]
 name = "ignore-files"
 version = "3.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3b0030836e50229b1c47a6604ea95268b164492d6104d79989179a02255254f"
+source = "git+https://github.com/domenkozar/watchexec.git?branch=feat%2Ffs-ready-cleanup#de8a3911bced73032ab0d5949e2843fed9ae0d04"
 dependencies = [
  "dunce",
  "futures",
@@ -4841,8 +4840,7 @@ dependencies = [
 [[package]]
 name = "project-origins"
 version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e42382141d102db809df94324b513c388b047ebc47926eec5417623b88781527"
+source = "git+https://github.com/domenkozar/watchexec.git?branch=feat%2Ffs-ready-cleanup#de8a3911bced73032ab0d5949e2843fed9ae0d04"
 dependencies = [
  "futures",
  "tokio",
@@ -8229,13 +8227,13 @@ dependencies = [
 
 [[package]]
 name = "watchexec"
-version = "8.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc35794a21139060aca512393e9b1a225fe48fc11edee65c84d6d76b25a53331"
+version = "8.1.2"
+source = "git+https://github.com/domenkozar/watchexec.git?branch=feat%2Ffs-ready-cleanup#de8a3911bced73032ab0d5949e2843fed9ae0d04"
 dependencies = [
  "async-priority-channel",
  "atomic-take",
  "futures",
+ "libc",
  "miette",
  "normalize-path",
  "notify",
@@ -8245,13 +8243,13 @@ dependencies = [
  "watchexec-events",
  "watchexec-signals",
  "watchexec-supervisor",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
 name = "watchexec-events"
-version = "6.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c4a8973a20c7d30198a12272519163168a9ba8b687693ec9d1f027b75b860d1"
+version = "6.1.0"
+source = "git+https://github.com/domenkozar/watchexec.git?branch=feat%2Ffs-ready-cleanup#de8a3911bced73032ab0d5949e2843fed9ae0d04"
 dependencies = [
  "notify-types",
  "watchexec-signals",
@@ -8260,8 +8258,7 @@ dependencies = [
 [[package]]
 name = "watchexec-filterer-globset"
 version = "8.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f258297db8519b9dd4c200aa0e7e261cb438c55571cbc6a22cb7b19a5b867080"
+source = "git+https://github.com/domenkozar/watchexec.git?branch=feat%2Ffs-ready-cleanup#de8a3911bced73032ab0d5949e2843fed9ae0d04"
 dependencies = [
  "ignore",
  "ignore-files",
@@ -8274,8 +8271,7 @@ dependencies = [
 [[package]]
 name = "watchexec-filterer-ignore"
 version = "7.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "923b0345fd40893ec39caf41ef2f4ce999b1bf25338001d211719f48ee7d7da4"
+source = "git+https://github.com/domenkozar/watchexec.git?branch=feat%2Ffs-ready-cleanup#de8a3911bced73032ab0d5949e2843fed9ae0d04"
 dependencies = [
  "dunce",
  "ignore",
@@ -8289,8 +8285,7 @@ dependencies = [
 [[package]]
 name = "watchexec-signals"
 version = "5.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fd4537617a323437550d34c73a6aeeb1b489bbcc526e63f044ca3e59347101f"
+source = "git+https://github.com/domenkozar/watchexec.git?branch=feat%2Ffs-ready-cleanup#de8a3911bced73032ab0d5949e2843fed9ae0d04"
 dependencies = [
  "miette",
  "nix 0.30.1",
@@ -8299,9 +8294,8 @@ dependencies = [
 
 [[package]]
 name = "watchexec-supervisor"
-version = "5.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a10a48302bf1927c9cb5a2974b6c77d6f214cb50442efec57c26b2f0a6c3689e"
+version = "5.1.0"
+source = "git+https://github.com/domenkozar/watchexec.git?branch=feat%2Ffs-ready-cleanup#de8a3911bced73032ab0d5949e2843fed9ae0d04"
 dependencies = [
  "futures",
  "process-wrap",
