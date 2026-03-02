@@ -1016,6 +1016,9 @@ impl ShellSession {
                 }
 
                 Event::PtyExit(exit_code) => {
+                    if self.config.show_status_line && !in_alternate_screen {
+                        write!(stdout, "\x1b[{};1H\x1b[2K", self.size.rows)?;
+                    }
                     Self::cleanup_forwarded_modes(
                         in_alternate_screen,
                         &forwarded_mouse_modes,
@@ -1074,6 +1077,9 @@ impl ShellSession {
             }
         }
 
+        if self.config.show_status_line && !in_alternate_screen {
+            write!(stdout, "\x1b[{};1H\x1b[2K", self.size.rows)?;
+        }
         Self::cleanup_forwarded_modes(in_alternate_screen, &forwarded_mouse_modes, stdout)?;
         Ok(None)
     }
