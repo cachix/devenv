@@ -112,9 +112,11 @@ fn build_wrapper_script(
     // Redirect all subsequent stdout/stderr to log files so that every
     // command in the exec block (including early echo statements before
     // an `exec` call) is captured by the log tailer.
+    // Close stdin so processes that read from it get EOF immediately
+    // instead of hanging forever or stealing terminal input.
     writeln!(
         script,
-        "exec >> {} 2>> {}",
+        "exec </dev/null >> {} 2>> {}",
         shell_escape::escape(stdout_log.to_string_lossy()),
         shell_escape::escape(stderr_log.to_string_lossy())
     )

@@ -258,6 +258,40 @@ async fn test_is_running_initially_false() {
     assert!(!manager.is_running().await);
 }
 
+/// Test that a process reading stdin gets EOF immediately and exits cleanly
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stdin_closed_for_processes() {
+    timeout(TEST_TIMEOUT, async {
+        let ctx = TestContext::new();
+        let manager = ctx.create_manager();
+
+        // Script reads from stdin, then writes what it got. With stdin closed
+        // (/dev/null), `read` returns immediately with empty input.
+        let config = ProcessConfig {
+            name: "stdin-reader".to_string(),
+            exec: "bash -c 'read line; echo \"got: [$line]\"'".to_string(),
+            ..Default::default()
+        };
+
+        manager
+            .start_command(&config, None)
+            .await
+            .expect("Failed to start");
+
+        // The process should complete and write output since stdin is /dev/null.
+        // `read` gets EOF immediately so the script finishes without hanging.
+        let stdout_log = ctx.state_dir.join("logs/stdin-reader.stdout.log");
+        assert!(
+            wait_for_file_content(&stdout_log, "got: []", STARTUP_TIMEOUT).await,
+            "Process should have received empty stdin and written output"
+        );
+
+        manager.stop_all().await.expect("Failed to stop all");
+    })
+    .await
+    .expect("Test timed out");
+}
+
 /// Test process that writes stdout/stderr via shell command
 #[tokio::test(flavor = "multi_thread")]
 async fn test_process_output_capture() {
