@@ -881,12 +881,14 @@ impl ShellSession {
                     // Scan for DEC private mode sequences and forward them
                     let was_in_alt = in_alternate_screen;
                     let mut erase_display = false;
+                    let mut clear_scrollback = false;
                     Self::process_escape_events(
                         &mut scanner,
                         &data,
                         &mut in_alternate_screen,
                         &mut forwarded_mouse_modes,
                         &mut erase_display,
+                        &mut clear_scrollback,
                         stdout,
                     )?;
 
@@ -907,6 +909,7 @@ impl ShellSession {
                                     &mut in_alternate_screen,
                                     &mut forwarded_mouse_modes,
                                     &mut erase_display,
+                                    &mut clear_scrollback,
                                     stdout,
                                 )?;
                                 let text = utf8_acc.accumulate(&more);
@@ -969,6 +972,10 @@ impl ShellSession {
                             renderer.row_offset -= consumed as u16;
                             renderer.invalidate();
                         }
+                    }
+
+                    if clear_scrollback {
+                        queue!(stdout, Clear(ClearType::Purge))?;
                     }
 
                     if in_alternate_screen || renderer.row_offset > 0 {
@@ -1117,12 +1124,18 @@ impl ShellSession {
     /// Sets `*erase_display` to `true` if a CSI 2 J (erase display) sequence is
     /// detected so the caller can consume `row_offset` and let the shell clear
     /// content left by the TUI.
+    ///
+    /// Sets `*clear_scrollback` to `true` if a CSI 3 J (clear scrollback)
+    /// sequence is detected.  The sequence is deferred instead of forwarded
+    /// immediately so the caller can emit it *after* `scroll_region` pushes
+    /// old TUI content into scrollback.
     fn process_escape_events(
         scanner: &mut EscapeScanner,
         data: &[u8],
         in_alternate_screen: &mut bool,
         forwarded_mouse_modes: &mut Vec<u16>,
         erase_display: &mut bool,
+        clear_scrollback: &mut bool,
         stdout: &mut impl Write,
     ) -> io::Result<()> {
         for event in scanner.scan(data) {
@@ -1169,8 +1182,8 @@ impl ShellSession {
                     // caller so it can consume row_offset.
                     *erase_display = true;
                 }
-                SequenceEvent::ClearScrollback { raw_bytes } => {
-                    stdout.write_all(&raw_bytes)?;
+                SequenceEvent::ClearScrollback { .. } => {
+                    *clear_scrollback = true;
                 }
                 SequenceEvent::PrimaryDA { raw_bytes } => {
                     // Forward to the real terminal. The terminal's DA1 response
