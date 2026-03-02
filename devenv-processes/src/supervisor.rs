@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use devenv_activity::ProcessStatus;
@@ -7,6 +6,7 @@ use devenv_event_sources::{
 };
 use futures::future::Either;
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
 use watchexec_supervisor::job::CommandState;
@@ -22,7 +22,7 @@ use crate::supervisor_state::{Action, Event, ExitStatus, SupervisorPhase, Superv
 /// The select loop maps I/O events to `Event`s and dispatches `Action`s.
 pub fn spawn_supervisor(
     resources: &ProcessResources,
-    shutdown: Arc<tokio::sync::Notify>,
+    shutdown: CancellationToken,
 ) -> JoinHandle<()> {
     let config = resources.config.clone();
     let job = resources.job.clone();
@@ -176,7 +176,7 @@ pub fn spawn_supervisor(
             tokio::select! {
                 biased;
 
-                _ = shutdown.notified() => {
+                _ = shutdown.cancelled() => {
                     debug!("Shutdown requested for {}", name);
                     break;
                 }
@@ -221,6 +221,7 @@ pub fn spawn_supervisor(
                 }
 
                 _ = file_watcher.recv() => {
+                    if shutdown.is_cancelled() { break 'supervisor; }
                     info!("File change detected for {}, restarting", name);
                     activity.log("File change detected, restarting");
                     match state.on_event(Event::FileChange, Instant::now()) {
@@ -267,6 +268,7 @@ pub fn spawn_supervisor(
                                     let _ = status_tx.send(state.status());
                                 }
                                 NotifyMessage::WatchdogTrigger => {
+                                    if shutdown.is_cancelled() { break 'supervisor; }
                                     debug!("Watchdog trigger from {}", name);
                                     match state.on_event(Event::WatchdogTrigger, Instant::now()) {
                                         Action::Restart => {
@@ -320,6 +322,7 @@ pub fn spawn_supervisor(
                 }
 
                 _ = &mut deadline_fut => {
+                    if shutdown.is_cancelled() { break 'supervisor; }
                     let now = Instant::now();
                     let is_startup = state.phase() == SupervisorPhase::Starting;
                     if is_startup {
@@ -355,6 +358,7 @@ pub fn spawn_supervisor(
                 }
 
                 _ = job.to_wait() => {
+                    if shutdown.is_cancelled() { break 'supervisor; }
                     // Extract exit status from the job
                     let (tx, rx) = tokio::sync::oneshot::channel();
                     job.run_async(move |ctx| {

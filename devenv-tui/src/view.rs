@@ -35,6 +35,7 @@ pub fn view(
     ui_state: &UiState,
     render_context: RenderContext,
     scroll: Option<ScrollState>,
+    shutting_down: bool,
 ) -> impl Into<AnyElement<'static>> {
     let (scroll_handle, active_activities) = match scroll {
         Some(s) => (s.handle, s.display_activities),
@@ -113,6 +114,7 @@ pub fn view(
                     completed,
                     cached,
                     render_context,
+                    shutting_down,
                 })) {
                     ActivityItem
                 }
@@ -232,6 +234,8 @@ struct ActivityRenderContext {
     cached: bool,
     /// Whether this is the final render before exit
     render_context: RenderContext,
+    /// Whether the application is shutting down (Ctrl-C pressed)
+    shutting_down: bool,
 }
 
 /// Helper to build activity prefix with hierarchy and status indicator.
@@ -278,6 +282,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         completed,
         cached,
         render_context,
+        shutting_down,
     } = &*ctx;
 
     // Calculate elapsed time - use stored duration for completed activities, skip for queued
@@ -633,6 +638,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             // Build status text with optional ports
             let status_str = match &process_data.lifecycle {
+                _ if *shutting_down && is_active => "stopping",
                 ProcessLifecycle::Disabled => "disabled",
                 ProcessLifecycle::Starting => "starting",
                 ProcessLifecycle::Running => "running",

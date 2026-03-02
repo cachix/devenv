@@ -325,13 +325,27 @@ where
         self.join_set.join_next().await
     }
 
-    /// Wait for all tasks to complete, propagating panics
+    /// Wait for all tasks to complete, propagating panics.
+    /// If shutdown is triggered, abort remaining tasks and return.
     pub async fn wait_all(&mut self) {
-        while let Some(res) = self.join_next().await {
-            match res {
-                Ok(_) => {}
-                Err(err) if err.is_panic() => std::panic::resume_unwind(err.into_panic()),
-                Err(err) => panic!("{err}"),
+        let cancel = self.shutdown.cancellation_token();
+        loop {
+            tokio::select! {
+                biased;
+                _ = cancel.cancelled() => {
+                    self.join_set.abort_all();
+                    // Drain remaining tasks so they're fully cleaned up
+                    while self.join_set.join_next().await.is_some() {}
+                    break;
+                }
+                result = self.join_set.join_next() => {
+                    match result {
+                        Some(Ok(_)) => {}
+                        Some(Err(err)) if err.is_panic() => std::panic::resume_unwind(err.into_panic()),
+                        Some(Err(err)) => panic!("{err}"),
+                        None => break,
+                    }
+                }
             }
         }
     }

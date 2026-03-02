@@ -216,14 +216,13 @@ impl TuiApp {
         // UiState is only modified by the UI thread.
         let ui_state = Arc::new(RwLock::new(UiState::new()));
 
-        // Main loop - runs until shutdown (either Ctrl+C or event processor signals completion)
+        // Main loop - runs until backend signals completion via exit_rx.
+        // We intentionally do NOT break on shutdown signal here so the TUI
+        // stays alive to show process shutdown progress. The loop exits only
+        // when the backend sends on exit_rx (after stop_all finishes).
         loop {
             tokio::select! {
                 biased;
-
-                _ = shutdown.wait_for_shutdown() => {
-                    break;
-                }
 
                 changed = exit_rx.changed() => {
                     if changed.is_err() || *exit_rx.borrow() {
@@ -291,7 +290,7 @@ impl TuiApp {
 
                     let mut element = element! {
                         View(width: terminal_width) {
-                            #(vec![view(&model_guard, &ui, RenderContext::Final, None).into()])
+                            #(vec![view(&model_guard, &ui, RenderContext::Final, None, shutdown.is_cancelled()).into()])
                         }
                     };
                     let canvas = element.render(Some(terminal_width as usize));
@@ -493,6 +492,11 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 debug!("Key event: {:?}", key_event);
                 match key_event.code {
                     KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                        debug!("Ctrl-C pressed, is_cancelled={}", shutdown.is_cancelled());
+                        // Second Ctrl-C during shutdown: force exit immediately
+                        if shutdown.is_cancelled() {
+                            shutdown.exit_process();
+                        }
                         // Set signal so Nix backend knows to interrupt operations
                         shutdown.set_last_signal(Signal::SIGINT);
                         shutdown.shutdown();
@@ -566,6 +570,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
     // Render the view - read activity model briefly, UI state separately
     let ui = ui_state.read().unwrap();
+    let is_shutting_down = shutdown.is_cancelled();
     let (rendered, last_render_height) = if let Ok(model_guard) = activity_model.read() {
         let display = model_guard.get_display_activities();
 
@@ -592,7 +597,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         let rendered = element! {
             ContextProvider(value: iocraft::Context::owned(activity_heights)) {
                 View(width: terminal_width) {
-                    #(vec![view(&model_guard, &ui, RenderContext::Normal, Some(ScrollState { handle: scroll_handle_opt, display_activities: display })).into()])
+                    #(vec![view(&model_guard, &ui, RenderContext::Normal, Some(ScrollState { handle: scroll_handle_opt, display_activities: display }), is_shutting_down).into()])
                 }
             }
         };
@@ -675,7 +680,7 @@ async fn run_view(
                 let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
                 let mut normal_view = element! {
                     View(width: terminal_width) {
-                        #(vec![view(&model, &ui, RenderContext::Normal, None).into()])
+                        #(vec![view(&model, &ui, RenderContext::Normal, None, shutdown.is_cancelled()).into()])
                     }
                 };
                 normal_view.render(Some(terminal_width as usize)).height() as u16

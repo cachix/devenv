@@ -1773,9 +1773,11 @@ impl Devenv {
                 // Run process tasks under the Phase 4 activity.
                 // Disabled processes (start.enable = false) are handled by the
                 // process manager: they appear in the TUI as stopped.
+                debug!("devenv.up: running process tasks (run_with_parent_activity)");
                 let _outputs = tasks_runner
                     .run_with_parent_activity(Arc::new(phase4))
                     .await;
+                debug!("devenv.up: process tasks completed, starting API server");
 
                 // Start the API server so process IPC (status, restart, etc.) works
                 tasks_runner.process_manager.start_api_server()?;
@@ -1786,11 +1788,16 @@ impl Devenv {
                     .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
 
                 if !options.detach {
+                    debug!(
+                        "devenv.up: calling run_foreground (native manager, detach=false), global_token_cancelled={}",
+                        self.shutdown.is_cancelled()
+                    );
                     let result = tasks_runner
                         .process_manager
                         .run_foreground(self.shutdown.cancellation_token(), command_rx)
                         .await
                         .map_err(|e| miette!("Process manager error: {}", e));
+                    debug!("devenv.up: run_foreground returned");
 
                     let _ = tokio::fs::remove_file(&pid_file).await;
                     result?;

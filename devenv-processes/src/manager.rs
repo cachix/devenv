@@ -103,7 +103,7 @@ enum ProcessEntry {
 pub struct NativeProcessManager {
     processes: Arc<RwLock<HashMap<String, ProcessEntry>>>,
     state_dir: PathBuf,
-    shutdown: Arc<tokio::sync::Notify>,
+    shutdown: CancellationToken,
     /// Parent activity for grouping all processes under "Starting processes"
     processes_activity: Arc<RwLock<Option<Activity>>>,
 }
@@ -116,7 +116,7 @@ impl NativeProcessManager {
         Ok(Self {
             processes: Arc::new(RwLock::new(HashMap::new())),
             state_dir,
-            shutdown: Arc::new(tokio::sync::Notify::new()),
+            shutdown: CancellationToken::new(),
             processes_activity: Arc::new(RwLock::new(None)),
         })
     }
@@ -363,11 +363,12 @@ impl NativeProcessManager {
     ///
     /// This wakes the supervisor loops so they exit before we abort their tasks.
     pub fn shutdown_supervisors(&self) {
-        self.shutdown.notify_waiters();
+        self.shutdown.cancel();
     }
 
     /// Stop all processes and clear disabled entries
     pub async fn stop_all(&self) -> Result<()> {
+        debug!("stop_all: shutting down supervisors");
         // Signal supervisors first so they exit gracefully
         self.shutdown_supervisors();
 
@@ -381,8 +382,15 @@ impl NativeProcessManager {
             .collect();
         drop(processes); // Release the read lock
 
-        for name in active_names {
-            let _ = self.stop(&name).await; // Continue even if one fails
+        debug!(
+            "stop_all: stopping {} processes: {:?}",
+            active_names.len(),
+            active_names
+        );
+        for name in &active_names {
+            debug!("stop_all: stopping {}", name);
+            let _ = self.stop(name).await; // Continue even if one fails
+            debug!("stop_all: stopped {}", name);
         }
 
         // Clear disabled processes (their activities complete on drop)
@@ -736,13 +744,20 @@ impl NativeProcessManager {
         cancellation_token: tokio_util::sync::CancellationToken,
         mut command_rx: Option<mpsc::Receiver<ProcessCommand>>,
     ) -> Result<()> {
+        debug!(
+            "run_foreground: ENTERED, token_cancelled={}",
+            cancellation_token.is_cancelled()
+        );
         info!("Manager event loop started (foreground)");
 
         loop {
             tokio::select! {
+                biased;
                 _ = cancellation_token.cancelled() => {
+                    debug!("run_foreground: cancellation detected, calling stop_all");
                     info!("Shutdown requested, stopping all processes");
                     self.stop_all().await?;
+                    debug!("run_foreground: stop_all completed");
                     break;
                 }
                 Some(cmd) = async {

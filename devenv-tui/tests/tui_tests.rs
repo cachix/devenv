@@ -15,7 +15,7 @@ const TEST_WIDTH: u16 = 80;
 const TEST_HEIGHT: u16 = 24;
 
 fn render_to_string(model: &ActivityModel, ui_state: &UiState) -> String {
-    let mut element = view(model, ui_state, RenderContext::Normal, None).into();
+    let mut element = view(model, ui_state, RenderContext::Normal, None, false).into();
     element.render(Some(TEST_WIDTH as usize)).to_string()
 }
 

@@ -330,6 +330,10 @@ fn handle_key_event(
                 }
                 sel.clear();
             } else {
+                // Second Ctrl-C during shutdown: force exit immediately
+                if shutdown.is_cancelled() {
+                    shutdown.exit_process();
+                }
                 shutdown.set_last_signal(Signal::SIGINT);
                 shutdown.shutdown();
             }
