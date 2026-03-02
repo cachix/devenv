@@ -46,7 +46,7 @@ let
   cargoLock = {
     lockFile = "${src}/Cargo.lock";
     outputHashes = {
-      "iocraft-0.7.18" = "sha256-LoKezEGgI5kztL2/5s5geqY2neHuF7K0xd00f0EjfBY=";
+      "iocraft-0.7.18" = "sha256-kgbJ6bE1shp+jBz1lN1SnG2D5UbwCT3+K/nRMWVun/E=";
       "crossterm-0.28.1" = "sha256-EC3HTF/l9E+3DnsLfB6L+SDNmfgWWJOSq8Oo+rQ3dVQ=";
       "nix-compat-0.1.0" = "sha256-dSkomGSFJgTtsxHWsBG8Qy2hqQDuemqDsKRJxvmuZ54=";
       "nix-bindings-bindgen-raw-0.1.0" = "sha256-XtnN/Moc0OZES37NTmAeLzwkVFSinpZ4qHrMdGOaBdI=";
