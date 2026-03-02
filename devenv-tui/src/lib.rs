@@ -47,7 +47,10 @@ pub async fn throttled_notify_loop(notify: Arc<Notify>, mut redraw: State<u64>, 
             _ = notify.notified() => {}
             _ = tokio::time::sleep(throttle_duration) => {}
         }
-        redraw.set(redraw.get().wrapping_add(1));
+        let Some(val) = redraw.try_get() else {
+            break;
+        };
+        redraw.set(val.wrapping_add(1));
         // Throttle: minimum time between renders to cap FPS
         tokio::time::sleep(throttle_duration).await;
     }

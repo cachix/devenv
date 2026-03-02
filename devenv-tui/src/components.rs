@@ -38,7 +38,10 @@ pub fn Spinner(mut hooks: Hooks, props: &SpinnerProps) -> impl Into<AnyElement<'
     hooks.use_future(async move {
         loop {
             tokio::time::sleep(Duration::from_millis(SPINNER_INTERVAL_MS)).await;
-            frame.set((frame.get() + 1) % SPINNER_FRAMES.len());
+            let Some(val) = frame.try_get() else {
+                break;
+            };
+            frame.set((val + 1) % SPINNER_FRAMES.len());
         }
     });
 
