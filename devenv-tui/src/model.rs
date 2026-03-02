@@ -188,7 +188,6 @@ pub struct UiState {
     pub view_options: ViewOptions,
     pub terminal_size: TerminalSize,
     pub view_mode: ViewMode,
-    pub last_render_height: u16,
 }
 
 impl UiState {
@@ -212,7 +211,6 @@ impl UiState {
             },
             terminal_size: TerminalSize { width, height },
             view_mode: ViewMode::Main,
-            last_render_height: 0,
         }
     }
 

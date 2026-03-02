@@ -252,8 +252,16 @@ impl TuiApp {
         {
             let ui = ui_state.read().unwrap();
             if let Ok(model_guard) = activity_model.read() {
-                // Clear the previous inline render output (which had the summary line)
-                let lines_to_clear = ui.last_render_height;
+                let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
+
+                // Measure the last inline render's height so we clear the right
+                // number of lines. Rendered once here at cleanup, not every frame.
+                let mut measure = element! {
+                    View(width: terminal_width) {
+                        #(vec![view(&model_guard, &ui, RenderContext::Normal, None, false).into()])
+                    }
+                };
+                let lines_to_clear = measure.render(Some(terminal_width as usize)).height() as u16;
 
                 if lines_to_clear > 0 {
                     let mut stderr = io::stderr();
@@ -285,8 +293,6 @@ impl TuiApp {
                         .into_iter()
                         .map(|(name, lines)| (name.to_string(), lines.to_vec()))
                         .collect();
-
-                    let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
 
                     let mut element = element! {
                         View(width: terminal_width) {
@@ -564,7 +570,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     // Render the view - read activity model briefly, UI state separately
     let ui = ui_state.read().unwrap();
     let is_shutting_down = shutdown.is_cancelled();
-    let (rendered, last_render_height) = if let Ok(model_guard) = activity_model.read() {
+    let rendered = if let Ok(model_guard) = activity_model.read() {
         let display = model_guard.get_display_activities();
 
         // Prune stale entries and compute total content height in a single lock
@@ -587,30 +593,19 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             None
         };
 
-        let rendered = element! {
+        element! {
             ContextProvider(value: iocraft::Context::owned(activity_heights)) {
                 View(width: terminal_width) {
                     #(vec![view(&model_guard, &ui, RenderContext::Normal, Some(ScrollState { handle: scroll_handle_opt, display_activities: display }), is_shutting_down).into()])
                 }
             }
-        };
-        // Height is computed by iocraft's render loop; use terminal height as
-        // the upper bound for clearing purposes (the inline renderer already
-        // tracks the actual painted height).
-        let height = terminal_height;
-        (rendered, height)
+        }
     } else {
-        (
-            element!(ContextProvider(value: iocraft::Context::owned(activity_heights)) {
-                View(width: terminal_width)
-            }),
-            0,
-        )
+        element!(ContextProvider(value: iocraft::Context::owned(activity_heights)) {
+            View(width: terminal_width)
+        })
     };
     drop(ui);
-    if let Ok(mut ui) = ui_state.write() {
-        ui.last_render_height = last_render_height;
-    }
 
     rendered
 }
