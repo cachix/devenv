@@ -978,6 +978,19 @@ impl Tasks {
         // Wait for all tasks to complete
         running_tasks.wait_all().await;
 
+        // wait_all() aborts spawned futures on shutdown so that run_foreground()
+        // can proceed to stop_all(). Aborted futures never write back their
+        // completion status, so sweep any still-Running tasks to Cancelled.
+        if self.shutdown.is_cancelled() {
+            for &index in &self.tasks_order {
+                let mut task_state = self.graph[index].write().await;
+                if let TaskStatus::Running(start) = task_state.status {
+                    task_state.status =
+                        TaskStatus::Completed(TaskCompleted::Cancelled(Some(start.elapsed())));
+                }
+            }
+        }
+
         // Check completion status and mark orchestration activity accordingly
         let status = self.get_completion_status().await;
 
