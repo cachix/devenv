@@ -388,9 +388,7 @@ impl NativeProcessManager {
             active_names
         );
         for name in &active_names {
-            debug!("stop_all: stopping {}", name);
             let _ = self.stop(name).await; // Continue even if one fails
-            debug!("stop_all: stopped {}", name);
         }
 
         // Clear disabled processes (their activities complete on drop)

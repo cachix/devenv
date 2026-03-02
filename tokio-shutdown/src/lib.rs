@@ -218,6 +218,18 @@ impl Shutdown {
         }
     }
 
+    /// Handle a user initiated interrupt (e.g., Ctrl+C from keyboard).
+    ///
+    /// On first call: records SIGINT and triggers graceful shutdown.
+    /// On second call (already shutting down): force exits the process.
+    pub fn handle_interrupt(&self) {
+        if self.is_cancelled() {
+            self.exit_process();
+        }
+        self.set_last_signal(Signal::SIGINT);
+        self.shutdown();
+    }
+
     /// Set the last signal manually.
     ///
     /// Used in TUI mode where Ctrl+C is received as a keyboard event rather than

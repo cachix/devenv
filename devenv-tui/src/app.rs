@@ -14,7 +14,7 @@ use iocraft::prelude::*;
 use std::io::{self, Write};
 use std::sync::{Arc, OnceLock, RwLock};
 use tokio::sync::{Notify, mpsc, watch};
-use tokio_shutdown::{Shutdown, Signal};
+use tokio_shutdown::Shutdown;
 use tracing::debug;
 
 /// Original terminal settings saved before TUI enters raw mode.
@@ -492,14 +492,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 debug!("Key event: {:?}", key_event);
                 match key_event.code {
                     KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        debug!("Ctrl-C pressed, is_cancelled={}", shutdown.is_cancelled());
-                        // Second Ctrl-C during shutdown: force exit immediately
-                        if shutdown.is_cancelled() {
-                            shutdown.exit_process();
-                        }
-                        // Set signal so Nix backend knows to interrupt operations
-                        shutdown.set_last_signal(Signal::SIGINT);
-                        shutdown.shutdown();
+                        shutdown.handle_interrupt();
                     }
                     KeyCode::Char('r') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                         // Restart selected process

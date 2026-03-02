@@ -15,7 +15,7 @@ use std::collections::VecDeque;
 use std::io::Write as _;
 use std::sync::{Arc, RwLock};
 use tokio::sync::Notify;
-use tokio_shutdown::{Shutdown, Signal};
+use tokio_shutdown::Shutdown;
 
 /// Line number prefix width: "NNNNN | " = 8 chars
 const LINE_NUM_PREFIX_WIDTH: usize = 8;
@@ -330,12 +330,7 @@ fn handle_key_event(
                 }
                 sel.clear();
             } else {
-                // Second Ctrl-C during shutdown: force exit immediately
-                if shutdown.is_cancelled() {
-                    shutdown.exit_process();
-                }
-                shutdown.set_last_signal(Signal::SIGINT);
-                shutdown.shutdown();
+                shutdown.handle_interrupt();
             }
         }
 

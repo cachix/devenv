@@ -221,6 +221,9 @@ pub fn spawn_supervisor(
                 }
 
                 _ = file_watcher.recv() => {
+                    // Bail if shutdown fired while another select arm was executing.
+                    // The biased select catches it next iteration, but we skip
+                    // expensive restart work below.
                     if shutdown.is_cancelled() { break 'supervisor; }
                     info!("File change detected for {}, restarting", name);
                     activity.log("File change detected, restarting");
