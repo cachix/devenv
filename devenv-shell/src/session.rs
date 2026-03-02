@@ -1212,7 +1212,8 @@ impl ShellSession {
         in_alternate_screen: bool,
     ) -> io::Result<()> {
         if self.config.show_status_line && !in_alternate_screen {
-            write!(stdout, "\x1b[{};1H\x1b[2K", self.size.rows)?;
+            // Save cursor, clear the status row, restore cursor.
+            write!(stdout, "\x1b7\x1b[{};1H\x1b[2K\x1b8", self.size.rows)?;
         }
         Ok(())
     }
