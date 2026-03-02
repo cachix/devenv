@@ -69,6 +69,10 @@ pub struct OscEvent {
 pub enum SequenceEvent {
     DecMode(DecModeEvent),
     Osc(OscEvent),
+    /// CSI 2 J — erase entire display.
+    EraseDisplay {
+        raw_bytes: Vec<u8>,
+    },
     /// CSI 3 J — erase scrollback buffer.
     ClearScrollback {
         raw_bytes: Vec<u8>,
@@ -216,6 +220,10 @@ impl EscapeScanner {
                             // DA1 with explicit zero param (CSI 0 c)
                             let raw_bytes = std::mem::take(&mut self.seq_bytes);
                             events.push(SequenceEvent::PrimaryDA { raw_bytes });
+                            self.state = RouterState::Ground;
+                        } else if byte == b'J' && self.csi_param == 2 {
+                            let raw_bytes = std::mem::take(&mut self.seq_bytes);
+                            events.push(SequenceEvent::EraseDisplay { raw_bytes });
                             self.state = RouterState::Ground;
                         } else if byte == b'J' && self.csi_param == 3 {
                             let raw_bytes = std::mem::take(&mut self.seq_bytes);
@@ -687,13 +695,48 @@ mod tests {
     #[test]
     fn ignores_other_ed_params() {
         let mut scanner = EscapeScanner::new();
-        // CSI 2 J (clear screen) should not emit ClearScrollback
-        let events = scanner.scan(b"\x1b[2J");
+        // CSI 1 J should not emit any event
+        let events = scanner.scan(b"\x1b[1J");
         assert!(events.is_empty());
         // Scanner recovers
         let events = scanner.scan(b"\x1b[3J");
         assert_eq!(events.len(), 1);
         assert!(matches!(events[0], SequenceEvent::ClearScrollback { .. }));
+    }
+
+    #[test]
+    fn detects_erase_display() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[2J");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::EraseDisplay { ref raw_bytes } = events[0] else {
+            panic!("expected EraseDisplay");
+        };
+        assert_eq!(raw_bytes, b"\x1b[2J");
+    }
+
+    #[test]
+    fn erase_display_split_across_buffers() {
+        let mut scanner = EscapeScanner::new();
+
+        let events1 = scanner.scan(b"\x1b[");
+        assert!(events1.is_empty());
+
+        let events2 = scanner.scan(b"2");
+        assert!(events2.is_empty());
+
+        let events3 = scanner.scan(b"J");
+        assert_eq!(events3.len(), 1);
+        assert!(matches!(events3[0], SequenceEvent::EraseDisplay { .. }));
+    }
+
+    #[test]
+    fn erase_display_interleaved_with_clear_scrollback() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[2J\x1b[3J");
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], SequenceEvent::EraseDisplay { .. }));
+        assert!(matches!(events[1], SequenceEvent::ClearScrollback { .. }));
     }
 
     #[test]

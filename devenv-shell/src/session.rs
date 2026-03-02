@@ -905,11 +905,13 @@ impl ShellSession {
                 Event::PtyOutput(data) => {
                     // Scan for DEC private mode sequences and forward them
                     let was_in_alt = in_alternate_screen;
+                    let mut erase_display = false;
                     Self::process_escape_events(
                         &mut scanner,
                         &data,
                         &mut in_alternate_screen,
                         &mut forwarded_mouse_modes,
+                        &mut erase_display,
                         stdout,
                     )?;
 
@@ -929,6 +931,7 @@ impl ShellSession {
                                     &more,
                                     &mut in_alternate_screen,
                                     &mut forwarded_mouse_modes,
+                                    &mut erase_display,
                                     stdout,
                                 )?;
                                 let text = utf8_acc.accumulate(&more);
@@ -978,7 +981,10 @@ impl ShellSession {
                         let cursor_excess = (vt.cursor().row + 1).saturating_sub(visible_rows);
                         let need = total_scroll.max(cursor_excess);
 
-                        let consumed = if in_alternate_screen {
+                        let consumed = if in_alternate_screen || erase_display {
+                            // Alternate screen or explicit screen clear (CSI 2J):
+                            // consume the entire offset so the shell owns the
+                            // full visible area.
                             renderer.row_offset as usize
                         } else {
                             need.min(renderer.row_offset as usize)
@@ -1131,11 +1137,16 @@ impl ShellSession {
 
     /// Scan raw PTY output for escape sequences (DEC private mode and OSC queries),
     /// forward relevant ones to the real terminal, and update alternate screen state.
+    ///
+    /// Sets `*erase_display` to `true` if a CSI 2 J (erase display) sequence is
+    /// detected so the caller can consume `row_offset` and let the shell clear
+    /// content left by the TUI.
     fn process_escape_events(
         scanner: &mut EscapeScanner,
         data: &[u8],
         in_alternate_screen: &mut bool,
         forwarded_mouse_modes: &mut Vec<u16>,
+        erase_display: &mut bool,
         stdout: &mut impl Write,
     ) -> io::Result<()> {
         for event in scanner.scan(data) {
@@ -1175,6 +1186,12 @@ impl ShellSession {
                     // are filtered from stdin by StdinFilter to prevent them
                     // from leaking into the shell as garbled text.
                     stdout.write_all(&event.raw_bytes)?;
+                }
+                SequenceEvent::EraseDisplay { .. } => {
+                    // CSI 2 J clears the entire display. Not forwarded (the
+                    // renderer handles screen content), but we signal the
+                    // caller so it can consume row_offset.
+                    *erase_display = true;
                 }
                 SequenceEvent::ClearScrollback { raw_bytes } => {
                     stdout.write_all(&raw_bytes)?;
