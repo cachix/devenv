@@ -283,14 +283,10 @@ impl Renderer {
             write!(stdout, "\x1b[{};1H\x1b[2K", row_idx + 1 + offset)?;
             stdout.write_all(dump_line(line).as_bytes())?;
             write!(stdout, "\x1b[0m")?;
-            if row_idx < self.prev_lines.len() {
-                self.prev_lines[row_idx] = cells.to_vec();
-            } else {
-                while self.prev_lines.len() < row_idx {
-                    self.prev_lines.push(Vec::new());
-                }
-                self.prev_lines.push(cells.to_vec());
+            if row_idx >= self.prev_lines.len() {
+                self.prev_lines.resize_with(row_idx + 1, Vec::new);
             }
+            self.prev_lines[row_idx] = cells.to_vec();
         }
         self.update_cursor(stdout, vt)
     }
@@ -356,6 +352,16 @@ impl Renderer {
             self.prev_cursor = new_cursor;
         }
         Ok(())
+    }
+
+    /// Write the VT cursor position to stdout (unconditional, no diffing).
+    ///
+    /// Used to restore the real terminal cursor after status line draws
+    /// or other operations that move it away from the VT position.
+    fn write_cursor(&self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+        let c = vt.cursor();
+        let offset = self.row_offset as usize;
+        write!(stdout, "\x1b[{};{}H", c.row + 1 + offset, c.col + 1)
     }
 
     /// Mark all lines as stale so the next render redraws everything.
@@ -588,7 +594,8 @@ impl ShellSession {
         tracing::trace!("session: raw mode active");
 
         let injected_stdin = io.stdin.is_some();
-        let mut stdout: Box<dyn Write + Send> = io.stdout.unwrap_or_else(|| Box::new(io::stdout()));
+        let stdout_raw: Box<dyn Write + Send> = io.stdout.unwrap_or_else(|| Box::new(io::stdout()));
+        let mut stdout: Box<dyn Write + Send> = Box::new(io::BufWriter::new(stdout_raw));
         let stdin_source: Box<dyn Read + Send> = io.stdin.unwrap_or_else(|| Box::new(io::stdin()));
 
         // Query cursor position FIRST before any terminal resets.
@@ -689,10 +696,7 @@ impl ShellSession {
             self.status_line
                 .draw(&mut stdout, self.size.cols, self.size.rows)?;
         }
-        // Position cursor after initial draw
-        let c = vt.cursor();
-        let offset = renderer.row_offset as usize;
-        write!(stdout, "\x1b[{};{}H", c.row + 1 + offset, c.col + 1)?;
+        renderer.write_cursor(&mut stdout, &vt)?;
         stdout.flush()?;
 
         // Set up event channel
@@ -834,9 +838,7 @@ impl ShellSession {
                         if self.config.show_status_line {
                             stdout.write_all(b"\x1b[?2026h")?;
                             self.status_line.draw(stdout, self.size.cols, self.size.rows)?;
-                            let c = vt.cursor();
-                            let offset = renderer.row_offset as usize;
-                            write!(stdout, "\x1b[{};{}H", c.row + 1 + offset, c.col + 1)?;
+                            renderer.write_cursor(stdout, vt)?;
                             stdout.write_all(b"\x1b[?2026l")?;
                             stdout.flush()?;
                         }
@@ -888,9 +890,7 @@ impl ShellSession {
                             }
                             self.status_line
                                 .draw(stdout, self.size.cols, self.size.rows)?;
-                            let c = vt.cursor();
-                            let offset = renderer.row_offset as usize;
-                            write!(stdout, "\x1b[{};{}H", c.row + 1 + offset, c.col + 1)?;
+                            renderer.write_cursor(stdout, vt)?;
                             stdout.flush()?;
                         }
                         continue;
@@ -1006,9 +1006,7 @@ impl ShellSession {
                         self.status_line
                             .draw(stdout, self.size.cols, self.size.rows)?;
                     }
-                    let c = vt.cursor();
-                    let offset = renderer.row_offset as usize;
-                    write!(stdout, "\x1b[{};{}H", c.row + 1 + offset, c.col + 1)?;
+                    renderer.write_cursor(stdout, vt)?;
 
                     // End synchronized output and flush.
                     stdout.write_all(b"\x1b[?2026l")?;
@@ -1016,14 +1014,13 @@ impl ShellSession {
                 }
 
                 Event::PtyExit(exit_code) => {
-                    if self.config.show_status_line && !in_alternate_screen {
-                        write!(stdout, "\x1b[{};1H\x1b[2K", self.size.rows)?;
-                    }
+                    self.clear_status_row(stdout, in_alternate_screen)?;
                     Self::cleanup_forwarded_modes(
                         in_alternate_screen,
                         &forwarded_mouse_modes,
                         stdout,
                     )?;
+                    stdout.flush()?;
                     return Ok(exit_code);
                 }
 
@@ -1063,8 +1060,7 @@ impl ShellSession {
                         if self.config.show_status_line && !in_alternate_screen {
                             self.status_line.draw(stdout, cols, rows)?;
                         }
-                        let c = vt.cursor();
-                        write!(stdout, "\x1b[{};{}H", c.row + 1, c.col + 1)?;
+                        renderer.write_cursor(stdout, vt)?;
                         stdout.flush()?;
                         let _ = coordinator_tx
                             .send(ShellEvent::Resize {
@@ -1077,10 +1073,9 @@ impl ShellSession {
             }
         }
 
-        if self.config.show_status_line && !in_alternate_screen {
-            write!(stdout, "\x1b[{};1H\x1b[2K", self.size.rows)?;
-        }
+        self.clear_status_row(stdout, in_alternate_screen)?;
         Self::cleanup_forwarded_modes(in_alternate_screen, &forwarded_mouse_modes, stdout)?;
+        stdout.flush()?;
         Ok(None)
     }
 
@@ -1237,16 +1232,26 @@ impl ShellSession {
     /// Does not flush — callers flush after ending their sync block.
     fn draw_status_and_cursor(
         &mut self,
-        stdout: &mut Box<dyn Write + Send>,
+        stdout: &mut impl Write,
         vt: &Vt,
         renderer: &Renderer,
     ) -> Result<(), SessionError> {
         if self.config.show_status_line {
             self.status_line
                 .draw(stdout, self.size.cols, self.size.rows)?;
-            let c = vt.cursor();
-            let offset = renderer.row_offset as usize;
-            write!(stdout, "\x1b[{};{}H", c.row + 1 + offset, c.col + 1)?;
+            renderer.write_cursor(stdout, vt)?;
+        }
+        Ok(())
+    }
+
+    /// Clear the status line row (e.g. on exit).
+    fn clear_status_row(
+        &self,
+        stdout: &mut impl Write,
+        in_alternate_screen: bool,
+    ) -> io::Result<()> {
+        if self.config.show_status_line && !in_alternate_screen {
+            write!(stdout, "\x1b[{};1H\x1b[2K", self.size.rows)?;
         }
         Ok(())
     }
