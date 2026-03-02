@@ -1362,16 +1362,18 @@ impl ActivityModel {
 
         let total_count = all_children.len();
 
-        // Sort by id for consistent ordering
-        all_children.sort_by_key(|a| a.id);
-
         // For Task parents or process groups, always show all children without limits
         let has_process_children = all_children
             .iter()
             .any(|a| matches!(a.variant, ActivityVariant::Process(_)));
         if parent_is_task || has_process_children {
+            // Sort processes alphabetically by name for consistent display
+            all_children.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
             return (all_children, total_count, 0);
         }
+
+        // Sort by id for consistent ordering
+        all_children.sort_by_key(|a| a.id);
 
         // Partition into active (including queued) and completed
         let (active, completed): (Vec<_>, Vec<_>) = all_children

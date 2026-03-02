@@ -1,0 +1,10 @@
+---
+source: devenv-tui/tests/tui_tests.rs
+expression: output
+---
+⠋ Running processes       [TIME]
+  └ ⠋ api-server starting [TIME]
+  └ ⠋ mysql starting      [TIME]
+  └ ⠋ zookeeper starting  [TIME]
+
+ 3 processes              ↑↓ nav

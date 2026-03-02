@@ -1753,6 +1753,69 @@ fn test_cachix_push_with_failures() {
     insta::assert_snapshot!(output);
 }
 
+/// Test that processes are displayed in alphabetical order regardless of start order.
+#[test]
+fn test_processes_alphabetical_order() {
+    let (mut model, ui_state) = new_test_model();
+
+    // Create the "Running processes" parent operation (matches real usage)
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+        id: 100,
+        name: "Running processes".to_string(),
+        parent: None,
+        detail: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    // Start processes in non-alphabetical order (z, a, m)
+    model.apply_activity_event(ActivityEvent::Process(Process::Start {
+        id: 1,
+        name: "zookeeper".to_string(),
+        parent: Some(100),
+        command: None,
+        ports: vec![],
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Process(Process::Start {
+        id: 2,
+        name: "api-server".to_string(),
+        parent: Some(100),
+        command: None,
+        ports: vec![],
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Process(Process::Start {
+        id: 3,
+        name: "mysql".to_string(),
+        parent: Some(100),
+        command: None,
+        ports: vec![],
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    let output = render_to_string(&model, &ui_state);
+
+    // Verify alphabetical order: api-server before mysql before zookeeper
+    let api_pos = output
+        .find("api-server")
+        .expect("api-server should be in output");
+    let mysql_pos = output.find("mysql").expect("mysql should be in output");
+    let zoo_pos = output
+        .find("zookeeper")
+        .expect("zookeeper should be in output");
+    assert!(
+        api_pos < mysql_pos && mysql_pos < zoo_pos,
+        "Processes should be in alphabetical order.\nFull output:\n{}",
+        output
+    );
+
+    insta::assert_snapshot!(output);
+}
+
 /// Test cachix push alongside other activities (build + push concurrent).
 #[test]
 fn test_cachix_push_alongside_build() {
