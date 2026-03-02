@@ -53,11 +53,17 @@ pub struct WatcherHandle {
 
 impl WatcherHandle {
     /// Adds a path to watch (non-recursive, for individual files from builders).
+    ///
+    /// Only updates the watchexec pathset when a new path is actually added.
+    /// Redundant pathset updates signal the fs worker to reconcile its inotify
+    /// watches, which can break existing watches.
     pub fn watch(&self, path: &Path) {
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
         let mut paths = self.watched_paths.lock().unwrap();
-        paths.insert(canonical);
+        if !paths.insert(canonical) {
+            return;
+        }
 
         if let Some(ref config) = self.config {
             config.pathset(
