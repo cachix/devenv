@@ -44,11 +44,6 @@ enum CommandResult {
     Exec(Command),
     /// Exit with a specific code (e.g., from shell exit)
     ExitCode(i32),
-    /// Prompt for missing secrets after TUI cleanup
-    PromptSecrets {
-        provider: Option<String>,
-        profile: Option<String>,
-    },
 }
 
 /// Internal result from command dispatch.
@@ -71,7 +66,6 @@ impl CommandResult {
     /// - Done: returns Ok(())
     /// - Print: prints to stdout and returns Ok(())
     /// - Exec: replaces the current process (never returns on success)
-    /// - PromptSecrets: prompts for missing secrets interactively
     fn exec(self) -> Result<()> {
         match self {
             CommandResult::Done => Ok(()),
@@ -87,27 +81,27 @@ impl CommandResult {
             CommandResult::ExitCode(code) => {
                 std::process::exit(code);
             }
-            CommandResult::PromptSecrets { provider, profile } => {
-                // Load secretspec and prompt for missing secrets
-                let mut secrets = secretspec::Secrets::load()
-                    .map_err(|e| miette::miette!("Failed to load secretspec: {}", e))?;
-
-                if let Some(ref p) = provider {
-                    secrets.set_provider(p);
-                }
-                if let Some(ref p) = profile {
-                    secrets.set_profile(p);
-                }
-
-                secrets
-                    .ensure_secrets(provider, profile, true)
-                    .map_err(|e| miette::miette!("Failed to set secrets: {}", e))?;
-
-                eprintln!("\nSecrets have been set. Please re-run your command.");
-                Ok(())
-            }
         }
     }
+}
+
+/// Prompt for missing secretspec secrets interactively.
+fn prompt_secrets(provider: Option<String>, profile: Option<String>) -> Result<()> {
+    let mut secrets = secretspec::Secrets::load()
+        .map_err(|e| miette::miette!("Failed to load secretspec: {}", e))?;
+
+    if let Some(ref p) = provider {
+        secrets.set_provider(p);
+    }
+    if let Some(ref p) = profile {
+        secrets.set_profile(p);
+    }
+
+    secrets
+        .ensure_secrets(provider, profile, true)
+        .map_err(|e| miette::miette!("Failed to set secrets: {}", e))?;
+
+    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -117,61 +111,75 @@ fn main() -> Result<()> {
         .completer("devenv")
         .complete();
 
-    let mut cli = Cli::parse();
+    loop {
+        let mut cli = Cli::parse();
 
-    // Resolve TUI flag: explicit --tui/--no-tui wins, otherwise default
-    // to TUI when running interactively outside CI.
-    cli.cli_options.tui = devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
-        .unwrap_or_else(|| {
-            let is_ci = std::env::var_os("CI").is_some();
-            let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdin())
-                && std::io::IsTerminal::is_terminal(&std::io::stderr());
-            !is_ci && is_tty
-        });
+        // Resolve TUI flag: explicit --tui/--no-tui wins, otherwise default
+        // to TUI when running interactively outside CI.
+        cli.cli_options.tui =
+            devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
+                .unwrap_or_else(|| {
+                    let is_ci = std::env::var_os("CI").is_some();
+                    let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdin())
+                        && std::io::IsTerminal::is_terminal(&std::io::stderr());
+                    !is_ci && is_tty
+                });
 
-    // Handle commands that don't need a runtime
-    match &cli.command {
-        None | Some(Commands::Version) => {
-            let version = crate_version!();
-            let system = cli
-                .nix_args
-                .system
-                .clone()
-                .unwrap_or_else(devenv_core::settings::default_system);
-            match build_rev() {
-                Some(rev) => println!("devenv {version}+{rev} ({system})"),
-                None => println!("devenv {version} ({system})"),
+        // Handle commands that don't need a runtime
+        match &cli.command {
+            None | Some(Commands::Version) => {
+                let version = crate_version!();
+                let system = cli
+                    .nix_args
+                    .system
+                    .clone()
+                    .unwrap_or_else(devenv_core::settings::default_system);
+                match build_rev() {
+                    Some(rev) => println!("devenv {version}+{rev} ({system})"),
+                    None => println!("devenv {version} ({system})"),
+                }
+                return Ok(());
             }
-            return Ok(());
+            Some(Commands::Direnvrc) => {
+                print!("{}", *devenv::DIRENVRC);
+                return Ok(());
+            }
+            _ => {}
         }
-        Some(Commands::Direnvrc) => {
-            print!("{}", *devenv::DIRENVRC);
-            return Ok(());
+
+        // Determine which mode to run in:
+        // - TUI mode: interactive terminal UI (default)
+        // - Legacy CLI mode: spinners and progress indicators (--no-tui)
+        // - Tracing mode: when --trace-output is stdout/stderr (conflicts with TUI/CLI output)
+        //
+        // Some commands require specific modes regardless of user options:
+        // - MCP stdio mode uses legacy CLI (stdout is JSON-RPC, progress goes to stderr)
+        // - MCP HTTP mode can use TUI
+        let force_legacy_cli = matches!(
+            &cli.command,
+            Some(Commands::Mcp { http: None }) // stdio mode needs legacy CLI (stderr output)
+                | Some(Commands::Lsp { .. }) // LSP needs direct stdout for protocol/config output
+                | Some(Commands::PrintPaths) // print output directly, no TUI needed
+        );
+
+        let result = if cli.tracing_args.use_tracing_mode() {
+            run_with_tracing(cli)
+        } else if force_legacy_cli || !cli.cli_options.tui {
+            run_with_legacy_cli(cli)
+        } else {
+            run_with_tui(cli)
+        };
+
+        match result {
+            Err(err) => match err.downcast::<devenv::SecretsNeedPrompting>() {
+                Ok(secrets_err) => {
+                    prompt_secrets(secrets_err.provider, secrets_err.profile)?;
+                    continue;
+                }
+                Err(err) => return Err(err),
+            },
+            ok => return ok,
         }
-        _ => {}
-    }
-
-    // Determine which mode to run in:
-    // - TUI mode: interactive terminal UI (default)
-    // - Legacy CLI mode: spinners and progress indicators (--no-tui)
-    // - Tracing mode: when --trace-output is stdout/stderr (conflicts with TUI/CLI output)
-    //
-    // Some commands require specific modes regardless of user options:
-    // - MCP stdio mode uses legacy CLI (stdout is JSON-RPC, progress goes to stderr)
-    // - MCP HTTP mode can use TUI
-    let force_legacy_cli = matches!(
-        &cli.command,
-        Some(Commands::Mcp { http: None }) // stdio mode needs legacy CLI (stderr output)
-            | Some(Commands::Lsp { .. }) // LSP needs direct stdout for protocol/config output
-            | Some(Commands::PrintPaths) // print output directly, no TUI needed
-    );
-
-    if cli.tracing_args.use_tracing_mode() {
-        run_with_tracing(cli)
-    } else if force_legacy_cli || !cli.cli_options.tui {
-        run_with_legacy_cli(cli)
-    } else {
-        run_with_tui(cli)
     }
 }
 
@@ -290,23 +298,9 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
         DebuggerResult::NotLaunched(result) => result,
     };
 
-    let result = match result {
-        Ok(cmd_result) => cmd_result,
-        Err(err) => {
-            // Check if secrets need prompting (special case: TUI stopped for password entry)
-            if let Some(secrets_err) = err.downcast_ref::<devenv::SecretsNeedPrompting>() {
-                CommandResult::PromptSecrets {
-                    provider: secrets_err.provider.clone(),
-                    profile: secrets_err.profile.clone(),
-                }
-            } else {
-                return Err(err);
-            }
-        }
-    };
-
-    // Execute any pending command (e.g., shell exec) now that TUI is cleaned up
-    result.exec()
+    // Execute any pending command (e.g., shell exec) now that TUI is cleaned up.
+    // SecretsNeedPrompting errors propagate to main() for retry.
+    result?.exec()
 }
 
 fn run_with_legacy_cli(cli: Cli) -> Result<()> {
@@ -326,7 +320,7 @@ fn run_with_legacy_cli(cli: Cli) -> Result<()> {
 
     match devenv_output.try_launch_debugger() {
         DebuggerResult::Launched(result) => result,
-        DebuggerResult::NotLaunched(result) => handle_secrets_or_exec(result),
+        DebuggerResult::NotLaunched(result) => result?.exec(),
     }
 }
 
@@ -351,7 +345,7 @@ fn run_with_tracing(cli: Cli) -> Result<()> {
 
     match devenv_output.try_launch_debugger() {
         DebuggerResult::Launched(result) => result,
-        DebuggerResult::NotLaunched(result) => handle_secrets_or_exec(result),
+        DebuggerResult::NotLaunched(result) => result?.exec(),
     }
 }
 
@@ -389,24 +383,6 @@ impl DevenvOutput {
         } else {
             DebuggerResult::NotLaunched(self.result)
         }
-    }
-}
-
-/// Handle SecretsNeedPrompting errors by prompting interactively, otherwise exec.
-fn handle_secrets_or_exec(result: Result<CommandResult>) -> Result<()> {
-    match result {
-        Err(err) => {
-            if let Some(secrets_err) = err.downcast_ref::<devenv::SecretsNeedPrompting>() {
-                CommandResult::PromptSecrets {
-                    provider: secrets_err.provider.clone(),
-                    profile: secrets_err.profile.clone(),
-                }
-                .exec()
-            } else {
-                Err(err)
-            }
-        }
-        Ok(cmd_result) => cmd_result.exec(),
     }
 }
 

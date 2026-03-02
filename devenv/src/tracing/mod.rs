@@ -119,7 +119,8 @@ pub fn init_cli_tracing(level: Level, trace_output: Option<&TraceOutput>) {
                 .with_ansi(ansi),
         )
         .with(export_writer.map(create_json_layer))
-        .init();
+        .try_init()
+        .ok();
 }
 
 /// Initialize tracing with the specified format and output destination.
@@ -140,14 +141,14 @@ pub fn init_tracing(level: Level, trace_format: TraceFormat, trace_output: Optio
 
     let writer = trace_output.and_then(create_trace_writer);
 
-    match trace_format {
+    let _ = match trace_format {
         TraceFormat::Full => {
             let layer = writer.map(|w| {
                 tracing_subscriber::fmt::layer()
                     .with_ansi(ansi)
                     .with_writer(w)
             });
-            base.with(layer).init()
+            base.with(layer).try_init()
         }
         TraceFormat::Pretty => {
             let layer = writer.map(|w| {
@@ -156,11 +157,11 @@ pub fn init_tracing(level: Level, trace_format: TraceFormat, trace_output: Optio
                     .with_writer(w)
                     .pretty()
             });
-            base.with(layer).init()
+            base.with(layer).try_init()
         }
         TraceFormat::Json => {
             let layer = writer.map(create_json_layer);
-            base.with(layer).init()
+            base.with(layer).try_init()
         }
-    }
+    };
 }
