@@ -10,7 +10,10 @@ use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
 use crate::terminal::RawModeGuard;
 use crate::utf8_accumulator::Utf8Accumulator;
 use avt::Vt;
-use crossterm::terminal;
+use crossterm::{
+    cursor, queue,
+    terminal::{self, Clear, ClearType},
+};
 use portable_pty::PtySize;
 use std::fmt::Write as FmtWrite;
 use std::io::{self, IsTerminal, Read, Write};
@@ -278,9 +281,14 @@ impl Renderer {
             if row_idx < self.prev_lines.len() && cells == &self.prev_lines[row_idx][..] {
                 continue;
             }
-            write!(stdout, "\x1b[{};1H\x1b[2K", row_idx + 1 + offset)?;
+            queue!(
+                stdout,
+                cursor::MoveTo(0, (row_idx + offset) as u16),
+                Clear(ClearType::CurrentLine)
+            )?;
             stdout.write_all(dump_line(line).as_bytes())?;
-            write!(stdout, "\x1b[0m")?;
+            // Raw SGR reset: crossterm's SetAttribute(Reset) allocates via Attribute::sgr()
+            stdout.write_all(b"\x1b[0m")?;
             if row_idx >= self.prev_lines.len() {
                 self.prev_lines.resize_with(row_idx + 1, Vec::new);
             }
@@ -322,9 +330,14 @@ impl Renderer {
             if row_idx >= max_row {
                 break;
             }
-            write!(stdout, "\x1b[{};1H\x1b[2K", row_idx + 1 + offset)?;
+            queue!(
+                stdout,
+                cursor::MoveTo(0, (row_idx + offset) as u16),
+                Clear(ClearType::CurrentLine)
+            )?;
             stdout.write_all(dump_line(line).as_bytes())?;
-            write!(stdout, "\x1b[0m")?;
+            // Raw SGR reset: crossterm's SetAttribute(Reset) allocates via Attribute::sgr()
+            stdout.write_all(b"\x1b[0m")?;
             self.prev_lines.push(line.cells().to_vec());
         }
         self.update_cursor(stdout, vt)
@@ -337,15 +350,13 @@ impl Renderer {
         let new_cursor = (cursor.col, cursor.row, cursor.visible);
         if new_cursor != self.prev_cursor {
             if cursor.visible && !self.prev_cursor.2 {
-                write!(stdout, "\x1b[?25h")?;
+                queue!(stdout, cursor::Show)?;
             } else if !cursor.visible && self.prev_cursor.2 {
-                write!(stdout, "\x1b[?25l")?;
+                queue!(stdout, cursor::Hide)?;
             }
-            write!(
+            queue!(
                 stdout,
-                "\x1b[{};{}H",
-                cursor.row + 1 + offset,
-                cursor.col + 1
+                cursor::MoveTo(cursor.col as u16, (cursor.row + offset) as u16)
             )?;
             self.prev_cursor = new_cursor;
         }
@@ -359,7 +370,10 @@ impl Renderer {
     fn write_cursor(&self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
         let c = vt.cursor();
         let offset = self.row_offset as usize;
-        write!(stdout, "\x1b[{};{}H", c.row + 1 + offset, c.col + 1)
+        queue!(
+            stdout,
+            cursor::MoveTo(c.col as u16, (c.row + offset) as u16)
+        )
     }
 
     /// Mark all lines as stale so the next render redraws everything.
@@ -797,10 +811,10 @@ impl ShellSession {
                     event = event_rx.recv() => event,
                     _ = tokio::time::sleep(spinner_interval) => {
                         if self.config.show_status_line {
-                            stdout.write_all(b"\x1b[?2026h")?;
+                            queue!(stdout, terminal::BeginSynchronizedUpdate)?;
                             self.status_line.draw(stdout, self.size.cols, self.size.rows)?;
                             renderer.write_cursor(stdout, vt)?;
-                            stdout.write_all(b"\x1b[?2026l")?;
+                            queue!(stdout, terminal::EndSynchronizedUpdate)?;
                             stdout.flush()?;
                         }
                         continue;
@@ -926,7 +940,7 @@ impl ShellSession {
 
                     // Begin synchronized output so the terminal buffers
                     // all writes atomically (mode 2026).
-                    stdout.write_all(b"\x1b[?2026h")?;
+                    queue!(stdout, terminal::BeginSynchronizedUpdate)?;
 
                     // Handle alternate screen transitions
                     if was_in_alt != in_alternate_screen {
@@ -970,7 +984,7 @@ impl ShellSession {
                     renderer.write_cursor(stdout, vt)?;
 
                     // End synchronized output and flush.
-                    stdout.write_all(b"\x1b[?2026l")?;
+                    queue!(stdout, terminal::EndSynchronizedUpdate)?;
                     stdout.flush()?;
                 }
 
@@ -987,7 +1001,7 @@ impl ShellSession {
 
                 Event::Command(cmd) => {
                     let scroll_count = self.handle_command(cmd, vt)?;
-                    stdout.write_all(b"\x1b[?2026h")?;
+                    queue!(stdout, terminal::BeginSynchronizedUpdate)?;
                     if scroll_count > 0 {
                         if renderer.row_offset > 0 {
                             renderer.render(stdout, vt)?;
@@ -996,7 +1010,7 @@ impl ShellSession {
                         }
                     }
                     self.draw_status_and_cursor(stdout, vt, renderer)?;
-                    stdout.write_all(b"\x1b[?2026l")?;
+                    queue!(stdout, terminal::EndSynchronizedUpdate)?;
                     stdout.flush()?;
                 }
 
@@ -1177,7 +1191,7 @@ impl ShellSession {
         stdout: &mut impl Write,
     ) -> io::Result<()> {
         if in_alternate_screen {
-            stdout.write_all(b"\x1b[?1049l")?;
+            queue!(stdout, terminal::LeaveAlternateScreen)?;
         }
         for &mode in forwarded_mouse_modes {
             write!(stdout, "\x1b[?{}l", mode)?;
@@ -1213,7 +1227,13 @@ impl ShellSession {
     ) -> io::Result<()> {
         if self.config.show_status_line && !in_alternate_screen {
             // Save cursor, clear the status row, restore cursor.
-            write!(stdout, "\x1b7\x1b[{};1H\x1b[2K\x1b8", self.size.rows)?;
+            queue!(
+                stdout,
+                cursor::SavePosition,
+                cursor::MoveTo(0, self.size.rows - 1),
+                Clear(ClearType::CurrentLine),
+                cursor::RestorePosition,
+            )?;
         }
         Ok(())
     }
