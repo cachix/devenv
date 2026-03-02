@@ -1207,46 +1207,32 @@ impl Devenv {
     /// Run enterShell tasks and return env vars exported by tasks (e.g., PATH with venv/bin).
     /// This runs tasks via Rust (not bash hook) to enable TUI progress reporting.
     /// Task failures are logged as warnings but don't prevent shell entry.
+    ///
+    /// If `pre_captured_envs` is provided (e.g. from test() which already captured envs),
+    /// those are used directly; otherwise a fresh capture is performed.
     pub async fn run_enter_shell_tasks(
         &self,
-        verbosity: tasks::VerbosityLevel,
-        tui: bool,
-    ) -> Result<HashMap<String, String>> {
-        self.run_enter_shell_tasks_with_executor(None, None, verbosity, tui)
-            .await
-    }
-
-    /// Run enterShell tasks with a custom executor and optional pre-captured shell env.
-    /// Used for running tasks inside a PTY for hot-reload mode, or from test() which
-    /// already captured envs in Phase 1.
-    /// Task failures are logged as warnings but don't prevent shell entry.
-    pub async fn run_enter_shell_tasks_with_executor(
-        &self,
-        executor: Option<Arc<dyn tasks::TaskExecutor>>,
         pre_captured_envs: Option<HashMap<String, String>>,
         verbosity: tasks::VerbosityLevel,
         tui: bool,
     ) -> Result<HashMap<String, String>> {
         self.assemble().await?;
 
-        // Use pre-captured envs if provided (e.g. from test() Phase 1), otherwise capture fresh.
         let envs = match pre_captured_envs {
             Some(e) => e,
             None => self.capture_shell_environment().await?,
         };
 
         let task_configs = self.load_tasks().await?;
-        self.run_enter_shell_tasks_inner(task_configs, executor, envs, verbosity, tui)
+        self.run_enter_shell_tasks_inner(task_configs, envs, verbosity, tui)
             .await
     }
 
     /// Core logic for running enterShell tasks with a pre-loaded task config.
-    /// Accepts an optional custom executor (e.g., PTY executor for hot-reload mode).
     /// Stores task-exported env vars on self so prepare_shell() can inject them.
     async fn run_enter_shell_tasks_inner(
         &self,
         task_configs: Vec<tasks::TaskConfig>,
-        executor: Option<Arc<dyn tasks::TaskExecutor>>,
         envs: HashMap<String, String>,
         verbosity: tasks::VerbosityLevel,
         tui: bool,
@@ -1262,17 +1248,13 @@ impl Devenv {
             ignore_process_deps: false,
         };
 
-        let has_custom_executor = executor.is_some();
-        let mut builder = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown));
-        if let Some(exec) = executor {
-            builder = builder.with_executor(exec);
-        }
-        let tasks = builder.build().await?;
+        let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
+            .build()
+            .await?;
 
-        // Custom executor implies PTY/TUI mode; otherwise respect the tui flag.
         // In TUI mode, skip TasksUi to avoid corrupting the TUI display —
         // the TUI captures activity events directly via the channel in main.rs.
-        let outputs = if has_custom_executor || tui {
+        let outputs = if tui {
             tasks.run(false).await
         } else {
             // Shell mode - initialize activity channel for TasksUi
@@ -1457,7 +1439,7 @@ impl Devenv {
         // When processes are present, up() (Phase 4) calls run_enter_shell_tasks_inner()
         // as part of its startup sequence, storing exports in self.task_exports.
         if !has_processes {
-            self.run_enter_shell_tasks_with_executor(None, Some(envs.clone()), verbosity, tui)
+            self.run_enter_shell_tasks(Some(envs.clone()), verbosity, tui)
                 .await?;
         }
 
@@ -1685,13 +1667,7 @@ impl Devenv {
         // Reuse task_configs from Phase 2 to avoid a redundant load_tasks() call.
         {
             let exports = self
-                .run_enter_shell_tasks_inner(
-                    task_configs.clone(),
-                    None,
-                    envs.clone(),
-                    verbosity,
-                    tui,
-                )
+                .run_enter_shell_tasks_inner(task_configs.clone(), envs.clone(), verbosity, tui)
                 .await?;
             envs.extend(exports);
         }

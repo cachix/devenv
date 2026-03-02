@@ -23,16 +23,7 @@ pub use model_events::UiEvent;
 
 // Re-export shell session types from devenv-shell
 pub use devenv_shell::{
-    // Protocol types
-    PtyTaskRequest,
-    PtyTaskResult,
-    SessionConfig,
-    SessionError,
-    SessionIo,
-    ShellCommand,
-    ShellEvent,
-    ShellSession,
-    TuiHandoff,
+    SessionConfig, SessionError, SessionIo, ShellCommand, ShellEvent, ShellSession, TuiHandoff,
 };
 
 /// Runs a loop that waits for notifications and triggers redraws at a throttled rate.

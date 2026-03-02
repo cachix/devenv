@@ -29,12 +29,6 @@ pub trait ShellDialect: Send + Sync {
     /// Generate the hot-reload hook script (keybinding + prompt hook).
     fn reload_hook(&self, reload_file: &Path) -> String;
 
-    /// Shell-specific command to disable history recording.
-    fn disable_history(&self) -> &str;
-
-    /// Shell-specific command to enable history recording.
-    fn enable_history(&self) -> &str;
-
     /// Path to the user's shell rc file (e.g., ~/.bashrc, ~/.zshrc).
     fn user_rcfile(&self) -> Option<PathBuf>;
 

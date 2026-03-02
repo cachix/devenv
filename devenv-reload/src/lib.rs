@@ -13,6 +13,5 @@ pub use devenv_event_sources::{FileChangeEvent, FileWatcher, FileWatcherConfig, 
 
 // Re-export types from devenv-shell for backwards compatibility
 pub use devenv_shell::{
-    CommandBuilder, Pty, PtyError, PtyTaskRequest, PtyTaskResult, ShellCommand, ShellEvent,
-    get_terminal_size,
+    CommandBuilder, Pty, PtyError, ShellCommand, ShellEvent, get_terminal_size,
 };

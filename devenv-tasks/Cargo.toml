@@ -8,10 +8,8 @@ license.workspace = true
 devenv-activity.workspace = true
 devenv-cache-core.workspace = true
 devenv-processes.workspace = true
-devenv-shell = { path = "../devenv-shell" }
 devenv-tui.workspace = true
 
-async-trait.workspace = true
 clap.workspace = true
 console.workspace = true
 miette.workspace = true
