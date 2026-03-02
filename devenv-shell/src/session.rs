@@ -22,6 +22,38 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
+/// Escape-sequence state tracked across PTY output processing.
+///
+/// Persistent fields (`in_alternate_screen`, `forwarded_mouse_modes`) carry
+/// across the entire session.  Per-batch fields (`erase_display`,
+/// `clear_scrollback`) are reset at the start of each `PtyOutput` batch.
+struct EscapeState {
+    in_alternate_screen: bool,
+    forwarded_mouse_modes: Vec<u16>,
+    /// Set when CSI 2 J is seen — signals the caller to consume `row_offset`.
+    erase_display: bool,
+    /// Set when CSI 3 J is seen — deferred so the caller can emit it *after*
+    /// `scroll_region` pushes old TUI content into scrollback.
+    clear_scrollback: bool,
+}
+
+impl EscapeState {
+    fn new() -> Self {
+        Self {
+            in_alternate_screen: false,
+            forwarded_mouse_modes: Vec::new(),
+            erase_display: false,
+            clear_scrollback: false,
+        }
+    }
+
+    /// Reset per-batch flags before processing a new `PtyOutput` batch.
+    fn reset_batch(&mut self) {
+        self.erase_display = false;
+        self.clear_scrollback = false;
+    }
+}
+
 /// Render a VT line as a string with SGR escape sequences.
 ///
 /// Equivalent to the `Line::dump()` method that was public in avt 0.14
@@ -796,9 +828,7 @@ impl ShellSession {
         let mut scanner = EscapeScanner::new();
         let mut stdin_filter = StdinFilter::new();
         let mut utf8_acc = Utf8Accumulator::new();
-        let mut in_alternate_screen = false;
-        // Track forwarded modes so we can clean them up on exit
-        let mut forwarded_mouse_modes: Vec<u16> = Vec::new();
+        let mut esc = EscapeState::new();
         let mut resize_pending = false;
 
         loop {
@@ -878,19 +908,9 @@ impl ShellSession {
                 }
 
                 Event::PtyOutput(data) => {
-                    // Scan for DEC private mode sequences and forward them
-                    let was_in_alt = in_alternate_screen;
-                    let mut erase_display = false;
-                    let mut clear_scrollback = false;
-                    Self::process_escape_events(
-                        &mut scanner,
-                        &data,
-                        &mut in_alternate_screen,
-                        &mut forwarded_mouse_modes,
-                        &mut erase_display,
-                        &mut clear_scrollback,
-                        stdout,
-                    )?;
+                    let was_in_alt = esc.in_alternate_screen;
+                    esc.reset_batch();
+                    Self::process_escape_events(&mut scanner, &data, &mut esc, stdout)?;
 
                     // Feed output into VT and track how many lines scrolled off
                     let mut total_scroll: usize = 0;
@@ -903,24 +923,12 @@ impl ShellSession {
                     while let Ok(event) = event_rx.try_recv() {
                         match event {
                             Event::PtyOutput(more) => {
-                                Self::process_escape_events(
-                                    &mut scanner,
-                                    &more,
-                                    &mut in_alternate_screen,
-                                    &mut forwarded_mouse_modes,
-                                    &mut erase_display,
-                                    &mut clear_scrollback,
-                                    stdout,
-                                )?;
+                                Self::process_escape_events(&mut scanner, &more, &mut esc, stdout)?;
                                 let text = utf8_acc.accumulate(&more);
                                 total_scroll += feed_vt(vt, &text);
                             }
                             Event::PtyExit(exit_code) => {
-                                Self::cleanup_forwarded_modes(
-                                    in_alternate_screen,
-                                    &forwarded_mouse_modes,
-                                    stdout,
-                                )?;
+                                Self::cleanup_forwarded_modes(&esc, stdout)?;
                                 renderer.render_with_scroll(stdout, vt, total_scroll)?;
                                 return Ok(exit_code);
                             }
@@ -946,7 +954,7 @@ impl ShellSession {
                     queue!(stdout, terminal::BeginSynchronizedUpdate)?;
 
                     // Handle alternate screen transitions
-                    if was_in_alt != in_alternate_screen {
+                    if was_in_alt != esc.in_alternate_screen {
                         renderer.invalidate();
                     }
 
@@ -959,7 +967,7 @@ impl ShellSession {
                         let cursor_excess = (vt.cursor().row + 1).saturating_sub(visible_rows);
                         let need = total_scroll.max(cursor_excess);
 
-                        let consumed = if in_alternate_screen || erase_display {
+                        let consumed = if esc.in_alternate_screen || esc.erase_display {
                             // Alternate screen or explicit screen clear (CSI 2J):
                             // consume the entire offset so the shell owns the
                             // full visible area.
@@ -974,11 +982,11 @@ impl ShellSession {
                         }
                     }
 
-                    if clear_scrollback {
+                    if esc.clear_scrollback {
                         queue!(stdout, Clear(ClearType::Purge))?;
                     }
 
-                    if in_alternate_screen || renderer.row_offset > 0 {
+                    if esc.in_alternate_screen || renderer.row_offset > 0 {
                         renderer.render(stdout, vt)?;
                     } else {
                         renderer.render_with_scroll(stdout, vt, total_scroll)?;
@@ -996,12 +1004,8 @@ impl ShellSession {
                 }
 
                 Event::PtyExit(exit_code) => {
-                    self.clear_status_row(stdout, in_alternate_screen)?;
-                    Self::cleanup_forwarded_modes(
-                        in_alternate_screen,
-                        &forwarded_mouse_modes,
-                        stdout,
-                    )?;
+                    self.clear_status_row(stdout, esc.in_alternate_screen)?;
+                    Self::cleanup_forwarded_modes(&esc, stdout)?;
                     stdout.flush()?;
                     return Ok(exit_code);
                 }
@@ -1039,7 +1043,7 @@ impl ShellSession {
                         vt.resize(pty_size.cols as usize, pty_size.rows as usize);
                         renderer.invalidate();
                         renderer.render_full(stdout, vt)?;
-                        if self.config.show_status_line && !in_alternate_screen {
+                        if self.config.show_status_line && !esc.in_alternate_screen {
                             self.status_line.draw(stdout, cols, rows)?;
                         }
                         renderer.write_cursor(stdout, vt)?;
@@ -1055,8 +1059,8 @@ impl ShellSession {
             }
         }
 
-        self.clear_status_row(stdout, in_alternate_screen)?;
-        Self::cleanup_forwarded_modes(in_alternate_screen, &forwarded_mouse_modes, stdout)?;
+        self.clear_status_row(stdout, esc.in_alternate_screen)?;
+        Self::cleanup_forwarded_modes(&esc, stdout)?;
         stdout.flush()?;
         Ok(None)
     }
@@ -1119,23 +1123,11 @@ impl ShellSession {
     }
 
     /// Scan raw PTY output for escape sequences (DEC private mode and OSC queries),
-    /// forward relevant ones to the real terminal, and update alternate screen state.
-    ///
-    /// Sets `*erase_display` to `true` if a CSI 2 J (erase display) sequence is
-    /// detected so the caller can consume `row_offset` and let the shell clear
-    /// content left by the TUI.
-    ///
-    /// Sets `*clear_scrollback` to `true` if a CSI 3 J (clear scrollback)
-    /// sequence is detected.  The sequence is deferred instead of forwarded
-    /// immediately so the caller can emit it *after* `scroll_region` pushes
-    /// old TUI content into scrollback.
+    /// forward relevant ones to the real terminal, and update escape state.
     fn process_escape_events(
         scanner: &mut EscapeScanner,
         data: &[u8],
-        in_alternate_screen: &mut bool,
-        forwarded_mouse_modes: &mut Vec<u16>,
-        erase_display: &mut bool,
-        clear_scrollback: &mut bool,
+        esc: &mut EscapeState,
         stdout: &mut impl Write,
     ) -> io::Result<()> {
         for event in scanner.scan(data) {
@@ -1147,9 +1139,9 @@ impl ShellSession {
                     stdout.write_all(event.raw_bytes())?;
 
                     if event.enters_alt_screen() {
-                        *in_alternate_screen = true;
+                        esc.in_alternate_screen = true;
                     } else if event.exits_alt_screen() {
-                        *in_alternate_screen = false;
+                        esc.in_alternate_screen = false;
                     }
 
                     match &event {
@@ -1158,14 +1150,14 @@ impl ShellSession {
                                 if matches!(
                                     m,
                                     1000 | 1002 | 1003 | 1005 | 1006 | 1015 | 2004 | 1004
-                                ) && !forwarded_mouse_modes.contains(&m)
+                                ) && !esc.forwarded_mouse_modes.contains(&m)
                                 {
-                                    forwarded_mouse_modes.push(m);
+                                    esc.forwarded_mouse_modes.push(m);
                                 }
                             }
                         }
                         DecModeEvent::Reset { modes, .. } => {
-                            forwarded_mouse_modes.retain(|m| !modes.contains(m));
+                            esc.forwarded_mouse_modes.retain(|m| !modes.contains(m));
                         }
                     }
                 }
@@ -1177,13 +1169,14 @@ impl ShellSession {
                     stdout.write_all(&event.raw_bytes)?;
                 }
                 SequenceEvent::EraseDisplay { .. } => {
-                    // CSI 2 J clears the entire display. Not forwarded (the
-                    // renderer handles screen content), but we signal the
-                    // caller so it can consume row_offset.
-                    *erase_display = true;
+                    // Not forwarded (the renderer handles screen content),
+                    // but signals the caller to consume row_offset.
+                    esc.erase_display = true;
                 }
                 SequenceEvent::ClearScrollback { .. } => {
-                    *clear_scrollback = true;
+                    // Deferred so the caller can emit it after scroll_region
+                    // pushes old TUI content into scrollback.
+                    esc.clear_scrollback = true;
                 }
                 SequenceEvent::PrimaryDA { raw_bytes } => {
                     // Forward to the real terminal. The terminal's DA1 response
@@ -1198,18 +1191,14 @@ impl ShellSession {
     }
 
     /// Reset any forwarded DEC modes on exit so the terminal is left clean.
-    fn cleanup_forwarded_modes(
-        in_alternate_screen: bool,
-        forwarded_mouse_modes: &[u16],
-        stdout: &mut impl Write,
-    ) -> io::Result<()> {
-        if in_alternate_screen {
+    fn cleanup_forwarded_modes(esc: &EscapeState, stdout: &mut impl Write) -> io::Result<()> {
+        if esc.in_alternate_screen {
             queue!(stdout, terminal::LeaveAlternateScreen)?;
         }
-        for &mode in forwarded_mouse_modes {
+        for &mode in &esc.forwarded_mouse_modes {
             write!(stdout, "\x1b[?{}l", mode)?;
         }
-        if in_alternate_screen || !forwarded_mouse_modes.is_empty() {
+        if esc.in_alternate_screen || !esc.forwarded_mouse_modes.is_empty() {
             stdout.flush()?;
         }
         Ok(())
