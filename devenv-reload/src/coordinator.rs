@@ -182,8 +182,6 @@ impl ShellCoordinator {
                         tracing::debug!("File watching paused, ignoring change: {:?}", path);
                         continue;
                     }
-                    // No longer in ready state when new file changes come in
-                    reload_ready = false;
                     // Check if file content actually changed by comparing hashes
                     let new_hash = match hash_file(&path) {
                         Some(h) => h,
@@ -199,6 +197,12 @@ impl ShellCoordinator {
                         tracing::debug!("File unchanged (same hash): {:?}", path);
                         continue;
                     }
+
+                    // Content actually changed: no longer in ready state.
+                    // Must be after the hash check: spurious watcher events
+                    // (unchanged content) must not disable reload_file polling,
+                    // otherwise the status line gets stuck on "Reload ready".
+                    reload_ready = false;
 
                     // Update stored hash
                     file_hashes.insert(path.clone(), new_hash);
