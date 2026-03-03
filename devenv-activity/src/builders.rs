@@ -351,6 +351,7 @@ pub struct ProcessBuilder {
     name: String,
     command: Option<String>,
     ports: Vec<String>,
+    ready_probe: Option<String>,
     id: Option<u64>,
     parent: Option<Option<u64>>,
     level: ActivityLevel,
@@ -362,6 +363,7 @@ impl ProcessBuilder {
             name: name.into(),
             command: None,
             ports: Vec::new(),
+            ready_probe: None,
             id: None,
             parent: None,
             level: ActivityLevel::default(),
@@ -375,6 +377,11 @@ impl ProcessBuilder {
 
     pub fn ports(mut self, ports: Vec<String>) -> Self {
         self.ports = ports;
+        self
+    }
+
+    pub fn ready_probe(mut self, probe: impl Into<String>) -> Self {
+        self.ready_probe = Some(probe.into());
         self
     }
 
@@ -405,6 +412,7 @@ impl ProcessBuilder {
             parent,
             command: self.command,
             ports: self.ports,
+            ready_probe: self.ready_probe,
             level: self.level,
             timestamp: Timestamp::now(),
         }));

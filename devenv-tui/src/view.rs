@@ -637,15 +637,21 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             );
 
             // Build status text with optional ports
-            let status_str = match &process_data.lifecycle {
-                _ if *shutting_down && is_active => "stopping",
-                ProcessLifecycle::Disabled => "disabled",
-                ProcessLifecycle::Starting => "starting",
-                ProcessLifecycle::Running => "running",
-                ProcessLifecycle::Ready => "ready",
-                ProcessLifecycle::Restarting => "restarting",
-                ProcessLifecycle::Stopped { success: true } => "stopped",
-                ProcessLifecycle::Stopped { success: false } => "failed",
+            let status_str: std::borrow::Cow<str> = match &process_data.lifecycle {
+                _ if *shutting_down && is_active => "stopping".into(),
+                ProcessLifecycle::Disabled => "disabled".into(),
+                ProcessLifecycle::Starting => "starting".into(),
+                ProcessLifecycle::Running => {
+                    if let Some(probe) = &process_data.ready_probe {
+                        format!("running (not ready: {})", probe).into()
+                    } else {
+                        "running".into()
+                    }
+                }
+                ProcessLifecycle::Ready => "ready".into(),
+                ProcessLifecycle::Restarting => "restarting".into(),
+                ProcessLifecycle::Stopped { success: true } => "stopped".into(),
+                ProcessLifecycle::Stopped { success: false } => "failed".into(),
             };
 
             // Format ports: extract just the port numbers for brevity

@@ -1586,6 +1586,7 @@ fn test_overflow_clips_top_keeps_bottom() {
         parent: None,
         command: None,
         ports: vec![],
+        ready_probe: None,
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -1776,6 +1777,7 @@ fn test_processes_alphabetical_order() {
         parent: Some(100),
         command: None,
         ports: vec![],
+        ready_probe: None,
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -1785,6 +1787,7 @@ fn test_processes_alphabetical_order() {
         parent: Some(100),
         command: None,
         ports: vec![],
+        ready_probe: None,
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -1804,6 +1807,7 @@ fn test_processes_alphabetical_order() {
         parent: Some(100),
         command: None,
         ports: vec![],
+        ready_probe: None,
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));

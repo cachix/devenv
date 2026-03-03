@@ -306,6 +306,9 @@ pub enum Process {
         /// Ports this process listens on (e.g., ["http:8080", "admin:9000"])
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         ports: Vec<String>,
+        /// Human-readable description of the readiness probe (e.g., "exec: pg_isready", "http: localhost:8080/health")
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ready_probe: Option<String>,
         #[serde(default)]
         level: ActivityLevel,
         timestamp: Timestamp,

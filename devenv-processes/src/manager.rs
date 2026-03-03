@@ -108,6 +108,23 @@ pub struct NativeProcessManager {
     processes_activity: Arc<RwLock<Option<Activity>>>,
 }
 
+/// Build a human-readable description of the readiness probe for TUI display.
+fn probe_description(config: &ProcessConfig) -> Option<String> {
+    let ready = config.ready.as_ref()?;
+    if ready.exec.is_some() {
+        return Some("exec".to_string());
+    }
+    if let Some(http) = &ready.http {
+        if let Some(get) = &http.get {
+            return Some(format!("http: {}:{}{}", get.host, get.port, get.path));
+        }
+    }
+    if ready.notify {
+        return Some("notify".to_string());
+    }
+    None
+}
+
 impl NativeProcessManager {
     /// Create a new native process manager
     pub fn new(state_dir: PathBuf) -> Result<Self> {
@@ -173,6 +190,9 @@ impl NativeProcessManager {
         let mut builder = Activity::process(&config.name)
             .command(&config.exec)
             .ports(ports);
+        if let Some(probe_desc) = probe_description(config) {
+            builder = builder.ready_probe(probe_desc);
+        }
         if let Some(pid) = parent_id {
             builder = builder.parent(Some(pid));
         }

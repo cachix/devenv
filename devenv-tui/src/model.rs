@@ -121,6 +121,8 @@ pub enum ProcessLifecycle {
 pub struct ProcessActivity {
     pub lifecycle: ProcessLifecycle,
     pub ports: Vec<String>,
+    /// Human-readable description of the readiness probe (e.g., "exec: pg_isready")
+    pub ready_probe: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -648,12 +650,14 @@ impl ActivityModel {
                 parent,
                 command,
                 ports,
+                ready_probe,
                 level,
                 ..
             } => {
                 let variant = ActivityVariant::Process(ProcessActivity {
                     lifecycle: ProcessLifecycle::Starting,
                     ports,
+                    ready_probe,
                 });
                 self.create_activity(id, name, parent, command, variant, level);
             }
