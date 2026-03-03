@@ -119,7 +119,6 @@ fn extract_base_dir(pattern: &str) -> &Path {
         None => {
             // No separator before the first wildcard means the wildcard is in the first segment.
             // Walk from cwd so patterns like `src*/*.ts` can match `src1/...`, `src2/...`, etc.
-            let _ = prefix;
             Path::new(".")
         }
     }
@@ -171,19 +170,7 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
         let mut overrides_builder = OverrideBuilder::new(&base_dir);
         let mut hidden_overrides_builder = OverrideBuilder::new(&base_dir);
 
-        for pattern in positive_group {
-            let normalized = normalize_pattern_for_base_dir(pattern, &base_dir);
-            if let Err(e) = overrides_builder.add(&normalized) {
-                warn!("Invalid glob pattern '{}': {}", normalized, e);
-            }
-            if pattern_explicitly_targets_hidden_path(&normalized) {
-                if let Err(e) = hidden_overrides_builder.add(&normalized) {
-                    warn!("Invalid hidden glob pattern '{}': {}", normalized, e);
-                }
-            }
-        }
-
-        for pattern in &negation_patterns {
+        for pattern in positive_group.iter().chain(negation_patterns.iter()) {
             let normalized = normalize_pattern_for_base_dir(pattern, &base_dir);
             if let Err(e) = overrides_builder.add(&normalized) {
                 warn!("Invalid glob pattern '{}': {}", normalized, e);
@@ -202,6 +189,10 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
                 continue;
             }
         };
+        // We pass overrides to the walker for efficient directory pruning, but also
+        // keep a copy for explicit match checking. The walker yields entries that are
+        // *not ignored* (including directories that match no rule), so we use
+        // overrides_for_match to select only positively matched files.
         let overrides_for_match = overrides.clone();
         let hidden_overrides = match hidden_overrides_builder.build() {
             Ok(hidden_overrides) => hidden_overrides,
