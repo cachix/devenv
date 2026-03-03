@@ -26,10 +26,7 @@
 
         1. Update version in Cargo.toml to $ARGUMENTS using `cargo set-version`
         2. Run `cargo check` to update Cargo.lock
-        3. Generate release notes:
-           - Find the latest git tag
-           - Get the diff between that tag and HEAD
-           - Summarize changes into release notes format
+        3. Put today's date in CHANGELOG.md
         4. Ask user for access to nixpkgs repository to bump devenv there
            - The package is at pkgs/by-name/de/devenv/package.nix
            - Sync with ./package.nix from this repo and bump version
