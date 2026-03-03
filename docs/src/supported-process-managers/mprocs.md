@@ -17,7 +17,10 @@ package
 
 
 *Default:*
-` pkgs.mprocs `
+
+```nix
+pkgs.mprocs
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
@@ -40,7 +43,10 @@ YAML 1\.1 value
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)

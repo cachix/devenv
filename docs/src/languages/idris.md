@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/idris\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)
@@ -43,12 +49,18 @@ package
 
 
 *Default:*
-` pkgs.idris2 `
+
+```nix
+pkgs.idris2
+```
 
 
 
 *Example:*
-` pkgs.idris `
+
+```nix
+pkgs.idris
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/idris\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)
@@ -69,12 +81,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/idris\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)
@@ -95,7 +113,10 @@ package
 
 
 *Default:*
-` pkgs.idris2Packages.idris2Lsp `
+
+```nix
+pkgs.idris2Packages.idris2Lsp
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/idris\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)

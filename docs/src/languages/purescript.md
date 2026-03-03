@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
@@ -44,7 +50,10 @@ package
 
 
 *Default:*
-` purescript-overlay.packages.${pkgs.stdenv.system}.purs `
+
+```nix
+purescript-overlay.packages.${pkgs.stdenv.system}.purs
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
@@ -65,12 +74,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
@@ -92,7 +107,10 @@ package
 
 
 *Default:*
-` purescript-overlay.packages.${pkgs.stdenv.system}.purescript-language-server `
+
+```nix
+purescript-overlay.packages.${pkgs.stdenv.system}.purescript-language-server
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
@@ -113,12 +131,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
@@ -140,7 +164,10 @@ package
 
 
 *Default:*
-` purescript-overlay.packages.${pkgs.stdenv.system}.spago `
+
+```nix
+purescript-overlay.packages.${pkgs.stdenv.system}.spago
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)

@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/odin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.odin `
+
+```nix
+pkgs.odin
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/odin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
@@ -65,7 +74,10 @@ null or package
 
 
 *Default:*
-` pkgs.gdb `
+
+```nix
+pkgs.gdb
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/odin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
@@ -86,12 +98,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/odin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
@@ -112,7 +130,10 @@ package
 
 
 *Default:*
-` pkgs.ols `
+
+```nix
+pkgs.ols
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/odin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)

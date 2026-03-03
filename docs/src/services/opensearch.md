@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.opensearch `
+
+```nix
+pkgs.opensearch
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -64,7 +73,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -85,13 +97,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "-Djava.net.preferIPv4Stack=true"
 ]
@@ -117,7 +132,7 @@ string
 
 *Default:*
 
-```
+```nix
 ''
   logger.action.name = org.opensearch.action
   logger.action.level = info
@@ -149,7 +164,10 @@ open submodule of (YAML 1\.1 value)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -170,7 +188,10 @@ string
 
 
 *Default:*
-` "opensearch" `
+
+```nix
+"opensearch"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -191,7 +212,10 @@ string
 
 
 *Default:*
-` "single-node" `
+
+```nix
+"single-node"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -212,7 +236,10 @@ The port to listen on for HTTP traffic\.
 
 
 *Default:*
-` 9200 `
+
+```nix
+9200
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -233,7 +260,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -257,7 +287,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -278,7 +311,10 @@ The port to listen on for transport traffic\.
 
 
 *Default:*
-` 9300 `
+
+```nix
+9300
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)

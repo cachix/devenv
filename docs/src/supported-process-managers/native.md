@@ -19,13 +19,16 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   {
     name = "http";
@@ -61,7 +64,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -82,7 +88,10 @@ signed integer
 
 
 *Default:*
-` 128 `
+
+```nix
+128
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -103,7 +112,10 @@ one of “tcp”, “unix_stream”
 
 
 *Default:*
-` "tcp" `
+
+```nix
+"tcp"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -124,7 +136,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -161,7 +176,10 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -182,7 +200,10 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -203,12 +224,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "pg_isready -d template1" `
+
+```nix
+"pg_isready -d template1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -229,7 +256,10 @@ signed integer
 
 
 *Default:*
-` 3 `
+
+```nix
+3
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -250,7 +280,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -271,7 +304,10 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -292,7 +328,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -313,7 +352,10 @@ string
 
 
 *Default:*
-` "/" `
+
+```nix
+"/"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -350,7 +392,10 @@ string
 
 
 *Default:*
-` "http" `
+
+```nix
+"http"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -371,7 +416,10 @@ signed integer
 
 
 *Default:*
-` 0 `
+
+```nix
+0
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -393,7 +441,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -414,7 +465,10 @@ signed integer
 
 
 *Default:*
-` 10 `
+
+```nix
+10
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -435,7 +489,10 @@ signed integer
 
 
 *Default:*
-` 1 `
+
+```nix
+1
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -456,7 +513,10 @@ signed integer
 
 
 *Default:*
-` 1 `
+
+```nix
+1
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -477,7 +537,10 @@ null or (unsigned integer, meaning >=0)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -498,7 +561,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -519,7 +585,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -540,7 +609,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -561,7 +633,10 @@ list of absolute path
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -584,13 +659,16 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   usec = 30000000; # 30 seconds
   require_ready = true;
@@ -617,7 +695,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/native\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)

@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.mariadb `
+
+```nix
+pkgs.mariadb
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
@@ -69,13 +78,16 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   {
     name = "devenv";
@@ -114,13 +126,16 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   "database.*" = "ALL PRIVILEGES";
   "*.*" = "SELECT, LOCK TABLES";
@@ -147,7 +162,10 @@ string
 
 
 *Default:*
-` "localhost" `
+
+```nix
+"localhost"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
@@ -184,7 +202,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
@@ -205,7 +226,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
@@ -227,13 +251,16 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   { name = "foodatabase"; schema = ./foodatabase.sql; }
   { name = "bardatabase"; }
@@ -277,7 +304,10 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
@@ -298,13 +328,16 @@ lazy attribute set of lazy attribute set of anything
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   mysqld = {
     key_buffer_size = "6G";
@@ -342,7 +375,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)

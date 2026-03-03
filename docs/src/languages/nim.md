@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nim\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.nim `
+
+```nix
+pkgs.nim
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nim\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
@@ -64,12 +73,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nim\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
@@ -90,7 +105,10 @@ package
 
 
 *Default:*
-` pkgs.nimlangserver `
+
+```nix
+pkgs.nimlangserver
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nim\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)

@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.minio `
+
+```nix
+pkgs.minio
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -64,7 +73,10 @@ string
 
 
 *Default:*
-` "minioadmin" `
+
+```nix
+"minioadmin"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -85,13 +97,16 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   mc anonymous set download local/mybucket
 ''
@@ -116,7 +131,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -137,7 +155,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -177,7 +198,10 @@ package
 
 
 *Default:*
-` pkgs.minio-client `
+
+```nix
+pkgs.minio-client
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -198,7 +222,10 @@ string
 
 
 *Default:*
-` "127.0.0.1:9001" `
+
+```nix
+"127.0.0.1:9001"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -219,7 +246,10 @@ string
 
 
 *Default:*
-` "127.0.0.1:9000" `
+
+```nix
+"127.0.0.1:9000"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -240,7 +270,10 @@ string
 
 
 *Default:*
-` "us-east-1" `
+
+```nix
+"us-east-1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -261,7 +294,10 @@ string
 
 
 *Default:*
-` "minioadmin" `
+
+```nix
+"minioadmin"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)

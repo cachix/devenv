@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/typst\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.typst `
+
+```nix
+pkgs.typst
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/typst\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
@@ -64,12 +73,18 @@ list of string
 
 
 *Default:*
-` [] `
+
+```nix
+[]
+```
 
 
 
 *Example:*
-` [ "${pkgs.roboto}/share/fonts/truetype" ] `
+
+```nix
+[ "${pkgs.roboto}/share/fonts/truetype" ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/typst\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
@@ -90,12 +105,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/typst\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
@@ -116,7 +137,10 @@ package
 
 
 *Default:*
-` pkgs.tinymist `
+
+```nix
+pkgs.tinymist
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/typst\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)

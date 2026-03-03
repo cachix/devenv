@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/standardml\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.mlton `
+
+```nix
+pkgs.mlton
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/standardml\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix)
@@ -64,12 +73,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/standardml\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix)
@@ -90,7 +105,10 @@ package
 
 
 *Default:*
-` pkgs.millet `
+
+```nix
+pkgs.millet
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/standardml\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix)

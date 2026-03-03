@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/httpbin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/httpbin.nix)
@@ -44,7 +50,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "127.0.0.1:8080"
 ]
@@ -69,7 +75,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/httpbin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/httpbin.nix)

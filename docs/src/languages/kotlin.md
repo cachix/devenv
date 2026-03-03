@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/kotlin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix)
@@ -43,12 +49,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/kotlin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix)
@@ -69,7 +81,10 @@ package
 
 
 *Default:*
-` pkgs.kotlin-language-server `
+
+```nix
+pkgs.kotlin-language-server
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/kotlin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix)

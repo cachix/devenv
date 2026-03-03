@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/influxdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/influxdb.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.influxdb2-server `
+
+```nix
+pkgs.influxdb2-server
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/influxdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/influxdb.nix)
@@ -64,13 +73,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "--flux-log-enabled"
 ]
@@ -95,7 +107,10 @@ The TCP port for the InfluxDB HTTP API\.
 
 
 *Default:*
-` 8086 `
+
+```nix
+8086
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/influxdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/influxdb.nix)

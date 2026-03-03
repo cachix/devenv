@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/adminer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.adminer `
+
+```nix
+pkgs.adminer
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/adminer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
@@ -64,7 +73,10 @@ string
 
 
 *Default:*
-` "127.0.0.1:8080" `
+
+```nix
+"127.0.0.1:8080"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/adminer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)

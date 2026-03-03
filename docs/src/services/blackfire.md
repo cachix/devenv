@@ -22,12 +22,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -49,12 +55,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -75,7 +87,10 @@ package
 
 
 *Default:*
-` pkgs.blackfire `
+
+```nix
+pkgs.blackfire
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -95,7 +110,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -117,7 +135,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -139,7 +160,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -161,7 +185,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -182,7 +209,10 @@ string
 
 
 *Default:*
-` "tcp://127.0.0.1:8307" `
+
+```nix
+"tcp://127.0.0.1:8307"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)

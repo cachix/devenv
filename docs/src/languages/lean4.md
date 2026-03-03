@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/lean4\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.lean4 `
+
+```nix
+pkgs.lean4
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/lean4\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix)

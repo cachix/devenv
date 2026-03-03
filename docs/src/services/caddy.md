@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.caddy `
+
+```nix
+pkgs.caddy
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -65,12 +74,18 @@ string
 
 
 *Default:*
-` "caddyfile" `
+
+```nix
+"caddyfile"
+```
 
 
 
 *Example:*
-` "nginx" `
+
+```nix
+"nginx"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -94,12 +109,18 @@ null or string
 
 
 *Default:*
-` "https://acme-v02.api.letsencrypt.org/directory" `
+
+```nix
+"https://acme-v02.api.letsencrypt.org/directory"
+```
 
 
 
 *Example:*
-` "https://acme-staging-v02.api.letsencrypt.org/directory" `
+
+```nix
+"https://acme-staging-v02.api.letsencrypt.org/directory"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -125,13 +146,16 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   # Global options block
   {
@@ -170,7 +194,10 @@ absolute path
 
 
 *Default:*
-` "${config.env.DEVENV_STATE}/caddy" `
+
+```nix
+"${config.env.DEVENV_STATE}/caddy"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -191,7 +218,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -212,7 +242,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -233,13 +266,16 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   "hydra.example.com" = {
     serverAliases = [ "www.hydra.example.com" ];
@@ -272,7 +308,10 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -293,13 +332,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "www.example.org"
   "example.org"

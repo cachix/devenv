@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elm\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix)
@@ -43,12 +49,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elm\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix)
@@ -69,7 +81,10 @@ package
 
 
 *Default:*
-` pkgs.elmPackages.elm-language-server `
+
+```nix
+pkgs.elmPackages.elm-language-server
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elm\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix)

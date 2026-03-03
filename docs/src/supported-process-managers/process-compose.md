@@ -17,7 +17,10 @@ package
 
 
 *Default:*
-` pkgs.process-compose `
+
+```nix
+pkgs.process-compose
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
@@ -40,7 +43,10 @@ signed integer
 
 
 *Default:*
-` 8080 `
+
+```nix
+8080
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
@@ -63,13 +69,16 @@ YAML 1\.1 value
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   availability = {
     backoff_seconds = 2;
@@ -106,7 +115,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
@@ -127,12 +139,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
@@ -153,7 +171,10 @@ string
 
 
 *Default:*
-` ${config.devenv.runtime}/pc.sock `
+
+```nix
+${config.devenv.runtime}/pc.sock
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)

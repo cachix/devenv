@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.opentelemetry-collector-contrib `
+
+```nix
+pkgs.opentelemetry-collector-contrib
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix)
@@ -68,13 +77,16 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 pkgs.writeTextFile { name = "otel-config.yaml"; text = "..."; }
 
 ```
@@ -100,7 +112,10 @@ open submodule of (YAML 1\.1 value)
 
 
 *Default:*
-` defaultSettings `
+
+```nix
+defaultSettings
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix)

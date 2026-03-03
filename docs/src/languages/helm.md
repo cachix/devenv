@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/helm\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.kubernetes-helm `
+
+```nix
+pkgs.kubernetes-helm
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/helm\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
@@ -64,12 +73,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/helm\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
@@ -90,7 +105,10 @@ package
 
 
 *Default:*
-` pkgs.helm-ls `
+
+```nix
+pkgs.helm-ls
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/helm\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
@@ -113,13 +131,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "helm-secrets"
   "helm-diff"

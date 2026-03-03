@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/sqld\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix)
@@ -43,7 +49,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/sqld\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix)
@@ -64,7 +73,10 @@ Port number to listen on\.
 
 
 *Default:*
-` 8080 `
+
+```nix
+8080
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/sqld\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix)

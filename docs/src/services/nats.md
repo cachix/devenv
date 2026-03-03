@@ -22,7 +22,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -43,7 +46,10 @@ package
 
 
 *Default:*
-` pkgs.nats-server `
+
+```nix
+pkgs.nats-server
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -62,12 +68,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -90,12 +102,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "nats-pass" `
+
+```nix
+"nats-pass"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -118,12 +136,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "my-secret-token" `
+
+```nix
+"my-secret-token"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -145,12 +169,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "nats-user" `
+
+```nix
+"nats-user"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -172,12 +202,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "localhost:4222" `
+
+```nix
+"localhost:4222"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -198,7 +234,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -221,12 +260,18 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 
 
 *Example:*
-` "0.0.0.0" `
+
+```nix
+"0.0.0.0"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -247,12 +292,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -274,12 +325,18 @@ string
 
 
 *Default:*
-` "10G" `
+
+```nix
+"10G"
+```
 
 
 
 *Example:*
-` "100G" `
+
+```nix
+"100G"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -301,12 +358,18 @@ string
 
 
 *Default:*
-` "1G" `
+
+```nix
+"1G"
+```
 
 
 
 *Example:*
-` "512M" `
+
+```nix
+"512M"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -328,12 +391,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "/var/log/nats-server.log" `
+
+```nix
+"/var/log/nats-server.log"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -356,7 +425,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -378,7 +450,10 @@ Access monitoring at http://host:port/varz
 
 
 *Default:*
-` 8222 `
+
+```nix
+8222
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -399,7 +474,10 @@ Port to listen on for client connections\.
 
 
 *Default:*
-` 4222 `
+
+```nix
+4222
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -421,12 +499,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "nats-dev-1" `
+
+```nix
+"nats-dev-1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -458,13 +542,16 @@ attribute set
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   tls = {
     cert_file = "/path/to/cert.pem";
@@ -503,7 +590,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nats\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)

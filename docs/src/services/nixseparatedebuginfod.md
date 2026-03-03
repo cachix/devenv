@@ -18,12 +18,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
@@ -44,7 +50,10 @@ package
 
 
 *Default:*
-` pkgs.nixseparatedebuginfod2 `
+
+```nix
+pkgs.nixseparatedebuginfod2
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
@@ -65,7 +74,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
@@ -87,7 +99,10 @@ string
 
 
 *Default:*
-` "1d" `
+
+```nix
+"1d"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
@@ -108,7 +123,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
@@ -129,7 +147,10 @@ Port for nixseparatedebuginfod to listen on\.
 
 
 *Default:*
-` 1949 `
+
+```nix
+1949
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
@@ -151,7 +172,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "local:"
   "https://cache.nixos.org"

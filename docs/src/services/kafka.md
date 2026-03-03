@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.apacheKafka `
+
+```nix
+pkgs.apacheKafka
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -64,7 +73,10 @@ absolute path
 
 
 *Default:*
-` "pkgs.writeText \"log4j.properties\" cfg.log4jProperties" `
+
+```nix
+"pkgs.writeText \"log4j.properties\" cfg.log4jProperties"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -102,12 +114,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka-connect\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -128,7 +146,10 @@ list of (open submodule of lazy attribute set of (null or boolean or signed inte
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka-connect\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -186,7 +207,10 @@ open submodule of lazy attribute set of (null or boolean or signed integer or st
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka-connect\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -208,7 +232,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "localhost:9092"
 ]
@@ -233,7 +257,10 @@ string
 
 
 *Default:*
-` "org.apache.kafka.connect.json.JsonConverter" `
+
+```nix
+"org.apache.kafka.connect.json.JsonConverter"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka-connect\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -254,7 +281,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka-connect\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -276,13 +306,16 @@ null or (list of string)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "http://localhost:8080"
 ]
@@ -307,7 +340,10 @@ signed integer
 
 
 *Default:*
-` 10000 `
+
+```nix
+10000
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka-connect\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -328,7 +364,10 @@ string
 
 
 *Default:*
-` ${config.env.DEVENV_STATE}/kafka/connect/connect.offsets `
+
+```nix
+${config.env.DEVENV_STATE}/kafka/connect/connect.offsets
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka-connect\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -353,7 +392,10 @@ null or (list of (string or absolute path))
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka-connect\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -374,7 +416,10 @@ string
 
 
 *Default:*
-` "org.apache.kafka.connect.json.JsonConverter" `
+
+```nix
+"org.apache.kafka.connect.json.JsonConverter"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka-connect\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -395,7 +440,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka-connect\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -419,7 +467,10 @@ one of “zookeeper”, “kraft”
 
 
 *Default:*
-` "kraft" `
+
+```nix
+"kraft"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -441,7 +492,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -463,7 +517,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -484,7 +541,10 @@ package
 
 
 *Default:*
-` pkgs.apacheKafka.passthru.jre `
+
+```nix
+pkgs.apacheKafka.passthru.jre
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -505,13 +565,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "-Djava.net.preferIPv4Stack=true"
   "-Dcom.sun.management.jmxremote"
@@ -539,7 +602,7 @@ strings concatenated with “\\n”
 
 *Default:*
 
-```
+```nix
 ''
   log4j.rootLogger=INFO, stdout
   
@@ -574,7 +637,10 @@ open submodule of lazy attribute set of (null or boolean or signed integer or st
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -595,7 +661,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -619,7 +688,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "PLAINTEXT://localhost:9092"
 ]
@@ -644,7 +713,10 @@ list of absolute path
 
 
 *Default:*
-` [ "${config.devenv.state + "/kafka"}/logs" ] `
+
+```nix
+[ "${config.devenv.state + "/kafka"}/logs" ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)

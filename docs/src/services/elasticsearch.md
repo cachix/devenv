@@ -19,7 +19,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -40,7 +43,10 @@ package
 
 
 *Default:*
-` pkgs.elasticsearch7 `
+
+```nix
+pkgs.elasticsearch7
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -59,7 +65,10 @@ string
 
 
 *Default:*
-` "elasticsearch" `
+
+```nix
+"elasticsearch"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -80,7 +89,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -101,13 +113,16 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   node.name: "elasticsearch"
   node.master: true
@@ -134,13 +149,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "-Djava.net.preferIPv4Stack=true"
 ]
@@ -165,7 +183,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -187,7 +208,7 @@ string
 
 *Default:*
 
-```
+```nix
 ''
   logger.action.name = org.elasticsearch.action
   logger.action.level = info
@@ -219,12 +240,18 @@ list of package
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
-` [ pkgs.elasticsearchPlugins.discovery-ec2 ] `
+
+```nix
+[ pkgs.elasticsearchPlugins.discovery-ec2 ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -245,7 +272,10 @@ Elasticsearch port to listen for HTTP traffic\.
 
 
 *Default:*
-` 9200 `
+
+```nix
+9200
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -266,7 +296,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -287,7 +320,10 @@ Elasticsearch port for the node to node communication\.
 
 
 *Default:*
-` 9300 `
+
+```nix
+9300
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)

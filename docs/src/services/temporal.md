@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/temporal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.temporal-cli `
+
+```nix
+pkgs.temporal-cli
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/temporal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -64,13 +73,16 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   "frontend.namespacerps" = "2500";
   "frontend.rps" = "2500";
@@ -96,7 +108,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/temporal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -117,13 +132,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "my-namespace"
   "my-other-namespace"
@@ -149,7 +167,10 @@ Port for the frontend gRPC service\.
 
 
 *Default:*
-` 7233 `
+
+```nix
+7233
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/temporal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -170,7 +191,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/temporal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -191,7 +215,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/temporal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -212,13 +239,16 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   journal_mode = "wal";
   synchronous = "2";
@@ -244,7 +274,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/temporal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -265,7 +298,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/temporal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -286,7 +322,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/temporal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -307,7 +346,10 @@ Port for the Web UI\.
 
 
 *Default:*
-` 8233 `
+
+```nix
+8233
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/temporal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)

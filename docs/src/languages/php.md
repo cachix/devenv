@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -47,13 +53,16 @@ package
 
 
 *Default:*
-` pkgs.php `
+
+```nix
+pkgs.php
+```
 
 
 
 *Example:*
 
-```
+```nix
 pkgs.php.buildEnv {
   extensions = { all, enabled }: with all; enabled ++ [ xdebug ];
   extraConfig = ''
@@ -82,7 +91,10 @@ submodule
 
 
 *Default:*
-` pkgs `
+
+```nix
+pkgs
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -103,7 +115,10 @@ null or package
 
 
 *Default:*
-` pkgs.phpPackages.composer `
+
+```nix
+pkgs.phpPackages.composer
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -122,7 +137,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -143,7 +161,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -167,7 +188,10 @@ null or strings concatenated with “\\n”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -188,13 +212,16 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   date.timezone = "CET"
 ''
@@ -220,13 +247,16 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   mypool = {
     user = "php";
@@ -265,7 +295,10 @@ null or strings concatenated with “\\n”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -286,12 +319,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "/path/to/unix/socket" `
+
+```nix
+"/path/to/unix/socket"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -312,13 +351,16 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   HOSTNAME = "$HOSTNAME";
   TMP = "/tmp";
@@ -363,7 +405,10 @@ package
 
 
 *Default:*
-` phpfpm.phpPackage `
+
+```nix
+phpfpm.phpPackage
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -388,13 +433,16 @@ attribute set of (string or signed integer or boolean)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   "pm" = "dynamic";
   "pm.max_children" = 75;
@@ -427,7 +475,10 @@ string *(read only)*
 
 
 *Example:*
-` config.env.DEVENV_STATE + "/php-fpm/<name>.sock" `
+
+```nix
+config.env.DEVENV_STATE + "/php-fpm/<name>.sock"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -459,7 +510,7 @@ attribute set of (string or signed integer or boolean)
 
 *Default:*
 
-```
+```nix
 {
   error_log = config.env.DEVENV_STATE + "/php-fpm/php-fpm.log";
 }
@@ -485,7 +536,10 @@ null or strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -506,12 +560,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -532,7 +592,10 @@ package
 
 
 *Default:*
-` pkgs.phpactor `
+
+```nix
+pkgs.phpactor
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -553,7 +616,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)

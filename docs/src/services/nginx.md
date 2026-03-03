@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nginx\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.nginx `
+
+```nix
+pkgs.nginx
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nginx\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
@@ -66,12 +75,18 @@ absolute path
 
 
 *Default:*
-` ${pkgs.mailcap}/etc/nginx/mime.types `
+
+```nix
+${pkgs.mailcap}/etc/nginx/mime.types
+```
 
 
 
 *Example:*
-` ${pkgs.nginx}/conf/mime.types `
+
+```nix
+${pkgs.nginx}/conf/mime.types
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nginx\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
@@ -92,7 +107,10 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nginx\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
@@ -113,7 +131,10 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nginx\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)

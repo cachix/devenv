@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` "pkgs.meilisearch" `
+
+```nix
+"pkgs.meilisearch"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -64,7 +73,10 @@ one of “development”, “production”
 
 
 *Default:*
-` "development" `
+
+```nix
+"development"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -85,7 +97,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -106,7 +121,10 @@ Meilisearch port to listen on\.
 
 
 *Default:*
-` 7700 `
+
+```nix
+7700
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -134,7 +152,10 @@ string
 
 
 *Default:*
-` "INFO" `
+
+```nix
+"INFO"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -158,7 +179,10 @@ string
 
 
 *Default:*
-` "107374182400" `
+
+```nix
+"107374182400"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -182,7 +206,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)

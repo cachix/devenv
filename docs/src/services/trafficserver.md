@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.trafficserver `
+
+```nix
+pkgs.trafficserver
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -67,12 +76,18 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "dest_domain=example.com suffix=js action=never-cache" `
+
+```nix
+"dest_domain=example.com suffix=js action=never-cache"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -96,12 +111,18 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "domain=example.com volume=1" `
+
+```nix
+"domain=example.com volume=1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -132,7 +153,7 @@ upstream defaults
 
 *Example:*
 
-```
+```nix
 {
   ip_allow = [{
     apply = "in";
@@ -171,7 +192,10 @@ upstream defaults
 
 
 *Example:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -195,13 +219,16 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   dest_domain=. method=get parent="p1.example:8080; p2.example:8080" round_robin=true
 ''
@@ -230,7 +257,10 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -251,12 +281,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "--header=ATS-My-Debug" `
+
+```nix
+"--header=ATS-My-Debug"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -278,7 +314,10 @@ string
 
 
 *Example:*
-` "xdebug.so" `
+
+```nix
+"xdebug.so"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -311,13 +350,16 @@ Traffic Server records value
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   proxy = {
     config = {
@@ -349,12 +391,18 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "map http://from.example http://origin.example" `
+
+```nix
+"map http://from.example http://origin.example"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -395,13 +443,16 @@ null or YAML 1\.1 value
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   sni = [{
     fqdn = "no-http2.example.com";
@@ -434,13 +485,16 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   dest_domain=internal.corp.example named="255.255.255.255:212 255.255.255.254" def_domain=corp.example search_list="corp.example corp1.example"
   dest_domain=!internal.corp.example named=255.255.255.253
@@ -469,12 +523,18 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "dest_ip=* ssl_cert_name=default.pem" `
+
+```nix
+"dest_ip=* ssl_cert_name=default.pem"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -498,12 +558,18 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "${config.services.traffic-server.runroot.cachedir} 256M" `
+
+```nix
+"${config.services.traffic-server.runroot.cachedir} 256M"
+```
 
 
 
 *Example:*
-` "/dev/disk/by-id/XXXXX volume=1" `
+
+```nix
+"/dev/disk/by-id/XXXXX volume=1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -528,7 +594,10 @@ null or YAML 1\.1 value
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -553,12 +622,18 @@ null or YAML 1\.1 value
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "volume=1 scheme=http size=20%" `
+
+```nix
+"volume=1 scheme=http size=20%"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)

@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.couchdb3 `
+
+```nix
+pkgs.couchdb3
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -64,7 +73,10 @@ string *(read only)*
 
 
 *Default:*
-` config.env.DEVENV_STATE + "/couchdb" `
+
+```nix
+config.env.DEVENV_STATE + "/couchdb"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -89,13 +101,16 @@ open submodule of attribute set of section of an INI file (attrs of INI atom (nu
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   couchdb = {
     database_dir = baseDir;
@@ -133,7 +148,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -154,7 +172,10 @@ Defined the port number to listen\.
 
 
 *Default:*
-` 5984 `
+
+```nix
+5984
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -177,7 +198,10 @@ absolute path
 
 
 *Default:*
-` config.env.DEVENV_STATE + "/couchdb" `
+
+```nix
+config.env.DEVENV_STATE + "/couchdb"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -200,7 +224,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -225,7 +252,10 @@ absolute path
 
 
 *Default:*
-` config.env.DEVENV_STATE + "/couchdb"/couchdb.uri `
+
+```nix
+config.env.DEVENV_STATE + "/couchdb"/couchdb.uri
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -248,7 +278,10 @@ absolute path
 
 
 *Default:*
-` config.env.DEVENV_STATE + "/couchdb" `
+
+```nix
+config.env.DEVENV_STATE + "/couchdb"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)

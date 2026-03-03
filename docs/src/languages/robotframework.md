@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/robotframework\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.python3 `
+
+```nix
+pkgs.python3
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/robotframework\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix)

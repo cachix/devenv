@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/terraform\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.terraform `
+
+```nix
+pkgs.terraform
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/terraform\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
@@ -64,12 +73,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/terraform\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
@@ -90,7 +105,10 @@ package
 
 
 *Default:*
-` pkgs.terraform-ls `
+
+```nix
+pkgs.terraform-ls
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/terraform\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
@@ -112,12 +130,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "1.5.0 or 1.6.2" `
+
+```nix
+"1.5.0 or 1.6.2"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/terraform\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)

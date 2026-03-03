@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.redis `
+
+```nix
+pkgs.redis
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
@@ -65,12 +74,18 @@ null or string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 
 
 *Example:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
@@ -91,7 +106,10 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "locale-collate C" `
+
+```nix
+"locale-collate C"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
@@ -113,7 +131,10 @@ If port 0 is specified, Redis will not listen on a TCP socket and a unix socket 
 
 
 *Default:*
-` 6379 `
+
+```nix
+6379
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)

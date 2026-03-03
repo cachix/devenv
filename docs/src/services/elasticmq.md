@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.elasticmq-server-bin `
+
+```nix
+pkgs.elasticmq-server-bin
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix)
@@ -64,7 +73,10 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix)

@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dart\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.dart `
+
+```nix
+pkgs.dart
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dart\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix)

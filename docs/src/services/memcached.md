@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.memcached `
+
+```nix
+pkgs.memcached
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
@@ -65,12 +74,18 @@ null or string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 
 
 *Example:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
@@ -92,7 +107,10 @@ If port 0 is specified memcached will not listen on a TCP socket\.
 
 
 *Default:*
-` 11211 `
+
+```nix
+11211
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
@@ -113,13 +131,16 @@ list of strings concatenated with “\\n”
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "--memory-limit=100M"
 ]

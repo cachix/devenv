@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.mongodb-ce `
+
+```nix
+pkgs.mongodb-ce
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
@@ -65,7 +74,7 @@ list of strings concatenated with “\\n”
 
 *Default:*
 
-```
+```nix
 [
   "--noauth"
 ]
@@ -75,7 +84,7 @@ list of strings concatenated with “\\n”
 
 *Example:*
 
-```
+```nix
 [
   "--port"
   "27017"
@@ -102,12 +111,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "secret" `
+
+```nix
+"secret"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
@@ -128,12 +143,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "mongoadmin" `
+
+```nix
+"mongoadmin"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
@@ -154,12 +175,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
@@ -180,12 +207,18 @@ string
 
 
 *Default:*
-` "rs0" `
+
+```nix
+"rs0"
+```
 
 
 
 *Example:*
-` "rs0" `
+
+```nix
+"rs0"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)

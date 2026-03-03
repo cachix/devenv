@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/julia\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.julia-bin `
+
+```nix
+pkgs.julia-bin
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/julia\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix)

@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
@@ -45,12 +51,18 @@ package
 
 
 *Default:*
-` pkgs.cassandra_4 `
+
+```nix
+pkgs.cassandra_4
+```
 
 
 
 *Example:*
-` pkgs.cassandra_4; `
+
+```nix
+pkgs.cassandra_4;
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
@@ -69,7 +81,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
@@ -90,7 +105,10 @@ string
 
 
 *Default:*
-` "Test Cluster" `
+
+```nix
+"Test Cluster"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
@@ -111,13 +129,16 @@ attribute set
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   commitlog_sync_batch_window_in_ms = 3;
 }
@@ -142,7 +163,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
@@ -163,12 +187,18 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 
 
 *Example:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
@@ -190,7 +220,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "127.0.0.1"
 ]

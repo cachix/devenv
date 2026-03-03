@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/vala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)
@@ -43,12 +49,18 @@ package
 
 
 *Default:*
-` pkgs.vala `
+
+```nix
+pkgs.vala
+```
 
 
 
 *Example:*
-` pkgs.vala_0_54 `
+
+```nix
+pkgs.vala_0_54
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/vala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)
@@ -69,12 +81,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/vala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)
@@ -95,7 +113,10 @@ package
 
 
 *Default:*
-` pkgs.vala-language-server `
+
+```nix
+pkgs.vala-language-server
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/vala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)

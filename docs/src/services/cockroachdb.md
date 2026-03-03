@@ -18,12 +18,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cockroachdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
@@ -44,7 +50,10 @@ unspecified value
 
 
 *Default:*
-` pkgs.cockroachdb `
+
+```nix
+pkgs.cockroachdb
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cockroachdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
@@ -65,7 +74,10 @@ string
 
 
 *Default:*
-` "localhost:8080" `
+
+```nix
+"localhost:8080"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cockroachdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
@@ -86,7 +98,10 @@ string
 
 
 *Default:*
-` "localhost:26257" `
+
+```nix
+"localhost:26257"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cockroachdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)

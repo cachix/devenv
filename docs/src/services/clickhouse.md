@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/clickhouse\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.clickhouse `
+
+```nix
+pkgs.clickhouse
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/clickhouse\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
@@ -80,7 +89,10 @@ Which http port to run clickhouse on\.
 
 
 *Default:*
-` 8123 `
+
+```nix
+8123
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/clickhouse\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
@@ -101,7 +113,10 @@ Which port to run clickhouse on\.
 
 
 *Default:*
-` 9000 `
+
+```nix
+9000
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/clickhouse\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)

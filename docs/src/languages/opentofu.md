@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/opentofu\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.opentofu `
+
+```nix
+pkgs.opentofu
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/opentofu\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)
@@ -64,12 +73,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/opentofu\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)
@@ -90,7 +105,10 @@ package
 
 
 *Default:*
-` pkgs.terraform-ls `
+
+```nix
+pkgs.terraform-ls
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/opentofu\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)

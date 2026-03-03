@@ -19,12 +19,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -45,7 +51,10 @@ package
 
 
 *Default:*
-` pkgs.prometheus `
+
+```nix
+pkgs.prometheus
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -64,7 +73,10 @@ attribute set
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -85,7 +97,10 @@ attribute set
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -106,7 +121,10 @@ null or (attribute set)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -127,7 +145,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -148,7 +169,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -169,7 +193,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -190,7 +217,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -212,7 +242,7 @@ attribute set
 
 *Default:*
 
-```
+```nix
 {
   evaluation_interval = "1m";
   scrape_interval = "1m";
@@ -239,7 +269,10 @@ Port for Prometheus web interface\.
 
 
 *Default:*
-` 9090 `
+
+```nix
+9090
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -260,7 +293,10 @@ list of (attribute set)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -281,7 +317,10 @@ list of (attribute set)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -302,7 +341,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -323,7 +365,10 @@ list of (attribute set)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -344,7 +389,10 @@ string
 
 
 *Default:*
-` ${config.devenv.state}/prometheus `
+
+```nix
+${config.devenv.state}/prometheus
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -365,7 +413,10 @@ string
 
 
 *Default:*
-` "15d" `
+
+```nix
+"15d"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/prometheus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)

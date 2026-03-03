@@ -17,12 +17,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
@@ -43,7 +49,10 @@ package
 
 
 *Default:*
-` pkgs.dynamodb-local `
+
+```nix
+pkgs.dynamodb-local
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
@@ -64,7 +73,10 @@ Listen port for DynamoDB Local\.
 
 
 *Default:*
-` 8000 `
+
+```nix
+8000
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
@@ -87,7 +99,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)

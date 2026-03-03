@@ -17,7 +17,10 @@ package
 
 
 *Default:*
-` pkgs.hivemind `
+
+```nix
+pkgs.hivemind
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
