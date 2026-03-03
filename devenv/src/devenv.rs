@@ -895,6 +895,7 @@ impl Devenv {
             cache_dir: self.devenv_dotfile.clone(),
             sudo_context: None,
             env: envs,
+            bash: String::new(),
             ignore_process_deps: false,
         };
 
@@ -1150,6 +1151,7 @@ impl Devenv {
             cache_dir: self.devenv_dotfile.clone(),
             sudo_context: None,
             env: envs,
+            bash: String::new(),
             ignore_process_deps: false,
         };
 
@@ -1245,6 +1247,7 @@ impl Devenv {
             cache_dir: self.devenv_dotfile.clone(),
             sudo_context: None,
             env: envs,
+            bash: String::new(),
             ignore_process_deps: false,
         };
 
@@ -1724,6 +1727,7 @@ impl Devenv {
                 );
 
                 let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
+                let bash = self.get_bash_path().await?;
                 let config = tasks::Config {
                     tasks: task_configs,
                     roots,
@@ -1732,6 +1736,7 @@ impl Devenv {
                     cache_dir: self.devenv_dotfile.clone(),
                     sudo_context: None,
                     env: envs,
+                    bash,
                     ignore_process_deps: false,
                 };
 

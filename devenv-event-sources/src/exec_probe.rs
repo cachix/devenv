@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::Duration;
 
 use tokio::sync::mpsc;
@@ -20,6 +21,8 @@ impl ExecProbe {
     pub fn spawn(
         command: String,
         name: String,
+        bash: String,
+        env: HashMap<String, String>,
         initial_delay: Duration,
         period: Duration,
         timeout: Duration,
@@ -35,9 +38,10 @@ impl ExecProbe {
             loop {
                 let result = tokio::time::timeout(
                     timeout,
-                    tokio::process::Command::new("sh")
+                    tokio::process::Command::new(&bash)
                         .arg("-c")
                         .arg(&command)
+                        .envs(&env)
                         .stdout(std::process::Stdio::null())
                         .stderr(std::process::Stdio::null())
                         .status(),
@@ -91,6 +95,8 @@ mod tests {
         let mut probe = ExecProbe::spawn(
             "exit 0".to_string(),
             "test".to_string(),
+            "bash".to_string(),
+            HashMap::new(),
             Duration::ZERO,
             Duration::from_millis(50),
             Duration::from_secs(5),
@@ -110,6 +116,8 @@ mod tests {
         let mut probe = ExecProbe::spawn(
             cmd,
             "test-retry".to_string(),
+            "bash".to_string(),
+            HashMap::new(),
             Duration::ZERO,
             Duration::from_millis(50),
             Duration::from_secs(5),

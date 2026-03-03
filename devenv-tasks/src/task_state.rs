@@ -263,6 +263,7 @@ impl TaskState {
         manager: &Arc<NativeProcessManager>,
         parent_id: Option<u64>,
         env: &std::collections::HashMap<String, String>,
+        bash: &str,
         cancel: &tokio_util::sync::CancellationToken,
     ) -> Result<()> {
         let Some(cmd) = &self.task.command else {
@@ -306,6 +307,7 @@ impl TaskState {
         merged_env.extend(self.task.env.clone());
         merged_env.extend(config.env.clone());
         config.env = merged_env;
+        config.bash = bash.to_string();
 
         // Check if we need to wait for readiness (ready config, has listen sockets, or has allocated ports)
         let requires_ready_wait = config.ready.is_some()

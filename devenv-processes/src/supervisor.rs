@@ -95,10 +95,14 @@ pub fn spawn_supervisor(
             .map(|addr| TcpProbe::spawn(addr.clone(), name.clone()));
 
         // Exec probe: runs a shell command periodically until it exits 0
+        let process_env = config.env.clone();
+        let process_bash = config.bash.clone();
         let mut exec_probe = exec_probe_cmd.as_ref().map(|cmd| {
             ExecProbe::spawn(
                 cmd.clone(),
                 name.clone(),
+                process_bash.clone(),
+                process_env.clone(),
                 initial_delay,
                 probe_period,
                 probe_timeout,
@@ -155,6 +159,8 @@ pub fn spawn_supervisor(
                     exec_probe = Some(ExecProbe::spawn(
                         cmd.clone(),
                         name.clone(),
+                        process_bash.clone(),
+                        process_env.clone(),
                         initial_delay,
                         probe_period,
                         probe_timeout,

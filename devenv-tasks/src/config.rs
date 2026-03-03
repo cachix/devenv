@@ -63,6 +63,9 @@ pub struct Config {
     /// Environment variables to pass to processes
     #[serde(skip, default)]
     pub env: std::collections::HashMap<String, String>,
+    /// Path to the bash binary to use for probe commands
+    #[serde(skip, default)]
+    pub bash: String,
     /// When true, exclude non-root process-type tasks from the scheduled subgraph.
     /// This prevents process duplication when process-compose manages process ordering
     /// via depends_on while devenv-tasks handles non-process dependencies (migrations, etc).

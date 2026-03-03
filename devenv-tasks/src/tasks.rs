@@ -126,6 +126,7 @@ impl TasksBuilder {
             shutdown: self.shutdown,
             process_manager,
             env: self.config.env,
+            bash: self.config.bash,
             executor: SubprocessExecutor::new(),
             refresh_task_cache: self.refresh_task_cache,
             ignore_process_deps: self.config.ignore_process_deps,
@@ -163,6 +164,8 @@ pub struct Tasks {
     pub process_manager: Arc<NativeProcessManager>,
     /// Environment variables to pass to processes
     pub env: HashMap<String, String>,
+    /// Path to the bash binary to use for probe commands
+    pub bash: String,
     pub executor: SubprocessExecutor,
     /// Force a refresh of the task cache, skipping cache reads
     pub refresh_task_cache: bool,
@@ -787,6 +790,7 @@ impl Tasks {
                 let process_manager_clone = self.process_manager.clone();
                 let parent_id = orchestration_activity.id();
                 let env = self.env.clone();
+                let bash = self.bash.clone();
                 let cancel = self.shutdown.cancellation_token();
                 let orchestration_activity_clone = Arc::clone(&orchestration_activity);
                 let completed_tasks_clone = Arc::clone(&completed_tasks);
@@ -799,7 +803,13 @@ impl Tasks {
                         match task_state_clone
                             .write()
                             .await
-                            .run_process(&process_manager_clone, Some(parent_id), &env, &cancel)
+                            .run_process(
+                                &process_manager_clone,
+                                Some(parent_id),
+                                &env,
+                                &bash,
+                                &cancel,
+                            )
                             .await
                         {
                             Ok(()) => {

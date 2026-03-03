@@ -174,6 +174,10 @@ impl Default for RestartConfig {
     }
 }
 
+fn default_bash() -> String {
+    "bash".to_string()
+}
+
 fn default_period() -> u64 {
     10
 }
@@ -216,6 +220,9 @@ impl Default for StartConfig {
 pub struct ProcessConfig {
     #[serde(default)]
     pub name: String,
+    /// Path to the bash binary to use for exec probes
+    #[serde(default = "default_bash")]
+    pub bash: String,
     #[serde(default)]
     pub start: StartConfig,
     #[serde(default, rename = "type")]
@@ -253,6 +260,7 @@ impl Default for ProcessConfig {
     fn default() -> Self {
         Self {
             name: String::new(),
+            bash: "bash".to_string(),
             start: StartConfig::default(),
             process_type: ProcessType::default(),
             exec: String::new(),

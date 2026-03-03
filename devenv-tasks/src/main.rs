@@ -186,6 +186,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
                 cache_dir,
                 sudo_context: sudo_context.clone(),
                 env: std::env::vars().collect(),
+                bash: String::new(),
                 ignore_process_deps,
             };
 
