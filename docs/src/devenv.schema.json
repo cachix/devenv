@@ -68,6 +68,12 @@
         "string",
         "null"
       ]
+    },
+    "reload": {
+      "type": [
+        "boolean",
+        "null"
+      ]
     }
   },
   "$defs": {
