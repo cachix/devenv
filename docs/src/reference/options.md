@@ -15,7 +15,10 @@ list of package
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
@@ -36,12 +39,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -62,7 +71,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "arm64-v8a"
   "x86_64"
@@ -88,12 +97,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -115,7 +130,10 @@ package
 
 
 *Default:*
-` pkgs.android-studio `
+
+```nix
+pkgs.android-studio
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -138,7 +156,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "34.0.0"
 ]
@@ -165,7 +183,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "3.22.1"
 ]
@@ -191,7 +209,10 @@ string
 
 
 *Default:*
-` "11.0" `
+
+```nix
+"11.0"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -213,7 +234,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -259,7 +283,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "android-sdk-preview-license"
   "android-googletv-license"
@@ -292,7 +316,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "extras;google;gcm"
 ]
@@ -317,7 +341,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -339,7 +366,10 @@ package
 
 
 *Default:*
-` pkgs.flutter `
+
+```nix
+pkgs.flutter
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -361,7 +391,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -383,7 +416,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -405,7 +441,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -428,7 +467,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "26.1.10909125"
 ]
@@ -478,7 +517,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "32"
   "34"
@@ -505,7 +544,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -527,7 +569,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -550,7 +595,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "google_apis_playstore"
 ]
@@ -576,7 +621,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -598,7 +646,10 @@ string
 
 
 *Default:*
-` "26.1.1" `
+
+```nix
+"26.1.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -621,12 +672,18 @@ null or package
 
 
 *Default:*
-` if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null `
+
+```nix
+if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null
+```
 
 
 
 *Example:*
-` pkgs.apple-sdk_15 `
+
+```nix
+pkgs.apple-sdk_15
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
@@ -647,12 +704,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
@@ -673,7 +736,10 @@ package
 
 
 *Default:*
-` pkgs.aws-vault `
+
+```nix
+pkgs.aws-vault
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
@@ -694,7 +760,10 @@ submodule
 
 
 *Default:*
-` pkgs `
+
+```nix
+pkgs
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
@@ -716,12 +785,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
@@ -742,7 +817,10 @@ package
 
 
 *Default:*
-` pkgs.awscli2 `
+
+```nix
+pkgs.awscli2
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
@@ -763,7 +841,10 @@ submodule
 
 
 *Default:*
-` pkgs `
+
+```nix
+pkgs
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
@@ -785,12 +866,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
@@ -811,7 +898,10 @@ package
 
 
 *Default:*
-` pkgs.opentofu `
+
+```nix
+pkgs.opentofu
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
@@ -848,7 +938,10 @@ submodule
 
 
 *Default:*
-` pkgs `
+
+```nix
+pkgs
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
@@ -870,12 +963,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
@@ -896,7 +995,10 @@ package
 
 
 *Default:*
-` pkgs.terraform `
+
+```nix
+pkgs.terraform
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
@@ -917,7 +1019,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix](https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix)
@@ -938,7 +1043,10 @@ package
 
 
 *Default:*
-` pkgs.cachix `
+
+```nix
+pkgs.cachix
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix](https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix)
@@ -959,7 +1067,10 @@ list of string
 
 
 *Default:*
-` [ "devenv" ] `
+
+```nix
+[ "devenv" ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix](https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix)
@@ -980,7 +1091,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix](https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix)
@@ -1001,12 +1115,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "mycert.pem" `
+
+```nix
+"mycert.pem"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix)
@@ -1027,13 +1147,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "example.com"
   "*.example.com"
@@ -1059,7 +1182,10 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix](https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix)
@@ -1080,7 +1206,10 @@ string matching the pattern ^\[0-9]{4}-\[0-9]{2}-\[0-9]{2}$
 
 
 *Example:*
-` "2025-01-15" `
+
+```nix
+"2025-01-15"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix](https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix)
@@ -1117,7 +1246,10 @@ string
 
 
 *Example:*
-` "git-hooks.package is now pkgs.prek" `
+
+```nix
+"git-hooks.package is now pkgs.prek"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix](https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix)
@@ -1138,7 +1270,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix](https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix)
@@ -1159,12 +1294,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1189,13 +1330,16 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   code-reviewer = {
     description = "Expert code review specialist that checks for quality, security, and best practices";
@@ -1266,7 +1410,10 @@ null or one of “opus”, “sonnet”, “haiku”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1287,7 +1434,10 @@ null or one of “default”, “acceptEdits”, “plan”, “bypassPermission
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1308,7 +1458,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1345,7 +1498,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1367,12 +1523,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "aws secretsmanager get-secret-value --secret-id claude-api-key | jq -r .SecretString" `
+
+```nix
+"aws secretsmanager get-secret-value --secret-id claude-api-key | jq -r .SecretString"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1393,12 +1555,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 30 `
+
+```nix
+30
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1420,13 +1588,16 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-``````
+``````nix
 {
   test = ''
     Run all tests in the project
@@ -1466,13 +1637,16 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   NODE_ENV = "development";
   PYTHONPATH = "/custom/python/path";
@@ -1498,7 +1672,10 @@ null or one of “browser”, “api-key”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1519,13 +1696,16 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   protect-secrets = {
     enable = true;
@@ -1574,7 +1754,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1629,7 +1812,10 @@ one of “PreToolUse”, “PostToolUse”, “PostToolUseFailure”, “Notific
 
 
 *Default:*
-` "PostToolUse" `
+
+```nix
+"PostToolUse"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1650,7 +1836,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1689,7 +1878,7 @@ attribute set of (submodule)
 
 *Default:*
 
-```
+```nix
 {
   "mcp.devenv.sh" = {
     type = "http";
@@ -1702,7 +1891,7 @@ attribute set of (submodule)
 
 *Example:*
 
-```
+```nix
 {
   awslabs-iam-mcp-server = {
     type = "stdio";
@@ -1752,7 +1941,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1773,7 +1965,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1794,7 +1989,10 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1815,7 +2013,10 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1852,7 +2053,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1873,12 +2077,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "claude-3-opus-20240229" `
+
+```nix
+"claude-3-opus-20240229"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -1901,13 +2111,16 @@ open submodule of attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   defaultMode = "acceptEdits";
   disableBypassPermissionsMode = true;
@@ -1945,7 +2158,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
@@ -1963,7 +2179,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
@@ -1981,7 +2200,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
@@ -1999,13 +2221,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "/shared/libs"
   "/common/configs"
@@ -2036,12 +2261,18 @@ null or one of “default”, “acceptEdits”, “plan”, “bypassPermission
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "acceptEdits" `
+
+```nix
+"acceptEdits"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -2062,12 +2293,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -2088,7 +2325,10 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -2109,7 +2349,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -2130,7 +2373,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -2151,7 +2397,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -2172,7 +2421,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2193,7 +2445,10 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2215,12 +2470,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2241,7 +2502,10 @@ absolute path or list of absolute path
 
 
 *Default:*
-` self `
+
+```nix
+self
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2263,7 +2527,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2284,7 +2551,10 @@ list of anything
 
 
 *Default:*
-` [ entrypoint ] `
+
+```nix
+[ entrypoint ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2305,7 +2575,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2326,7 +2599,10 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2349,7 +2625,10 @@ list of package
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2370,7 +2649,10 @@ list of package
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2391,7 +2673,10 @@ null or path in the Nix store
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2412,7 +2697,10 @@ signed integer
 
 
 *Default:*
-` 1 `
+
+```nix
+1
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2435,7 +2723,10 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2456,12 +2747,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "1000" `
+
+```nix
+"1000"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2480,12 +2777,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "root" `
+
+```nix
+"root"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2506,12 +2809,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "644" `
+
+```nix
+"644"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2548,12 +2857,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` ".*" `
+
+```nix
+".*"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2574,12 +2889,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "1000" `
+
+```nix
+"1000"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2600,12 +2921,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "root" `
+
+```nix
+"root"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2626,7 +2953,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2647,7 +2977,10 @@ null or signed integer
 
 
 *Default:*
-` 1 `
+
+```nix
+1
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2668,7 +3001,10 @@ null or string
 
 
 *Default:*
-` "top-level name or containers.mycontainer.name" `
+
+```nix
+"top-level name or containers.mycontainer.name"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2689,7 +3025,10 @@ null or string
 
 
 *Default:*
-` "docker-daemon:" `
+
+```nix
+"docker-daemon:"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2714,7 +3053,10 @@ null or string or package or list of string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2735,7 +3077,10 @@ null or string
 
 
 *Default:*
-` "latest" `
+
+```nix
+"latest"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2756,7 +3101,10 @@ string
 
 
 *Default:*
-` "/env" `
+
+```nix
+"/env"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2777,7 +3125,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/delta.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/delta.nix)
@@ -2798,12 +3149,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
@@ -2824,7 +3181,10 @@ open submodule of (JSON value)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
@@ -2846,7 +3206,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "mkhl.direnv"
 ]
@@ -2871,7 +3231,10 @@ string
 
 
 *Default:*
-` "ghcr.io/cachix/devenv/devcontainer:latest" `
+
+```nix
+"ghcr.io/cachix/devenv/devcontainer:latest"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
@@ -2892,7 +3255,10 @@ anything
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
@@ -2913,7 +3279,10 @@ anything
 
 
 *Default:*
-` "devenv test" `
+
+```nix
+"devenv test"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
@@ -2950,12 +3319,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/debug.nix](https://github.com/cachix/devenv/blob/main/src/modules/debug.nix)
@@ -2997,7 +3372,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tests.nix](https://github.com/cachix/devenv/blob/main/src/modules/tests.nix)
@@ -3018,7 +3396,10 @@ string
 
 
 *Default:*
-` "1.11.2" `
+
+```nix
+"1.11.2"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
@@ -3039,7 +3420,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
@@ -3060,7 +3444,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/difftastic.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/difftastic.nix)
@@ -3081,12 +3468,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix)
@@ -3107,7 +3500,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix)
@@ -3128,7 +3524,10 @@ string or list of string
 
 
 *Default:*
-` ".env" `
+
+```nix
+".env"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix)
@@ -3149,7 +3548,10 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
@@ -3186,7 +3588,10 @@ open submodule of lazy attribute set of anything
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
@@ -3207,7 +3612,10 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
@@ -3228,7 +3636,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
@@ -3249,7 +3660,10 @@ null or (attribute set of section of an INI file (attrs of INI atom (null, bool,
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
@@ -3270,7 +3684,10 @@ null or JSON value
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
@@ -3291,7 +3708,10 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
@@ -3312,7 +3732,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
@@ -3333,7 +3756,10 @@ null or TOML value
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
@@ -3354,7 +3780,10 @@ null or YAML 1.1 value
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
@@ -3375,7 +3804,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix)
@@ -3396,7 +3828,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/git-hooks.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/git-hooks.nix)
@@ -3419,7 +3854,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -3442,7 +3880,10 @@ list of unspecified value
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -3463,12 +3904,18 @@ package
 
 
 *Default:*
-` pkgs.pre-commit `
+
+```nix
+pkgs.pre-commit
+```
 
 
 
 *Example:*
-` pkgs.prek `
+
+```nix
+pkgs.prek
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -3490,7 +3937,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -3511,7 +3961,10 @@ package *(read only)*
 
 
 *Default:*
-` "<derivation>" `
+
+```nix
+"<derivation>"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -3536,7 +3989,10 @@ string
 
 
 *Default:*
-` ".pre-commit-config.yaml" `
+
+```nix
+".pre-commit-config.yaml"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -3560,7 +4016,7 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 *Default:*
 
-```
+```nix
 [
   "pre-commit"
 ]
@@ -3585,7 +4041,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -3606,7 +4065,10 @@ package
 
 
 *Default:*
-` pkgs.gitMinimal `
+
+```nix
+pkgs.gitMinimal
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -4165,6 +4627,10 @@ Check for debugger imports and py37+ ` breakpoint() ` calls in python source.
 
 Automatically upgrade syntax for newer versions.
 
+**` regal `**
+
+A linter for Rego policies
+
 **` reuse `**
 
 reuse is a tool for compliance with the REUSE recommendations.
@@ -4327,7 +4793,10 @@ open submodule of attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -4349,7 +4818,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4370,7 +4842,10 @@ null or package
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4391,7 +4866,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4412,7 +4890,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4433,7 +4914,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4454,7 +4938,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4475,7 +4962,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4512,7 +5002,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4533,7 +5026,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4557,7 +5053,10 @@ list of package
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4578,7 +5077,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4599,7 +5101,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4639,7 +5144,10 @@ string
 
 
 *Default:*
-` "the attribute name the hook submodule is bound to" `
+
+```nix
+"the attribute name the hook submodule is bound to"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4652,6 +5160,14 @@ string
 
 The language of the hook - tells pre-commit how to install the hook.
 
+Defaults to ` "system" `, or ` "unsupported" ` when using pre-commit >= 4.4.0.
+
+Note: ` "unsupported" ` does not mean deprecated.
+Pre-commit >= 4.4.0 renamed ` "system" ` to ` "unsupported" ` because
+when using this language pre-commit does not provision the tools, and using externally
+managed tools (e.g. via Nix) is not an officially supported workflow.
+Both values are functionally equivalent.
+
 
 
 *Type:*
@@ -4660,7 +5176,10 @@ string
 
 
 *Default:*
-` "system" `
+
+```nix
+"system" or "unsupported" depending on pre-commit version
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4681,7 +5200,10 @@ string
 
 
 *Default:*
-`` the attribute name the hook submodule is bound to, same as `id` ``
+
+````nix
+the attribute name the hook submodule is bound to, same as `id`
+````
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4702,7 +5224,37 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.\<name>.priority
+
+
+
+Defines the order in which the hooks are executed. Default priority is set by the order in the list of hooks.
+Evaluation goes from 0 and up.
+If two hooks have the same priority, they’ll run in parallel.
+This works only if cfg.package is set to prek.
+
+
+
+*Type:*
+null or 32 bit unsigned integer; between 0 and 4294967295 (both inclusive)
+
+
+
+*Default:*
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4742,7 +5294,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4763,7 +5318,10 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 
 *Default:*
-` default_stages `
+
+```nix
+default_stages
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4785,7 +5343,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "file"
 ]
@@ -4810,7 +5368,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4831,7 +5392,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4868,7 +5432,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4889,7 +5456,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4910,12 +5480,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -4936,7 +5512,10 @@ null or string or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -4957,13 +5536,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "flake.nix"
   "./templates"
@@ -4989,12 +5571,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 8 `
+
+```nix
+8
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5015,12 +5603,18 @@ one of “normal”, “quiet”, “silent”
 
 
 *Default:*
-` "normal" `
+
+```nix
+"normal"
+```
 
 
 
 *Example:*
-` "quiet" `
+
+```nix
+"quiet"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5057,7 +5651,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5078,7 +5675,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5099,7 +5699,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5120,7 +5723,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5157,7 +5763,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5178,7 +5787,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5200,7 +5812,7 @@ null or string
 
 *Default:*
 
-```
+```nix
 "${tools.autoflake}/bin/autoflake"
 
 ```
@@ -5224,7 +5836,10 @@ string
 
 
 *Default:*
-` "--in-place --expand-star-imports --remove-duplicate-keys --remove-unused-variables" `
+
+```nix
+"--in-place --expand-star-imports --remove-duplicate-keys --remove-unused-variables"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5261,7 +5876,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5282,7 +5900,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5306,7 +5927,7 @@ null or string or absolute path
 
 *Default:*
 
-```
+```nix
 "${tools.biome}/bin/biome"
 
 ```
@@ -5315,7 +5936,7 @@ null or string or absolute path
 
 *Example:*
 
-```
+```nix
 "./node_modules/.bin/biome"
 
 ```
@@ -5339,7 +5960,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5360,7 +5984,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5385,6 +6012,8 @@ submodule
 
 ## git-hooks.hooks.black.enable
 
+
+
 Whether to enable this pre-commit hook.
 
 
@@ -5395,7 +6024,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5403,8 +6035,6 @@ boolean
 
 
 ## git-hooks.hooks.black.description
-
-
 
 Description of the hook. Used for metadata purposes only.
 
@@ -5416,7 +6046,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5437,12 +6070,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "--skip-magic-trailing-comma" `
+
+```nix
+"--skip-magic-trailing-comma"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5479,7 +6118,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5500,7 +6142,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5521,7 +6166,10 @@ string
 
 
 *Default:*
-` "default.nix" `
+
+```nix
+"default.nix"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5558,7 +6206,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5611,7 +6262,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5632,7 +6286,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5653,7 +6310,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5674,7 +6334,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5695,7 +6358,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5732,7 +6398,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5753,7 +6422,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5774,12 +6446,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` ".cmake-format.json" `
+
+```nix
+".cmake-format.json"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5816,7 +6494,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5837,7 +6518,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5858,7 +6542,10 @@ null or string or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5895,7 +6582,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5916,7 +6606,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5937,7 +6630,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5974,7 +6670,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5995,7 +6694,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6016,7 +6718,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6037,7 +6742,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6058,7 +6766,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6079,7 +6790,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6100,7 +6814,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6121,7 +6838,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6142,7 +6862,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6179,7 +6902,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6200,7 +6926,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6221,7 +6950,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6242,7 +6974,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6279,7 +7014,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6300,7 +7038,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6321,7 +7062,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6342,7 +7086,10 @@ one of “default”, “compact”, “json”
 
 
 *Default:*
-` "default" `
+
+```nix
+"default"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6379,7 +7126,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6400,7 +7150,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6421,7 +7174,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6442,7 +7198,10 @@ list of package
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6479,7 +7238,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6500,7 +7262,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6521,7 +7286,10 @@ one of “auto”, “always”, “never”
 
 
 *Default:*
-` "auto" `
+
+```nix
+"auto"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6542,7 +7310,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6563,7 +7334,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6584,7 +7358,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6605,7 +7382,10 @@ one of 0, 1, 2, 3, 4
 
 
 *Default:*
-` 0 `
+
+```nix
+0
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6642,7 +7422,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6663,7 +7446,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6687,7 +7473,7 @@ null or string or absolute path
 
 *Default:*
 
-```
+```nix
 "${tools.eslint}/bin/eslint"
 
 ```
@@ -6696,7 +7482,7 @@ null or string or absolute path
 
 *Example:*
 
-```
+```nix
 "./node_modules/.bin/eslint"
 
 ```
@@ -6720,7 +7506,10 @@ string
 
 
 *Default:*
-` "\.js$" `
+
+```nix
+"\.js$"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6757,7 +7546,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6778,7 +7570,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6800,7 +7595,7 @@ null or string
 
 *Default:*
 
-```
+```nix
 "${tools.flake8}/bin/flake8"
 
 ```
@@ -6824,13 +7619,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "E501"
 ]
@@ -6855,7 +7653,10 @@ string
 
 
 *Default:*
-` "default" `
+
+```nix
+"default"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6892,7 +7693,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6913,7 +7717,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6934,7 +7741,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6955,7 +7765,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6976,7 +7789,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6997,7 +7813,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7018,7 +7837,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7039,7 +7861,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7060,7 +7885,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7081,7 +7909,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7102,7 +7933,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7123,7 +7957,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7144,7 +7981,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7181,7 +8021,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7202,7 +8045,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7223,7 +8069,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7260,7 +8109,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7281,7 +8133,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7302,12 +8157,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "-m 120" `
+
+```nix
+"-m 120"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7344,7 +8205,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7365,7 +8229,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7386,12 +8253,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "-tags integration" `
+
+```nix
+"-tags integration"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7416,8 +8289,6 @@ submodule
 
 ## git-hooks.hooks.headache.enable
 
-
-
 Whether to enable this pre-commit hook.
 
 
@@ -7428,7 +8299,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7449,7 +8323,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7457,6 +8334,8 @@ string
 
 
 ## git-hooks.hooks.headache.settings.header-file
+
+
 
 Path to the header file.
 
@@ -7468,7 +8347,10 @@ string
 
 
 *Default:*
-` ".header" `
+
+```nix
+".header"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7505,7 +8387,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7526,7 +8411,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7547,7 +8435,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7584,7 +8475,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7605,7 +8499,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7626,7 +8523,10 @@ null or string or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7663,7 +8563,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7684,7 +8587,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7705,7 +8611,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7742,7 +8651,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7763,7 +8675,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7784,7 +8699,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7805,7 +8723,10 @@ one of “”, “black”, “django”, “pycharm”, “google”, “open_s
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7842,7 +8763,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7863,7 +8787,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7900,7 +8827,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7921,7 +8851,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7942,7 +8875,10 @@ string
 
 
 *Default:*
-` "--local --silent --overwriteIfDifferent" `
+
+```nix
+"--local --silent --overwriteIfDifferent"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -7979,7 +8915,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8000,7 +8939,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8021,7 +8963,10 @@ one of “Error”, “Warning”, “Information”, “Hint”
 
 
 *Default:*
-` "Warning" `
+
+```nix
+"Warning"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8042,7 +8987,10 @@ attribute set
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8079,7 +9027,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8100,7 +9051,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8121,7 +9075,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8142,7 +9099,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8179,7 +9139,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8200,7 +9163,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8221,7 +9187,10 @@ attribute set
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8258,7 +9227,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8279,7 +9251,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8300,7 +9275,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8321,7 +9299,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8342,7 +9323,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8363,7 +9347,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8384,7 +9371,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8405,7 +9395,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8426,7 +9419,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8447,7 +9443,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8468,7 +9467,10 @@ string
 
 
 *Default:*
-` "default" `
+
+```nix
+"default"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8489,7 +9491,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8510,7 +9515,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8531,7 +9539,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8568,7 +9579,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8589,7 +9603,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8611,7 +9628,7 @@ null or string or absolute path
 
 *Default:*
 
-```
+```nix
 "${tools.mkdocs-linkcheck}/bin/mkdocs-linkcheck"
 
 ```
@@ -8635,7 +9652,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8656,7 +9676,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8677,7 +9700,10 @@ one of “get”, “head”
 
 
 *Default:*
-` "get" `
+
+```nix
+"get"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8698,7 +9724,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8719,7 +9748,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -8756,7 +9788,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8777,7 +9812,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8799,7 +9837,7 @@ null or string
 
 *Default:*
 
-```
+```nix
 "${tools.mypy}/bin/mypy"
 
 ```
@@ -8839,7 +9877,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8860,10 +9901,101 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.nil
+
+
+
+nil hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.nil.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.nil.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+""
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.nil.settings.denyWarnings
+
+
+
+Treat warnings like errors and exit with non-zero code
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
@@ -8897,7 +10029,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8918,7 +10053,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8955,7 +10093,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8976,7 +10117,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8997,7 +10141,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -9018,7 +10165,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -9055,7 +10205,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9076,7 +10229,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9097,7 +10253,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -9134,7 +10293,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9155,7 +10317,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9176,7 +10341,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -9197,7 +10365,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -9234,7 +10405,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9255,7 +10429,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9277,7 +10454,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "main"
 ]
@@ -9287,7 +10464,7 @@ list of string
 
 *Example:*
 
-```
+```nix
 [
   "main"
   "master"
@@ -9313,13 +10490,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "ma.*"
 ]
@@ -9360,7 +10540,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9381,7 +10564,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9402,7 +10588,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -9423,7 +10612,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -9460,7 +10652,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9481,7 +10676,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9503,7 +10701,7 @@ null or string
 
 *Default:*
 
-```
+```nix
 "${tools.php-cs-fixer}/bin/php-cs-fixer"
 
 ```
@@ -9543,7 +10741,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9564,7 +10765,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9586,7 +10790,7 @@ null or string
 
 *Default:*
 
-```
+```nix
 "${tools.phpcbf}/bin/phpcbf"
 
 ```
@@ -9626,7 +10830,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9647,7 +10854,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9669,7 +10879,7 @@ null or string
 
 *Default:*
 
-```
+```nix
 "${tools.phpcs}/bin/phpcs"
 
 ```
@@ -9709,7 +10919,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9730,7 +10943,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9752,7 +10968,7 @@ null or string
 
 *Default:*
 
-```
+```nix
 "${tools.phpstan}/bin/phpstan"
 
 ```
@@ -9792,7 +11008,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9813,7 +11032,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9834,7 +11056,10 @@ one of “always”, “avoid”
 
 
 *Default:*
-` "always" `
+
+```nix
+"always"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -9858,7 +11083,7 @@ null or string or absolute path
 
 *Default:*
 
-```
+```nix
 "${tools.prettier}/bin/prettier"
 
 ```
@@ -9867,7 +11092,7 @@ null or string or absolute path
 
 *Example:*
 
-```
+```nix
 "./node_modules/.bin/prettier"
 
 ```
@@ -9891,7 +11116,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -9912,7 +11140,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -9933,7 +11164,10 @@ string
 
 
 *Default:*
-` "./node_modules/.cache/prettier/.prettier-cache" `
+
+```nix
+"./node_modules/.cache/prettier/.prettier-cache"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -9954,7 +11188,10 @@ null or one of “metadata”, “content”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -9975,7 +11212,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -9996,7 +11236,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10017,7 +11260,10 @@ one of “cli-override”, “file-override”, “prefer-file”
 
 
 *Default:*
-` "cli-override" `
+
+```nix
+"cli-override"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10038,7 +11284,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10059,7 +11308,10 @@ one of “auto”, “off”
 
 
 *Default:*
-` "auto" `
+
+```nix
+"auto"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10080,7 +11332,10 @@ one of “lf”, “crlf”, “cr”, “auto”
 
 
 *Default:*
-` "lf" `
+
+```nix
+"lf"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10101,7 +11356,10 @@ one of “css”, “strict”, “ignore”
 
 
 *Default:*
-` "css" `
+
+```nix
+"css"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10124,7 +11382,10 @@ list of (string or absolute path)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10145,7 +11406,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10166,7 +11430,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10187,7 +11454,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10208,7 +11478,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10229,12 +11502,18 @@ one of “silent”, “error”, “warn”, “log”, “debug”
 
 
 *Default:*
-` "log" `
+
+```nix
+"log"
+```
 
 
 
 *Example:*
-` "debug" `
+
+```nix
+"debug"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10255,7 +11534,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10276,7 +11558,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10297,7 +11582,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10318,7 +11606,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10339,7 +11630,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10360,7 +11654,10 @@ one of “”, “flow”, “babel”, “babel-flow”, “babel-ts”, “typ
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10381,7 +11678,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10402,7 +11702,10 @@ signed integer
 
 
 *Default:*
-` 80 `
+
+```nix
+80
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10423,7 +11726,10 @@ one of “always”, “never”, “preserve”
 
 
 *Default:*
-` "preserve" `
+
+```nix
+"preserve"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10444,7 +11750,10 @@ one of “as-needed”, “consistent”, “preserve”
 
 
 *Default:*
-` "as-needed" `
+
+```nix
+"as-needed"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10465,7 +11774,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10486,7 +11798,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10507,7 +11822,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10528,7 +11846,10 @@ signed integer
 
 
 *Default:*
-` 2 `
+
+```nix
+2
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10549,7 +11870,10 @@ one of “all”, “es5”, “none”
 
 
 *Default:*
-` "all" `
+
+```nix
+"all"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10570,7 +11894,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10591,7 +11918,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10612,7 +11942,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10633,7 +11966,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10670,7 +12006,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -10691,7 +12030,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -10712,7 +12054,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10733,7 +12078,10 @@ null or signed integer or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10754,7 +12102,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10775,7 +12126,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10796,7 +12150,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10833,7 +12190,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -10854,7 +12214,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -10875,13 +12238,16 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   {
     "checks": {
@@ -10910,7 +12276,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10931,7 +12300,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -10968,7 +12340,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -10989,7 +12364,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11011,7 +12389,7 @@ null or string
 
 *Default:*
 
-```
+```nix
 "${tools.psalm}/bin/psalm"
 
 ```
@@ -11051,7 +12429,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11072,7 +12453,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11094,7 +12478,7 @@ null or string
 
 *Default:*
 
-```
+```nix
 "${tools.pylint}/bin/pylint"
 
 ```
@@ -11118,7 +12502,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11139,7 +12526,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11176,7 +12566,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11197,7 +12590,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11219,7 +12615,7 @@ null or string
 
 *Default:*
 
-```
+```nix
 "${tools.pyright}/bin/pyright"
 
 ```
@@ -11259,7 +12655,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11280,7 +12679,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11302,9 +12704,105 @@ null or string
 
 *Default:*
 
-```
+```nix
 "${tools.pyupgrade}/bin/pyupgrade"
 
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.regal
+
+
+
+regal hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.regal.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.regal.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+""
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.regal.settings.flags
+
+
+
+Flags passed to regal. For available options run ‘regal lint --help’
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+""
+```
+
+
+
+*Example:*
+
+```nix
+"--disable-category style"
 ```
 
 *Declared by:*
@@ -11342,7 +12840,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11363,7 +12864,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11384,12 +12888,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "--json" `
+
+```nix
+"--json"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11426,7 +12936,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11447,7 +12960,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11468,7 +12984,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11505,7 +13024,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11526,7 +13048,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11547,7 +13072,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11584,7 +13112,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11605,7 +13136,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11626,13 +13160,16 @@ attribute set
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   configuration = {
     MD013 = {
@@ -11684,7 +13221,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11737,7 +13277,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11758,7 +13301,10 @@ list of string matching the pattern \[]\[\*?!0-9A-Za-z_-]+
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11779,7 +13325,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11800,7 +13349,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11821,7 +13373,10 @@ one of “auto”, “always”, “never”
 
 
 *Default:*
-` "always" `
+
+```nix
+"always"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11842,7 +13397,10 @@ attribute set
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11863,7 +13421,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11884,7 +13445,10 @@ null or one of “files”, “stdout”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11901,7 +13465,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11922,7 +13489,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11943,7 +13513,10 @@ null or one of “human”, “short”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11964,7 +13537,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12001,7 +13577,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12022,10 +13601,157 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.shfmt.settings.binary-next-line
+
+
+
+Binary ops like \&\& and | may start a line.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.shfmt.settings.case-indent
+
+
+
+Switch cases will be indented.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.shfmt.settings.func-next-line
+
+
+
+Function opening braces are placed on a separate line.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.shfmt.settings.indent
+
+
+
+0 for tabs, >0 for number of spaces.
+
+
+
+*Type:*
+null or signed integer or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.shfmt.settings.keep-padding
+
+
+
+Keep column alignment paddings.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.shfmt.settings.language-dialect
+
+
+
+Shell language dialect.
+
+
+
+*Type:*
+null or one of “auto”, “bash”, “posix”, “mksh”, “bats”
+
+
+
+*Default:*
+
+```nix
+"auto"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
@@ -12043,7 +13769,34 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.shfmt.settings.space-redirects
+
+
+
+Redirect operators will be followed by a space.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12080,7 +13833,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12101,7 +13857,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12122,7 +13881,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12143,7 +13905,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12180,7 +13945,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12201,7 +13969,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12222,7 +13993,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12243,7 +14017,10 @@ one of “stderr”, “errfmt”, “json”
 
 
 *Default:*
-` "errfmt" `
+
+```nix
+"errfmt"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12264,13 +14041,16 @@ null or (list of string)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "flake.nix"
   "_*"
@@ -12296,12 +14076,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12353,7 +14139,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12390,7 +14179,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12411,7 +14203,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12432,7 +14227,10 @@ list of package
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12453,7 +14251,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12490,7 +14291,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12511,7 +14315,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12532,7 +14339,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12553,7 +14363,10 @@ one of “auto”, “always”, “never”
 
 
 *Default:*
-` "auto" `
+
+```nix
+"auto"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12574,13 +14387,16 @@ TOML value
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   default = {
     binary = false;
@@ -12615,12 +14431,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` ".typos.toml" `
+
+```nix
+".typos.toml"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12641,7 +14463,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12662,13 +14487,16 @@ Ignore files and directories matching one of the globs.
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "*.nix"
 ]
@@ -12693,12 +14521,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12719,7 +14553,10 @@ one of “silent”, “brief”, “long”, “json”
 
 
 *Default:*
-` "long" `
+
+```nix
+"long"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12740,7 +14577,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12761,13 +14601,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "MQTT"
   "mosquitto"
@@ -12793,7 +14636,10 @@ one of “en”, “en-us”, “en-gb”, “en-ca”, “en-au”
 
 
 *Default:*
-` "en" `
+
+```nix
+"en"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12814,7 +14660,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12835,7 +14684,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12856,7 +14708,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12877,7 +14732,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12898,7 +14756,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12919,7 +14780,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12956,7 +14820,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12977,7 +14844,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12998,7 +14868,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13019,12 +14892,18 @@ one of “requirements.txt”, “pylock.toml”
 
 
 *Default:*
-` "pylock.toml" `
+
+```nix
+"pylock.toml"
+```
 
 
 
 *Example:*
-` "requirements.txt" `
+
+```nix
+"requirements.txt"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13046,7 +14925,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13083,7 +14965,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -13104,7 +14989,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -13125,7 +15013,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13146,13 +15037,16 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   MinAlertLevel = suggestion
   [*]
@@ -13179,7 +15073,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13216,7 +15113,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -13237,7 +15137,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -13258,7 +15161,10 @@ strings concatenated with “,”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13281,7 +15187,10 @@ strings concatenated with “,”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13302,12 +15211,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13329,12 +15244,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` ".woodpecker.yml" `
+
+```nix
+".woodpecker.yml"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13371,7 +15292,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -13392,7 +15316,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -13413,12 +15340,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` ".yamlfmt" `
+
+```nix
+".yamlfmt"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13439,7 +15372,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13476,7 +15412,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -13497,7 +15436,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -13518,12 +15460,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "{extends: relaxed, rules: {line-length: {max: 120}}}" `
+
+```nix
+"{extends: relaxed, rules: {line-length: {max: 120}}}"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13544,7 +15492,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13565,13 +15516,16 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   ---
   
@@ -13601,7 +15555,10 @@ one of “parsable”, “standard”, “colored”, “github”, “auto”
 
 
 *Default:*
-` "auto" `
+
+```nix
+"auto"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13622,7 +15579,10 @@ one of “default”, “relaxed”
 
 
 *Default:*
-` "default" `
+
+```nix
+"default"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13643,7 +15603,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13667,7 +15630,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -13688,7 +15654,10 @@ list of (string or anything) *(read only)*
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -13730,7 +15699,10 @@ absolute path
 
 
 *Default:*
-` gitignoreSource config.src `
+
+```nix
+gitignoreSource config.src
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -13752,7 +15724,10 @@ package
 
 
 *Default:*
-` <derivation> `
+
+```nix
+<derivation>
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -13773,7 +15748,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13794,12 +15772,18 @@ null or (attribute set)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; }" `
+
+```nix
+"pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; }"
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -13861,7 +15845,7 @@ lazy attribute set of (null or package)
 
 *Default:*
 
-```
+```nix
 git-hooks.nix-pkgs.callPackage tools-dot-nix { inherit (pkgs) system; }
 
 ```
@@ -13885,13 +15869,16 @@ attribute set of (string or list of string)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   "another-example.com" = [
     "::1"
@@ -13920,7 +15907,10 @@ string
 
 
 *Default:*
-` "devenv-<hash>" `
+
+```nix
+"devenv-<hash>"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/hostctl.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/hostctl.nix)
@@ -13941,7 +15931,10 @@ attribute set of list of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/info.nix](https://github.com/cachix/devenv/blob/main/src/modules/info.nix)
@@ -13962,13 +15955,16 @@ list of package
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   pkgs.hello
   (pkgs.python3.withPackages (ps: [ ps.numpy ps.pandas ]))
@@ -13995,12 +15991,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "mykey.pem" `
+
+```nix
+"mykey.pem"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix)
@@ -14021,12 +16023,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)
@@ -14047,7 +16055,10 @@ package
 
 
 *Default:*
-` pkgs.ansible `
+
+```nix
+pkgs.ansible
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)
@@ -14068,12 +16079,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)
@@ -14094,7 +16111,10 @@ null or package
 
 
 *Default:*
-` pkgs.ansible-language-server `
+
+```nix
+pkgs.ansible-language-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)
@@ -14115,12 +16135,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix)
@@ -14142,7 +16168,10 @@ null or package
 
 
 *Default:*
-` pkgs.gdb `
+
+```nix
+pkgs.gdb
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix)
@@ -14163,12 +16192,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix)
@@ -14189,7 +16224,10 @@ package
 
 
 *Default:*
-` pkgs.ccls `
+
+```nix
+pkgs.ccls
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix)
@@ -14210,12 +16248,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix)
@@ -14236,12 +16280,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix)
@@ -14262,7 +16312,10 @@ package
 
 
 *Default:*
-` pkgs.clojure-lsp `
+
+```nix
+pkgs.clojure-lsp
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix)
@@ -14283,12 +16336,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix)
@@ -14309,12 +16368,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix)
@@ -14335,7 +16400,10 @@ package
 
 
 *Default:*
-` pkgs.ccls `
+
+```nix
+pkgs.ccls
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix)
@@ -14356,12 +16424,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
@@ -14382,7 +16456,10 @@ package
 
 
 *Default:*
-` pkgs.crystal `
+
+```nix
+pkgs.crystal
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
@@ -14403,12 +16480,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
@@ -14429,7 +16512,10 @@ package
 
 
 *Default:*
-` pkgs.crystalline `
+
+```nix
+pkgs.crystalline
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
@@ -14450,7 +16536,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
@@ -14471,7 +16560,10 @@ package
 
 
 *Default:*
-` pkgs.shards `
+
+```nix
+pkgs.shards
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
@@ -14492,12 +16584,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)
@@ -14518,7 +16616,10 @@ package
 
 
 *Default:*
-` pkgs.cue `
+
+```nix
+pkgs.cue
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)
@@ -14539,12 +16640,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)
@@ -14565,7 +16672,10 @@ package
 
 
 *Default:*
-` pkgs.cuelsp `
+
+```nix
+pkgs.cuelsp
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)
@@ -14586,12 +16696,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix)
@@ -14612,7 +16728,10 @@ package
 
 
 *Default:*
-` pkgs.dart `
+
+```nix
+pkgs.dart
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix)
@@ -14633,12 +16752,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/deno.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/deno.nix)
@@ -14659,7 +16784,10 @@ package
 
 
 *Default:*
-` pkgs.deno `
+
+```nix
+pkgs.deno
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/deno.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/deno.nix)
@@ -14680,12 +16808,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
@@ -14706,7 +16840,10 @@ package
 
 
 *Default:*
-` pkgs.dotnet-sdk `
+
+```nix
+pkgs.dotnet-sdk
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
@@ -14732,7 +16869,10 @@ boolean
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
@@ -14753,7 +16893,10 @@ package
 
 
 *Default:*
-` pkgs.csharp-ls `
+
+```nix
+pkgs.csharp-ls
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
@@ -14774,12 +16917,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)
@@ -14800,7 +16949,10 @@ package
 
 
 *Default:*
-` pkgs.elixir `
+
+```nix
+pkgs.elixir
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)
@@ -14821,12 +16973,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)
@@ -14847,7 +17005,10 @@ package
 
 
 *Default:*
-` pkgs.elixir-ls `
+
+```nix
+pkgs.elixir-ls
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)
@@ -14868,12 +17029,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix)
@@ -14894,12 +17061,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix)
@@ -14920,7 +17093,10 @@ package
 
 
 *Default:*
-` pkgs.elmPackages.elm-language-server `
+
+```nix
+pkgs.elmPackages.elm-language-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix)
@@ -14941,12 +17117,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)
@@ -14967,7 +17149,10 @@ package
 
 
 *Default:*
-` pkgs.erlang `
+
+```nix
+pkgs.erlang
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)
@@ -14988,12 +17173,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)
@@ -15014,7 +17205,10 @@ package
 
 
 *Default:*
-` pkgs.erlang-language-platform `
+
+```nix
+pkgs.erlang-language-platform
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)
@@ -15035,12 +17229,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix)
@@ -15061,7 +17261,10 @@ package
 
 
 *Default:*
-` pkgs.gfortran `
+
+```nix
+pkgs.gfortran
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix)
@@ -15082,12 +17285,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix)
@@ -15108,7 +17317,10 @@ package
 
 
 *Default:*
-` pkgs.fortls `
+
+```nix
+pkgs.fortls
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix)
@@ -15129,12 +17341,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/gawk.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/gawk.nix)
@@ -15155,12 +17373,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/gleam.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/gleam.nix)
@@ -15181,7 +17405,10 @@ package
 
 
 *Default:*
-` pkgs.gleam `
+
+```nix
+pkgs.gleam
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/gleam.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/gleam.nix)
@@ -15202,12 +17429,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
@@ -15228,7 +17461,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
@@ -15249,7 +17485,10 @@ package
 
 
 *Default:*
-` pkgs.go `
+
+```nix
+pkgs.go
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
@@ -15270,12 +17509,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
@@ -15296,7 +17541,10 @@ package
 
 
 *Default:*
-` pkgs.gopls `
+
+```nix
+pkgs.gopls
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
@@ -15318,12 +17566,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "1.22.0" `
+
+```nix
+"1.22.0"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
@@ -15344,12 +17598,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/hare.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/hare.nix)
@@ -15370,12 +17630,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
@@ -15396,7 +17662,10 @@ package
 
 
 *Default:*
-` pkgs.ghc `
+
+```nix
+pkgs.ghc
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
@@ -15417,7 +17686,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
@@ -15438,7 +17710,10 @@ package
 
 
 *Default:*
-` pkgs.cabal-install `
+
+```nix
+pkgs.cabal-install
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
@@ -15459,12 +17734,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
@@ -15485,7 +17766,10 @@ package
 
 
 *Default:*
-` pkgs.haskell-language-server `
+
+```nix
+pkgs.haskell-language-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
@@ -15506,7 +17790,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
@@ -15527,7 +17814,10 @@ package
 
 
 *Default:*
-` pkgs.stack `
+
+```nix
+pkgs.stack
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
@@ -15549,7 +17839,10 @@ list of string
 
 
 *Default:*
-` [ "--no-nix" "--system-ghc" "--no-install-ghc" ] `
+
+```nix
+[ "--no-nix" "--system-ghc" "--no-install-ghc" ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
@@ -15570,12 +17863,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
@@ -15596,7 +17895,10 @@ package
 
 
 *Default:*
-` pkgs.kubernetes-helm `
+
+```nix
+pkgs.kubernetes-helm
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
@@ -15617,12 +17919,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
@@ -15643,7 +17951,10 @@ package
 
 
 *Default:*
-` pkgs.helm-ls `
+
+```nix
+pkgs.helm-ls
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
@@ -15666,13 +17977,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "helm-secrets"
   "helm-diff"
@@ -15699,12 +18013,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)
@@ -15725,12 +18045,18 @@ package
 
 
 *Default:*
-` pkgs.idris2 `
+
+```nix
+pkgs.idris2
+```
 
 
 
 *Example:*
-` pkgs.idris `
+
+```nix
+pkgs.idris
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)
@@ -15751,12 +18077,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)
@@ -15777,7 +18109,10 @@ package
 
 
 *Default:*
-` pkgs.idris2Packages.idris2Lsp `
+
+```nix
+pkgs.idris2Packages.idris2Lsp
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)
@@ -15798,12 +18133,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
@@ -15824,12 +18165,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
@@ -15851,7 +18198,10 @@ package
 
 
 *Default:*
-` pkgs.gradle.override { java = cfg.jdk.package; } `
+
+```nix
+pkgs.gradle.override { java = cfg.jdk.package; }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
@@ -15873,12 +18223,18 @@ package
 
 
 *Default:*
-` pkgs.jdk `
+
+```nix
+pkgs.jdk
+```
 
 
 
 *Example:*
-` pkgs.jdk8 `
+
+```nix
+pkgs.jdk8
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
@@ -15899,12 +18255,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
@@ -15925,7 +18287,10 @@ package
 
 
 *Default:*
-` pkgs.jdt-language-server `
+
+```nix
+pkgs.jdt-language-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
@@ -15946,12 +18311,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
@@ -15973,7 +18344,10 @@ package
 
 
 *Default:*
-` pkgs.maven.override { jdk_headless = cfg.jdk.package; } `
+
+```nix
+pkgs.maven.override { jdk_headless = cfg.jdk.package; }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
@@ -15994,12 +18368,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16020,7 +18400,10 @@ package
 
 
 *Default:*
-` pkgs.nodejs-slim `
+
+```nix
+pkgs.nodejs-slim
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16041,12 +18424,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16067,7 +18456,10 @@ package
 
 
 *Default:*
-` pkgs.bun `
+
+```nix
+pkgs.bun
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16088,12 +18480,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16114,12 +18512,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16141,12 +18545,18 @@ string
 
 
 *Default:*
-` config.devenv.root `
+
+```nix
+config.devenv.root
+```
 
 
 
 *Example:*
-` "./directory" `
+
+```nix
+"./directory"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16167,12 +18577,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16193,7 +18609,10 @@ package
 
 
 *Default:*
-` pkgs.typescript-language-server `
+
+```nix
+pkgs.typescript-language-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16214,12 +18633,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16240,7 +18665,10 @@ package
 
 
 *Default:*
-` languages.javascript.package `
+
+```nix
+languages.javascript.package
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16261,12 +18689,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16287,12 +18721,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16313,7 +18753,10 @@ package
 
 
 *Default:*
-` pkgs.nodePackages.pnpm `
+
+```nix
+pkgs.nodePackages.pnpm
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16334,12 +18777,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16360,12 +18809,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16386,7 +18841,10 @@ package
 
 
 *Default:*
-` pkgs.yarn `
+
+```nix
+pkgs.yarn
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16407,12 +18865,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -16433,12 +18897,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/jsonnet.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/jsonnet.nix)
@@ -16459,12 +18929,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/jsonnet.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/jsonnet.nix)
@@ -16485,7 +18961,10 @@ package
 
 
 *Default:*
-` pkgs.jsonnet-language-server `
+
+```nix
+pkgs.jsonnet-language-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/jsonnet.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/jsonnet.nix)
@@ -16506,12 +18985,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix)
@@ -16532,7 +19017,10 @@ package
 
 
 *Default:*
-` pkgs.julia-bin `
+
+```nix
+pkgs.julia-bin
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix)
@@ -16553,12 +19041,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix)
@@ -16579,12 +19073,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix)
@@ -16605,7 +19105,10 @@ package
 
 
 *Default:*
-` pkgs.kotlin-language-server `
+
+```nix
+pkgs.kotlin-language-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix)
@@ -16626,12 +19129,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix)
@@ -16652,7 +19161,10 @@ package
 
 
 *Default:*
-` pkgs.lean4 `
+
+```nix
+pkgs.lean4
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix)
@@ -16673,12 +19185,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)
@@ -16699,7 +19217,10 @@ package
 
 
 *Default:*
-` pkgs.lua `
+
+```nix
+pkgs.lua
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)
@@ -16720,12 +19241,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)
@@ -16746,7 +19273,10 @@ package
 
 
 *Default:*
-` pkgs.lua-language-server `
+
+```nix
+pkgs.lua-language-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)
@@ -16767,12 +19297,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
@@ -16793,7 +19329,10 @@ package
 
 
 *Default:*
-` pkgs.nim `
+
+```nix
+pkgs.nim
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
@@ -16814,12 +19353,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
@@ -16840,7 +19385,10 @@ package
 
 
 *Default:*
-` pkgs.nimlangserver `
+
+```nix
+pkgs.nimlangserver
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
@@ -16861,12 +19409,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix)
@@ -16887,12 +19441,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix)
@@ -16913,7 +19473,10 @@ package
 
 
 *Default:*
-` pkgs.nixd `
+
+```nix
+pkgs.nixd
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix)
@@ -16934,12 +19497,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)
@@ -16960,7 +19529,10 @@ attribute set
 
 
 *Default:*
-` pkgs.ocaml-ng.ocamlPackages_4_12 `
+
+```nix
+pkgs.ocaml-ng.ocamlPackages_4_12
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)
@@ -16981,12 +19553,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)
@@ -17007,7 +19585,10 @@ package
 
 
 *Default:*
-` pkgs.ocamlPackages.ocaml-lsp `
+
+```nix
+pkgs.ocamlPackages.ocaml-lsp
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)
@@ -17028,12 +19609,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
@@ -17054,7 +19641,10 @@ package
 
 
 *Default:*
-` pkgs.odin `
+
+```nix
+pkgs.odin
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
@@ -17076,7 +19666,10 @@ null or package
 
 
 *Default:*
-` pkgs.gdb `
+
+```nix
+pkgs.gdb
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
@@ -17097,12 +19690,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
@@ -17123,7 +19722,10 @@ package
 
 
 *Default:*
-` pkgs.ols `
+
+```nix
+pkgs.ols
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
@@ -17144,12 +19746,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)
@@ -17170,7 +19778,10 @@ package
 
 
 *Default:*
-` pkgs.opentofu `
+
+```nix
+pkgs.opentofu
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)
@@ -17191,12 +19802,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)
@@ -17217,7 +19834,10 @@ package
 
 
 *Default:*
-` pkgs.terraform-ls `
+
+```nix
+pkgs.terraform-ls
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)
@@ -17238,12 +19858,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix)
@@ -17264,12 +19890,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix)
@@ -17290,12 +19922,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix)
@@ -17316,13 +19954,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "Mojolicious"
 ]
@@ -17347,12 +19988,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix)
@@ -17373,7 +20020,10 @@ package
 
 
 *Default:*
-` pkgs.perlnavigator `
+
+```nix
+pkgs.perlnavigator
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix)
@@ -17394,12 +20044,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17422,13 +20078,16 @@ package
 
 
 *Default:*
-` pkgs.php `
+
+```nix
+pkgs.php
+```
 
 
 
 *Example:*
 
-```
+```nix
 pkgs.php.buildEnv {
   extensions = { all, enabled }: with all; enabled ++ [ xdebug ];
   extraConfig = ''
@@ -17457,7 +20116,10 @@ submodule
 
 
 *Default:*
-` pkgs `
+
+```nix
+pkgs
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17478,7 +20140,10 @@ null or package
 
 
 *Default:*
-` pkgs.phpPackages.composer `
+
+```nix
+pkgs.phpPackages.composer
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17499,7 +20164,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17520,7 +20188,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17544,7 +20215,10 @@ null or strings concatenated with “\\n”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17565,13 +20239,16 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   date.timezone = "CET"
 ''
@@ -17597,13 +20274,16 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   mypool = {
     user = "php";
@@ -17642,7 +20322,10 @@ null or strings concatenated with “\\n”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17663,12 +20346,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "/path/to/unix/socket" `
+
+```nix
+"/path/to/unix/socket"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17689,13 +20378,16 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   HOSTNAME = "$HOSTNAME";
   TMP = "/tmp";
@@ -17740,7 +20432,10 @@ package
 
 
 *Default:*
-` phpfpm.phpPackage `
+
+```nix
+phpfpm.phpPackage
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17765,13 +20460,16 @@ attribute set of (string or signed integer or boolean)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   "pm" = "dynamic";
   "pm.max_children" = 75;
@@ -17804,7 +20502,10 @@ string *(read only)*
 
 
 *Example:*
-` config.env.DEVENV_STATE + "/php-fpm/<name>.sock" `
+
+```nix
+config.env.DEVENV_STATE + "/php-fpm/<name>.sock"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17836,7 +20537,7 @@ attribute set of (string or signed integer or boolean)
 
 *Default:*
 
-```
+```nix
 {
   error_log = config.env.DEVENV_STATE + "/php-fpm/php-fpm.log";
 }
@@ -17862,7 +20563,10 @@ null or strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17883,12 +20587,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17909,7 +20619,10 @@ package
 
 
 *Default:*
-` pkgs.phpactor `
+
+```nix
+pkgs.phpactor
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17930,7 +20643,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -17951,12 +20667,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
@@ -17978,7 +20700,10 @@ package
 
 
 *Default:*
-` purescript-overlay.packages.${pkgs.stdenv.system}.purs `
+
+```nix
+purescript-overlay.packages.${pkgs.stdenv.system}.purs
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
@@ -17999,12 +20724,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
@@ -18026,7 +20757,10 @@ package
 
 
 *Default:*
-` purescript-overlay.packages.${pkgs.stdenv.system}.purescript-language-server `
+
+```nix
+purescript-overlay.packages.${pkgs.stdenv.system}.purescript-language-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
@@ -18047,12 +20781,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
@@ -18074,7 +20814,10 @@ package
 
 
 *Default:*
-` purescript-overlay.packages.${pkgs.stdenv.system}.spago `
+
+```nix
+purescript-overlay.packages.${pkgs.stdenv.system}.spago
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
@@ -18095,12 +20838,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18121,7 +20870,10 @@ package
 
 
 *Default:*
-` pkgs.python3 `
+
+```nix
+pkgs.python3
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18143,12 +20895,18 @@ string
 
 
 *Default:*
-` config.devenv.root `
+
+```nix
+config.devenv.root
+```
 
 
 
 *Example:*
-` "./directory" `
+
+```nix
+"./directory"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18202,7 +20960,7 @@ list of absolute path
 
 *Default:*
 
-```
+```nix
 [ "${config.devenv.dotfile}/profile" ]
 
 ```
@@ -18226,12 +20984,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18252,7 +21016,10 @@ package
 
 
 *Default:*
-` pkgs.pyright `
+
+```nix
+pkgs.pyright
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18277,7 +21044,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18306,7 +21076,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18327,12 +21100,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18353,7 +21132,10 @@ package
 
 
 *Default:*
-` pkgs.poetry `
+
+```nix
+pkgs.poetry
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18374,7 +21156,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18395,12 +21180,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18421,7 +21212,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18442,7 +21236,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18463,7 +21260,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18484,7 +21284,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18505,7 +21308,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18526,7 +21332,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18547,7 +21356,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18568,7 +21380,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18589,7 +21404,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18610,7 +21428,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18631,7 +21452,10 @@ one of “no”, “little”, “more”, “debug”
 
 
 *Default:*
-` "no" `
+
+```nix
+"no"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18652,12 +21476,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18678,7 +21508,10 @@ package
 
 
 *Default:*
-` pkgs.uv `
+
+```nix
+pkgs.uv
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18699,12 +21532,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18725,7 +21564,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18746,7 +21588,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18767,7 +21612,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18788,7 +21636,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18809,7 +21660,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18830,7 +21684,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18851,7 +21708,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18872,12 +21732,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18898,7 +21764,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18920,7 +21789,10 @@ null or strings concatenated with “\\n” or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18942,12 +21814,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "3.11 or 3.11.2" `
+
+```nix
+"3.11 or 3.11.2"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python](https://github.com/cachix/devenv/blob/main/src/modules/languages/python)
@@ -18968,12 +21846,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
@@ -18994,7 +21878,10 @@ package
 
 
 *Default:*
-` pkgs.R `
+
+```nix
+pkgs.R
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
@@ -19015,12 +21902,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
@@ -19041,7 +21934,10 @@ package
 
 
 *Default:*
-` pkgs.rPackages.languageserver `
+
+```nix
+pkgs.rPackages.languageserver
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
@@ -19062,12 +21958,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
@@ -19088,7 +21990,10 @@ package
 
 
 *Default:*
-` pkgs.radianWrapper `
+
+```nix
+pkgs.radianWrapper
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
@@ -19109,12 +22014,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix)
@@ -19135,7 +22046,10 @@ package
 
 
 *Default:*
-` pkgs.racket-minimal `
+
+```nix
+pkgs.racket-minimal
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix)
@@ -19156,12 +22070,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/raku.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/raku.nix)
@@ -19182,12 +22102,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix)
@@ -19208,7 +22134,10 @@ package
 
 
 *Default:*
-` pkgs.python3 `
+
+```nix
+pkgs.python3
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix)
@@ -19229,12 +22158,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
@@ -19255,7 +22190,10 @@ package
 
 
 *Default:*
-` pkgs.ruby `
+
+```nix
+pkgs.ruby
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
@@ -19276,12 +22214,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
@@ -19302,7 +22246,10 @@ package
 
 
 *Default:*
-` pkgs.bundler.override { ruby = cfg.package; } `
+
+```nix
+pkgs.bundler.override { ruby = cfg.package; }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
@@ -19323,12 +22270,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
@@ -19349,12 +22302,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
@@ -19375,7 +22334,10 @@ package
 
 
 *Default:*
-` pkgs.solargraph.override { ruby = cfg.package; } `
+
+```nix
+pkgs.solargraph.override { ruby = cfg.package; }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
@@ -19397,12 +22359,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "3.2.1" `
+
+```nix
+"3.2.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
@@ -19429,13 +22397,16 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 ./.ruby-version
 
 ```
@@ -19459,12 +22430,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19485,7 +22462,10 @@ one of “nixpkgs”, “stable”, “beta”, “nightly”
 
 
 *Default:*
-` "nixpkgs" `
+
+```nix
+"nixpkgs"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19507,7 +22487,10 @@ list of string
 
 
 *Default:*
-` [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ] `
+
+```nix
+[ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19558,12 +22541,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19584,7 +22573,10 @@ package
 
 
 *Default:*
-` pkgs.rust-analyzer `
+
+```nix
+pkgs.rust-analyzer
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19608,7 +22600,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19629,7 +22624,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19651,7 +22649,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19672,7 +22673,10 @@ open submodule of attribute set of package
 
 
 *Default:*
-` nixpkgs `
+
+```nix
+nixpkgs
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19693,7 +22697,10 @@ null or package
 
 
 *Default:*
-` pkgs.cargo `
+
+```nix
+pkgs.cargo
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19714,7 +22721,10 @@ null or package
 
 
 *Default:*
-` pkgs.clippy `
+
+```nix
+pkgs.clippy
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19735,7 +22745,10 @@ null or package
 
 
 *Default:*
-` pkgs.rust-analyzer `
+
+```nix
+pkgs.rust-analyzer
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19756,7 +22769,10 @@ null or package
 
 
 *Default:*
-` pkgs.rustc `
+
+```nix
+pkgs.rustc
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19777,7 +22793,10 @@ null or package
 
 
 *Default:*
-` pkgs.rustfmt `
+
+```nix
+pkgs.rustfmt
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19812,12 +22831,18 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` ./rust-toolchain.toml `
+
+```nix
+./rust-toolchain.toml
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19856,7 +22881,10 @@ string
 
 
 *Default:*
-` "latest" `
+
+```nix
+"latest"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -19877,12 +22905,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
@@ -19903,7 +22937,10 @@ package
 
 
 *Default:*
-` pkgs.scala_3 `
+
+```nix
+pkgs.scala_3
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
@@ -19924,12 +22961,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
@@ -19950,7 +22993,10 @@ package
 
 
 *Default:*
-` pkgs.metals `
+
+```nix
+pkgs.metals
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
@@ -19971,12 +23017,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
@@ -19997,7 +23049,10 @@ package
 
 
 *Default:*
-` pkgs.mill `
+
+```nix
+pkgs.mill
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
@@ -20018,12 +23073,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
@@ -20044,12 +23105,18 @@ package
 
 
 *Default:*
-` pkgs.sbt `
+
+```nix
+pkgs.sbt
+```
 
 
 
 *Example:*
-` sbt-with-scala-native `
+
+```nix
+sbt-with-scala-native
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
@@ -20070,12 +23137,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/shell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/shell.nix)
@@ -20096,12 +23169,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/shell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/shell.nix)
@@ -20122,7 +23201,10 @@ package
 
 
 *Default:*
-` pkgs.bash-language-server `
+
+```nix
+pkgs.bash-language-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/shell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/shell.nix)
@@ -20143,12 +23225,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix)
@@ -20169,7 +23257,10 @@ package
 
 
 *Default:*
-` pkgs.solc `
+
+```nix
+pkgs.solc
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix)
@@ -20190,12 +23281,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix)
@@ -20216,7 +23313,10 @@ package
 
 
 *Default:*
-` foundry.defaultPackage.$${pkgs.stdenv.system} `
+
+```nix
+foundry.defaultPackage.$${pkgs.stdenv.system}
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix)
@@ -20237,12 +23337,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix)
@@ -20263,7 +23369,10 @@ package
 
 
 *Default:*
-` pkgs.mlton `
+
+```nix
+pkgs.mlton
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix)
@@ -20284,12 +23393,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix)
@@ -20310,7 +23425,10 @@ package
 
 
 *Default:*
-` pkgs.millet `
+
+```nix
+pkgs.millet
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix)
@@ -20331,12 +23449,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
@@ -20357,7 +23481,10 @@ package
 
 
 *Default:*
-` pkgs.swift `
+
+```nix
+pkgs.swift
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
@@ -20378,12 +23505,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
@@ -20404,7 +23537,10 @@ package
 
 
 *Default:*
-` pkgs.sourcekit-lsp `
+
+```nix
+pkgs.sourcekit-lsp
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
@@ -20425,12 +23561,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
@@ -20451,7 +23593,10 @@ package
 
 
 *Default:*
-` pkgs.terraform `
+
+```nix
+pkgs.terraform
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
@@ -20472,12 +23617,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
@@ -20498,7 +23649,10 @@ package
 
 
 *Default:*
-` pkgs.terraform-ls `
+
+```nix
+pkgs.terraform-ls
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
@@ -20520,12 +23674,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "1.5.0 or 1.6.2" `
+
+```nix
+"1.5.0 or 1.6.2"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
@@ -20546,12 +23706,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
@@ -20572,13 +23738,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "algorithms"
   "latexmk"
@@ -20604,12 +23773,18 @@ unspecified value
 
 
 *Default:*
-` pkgs.texliveSmall `
+
+```nix
+pkgs.texliveSmall
+```
 
 
 
 *Example:*
-` pkgs.texliveBasic `
+
+```nix
+pkgs.texliveBasic
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
@@ -20630,12 +23805,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
@@ -20656,7 +23837,10 @@ package
 
 
 *Default:*
-` pkgs.texlab `
+
+```nix
+pkgs.texlab
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
@@ -20677,12 +23861,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typescript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typescript.nix)
@@ -20703,12 +23893,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typescript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typescript.nix)
@@ -20729,7 +23925,10 @@ package
 
 
 *Default:*
-` pkgs.typescript-language-server `
+
+```nix
+pkgs.typescript-language-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typescript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typescript.nix)
@@ -20750,12 +23949,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
@@ -20776,7 +23981,10 @@ package
 
 
 *Default:*
-` pkgs.typst `
+
+```nix
+pkgs.typst
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
@@ -20797,12 +24005,18 @@ list of string
 
 
 *Default:*
-` [] `
+
+```nix
+[]
+```
 
 
 
 *Example:*
-` [ "${pkgs.roboto}/share/fonts/truetype" ] `
+
+```nix
+[ "${pkgs.roboto}/share/fonts/truetype" ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
@@ -20823,12 +24037,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
@@ -20849,7 +24069,10 @@ package
 
 
 *Default:*
-` pkgs.tinymist `
+
+```nix
+pkgs.tinymist
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
@@ -20870,12 +24093,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix)
@@ -20896,7 +24125,10 @@ package
 
 
 *Default:*
-` pkgs.unison-ucm `
+
+```nix
+pkgs.unison-ucm
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix)
@@ -20917,12 +24149,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/v.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/v.nix)
@@ -20943,7 +24181,10 @@ package
 
 
 *Default:*
-` pkgs.vlang `
+
+```nix
+pkgs.vlang
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/v.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/v.nix)
@@ -20964,12 +24205,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)
@@ -20990,12 +24237,18 @@ package
 
 
 *Default:*
-` pkgs.vala `
+
+```nix
+pkgs.vala
+```
 
 
 
 *Example:*
-` pkgs.vala_0_54 `
+
+```nix
+pkgs.vala_0_54
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)
@@ -21016,12 +24269,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)
@@ -21042,7 +24301,10 @@ package
 
 
 *Default:*
-` pkgs.vala-language-server `
+
+```nix
+pkgs.vala-language-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)
@@ -21063,12 +24325,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
@@ -21089,7 +24357,10 @@ package
 
 
 *Default:*
-` pkgs.zig `
+
+```nix
+pkgs.zig
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
@@ -21110,12 +24381,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
@@ -21136,7 +24413,10 @@ package
 
 
 *Default:*
-` pkgs.zls `
+
+```nix
+pkgs.zls
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
@@ -21158,12 +24438,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "0.15.1" `
+
+```nix
+"0.15.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
@@ -21184,7 +24470,10 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
@@ -21205,13 +24494,16 @@ null or unspecified value
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   home.username = "jdoe";
   home.homeDirectory = "/home/jdoe";
@@ -21239,13 +24531,16 @@ null or unspecified value
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 { pkgs, ... }: {
   environment.systemPackages = [
     pkgs.vim
@@ -21274,13 +24569,16 @@ null or unspecified value
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   fileSystems."/".device = "/dev/sda1";
   boot.loader.systemd-boot.enable = true;
@@ -21308,12 +24606,18 @@ string
 
 
 *Default:*
-` pkgs.stdenv.system `
+
+```nix
+pkgs.stdenv.system
+```
 
 
 
 *Example:*
-` "x86_64-linux" `
+
+```nix
+"x86_64-linux"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
@@ -21334,7 +24638,10 @@ null or string
 
 
 *Default:*
-` "devenv-shell" `
+
+```nix
+"devenv-shell"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
@@ -21355,13 +24662,16 @@ outputOf (attribute set)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   git = pkgs.git;
   foo = {
@@ -21390,13 +24700,16 @@ list of function that evaluates to a(n) function that evaluates to a(n) (attribu
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   (final: prev: {
     hello = prev.hello.overrideAttrs (oldAttrs: {
@@ -21426,7 +24739,10 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -21463,7 +24779,10 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -21489,7 +24808,10 @@ one of “hivemind”, “honcho”, “mprocs”, “native”, “overmind”,
 
 
 *Example:*
-` "process-compose" `
+
+```nix
+"process-compose"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -21510,7 +24832,10 @@ package
 
 
 *Default:*
-` pkgs.hivemind `
+
+```nix
+pkgs.hivemind
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
@@ -21531,7 +24856,10 @@ package
 
 
 *Default:*
-` pkgs.honcho `
+
+```nix
+pkgs.honcho
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix)
@@ -21552,7 +24880,10 @@ package
 
 
 *Default:*
-` pkgs.mprocs `
+
+```nix
+pkgs.mprocs
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
@@ -21575,7 +24906,10 @@ YAML 1.1 value
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
@@ -21599,13 +24933,16 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   {
     name = "http";
@@ -21641,7 +24978,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21662,7 +25002,10 @@ signed integer
 
 
 *Default:*
-` 128 `
+
+```nix
+128
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21683,7 +25026,10 @@ one of “tcp”, “unix_stream”
 
 
 *Default:*
-` "tcp" `
+
+```nix
+"tcp"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21704,7 +25050,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21741,7 +25090,10 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21762,7 +25114,10 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21783,12 +25138,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "pg_isready -d template1" `
+
+```nix
+"pg_isready -d template1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21809,7 +25170,10 @@ signed integer
 
 
 *Default:*
-` 3 `
+
+```nix
+3
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21830,7 +25194,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21851,7 +25218,10 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21872,7 +25242,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21893,7 +25266,10 @@ string
 
 
 *Default:*
-` "/" `
+
+```nix
+"/"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21930,7 +25306,10 @@ string
 
 
 *Default:*
-` "http" `
+
+```nix
+"http"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21951,7 +25330,10 @@ signed integer
 
 
 *Default:*
-` 0 `
+
+```nix
+0
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21973,7 +25355,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -21994,7 +25379,10 @@ signed integer
 
 
 *Default:*
-` 10 `
+
+```nix
+10
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -22015,7 +25403,10 @@ signed integer
 
 
 *Default:*
-` 1 `
+
+```nix
+1
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -22036,7 +25427,10 @@ signed integer
 
 
 *Default:*
-` 1 `
+
+```nix
+1
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -22057,7 +25451,10 @@ null or (unsigned integer, meaning >=0)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -22078,7 +25475,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -22099,7 +25499,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -22120,7 +25523,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -22141,7 +25547,10 @@ list of absolute path
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -22164,13 +25573,16 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   usec = 30000000; # 30 seconds
   require_ready = true;
@@ -22197,7 +25609,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
@@ -22234,7 +25649,10 @@ package
 
 
 *Default:*
-` pkgs.overmind `
+
+```nix
+pkgs.overmind
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix)
@@ -22255,7 +25673,10 @@ package
 
 
 *Default:*
-` pkgs.process-compose `
+
+```nix
+pkgs.process-compose
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
@@ -22278,7 +25699,10 @@ signed integer
 
 
 *Default:*
-` 8080 `
+
+```nix
+8080
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
@@ -22301,13 +25725,16 @@ YAML 1.1 value
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   availability = {
     backoff_seconds = 2;
@@ -22344,7 +25771,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
@@ -22365,12 +25795,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
@@ -22391,7 +25827,10 @@ string
 
 
 *Default:*
-` ${config.devenv.runtime}/pc.sock `
+
+```nix
+${config.devenv.runtime}/pc.sock
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
@@ -22412,7 +25851,10 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -22436,13 +25878,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "devenv:processes:postgres"
   "myapp:migrations@succeeded"
@@ -22468,13 +25913,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "devenv:processes:nginx"
 ]
@@ -22499,7 +25947,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -22520,7 +25971,10 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -22559,7 +26013,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -22583,13 +26040,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "cap_net_admin"
   "cap_sys_admin"
@@ -22617,13 +26077,16 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   {
     address = "127.0.0.1:8080";
@@ -22658,7 +26121,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -22679,7 +26145,10 @@ null or signed integer
 
 
 *Default:*
-` 128 `
+
+```nix
+128
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -22716,7 +26185,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -22753,7 +26225,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -22781,13 +26256,16 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   http.allocate = 8080;
   admin.allocate = 9000;
@@ -22814,7 +26292,10 @@ Base port for auto-allocation (increments until free)
 
 
 *Example:*
-` 8080 `
+
+```nix
+8080
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -22860,13 +26341,16 @@ YAML 1.1 value
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   availability = {
     backoff_seconds = 2;
@@ -22905,7 +26389,10 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -22926,12 +26413,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "pg_isready -d template1" `
+
+```nix
+"pg_isready -d template1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -22952,7 +26445,10 @@ signed integer
 
 
 *Default:*
-` 3 `
+
+```nix
+3
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -22973,7 +26469,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -22994,7 +26493,10 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23015,7 +26517,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23036,7 +26541,10 @@ string
 
 
 *Default:*
-` "/" `
+
+```nix
+"/"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23073,7 +26581,10 @@ string
 
 
 *Default:*
-` "http" `
+
+```nix
+"http"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23094,7 +26605,10 @@ signed integer
 
 
 *Default:*
-` 0 `
+
+```nix
+0
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23116,7 +26630,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23137,7 +26654,10 @@ signed integer
 
 
 *Default:*
-` 10 `
+
+```nix
+10
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23158,7 +26678,10 @@ signed integer
 
 
 *Default:*
-` 1 `
+
+```nix
+1
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23179,7 +26702,10 @@ signed integer
 
 
 *Default:*
-` 1 `
+
+```nix
+1
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23200,7 +26726,10 @@ null or (unsigned integer, meaning >=0)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23221,7 +26750,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23242,7 +26774,10 @@ null or signed integer
 
 
 *Default:*
-` 5 `
+
+```nix
+5
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23263,7 +26798,10 @@ one of “never”, “always”, “on_failure”
 
 
 *Default:*
-` "on_failure" `
+
+```nix
+"on_failure"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23284,7 +26822,10 @@ null or (unsigned integer, meaning >=0)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23305,7 +26846,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23329,7 +26873,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23352,13 +26899,16 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   paths = [ ./src ];
   extensions = [ "rs" "toml" ];
@@ -23389,13 +26939,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "rs"
   "toml"
@@ -23423,13 +26976,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "*.log"
   ".git"
@@ -23459,13 +27015,16 @@ list of absolute path
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [ ./src ./config.yaml ]
 
 ```
@@ -23491,13 +27050,16 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   usec = 30000000; # 30 seconds
   require_ready = true;
@@ -23524,7 +27086,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
@@ -23561,13 +27126,16 @@ open submodule of lazy attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   # Manual profiles (activated via --profile)
   "base" = {
@@ -23632,13 +27200,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "base"
   "backend"
@@ -23661,7 +27232,10 @@ module
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
@@ -23679,7 +27253,10 @@ lazy attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
@@ -23700,13 +27277,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "base"
   "backend"
@@ -23732,7 +27312,10 @@ module
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
@@ -23753,7 +27336,10 @@ lazy attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
@@ -23774,13 +27360,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "base"
   "backend"
@@ -23806,7 +27395,10 @@ module
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
@@ -23827,7 +27419,10 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -23848,7 +27443,10 @@ package
 
 
 *Default:*
-` pkgs.bash `
+
+```nix
+pkgs.bash
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -23869,7 +27467,10 @@ list of package
 
 
 *Default:*
-` [] `
+
+```nix
+[]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -23890,7 +27491,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -23911,7 +27515,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -23948,7 +27555,10 @@ boolean *(read only)*
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix)
@@ -23969,7 +27579,10 @@ null or string *(read only)*
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix)
@@ -23990,7 +27603,10 @@ null or string *(read only)*
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix)
@@ -24011,7 +27627,10 @@ attribute set of string *(read only)*
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix)
@@ -24032,12 +27651,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
@@ -24058,7 +27683,10 @@ package
 
 
 *Default:*
-` pkgs.adminer `
+
+```nix
+pkgs.adminer
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
@@ -24079,7 +27707,10 @@ string
 
 
 *Default:*
-` "127.0.0.1:8080" `
+
+```nix
+"127.0.0.1:8080"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
@@ -24103,12 +27734,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -24130,12 +27767,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -24156,7 +27799,10 @@ package
 
 
 *Default:*
-` pkgs.blackfire `
+
+```nix
+pkgs.blackfire
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -24178,7 +27824,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -24200,7 +27849,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -24222,7 +27874,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -24244,7 +27899,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -24265,7 +27923,10 @@ string
 
 
 *Default:*
-` "tcp://127.0.0.1:8307" `
+
+```nix
+"tcp://127.0.0.1:8307"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
@@ -24286,12 +27947,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -24312,7 +27979,10 @@ package
 
 
 *Default:*
-` pkgs.caddy `
+
+```nix
+pkgs.caddy
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -24334,12 +28004,18 @@ string
 
 
 *Default:*
-` "caddyfile" `
+
+```nix
+"caddyfile"
+```
 
 
 
 *Example:*
-` "nginx" `
+
+```nix
+"nginx"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -24363,12 +28039,18 @@ null or string
 
 
 *Default:*
-` "https://acme-v02.api.letsencrypt.org/directory" `
+
+```nix
+"https://acme-v02.api.letsencrypt.org/directory"
+```
 
 
 
 *Example:*
-` "https://acme-staging-v02.api.letsencrypt.org/directory" `
+
+```nix
+"https://acme-staging-v02.api.letsencrypt.org/directory"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -24394,13 +28076,16 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   # Global options block
   {
@@ -24439,7 +28124,10 @@ absolute path
 
 
 *Default:*
-` "${config.env.DEVENV_STATE}/caddy" `
+
+```nix
+"${config.env.DEVENV_STATE}/caddy"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -24460,7 +28148,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -24481,7 +28172,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -24502,13 +28196,16 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   "hydra.example.com" = {
     serverAliases = [ "www.hydra.example.com" ];
@@ -24541,7 +28238,10 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -24562,13 +28262,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "www.example.org"
   "example.org"
@@ -24594,12 +28297,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
@@ -24620,12 +28329,18 @@ package
 
 
 *Default:*
-` pkgs.cassandra_4 `
+
+```nix
+pkgs.cassandra_4
+```
 
 
 
 *Example:*
-` pkgs.cassandra_4; `
+
+```nix
+pkgs.cassandra_4;
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
@@ -24646,7 +28361,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
@@ -24667,7 +28385,10 @@ string
 
 
 *Default:*
-` "Test Cluster" `
+
+```nix
+"Test Cluster"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
@@ -24688,13 +28409,16 @@ attribute set
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   commitlog_sync_batch_window_in_ms = 3;
 }
@@ -24719,7 +28443,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
@@ -24740,12 +28467,18 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 
 
 *Example:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
@@ -24767,7 +28500,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "127.0.0.1"
 ]
@@ -24792,12 +28525,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
@@ -24818,7 +28557,10 @@ package
 
 
 *Default:*
-` pkgs.clickhouse `
+
+```nix
+pkgs.clickhouse
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
@@ -24855,7 +28597,10 @@ Which http port to run clickhouse on.
 
 
 *Default:*
-` 8123 `
+
+```nix
+8123
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
@@ -24876,7 +28621,10 @@ Which port to run clickhouse on.
 
 
 *Default:*
-` 9000 `
+
+```nix
+9000
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
@@ -24898,12 +28646,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
@@ -24924,7 +28678,10 @@ unspecified value
 
 
 *Default:*
-` pkgs.cockroachdb `
+
+```nix
+pkgs.cockroachdb
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
@@ -24945,7 +28702,10 @@ string
 
 
 *Default:*
-` "localhost:8080" `
+
+```nix
+"localhost:8080"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
@@ -24966,7 +28726,10 @@ string
 
 
 *Default:*
-` "localhost:26257" `
+
+```nix
+"localhost:26257"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
@@ -24987,12 +28750,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -25013,7 +28782,10 @@ package
 
 
 *Default:*
-` pkgs.couchdb3 `
+
+```nix
+pkgs.couchdb3
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -25034,7 +28806,10 @@ string *(read only)*
 
 
 *Default:*
-` config.env.DEVENV_STATE + "/couchdb" `
+
+```nix
+config.env.DEVENV_STATE + "/couchdb"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -25059,13 +28834,16 @@ open submodule of attribute set of section of an INI file (attrs of INI atom (nu
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   couchdb = {
     database_dir = baseDir;
@@ -25103,7 +28881,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -25124,7 +28905,10 @@ Defined the port number to listen.
 
 
 *Default:*
-` 5984 `
+
+```nix
+5984
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -25147,7 +28931,10 @@ absolute path
 
 
 *Default:*
-` config.env.DEVENV_STATE + "/couchdb" `
+
+```nix
+config.env.DEVENV_STATE + "/couchdb"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -25170,7 +28957,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -25195,7 +28985,10 @@ absolute path
 
 
 *Default:*
-` config.env.DEVENV_STATE + "/couchdb"/couchdb.uri `
+
+```nix
+config.env.DEVENV_STATE + "/couchdb"/couchdb.uri
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -25218,7 +29011,10 @@ absolute path
 
 
 *Default:*
-` config.env.DEVENV_STATE + "/couchdb" `
+
+```nix
+config.env.DEVENV_STATE + "/couchdb"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -25239,12 +29035,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
@@ -25265,7 +29067,10 @@ package
 
 
 *Default:*
-` pkgs.dynamodb-local `
+
+```nix
+pkgs.dynamodb-local
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
@@ -25286,7 +29091,10 @@ Listen port for DynamoDB Local.
 
 
 *Default:*
-` 8000 `
+
+```nix
+8000
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
@@ -25309,7 +29117,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
@@ -25330,12 +29141,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix)
@@ -25356,7 +29173,10 @@ package
 
 
 *Default:*
-` pkgs.elasticmq-server-bin `
+
+```nix
+pkgs.elasticmq-server-bin
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix)
@@ -25377,7 +29197,10 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix)
@@ -25398,7 +29221,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -25419,7 +29245,10 @@ package
 
 
 *Default:*
-` pkgs.elasticsearch7 `
+
+```nix
+pkgs.elasticsearch7
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -25440,7 +29269,10 @@ string
 
 
 *Default:*
-` "elasticsearch" `
+
+```nix
+"elasticsearch"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -25461,7 +29293,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -25482,13 +29317,16 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   node.name: "elasticsearch"
   node.master: true
@@ -25515,13 +29353,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "-Djava.net.preferIPv4Stack=true"
 ]
@@ -25546,7 +29387,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -25568,7 +29412,7 @@ string
 
 *Default:*
 
-```
+```nix
 ''
   logger.action.name = org.elasticsearch.action
   logger.action.level = info
@@ -25600,12 +29444,18 @@ list of package
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
-` [ pkgs.elasticsearchPlugins.discovery-ec2 ] `
+
+```nix
+[ pkgs.elasticsearchPlugins.discovery-ec2 ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -25626,7 +29476,10 @@ Elasticsearch port to listen for HTTP traffic.
 
 
 *Default:*
-` 9200 `
+
+```nix
+9200
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -25647,7 +29500,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -25668,7 +29524,10 @@ Elasticsearch port for the node to node communication.
 
 
 *Default:*
-` 9300 `
+
+```nix
+9300
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
@@ -25689,12 +29548,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/httpbin.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/httpbin.nix)
@@ -25716,7 +29581,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "127.0.0.1:8080"
 ]
@@ -25741,7 +29606,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/httpbin.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/httpbin.nix)
@@ -25762,12 +29630,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/influxdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/influxdb.nix)
@@ -25788,7 +29662,10 @@ package
 
 
 *Default:*
-` pkgs.influxdb2-server `
+
+```nix
+pkgs.influxdb2-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/influxdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/influxdb.nix)
@@ -25809,13 +29686,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "--flux-log-enabled"
 ]
@@ -25840,7 +29720,10 @@ The TCP port for the InfluxDB HTTP API.
 
 
 *Default:*
-` 8086 `
+
+```nix
+8086
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/influxdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/influxdb.nix)
@@ -25861,12 +29744,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -25887,7 +29776,10 @@ package
 
 
 *Default:*
-` pkgs.apacheKafka `
+
+```nix
+pkgs.apacheKafka
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -25908,7 +29800,10 @@ absolute path
 
 
 *Default:*
-` "pkgs.writeText \"log4j.properties\" cfg.log4jProperties" `
+
+```nix
+"pkgs.writeText \"log4j.properties\" cfg.log4jProperties"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -25946,12 +29841,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -25972,7 +29873,10 @@ list of (open submodule of lazy attribute set of (null or boolean or signed inte
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -26030,7 +29934,10 @@ open submodule of lazy attribute set of (null or boolean or signed integer or st
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -26052,7 +29959,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "localhost:9092"
 ]
@@ -26077,7 +29984,10 @@ string
 
 
 *Default:*
-` "org.apache.kafka.connect.json.JsonConverter" `
+
+```nix
+"org.apache.kafka.connect.json.JsonConverter"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -26098,7 +30008,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -26120,13 +30033,16 @@ null or (list of string)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "http://localhost:8080"
 ]
@@ -26151,7 +30067,10 @@ signed integer
 
 
 *Default:*
-` 10000 `
+
+```nix
+10000
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -26172,7 +30091,10 @@ string
 
 
 *Default:*
-` ${config.env.DEVENV_STATE}/kafka/connect/connect.offsets `
+
+```nix
+${config.env.DEVENV_STATE}/kafka/connect/connect.offsets
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -26197,7 +30119,10 @@ null or (list of (string or absolute path))
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -26218,7 +30143,10 @@ string
 
 
 *Default:*
-` "org.apache.kafka.connect.json.JsonConverter" `
+
+```nix
+"org.apache.kafka.connect.json.JsonConverter"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -26239,7 +30167,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
@@ -26263,7 +30194,10 @@ one of “zookeeper”, “kraft”
 
 
 *Default:*
-` "kraft" `
+
+```nix
+"kraft"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -26285,7 +30219,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -26307,7 +30244,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -26328,7 +30268,10 @@ package
 
 
 *Default:*
-` pkgs.apacheKafka.passthru.jre `
+
+```nix
+pkgs.apacheKafka.passthru.jre
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -26349,13 +30292,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "-Djava.net.preferIPv4Stack=true"
   "-Dcom.sun.management.jmxremote"
@@ -26383,7 +30329,7 @@ strings concatenated with “\\n”
 
 *Default:*
 
-```
+```nix
 ''
   log4j.rootLogger=INFO, stdout
   
@@ -26418,7 +30364,10 @@ open submodule of lazy attribute set of (null or boolean or signed integer or st
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -26439,7 +30388,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -26463,7 +30415,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "PLAINTEXT://localhost:9092"
 ]
@@ -26488,7 +30440,10 @@ list of absolute path
 
 
 *Default:*
-` [ "${config.devenv.state + "/kafka"}/logs" ] `
+
+```nix
+[ "${config.devenv.state + "/kafka"}/logs" ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -26510,12 +30465,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26536,7 +30497,10 @@ package
 
 
 *Default:*
-` pkgs.keycloak `
+
+```nix
+pkgs.keycloak
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26559,12 +30523,18 @@ one of “dev-mem”, “dev-file”
 
 
 *Default:*
-` "dev-file" `
+
+```nix
+"dev-file"
+```
 
 
 
 *Example:*
-` "dev-mem" `
+
+```nix
+"dev-mem"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26589,7 +30559,10 @@ string
 
 
 *Default:*
-` "admin" `
+
+```nix
+"admin"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26612,7 +30585,10 @@ list of absolute path
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26634,7 +30610,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26656,13 +30635,16 @@ attribute set of (submodule)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   myrealm = {
     path = "./myfolder/export.json";
@@ -26692,12 +30674,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26718,12 +30706,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26746,12 +30740,18 @@ null or relative path not in the Nix store
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "./realms/a.json" `
+
+```nix
+"./realms/a.json"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26773,7 +30773,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26808,7 +30811,7 @@ open submodule of attribute set of (null or string or signed integer or boolean 
 
 *Example:*
 
-```
+```nix
 {
   hostname = "localhost";
   https-key-store-file = "/path/to/file";
@@ -26840,12 +30843,18 @@ string
 
 
 *Default:*
-` "localhost" `
+
+```nix
+"localhost"
+```
 
 
 
 *Example:*
-` "localhost" `
+
+```nix
+"localhost"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26866,12 +30875,18 @@ string
 
 
 *Default:*
-` "::" `
+
+```nix
+"::"
+```
 
 
 
 *Example:*
-` "::1" `
+
+```nix
+"::1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26892,12 +30907,18 @@ On which port Keycloak should listen for new HTTP connections.
 
 
 *Default:*
-` 8080 `
+
+```nix
+8080
+```
 
 
 
 *Example:*
-` 8080 `
+
+```nix
+8080
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26929,12 +30950,18 @@ string
 
 
 *Default:*
-` "/" `
+
+```nix
+"/"
+```
 
 
 
 *Example:*
-` "/auth" `
+
+```nix
+"/auth"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26956,12 +30983,18 @@ If its not set, its disabled.
 
 
 *Default:*
-` 34429 `
+
+```nix
+34429
+```
 
 
 
 *Example:*
-` 34429 `
+
+```nix
+34429
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -26983,12 +31016,18 @@ null or relative path not in the Nix store
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "/run/keys/ssl_cert" `
+
+```nix
+"/run/keys/ssl_cert"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -27010,12 +31049,18 @@ null or relative path not in the Nix store
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "/run/keys/ssl_key" `
+
+```nix
+"/run/keys/ssl_key"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
@@ -27036,12 +31081,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
@@ -27062,7 +31113,10 @@ package
 
 
 *Default:*
-` pkgs.mailhog `
+
+```nix
+pkgs.mailhog
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
@@ -27083,13 +31137,16 @@ list of strings concatenated with “\\n”
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "-invite-jim"
 ]
@@ -27114,7 +31171,10 @@ string
 
 
 *Default:*
-` "127.0.0.1:8025" `
+
+```nix
+"127.0.0.1:8025"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
@@ -27135,7 +31195,10 @@ string
 
 
 *Default:*
-` "127.0.0.1:1025" `
+
+```nix
+"127.0.0.1:1025"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
@@ -27156,7 +31219,10 @@ string
 
 
 *Default:*
-` "127.0.0.1:8025" `
+
+```nix
+"127.0.0.1:8025"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
@@ -27177,12 +31243,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix)
@@ -27203,7 +31275,10 @@ package
 
 
 *Default:*
-` pkgs.mailpit `
+
+```nix
+pkgs.mailpit
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix)
@@ -27224,13 +31299,16 @@ list of strings concatenated with “\\n”
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "--max=500"
 ]
@@ -27255,7 +31333,10 @@ string
 
 
 *Default:*
-` "127.0.0.1:1025" `
+
+```nix
+"127.0.0.1:1025"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix)
@@ -27276,7 +31357,10 @@ string
 
 
 *Default:*
-` "127.0.0.1:8025" `
+
+```nix
+"127.0.0.1:8025"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix)
@@ -27297,12 +31381,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -27323,7 +31413,10 @@ package
 
 
 *Default:*
-` "pkgs.meilisearch" `
+
+```nix
+"pkgs.meilisearch"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -27344,7 +31437,10 @@ one of “development”, “production”
 
 
 *Default:*
-` "development" `
+
+```nix
+"development"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -27365,7 +31461,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -27386,7 +31485,10 @@ Meilisearch port to listen on.
 
 
 *Default:*
-` 7700 `
+
+```nix
+7700
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -27414,7 +31516,10 @@ string
 
 
 *Default:*
-` "INFO" `
+
+```nix
+"INFO"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -27438,7 +31543,10 @@ string
 
 
 *Default:*
-` "107374182400" `
+
+```nix
+"107374182400"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -27462,7 +31570,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
@@ -27483,12 +31594,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
@@ -27509,7 +31626,10 @@ package
 
 
 *Default:*
-` pkgs.memcached `
+
+```nix
+pkgs.memcached
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
@@ -27531,12 +31651,18 @@ null or string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 
 
 *Example:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
@@ -27558,7 +31684,10 @@ If port 0 is specified memcached will not listen on a TCP socket.
 
 
 *Default:*
-` 11211 `
+
+```nix
+11211
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
@@ -27579,13 +31708,16 @@ list of strings concatenated with “\\n”
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "--memory-limit=100M"
 ]
@@ -27610,12 +31742,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -27636,7 +31774,10 @@ package
 
 
 *Default:*
-` pkgs.minio `
+
+```nix
+pkgs.minio
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -27657,7 +31798,10 @@ string
 
 
 *Default:*
-` "minioadmin" `
+
+```nix
+"minioadmin"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -27678,13 +31822,16 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   mc anonymous set download local/mybucket
 ''
@@ -27709,7 +31856,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -27730,7 +31880,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -27770,7 +31923,10 @@ package
 
 
 *Default:*
-` pkgs.minio-client `
+
+```nix
+pkgs.minio-client
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -27791,7 +31947,10 @@ string
 
 
 *Default:*
-` "127.0.0.1:9001" `
+
+```nix
+"127.0.0.1:9001"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -27812,7 +31971,10 @@ string
 
 
 *Default:*
-` "127.0.0.1:9000" `
+
+```nix
+"127.0.0.1:9000"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -27833,7 +31995,10 @@ string
 
 
 *Default:*
-` "us-east-1" `
+
+```nix
+"us-east-1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -27854,7 +32019,10 @@ string
 
 
 *Default:*
-` "minioadmin" `
+
+```nix
+"minioadmin"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
@@ -27875,12 +32043,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
@@ -27901,7 +32075,10 @@ package
 
 
 *Default:*
-` pkgs.mongodb-ce `
+
+```nix
+pkgs.mongodb-ce
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
@@ -27923,7 +32100,7 @@ list of strings concatenated with “\\n”
 
 *Default:*
 
-```
+```nix
 [
   "--noauth"
 ]
@@ -27933,7 +32110,7 @@ list of strings concatenated with “\\n”
 
 *Example:*
 
-```
+```nix
 [
   "--port"
   "27017"
@@ -27960,12 +32137,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "secret" `
+
+```nix
+"secret"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
@@ -27986,12 +32169,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "mongoadmin" `
+
+```nix
+"mongoadmin"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
@@ -28012,12 +32201,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
@@ -28038,12 +32233,18 @@ string
 
 
 *Default:*
-` "rs0" `
+
+```nix
+"rs0"
+```
 
 
 
 *Example:*
-` "rs0" `
+
+```nix
+"rs0"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
@@ -28064,12 +32265,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
@@ -28090,7 +32297,10 @@ package
 
 
 *Default:*
-` pkgs.mariadb `
+
+```nix
+pkgs.mariadb
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
@@ -28116,13 +32326,16 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   {
     name = "devenv";
@@ -28161,13 +32374,16 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   "database.*" = "ALL PRIVILEGES";
   "*.*" = "SELECT, LOCK TABLES";
@@ -28194,7 +32410,10 @@ string
 
 
 *Default:*
-` "localhost" `
+
+```nix
+"localhost"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
@@ -28231,7 +32450,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
@@ -28252,7 +32474,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
@@ -28274,13 +32499,16 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   { name = "foodatabase"; schema = ./foodatabase.sql; }
   { name = "bardatabase"; }
@@ -28324,7 +32552,10 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
@@ -28345,13 +32576,16 @@ lazy attribute set of lazy attribute set of anything
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   mysqld = {
     key_buffer_size = "6G";
@@ -28389,7 +32623,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
@@ -28414,7 +32651,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28435,7 +32675,10 @@ package
 
 
 *Default:*
-` pkgs.nats-server `
+
+```nix
+pkgs.nats-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28456,12 +32699,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28484,12 +32733,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "nats-pass" `
+
+```nix
+"nats-pass"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28512,12 +32767,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "my-secret-token" `
+
+```nix
+"my-secret-token"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28539,12 +32800,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "nats-user" `
+
+```nix
+"nats-user"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28566,12 +32833,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "localhost:4222" `
+
+```nix
+"localhost:4222"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28592,7 +32865,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28615,12 +32891,18 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 
 
 *Example:*
-` "0.0.0.0" `
+
+```nix
+"0.0.0.0"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28641,12 +32923,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28668,12 +32956,18 @@ string
 
 
 *Default:*
-` "10G" `
+
+```nix
+"10G"
+```
 
 
 
 *Example:*
-` "100G" `
+
+```nix
+"100G"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28695,12 +32989,18 @@ string
 
 
 *Default:*
-` "1G" `
+
+```nix
+"1G"
+```
 
 
 
 *Example:*
-` "512M" `
+
+```nix
+"512M"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28722,12 +33022,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "/var/log/nats-server.log" `
+
+```nix
+"/var/log/nats-server.log"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28750,7 +33056,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28772,7 +33081,10 @@ Access monitoring at http://host:port/varz
 
 
 *Default:*
-` 8222 `
+
+```nix
+8222
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28793,7 +33105,10 @@ Port to listen on for client connections.
 
 
 *Default:*
-` 4222 `
+
+```nix
+4222
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28815,12 +33130,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "nats-dev-1" `
+
+```nix
+"nats-dev-1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28852,13 +33173,16 @@ attribute set
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   tls = {
     cert_file = "/path/to/cert.pem";
@@ -28897,7 +33221,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nats.nix)
@@ -28918,12 +33245,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
@@ -28944,7 +33277,10 @@ package
 
 
 *Default:*
-` pkgs.nginx `
+
+```nix
+pkgs.nginx
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
@@ -28967,12 +33303,18 @@ absolute path
 
 
 *Default:*
-` ${pkgs.mailcap}/etc/nginx/mime.types `
+
+```nix
+${pkgs.mailcap}/etc/nginx/mime.types
+```
 
 
 
 *Example:*
-` ${pkgs.nginx}/conf/mime.types `
+
+```nix
+${pkgs.nginx}/conf/mime.types
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
@@ -28993,7 +33335,10 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
@@ -29014,7 +33359,10 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
@@ -29035,12 +33383,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
@@ -29061,7 +33415,10 @@ package
 
 
 *Default:*
-` pkgs.nixseparatedebuginfod2 `
+
+```nix
+pkgs.nixseparatedebuginfod2
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
@@ -29084,7 +33441,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
@@ -29106,7 +33466,10 @@ string
 
 
 *Default:*
-` "1d" `
+
+```nix
+"1d"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
@@ -29127,7 +33490,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
@@ -29148,7 +33514,10 @@ Port for nixseparatedebuginfod to listen on.
 
 
 *Default:*
-` 1949 `
+
+```nix
+1949
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
@@ -29170,7 +33539,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "local:"
   "https://cache.nixos.org"
@@ -29196,12 +33565,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -29222,7 +33597,10 @@ package
 
 
 *Default:*
-` pkgs.opensearch `
+
+```nix
+pkgs.opensearch
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -29243,7 +33621,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -29264,13 +33645,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "-Djava.net.preferIPv4Stack=true"
 ]
@@ -29296,7 +33680,7 @@ string
 
 *Default:*
 
-```
+```nix
 ''
   logger.action.name = org.opensearch.action
   logger.action.level = info
@@ -29328,7 +33712,10 @@ open submodule of (YAML 1.1 value)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -29349,7 +33736,10 @@ string
 
 
 *Default:*
-` "opensearch" `
+
+```nix
+"opensearch"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -29370,7 +33760,10 @@ string
 
 
 *Default:*
-` "single-node" `
+
+```nix
+"single-node"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -29391,7 +33784,10 @@ The port to listen on for HTTP traffic.
 
 
 *Default:*
-` 9200 `
+
+```nix
+9200
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -29412,7 +33808,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -29436,7 +33835,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -29457,7 +33859,10 @@ The port to listen on for transport traffic.
 
 
 *Default:*
-` 9300 `
+
+```nix
+9300
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
@@ -29478,12 +33883,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix)
@@ -29504,7 +33915,10 @@ package
 
 
 *Default:*
-` pkgs.opentelemetry-collector-contrib `
+
+```nix
+pkgs.opentelemetry-collector-contrib
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix)
@@ -29529,13 +33943,16 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 pkgs.writeTextFile { name = "otel-config.yaml"; text = "..."; }
 
 ```
@@ -29561,7 +33978,10 @@ open submodule of (YAML 1.1 value)
 
 
 *Default:*
-` defaultSettings `
+
+```nix
+defaultSettings
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix)
@@ -29583,12 +34003,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
@@ -29609,13 +34035,16 @@ package
 
 
 *Default:*
-` pkgs.postgresql `
+
+```nix
+pkgs.postgresql
+```
 
 
 
 *Example:*
 
-```
+```nix
 pkgs.postgresql_15
 
 ```
@@ -29639,7 +34068,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
@@ -29737,13 +34169,16 @@ null or (function that evaluates to a(n) list of package)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 extensions: [
   extensions.pg_cron
   extensions.postgis
@@ -29772,13 +34207,16 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 builtins.readFile ./my-custom/directory/to/pg_hba.conf
 
 ```
@@ -29804,7 +34242,7 @@ list of strings concatenated with “\\n”
 
 *Default:*
 
-```
+```nix
 [
   "--locale=C"
   "--encoding=UTF8"
@@ -29815,7 +34253,7 @@ list of strings concatenated with “\\n”
 
 *Example:*
 
-```
+```nix
 [
   "--data-checksums"
   "--allow-group-access"
@@ -29842,13 +34280,16 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   {
     name = "foodatabase";
@@ -29879,13 +34320,16 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT);
 INSERT INTO users (name) VALUES ('admin');
 CREATE EXTENSION IF NOT EXISTS pg_uuidv7;
@@ -29927,7 +34371,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
@@ -29949,7 +34396,10 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
@@ -29970,7 +34420,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
@@ -29996,13 +34449,16 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 CREATE ROLE postgres SUPERUSER;
 CREATE ROLE bar;
 
@@ -30039,12 +34495,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
@@ -30065,7 +34527,10 @@ The TCP port to accept connections.
 
 
 *Default:*
-` 5432 `
+
+```nix
+5432
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
@@ -30091,13 +34556,16 @@ attribute set of (boolean or floating point number or signed integer or string)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   log_connections = true;
   log_statement = "all";
@@ -30127,12 +34595,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30153,7 +34627,10 @@ package
 
 
 *Default:*
-` pkgs.prometheus `
+
+```nix
+pkgs.prometheus
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30174,7 +34651,10 @@ attribute set
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30195,7 +34675,10 @@ attribute set
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30216,7 +34699,10 @@ null or (attribute set)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30237,7 +34723,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30258,7 +34747,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30279,7 +34771,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30300,7 +34795,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30322,7 +34820,7 @@ attribute set
 
 *Default:*
 
-```
+```nix
 {
   evaluation_interval = "1m";
   scrape_interval = "1m";
@@ -30349,7 +34847,10 @@ Port for Prometheus web interface.
 
 
 *Default:*
-` 9090 `
+
+```nix
+9090
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30370,7 +34871,10 @@ list of (attribute set)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30391,7 +34895,10 @@ list of (attribute set)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30412,7 +34919,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30433,7 +34943,10 @@ list of (attribute set)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30454,7 +34967,10 @@ string
 
 
 *Default:*
-` ${config.devenv.state}/prometheus `
+
+```nix
+${config.devenv.state}/prometheus
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30475,7 +34991,10 @@ string
 
 
 *Default:*
-` "15d" `
+
+```nix
+"15d"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
@@ -30497,7 +35016,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
@@ -30518,7 +35040,10 @@ package
 
 
 *Default:*
-` pkgs.rabbitmq-server `
+
+```nix
+pkgs.rabbitmq-server
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
@@ -30549,13 +35074,16 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   "auth_backends.1.authn" = "rabbit_auth_backend_ldap";
   "auth_backends.1.authz" = "rabbit_auth_backend_internal";
@@ -30584,7 +35112,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
@@ -30613,12 +35144,18 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 
 
 *Example:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
@@ -30639,12 +35176,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
@@ -30665,7 +35208,10 @@ On which port to run the management plugin.
 
 
 *Default:*
-` 15672 `
+
+```nix
+15672
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
@@ -30691,7 +35237,10 @@ string
 
 
 *Default:*
-` "rabbit@localhost" `
+
+```nix
+"rabbit@localhost"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
@@ -30712,7 +35261,10 @@ list of absolute path
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
@@ -30733,7 +35285,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
@@ -30754,7 +35309,10 @@ Port on which RabbitMQ will listen for AMQP connections.
 
 
 *Default:*
-` 5672 `
+
+```nix
+5672
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
@@ -30775,12 +35333,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
@@ -30801,7 +35365,10 @@ package
 
 
 *Default:*
-` pkgs.redis `
+
+```nix
+pkgs.redis
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
@@ -30823,12 +35390,18 @@ null or string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 
 
 *Example:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
@@ -30849,7 +35422,10 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "locale-collate C" `
+
+```nix
+"locale-collate C"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
@@ -30871,7 +35447,10 @@ If port 0 is specified, Redis will not listen on a TCP socket and a unix socket 
 
 
 *Default:*
-` 6379 `
+
+```nix
+6379
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
@@ -30892,12 +35471,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix)
@@ -30918,7 +35503,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix)
@@ -30939,7 +35527,10 @@ Port number to listen on.
 
 
 *Default:*
-` 8080 `
+
+```nix
+8080
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix)
@@ -30960,12 +35551,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/tailscale.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tailscale.nix)
@@ -31002,12 +35599,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -31028,7 +35631,10 @@ package
 
 
 *Default:*
-` pkgs.temporal-cli `
+
+```nix
+pkgs.temporal-cli
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -31049,13 +35655,16 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   "frontend.namespacerps" = "2500";
   "frontend.rps" = "2500";
@@ -31081,7 +35690,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -31102,13 +35714,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "my-namespace"
   "my-other-namespace"
@@ -31134,7 +35749,10 @@ Port for the frontend gRPC service.
 
 
 *Default:*
-` 7233 `
+
+```nix
+7233
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -31155,7 +35773,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -31176,7 +35797,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -31197,13 +35821,16 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   journal_mode = "wal";
   synchronous = "2";
@@ -31229,7 +35856,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -31250,7 +35880,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -31271,7 +35904,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -31292,7 +35928,10 @@ Port for the Web UI.
 
 
 *Default:*
-` 8233 `
+
+```nix
+8233
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
@@ -31316,12 +35955,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
@@ -31342,7 +35987,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
@@ -31363,7 +36011,10 @@ package
 
 
 *Default:*
-` pkgs.tideways-cli `
+
+```nix
+pkgs.tideways-cli
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
@@ -31384,7 +36035,10 @@ package
 
 
 *Default:*
-` pkgs.tideways-daemon `
+
+```nix
+pkgs.tideways-daemon
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
@@ -31405,7 +36059,10 @@ string
 
 
 *Default:*
-` "devenv" `
+
+```nix
+"devenv"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
@@ -31426,7 +36083,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
@@ -31447,7 +36107,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
@@ -31468,12 +36131,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -31494,7 +36163,10 @@ package
 
 
 *Default:*
-` pkgs.trafficserver `
+
+```nix
+pkgs.trafficserver
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -31518,12 +36190,18 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "dest_domain=example.com suffix=js action=never-cache" `
+
+```nix
+"dest_domain=example.com suffix=js action=never-cache"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -31547,12 +36225,18 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "domain=example.com volume=1" `
+
+```nix
+"domain=example.com volume=1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -31583,7 +36267,7 @@ upstream defaults
 
 *Example:*
 
-```
+```nix
 {
   ip_allow = [{
     apply = "in";
@@ -31622,7 +36306,10 @@ upstream defaults
 
 
 *Example:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -31646,13 +36333,16 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   dest_domain=. method=get parent="p1.example:8080; p2.example:8080" round_robin=true
 ''
@@ -31681,7 +36371,10 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -31702,12 +36395,18 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "--header=ATS-My-Debug" `
+
+```nix
+"--header=ATS-My-Debug"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -31729,7 +36428,10 @@ string
 
 
 *Example:*
-` "xdebug.so" `
+
+```nix
+"xdebug.so"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -31762,13 +36464,16 @@ Traffic Server records value
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   proxy = {
     config = {
@@ -31800,12 +36505,18 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "map http://from.example http://origin.example" `
+
+```nix
+"map http://from.example http://origin.example"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -31846,13 +36557,16 @@ null or YAML 1.1 value
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   sni = [{
     fqdn = "no-http2.example.com";
@@ -31885,13 +36599,16 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
 
-```
+```nix
 ''
   dest_domain=internal.corp.example named="255.255.255.255:212 255.255.255.254" def_domain=corp.example search_list="corp.example corp1.example"
   dest_domain=!internal.corp.example named=255.255.255.253
@@ -31920,12 +36637,18 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "dest_ip=* ssl_cert_name=default.pem" `
+
+```nix
+"dest_ip=* ssl_cert_name=default.pem"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -31949,12 +36672,18 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "${config.services.traffic-server.runroot.cachedir} 256M" `
+
+```nix
+"${config.services.traffic-server.runroot.cachedir} 256M"
+```
 
 
 
 *Example:*
-` "/dev/disk/by-id/XXXXX volume=1" `
+
+```nix
+"/dev/disk/by-id/XXXXX volume=1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -31979,7 +36708,10 @@ null or YAML 1.1 value
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -32004,12 +36736,18 @@ null or YAML 1.1 value
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 
 
 *Example:*
-` "volume=1 scheme=http size=20%" `
+
+```nix
+"volume=1 scheme=http size=20%"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -32030,12 +36768,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
@@ -32056,7 +36800,10 @@ package
 
 
 *Default:*
-` pkgs.typesense `
+
+```nix
+pkgs.typesense
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
@@ -32077,12 +36824,18 @@ list of strings concatenated with “\\n”
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
@@ -32103,7 +36856,10 @@ string
 
 
 *Default:*
-` "example" `
+
+```nix
+"example"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
@@ -32124,7 +36880,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
@@ -32145,7 +36904,10 @@ The HTTP port to accept connections.
 
 
 *Default:*
-` 8108 `
+
+```nix
+8108
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
@@ -32166,7 +36928,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
@@ -32187,12 +36952,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
@@ -32213,7 +36984,10 @@ package
 
 
 *Default:*
-` pkgs.varnish `
+
+```nix
+pkgs.varnish
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
@@ -32234,12 +37008,18 @@ list of package
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
-` [ pkgs.varnish73Packages.modules ] `
+
+```nix
+[ pkgs.varnish73Packages.modules ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
@@ -32260,7 +37040,10 @@ string
 
 
 *Default:*
-` "127.0.0.1:6081" `
+
+```nix
+"127.0.0.1:6081"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
@@ -32281,7 +37064,10 @@ string
 
 
 *Default:*
-` "64M" `
+
+```nix
+"64M"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
@@ -32303,7 +37089,7 @@ strings concatenated with “\\n”
 
 *Default:*
 
-```
+```nix
 ''
   vcl 4.0;
   
@@ -32333,12 +37119,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
@@ -32359,7 +37151,10 @@ package
 
 
 *Default:*
-` pkgs.vault-bin `
+
+```nix
+pkgs.vault-bin
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
@@ -32380,7 +37175,10 @@ string
 
 
 *Default:*
-` "127.0.0.1:8200" `
+
+```nix
+"127.0.0.1:8200"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
@@ -32401,7 +37199,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
@@ -32422,7 +37223,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
@@ -32443,7 +37247,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
@@ -32464,12 +37271,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
@@ -32490,7 +37303,10 @@ package
 
 
 *Default:*
-` pkgs.wiremock `
+
+```nix
+pkgs.wiremock
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
@@ -32511,7 +37327,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
@@ -32533,13 +37352,16 @@ JSON value
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   {
     request = {
@@ -32588,7 +37410,10 @@ The port number for the HTTP server to listen on.
 
 
 *Default:*
-` 8080 `
+
+```nix
+8080
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
@@ -32609,7 +37434,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
@@ -32630,12 +37458,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
@@ -32656,7 +37490,10 @@ package
 
 
 *Default:*
-` pkgs.starship `
+
+```nix
+pkgs.starship
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
@@ -32677,12 +37514,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
@@ -32703,12 +37546,18 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` ${config.env.DEVENV_ROOT}/starship.toml `
+
+```nix
+${config.env.DEVENV_ROOT}/starship.toml
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
@@ -32729,7 +37578,10 @@ TOML value
 
 
 *Default:*
-` {} `
+
+```nix
+{}
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
@@ -32750,7 +37602,10 @@ package
 
 
 *Default:*
-` pkgs.stdenv `
+
+```nix
+pkgs.stdenv
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
@@ -32787,7 +37642,10 @@ package
 
 
 *Default:*
-` pkgs.bash `
+
+```nix
+pkgs.bash
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -32820,7 +37678,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -32850,7 +37711,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -32871,7 +37735,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -32892,7 +37759,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -32913,7 +37783,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -32934,7 +37807,10 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -32955,7 +37831,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -32976,7 +37855,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -32997,7 +37879,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33018,7 +37903,10 @@ attribute set of anything
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33039,7 +37927,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33060,13 +37951,16 @@ list of (submodule)
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   {
     address = "127.0.0.1:8080";
@@ -33101,7 +37995,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33122,7 +38019,10 @@ null or signed integer
 
 
 *Default:*
-` 128 `
+
+```nix
+128
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33159,7 +38059,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33196,7 +38099,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33218,7 +38124,10 @@ attribute set of 16 bit unsigned integer; between 0 and 65535 (both inclusive)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33239,7 +38148,10 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33260,12 +38172,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "pg_isready -d template1" `
+
+```nix
+"pg_isready -d template1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33286,7 +38204,10 @@ signed integer
 
 
 *Default:*
-` 3 `
+
+```nix
+3
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33307,7 +38228,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33328,7 +38252,10 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33349,7 +38276,10 @@ string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33370,7 +38300,10 @@ string
 
 
 *Default:*
-` "/" `
+
+```nix
+"/"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33407,7 +38340,10 @@ string
 
 
 *Default:*
-` "http" `
+
+```nix
+"http"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33428,7 +38364,10 @@ signed integer
 
 
 *Default:*
-` 0 `
+
+```nix
+0
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33450,7 +38389,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33471,7 +38413,10 @@ signed integer
 
 
 *Default:*
-` 10 `
+
+```nix
+10
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33492,7 +38437,10 @@ signed integer
 
 
 *Default:*
-` 1 `
+
+```nix
+1
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33513,7 +38461,10 @@ signed integer
 
 
 *Default:*
-` 1 `
+
+```nix
+1
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33534,7 +38485,10 @@ null or (unsigned integer, meaning >=0)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33555,7 +38509,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33576,7 +38533,10 @@ null or signed integer
 
 
 *Default:*
-` 5 `
+
+```nix
+5
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33597,7 +38557,10 @@ one of “never”, “always”, “on_failure”
 
 
 *Default:*
-` "on_failure" `
+
+```nix
+"on_failure"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33618,7 +38581,10 @@ null or (unsigned integer, meaning >=0)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33639,7 +38605,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33660,7 +38629,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33681,7 +38653,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33703,7 +38678,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33724,7 +38702,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33746,7 +38727,10 @@ list of absolute path
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33767,13 +38751,16 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   usec = 30000000; # 30 seconds
   require_ready = true;
@@ -33800,7 +38787,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33837,7 +38827,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33858,7 +38851,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33882,7 +38878,10 @@ one of “oneshot”, “process”
 
 
 *Default:*
-` "oneshot" `
+
+```nix
+"oneshot"
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -33903,12 +38902,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/treefmt.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/treefmt.nix)
@@ -33929,7 +38934,10 @@ submodule
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/treefmt.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/treefmt.nix)
@@ -33950,7 +38958,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
@@ -33971,7 +38982,10 @@ package
 
 
 *Default:*
-` pkgs.treefmt `
+
+```nix
+pkgs.treefmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
@@ -34109,12 +39123,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix)
@@ -34135,7 +39155,10 @@ package
 
 
 *Default:*
-` pkgs.actionlint `
+
+```nix
+pkgs.actionlint
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix)
@@ -34156,7 +39179,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix)
@@ -34194,7 +39220,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   ".github/workflows/*.yml"
   ".github/workflows/*.yaml"
@@ -34220,7 +39246,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix)
@@ -34241,12 +39270,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix)
@@ -34267,7 +39302,10 @@ package
 
 
 *Default:*
-` pkgs.aiken `
+
+```nix
+pkgs.aiken
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix)
@@ -34288,7 +39326,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix)
@@ -34326,7 +39367,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.ak"
 ]
@@ -34351,7 +39392,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix)
@@ -34372,12 +39416,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix)
@@ -34398,7 +39448,10 @@ package
 
 
 *Default:*
-` pkgs.alejandra `
+
+```nix
+pkgs.alejandra
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix)
@@ -34419,7 +39472,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix)
@@ -34457,7 +39513,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.nix"
 ]
@@ -34482,7 +39538,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix)
@@ -34503,12 +39562,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix)
@@ -34529,7 +39594,10 @@ package
 
 
 *Default:*
-` pkgs.asmfmt `
+
+```nix
+pkgs.asmfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix)
@@ -34550,7 +39618,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix)
@@ -34588,7 +39659,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.s"
 ]
@@ -34613,7 +39684,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix)
@@ -34634,12 +39708,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -34660,7 +39740,10 @@ package
 
 
 *Default:*
-` pkgs.autocorrect `
+
+```nix
+pkgs.autocorrect
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -34681,7 +39764,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -34719,7 +39805,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*"
 ]
@@ -34744,7 +39830,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -34765,7 +39854,10 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -34786,12 +39878,18 @@ null or one of “off”, “error”, “warning”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "error" `
+
+```nix
+"error"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -34812,13 +39910,16 @@ null or (attribute set of string)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   "*.js" = "javascript";
   ".mdx" = "markdown";
@@ -34846,7 +39947,10 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -34867,12 +39971,18 @@ null or one of “off”, “error”, “warning”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "error" `
+
+```nix
+"error"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -34893,12 +40003,18 @@ null or one of “off”, “error”, “warning”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "error" `
+
+```nix
+"error"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -34919,12 +40035,18 @@ null or one of “off”, “error”, “warning”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "error" `
+
+```nix
+"error"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -34945,12 +40067,18 @@ null or one of “off”, “error”, “warning”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "error" `
+
+```nix
+"error"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -34971,12 +40099,18 @@ null or one of “off”, “error”, “warning”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "error" `
+
+```nix
+"error"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -34997,12 +40131,18 @@ null or one of “off”, “error”, “warning”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "error" `
+
+```nix
+"error"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -35023,12 +40163,18 @@ null or one of “off”, “error”, “warning”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "off" `
+
+```nix
+"off"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -35049,12 +40195,18 @@ null or one of “off”, “error”, “warning”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "off" `
+
+```nix
+"off"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -35075,12 +40227,18 @@ null or one of “off”, “error”, “warning”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "error" `
+
+```nix
+"error"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -35101,12 +40259,18 @@ null or one of “off”, “error”, “warning”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "off" `
+
+```nix
+"off"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -35127,12 +40291,18 @@ null or one of “off”, “error”, “warning”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "warning" `
+
+```nix
+"warning"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -35153,7 +40323,10 @@ null or (submodule)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -35174,13 +40347,16 @@ null or (list of string)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "GitHub"
   "App Store"
@@ -35214,13 +40390,16 @@ null or (attribute set of (null or one of “off”, “error”, “warning”)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   "Hello你好" = "warning";
   "Hi你好" = "off";
@@ -35246,12 +40425,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 2 `
+
+```nix
+2
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
@@ -35272,12 +40457,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix)
@@ -35298,7 +40489,10 @@ package
 
 
 *Default:*
-` pkgs.beautysh `
+
+```nix
+pkgs.beautysh
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix)
@@ -35319,7 +40513,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix)
@@ -35357,7 +40554,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.sh"
   "*.bash"
@@ -35385,12 +40582,18 @@ signed integer
 
 
 *Default:*
-` 2 `
+
+```nix
+2
+```
 
 
 
 *Example:*
-` 4 `
+
+```nix
+4
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix)
@@ -35411,7 +40614,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix)
@@ -35432,12 +40638,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
@@ -35458,7 +40670,10 @@ package
 
 
 *Default:*
-` pkgs.biome `
+
+```nix
+pkgs.biome
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
@@ -35479,7 +40694,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
@@ -35516,12 +40734,18 @@ one of “format”, “lint”, “check”
 
 
 *Default:*
-` "check" `
+
+```nix
+"check"
+```
 
 
 
 *Example:*
-` "format" `
+
+```nix
+"format"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
@@ -35542,7 +40766,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
@@ -35564,7 +40791,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.js"
   "*.ts"
@@ -35602,7 +40829,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
@@ -35623,13 +40853,16 @@ JSON value
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   formatter = {
     indentStyle = "space";
@@ -35668,12 +40901,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
@@ -35700,7 +40939,7 @@ Fetches ` "https://biomejs.dev/schemas/${biomeVersion}/schema.json" ` using ` pk
 
 *Example:*
 
-```
+```nix
 pkgs.fetchurl {
   url = "https://biomejs.dev/schemas/2.1.2/schema.json"
   hash = "sha256-n4Y16J7g34e0VdQzRItu/P7n5oppkY4Vm4P1pQxOILU=";
@@ -35727,12 +40966,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix)
@@ -35753,7 +40998,10 @@ package
 
 
 *Default:*
-` pkgs.black `
+
+```nix
+pkgs.black
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix)
@@ -35774,7 +41022,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix)
@@ -35812,7 +41063,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.py"
   "*.pyi"
@@ -35838,7 +41089,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix)
@@ -35859,12 +41113,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix)
@@ -35885,7 +41145,10 @@ package
 
 
 *Default:*
-` pkgs.buf `
+
+```nix
+pkgs.buf
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix)
@@ -35906,7 +41169,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix)
@@ -35944,7 +41210,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.proto"
 ]
@@ -35969,7 +41235,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix)
@@ -35990,12 +41259,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix)
@@ -36016,7 +41291,10 @@ package
 
 
 *Default:*
-` pkgs.buildifier `
+
+```nix
+pkgs.buildifier
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix)
@@ -36037,7 +41315,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix)
@@ -36075,7 +41356,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.bazel"
   "*.bzl"
@@ -36101,7 +41382,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix)
@@ -36122,12 +41406,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix)
@@ -36148,7 +41438,10 @@ package
 
 
 *Default:*
-` pkgs.haskellPackages.cabal-fmt `
+
+```nix
+pkgs.haskellPackages.cabal-fmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix)
@@ -36169,7 +41462,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix)
@@ -36207,7 +41503,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.cabal"
 ]
@@ -36232,7 +41528,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix)
@@ -36253,12 +41552,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix)
@@ -36279,7 +41584,10 @@ package
 
 
 *Default:*
-` pkgs.haskellPackages.cabal-gild `
+
+```nix
+pkgs.haskellPackages.cabal-gild
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix)
@@ -36300,7 +41608,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix)
@@ -36338,7 +41649,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.cabal"
   "cabal.project"
@@ -36365,7 +41676,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix)
@@ -36386,12 +41700,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix)
@@ -36412,7 +41732,10 @@ package
 
 
 *Default:*
-` pkgs.clang-tools `
+
+```nix
+pkgs.clang-tools
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix)
@@ -36433,7 +41756,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix)
@@ -36471,7 +41797,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.c"
   "*.cc"
@@ -36508,7 +41834,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix)
@@ -36529,12 +41858,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
@@ -36555,7 +41890,10 @@ package
 
 
 *Default:*
-` pkgs.clang-tools `
+
+```nix
+pkgs.clang-tools
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
@@ -36576,12 +41914,18 @@ null or absolute path or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "/my/cmake/build/directory" `
+
+```nix
+"/my/cmake/build/directory"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
@@ -36602,12 +41946,18 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "/some/path/myTidyConfigFile" `
+
+```nix
+"/some/path/myTidyConfigFile"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
@@ -36628,7 +41978,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
@@ -36666,7 +42019,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.c"
   "*.cc"
@@ -36703,7 +42056,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
@@ -36724,7 +42080,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
@@ -36745,12 +42104,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix)
@@ -36771,7 +42136,10 @@ package
 
 
 *Default:*
-` pkgs.cljfmt `
+
+```nix
+pkgs.cljfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix)
@@ -36792,7 +42160,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix)
@@ -36830,7 +42201,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.clj"
   "*.cljc"
@@ -36858,7 +42229,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix)
@@ -36879,12 +42253,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix)
@@ -36905,7 +42285,10 @@ package
 
 
 *Default:*
-` pkgs.cmake-format `
+
+```nix
+pkgs.cmake-format
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix)
@@ -36926,7 +42309,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix)
@@ -36964,7 +42350,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.cmake"
   "CMakeLists.txt"
@@ -36990,7 +42376,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix)
@@ -37011,12 +42400,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix)
@@ -37037,7 +42432,10 @@ package
 
 
 *Default:*
-` pkgs.csharpier `
+
+```nix
+pkgs.csharpier
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix)
@@ -37058,7 +42456,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix)
@@ -37096,7 +42497,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.cs"
   "*.csproj"
@@ -37124,7 +42525,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix)
@@ -37145,12 +42549,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix)
@@ -37171,7 +42581,10 @@ package
 
 
 *Default:*
-` pkgs.cue `
+
+```nix
+pkgs.cue
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix)
@@ -37192,7 +42605,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix)
@@ -37230,7 +42646,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.cue"
 ]
@@ -37255,7 +42671,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix)
@@ -37276,12 +42695,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix)
@@ -37302,7 +42727,10 @@ package
 
 
 *Default:*
-` pkgs.d2 `
+
+```nix
+pkgs.d2
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix)
@@ -37323,7 +42751,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix)
@@ -37361,7 +42792,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.d2"
 ]
@@ -37386,7 +42817,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix)
@@ -37407,12 +42841,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix)
@@ -37433,7 +42873,10 @@ package
 
 
 *Default:*
-` pkgs.dart `
+
+```nix
+pkgs.dart
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix)
@@ -37454,7 +42897,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix)
@@ -37492,7 +42938,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.dart"
 ]
@@ -37517,7 +42963,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix)
@@ -37538,12 +42987,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
@@ -37564,7 +43019,10 @@ package
 
 
 *Default:*
-` pkgs.deadnix `
+
+```nix
+pkgs.deadnix
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
@@ -37585,7 +43043,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
@@ -37623,7 +43084,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.nix"
 ]
@@ -37648,12 +43109,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
@@ -37674,12 +43141,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
@@ -37700,12 +43173,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
@@ -37726,7 +43205,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
@@ -37747,12 +43229,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix)
@@ -37773,7 +43261,10 @@ package
 
 
 *Default:*
-` pkgs.deno `
+
+```nix
+pkgs.deno
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix)
@@ -37794,7 +43285,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix)
@@ -37832,7 +43326,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.css"
   "*.html"
@@ -37871,7 +43365,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix)
@@ -37892,12 +43389,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/detekt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/detekt.nix)
@@ -37918,7 +43421,10 @@ package
 
 
 *Default:*
-` pkgs.detekt `
+
+```nix
+pkgs.detekt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/detekt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/detekt.nix)
@@ -37939,7 +43445,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/detekt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/detekt.nix)
@@ -37960,12 +43469,18 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "./detekt-config.yml" `
+
+```nix
+"./detekt-config.yml"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/detekt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/detekt.nix)
@@ -37986,7 +43501,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/detekt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/detekt.nix)
@@ -38024,7 +43542,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.kt"
   "*.kts"
@@ -38050,7 +43568,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/detekt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/detekt.nix)
@@ -38071,12 +43592,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix)
@@ -38097,7 +43624,10 @@ package
 
 
 *Default:*
-` pkgs.dformat `
+
+```nix
+pkgs.dformat
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix)
@@ -38118,7 +43648,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix)
@@ -38156,7 +43689,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.d"
 ]
@@ -38181,7 +43714,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix)
@@ -38202,12 +43738,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix)
@@ -38228,7 +43770,10 @@ package
 
 
 *Default:*
-` pkgs.dhall `
+
+```nix
+pkgs.dhall
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix)
@@ -38249,7 +43794,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix)
@@ -38287,7 +43835,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.dhall"
 ]
@@ -38312,7 +43860,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix)
@@ -38333,7 +43884,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix)
@@ -38354,12 +43908,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
@@ -38380,7 +43940,10 @@ package
 
 
 *Default:*
-` pkgs.djlint `
+
+```nix
+pkgs.djlint
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
@@ -38401,7 +43964,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
@@ -38438,7 +44004,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
@@ -38460,7 +44029,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.html"
 ]
@@ -38485,7 +44054,10 @@ unsigned integer, meaning >=0
 
 
 *Default:*
-` 4 `
+
+```nix
+4
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
@@ -38506,7 +44078,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
@@ -38527,7 +44102,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
@@ -38548,12 +44126,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix)
@@ -38574,7 +44158,10 @@ package
 
 
 *Default:*
-` pkgs.dnscontrol `
+
+```nix
+pkgs.dnscontrol
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix)
@@ -38595,7 +44182,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix)
@@ -38633,7 +44223,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "dnsconfig.js"
 ]
@@ -38658,7 +44248,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix)
@@ -38679,12 +44272,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix)
@@ -38705,7 +44304,10 @@ package
 
 
 *Default:*
-` pkgs.dockerfmt `
+
+```nix
+pkgs.dockerfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix)
@@ -38726,7 +44328,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix)
@@ -38764,7 +44369,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "Dockerfile"
   "*/Dockerfile"
@@ -38796,7 +44401,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix)
@@ -38817,12 +44425,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix)
@@ -38843,7 +44457,10 @@ package
 
 
 *Default:*
-` pkgs.dockfmt `
+
+```nix
+pkgs.dockfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix)
@@ -38864,7 +44481,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix)
@@ -38902,7 +44522,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "Dockerfile"
   "*/Dockerfile"
@@ -38934,7 +44554,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix)
@@ -38955,12 +44578,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix)
@@ -38981,7 +44610,10 @@ package
 
 
 *Default:*
-` pkgs.dos2unix `
+
+```nix
+pkgs.dos2unix
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix)
@@ -39002,7 +44634,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix)
@@ -39040,7 +44675,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*"
 ]
@@ -39065,7 +44700,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix)
@@ -39086,12 +44724,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
@@ -39112,7 +44756,10 @@ package
 
 
 *Default:*
-` pkgs.dprint `
+
+```nix
+pkgs.dprint
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
@@ -39133,7 +44780,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
@@ -39171,7 +44821,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   ".*"
 ]
@@ -39196,7 +44846,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
@@ -39217,7 +44870,10 @@ open submodule of (JSON value)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
@@ -39238,12 +44894,18 @@ null or string or list of string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "https://dprint.dev/path/to/config/file.v1.json" `
+
+```nix
+"https://dprint.dev/path/to/config/file.v1.json"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
@@ -39264,12 +44926,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
@@ -39290,12 +44958,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 2 `
+
+```nix
+2
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
@@ -39317,12 +44991,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 80 `
+
+```nix
+80
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
@@ -39343,12 +45023,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "auto" `
+
+```nix
+"auto"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
@@ -39369,13 +45055,16 @@ null or (list of string)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 # (recommended) using plugins from nixpkgs
 # plugins is the list of all available dprint plugins in nixpkgs
 (pkgs.dprint-plugins.getPluginList (
@@ -39415,12 +45104,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
@@ -39441,12 +45136,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix)
@@ -39467,7 +45168,10 @@ package
 
 
 *Default:*
-` pkgs.dscanner `
+
+```nix
+pkgs.dscanner
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix)
@@ -39488,7 +45192,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix)
@@ -39526,7 +45233,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.d"
 ]
@@ -39551,7 +45258,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix)
@@ -39572,12 +45282,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix)
@@ -39598,7 +45314,10 @@ package
 
 
 *Default:*
-` pkgs.efmt `
+
+```nix
+pkgs.efmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix)
@@ -39619,7 +45338,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix)
@@ -39657,7 +45379,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.erl"
   "*.hrl"
@@ -39688,7 +45410,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix)
@@ -39709,12 +45434,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix)
@@ -39735,7 +45466,10 @@ package
 
 
 *Default:*
-` pkgs.elmPackages.elm-format `
+
+```nix
+pkgs.elmPackages.elm-format
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix)
@@ -39756,7 +45490,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix)
@@ -39794,7 +45531,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.elm"
 ]
@@ -39819,7 +45556,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix)
@@ -39840,12 +45580,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix)
@@ -39866,7 +45612,10 @@ package
 
 
 *Default:*
-` pkgs.erlfmt `
+
+```nix
+pkgs.erlfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix)
@@ -39887,7 +45636,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix)
@@ -39925,7 +45677,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.erl"
   "*.hrl"
@@ -39956,12 +45708,18 @@ signed integer
 
 
 *Default:*
-` 100 `
+
+```nix
+100
+```
 
 
 
 *Example:*
-` 80 `
+
+```nix
+80
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix)
@@ -39982,7 +45740,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix)
@@ -40003,12 +45764,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix)
@@ -40029,7 +45796,10 @@ package
 
 
 *Default:*
-` pkgs.fantomas `
+
+```nix
+pkgs.fantomas
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix)
@@ -40050,7 +45820,10 @@ package
 
 
 *Default:*
-` pkgs.dotnet-sdk `
+
+```nix
+pkgs.dotnet-sdk
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix)
@@ -40071,7 +45844,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix)
@@ -40109,7 +45885,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.fs"
   "*.fsx"
@@ -40138,7 +45914,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix)
@@ -40159,12 +45938,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix)
@@ -40185,7 +45970,10 @@ package
 
 
 *Default:*
-` pkgs.fish `
+
+```nix
+pkgs.fish
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix)
@@ -40206,7 +45994,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix)
@@ -40244,7 +46035,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.fish"
 ]
@@ -40269,10 +46060,256 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix)
+
+
+
+## treefmt.config.programs.flake-edit.enable
+
+
+
+Whether to enable flake-edit.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix)
+
+
+
+## treefmt.config.programs.flake-edit.package
+
+
+
+The flake-edit package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.flake-edit
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix)
+
+
+
+## treefmt.config.programs.flake-edit.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix)
+
+
+
+## treefmt.config.programs.flake-edit.finalPackage
+
+
+
+Resulting ` flake-edit ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix)
+
+
+
+## treefmt.config.programs.flake-edit.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[
+  "flake.nix"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix)
+
+
+
+## treefmt.config.programs.flake-edit.noLock
+
+
+
+Skip updating the lockfile after editing flake.nix
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix)
+
+
+
+## treefmt.config.programs.flake-edit.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix)
+
+
+
+## treefmt.config.programs.flake-edit.settings.follow.aliases
+
+
+
+Mapping of canonical input names to alternative names.
+Allows nested inputs like “nixpkgs-lib” to follow “nixpkgs”.
+
+
+
+*Type:*
+attribute set of list of string
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  nixpkgs = [
+    "nixpkgs-lib"
+  ];
+}
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix)
+
+
+
+## treefmt.config.programs.flake-edit.settings.follow.ignore
+
+
+
+List of inputs to ignore when following.
+Supports simple names (“systems”) or full paths (“crane.nixpkgs”).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  "systems"
+  "crane.flake-utils"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/flake-edit.nix)
 
 
 
@@ -40290,12 +46327,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix)
@@ -40316,7 +46359,10 @@ package
 
 
 *Default:*
-` pkgs.fnlfmt `
+
+```nix
+pkgs.fnlfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix)
@@ -40337,7 +46383,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix)
@@ -40375,7 +46424,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.fnl"
 ]
@@ -40400,7 +46449,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix)
@@ -40421,12 +46473,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
@@ -40447,7 +46505,10 @@ package
 
 
 *Default:*
-` pkgs.formatjson5 `
+
+```nix
+pkgs.formatjson5
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
@@ -40468,7 +46529,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
@@ -40506,7 +46570,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.json5"
 ]
@@ -40531,7 +46595,10 @@ signed integer
 
 
 *Default:*
-` 4 `
+
+```nix
+4
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
@@ -40552,7 +46619,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
@@ -40573,7 +46643,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
@@ -40594,7 +46667,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
@@ -40615,7 +46691,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
@@ -40636,12 +46715,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix)
@@ -40662,7 +46747,10 @@ package
 
 
 *Default:*
-` pkgs.haskellPackages.fourmolu `
+
+```nix
+pkgs.haskellPackages.fourmolu
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix)
@@ -40683,7 +46771,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix)
@@ -40721,7 +46812,7 @@ unspecified value
 
 *Default:*
 
-```
+```nix
 [
   "BangPatterns"
   "PatternSynonyms"
@@ -40749,7 +46840,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.hs"
 ]
@@ -40774,7 +46865,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix)
@@ -40795,12 +46889,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix)
@@ -40821,7 +46921,10 @@ package
 
 
 *Default:*
-` pkgs.fprettify `
+
+```nix
+pkgs.fprettify
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix)
@@ -40842,7 +46945,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix)
@@ -40880,7 +46986,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.f90"
 ]
@@ -40905,7 +47011,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix)
@@ -40926,12 +47035,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix)
@@ -40952,7 +47067,10 @@ package
 
 
 *Default:*
-` pkgs.gdtoolkit_4 `
+
+```nix
+pkgs.gdtoolkit_4
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix)
@@ -40973,7 +47091,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix)
@@ -41011,7 +47132,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.gd"
 ]
@@ -41036,7 +47157,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix)
@@ -41057,12 +47181,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
@@ -41083,7 +47213,10 @@ package
 
 
 *Default:*
-` pkgs.genemichaels `
+
+```nix
+pkgs.genemichaels
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
@@ -41104,7 +47237,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
@@ -41126,7 +47262,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.rs"
 ]
@@ -41152,12 +47288,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
@@ -41180,12 +47322,18 @@ null or (positive integer, meaning >0)
 
 
 *Default:*
-` 80 `
+
+```nix
+80
+```
 
 
 
 *Example:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
@@ -41209,12 +47357,18 @@ unsigned integer, meaning >=0
 
 
 *Default:*
-` 0 `
+
+```nix
+0
+```
 
 
 
 *Example:*
-` 1 `
+
+```nix
+1
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
@@ -41236,12 +47390,18 @@ positive integer, meaning >0
 
 
 *Default:*
-` 120 `
+
+```nix
+120
+```
 
 
 
 *Example:*
-` 80 `
+
+```nix
+80
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
@@ -41262,12 +47422,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
@@ -41289,12 +47455,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
@@ -41316,12 +47488,18 @@ null or (positive integer, meaning >0)
 
 
 *Default:*
-` 1 `
+
+```nix
+1
+```
 
 
 
 *Example:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
@@ -41342,12 +47520,18 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
@@ -41373,7 +47557,10 @@ Generated JSON file from ` treefmt.config.programs.genemichaels.settings `
 
 
 *Example:*
-` ./.genemichaels.json `
+
+```nix
+./.genemichaels.json
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
@@ -41395,12 +47582,18 @@ null or (unsigned integer, meaning >=0)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 1 `
+
+```nix
+1
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
@@ -41421,12 +47614,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix)
@@ -41447,7 +47646,10 @@ package
 
 
 *Default:*
-` pkgs.gleam `
+
+```nix
+pkgs.gleam
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix)
@@ -41468,7 +47670,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix)
@@ -41506,7 +47711,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.gleam"
 ]
@@ -41531,7 +47736,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix)
@@ -41552,12 +47760,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix)
@@ -41578,7 +47792,10 @@ package
 
 
 *Default:*
-` pkgs.go `
+
+```nix
+pkgs.go
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix)
@@ -41600,7 +47817,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "vendor/*"
 ]
@@ -41642,7 +47859,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.go"
 ]
@@ -41667,7 +47884,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix)
@@ -41688,12 +47908,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix)
@@ -41714,7 +47940,10 @@ package
 
 
 *Default:*
-` pkgs.gofumpt `
+
+```nix
+pkgs.gofumpt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix)
@@ -41736,7 +47965,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "vendor/*"
 ]
@@ -41761,7 +47990,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix)
@@ -41799,7 +48031,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.go"
 ]
@@ -41824,7 +48056,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix)
@@ -41845,12 +48080,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix)
@@ -41871,7 +48112,10 @@ package
 
 
 *Default:*
-` pkgs.gotools `
+
+```nix
+pkgs.gotools
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix)
@@ -41893,7 +48137,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "vendor/*"
 ]
@@ -41935,7 +48179,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.go"
 ]
@@ -41960,7 +48204,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix)
@@ -41981,12 +48228,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
@@ -42007,13 +48260,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "govet"
   "errcheck"
@@ -42040,13 +48296,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "govet"
   "gofmt"
@@ -42072,7 +48331,10 @@ package
 
 
 *Default:*
-` pkgs.golangci-lint `
+
+```nix
+pkgs.golangci-lint
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
@@ -42093,13 +48355,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "integration"
   "e2e"
@@ -42125,12 +48390,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 4 `
+
+```nix
+4
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
@@ -42151,12 +48422,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` ".golangci.yml" `
+
+```nix
+".golangci.yml"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
@@ -42177,13 +48454,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "typecheck"
 ]
@@ -42209,7 +48489,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "vendor/*"
 ]
@@ -42234,7 +48514,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
@@ -42272,7 +48555,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.go"
 ]
@@ -42297,12 +48580,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 50 `
+
+```nix
+50
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
@@ -42323,12 +48612,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 3 `
+
+```nix
+3
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
@@ -42349,12 +48644,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "HEAD~1" `
+
+```nix
+"HEAD~1"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
@@ -42375,7 +48676,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
@@ -42396,7 +48700,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
@@ -42417,7 +48724,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
@@ -42438,12 +48748,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "5m" `
+
+```nix
+"5m"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
@@ -42464,7 +48780,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
@@ -42485,12 +48804,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix)
@@ -42511,7 +48836,10 @@ package
 
 
 *Default:*
-` pkgs.golines `
+
+```nix
+pkgs.golines
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix)
@@ -42533,7 +48861,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "vendor/*"
 ]
@@ -42575,7 +48903,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.go"
 ]
@@ -42600,12 +48928,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 100 `
+
+```nix
+100
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix)
@@ -42626,7 +48960,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix)
@@ -42647,12 +48984,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 4 `
+
+```nix
+4
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix)
@@ -42673,12 +49016,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix)
@@ -42699,7 +49048,10 @@ package
 
 
 *Default:*
-` pkgs.google-java-format `
+
+```nix
+pkgs.google-java-format
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix)
@@ -42722,12 +49074,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix)
@@ -42748,7 +49106,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix)
@@ -42786,7 +49147,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.java"
 ]
@@ -42811,7 +49172,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix)
@@ -42832,12 +49196,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix)
@@ -42858,7 +49228,10 @@ package
 
 
 *Default:*
-` pkgs.hclfmt `
+
+```nix
+pkgs.hclfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix)
@@ -42879,7 +49252,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix)
@@ -42917,7 +49293,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.hcl"
 ]
@@ -42942,7 +49318,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix)
@@ -42963,12 +49342,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix)
@@ -42989,7 +49374,10 @@ package
 
 
 *Default:*
-` pkgs.hlint `
+
+```nix
+pkgs.hlint
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix)
@@ -43010,7 +49398,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix)
@@ -43048,7 +49439,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.hs"
 ]
@@ -43073,7 +49464,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix)
@@ -43094,12 +49488,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix)
@@ -43120,7 +49520,10 @@ package
 
 
 *Default:*
-` pkgs.hujsonfmt `
+
+```nix
+pkgs.hujsonfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix)
@@ -43141,7 +49544,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix)
@@ -43179,7 +49585,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.hujson"
 ]
@@ -43204,7 +49610,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix)
@@ -43225,12 +49634,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix)
@@ -43251,7 +49666,10 @@ package
 
 
 *Default:*
-` pkgs.isort `
+
+```nix
+pkgs.isort
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix)
@@ -43272,7 +49690,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix)
@@ -43310,7 +49731,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.py"
   "*.pyi"
@@ -43336,7 +49757,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix)
@@ -43357,7 +49781,10 @@ string
 
 
 *Default:*
-` "" `
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix)
@@ -43378,12 +49805,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix)
@@ -43404,7 +49837,10 @@ package
 
 
 *Default:*
-` pkgs.jsonfmt `
+
+```nix
+pkgs.jsonfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix)
@@ -43425,7 +49861,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix)
@@ -43463,7 +49902,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.json"
 ]
@@ -43488,7 +49927,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix)
@@ -43509,12 +49951,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix)
@@ -43535,7 +49983,10 @@ package
 
 
 *Default:*
-` pkgs.go-jsonnet `
+
+```nix
+pkgs.go-jsonnet
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix)
@@ -43556,7 +50007,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix)
@@ -43594,7 +50048,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.jsonnet"
   "*.libsonnet"
@@ -43620,7 +50074,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix)
@@ -43641,12 +50098,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix)
@@ -43667,7 +50130,10 @@ package
 
 
 *Default:*
-` pkgs.go-jsonnet `
+
+```nix
+pkgs.go-jsonnet
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix)
@@ -43688,7 +50154,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix)
@@ -43726,7 +50195,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.jsonnet"
   "*.libsonnet"
@@ -43752,7 +50221,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix)
@@ -43773,12 +50245,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix)
@@ -43799,7 +50277,10 @@ package
 
 
 *Default:*
-` pkgs.just `
+
+```nix
+pkgs.just
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix)
@@ -43820,7 +50301,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix)
@@ -43858,7 +50342,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "[Jj][Uu][Ss][Tt][Ff][Ii][Ll][Ee]"
   "*/[Jj][Uu][Ss][Tt][Ff][Ii][Ll][Ee]"
@@ -43888,7 +50372,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix)
@@ -43909,12 +50396,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix)
@@ -43935,7 +50428,10 @@ package
 
 
 *Default:*
-` pkgs.kdlfmt `
+
+```nix
+pkgs.kdlfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix)
@@ -43956,7 +50452,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix)
@@ -43994,7 +50493,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.kdl"
 ]
@@ -44019,7 +50518,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix)
@@ -44040,12 +50542,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix)
@@ -44066,7 +50574,10 @@ package
 
 
 *Default:*
-` pkgs.keep-sorted `
+
+```nix
+pkgs.keep-sorted
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix)
@@ -44087,7 +50598,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix)
@@ -44125,7 +50639,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*"
 ]
@@ -44150,7 +50664,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix)
@@ -44171,12 +50688,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix)
@@ -44197,7 +50720,10 @@ package
 
 
 *Default:*
-` pkgs.ktfmt `
+
+```nix
+pkgs.ktfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix)
@@ -44218,7 +50744,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix)
@@ -44256,7 +50785,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.kt"
   "*.kts"
@@ -44282,7 +50811,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix)
@@ -44303,12 +50835,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix)
@@ -44329,7 +50867,10 @@ package
 
 
 *Default:*
-` pkgs.ktlint `
+
+```nix
+pkgs.ktlint
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix)
@@ -44350,7 +50891,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix)
@@ -44388,7 +50932,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.kt"
   "*.kts"
@@ -44414,7 +50958,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix)
@@ -44435,12 +50982,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix)
@@ -44461,7 +51014,10 @@ package
 
 
 *Default:*
-` pkgs.texliveMedium `
+
+```nix
+pkgs.texliveMedium
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix)
@@ -44482,7 +51038,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix)
@@ -44520,7 +51079,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.tex"
   "*.sty"
@@ -44549,7 +51108,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix)
@@ -44570,12 +51132,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix)
@@ -44596,7 +51164,10 @@ package
 
 
 *Default:*
-` pkgs.leptosfmt `
+
+```nix
+pkgs.leptosfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix)
@@ -44617,7 +51188,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix)
@@ -44655,7 +51229,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.rs"
 ]
@@ -44680,7 +51254,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix)
@@ -44701,12 +51278,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -44727,7 +51310,10 @@ package
 
 
 *Default:*
-` pkgs.mbake `
+
+```nix
+pkgs.mbake
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -44748,7 +51334,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -44786,7 +51375,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "Makefile"
   "*/Makefile"
@@ -44819,7 +51408,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -44840,7 +51432,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -44861,7 +51456,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -44882,7 +51480,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -44903,7 +51504,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -44924,7 +51528,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -44945,7 +51552,10 @@ null or (unsigned integer, meaning >=0)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -44966,7 +51576,10 @@ null or (unsigned integer, meaning >=0)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -44987,7 +51600,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -45008,7 +51624,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -45029,7 +51648,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -45050,7 +51672,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -45071,7 +51696,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -45092,7 +51720,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -45113,7 +51744,10 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -45134,7 +51768,10 @@ null or (unsigned integer, meaning >=0)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mbake.nix)
@@ -45155,12 +51792,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
@@ -45181,7 +51824,10 @@ package
 
 
 *Default:*
-` pkgs.mdformat `
+
+```nix
+pkgs.mdformat
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
@@ -45202,7 +51848,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
@@ -45240,7 +51889,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.md"
 ]
@@ -45270,7 +51919,7 @@ function that evaluates to a(n) list of package
 
 *Default:*
 
-```
+```nix
 ps: [ ];
 
 ```
@@ -45279,7 +51928,7 @@ ps: [ ];
 
 *Example:*
 
-```
+```nix
 ps: [
   ps.mdformat-footnote
   ps.mdformat-gfm
@@ -45306,7 +51955,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
@@ -45327,12 +51979,18 @@ null or one of “crlf”, “lf”, “keep”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "lf" `
+
+```nix
+"lf"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
@@ -45353,12 +52011,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
@@ -45380,12 +52044,18 @@ null or signed integer or one of “keep”, “no”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "keep" `
+
+```nix
+"keep"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
@@ -45406,12 +52076,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix)
@@ -45432,7 +52108,10 @@ package
 
 
 *Default:*
-` pkgs.mdsh `
+
+```nix
+pkgs.mdsh
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix)
@@ -45453,7 +52132,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix)
@@ -45491,7 +52173,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "README.md"
 ]
@@ -45516,7 +52198,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix)
@@ -45537,12 +52222,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix)
@@ -45563,7 +52254,10 @@ package
 
 
 *Default:*
-` pkgs.meson `
+
+```nix
+pkgs.meson
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix)
@@ -45584,12 +52278,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix)
@@ -45610,7 +52310,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix)
@@ -45648,7 +52351,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "meson.build"
   "meson.options"
@@ -45678,7 +52381,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix)
@@ -45699,12 +52405,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix)
@@ -45725,7 +52437,10 @@ package
 
 
 *Default:*
-` pkgs.elixir `
+
+```nix
+pkgs.elixir
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix)
@@ -45746,7 +52461,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix)
@@ -45784,7 +52502,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.ex"
   "*.exs"
@@ -45810,7 +52528,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix)
@@ -45831,12 +52552,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix)
@@ -45857,7 +52584,10 @@ package
 
 
 *Default:*
-` pkgs.muon `
+
+```nix
+pkgs.muon
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix)
@@ -45878,12 +52608,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix)
@@ -45904,7 +52640,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix)
@@ -45942,7 +52681,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "meson.build"
   "meson.options"
@@ -45972,7 +52711,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix)
@@ -45993,12 +52735,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix)
@@ -46019,7 +52767,10 @@ package
 
 
 *Default:*
-` pkgs.mypy `
+
+```nix
+pkgs.mypy
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix)
@@ -46041,7 +52792,7 @@ attribute set of (submodule)
 
 *Default:*
 
-```
+```nix
 {
   "" = { };
 }
@@ -46051,7 +52802,7 @@ attribute set of (submodule)
 
 *Example:*
 
-```
+```nix
 {
   "" = {
     modules = [
@@ -46082,7 +52833,10 @@ string
 
 
 *Default:*
-` "‹name›" `
+
+```nix
+"‹name›"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix)
@@ -46103,7 +52857,10 @@ list of package
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
@@ -46130,13 +52887,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "path/to/my/module"
 ]
@@ -46162,7 +52922,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   ""
 ]
@@ -46172,7 +52932,7 @@ list of string
 
 *Example:*
 
-```
+```nix
 [
   "mymodule"
   "tests"
@@ -46198,13 +52958,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "--ignore-missing-imports"
 ]
@@ -46229,12 +52992,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nbstripout.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nbstripout.nix)
@@ -46255,7 +53024,10 @@ package
 
 
 *Default:*
-` pkgs.nbstripout `
+
+```nix
+pkgs.nbstripout
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nbstripout.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nbstripout.nix)
@@ -46276,7 +53048,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nbstripout.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nbstripout.nix)
@@ -46314,7 +53089,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.ipynb"
 ]
@@ -46339,7 +53114,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nbstripout.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nbstripout.nix)
@@ -46360,12 +53138,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix)
@@ -46386,7 +53170,10 @@ package
 
 
 *Default:*
-` pkgs.nickel `
+
+```nix
+pkgs.nickel
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix)
@@ -46407,7 +53194,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix)
@@ -46445,7 +53235,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.ncl"
   "*.nickel"
@@ -46471,7 +53261,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix)
@@ -46492,12 +53285,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix)
@@ -46518,7 +53317,10 @@ package
 
 
 *Default:*
-` pkgs.nim `
+
+```nix
+pkgs.nim
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix)
@@ -46539,7 +53341,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix)
@@ -46577,7 +53382,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.nim"
 ]
@@ -46602,7 +53407,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix)
@@ -46623,12 +53431,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix)
@@ -46649,7 +53463,10 @@ package
 
 
 *Default:*
-` pkgs.nixf-diagnose `
+
+```nix
+pkgs.nixf-diagnose
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix)
@@ -46670,7 +53487,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix)
@@ -46691,7 +53511,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix)
@@ -46728,13 +53551,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "sema-primop-overridden"
 ]
@@ -46760,7 +53586,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.nix"
 ]
@@ -46785,12 +53611,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "sema-primop-overridden" `
+
+```nix
+"sema-primop-overridden"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix)
@@ -46811,7 +53643,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix)
@@ -46832,12 +53667,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix)
@@ -46858,12 +53699,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
@@ -46884,7 +53731,10 @@ package
 
 
 *Default:*
-` pkgs.nixfmt `
+
+```nix
+pkgs.nixfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
@@ -46905,7 +53755,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
@@ -46943,7 +53796,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.nix"
 ]
@@ -46968,12 +53821,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 4 `
+
+```nix
+4
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
@@ -46994,7 +53853,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
@@ -47016,7 +53878,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
@@ -47037,12 +53902,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 120 `
+
+```nix
+120
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
@@ -47063,12 +53934,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix)
@@ -47089,7 +53966,10 @@ package
 
 
 *Default:*
-` pkgs.nixpkgs-fmt `
+
+```nix
+pkgs.nixpkgs-fmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix)
@@ -47110,7 +53990,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix)
@@ -47148,7 +54031,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.nix"
 ]
@@ -47173,7 +54056,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix)
@@ -47194,12 +54080,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix)
@@ -47220,7 +54112,10 @@ package
 
 
 *Default:*
-` pkgs.ocamlformat `
+
+```nix
+pkgs.ocamlformat
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix)
@@ -47241,7 +54136,10 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix)
@@ -47262,7 +54160,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix)
@@ -47300,7 +54201,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.ml"
   "*.mli"
@@ -47347,7 +54248,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix)
@@ -47368,12 +54272,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix)
@@ -47394,7 +54304,10 @@ package
 
 
 *Default:*
-` pkgs.ols `
+
+```nix
+pkgs.ols
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix)
@@ -47415,7 +54328,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix)
@@ -47453,7 +54369,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.odin"
 ]
@@ -47478,7 +54394,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix)
@@ -47499,12 +54418,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix)
@@ -47525,7 +54450,10 @@ package
 
 
 *Default:*
-` pkgs.open-policy-agent `
+
+```nix
+pkgs.open-policy-agent
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix)
@@ -47546,7 +54474,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix)
@@ -47584,7 +54515,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.rego"
 ]
@@ -47609,7 +54540,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix)
@@ -47630,12 +54564,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix)
@@ -47656,7 +54596,10 @@ package
 
 
 *Default:*
-` pkgs.ormolu `
+
+```nix
+pkgs.ormolu
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix)
@@ -47677,7 +54620,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix)
@@ -47715,7 +54661,7 @@ unspecified value
 
 *Default:*
 
-```
+```nix
 [
   "BangPatterns"
   "PatternSynonyms"
@@ -47743,7 +54689,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.hs"
 ]
@@ -47768,7 +54714,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix)
@@ -47789,12 +54738,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)
@@ -47815,7 +54770,10 @@ package
 
 
 *Default:*
-` pkgs.oxfmt `
+
+```nix
+pkgs.oxfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)
@@ -47836,7 +54794,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)
@@ -47874,7 +54835,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.cjs"
   "*.css"
@@ -47918,7 +54879,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)
@@ -47939,12 +54903,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
@@ -47965,7 +54935,10 @@ package
 
 
 *Default:*
-` pkgs.oxipng `
+
+```nix
+pkgs.oxipng
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
@@ -47986,12 +54959,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
@@ -48012,7 +54991,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
@@ -48050,7 +55032,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.png"
 ]
@@ -48075,12 +55057,18 @@ string
 
 
 *Default:*
-` "2" `
+
+```nix
+"2"
+```
 
 
 
 *Example:*
-` "max" `
+
+```nix
+"max"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
@@ -48101,7 +55089,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
@@ -48122,12 +55113,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
@@ -48148,12 +55145,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "safe" `
+
+```nix
+"safe"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
@@ -48174,12 +55177,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix)
@@ -48200,7 +55209,10 @@ package
 
 
 *Default:*
-` pkgs.packer `
+
+```nix
+pkgs.packer
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix)
@@ -48221,7 +55233,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix)
@@ -48259,7 +55274,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.pkr.hcl"
   "*.pkrvars.hcl"
@@ -48285,7 +55300,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix)
@@ -48306,12 +55324,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix)
@@ -48332,7 +55356,10 @@ package
 
 
 *Default:*
-` pkgs.perlPackages.PerlTidy `
+
+```nix
+pkgs.perlPackages.PerlTidy
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix)
@@ -48353,7 +55380,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix)
@@ -48391,7 +55421,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.pl"
 ]
@@ -48416,7 +55446,10 @@ null or absolute path
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix)
@@ -48437,7 +55470,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix)
@@ -48458,12 +55494,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix)
@@ -48484,7 +55526,10 @@ package
 
 
 *Default:*
-` pkgs.php83Packages.php-cs-fixer `
+
+```nix
+pkgs.php83Packages.php-cs-fixer
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix)
@@ -48505,12 +55550,18 @@ string or absolute path
 
 
 *Default:*
-` "./.php-cs-fixer.php" `
+
+```nix
+"./.php-cs-fixer.php"
+```
 
 
 
 *Example:*
-` "./.php-cs-fixer.dist.php" `
+
+```nix
+"./.php-cs-fixer.dist.php"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix)
@@ -48531,7 +55582,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix)
@@ -48569,7 +55623,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.php"
 ]
@@ -48594,7 +55648,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix)
@@ -48615,12 +55672,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
@@ -48641,7 +55704,10 @@ package
 
 
 *Default:*
-` pkgs.pinact `
+
+```nix
+pkgs.pinact
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
@@ -48662,7 +55728,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
@@ -48700,7 +55769,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   ".github/workflows/*.yml"
   ".github/workflows/*.yaml"
@@ -48728,7 +55797,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
@@ -48751,7 +55823,10 @@ open submodule of (YAML 1.1 value)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
@@ -48772,7 +55847,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
@@ -48793,7 +55871,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
@@ -48814,12 +55895,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -48840,7 +55927,10 @@ package
 
 
 *Default:*
-` pkgs.nodePackages.prettier `
+
+```nix
+pkgs.nodePackages.prettier
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -48861,7 +55951,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -48899,7 +55992,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.cjs"
   "*.css"
@@ -48939,7 +56032,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -48960,12 +56056,18 @@ null or one of “always”, “avoid”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "always" `
+
+```nix
+"always"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -48986,12 +56088,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49012,12 +56120,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49040,12 +56154,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` -1 `
+
+```nix
+-1
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49068,12 +56188,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49094,12 +56220,18 @@ null or one of “auto”, “off”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "auto" `
+
+```nix
+"auto"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49120,12 +56252,18 @@ null or one of “lf”, “crlf”, “cr”, “auto”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "lf" `
+
+```nix
+"lf"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49146,12 +56284,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "example.js" `
+
+```nix
+"example.js"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49172,12 +56316,18 @@ null or one of “css”, “strict”, “ignore”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "css" `
+
+```nix
+"css"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49198,12 +56348,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49224,12 +56380,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49250,13 +56412,16 @@ null or (list of (attribute set))
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   files = [
     "*.html"
@@ -49287,12 +56452,18 @@ null or one of “flow”, “babel”, “babel-flow”, “babel-ts”, “typ
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "typescript" `
+
+```nix
+"typescript"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49315,12 +56486,18 @@ null or (list of string) or value false (singular enum)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49341,13 +56518,16 @@ null or (list of string)
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "@prettier/plugin-xml"
 ]
@@ -49372,12 +56552,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 80 `
+
+```nix
+80
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49398,12 +56584,18 @@ null or one of “always”, “never”, “preserve”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "preserve" `
+
+```nix
+"preserve"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49424,12 +56616,18 @@ null or one of “as-needed”, “consistent”, “preserve”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "as-needed" `
+
+```nix
+"as-needed"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49452,12 +56650,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 0 `
+
+```nix
+0
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49480,12 +56684,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 0 `
+
+```nix
+0
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49507,12 +56717,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49533,12 +56749,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49559,12 +56781,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49585,12 +56813,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49611,12 +56845,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 2 `
+
+```nix
+2
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49637,12 +56877,18 @@ null or one of “es5”, “none”, “all”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "es5" `
+
+```nix
+"es5"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49663,12 +56909,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49689,12 +56941,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
@@ -49715,12 +56973,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix)
@@ -49741,7 +57005,10 @@ package
 
 
 *Default:*
-` pkgs.protolint `
+
+```nix
+pkgs.protolint
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix)
@@ -49762,7 +57029,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix)
@@ -49800,7 +57070,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.proto"
 ]
@@ -49825,7 +57095,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix)
@@ -49846,12 +57119,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/qmlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/qmlformat.nix)
@@ -49872,7 +57151,10 @@ package
 
 
 *Default:*
-` pkgs.kdePackages.qtdeclarative `
+
+```nix
+pkgs.kdePackages.qtdeclarative
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/qmlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/qmlformat.nix)
@@ -49893,7 +57175,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/qmlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/qmlformat.nix)
@@ -49931,7 +57216,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.qml"
 ]
@@ -49956,7 +57241,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/qmlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/qmlformat.nix)
@@ -49977,12 +57265,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix)
@@ -50003,7 +57297,10 @@ package
 
 
 *Default:*
-` pkgs.rstfmt `
+
+```nix
+pkgs.rstfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix)
@@ -50024,7 +57321,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix)
@@ -50062,7 +57362,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.rst"
   "*.txt"
@@ -50088,12 +57388,18 @@ signed integer
 
 
 *Default:*
-` 72 `
+
+```nix
+72
+```
 
 
 
 *Example:*
-` 80 `
+
+```nix
+80
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix)
@@ -50114,7 +57420,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix)
@@ -50135,12 +57444,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix)
@@ -50161,7 +57476,10 @@ package
 
 
 *Default:*
-` pkgs.rubocop `
+
+```nix
+pkgs.rubocop
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix)
@@ -50182,7 +57500,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix)
@@ -50220,7 +57541,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.rb"
 ]
@@ -50245,7 +57566,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix)
@@ -50266,12 +57590,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix)
@@ -50292,7 +57622,10 @@ package
 
 
 *Default:*
-` pkgs.ruff `
+
+```nix
+pkgs.ruff
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix)
@@ -50313,7 +57646,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix)
@@ -50334,13 +57670,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "I"
 ]
@@ -50382,7 +57721,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.py"
   "*.pyi"
@@ -50408,7 +57747,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix)
@@ -50429,12 +57771,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix)
@@ -50455,7 +57803,10 @@ package
 
 
 *Default:*
-` pkgs.ruff `
+
+```nix
+pkgs.ruff
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix)
@@ -50476,7 +57827,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix)
@@ -50514,7 +57868,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.py"
   "*.pyi"
@@ -50540,12 +57894,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 79 `
+
+```nix
+79
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix)
@@ -50566,7 +57926,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix)
@@ -50587,12 +57950,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix)
@@ -50613,7 +57982,10 @@ package
 
 
 *Default:*
-` pkgs.rufo `
+
+```nix
+pkgs.rufo
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix)
@@ -50634,7 +58006,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix)
@@ -50672,7 +58047,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.rb"
 ]
@@ -50697,7 +58072,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix)
@@ -50718,12 +58096,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-check.nix)
@@ -50744,7 +58128,10 @@ package
 
 
 *Default:*
-` pkgs.rumdl `
+
+```nix
+pkgs.rumdl
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-check.nix)
@@ -50765,7 +58152,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-check.nix)
@@ -50803,7 +58193,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.md"
 ]
@@ -50828,7 +58218,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-check.nix)
@@ -50849,12 +58242,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-format.nix)
@@ -50875,7 +58274,10 @@ package
 
 
 *Default:*
-` pkgs.rumdl `
+
+```nix
+pkgs.rumdl
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-format.nix)
@@ -50896,7 +58298,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-format.nix)
@@ -50934,7 +58339,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.md"
 ]
@@ -50959,7 +58364,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rumdl-format.nix)
@@ -50980,12 +58388,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix)
@@ -51006,7 +58420,10 @@ package
 
 
 *Default:*
-` pkgs.rustfmt `
+
+```nix
+pkgs.rustfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix)
@@ -51027,7 +58444,10 @@ string
 
 
 *Default:*
-` "2024" `
+
+```nix
+"2024"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix)
@@ -51048,7 +58468,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix)
@@ -51086,7 +58509,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.rs"
 ]
@@ -51111,7 +58534,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix)
@@ -51132,12 +58558,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix)
@@ -51158,7 +58590,10 @@ package
 
 
 *Default:*
-` pkgs.scalafmt `
+
+```nix
+pkgs.scalafmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix)
@@ -51179,7 +58614,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix)
@@ -51217,7 +58655,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.sbt"
   "*.scala"
@@ -51243,7 +58681,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix)
@@ -51264,12 +58705,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix)
@@ -51290,7 +58737,10 @@ package
 
 
 *Default:*
-` pkgs.shellcheck `
+
+```nix
+pkgs.shellcheck
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix)
@@ -51311,7 +58761,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix)
@@ -51332,12 +58785,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix)
@@ -51358,13 +58817,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "all"
 ]
@@ -51406,7 +58868,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.sh"
   "*.bash"
@@ -51434,7 +58896,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix)
@@ -51455,7 +58920,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix)
@@ -51476,7 +58944,10 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix)
@@ -51497,12 +58968,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
@@ -51523,7 +59000,10 @@ package
 
 
 *Default:*
-` pkgs.shfmt `
+
+```nix
+pkgs.shfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
@@ -51544,7 +59024,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
@@ -51582,7 +59065,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.sh"
   "*.bash"
@@ -51611,12 +59094,18 @@ null or signed integer
 
 
 *Default:*
-` 2 `
+
+```nix
+2
+```
 
 
 
 *Example:*
-` 4 `
+
+```nix
+4
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
@@ -51637,7 +59126,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
@@ -51658,7 +59150,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
@@ -51682,12 +59177,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
@@ -51708,12 +59209,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
@@ -51734,7 +59241,10 @@ package
 
 
 *Default:*
-` pkgs.sizelint `
+
+```nix
+pkgs.sizelint
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
@@ -51755,7 +59265,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
@@ -51776,12 +59289,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
@@ -51819,7 +59338,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*"
 ]
@@ -51844,7 +59363,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
@@ -51865,7 +59387,10 @@ open submodule of (TOML value)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
@@ -51886,12 +59411,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix)
@@ -51912,7 +59443,10 @@ package
 
 
 *Default:*
-` pkgs.sql-formatter `
+
+```nix
+pkgs.sql-formatter
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix)
@@ -51933,12 +59467,18 @@ null or one of “bigquery”, “db2”, “db2i”, “hive”, “mariadb”,
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "postgresql" `
+
+```nix
+"postgresql"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix)
@@ -51959,7 +59499,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix)
@@ -51997,7 +59540,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.sql"
 ]
@@ -52022,7 +59565,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix)
@@ -52043,12 +59589,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix)
@@ -52069,7 +59621,10 @@ package
 
 
 *Default:*
-` pkgs.sqlfluff `
+
+```nix
+pkgs.sqlfluff
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix)
@@ -52090,12 +59645,18 @@ null or one of “db2”, “ansi”, “soql”, “tsql”, “hive”, “tri
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "sqlite" `
+
+```nix
+"sqlite"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix)
@@ -52116,7 +59677,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix)
@@ -52154,7 +59718,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.sql"
 ]
@@ -52179,7 +59743,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix)
@@ -52200,12 +59767,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix)
@@ -52226,7 +59799,10 @@ package
 
 
 *Default:*
-` pkgs.sqlfluff `
+
+```nix
+pkgs.sqlfluff
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix)
@@ -52247,7 +59823,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix)
@@ -52285,7 +59864,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.sql"
 ]
@@ -52310,7 +59889,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix)
@@ -52331,12 +59913,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix)
@@ -52357,7 +59945,10 @@ package
 
 
 *Default:*
-` pkgs.sqruff `
+
+```nix
+pkgs.sqruff
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix)
@@ -52378,7 +59969,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix)
@@ -52416,7 +60010,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.sql"
 ]
@@ -52441,7 +60035,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix)
@@ -52462,12 +60059,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix)
@@ -52488,7 +60091,10 @@ package
 
 
 *Default:*
-` pkgs.statix `
+
+```nix
+pkgs.statix
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix)
@@ -52509,13 +60115,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "empty_pattern"
 ]
@@ -52540,7 +60149,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix)
@@ -52578,7 +60190,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.nix"
 ]
@@ -52603,7 +60215,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix)
@@ -52624,12 +60239,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix)
@@ -52650,7 +60271,10 @@ package
 
 
 *Default:*
-` pkgs.stylish-haskell `
+
+```nix
+pkgs.stylish-haskell
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix)
@@ -52671,7 +60295,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix)
@@ -52709,7 +60336,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.hs"
 ]
@@ -52734,7 +60361,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix)
@@ -52755,12 +60385,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
@@ -52781,7 +60417,10 @@ package
 
 
 *Default:*
-` pkgs.stylua `
+
+```nix
+pkgs.stylua
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
@@ -52802,7 +60441,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
@@ -52840,7 +60482,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.lua"
 ]
@@ -52865,7 +60507,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
@@ -52903,12 +60548,18 @@ null or one of “Always”, “NoSingleString”, “NoSingleTable”, “None�
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "Always" `
+
+```nix
+"Always"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
@@ -52929,12 +60580,18 @@ null or one of “Never”, “FunctionOnly”, “ConditionalOnly”, “Always
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "Never" `
+
+```nix
+"Never"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
@@ -52959,12 +60616,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 120 `
+
+```nix
+120
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
@@ -52985,12 +60648,18 @@ null or one of “Tabs”, “Spaces”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "Tabs" `
+
+```nix
+"Tabs"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
@@ -53015,12 +60684,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 4 `
+
+```nix
+4
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
@@ -53041,12 +60716,18 @@ null or one of “Unix”, “Windows”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "Unix" `
+
+```nix
+"Unix"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
@@ -53073,12 +60754,18 @@ null or one of “AutoPreferDouble”, “AutoPreferSingle”, “ForceDouble”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "AutoPreferDouble" `
+
+```nix
+"AutoPreferDouble"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
@@ -53110,12 +60797,18 @@ null or boolean
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
@@ -53136,12 +60829,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix)
@@ -53162,7 +60861,10 @@ package
 
 
 *Default:*
-` pkgs.swift-format `
+
+```nix
+pkgs.swift-format
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix)
@@ -53183,7 +60885,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix)
@@ -53221,7 +60926,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.swift"
 ]
@@ -53246,7 +60951,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix)
@@ -53267,12 +60975,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
@@ -53293,7 +61007,10 @@ package
 
 
 *Default:*
-` pkgs.taplo `
+
+```nix
+pkgs.taplo
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
@@ -53314,7 +61031,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
@@ -53352,7 +61072,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.toml"
 ]
@@ -53377,7 +61097,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
@@ -53398,7 +61121,10 @@ open submodule of (TOML value)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
@@ -53419,12 +61145,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix)
@@ -53445,7 +61177,10 @@ package
 
 
 *Default:*
-` pkgs.templ `
+
+```nix
+pkgs.templ
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix)
@@ -53466,7 +61201,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix)
@@ -53504,7 +61242,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.templ"
 ]
@@ -53529,7 +61267,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix)
@@ -53550,12 +61291,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix)
@@ -53576,7 +61323,10 @@ package
 
 
 *Default:*
-` pkgs.opentofu `
+
+```nix
+pkgs.opentofu
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix)
@@ -53597,7 +61347,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix)
@@ -53635,7 +61388,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.tf"
   "*.tfvars"
@@ -53662,7 +61415,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix)
@@ -53683,12 +61439,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix)
@@ -53709,7 +61471,10 @@ package
 
 
 *Default:*
-` pkgs.tex-fmt `
+
+```nix
+pkgs.tex-fmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix)
@@ -53730,7 +61495,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix)
@@ -53768,7 +61536,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.tex"
   "*.sty"
@@ -53797,10 +61565,159 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix)
+
+
+
+## treefmt.config.programs.tilt.enable
+
+
+
+Whether to enable tilt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/tilt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/tilt.nix)
+
+
+
+## treefmt.config.programs.tilt.package
+
+
+
+The bazel-buildtools package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.bazel-buildtools
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/tilt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/tilt.nix)
+
+
+
+## treefmt.config.programs.tilt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/tilt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/tilt.nix)
+
+
+
+## treefmt.config.programs.tilt.finalPackage
+
+
+
+Resulting ` tilt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/tilt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/tilt.nix)
+
+
+
+## treefmt.config.programs.tilt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[
+  "Tiltfile"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/tilt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/tilt.nix)
+
+
+
+## treefmt.config.programs.tilt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/tilt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/tilt.nix)
 
 
 
@@ -53818,12 +61735,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix)
@@ -53844,7 +61767,10 @@ package
 
 
 *Default:*
-` pkgs.toml-sort `
+
+```nix
+pkgs.toml-sort
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix)
@@ -53865,12 +61791,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix)
@@ -53891,7 +61823,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix)
@@ -53929,7 +61864,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.toml"
 ]
@@ -53954,7 +61889,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix)
@@ -53975,12 +61913,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54001,7 +61945,10 @@ package
 
 
 *Default:*
-` pkgs.typos `
+
+```nix
+pkgs.typos
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54022,7 +61969,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54043,12 +61993,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "typos.toml" `
+
+```nix
+"typos.toml"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54069,7 +62025,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54106,7 +62065,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54128,7 +62090,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*"
 ]
@@ -54153,7 +62115,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54174,7 +62139,10 @@ null or one of “en”, “en-us”, “en-gb”, “en-ca”, “en-au”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54195,7 +62163,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54216,7 +62187,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54237,7 +62211,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54258,7 +62235,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54279,7 +62259,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54300,7 +62283,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54321,7 +62307,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54342,7 +62331,10 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54363,7 +62355,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54384,12 +62379,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54410,12 +62411,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 2 `
+
+```nix
+2
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
@@ -54436,12 +62443,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
@@ -54462,7 +62475,10 @@ package
 
 
 *Default:*
-` pkgs.typstyle `
+
+```nix
+pkgs.typstyle
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
@@ -54483,7 +62499,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
@@ -54521,7 +62540,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.typ"
   "*.typst"
@@ -54547,12 +62566,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 4 `
+
+```nix
+4
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
@@ -54573,12 +62598,18 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` 100 `
+
+```nix
+100
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
@@ -54599,7 +62630,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
@@ -54620,12 +62654,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
@@ -54646,12 +62686,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/wgslfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/wgslfmt.nix)
@@ -54672,7 +62718,10 @@ package
 
 
 *Default:*
-` pkgs.wgsl-analyzer `
+
+```nix
+pkgs.wgsl-analyzer
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/wgslfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/wgslfmt.nix)
@@ -54693,7 +62742,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/wgslfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/wgslfmt.nix)
@@ -54731,7 +62783,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.wgsl"
 ]
@@ -54756,7 +62808,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/wgslfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/wgslfmt.nix)
@@ -54777,12 +62832,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/wgslfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/wgslfmt.nix)
@@ -54803,12 +62864,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix)
@@ -54829,7 +62896,10 @@ package
 
 
 *Default:*
-` pkgs.libxml2 `
+
+```nix
+pkgs.libxml2
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix)
@@ -54850,7 +62920,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix)
@@ -54888,7 +62961,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.xml"
   "*.svg"
@@ -54919,7 +62992,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix)
@@ -54940,12 +63016,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix)
@@ -54966,7 +63048,10 @@ package
 
 
 *Default:*
-` pkgs.yamlfmt `
+
+```nix
+pkgs.yamlfmt
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix)
@@ -54987,7 +63072,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix)
@@ -55025,7 +63113,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.yaml"
   "*.yml"
@@ -55051,7 +63139,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix)
@@ -55074,7 +63165,10 @@ open submodule of (YAML 1.1 value)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix)
@@ -55095,12 +63189,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamllint.nix)
@@ -55121,7 +63221,10 @@ package
 
 
 *Default:*
-` pkgs.yamllint `
+
+```nix
+pkgs.yamllint
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamllint.nix)
@@ -55142,7 +63245,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamllint.nix)
@@ -55180,7 +63286,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.yaml"
   "*.yml"
@@ -55206,7 +63312,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamllint.nix)
@@ -55229,7 +63338,10 @@ open submodule of (YAML 1.1 value)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamllint.nix)
@@ -55250,12 +63362,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix)
@@ -55276,7 +63394,10 @@ package
 
 
 *Default:*
-` pkgs.yapf `
+
+```nix
+pkgs.yapf
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix)
@@ -55297,7 +63418,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix)
@@ -55335,7 +63459,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.py"
   "*.pyi"
@@ -55361,7 +63485,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix)
@@ -55382,12 +63509,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix)
@@ -55408,7 +63541,10 @@ package
 
 
 *Default:*
-` pkgs.zig `
+
+```nix
+pkgs.zig
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix)
@@ -55429,7 +63565,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix)
@@ -55467,7 +63606,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.zig"
   "*.zon"
@@ -55493,7 +63632,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix)
@@ -55514,12 +63656,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix)
@@ -55540,7 +63688,10 @@ package
 
 
 *Default:*
-` pkgs.zizmor `
+
+```nix
+pkgs.zizmor
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix)
@@ -55561,7 +63712,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix)
@@ -55599,7 +63753,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   ".github/workflows/*.yml"
   ".github/workflows/*.yaml"
@@ -55627,7 +63781,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix)
@@ -55648,12 +63805,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix)
@@ -55674,7 +63837,10 @@ package
 
 
 *Default:*
-` pkgs.zprint `
+
+```nix
+pkgs.zprint
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix)
@@ -55695,7 +63861,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix)
@@ -55733,7 +63902,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "*.clj"
   "*.cljc"
@@ -55761,7 +63930,10 @@ null or signed integer
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix)
@@ -55782,12 +63954,18 @@ null or string
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 
 
 *Example:*
-` "{:width 90}" `
+
+```nix
+"{:width 90}"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix)
@@ -55810,7 +63988,10 @@ null or string
 
 
 *Default:*
-` ".git/config" `
+
+```nix
+".git/config"
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
@@ -55831,7 +64012,10 @@ open submodule of (TOML value)
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
@@ -55852,13 +64036,16 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 
 
 *Example:*
 
-```
+```nix
 [
   "node_modules/*"
 ]
@@ -55883,7 +64070,10 @@ attribute set of (open submodule of (TOML value))
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
@@ -55920,7 +64110,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
@@ -55957,7 +64150,10 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```nix
+[ ]
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
@@ -55978,7 +64174,10 @@ null or one of “debug”, “info”, “warn”, “error”, “fatal”
 
 
 *Default:*
-` null `
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
@@ -56000,7 +64199,7 @@ list of string
 
 *Default:*
 
-```
+```nix
 [
   "HOST_PATH"
   "NIX_BUILD_CORES"
