@@ -12,6 +12,7 @@ use osc::{OscParser, OscResult};
 
 /// DEC private modes that should be forwarded to the real terminal.
 const FORWARDED_MODES: &[u16] = &[
+    1, // cursor key mode (DECCKM) — applications use smkx/rmkx to toggle
     47, 1047, 1049, // alternate screen
     1000, 1002, 1003, // mouse tracking
     1005, 1006, 1015, // mouse encoding
@@ -22,6 +23,17 @@ const FORWARDED_MODES: &[u16] = &[
 
 /// Modes that control alternate screen buffer.
 const ALT_SCREEN_MODES: &[u16] = &[47, 1047, 1049];
+
+/// Modes that need explicit reset on session exit. Excludes alternate screen
+/// modes (handled via `LeaveAlternateScreen`) and synchronized output (mode
+/// 2026, managed per-frame by the renderer).
+pub const CLEANUP_MODES: &[u16] = &[
+    1, // cursor key mode (DECCKM)
+    1000, 1002, 1003, // mouse tracking
+    1005, 1006, 1015, // mouse encoding
+    2004, // bracketed paste
+    1004, // focus events
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DecModeEvent {
@@ -82,6 +94,13 @@ pub enum SequenceEvent {
     /// as a sync marker to terminate pending capability queries.
     PrimaryDA {
         raw_bytes: Vec<u8>,
+    },
+    /// `ESC =` (DECKPAM) or `ESC >` (DECKPNM) — keypad application/numeric mode.
+    /// Part of `smkx`/`rmkx` terminfo capabilities alongside DECCKM.
+    KeypadMode {
+        /// `true` = application mode (DECKPAM, `ESC =`),
+        /// `false` = numeric mode (DECKPNM, `ESC >`).
+        application: bool,
     },
 }
 
@@ -146,6 +165,14 @@ impl EscapeScanner {
                         b']' => {
                             self.state = RouterState::Osc;
                             self.osc_parser.reset();
+                        }
+                        b'=' | b'>' => {
+                            // DECKPAM (ESC =) / DECKPNM (ESC >)
+                            self.seq_bytes.clear();
+                            events.push(SequenceEvent::KeypadMode {
+                                application: byte == b'=',
+                            });
+                            self.state = RouterState::Ground;
                         }
                         0x1b => {
                             // Another ESC restarts the sequence
@@ -814,5 +841,70 @@ mod tests {
         let events = scanner.scan(b"\x1b[c");
         assert_eq!(events.len(), 1);
         assert!(matches!(events[0], SequenceEvent::PrimaryDA { .. }));
+    }
+
+    // -- Keypad mode (DECKPAM/DECKPNM) tests --
+
+    #[test]
+    fn detects_deckpam() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b=");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            events[0],
+            SequenceEvent::KeypadMode { application: true }
+        ));
+    }
+
+    #[test]
+    fn detects_deckpnm() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b>");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            events[0],
+            SequenceEvent::KeypadMode { application: false }
+        ));
+    }
+
+    #[test]
+    fn keypad_mode_split_across_buffers() {
+        let mut scanner = EscapeScanner::new();
+
+        let events1 = scanner.scan(b"\x1b");
+        assert!(events1.is_empty());
+
+        let events2 = scanner.scan(b"=");
+        assert_eq!(events2.len(), 1);
+        assert!(matches!(
+            events2[0],
+            SequenceEvent::KeypadMode { application: true }
+        ));
+    }
+
+    #[test]
+    fn smkx_sequence() {
+        let mut scanner = EscapeScanner::new();
+        // smkx = \x1b[?1h\x1b=
+        let events = scanner.scan(b"\x1b[?1h\x1b=");
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], SequenceEvent::DecMode(_)));
+        assert!(matches!(
+            events[1],
+            SequenceEvent::KeypadMode { application: true }
+        ));
+    }
+
+    #[test]
+    fn rmkx_sequence() {
+        let mut scanner = EscapeScanner::new();
+        // rmkx = \x1b[?1l\x1b>
+        let events = scanner.scan(b"\x1b[?1l\x1b>");
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], SequenceEvent::DecMode(_)));
+        assert!(matches!(
+            events[1],
+            SequenceEvent::KeypadMode { application: false }
+        ));
     }
 }

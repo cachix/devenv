@@ -3,7 +3,7 @@
 //! This module provides the main `ShellSession` type that orchestrates
 //! PTY lifecycle, terminal I/O, and status line rendering.
 
-use crate::escape::{DecModeEvent, EscapeScanner, SequenceEvent};
+use crate::escape::{CLEANUP_MODES, DecModeEvent, EscapeScanner, SequenceEvent};
 use crate::protocol::{ShellCommand, ShellEvent};
 use crate::pty::{Pty, PtyError, get_terminal_size};
 use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
@@ -24,12 +24,18 @@ use tokio::sync::{mpsc, oneshot};
 
 /// Escape-sequence state tracked across PTY output processing.
 ///
-/// Persistent fields (`in_alternate_screen`, `forwarded_mouse_modes`) carry
-/// across the entire session.  Per-batch fields (`erase_display`,
-/// `clear_scrollback`) are reset at the start of each `PtyOutput` batch.
+/// Persistent fields (`in_alternate_screen`, `forwarded_dec_modes`,
+/// `keypad_application_mode`) carry across the entire session.
+/// Per-batch fields (`erase_display`, `clear_scrollback`) are reset at the
+/// start of each `PtyOutput` batch.
 struct EscapeState {
     in_alternate_screen: bool,
-    forwarded_mouse_modes: Vec<u16>,
+    /// DEC private modes that were set and need explicit reset on exit.
+    /// Tracked separately from `in_alternate_screen` (which uses
+    /// `LeaveAlternateScreen`) and keypad mode (which uses `ESC >`).
+    forwarded_dec_modes: Vec<u16>,
+    /// Keypad is in application mode (DECKPAM, `ESC =`).
+    keypad_application_mode: bool,
     /// Set when CSI 2 J is seen — signals the caller to consume `row_offset`.
     erase_display: bool,
     /// Set when CSI 3 J is seen — deferred so the caller can emit it *after*
@@ -41,7 +47,8 @@ impl EscapeState {
     fn new() -> Self {
         Self {
             in_alternate_screen: false,
-            forwarded_mouse_modes: Vec::new(),
+            forwarded_dec_modes: Vec::new(),
+            keypad_application_mode: false,
             erase_display: false,
             clear_scrollback: false,
         }
@@ -1147,17 +1154,15 @@ impl ShellSession {
                     match &event {
                         DecModeEvent::Set { modes, .. } => {
                             for &m in modes {
-                                if matches!(
-                                    m,
-                                    1000 | 1002 | 1003 | 1005 | 1006 | 1015 | 2004 | 1004
-                                ) && !esc.forwarded_mouse_modes.contains(&m)
+                                if CLEANUP_MODES.contains(&m)
+                                    && !esc.forwarded_dec_modes.contains(&m)
                                 {
-                                    esc.forwarded_mouse_modes.push(m);
+                                    esc.forwarded_dec_modes.push(m);
                                 }
                             }
                         }
                         DecModeEvent::Reset { modes, .. } => {
-                            esc.forwarded_mouse_modes.retain(|m| !modes.contains(m));
+                            esc.forwarded_dec_modes.retain(|m| !modes.contains(m));
                         }
                     }
                 }
@@ -1185,6 +1190,10 @@ impl ShellSession {
                     // program that sent the query.
                     stdout.write_all(&raw_bytes)?;
                 }
+                SequenceEvent::KeypadMode { application } => {
+                    stdout.write_all(if application { b"\x1b=" } else { b"\x1b>" })?;
+                    esc.keypad_application_mode = application;
+                }
             }
         }
         Ok(())
@@ -1195,10 +1204,17 @@ impl ShellSession {
         if esc.in_alternate_screen {
             queue!(stdout, terminal::LeaveAlternateScreen)?;
         }
-        for &mode in &esc.forwarded_mouse_modes {
+        for &mode in &esc.forwarded_dec_modes {
             write!(stdout, "\x1b[?{}l", mode)?;
         }
-        if esc.in_alternate_screen || !esc.forwarded_mouse_modes.is_empty() {
+        if esc.keypad_application_mode {
+            // Reset to numeric keypad mode (DECKPNM)
+            stdout.write_all(b"\x1b>")?;
+        }
+        if esc.in_alternate_screen
+            || !esc.forwarded_dec_modes.is_empty()
+            || esc.keypad_application_mode
+        {
             stdout.flush()?;
         }
         Ok(())
