@@ -163,13 +163,12 @@ fn main() -> Result<()> {
                 | Some(Commands::Init { .. }) // interactive prompts (dialoguer) need direct terminal
         );
 
-        let result = if cli.tracing_args.use_tracing_mode() {
-            run_with_tracing(cli)
-        } else if force_legacy_cli || !cli.cli_options.tui {
-            run_with_legacy_cli(cli)
-        } else {
-            run_with_tui(cli)
-        };
+        let result =
+            if !force_legacy_cli && cli.cli_options.tui && !cli.tracing_args.use_tracing_mode() {
+                run_with_tui(cli)
+            } else {
+                run_without_tui(cli)
+            };
 
         match result {
             Err(err) => match err.downcast::<devenv::SecretsNeedPrompting>() {
@@ -294,60 +293,30 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
         bail!("devenv thread panicked");
     };
 
-    let result = match devenv_output.try_launch_debugger() {
-        DebuggerResult::Launched(result) => return result,
-        DebuggerResult::NotLaunched(result) => result,
-    };
-
-    // Execute any pending command (e.g., shell exec) now that TUI is cleaned up.
-    // SecretsNeedPrompting errors propagate to main() for retry.
-    result?.exec()
+    devenv_output.finish()
 }
 
-fn run_with_legacy_cli(cli: Cli) -> Result<()> {
+fn run_without_tui(cli: Cli) -> Result<()> {
     let devenv_output = build_gc_runtime().block_on(async {
         let shutdown = Shutdown::new();
         shutdown.install_signals().await;
 
         let level = cli.get_log_level();
-        devenv_tracing::init_cli_tracing(level, cli.tracing_args.trace_output.as_ref());
+        if cli.tracing_args.use_tracing_mode() {
+            devenv_tracing::init_tracing(
+                level,
+                cli.tracing_args.trace_format,
+                cli.tracing_args.trace_output.as_ref(),
+            );
+        } else {
+            devenv_tracing::init_cli_tracing(level, cli.tracing_args.trace_output.as_ref());
+        }
 
-        // No TUI in legacy mode - create dummy channel (drop receiver immediately)
         let (backend_done_tx, _) = tokio::sync::oneshot::channel();
-
-        // Don't race with shutdown - let run_devenv handle shutdown via cancellation token
         run_devenv(cli, shutdown.clone(), backend_done_tx, None, None).await
     });
 
-    match devenv_output.try_launch_debugger() {
-        DebuggerResult::Launched(result) => result,
-        DebuggerResult::NotLaunched(result) => result?.exec(),
-    }
-}
-
-fn run_with_tracing(cli: Cli) -> Result<()> {
-    let devenv_output = build_gc_runtime().block_on(async {
-        let shutdown = Shutdown::new();
-        shutdown.install_signals().await;
-
-        let level = cli.get_log_level();
-        devenv_tracing::init_tracing(
-            level,
-            cli.tracing_args.trace_format,
-            cli.tracing_args.trace_output.as_ref(),
-        );
-
-        // No TUI in tracing mode - create dummy channel (drop receiver immediately)
-        let (backend_done_tx, _) = tokio::sync::oneshot::channel();
-
-        // Don't race with shutdown - let run_devenv handle shutdown via cancellation token
-        run_devenv(cli, shutdown.clone(), backend_done_tx, None, None).await
-    });
-
-    match devenv_output.try_launch_debugger() {
-        DebuggerResult::Launched(result) => result,
-        DebuggerResult::NotLaunched(result) => result?.exec(),
-    }
+    devenv_output.finish()
 }
 
 /// Output from run_devenv containing the command result.
@@ -383,6 +352,14 @@ impl DevenvOutput {
             DebuggerResult::Launched(repl_result)
         } else {
             DebuggerResult::NotLaunched(self.result)
+        }
+    }
+
+    /// Handle debugger launch and execute the command result.
+    fn finish(self) -> Result<()> {
+        match self.try_launch_debugger() {
+            DebuggerResult::Launched(result) => result,
+            DebuggerResult::NotLaunched(result) => result?.exec(),
         }
     }
 }
@@ -945,22 +922,16 @@ async fn run_reload_shell(
         ShellCoordinator::run(reload_config, builder, command_tx, event_rx).await
     });
 
-    // Create TUI handoff configuration
-    // If no terminal_ready_rx (no TUI), create a dummy channel that immediately completes
-    let handoff = if let Some(terminal_ready_rx) = terminal_ready_rx {
-        Some(TuiHandoff {
-            backend_done_tx,
-            terminal_ready_rx,
-        })
-    } else {
-        // No TUI - create dummy channel that completes immediately with 0 height
-        let (dummy_tx, dummy_rx) = tokio::sync::oneshot::channel::<u16>();
-        let _ = dummy_tx.send(0); // Immediately signal ready with no render height
-        Some(TuiHandoff {
-            backend_done_tx,
-            terminal_ready_rx: dummy_rx,
-        })
-    };
+    // If no TUI, create a dummy channel that immediately signals ready with 0 height
+    let terminal_ready_rx = terminal_ready_rx.unwrap_or_else(|| {
+        let (tx, rx) = tokio::sync::oneshot::channel::<u16>();
+        let _ = tx.send(0);
+        rx
+    });
+    let handoff = Some(TuiHandoff {
+        backend_done_tx,
+        terminal_ready_rx,
+    });
 
     // Run shell session on current thread (owns terminal)
     let shell_session = ShellSession::with_defaults().with_status_line(is_interactive);
