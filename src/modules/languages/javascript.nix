@@ -260,9 +260,9 @@ in
       enable = lib.mkEnableOption "install npm";
       package = lib.mkOption {
         type = lib.types.package;
-        default = cfg.package.override {
-          enableNpm = true;
-        };
+        default =
+          # Nixpkgs releases 26.05 no longer expose enableNpm option
+          cfg.package.override (args: args // lib.optionalAttrs (lib.hasAttr "enableNpm" args) { enableNpm = true; });
         defaultText = lib.literalExpression "languages.javascript.package";
         description = "The Node.js package to use.";
       };
