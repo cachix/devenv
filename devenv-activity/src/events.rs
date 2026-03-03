@@ -35,7 +35,7 @@ pub struct SetExpected {
 }
 
 /// Categories for expected count tracking
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Valuable)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Valuable)]
 #[serde(rename_all = "lowercase")]
 pub enum ExpectedCategory {
     /// Build activities (derivations to build)

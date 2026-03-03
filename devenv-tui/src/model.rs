@@ -735,13 +735,10 @@ impl ActivityModel {
     fn handle_set_expected(&mut self, event: SetExpected) {
         match event.category {
             ExpectedCategory::Build => {
-                // Accumulate expected builds
-                self.expected_builds = Some(self.expected_builds.unwrap_or(0) + event.expected);
+                self.expected_builds = Some(event.expected);
             }
             ExpectedCategory::Download => {
-                // Accumulate expected downloads
-                self.expected_downloads =
-                    Some(self.expected_downloads.unwrap_or(0) + event.expected);
+                self.expected_downloads = Some(event.expected);
             }
         }
     }
@@ -1523,5 +1520,54 @@ fn format_eval_op(op: &EvalOp) -> String {
         EvalOp::GetEnv { name } => format!("devenv getEnv: '{}'", name),
         EvalOp::PathExists { source } => format!("devenv pathExists: '{}'", source.display()),
         EvalOp::TrackedPath { source } => format!("trace: devenv path: '{}'", source.display()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use devenv_activity::Timestamp;
+
+    fn set_expected_event(category: ExpectedCategory, expected: u64) -> SetExpected {
+        SetExpected {
+            category,
+            expected,
+            timestamp: Timestamp::now(),
+        }
+    }
+
+    #[test]
+    fn test_set_expected_replaces_not_accumulates() {
+        let mut model = ActivityModel::default();
+
+        model.handle_set_expected(set_expected_event(ExpectedCategory::Download, 5));
+        assert_eq!(model.expected_downloads, Some(5));
+
+        // The bridge recomputed the total — the model should replace, not add
+        model.handle_set_expected(set_expected_event(ExpectedCategory::Download, 8));
+        assert_eq!(model.expected_downloads, Some(8));
+    }
+
+    #[test]
+    fn test_set_expected_categories_are_independent() {
+        let mut model = ActivityModel::default();
+
+        model.handle_set_expected(set_expected_event(ExpectedCategory::Build, 3));
+        model.handle_set_expected(set_expected_event(ExpectedCategory::Download, 10));
+
+        assert_eq!(model.expected_builds, Some(3));
+        assert_eq!(model.expected_downloads, Some(10));
+    }
+
+    #[test]
+    fn test_set_expected_propagates_to_summary() {
+        let mut model = ActivityModel::default();
+
+        model.handle_set_expected(set_expected_event(ExpectedCategory::Build, 7));
+        model.handle_set_expected(set_expected_event(ExpectedCategory::Download, 12));
+
+        let summary = model.calculate_summary();
+        assert_eq!(summary.expected_builds, Some(7));
+        assert_eq!(summary.expected_downloads, Some(12));
     }
 }

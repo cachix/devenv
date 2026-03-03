@@ -43,6 +43,47 @@ struct EvalActivityState {
     current_eval_id: Option<u64>,
 }
 
+/// Tracks per-activity expected counts and computes category totals.
+///
+/// Nix emits absolute expected counts per activity, potentially re-reporting
+/// the same value many times. This tracker deduplicates per-activity counts
+/// and computes correct totals by summing across all activities per category.
+#[derive(Debug, Default)]
+struct ExpectedCountTracker {
+    counts: HashMap<(u64, ExpectedCategory), u64>,
+}
+
+impl ExpectedCountTracker {
+    /// Update the expected count for an activity.
+    /// Returns `Some(total)` if the category total changed, `None` otherwise.
+    #[must_use]
+    fn update(
+        &mut self,
+        activity_id: u64,
+        category: ExpectedCategory,
+        expected: u64,
+    ) -> Option<u64> {
+        let key = (activity_id, category);
+        let prev = self.counts.insert(key, expected);
+        if prev == Some(expected) {
+            return None;
+        }
+        let total = self
+            .counts
+            .iter()
+            .filter(|((_, c), _)| *c == category)
+            .map(|(_, v)| v)
+            .sum();
+        Some(total)
+    }
+
+    /// Remove all counts for an activity (called when it stops).
+    /// Does not re-emit totals — we don't want the UI count to go down.
+    fn remove_activity(&mut self, activity_id: u64) {
+        self.counts.retain(|&(id, _), _| id != activity_id);
+    }
+}
+
 /// Bridge that converts Nix internal logs to tracing events.
 ///
 /// The bridge manages eval activity lifecycle with lazy creation - the activity
@@ -57,6 +98,7 @@ pub struct NixLogBridge {
     observers: Mutex<Vec<Arc<dyn OpObserver>>>,
     /// Error messages to be printed after TUI exits, before entering REPL
     pre_repl_errors: Mutex<Vec<String>>,
+    expected_counts: Mutex<ExpectedCountTracker>,
 }
 
 /// Information about an active Nix activity
@@ -91,6 +133,7 @@ impl NixLogBridge {
             }),
             observers: Mutex::new(Vec::new()),
             pre_repl_errors: Mutex::new(Vec::new()),
+            expected_counts: Mutex::new(ExpectedCountTracker::default()),
         })
     }
 
@@ -449,6 +492,10 @@ impl NixLogBridge {
 
     /// Handle the stop of a Nix activity
     fn handle_activity_stop(&self, activity_id: u64, success: bool) {
+        if let Ok(mut tracker) = self.expected_counts.lock() {
+            tracker.remove_activity(activity_id);
+        }
+
         let Ok(mut activities) = self.active_activities.lock() else {
             return;
         };
@@ -527,7 +574,8 @@ impl NixLogBridge {
             ResultType::SetExpected => {
                 // Handle expected count announcements from Nix.
                 // fields[0] is the ActivityType (as int), fields[1] is the expected count.
-                // This announces aggregate expected counts (e.g., "expect 10 downloads").
+                // Nix emits absolute counts per activity, potentially re-reporting the same
+                // value many times. We track per-activity and only emit when the total changes.
                 if let (Some(Field::Int(activity_type_int)), Some(Field::Int(expected))) =
                     (fields.first(), fields.get(1))
                 {
@@ -545,7 +593,11 @@ impl NixLogBridge {
                         });
 
                     if let Some(cat) = category {
-                        set_expected(cat, *expected);
+                        if let Ok(mut tracker) = self.expected_counts.lock()
+                            && let Some(total) = tracker.update(activity_id, cat, *expected)
+                        {
+                            set_expected(cat, total);
+                        }
                     }
                 }
             }
@@ -804,5 +856,77 @@ mod tests {
         let (summary, details) = parse_nix_error("error: something went wrong");
         assert_eq!(summary, "error: something went wrong");
         assert!(details.is_none());
+    }
+
+    #[test]
+    fn test_expected_count_single_activity() {
+        let mut tracker = ExpectedCountTracker::default();
+
+        // First report: activity 1 expects 5 downloads
+        assert_eq!(tracker.update(1, ExpectedCategory::Download, 5), Some(5),);
+
+        // Same value again: no change
+        assert_eq!(tracker.update(1, ExpectedCategory::Download, 5), None,);
+
+        // Updated count: activity 1 now expects 10 downloads
+        assert_eq!(tracker.update(1, ExpectedCategory::Download, 10), Some(10),);
+    }
+
+    #[test]
+    fn test_expected_count_multiple_activities_same_category() {
+        let mut tracker = ExpectedCountTracker::default();
+
+        // Activity 1 expects 5 downloads
+        assert_eq!(tracker.update(1, ExpectedCategory::Download, 5), Some(5),);
+
+        // Activity 2 expects 3 downloads — total is 8
+        assert_eq!(tracker.update(2, ExpectedCategory::Download, 3), Some(8),);
+
+        // Activity 1 re-reports 5 — no change
+        assert_eq!(tracker.update(1, ExpectedCategory::Download, 5), None,);
+
+        // Activity 2 updates to 7 — total is 12
+        assert_eq!(tracker.update(2, ExpectedCategory::Download, 7), Some(12),);
+    }
+
+    #[test]
+    fn test_expected_count_independent_categories() {
+        let mut tracker = ExpectedCountTracker::default();
+
+        // Builds and downloads tracked independently
+        assert_eq!(tracker.update(1, ExpectedCategory::Build, 3), Some(3),);
+        assert_eq!(tracker.update(1, ExpectedCategory::Download, 10), Some(10),);
+        assert_eq!(tracker.update(2, ExpectedCategory::Build, 2), Some(5),);
+
+        // Download total should still be 10
+        assert_eq!(tracker.update(1, ExpectedCategory::Download, 10), None,);
+    }
+
+    #[test]
+    fn test_expected_count_remove_activity() {
+        let mut tracker = ExpectedCountTracker::default();
+
+        tracker.update(1, ExpectedCategory::Download, 5);
+        tracker.update(2, ExpectedCategory::Download, 3);
+
+        // Remove activity 1 — only activity 2 remains
+        tracker.remove_activity(1);
+
+        // Activity 3 reports 2 downloads — total is 3 + 2 = 5 (activity 1 is gone)
+        assert_eq!(tracker.update(3, ExpectedCategory::Download, 2), Some(5),);
+    }
+
+    #[test]
+    fn test_expected_count_remove_cleans_all_categories() {
+        let mut tracker = ExpectedCountTracker::default();
+
+        tracker.update(1, ExpectedCategory::Build, 3);
+        tracker.update(1, ExpectedCategory::Download, 5);
+
+        tracker.remove_activity(1);
+
+        // Both categories should start fresh
+        assert_eq!(tracker.update(2, ExpectedCategory::Build, 1), Some(1),);
+        assert_eq!(tracker.update(2, ExpectedCategory::Download, 1), Some(1),);
     }
 }
