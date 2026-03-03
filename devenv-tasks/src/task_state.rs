@@ -77,17 +77,22 @@ impl TaskState {
             return Ok(false);
         }
 
-        // Include the command path in the files to check, so that
-        // changes to the task's exec script or dependencies will invalidate the cache.
-        // This works because Nix store paths are content-addressed.
-        let mut files_to_check = self.task.exec_if_modified.clone();
-        if let Some(cmd) = &self.task.command {
-            files_to_check.push(cmd.clone());
+        let patterns_modified = cache
+            .check_modified_files(&self.task.name, &self.task.exec_if_modified)
+            .await?;
+        if patterns_modified {
+            return Ok(true);
         }
 
-        cache
-            .check_modified_files(&self.task.name, &files_to_check)
-            .await
+        // Track command path changes separately so negation patterns in exec_if_modified
+        // don't suppress cache invalidation for the task script itself.
+        if let Some(cmd) = &self.task.command {
+            return cache
+                .check_modified_files(&self.task.name, &[cmd.clone()])
+                .await;
+        }
+
+        Ok(false)
     }
 
     /// Check if any files specified in exec_if_modified have been modified.
@@ -611,14 +616,15 @@ impl TaskState {
 
         // Only update file states on success - failed tasks should not be cached
         if result.success {
-            // Include command path in the files to update, matching check_files_modified
-            let mut files_to_update = self.task.exec_if_modified.clone();
-            if let Some(cmd) = &self.task.command {
-                files_to_update.push(cmd.clone());
-            }
-            let expanded_paths = expand_glob_patterns(&files_to_update);
+            let expanded_paths = expand_glob_patterns(&self.task.exec_if_modified);
             for path in expanded_paths {
                 cache.update_file_state(&self.task.name, &path).await?;
+            }
+
+            if let Some(cmd) = &self.task.command {
+                for path in expand_glob_patterns(&[cmd.clone()]) {
+                    cache.update_file_state(&self.task.name, &path).await?;
+                }
             }
         }
 
