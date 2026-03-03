@@ -160,6 +160,7 @@ fn main() -> Result<()> {
             Some(Commands::Mcp { http: None }) // stdio mode needs legacy CLI (stderr output)
                 | Some(Commands::Lsp { .. }) // LSP needs direct stdout for protocol/config output
                 | Some(Commands::PrintPaths) // print output directly, no TUI needed
+                | Some(Commands::Init { .. }) // interactive prompts (dialoguer) need direct terminal
         );
 
         let result = if cli.tracing_args.use_tracing_mode() {
