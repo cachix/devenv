@@ -1367,8 +1367,17 @@ impl ActivityModel {
             .iter()
             .any(|a| matches!(a.variant, ActivityVariant::Process(_)));
         if parent_is_task || has_process_children {
-            // Sort processes alphabetically by name for consistent display
-            all_children.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+            // Sort non-process activities first (by id), then processes alphabetically
+            all_children.sort_by(|a, b| {
+                let a_is_process = matches!(a.variant, ActivityVariant::Process(_));
+                let b_is_process = matches!(b.variant, ActivityVariant::Process(_));
+                match (a_is_process, b_is_process) {
+                    (false, true) => std::cmp::Ordering::Less,
+                    (true, false) => std::cmp::Ordering::Greater,
+                    (false, false) => a.id.cmp(&b.id),
+                    (true, true) => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                }
+            });
             return (all_children, total_count, 0);
         }
 

@@ -1753,7 +1753,8 @@ fn test_cachix_push_with_failures() {
     insta::assert_snapshot!(output);
 }
 
-/// Test that processes are displayed in alphabetical order regardless of start order.
+/// Test that non-process activities (like "Evaluating Nix") appear first,
+/// followed by processes in alphabetical order.
 #[test]
 fn test_processes_alphabetical_order() {
     let (mut model, ui_state) = new_test_model();
@@ -1787,8 +1788,18 @@ fn test_processes_alphabetical_order() {
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
-    model.apply_activity_event(ActivityEvent::Process(Process::Start {
+
+    // Add "Evaluating Nix" as a child of "Running processes" (happens during process manager eval)
+    model.apply_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
         id: 3,
+        name: "Evaluating Nix".to_string(),
+        parent: Some(100),
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Process(Process::Start {
+        id: 4,
         name: "mysql".to_string(),
         parent: Some(100),
         command: None,
@@ -1799,7 +1810,10 @@ fn test_processes_alphabetical_order() {
 
     let output = render_to_string(&model, &ui_state);
 
-    // Verify alphabetical order: api-server before mysql before zookeeper
+    // Verify "Evaluating Nix" comes first, then processes alphabetically
+    let eval_pos = output
+        .find("Evaluating Nix")
+        .expect("Evaluating Nix should be in output");
     let api_pos = output
         .find("api-server")
         .expect("api-server should be in output");
@@ -1808,8 +1822,8 @@ fn test_processes_alphabetical_order() {
         .find("zookeeper")
         .expect("zookeeper should be in output");
     assert!(
-        api_pos < mysql_pos && mysql_pos < zoo_pos,
-        "Processes should be in alphabetical order.\nFull output:\n{}",
+        eval_pos < api_pos && api_pos < mysql_pos && mysql_pos < zoo_pos,
+        "Evaluating Nix should come first, then processes in alphabetical order.\nFull output:\n{}",
         output
     );
 

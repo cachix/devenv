@@ -1,8 +1,10 @@
 ---
 source: devenv-tui/tests/tui_tests.rs
+assertion_line: 1830
 expression: output
 ---
 ⠋ Running processes       [TIME]
+  └ ⠋ Evaluating Nix      [TIME]
   └ ⠋ api-server starting [TIME]
   └ ⠋ mysql starting      [TIME]
   └ ⠋ zookeeper starting  [TIME]
