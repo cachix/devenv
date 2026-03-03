@@ -512,7 +512,16 @@ pub enum Commands {
 
     #[command(about = "Run tests. http://devenv.sh/tests/", alias = "ci")]
     Test {
-        #[arg(short, long, help = "Don't override .devenv to a temporary directory.")]
+        #[arg(
+            long,
+            help = "Override .devenv with a temporary directory for isolation."
+        )]
+        override_dotfile: bool,
+        #[arg(
+            long,
+            help = "Deprecated: no-op flag kept for backward compatibility.",
+            hide = true
+        )]
         dont_override_dotfile: bool,
     },
 

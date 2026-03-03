@@ -493,22 +493,23 @@ async fn run_devenv(
     // we let Drop delete the dir after all commands have ran
     let _tmpdir = match &command {
         Commands::Test {
-            dont_override_dotfile,
+            override_dotfile,
+            dont_override_dotfile: _,
         } => {
-            let setup_test_tmpdir = || -> Result<TempDir> {
-                let pwd = std::env::current_dir()
-                    .into_diagnostic()
-                    .wrap_err("Failed to get current directory")?;
-                let tmpdir = TempDir::with_prefix_in(".devenv.", pwd)
-                    .into_diagnostic()
-                    .wrap_err("Failed to create temporary directory")?;
-                Ok(tmpdir)
-            };
-            let tmpdir = match setup_test_tmpdir() {
-                Ok(t) => t,
-                Err(e) => return output(Err(e)),
-            };
-            if !dont_override_dotfile {
+            if *override_dotfile {
+                let setup_test_tmpdir = || -> Result<TempDir> {
+                    let pwd = std::env::current_dir()
+                        .into_diagnostic()
+                        .wrap_err("Failed to get current directory")?;
+                    let tmpdir = TempDir::with_prefix_in(".devenv.", pwd)
+                        .into_diagnostic()
+                        .wrap_err("Failed to create temporary directory")?;
+                    Ok(tmpdir)
+                };
+                let tmpdir = match setup_test_tmpdir() {
+                    Ok(t) => t,
+                    Err(e) => return output(Err(e)),
+                };
                 let file_name = tmpdir
                     .path()
                     .file_name()
@@ -520,8 +521,10 @@ async fn run_devenv(
                 };
                 info!("Overriding .devenv to {}", file_name);
                 options.devenv_dotfile = Some(tmpdir.path().to_path_buf());
+                Some(tmpdir)
+            } else {
+                None
             }
-            Some(tmpdir)
         }
         _ => None,
     };
