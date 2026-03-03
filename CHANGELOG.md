@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 (2026-02-XX)
+## 2.0.0 (2026-03-03)
 
 This is a major release with significant architectural changes. devenv 2.0 introduces a native Rust process manager, a full terminal UI, hot-reload for shell environments, automatic port allocation, an eval caching layer, and many more improvements. See the [migration guide](https://devenv.sh/guides/migrating-to-2.0/) for detailed upgrade instructions.
 
