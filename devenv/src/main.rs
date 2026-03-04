@@ -486,17 +486,18 @@ async fn run_devenv(
         from_external,
         devenv_root: None,
         devenv_dotfile: None,
+        devenv_state: None,
         shutdown: shutdown.clone(),
         is_testing,
     };
 
-    // we let Drop delete the dir after all commands have ran
-    let _tmpdir = match &command {
+    // we let Drop delete the dirs after all commands have ran
+    let (_tmpdir, _state_tmpdir) = match &command {
         Commands::Test {
             override_dotfile,
             dont_override_dotfile: _,
         } => {
-            if *override_dotfile {
+            let dotfile_tmpdir = if *override_dotfile {
                 let setup_test_tmpdir = || -> Result<TempDir> {
                     let pwd = std::env::current_dir()
                         .into_diagnostic()
@@ -524,9 +525,24 @@ async fn run_devenv(
                 Some(tmpdir)
             } else {
                 None
-            }
+            };
+
+            let state_tmpdir = match TempDir::new()
+                .into_diagnostic()
+                .wrap_err("Failed to create temporary state directory")
+            {
+                Ok(t) => t,
+                Err(e) => return output(Err(e)),
+            };
+            info!(
+                "Using temporary state directory: {}",
+                state_tmpdir.path().display()
+            );
+            options.devenv_state = Some(state_tmpdir.path().to_path_buf());
+
+            (dotfile_tmpdir, Some(state_tmpdir))
         }
-        _ => None,
+        _ => (None, None),
     };
 
     let devenv = Devenv::new(options).await;

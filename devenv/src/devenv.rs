@@ -81,6 +81,7 @@ pub struct DevenvOptions {
     pub from_external: bool,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
+    pub devenv_state: Option<PathBuf>,
     pub shutdown: Arc<tokio_shutdown::Shutdown>,
     pub is_testing: bool,
 }
@@ -100,6 +101,7 @@ impl DevenvOptions {
             from_external: false,
             devenv_root: None,
             devenv_dotfile: None,
+            devenv_state: None,
             shutdown,
             is_testing: false,
         }
@@ -182,6 +184,7 @@ pub struct Devenv {
     // All kinds of paths
     devenv_root: PathBuf,
     devenv_dotfile: PathBuf,
+    devenv_state: Option<PathBuf>,
     devenv_dot_gc: PathBuf,
     devenv_home_gc: PathBuf,
     devenv_tmp: PathBuf,
@@ -374,6 +377,7 @@ impl Devenv {
             is_testing: options.is_testing,
             devenv_root,
             devenv_dotfile,
+            devenv_state: options.devenv_state,
             devenv_dot_gc,
             devenv_home_gc,
             devenv_tmp,
@@ -2088,6 +2092,7 @@ impl Devenv {
             impure: self.nix_settings.impure,
             nixpkgs_config: self.nixpkgs_config.clone(),
             lock_fingerprint: &lock_fingerprint,
+            devenv_state: self.devenv_state.as_deref(),
         };
 
         // Serialize NixArgs for caching and return

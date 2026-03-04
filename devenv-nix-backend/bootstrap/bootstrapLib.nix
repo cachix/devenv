@@ -31,6 +31,7 @@ rec {
     , devenv_dotfile_path
     , devenv_tmpdir
     , devenv_runtime
+    , devenv_state ? null
     , devenv_istesting ? false
     , devenv_direnvrc_latest_version
     , container_name ? null
@@ -159,6 +160,9 @@ rec {
                 })
                 (lib.optionalAttrs (builtins.hasAttr "runtime" options.devenv) {
                   runtime = devenv_runtime;
+                })
+                (lib.optionalAttrs (builtins.hasAttr "state" options.devenv && devenv_state != null) {
+                  state = devenv_state;
                 })
                 (lib.optionalAttrs (builtins.hasAttr "direnvrcLatestVersion" options.devenv) {
                   direnvrcLatestVersion = devenv_direnvrc_latest_version;

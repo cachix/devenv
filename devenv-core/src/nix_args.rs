@@ -382,6 +382,11 @@ pub struct NixArgs<'a> {
     /// Unlike the serialized lock file, this includes narHashes for path inputs
     /// which are normally stripped when writing to disk.
     pub lock_fingerprint: &'a str,
+
+    /// Optional override for the state directory (DEVENV_STATE).
+    /// When set, overrides the default of devenv_dotfile/state.
+    /// Used during testing to isolate runtime state in a temporary directory.
+    pub devenv_state: Option<&'a Path>,
 }
 
 #[cfg(test)]
