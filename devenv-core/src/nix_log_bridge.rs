@@ -592,12 +592,11 @@ impl NixLogBridge {
                             _ => None,
                         });
 
-                    if let Some(cat) = category {
-                        if let Ok(mut tracker) = self.expected_counts.lock()
-                            && let Some(total) = tracker.update(activity_id, cat, *expected)
-                        {
-                            set_expected(cat, total);
-                        }
+                    if let Some(cat) = category
+                        && let Ok(mut tracker) = self.expected_counts.lock()
+                        && let Some(total) = tracker.update(activity_id, cat, *expected)
+                    {
+                        set_expected(cat, total);
                     }
                 }
             }
@@ -906,8 +905,8 @@ mod tests {
     fn test_expected_count_remove_activity() {
         let mut tracker = ExpectedCountTracker::default();
 
-        tracker.update(1, ExpectedCategory::Download, 5);
-        tracker.update(2, ExpectedCategory::Download, 3);
+        let _ = tracker.update(1, ExpectedCategory::Download, 5);
+        let _ = tracker.update(2, ExpectedCategory::Download, 3);
 
         // Remove activity 1 — only activity 2 remains
         tracker.remove_activity(1);
@@ -920,8 +919,8 @@ mod tests {
     fn test_expected_count_remove_cleans_all_categories() {
         let mut tracker = ExpectedCountTracker::default();
 
-        tracker.update(1, ExpectedCategory::Build, 3);
-        tracker.update(1, ExpectedCategory::Download, 5);
+        let _ = tracker.update(1, ExpectedCategory::Build, 3);
+        let _ = tracker.update(1, ExpectedCategory::Download, 5);
 
         tracker.remove_activity(1);
 

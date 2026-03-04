@@ -272,10 +272,10 @@ fn fetch_tasks(task_file: &Option<PathBuf>) -> Result<Vec<TaskConfig>> {
 ///
 /// Returns the raw JSON string and the source it came from, or an error if no source is available.
 fn read_raw_task_source(task_file: &Option<PathBuf>) -> Result<(String, TaskSource)> {
-    if let Ok(raw) = env::var("DEVENV_TASKS") {
-        if !raw.is_empty() {
-            return Ok((raw, TaskSource::EnvVar));
-        }
+    if let Ok(raw) = env::var("DEVENV_TASKS")
+        && !raw.is_empty()
+    {
+        return Ok((raw, TaskSource::EnvVar));
     }
 
     match task_file {

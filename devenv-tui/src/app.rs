@@ -433,7 +433,7 @@ fn scroll_selected_into_view(
     let target_height = activity_height(heights, selected_id);
 
     let vp = handle.viewport_height() as i32;
-    let current = handle.scroll_offset() as i32;
+    let current = handle.scroll_offset();
     if offset < current {
         handle.scroll_to(offset);
     } else if offset + target_height > current + vp {

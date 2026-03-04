@@ -114,10 +114,10 @@ fn probe_description(config: &ProcessConfig) -> Option<String> {
     if ready.exec.is_some() {
         return Some("exec".to_string());
     }
-    if let Some(http) = &ready.http {
-        if let Some(get) = &http.get {
-            return Some(format!("http: {}:{}{}", get.host, get.port, get.path));
-        }
+    if let Some(http) = &ready.http
+        && let Some(get) = &http.get
+    {
+        return Some(format!("http: {}:{}{}", get.host, get.port, get.path));
     }
     if ready.notify {
         return Some("notify".to_string());

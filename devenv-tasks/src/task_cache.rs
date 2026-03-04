@@ -152,10 +152,10 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
     for pattern in &positive_patterns {
         if is_literal_pattern(pattern) && negation_patterns.is_empty() {
             let path = Path::new(pattern);
-            if path.exists() {
-                if let Some(path_str) = path.to_str() {
-                    results.push(path_str.to_string());
-                }
+            if path.exists()
+                && let Some(path_str) = path.to_str()
+            {
+                results.push(path_str.to_string());
             }
             continue;
         }
@@ -175,10 +175,10 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
             if let Err(e) = overrides_builder.add(&normalized) {
                 warn!("Invalid glob pattern '{}': {}", normalized, e);
             }
-            if pattern_explicitly_targets_hidden_path(&normalized) {
-                if let Err(e) = hidden_overrides_builder.add(&normalized) {
-                    warn!("Invalid hidden glob pattern '{}': {}", normalized, e);
-                }
+            if pattern_explicitly_targets_hidden_path(&normalized)
+                && let Err(e) = hidden_overrides_builder.add(&normalized)
+            {
+                warn!("Invalid hidden glob pattern '{}': {}", normalized, e);
             }
         }
 

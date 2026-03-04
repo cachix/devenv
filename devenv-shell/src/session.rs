@@ -908,7 +908,7 @@ impl ShellSession {
                     }
                     let filtered = stdin_filter.filter(&data);
                     if !filtered.is_empty() {
-                        pty.write_all(&filtered)?;
+                        pty.write_all(filtered)?;
                         pty.flush()?;
                     }
                 }
@@ -953,7 +953,7 @@ impl ShellSession {
                             Event::Stdin(stdin_data) => {
                                 let filtered = stdin_filter.filter(&stdin_data);
                                 if !filtered.is_empty() {
-                                    pty.write_all(&filtered)?;
+                                    pty.write_all(filtered)?;
                                     pty.flush()?;
                                 }
                             }

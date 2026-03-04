@@ -88,7 +88,7 @@ impl TaskState {
         // don't suppress cache invalidation for the task script itself.
         if let Some(cmd) = &self.task.command {
             return cache
-                .check_modified_files(&self.task.name, &[cmd.clone()])
+                .check_modified_files(&self.task.name, std::slice::from_ref(cmd))
                 .await;
         }
 
@@ -624,7 +624,7 @@ impl TaskState {
             }
 
             if let Some(cmd) = &self.task.command {
-                for path in expand_glob_patterns(&[cmd.clone()]) {
+                for path in expand_glob_patterns(std::slice::from_ref(cmd)) {
                     cache.update_file_state(&self.task.name, &path).await?;
                 }
             }
