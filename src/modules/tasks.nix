@@ -378,10 +378,15 @@ in
       }
     ];
 
-    # Only set DEVENV_TASKS env var for flakes integration or pre-2.0 CLI,
-    # where devenv-tasks is invoked via shell hooks and needs the env var.
-    # For 2.0+, DEVENV_TASK_FILE is sufficient and avoids bloating the environment.
-    env.DEVENV_TASKS = lib.optionalString (config.devenv.cli.version == null || lib.versionOlder config.devenv.cli.version "2.0") (builtins.toJSON tasksJSON);
+    # Skip DEVENV_TASKS env var for the native process manager on CLI 2.0+,
+    # where DEVENV_TASK_FILE is sufficient and avoids bloating the environment.
+    env.DEVENV_TASKS =
+      let
+        isNativeWith2Plus = config.process.manager.implementation == "native"
+          && config.devenv.cli.version != null
+          && lib.versionAtLeast config.devenv.cli.version "2.0";
+      in
+      lib.optionalString (!isNativeWith2Plus) (builtins.toJSON tasksJSON);
     env.DEVENV_TASK_FILE = config.task.config;
     task.config = (pkgs.formats.json { }).generate "tasks.json" tasksJSON;
 
