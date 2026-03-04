@@ -446,6 +446,7 @@ mod tests {
             impure: false,
             nixpkgs_config,
             lock_fingerprint,
+            devenv_state: None,
         };
 
         let serialized = ser_nix::to_string(&args).expect("Failed to serialize NixArgs");
@@ -553,6 +554,7 @@ mod tests {
             impure: false,
             nixpkgs_config,
             lock_fingerprint: "",
+            devenv_state: None,
         };
 
         let serialized = ser_nix::to_string(&args).expect("Failed to serialize NixArgs");
