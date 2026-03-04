@@ -2051,7 +2051,11 @@ impl Devenv {
                 .map(|resolved| SecretspecData {
                     profile: resolved.profile.clone(),
                     provider: resolved.provider.clone(),
-                    secrets: resolved.secrets.clone(),
+                    secrets: resolved
+                        .secrets
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect(),
                 });
 
         let active_profiles = &self.shell_settings.profiles;

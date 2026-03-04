@@ -9,7 +9,7 @@ use miette::{Result, miette};
 use ser_nix::NixLiteral;
 use serde::Serialize;
 use serde::ser::{SerializeMap, Serializer};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::path::Path;
 
 /// A parsed CLI option with path and typed value
@@ -45,6 +45,24 @@ pub enum CliValue {
     PkgList(Vec<String>),
 }
 
+/// Escape a string for use inside a Nix double-quoted string.
+/// Handles backslash, double-quote, dollar-brace interpolation, newline, and tab.
+fn escape_nix_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '$' if chars.peek() == Some(&'{') => out.push_str("\\$"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 impl CliValue {
     /// Render this value as a Nix literal string.
     ///
@@ -54,8 +72,7 @@ impl CliValue {
     fn to_nix_literal(&self, force: bool) -> String {
         match self {
             CliValue::String(s) => {
-                // Escape quotes in the string
-                let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+                let escaped = escape_nix_string(s);
                 format!("lib.mkForce \"{}\"", escaped)
             }
             CliValue::Int(n) => format!("lib.mkForce {}", n),
@@ -94,13 +111,13 @@ pub struct CliOptionsConfig(pub Vec<CliOption>);
 #[derive(Debug, Clone)]
 enum NestedValue {
     Leaf(CliValue, bool),
-    Map(HashMap<String, NestedValue>),
+    Map(BTreeMap<String, NestedValue>),
 }
 
 impl CliOptionsConfig {
     /// Build nested structure from flat list of options
     fn build_nested(&self) -> NestedValue {
-        let mut root: HashMap<String, NestedValue> = HashMap::new();
+        let mut root: BTreeMap<String, NestedValue> = BTreeMap::new();
 
         for opt in &self.0 {
             Self::insert_at_path(&mut root, &opt.path, &opt.value, opt.force);
@@ -111,7 +128,7 @@ impl CliOptionsConfig {
 
     /// Insert a value at a nested path
     fn insert_at_path(
-        map: &mut HashMap<String, NestedValue>,
+        map: &mut BTreeMap<String, NestedValue>,
         path: &[String],
         value: &CliValue,
         force: bool,
@@ -129,7 +146,7 @@ impl CliOptionsConfig {
             // Intermediate node - ensure it's a map and recurse
             let entry = map
                 .entry(key.clone())
-                .or_insert_with(|| NestedValue::Map(HashMap::new()));
+                .or_insert_with(|| NestedValue::Map(BTreeMap::new()));
 
             if let NestedValue::Map(inner_map) = entry {
                 Self::insert_at_path(inner_map, &path[1..], value, force);
@@ -149,11 +166,8 @@ impl Serialize for NestedValue {
             }
             NestedValue::Map(map) => {
                 let mut s = serializer.serialize_map(Some(map.len()))?;
-                // Sort keys for deterministic output
-                let mut keys: Vec<_> = map.keys().collect();
-                keys.sort();
-                for key in keys {
-                    s.serialize_entry(key, &map[key])?;
+                for (key, value) in map {
+                    s.serialize_entry(key, value)?;
                 }
                 s.end()
             }
@@ -190,13 +204,14 @@ impl Serialize for CliOptionsConfig {
 /// Input format: ["key:type", "value", "key2:type2", "value2", ...]
 /// Supported types: string, int, float, bool, path, pkg, pkgs
 pub fn parse_cli_options(raw_options: &[String]) -> Result<Vec<CliOption>> {
-    let mut options = Vec::new();
+    let mut options = Vec::with_capacity(raw_options.len() / 2);
 
     // Process pairs of [key:type, value]
     for chunk in raw_options.chunks(2) {
         if chunk.len() != 2 {
             return Err(miette!(
-                "CLI options must be provided in pairs (key:type value)"
+                "CLI option '{}' is missing its value (options must be key:type value pairs)",
+                chunk[0]
             ));
         }
 
@@ -204,16 +219,12 @@ pub fn parse_cli_options(raw_options: &[String]) -> Result<Vec<CliOption>> {
         let value_str = &chunk[1];
 
         // Split key:type
-        let parts: Vec<&str> = key_with_type.splitn(2, ':').collect();
-        if parts.len() != 2 {
-            return Err(miette!(
+        let (key, raw_type) = key_with_type.split_once(':').ok_or_else(|| {
+            miette!(
                 "CLI option '{}' must include type (e.g., key:string, key:bool)",
                 key_with_type
-            ));
-        }
-
-        let key = parts[0];
-        let raw_type = parts[1];
+            )
+        })?;
 
         // Check for `!` suffix which forces replacement for list types
         let (type_name, explicit_force) = if let Some(stripped) = raw_type.strip_suffix('!') {
@@ -238,6 +249,13 @@ pub fn parse_cli_options(raw_options: &[String]) -> Result<Vec<CliOption>> {
                 let f: f64 = value_str.parse().map_err(|_| {
                     miette!("Invalid float value '{}' for option '{}'", value_str, key)
                 })?;
+                if !f.is_finite() {
+                    return Err(miette!(
+                        "Float value '{}' for option '{}' must be finite (not NaN or infinity)",
+                        value_str,
+                        key
+                    ));
+                }
                 CliValue::Float(f)
             }
             "bool" => {
@@ -292,7 +310,7 @@ pub struct SecretspecData {
     pub provider: String,
 
     /// Map of secret names to their values
-    pub secrets: HashMap<String, String>,
+    pub secrets: BTreeMap<String, String>,
 }
 
 /// Arguments passed to Nix when assembling the environment
