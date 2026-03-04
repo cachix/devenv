@@ -65,6 +65,7 @@ impl TestNixArgs {
             impure: false,
             nixpkgs_config,
             lock_fingerprint: "",
+            devenv_state: None,
         }
     }
 }
