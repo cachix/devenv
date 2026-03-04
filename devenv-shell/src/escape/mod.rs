@@ -142,9 +142,21 @@ impl EscapeScanner {
     }
 
     /// Scan a chunk of raw PTY output and return any escape sequence events found.
+    ///
+    /// Convenience wrapper around [`scan_into`](Self::scan_into) that allocates
+    /// a new Vec per call. Prefer `scan_into` on hot paths.
+    #[cfg(test)]
     pub fn scan(&mut self, data: &[u8]) -> Vec<SequenceEvent> {
         let mut events = Vec::new();
+        self.scan_into(data, &mut events);
+        events
+    }
 
+    /// Scan a chunk of raw PTY output, appending events to the provided Vec.
+    ///
+    /// Unlike [`scan`], this avoids allocating a new Vec on every call.
+    /// The caller can reuse the Vec across invocations.
+    pub fn scan_into(&mut self, data: &[u8], events: &mut Vec<SequenceEvent>) {
         for &byte in data {
             match self.state {
                 RouterState::Ground => {
@@ -324,8 +336,6 @@ impl EscapeScanner {
                 }
             }
         }
-
-        events
     }
 
     fn reset(&mut self) {

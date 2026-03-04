@@ -212,12 +212,8 @@ fn format_changed_files(changed_files: &[PathBuf], max_len: usize) -> String {
 }
 
 /// Select short or long keybind label based on terminal width.
-fn keybind_label(keybind: (&str, &str), use_short: bool) -> String {
-    if use_short {
-        keybind.0.to_string()
-    } else {
-        keybind.1.to_string()
-    }
+fn keybind_label(keybind: (&'static str, &'static str), use_short: bool) -> &'static str {
+    if use_short { keybind.0 } else { keybind.1 }
 }
 
 /// Build "in N.Ns" duration elements, or empty if no duration recorded.

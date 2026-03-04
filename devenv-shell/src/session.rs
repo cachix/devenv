@@ -23,6 +23,11 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
+/// Keybind byte sequences (ESC + Ctrl key).
+const KEYBIND_TOGGLE_PAUSE: [u8; 2] = [0x1b, 0x04]; // Ctrl-Alt-D
+const KEYBIND_LIST_WATCHED: [u8; 2] = [0x1b, 0x17]; // Ctrl-Alt-W
+const KEYBIND_TOGGLE_ERROR: [u8; 2] = [0x1b, 0x05]; // Ctrl-Alt-E
+
 /// Escape-sequence state tracked across PTY output processing.
 ///
 /// Persistent fields (`in_alternate_screen`, `forwarded_dec_modes`,
@@ -151,6 +156,7 @@ fn feed_vt(vt: &mut Vt, text: &str) -> usize {
 struct StdinFilter {
     state: StdinFilterState,
     buf: Vec<u8>,
+    output: Vec<u8>,
 }
 
 #[derive(Clone, Copy)]
@@ -167,12 +173,15 @@ impl StdinFilter {
         Self {
             state: StdinFilterState::Ground,
             buf: Vec::new(),
+            output: Vec::new(),
         }
     }
 
     /// Filter a chunk of stdin data, returning only non-OSC bytes.
-    fn filter(&mut self, data: &[u8]) -> Vec<u8> {
-        let mut output = Vec::with_capacity(data.len());
+    fn filter(&mut self, data: &[u8]) -> &[u8] {
+        self.output.clear();
+        self.output.reserve(data.len());
+        let output = &mut self.output;
 
         for &byte in data {
             match self.state {
@@ -254,7 +263,7 @@ impl StdinFilter {
             }
         }
 
-        output
+        &self.output
     }
 }
 
@@ -305,7 +314,9 @@ impl Renderer {
         }
         write!(stdout, "\x1b[1;{}r", content_rows)?;
         write!(stdout, "\x1b[{};1H", content_rows)?;
-        stdout.write_all("\n".repeat(count).as_bytes())?;
+        for _ in 0..count {
+            stdout.write_all(b"\n")?;
+        }
         write!(stdout, "\x1b[r")
     }
 
@@ -827,6 +838,7 @@ impl ShellSession {
         let mut utf8_acc = Utf8Accumulator::new();
         let mut esc = EscapeState::new();
         let mut resize_pending = false;
+        let mut esc_events = Vec::new();
 
         loop {
             // Use select! to handle both events and spinner animation
@@ -857,18 +869,15 @@ impl ShellSession {
 
             match event {
                 Event::Stdin(data) => {
-                    // Check for Ctrl-Alt-D (ESC + Ctrl-D = 0x1b 0x04) to toggle pause
-                    if data.len() == 2 && data[0] == 0x1b && data[1] == 0x04 {
+                    if data.as_slice() == KEYBIND_TOGGLE_PAUSE {
                         let _ = coordinator_tx.send(ShellEvent::TogglePause).await;
                         continue;
                     }
-                    // Check for Ctrl-Alt-W (ESC + Ctrl-W = 0x1b 0x17) to list watched files
-                    if data.len() == 2 && data[0] == 0x1b && data[1] == 0x17 {
+                    if data.as_slice() == KEYBIND_LIST_WATCHED {
                         let _ = coordinator_tx.send(ShellEvent::ListWatchedFiles).await;
                         continue;
                     }
-                    // Check for Ctrl-Alt-E (ESC + Ctrl-E = 0x1b 0x05) to toggle error
-                    if data.len() == 2 && data[0] == 0x1b && data[1] == 0x05 {
+                    if data.as_slice() == KEYBIND_TOGGLE_ERROR {
                         let state = self.status_line.state_mut();
                         if state.error.is_some() {
                             state.show_error = !state.show_error;
@@ -907,7 +916,13 @@ impl ShellSession {
                 Event::PtyOutput(data) => {
                     let was_in_alt = esc.in_alternate_screen;
                     esc.reset_batch();
-                    Self::process_escape_events(&mut scanner, &data, &mut esc, stdout)?;
+                    Self::process_escape_events(
+                        &mut scanner,
+                        &data,
+                        &mut esc,
+                        stdout,
+                        &mut esc_events,
+                    )?;
 
                     // Feed output into VT and track how many lines scrolled off
                     let mut total_scroll: usize = 0;
@@ -920,7 +935,13 @@ impl ShellSession {
                     while let Ok(event) = event_rx.try_recv() {
                         match event {
                             Event::PtyOutput(more) => {
-                                Self::process_escape_events(&mut scanner, &more, &mut esc, stdout)?;
+                                Self::process_escape_events(
+                                    &mut scanner,
+                                    &more,
+                                    &mut esc,
+                                    stdout,
+                                    &mut esc_events,
+                                )?;
                                 let text = utf8_acc.accumulate(&more);
                                 total_scroll += feed_vt(vt, &text);
                             }
@@ -1125,8 +1146,11 @@ impl ShellSession {
         data: &[u8],
         esc: &mut EscapeState,
         stdout: &mut impl Write,
+        events_buf: &mut Vec<SequenceEvent>,
     ) -> io::Result<()> {
-        for event in scanner.scan(data) {
+        events_buf.clear();
+        scanner.scan_into(data, events_buf);
+        for event in events_buf.drain(..) {
             match event {
                 SequenceEvent::DecMode(event) => {
                     if !event.has_forwarded_mode() {

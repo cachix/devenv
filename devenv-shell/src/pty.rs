@@ -111,20 +111,12 @@ impl Pty {
 
 /// Get the current terminal size.
 pub fn get_terminal_size() -> PtySize {
-    if let Some((cols, rows)) = term_size::dimensions() {
-        PtySize {
-            rows: rows as u16,
-            cols: cols as u16,
-            pixel_width: 0,
-            pixel_height: 0,
-        }
-    } else {
-        PtySize {
-            rows: 24,
-            cols: 80,
-            pixel_width: 0,
-            pixel_height: 0,
-        }
+    let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+    PtySize {
+        rows,
+        cols,
+        pixel_width: 0,
+        pixel_height: 0,
     }
 }
 

@@ -2,22 +2,11 @@
 //!
 //! Provides utilities for managing terminal state, including raw mode handling.
 
-use std::io;
+use std::io::{self, IsTerminal};
 
 /// Check if stdin is a TTY.
 pub fn is_tty() -> bool {
-    #[cfg(unix)]
-    {
-        use std::os::unix::io::AsRawFd;
-        let fd = io::stdin().as_raw_fd();
-        let result = unsafe { libc::isatty(fd) };
-        result == 1
-    }
-
-    #[cfg(not(unix))]
-    {
-        false
-    }
+    io::stdin().is_terminal()
 }
 
 /// Raw terminal mode guard that restores terminal state on drop.
