@@ -456,6 +456,8 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     // ScrollView handle and per-activity height measurements
     let scroll_handle = hooks.use_ref_default::<ScrollViewHandle>();
     let mut activity_heights: ActivityHeights = hooks.use_ref_default();
+    // Tracks whether the ScrollView is currently rendered (and handle is valid)
+    let mut scroll_view_active = hooks.use_ref_default::<bool>();
 
     // Redraw when notified of activity model changes (throttled)
     let redraw = hooks.use_state(|| 0u64);
@@ -490,6 +492,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         let shutdown = shutdown.clone();
         let command_tx = command_tx.clone();
         let mut scroll_handle = scroll_handle;
+        let scroll_view_active = scroll_view_active;
 
         move |event| {
             if let TerminalEvent::Key(key_event) = event
@@ -535,7 +538,9 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 } else {
                                     ui.select_previous_activity(&selectable);
                                 }
-                                if let Some(selected_id) = ui.selected_activity {
+                                if let Some(selected_id) = ui.selected_activity
+                                    && *scroll_view_active.read()
+                                {
                                     let display = model.get_display_activities();
                                     let heights = activity_heights.read();
                                     scroll_selected_into_view(
@@ -592,6 +597,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         } else {
             None
         };
+        *scroll_view_active.write() = scroll_handle_opt.is_some();
 
         element! {
             ContextProvider(value: iocraft::Context::owned(activity_heights)) {
