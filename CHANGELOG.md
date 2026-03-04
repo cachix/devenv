@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.1 (unreleased)
+
+### Bug Fixes
+
+- Fixed TUI panic when navigating up/down with many processes ([#2542](https://github.com/cachix/devenv/issues/2542)).
+- Fixed exec readiness probes not inheriting the process environment (e.g. `PGDATA`, `PGHOST`), causing probes to always fail.
+
+### Improvements
+
+- TUI now displays the readiness probe type when a process is in the starting state (e.g. `starting (exec: pg_isready)` or `starting (http: localhost:8080/health)`).
+
 ## 2.0.0 (2026-03-03)
 
 This is a major release with significant architectural changes. devenv 2.0 introduces a native Rust process manager, a full terminal UI, hot-reload for shell environments, automatic port allocation, an eval caching layer, and many more improvements. See the [migration guide](https://devenv.sh/guides/migrating-to-2.0/) for detailed upgrade instructions.

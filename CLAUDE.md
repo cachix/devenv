@@ -144,6 +144,33 @@ Environment variables `DEVENV_TRACE_OUTPUT` and `DEVENV_TRACE_FORMAT` can be use
 - **Error Handling**: Use `bail!()` not `panic!()`, propagate with `?`
 - **No unsafe**: Don't use `unsafe` code
 
+## Changelog
+
+`CHANGELOG.md` follows this structure:
+
+```
+## <version> (unreleased)
+
+### Bug Fixes
+
+- Fixed <description> ([#<issue>](https://github.com/cachix/devenv/issues/<issue>)).
+
+### Improvements
+
+- <Description of improvement>.
+
+### Breaking Changes
+
+- **<Name>**: <Description>.
+```
+
+When updating the changelog:
+1. Use `git log <last-release-commit>..HEAD` to find commits since the last release.
+2. Skip automated commits (e.g. `Auto generate ...`) and test-only commits.
+3. Group entries under **Bug Fixes**, **Improvements**, or **Breaking Changes**.
+4. Link GitHub issues when referenced in commit messages (search for `Fixes`/`Closes`/`#` in commit bodies).
+5. The unreleased section sits above the last release entry.
+
 ## Files That Should Not Be Edited
 
 - `docs/reference/options.md` - Auto-generated from Nix module options
