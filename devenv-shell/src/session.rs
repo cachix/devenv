@@ -15,6 +15,7 @@ use crossterm::{
     terminal::{self, Clear, ClearType},
 };
 use portable_pty::PtySize;
+use std::collections::BTreeSet;
 use std::fmt::Write as FmtWrite;
 use std::io::{self, IsTerminal, Read, Write};
 use std::sync::Arc;
@@ -33,7 +34,7 @@ struct EscapeState {
     /// DEC private modes that were set and need explicit reset on exit.
     /// Tracked separately from `in_alternate_screen` (which uses
     /// `LeaveAlternateScreen`) and keypad mode (which uses `ESC >`).
-    forwarded_dec_modes: Vec<u16>,
+    forwarded_dec_modes: BTreeSet<u16>,
     /// Keypad is in application mode (DECKPAM, `ESC =`).
     keypad_application_mode: bool,
     /// Set when CSI 2 J is seen — signals the caller to consume `row_offset`.
@@ -47,7 +48,7 @@ impl EscapeState {
     fn new() -> Self {
         Self {
             in_alternate_screen: false,
-            forwarded_dec_modes: Vec::new(),
+            forwarded_dec_modes: BTreeSet::new(),
             keypad_application_mode: false,
             erase_display: false,
             clear_scrollback: false,
@@ -65,15 +66,13 @@ impl EscapeState {
 ///
 /// Equivalent to the `Line::dump()` method that was public in avt 0.14
 /// but made `pub(crate)` in 0.17.
-fn dump_line(line: &avt::Line) -> String {
-    let mut s = String::new();
+fn dump_line(buf: &mut String, line: &avt::Line) {
     for cells in line.chunks(|c1, c2| c1.pen() != c2.pen()) {
-        dump_pen(&mut s, cells[0].pen());
+        dump_pen(buf, cells[0].pen());
         for cell in &cells {
-            s.push(cell.char());
+            buf.push(cell.char());
         }
     }
-    s
 }
 
 fn dump_pen(s: &mut String, pen: &avt::Pen) {
@@ -277,6 +276,8 @@ struct Renderer {
     /// Number of usable content rows on the real terminal (excludes status line).
     /// Used to clip rendering so offset VT rows don't overwrite the status line.
     content_rows: u16,
+    /// Reusable buffer for SGR line rendering (avoids per-line allocation).
+    line_buf: String,
 }
 
 impl Renderer {
@@ -286,6 +287,7 @@ impl Renderer {
             prev_cursor: (0, 0, true),
             row_offset: 0,
             content_rows,
+            line_buf: String::new(),
         }
     }
 
@@ -325,13 +327,17 @@ impl Renderer {
                 cursor::MoveTo(0, (row_idx + offset) as u16),
                 Clear(ClearType::CurrentLine)
             )?;
-            stdout.write_all(dump_line(line).as_bytes())?;
+            self.line_buf.clear();
+            dump_line(&mut self.line_buf, line);
+            stdout.write_all(self.line_buf.as_bytes())?;
             // Raw SGR reset: crossterm's SetAttribute(Reset) allocates via Attribute::sgr()
             stdout.write_all(b"\x1b[0m")?;
             if row_idx >= self.prev_lines.len() {
                 self.prev_lines.resize_with(row_idx + 1, Vec::new);
             }
-            self.prev_lines[row_idx] = cells.to_vec();
+            let prev = &mut self.prev_lines[row_idx];
+            prev.clear();
+            prev.extend_from_slice(cells);
         }
         self.update_cursor(stdout, vt)
     }
@@ -362,24 +368,8 @@ impl Renderer {
 
     /// Full redraw of all VT lines (after resize or initialization).
     fn render_full(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
-        let offset = self.row_offset as usize;
-        let max_row = self.visible_rows();
-        self.prev_lines.clear();
-        for (row_idx, line) in vt.view().enumerate() {
-            if row_idx >= max_row {
-                break;
-            }
-            queue!(
-                stdout,
-                cursor::MoveTo(0, (row_idx + offset) as u16),
-                Clear(ClearType::CurrentLine)
-            )?;
-            stdout.write_all(dump_line(line).as_bytes())?;
-            // Raw SGR reset: crossterm's SetAttribute(Reset) allocates via Attribute::sgr()
-            stdout.write_all(b"\x1b[0m")?;
-            self.prev_lines.push(line.cells().to_vec());
-        }
-        self.update_cursor(stdout, vt)
+        self.invalidate();
+        self.render(stdout, vt)
     }
 
     /// Position the real terminal cursor to match the VT cursor.
@@ -1048,7 +1038,6 @@ impl ShellSession {
                         renderer.content_rows = pty_size.rows;
                         let _ = pty.resize(pty_size);
                         vt.resize(pty_size.cols as usize, pty_size.rows as usize);
-                        renderer.invalidate();
                         renderer.render_full(stdout, vt)?;
                         if self.config.show_status_line && !esc.in_alternate_screen {
                             self.status_line.draw(stdout, cols, rows)?;
@@ -1154,15 +1143,15 @@ impl ShellSession {
                     match &event {
                         DecModeEvent::Set { modes, .. } => {
                             for &m in modes {
-                                if CLEANUP_MODES.contains(&m)
-                                    && !esc.forwarded_dec_modes.contains(&m)
-                                {
-                                    esc.forwarded_dec_modes.push(m);
+                                if CLEANUP_MODES.contains(&m) {
+                                    esc.forwarded_dec_modes.insert(m);
                                 }
                             }
                         }
                         DecModeEvent::Reset { modes, .. } => {
-                            esc.forwarded_dec_modes.retain(|m| !modes.contains(m));
+                            for m in modes {
+                                esc.forwarded_dec_modes.remove(m);
+                            }
                         }
                     }
                 }
