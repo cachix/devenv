@@ -946,7 +946,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Input other does not exist so it can't be followed.")]
     fn add_input_with_missing_follows() {
         let mut config = Config::default();
         let result = config.add_input(
@@ -954,7 +953,12 @@ mod tests {
             "github:org/repo",
             &["other".to_string()],
         );
-        result.unwrap(); // This will panic with the Err from add_input
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Input other does not exist so it can't be followed."),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
