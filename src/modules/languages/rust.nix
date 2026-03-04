@@ -85,8 +85,12 @@ in
       enable = lib.mkEnableOption "Rust Language Server" // { default = true; };
       package = lib.mkOption {
         type = lib.types.package;
-        default = pkgs.rust-analyzer;
-        defaultText = lib.literalExpression "pkgs.rust-analyzer";
+        defaultText = lib.literalMD ''
+          Depends on the configured toolchain:
+          - `nixpkgs` channel: `pkgs.rust-analyzer`.
+          - non-nixpkgs channel: the `rust-analyzer` component from the rust-overlay toolchain, with a fallback to `pkgs.rust-analyzer` if not present in the manifest.
+          - `toolchainFile`: the aggregated toolchain package derived from the file.
+        '';
         description = "The Rust language server package to use.";
       };
     };
@@ -291,6 +295,7 @@ in
       in
       {
         languages.rust.toolchainPackage = toolchainFromFile;
+        languages.rust.lsp.package = lib.mkDefault toolchainFromFile;
         packages = [ cfg.toolchainPackage ];
       }
     ))
@@ -302,6 +307,7 @@ in
           paths = builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) cfg.components;
         }
       );
+      languages.rust.lsp.package = lib.mkDefault cfg.toolchain.rust-analyzer;
       packages = [ cfg.toolchainPackage ];
     })
 
@@ -378,6 +384,11 @@ in
       {
         languages.rust.toolchain = builtins.mapAttrs (_: lib.mkDefault) toolchainComponents;
         languages.rust.toolchainPackage = lib.mkDefault profile;
+        languages.rust.lsp.package = lib.mkDefault (
+          if builtins.elem "rust-analyzer" availableComponents then toolchainComponents.rust-analyzer
+          else if builtins.elem "rust-analyzer-preview" availableComponents then toolchainComponents.rust-analyzer-preview
+          else builtins.trace "warning: rust-analyzer not found in the ${cfg.channel} toolchain components; falling back to pkgs.rust-analyzer" pkgs.rust-analyzer
+        );
         packages = [ cfg.toolchainPackage ];
       }
     ))
