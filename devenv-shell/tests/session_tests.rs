@@ -44,6 +44,9 @@ fn spawn_cmd(shell_line: &str) -> ShellCommand {
     }
 }
 
+/// Floods 30 numbered lines followed by a DONE marker, overflowing a 24-row terminal.
+const FLOOD_CMD: &str = "for i in $(seq 1 30); do echo \"line$i\"; done; echo DONE; exit 0";
+
 /// Read from a UnixStream until `needle` is found or deadline expires.
 /// Returns all bytes read so far.
 fn read_until(stream: &mut UnixStream, needle: &[u8], deadline: Duration) -> Vec<u8> {
@@ -233,6 +236,19 @@ fn render(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String> {
         .collect()
 }
 
+/// Render captured stdout and return ALL lines (scrollback + viewport).
+/// Tests that scrolled-off content was correctly pushed into native scrollback.
+fn render_all_lines(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String> {
+    let mut vt = Vt::builder()
+        .size(cols, rows)
+        .scrollback_limit(10000)
+        .build();
+    vt.feed_str(&String::from_utf8_lossy(stdout_bytes));
+    vt.lines()
+        .map(|line| line.text().trim_end().to_owned())
+        .collect()
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_status_line_rendered_on_last_row() {
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
@@ -266,24 +282,81 @@ async fn test_status_line_rendered_on_last_row() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_scroll_region_preserves_status_line() {
+async fn test_overflow_preserved_in_scrollback() {
     let (io, _stdin_ours, mut stdout_ours) = test_io();
+    let (cmd_tx, cmd_rx) = mpsc::channel(10);
+    let (event_tx, _event_rx) = mpsc::channel(10);
+
+    let session = test_session();
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+
+    cmd_tx.send(spawn_cmd(FLOOD_CMD)).await.unwrap();
+
+    let collected = read_until(&mut stdout_ours, b"DONE", Duration::from_secs(5));
+
+    // All 30 lines must appear in scrollback + viewport — nothing lost
+    let all_lines = render_all_lines(&collected, 80, 24);
+    let non_empty: Vec<_> = all_lines
+        .iter()
+        .filter(|r| !r.is_empty())
+        .cloned()
+        .collect();
+    for i in 1..=30 {
+        let expected = format!("line{}", i);
+        assert!(
+            non_empty.iter().any(|l| l.contains(&expected)),
+            "expected '{}' in scrollback + viewport, but it was lost",
+            expected
+        );
+    }
+
+    let _ = handle.await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_overflow_viewport_shows_tail() {
+    let (io, _stdin_ours, mut stdout_ours) = test_io();
+    let (cmd_tx, cmd_rx) = mpsc::channel(10);
+    let (event_tx, _event_rx) = mpsc::channel(10);
+
+    let session = test_session();
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+
+    cmd_tx.send(spawn_cmd(FLOOD_CMD)).await.unwrap();
+
+    let collected = read_until(&mut stdout_ours, b"DONE", Duration::from_secs(5));
+
+    let rows = render(&collected, 80, 24);
+    let non_empty: Vec<_> = rows.iter().filter(|r| !r.is_empty()).collect();
+    insta::assert_snapshot!(
+        non_empty
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+
+    let _ = handle.await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_overflow_status_line_protected() {
+    let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
 
     let session = status_line_session();
     let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
 
-    // Spawn a shell that floods 30 lines (more than the 23-row scroll region),
-    // then prints a marker and exits
+    // Flood 30 lines then keep the process alive so the status line isn't
+    // cleared by the PtyExit handler.
     cmd_tx
         .send(spawn_cmd(
-            "for i in $(seq 1 30); do echo \"line$i\"; done; echo DONE; exit 0",
+            "for i in $(seq 1 30); do echo \"line$i\"; done; echo DONE; read unused",
         ))
         .await
         .unwrap();
 
-    // Tell the session about watched files so the status line has visible content
     cmd_tx
         .send(ShellCommand::WatchedFiles {
             files: vec!["test.nix".into()],
@@ -291,14 +364,26 @@ async fn test_scroll_region_preserves_status_line() {
         .await
         .unwrap();
 
-    // Wait for all output to arrive
-    let collected = read_until(&mut stdout_ours, b"DONE", Duration::from_secs(5));
+    // Wait for both the flood output and the status line render
+    let mut collected = read_until(&mut stdout_ours, b"DONE", Duration::from_secs(5));
+    if !collected
+        .windows(b"watching".len())
+        .any(|w| w == b"watching")
+    {
+        collected.extend(read_until(
+            &mut stdout_ours,
+            b"watching",
+            Duration::from_secs(5),
+        ));
+    }
+
     let rows = render(&collected, 80, 24);
+    insta::assert_snapshot!(rows[23]);
 
-    // Snapshot the full viewport — shell output should be in rows 0-22,
-    // status line should be on row 23 (protected by scroll region)
-    insta::assert_snapshot!(rows.join("\n"));
-
+    // Unblock the process so it can exit
+    let _ = stdin_ours.write_all(b"\n");
+    drop(stdin_ours);
+    drop(cmd_tx);
     let _ = handle.await;
 }
 

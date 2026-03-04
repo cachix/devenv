@@ -1,7 +1,8 @@
 ---
 source: devenv-shell/tests/session_tests.rs
-expression: "rows.join(\"\\n\")"
+expression: "non_empty.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(\"\\n\")"
 ---
+line9
 line10
 line11
 line12
@@ -24,5 +25,3 @@ line28
 line29
 line30
 DONE
-
- 👁  devenv watching 1 files                                    Ctrl-Alt-D pause

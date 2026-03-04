@@ -131,18 +131,21 @@ fn dump_color(s: &mut String, color: avt::Color, base: u8) {
     }
 }
 
-/// Feed text into VT and return the actual number of lines that scrolled off
-/// the viewport. Unlike `changes.scrollback.count()` (which only reports lines
-/// trimmed by gc beyond the scrollback limit), this accounts for lines retained
-/// in scrollback too.
-fn feed_vt(vt: &mut Vt, text: &str) -> usize {
+/// Feed text into VT and return `(scroll_count, gc_count)`.
+///
+/// `scroll_count` is the number of lines that scrolled off the viewport
+/// (including lines retained in scrollback and lines trimmed by GC).
+/// `gc_count` is the number of lines trimmed by GC beyond the scrollback
+/// limit — needed to keep `Renderer::scrollback_flushed` accurate.
+fn feed_vt(vt: &mut Vt, text: &str) -> (usize, usize) {
     let lines_before = vt.lines().count();
     let gc_count = {
         let changes = vt.feed_str(text);
         changes.scrollback.count()
     };
     let lines_after = vt.lines().count();
-    (lines_after + gc_count).saturating_sub(lines_before)
+    let scroll_count = (lines_after + gc_count).saturating_sub(lines_before);
+    (scroll_count, gc_count)
 }
 
 /// Filters OSC responses from stdin to prevent garbled text.
@@ -285,6 +288,9 @@ struct Renderer {
     /// Number of usable content rows on the real terminal (excludes status line).
     /// Used to clip rendering so offset VT rows don't overwrite the status line.
     content_rows: u16,
+    /// Number of VT scrollback lines already pushed to native terminal scrollback.
+    /// Used to flush only new (unflushed) scrollback lines in `render_with_scroll`.
+    scrollback_flushed: usize,
     /// Reusable buffer for SGR line rendering (avoids per-line allocation).
     line_buf: String,
 }
@@ -296,8 +302,22 @@ impl Renderer {
             prev_cursor: (0, 0, true),
             row_offset: 0,
             content_rows,
+            scrollback_flushed: 0,
             line_buf: String::new(),
         }
+    }
+
+    /// Feed text into VT and adjust the scrollback watermark for GC.
+    /// Returns the scroll count (lines that scrolled off the viewport).
+    fn feed_vt(&mut self, vt: &mut Vt, text: &str) -> usize {
+        let (scroll, gc) = feed_vt(vt, text);
+        self.scrollback_flushed = self.scrollback_flushed.saturating_sub(gc);
+        scroll
+    }
+
+    /// Mark all current VT scrollback as already flushed (e.g., after resize).
+    fn mark_scrollback_flushed(&mut self, vt: &Vt) {
+        self.scrollback_flushed = vt.lines().count().saturating_sub(vt.size().1);
     }
 
     /// Number of VT rows that fit on-screen given the current offset.
@@ -320,6 +340,14 @@ impl Renderer {
         write!(stdout, "\x1b[r")
     }
 
+    /// Write a single VT line's content (SGR-formatted text + reset) to stdout.
+    fn write_line_content(&mut self, stdout: &mut impl Write, line: &avt::Line) -> io::Result<()> {
+        self.line_buf.clear();
+        dump_line(&mut self.line_buf, line);
+        stdout.write_all(self.line_buf.as_bytes())?;
+        stdout.write_all(b"\x1b[0m")
+    }
+
     /// Render changed VT lines to stdout. Skips lines that haven't changed
     /// and clips rows that would fall outside the visible area.
     fn render(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
@@ -338,11 +366,7 @@ impl Renderer {
                 cursor::MoveTo(0, (row_idx + offset) as u16),
                 Clear(ClearType::CurrentLine)
             )?;
-            self.line_buf.clear();
-            dump_line(&mut self.line_buf, line);
-            stdout.write_all(self.line_buf.as_bytes())?;
-            // Raw SGR reset: crossterm's SetAttribute(Reset) allocates via Attribute::sgr()
-            stdout.write_all(b"\x1b[0m")?;
+            self.write_line_content(stdout, line)?;
             if row_idx >= self.prev_lines.len() {
                 self.prev_lines.resize_with(row_idx + 1, Vec::new);
             }
@@ -353,26 +377,62 @@ impl Renderer {
         self.update_cursor(stdout, vt)
     }
 
-    /// Scroll the real terminal to push content into native scrollback, then render.
+    /// Push unflushed VT scrollback lines into native terminal scrollback,
+    /// then render the viewport.
     ///
-    /// When the VT reports scrolled lines (via `Changes.scrollback`), we use a
-    /// DECSTBM scroll region to protect the status line row, write newlines to scroll
-    /// the real terminal, then reset the region. This pushes content into the terminal's
-    /// native scrollback buffer — the same mechanism tmux uses.
-    fn render_with_scroll(
-        &mut self,
-        stdout: &mut impl Write,
-        vt: &Vt,
-        scroll_count: usize,
-    ) -> io::Result<()> {
-        if scroll_count > 0 {
-            let effective = scroll_count.min(self.content_rows as usize);
-            Self::scroll_region(stdout, self.content_rows, effective)?;
-            if effective < self.prev_lines.len() {
-                self.prev_lines.drain(..effective);
-            } else {
-                self.prev_lines.clear();
+    /// Instead of blindly scrolling the previous screen content (which loses
+    /// the actual scrolled-off text), this draws VT scrollback lines onto the
+    /// real terminal and then scrolls them off via newlines inside a DECSTBM
+    /// region that protects the status line.
+    fn render_with_scroll(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+        let vt_scrollback = vt.lines().count().saturating_sub(vt.size().1);
+        let unflushed = vt_scrollback.saturating_sub(self.scrollback_flushed);
+
+        if unflushed > 0 && self.content_rows > 0 {
+            let batch_size = self.content_rows as usize;
+
+            // Set scroll region to protect the status line row.
+            write!(stdout, "\x1b[1;{}r", self.content_rows)?;
+
+            // Iterate scrollback lines starting from the first unflushed one.
+            // vt.line(n) is viewport-relative, so we must use lines() iterator.
+            let mut lines_iter = vt.lines().skip(self.scrollback_flushed);
+            let mut remaining = unflushed;
+
+            while remaining > 0 {
+                let count = remaining.min(batch_size);
+                let mut drawn = 0;
+
+                for i in 0..count {
+                    let Some(line) = lines_iter.next() else {
+                        break;
+                    };
+                    queue!(
+                        stdout,
+                        cursor::MoveTo(0, i as u16),
+                        Clear(ClearType::CurrentLine)
+                    )?;
+                    self.write_line_content(stdout, line)?;
+                    drawn += 1;
+                }
+
+                if drawn > 0 {
+                    // Scroll drawn content into native scrollback.
+                    queue!(stdout, cursor::MoveTo(0, self.content_rows - 1))?;
+                    for _ in 0..drawn {
+                        stdout.write_all(b"\n")?;
+                    }
+                }
+
+                remaining -= count;
+                if drawn < count {
+                    break;
+                }
             }
+
+            write!(stdout, "\x1b[r")?;
+            self.scrollback_flushed = vt_scrollback;
+            self.prev_lines.clear();
         }
         self.render(stdout, vt)
     }
@@ -588,7 +648,7 @@ impl ShellSession {
         let pty = Arc::new(Pty::spawn(initial_cmd, pty_size)?);
         let mut vt = Vt::builder()
             .size(pty_size.cols as usize, pty_size.rows as usize)
-            .scrollback_limit(self.size.rows as usize)
+            .scrollback_limit(10_000)
             .build();
 
         // Handle TUI handoff if present
@@ -889,11 +949,11 @@ impl ShellSession {
                                     error_text.push_str(&format!("  {}\r\n", line));
                                 }
                                 error_text.push_str("\r\n");
-                                let scroll_count = feed_vt(vt, &error_text);
+                                renderer.feed_vt(vt, &error_text);
                                 if renderer.row_offset > 0 {
                                     renderer.render(stdout, vt)?;
                                 } else {
-                                    renderer.render_with_scroll(stdout, vt, scroll_count)?;
+                                    renderer.render_with_scroll(stdout, vt)?;
                                 }
                             } else {
                                 pty.write_all(&[0x0C])?;
@@ -925,11 +985,8 @@ impl ShellSession {
                     )?;
 
                     // Feed output into VT and track how many lines scrolled off
-                    let mut total_scroll: usize = 0;
-                    {
-                        let text = utf8_acc.accumulate(&data);
-                        total_scroll += feed_vt(vt, &text);
-                    }
+                    let text = utf8_acc.accumulate(&data);
+                    let mut total_scroll = renderer.feed_vt(vt, &text);
 
                     // Batch: drain any additional pending PtyOutput events
                     while let Ok(event) = event_rx.try_recv() {
@@ -943,11 +1000,11 @@ impl ShellSession {
                                     &mut esc_events,
                                 )?;
                                 let text = utf8_acc.accumulate(&more);
-                                total_scroll += feed_vt(vt, &text);
+                                total_scroll += renderer.feed_vt(vt, &text);
                             }
                             Event::PtyExit(exit_code) => {
                                 Self::cleanup_forwarded_modes(&esc, stdout)?;
-                                renderer.render_with_scroll(stdout, vt, total_scroll)?;
+                                renderer.render_with_scroll(stdout, vt)?;
                                 return Ok(exit_code);
                             }
                             Event::Stdin(stdin_data) => {
@@ -958,7 +1015,7 @@ impl ShellSession {
                                 }
                             }
                             Event::Command(cmd) => {
-                                total_scroll += self.handle_command(cmd, vt)?;
+                                total_scroll += self.handle_command(cmd, vt, renderer)?;
                             }
                             Event::Resize => {
                                 resize_pending = true;
@@ -1007,7 +1064,7 @@ impl ShellSession {
                     if esc.in_alternate_screen || renderer.row_offset > 0 {
                         renderer.render(stdout, vt)?;
                     } else {
-                        renderer.render_with_scroll(stdout, vt, total_scroll)?;
+                        renderer.render_with_scroll(stdout, vt)?;
                     }
 
                     if self.config.show_status_line {
@@ -1029,13 +1086,13 @@ impl ShellSession {
                 }
 
                 Event::Command(cmd) => {
-                    let scroll_count = self.handle_command(cmd, vt)?;
+                    let scroll_count = self.handle_command(cmd, vt, renderer)?;
                     queue!(stdout, terminal::BeginSynchronizedUpdate)?;
                     if scroll_count > 0 {
                         if renderer.row_offset > 0 {
                             renderer.render(stdout, vt)?;
                         } else {
-                            renderer.render_with_scroll(stdout, vt, scroll_count)?;
+                            renderer.render_with_scroll(stdout, vt)?;
                         }
                     }
                     self.draw_status_and_cursor(stdout, vt, renderer)?;
@@ -1059,6 +1116,7 @@ impl ShellSession {
                         renderer.content_rows = pty_size.rows;
                         let _ = pty.resize(pty_size);
                         vt.resize(pty_size.cols as usize, pty_size.rows as usize);
+                        renderer.mark_scrollback_flushed(vt);
                         renderer.render_full(stdout, vt)?;
                         if self.config.show_status_line && !esc.in_alternate_screen {
                             self.status_line.draw(stdout, cols, rows)?;
@@ -1084,9 +1142,15 @@ impl ShellSession {
 
     /// Handle a command from the coordinator.
     ///
-    /// Pure state update — no rendering. Returns the number of scrollback
-    /// lines produced so the caller can fold it into its render pass.
-    fn handle_command(&mut self, cmd: ShellCommand, vt: &mut Vt) -> Result<usize, SessionError> {
+    /// Updates state and, for some commands (e.g. `PrintWatchedFiles`), feeds
+    /// text into the VT. Does not write to stdout. Returns the scroll count
+    /// so the caller can fold it into its render pass.
+    fn handle_command(
+        &mut self,
+        cmd: ShellCommand,
+        vt: &mut Vt,
+        renderer: &mut Renderer,
+    ) -> Result<usize, SessionError> {
         match cmd {
             ShellCommand::ReloadReady { changed_files } => {
                 self.status_line.state_mut().set_reload_ready(changed_files);
@@ -1124,7 +1188,7 @@ impl ShellSession {
                 for file in &files {
                     text.push_str(&format!("  {}\r\n", file.display()));
                 }
-                return Ok(feed_vt(vt, &text));
+                return Ok(renderer.feed_vt(vt, &text));
             }
 
             ShellCommand::Shutdown => {
