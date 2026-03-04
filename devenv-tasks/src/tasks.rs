@@ -1224,6 +1224,7 @@ mod schedule_tests {
             cache_dir,
             sudo_context: None,
             env: HashMap::new(),
+            bash: String::new(),
             ignore_process_deps,
         };
 
