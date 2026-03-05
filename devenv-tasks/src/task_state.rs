@@ -2,18 +2,20 @@ use crate::SudoContext;
 use crate::config::TaskConfig;
 use crate::executor::{ExecutionContext, OutputCallback, SubprocessExecutor};
 use crate::task_cache::{TaskCache, expand_glob_patterns};
-use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
+use crate::types::{
+    Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel, get_devenv_env,
+    get_or_create_devenv_env_mut,
+};
+use base64::Engine;
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
 use devenv_processes::{ListenKind, NativeProcessManager, ProcessConfig};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::collections::BTreeMap;
-use std::process::Stdio;
 use std::sync::Arc;
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
-use tokio::process::Command;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
+
+const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 
 impl std::fmt::Debug for TaskState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -173,12 +175,11 @@ impl TaskState {
     }
 
     /// Prepare environment variables for task execution.
-    /// Returns the environment map and a tempfile for task output.
     fn prepare_env(
         &self,
         outputs: &BTreeMap<String, serde_json::Value>,
         shell_env: &std::collections::HashMap<String, String>,
-    ) -> Result<(BTreeMap<String, String>, tempfile::NamedTempFile)> {
+    ) -> Result<BTreeMap<String, String>> {
         // Start with shell env as the base layer
         let mut env: BTreeMap<String, String> = shell_env
             .iter()
@@ -193,22 +194,10 @@ impl TaskState {
             env.insert("DEVENV_TASK_INPUT".to_string(), input_json);
         }
 
-        // Create a temporary file for DEVENV_TASK_OUTPUT_FILE
-        let outputs_file = tempfile::Builder::new()
-            .prefix("devenv_task_output")
-            .suffix(".json")
-            .tempfile()
-            .into_diagnostic()
-            .wrap_err("Failed to create temporary file for task output")?;
-
         // Set environment variables from task outputs
         let mut devenv_env = String::new();
         for (_, value) in outputs.iter() {
-            if let Some(env_obj) = value
-                .get("devenv")
-                .and_then(|d| d.get("env"))
-                .and_then(|e| e.as_object())
-            {
+            if let Some(env_obj) = get_devenv_env(value) {
                 for (env_key, env_value) in env_obj {
                     if let Some(env_str) = env_value.as_str() {
                         env.insert(env_key.clone(), env_str.to_string());
@@ -235,60 +224,123 @@ impl TaskState {
             .wrap_err("Failed to serialize task outputs to JSON")?;
         env.insert("DEVENV_TASKS_OUTPUTS".to_string(), outputs_json);
 
-        Ok((env, outputs_file))
+        Ok(env)
     }
 
-    fn prepare_command(
-        &self,
-        cmd: &str,
-        outputs: &BTreeMap<String, serde_json::Value>,
-        shell_env: &std::collections::HashMap<String, String>,
-    ) -> Result<(Command, tempfile::NamedTempFile)> {
-        let (env, outputs_file) = self.prepare_env(outputs, shell_env)?;
+    /// Create a temporary file for task I/O.
+    fn create_tempfile(prefix: &str, suffix: &str) -> Result<tempfile::NamedTempFile> {
+        tempfile::Builder::new()
+            .prefix(prefix)
+            .suffix(suffix)
+            .tempfile()
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to create temporary file ({prefix})"))
+    }
 
-        // If we dropped privileges but have sudo context, restore sudo for the task
-        let mut command = if let Some(_ctx) = &self.sudo_context {
-            // Wrap with sudo to restore elevated privileges
-            let mut sudo_cmd = Command::new("sudo");
-            // Use -E to preserve environment variables
-            // The command here is a store path to a task script, not an arbitrary shell command.
-            sudo_cmd.args(["-E", cmd]);
-            sudo_cmd
-        } else {
-            // Normal execution - no sudo involved
-            Command::new(cmd)
+    async fn get_outputs(
+        outputs_file: &tempfile::NamedTempFile,
+        exports_file: &tempfile::NamedTempFile,
+        stdout_lines: &[(std::time::Instant, String)],
+    ) -> Output {
+        // Read both files concurrently
+        let (output_data, export_data) = tokio::join!(
+            tokio::fs::read(outputs_file.path()),
+            tokio::fs::read(exports_file.path()),
+        );
+
+        // TODO: report JSON parsing errors
+        let mut output: Option<serde_json::Value> = output_data
+            .ok()
+            .and_then(|data| serde_json::from_slice(&data).ok());
+
+        // Collect exports from both the legacy stdout protocol (pre-2.0.4 Nix modules)
+        // and the file based protocol (CLI 2.0.4+). File exports are applied last
+        // so they take precedence over stdout exports.
+        let stdout_exports = Self::parse_stdout_exports(stdout_lines);
+        let file_exports = match export_data {
+            Ok(data) if !data.is_empty() => Self::parse_exports(&data),
+            _ => Vec::new(),
         };
 
-        command.stdout(Stdio::piped()).stderr(Stdio::piped());
-
-        // Set working directory if specified
-        if let Some(cwd) = &self.task.cwd {
-            self.validate_cwd()?;
-            command.current_dir(cwd);
-        }
-
-        // Set environment variables
-        for (key, value) in &env {
-            command.env(key, value);
-        }
-
-        // Set DEVENV_TASK_OUTPUT_FILE
-        command.env("DEVENV_TASK_OUTPUT_FILE", outputs_file.path());
-
-        Ok((command, outputs_file))
-    }
-
-    async fn get_outputs(outputs_file: &tempfile::NamedTempFile) -> Output {
-        let output = match File::open(outputs_file.path()).await {
-            Ok(mut file) => {
-                let mut contents = String::new();
-                // TODO: report JSON parsing errors
-                file.read_to_string(&mut contents).await.ok();
-                serde_json::from_str(&contents).ok()
+        if !stdout_exports.is_empty() || !file_exports.is_empty() {
+            let out = output.get_or_insert_with(|| serde_json::json!({}));
+            if let Some(env_obj) = get_or_create_devenv_env_mut(out) {
+                for (k, v) in stdout_exports.into_iter().chain(file_exports) {
+                    env_obj.insert(k, serde_json::Value::String(v));
+                }
+            } else {
+                tracing::warn!(
+                    "Task output is not a JSON object, {} export(s) dropped",
+                    stdout_exports.len() + file_exports.len()
+                );
             }
-            Err(_) => None,
-        };
+        }
+
         Output(output)
+    }
+
+    /// Decode base64 bytes into a UTF-8 string, logging a warning on failure.
+    fn decode_b64(data: &[u8], context: &str) -> Option<String> {
+        match B64.decode(data) {
+            Ok(bytes) => match String::from_utf8(bytes) {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    tracing::warn!("Skipping {context} with invalid UTF-8: {e}");
+                    None
+                }
+            },
+            Err(e) => {
+                tracing::warn!("Skipping {context} with invalid base64: {e}");
+                None
+            }
+        }
+    }
+
+    /// Parse DEVENV_EXPORT lines from stdout (legacy protocol for pre-2.0.4 Nix modules).
+    /// Format: DEVENV_EXPORT:<base64-key>=<base64-value>
+    fn parse_stdout_exports(
+        stdout_lines: &[(std::time::Instant, String)],
+    ) -> Vec<(String, String)> {
+        let mut exports = Vec::new();
+        for (_, line) in stdout_lines {
+            if let Some(rest) = line.strip_prefix("DEVENV_EXPORT:") {
+                // Base64 uses '=' for padding, so find the separator '=' at the
+                // first position that is a multiple of 4 (end of a valid base64 string).
+                let split_pos = (4..rest.len())
+                    .step_by(4)
+                    .find(|&i| rest.as_bytes()[i] == b'=');
+                if let Some(pos) = split_pos {
+                    if let (Some(var), Some(val)) = (
+                        Self::decode_b64(rest[..pos].as_bytes(), "DEVENV_EXPORT key"),
+                        Self::decode_b64(rest[pos + 1..].as_bytes(), "DEVENV_EXPORT value"),
+                    ) {
+                        exports.push((var, val));
+                    }
+                }
+            }
+        }
+        exports
+    }
+
+    /// Parse null-separated name\0base64(value)\0 pairs from exports file.
+    fn parse_exports(data: &[u8]) -> Vec<(String, String)> {
+        let mut exports = Vec::new();
+        let mut parts = data.split(|&b| b == 0);
+        while let (Some(name), Some(value_b64)) = (parts.next(), parts.next()) {
+            if !name.is_empty() {
+                let name_str = match std::str::from_utf8(name) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::warn!("Skipping export with invalid UTF-8 name: {e}");
+                        continue;
+                    }
+                };
+                if let Some(value) = Self::decode_b64(value_b64, name_str) {
+                    exports.push((name_str.to_string(), value));
+                }
+            }
+        }
+        exports
     }
 
     /// Run a process task (long-running)
@@ -374,75 +426,6 @@ impl TaskState {
         Ok(())
     }
 
-    /// Process DEVENV_EXPORT lines from task stdout and merge into output file.
-    ///
-    /// Format: DEVENV_EXPORT:<base64-var>=<base64-value>
-    /// This allows tasks to export env vars without needing the devenv-tasks binary.
-    async fn process_exports(
-        stdout_lines: &[(std::time::Instant, String)],
-        outputs_file: &tempfile::NamedTempFile,
-    ) {
-        use base64::Engine;
-        use std::io::Write;
-
-        let mut exports: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
-
-        for (_, line) in stdout_lines {
-            if let Some(rest) = line.strip_prefix("DEVENV_EXPORT:") {
-                // Format: <base64-key>=<base64-value>
-                // Base64 uses '=' for padding, so split_once('=') would split
-                // inside the key's padding. Instead, find the separator '=' at the
-                // first position that's a multiple of 4 (end of a valid base64 string).
-                let split_pos = (4..rest.len())
-                    .step_by(4)
-                    .find(|&i| rest.as_bytes()[i] == b'=');
-                if let Some(pos) = split_pos {
-                    let var_b64 = &rest[..pos];
-                    let val_b64 = &rest[pos + 1..];
-                    let engine = base64::engine::general_purpose::STANDARD;
-                    if let (Ok(var_bytes), Ok(val_bytes)) =
-                        (engine.decode(var_b64), engine.decode(val_b64))
-                        && let (Ok(var), Ok(val)) =
-                            (String::from_utf8(var_bytes), String::from_utf8(val_bytes))
-                    {
-                        exports.insert(var, serde_json::Value::String(val));
-                    }
-                }
-            }
-        }
-
-        if exports.is_empty() {
-            return;
-        }
-
-        // Read existing output file content
-        let mut output: serde_json::Value = std::fs::read_to_string(outputs_file.path())
-            .ok()
-            .and_then(|content| serde_json::from_str(&content).ok())
-            .unwrap_or_else(|| serde_json::json!({}));
-
-        // Ensure devenv.env structure exists
-        if output.get("devenv").is_none() {
-            output["devenv"] = serde_json::json!({});
-        }
-        if output["devenv"].get("env").is_none() {
-            output["devenv"]["env"] = serde_json::json!({});
-        }
-
-        // Merge exports into devenv.env
-        if let Some(env_obj) = output["devenv"]["env"].as_object_mut() {
-            for (k, v) in exports {
-                env_obj.insert(k, v);
-            }
-        }
-
-        // Write back to file
-        if let Ok(content) = serde_json::to_string_pretty(&output) {
-            let _ = std::fs::File::create(outputs_file.path())
-                .and_then(|mut f| f.write_all(content.as_bytes()));
-        }
-    }
-
     /// Run this task with a pre-assigned activity ID.
     /// The Task::Hierarchy event has already been emitted; this emits Task::Start.
     pub async fn run(
@@ -498,9 +481,20 @@ impl TaskState {
                 // First check if we have cached output from a previous run
                 let cached_output = self.get_cached_output(cache).await;
 
-                let (mut command, _) = self
-                    .prepare_command(cmd, outputs, shell_env)
+                self.validate_cwd()?;
+                let env = self
+                    .prepare_env(outputs, shell_env)
                     .wrap_err("Failed to prepare status command")?;
+                let exports_file = Self::create_tempfile("devenv_task_exports", "")?;
+                let ctx = ExecutionContext {
+                    command: cmd,
+                    cwd: self.task.cwd.as_deref(),
+                    env,
+                    use_sudo: self.sudo_context.is_some(),
+                    output_file_path: std::path::Path::new("/dev/null"),
+                    exports_file_path: exports_file.path(),
+                };
+                let mut command = ctx.build_command();
 
                 // Create a Command activity for the status check (automatically parented to task_activity)
                 let status_activity = Activity::command(&self.task.name)
@@ -515,7 +509,20 @@ impl TaskState {
                         }
 
                         if output.status.success() {
-                            let output = Output(cached_output);
+                            // Start with cached output, merge in any exports from the status command
+                            let mut result = cached_output.unwrap_or_else(|| serde_json::json!({}));
+                            if let Ok(data) = tokio::fs::read(exports_file.path()).await {
+                                let exports = Self::parse_exports(&data);
+                                if let (false, Some(env_obj)) = (
+                                    exports.is_empty(),
+                                    get_or_create_devenv_env_mut(&mut result),
+                                ) {
+                                    for (k, v) in exports {
+                                        env_obj.insert(k, serde_json::Value::String(v));
+                                    }
+                                }
+                            }
+                            let output = Output(Some(result));
                             tracing::debug!(
                                 "Task {} skipped with output: {:?}",
                                 self.task.name,
@@ -581,13 +588,16 @@ impl TaskState {
             .level(ActivityLevel::Debug)
             .start();
 
-        // Validate working directory if specified
         self.validate_cwd()?;
 
-        // Prepare environment and output file
-        let (env, outputs_file) = self
+        // Prepare environment
+        let env = self
             .prepare_env(outputs, shell_env)
             .wrap_err("Failed to prepare task environment")?;
+
+        // Create temporary files for task output and exports
+        let outputs_file = Self::create_tempfile("devenv_task_output", ".json")?;
+        let exports_file = Self::create_tempfile("devenv_task_exports", "")?;
 
         // Build execution context
         let ctx = ExecutionContext {
@@ -596,14 +606,12 @@ impl TaskState {
             env,
             use_sudo: self.sudo_context.is_some(),
             output_file_path: outputs_file.path(),
+            exports_file_path: exports_file.path(),
         };
 
         // Execute using the provided executor
         let callback = ActivityCallback::new(task_activity);
         let result = executor.execute(ctx, &callback, cancellation).await;
-
-        // Process any DEVENV_EXPORT lines from stdout and merge into output file
-        Self::process_exports(&result.stdout_lines, &outputs_file).await;
 
         // Only update file states on success - failed tasks should not be cached
         if result.success {
@@ -629,7 +637,7 @@ impl TaskState {
         if result.success {
             Ok(TaskCompleted::Success(
                 now.elapsed(),
-                Self::get_outputs(&outputs_file).await,
+                Self::get_outputs(&outputs_file, &exports_file, &result.stdout_lines).await,
             ))
         } else {
             cmd_activity.fail();
@@ -642,6 +650,203 @@ impl TaskState {
                     error: result.error.unwrap_or_else(|| "Unknown error".to_string()),
                 },
             ))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::Engine;
+    use proptest::prelude::*;
+    use std::time::Instant;
+
+    fn encode(s: &str) -> String {
+        B64.encode(s)
+    }
+
+    fn make_line(key: &str, value: &str) -> (Instant, String) {
+        (
+            Instant::now(),
+            format!("DEVENV_EXPORT:{}={}", encode(key), encode(value)),
+        )
+    }
+
+    fn make_file_data(pairs: &[(&str, &str)]) -> Vec<u8> {
+        let mut data = Vec::new();
+        for (name, value) in pairs {
+            data.extend_from_slice(name.as_bytes());
+            data.push(0);
+            data.extend_from_slice(B64.encode(value).as_bytes());
+            data.push(0);
+        }
+        data
+    }
+
+    // -- parse_exports tests --
+
+    #[test]
+    fn parse_exports_empty() {
+        assert!(TaskState::parse_exports(b"").is_empty());
+    }
+
+    #[test]
+    fn parse_exports_single() {
+        let data = make_file_data(&[("FOO", "bar")]);
+        let result = TaskState::parse_exports(&data);
+        assert_eq!(result, vec![("FOO".into(), "bar".into())]);
+    }
+
+    #[test]
+    fn parse_exports_multiple() {
+        let data = make_file_data(&[("A", "1"), ("B", "2"), ("C", "3")]);
+        let result = TaskState::parse_exports(&data);
+        assert_eq!(
+            result,
+            vec![
+                ("A".into(), "1".into()),
+                ("B".into(), "2".into()),
+                ("C".into(), "3".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_exports_empty_value() {
+        let data = make_file_data(&[("KEY", "")]);
+        let result = TaskState::parse_exports(&data);
+        assert_eq!(result, vec![("KEY".into(), String::new())]);
+    }
+
+    #[test]
+    fn parse_exports_value_with_special_chars() {
+        let data = make_file_data(&[("P", "hello world"), ("Q", "a=b=c"), ("R", "line\nnewline")]);
+        let result = TaskState::parse_exports(&data);
+        assert_eq!(
+            result,
+            vec![
+                ("P".into(), "hello world".into()),
+                ("Q".into(), "a=b=c".into()),
+                ("R".into(), "line\nnewline".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_exports_skips_empty_name() {
+        // Manually craft data with an empty name: \0<base64>\0
+        let mut data = Vec::new();
+        data.push(0);
+        data.extend_from_slice(B64.encode("val").as_bytes());
+        data.push(0);
+        // Then a valid pair
+        data.extend_from_slice(b"GOOD");
+        data.push(0);
+        data.extend_from_slice(B64.encode("ok").as_bytes());
+        data.push(0);
+
+        let result = TaskState::parse_exports(&data);
+        assert_eq!(result, vec![("GOOD".into(), "ok".into())]);
+    }
+
+    #[test]
+    fn parse_exports_invalid_base64_skipped() {
+        let mut data = Vec::new();
+        data.extend_from_slice(b"NAME");
+        data.push(0);
+        data.extend_from_slice(b"!!!not-base64!!!");
+        data.push(0);
+
+        let result = TaskState::parse_exports(&data);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn parse_exports_odd_field_ignored() {
+        // A trailing name without a value pair is ignored
+        let mut data = make_file_data(&[("A", "1")]);
+        data.extend_from_slice(b"ORPHAN");
+        let result = TaskState::parse_exports(&data);
+        assert_eq!(result, vec![("A".into(), "1".into())]);
+    }
+
+    // -- parse_stdout_exports tests --
+
+    #[test]
+    fn parse_stdout_exports_empty() {
+        assert!(TaskState::parse_stdout_exports(&[]).is_empty());
+    }
+
+    #[test]
+    fn parse_stdout_exports_ignores_non_export_lines() {
+        let lines = vec![
+            (Instant::now(), "some normal output".into()),
+            (Instant::now(), "building stuff...".into()),
+        ];
+        assert!(TaskState::parse_stdout_exports(&lines).is_empty());
+    }
+
+    #[test]
+    fn parse_stdout_exports_single() {
+        let lines = vec![make_line("MY_VAR", "my_value")];
+        let result = TaskState::parse_stdout_exports(&lines);
+        assert_eq!(result, vec![("MY_VAR".into(), "my_value".into())]);
+    }
+
+    #[test]
+    fn parse_stdout_exports_mixed_lines() {
+        let lines = vec![
+            (Instant::now(), "before".into()),
+            make_line("X", "1"),
+            (Instant::now(), "middle".into()),
+            make_line("Y", "2"),
+            (Instant::now(), "after".into()),
+        ];
+        let result = TaskState::parse_stdout_exports(&lines);
+        assert_eq!(
+            result,
+            vec![("X".into(), "1".into()), ("Y".into(), "2".into())]
+        );
+    }
+
+    #[test]
+    fn parse_stdout_exports_short_key() {
+        // 1-char key "A" -> base64 "QQ==" (4 chars with padding)
+        let lines = vec![make_line("A", "val")];
+        let result = TaskState::parse_stdout_exports(&lines);
+        assert_eq!(result, vec![("A".into(), "val".into())]);
+    }
+
+    #[test]
+    fn parse_stdout_exports_empty_value() {
+        let lines = vec![make_line("KEY", "")];
+        let result = TaskState::parse_stdout_exports(&lines);
+        assert_eq!(result, vec![("KEY".into(), String::new())]);
+    }
+
+    #[test]
+    fn parse_stdout_exports_value_with_equals() {
+        let lines = vec![make_line("PATH", "/usr/bin:/bin")];
+        let result = TaskState::parse_stdout_exports(&lines);
+        assert_eq!(result, vec![("PATH".into(), "/usr/bin:/bin".into())]);
+    }
+
+    // -- proptest round-trip tests --
+
+    proptest! {
+        #[test]
+        fn parse_exports_roundtrip(pairs in prop::collection::vec(("[A-Za-z_][A-Za-z0-9_]{0,30}", ".*"), 0..20)) {
+            let refs: Vec<(&str, &str)> = pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+            let data = make_file_data(&refs);
+            let result = TaskState::parse_exports(&data);
+            prop_assert_eq!(result, pairs);
+        }
+
+        #[test]
+        fn parse_stdout_exports_roundtrip(pairs in prop::collection::vec(("[A-Za-z_][A-Za-z0-9_]{0,30}", ".*"), 0..20)) {
+            let lines: Vec<(Instant, String)> = pairs.iter().map(|(k, v)| make_line(k, v)).collect();
+            let result = TaskState::parse_stdout_exports(&lines);
+            prop_assert_eq!(result, pairs);
         }
     }
 }

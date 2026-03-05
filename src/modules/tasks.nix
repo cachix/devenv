@@ -45,24 +45,35 @@ let
                 if config.binary != null
                 then config.binary == "bash"
                 else config.package.meta.mainProgram or null == "bash";
-              # Output exports in a format the Rust executor can parse
-              # Format: DEVENV_EXPORT:<base64-encoded-var>=<base64-encoded-value>
-              # Base64 encoding handles special characters safely
-              exportVars = vars: ''
+              # Export env vars from tasks.
+              # CLI 2.0.4+: write name\0base64(value)\0 pairs to $DEVENV_TASK_EXPORTS_FILE
+              # Older: echo DEVENV_EXPORT:<base64-key>=<base64-value> to stdout
+              useFileExports = inputs.config.devenv.cli.version != null
+                && lib.versionAtLeast inputs.config.devenv.cli.version "2.0.4";
+              varLoop = body: vars: ''
                 for _var in ${lib.concatStringsSep " " vars}; do
                   if [ -n "''${!_var+x}" ]; then
-                    _var_b64=$(printf '%s' "$_var" | base64 -w0)
-                    _val_b64=$(printf '%s' "''${!_var}" | base64 -w0)
-                    echo "DEVENV_EXPORT:$_var_b64=$_val_b64"
+                    ${body}
                   fi
                 done
               '';
+              exportVars =
+                if useFileExports then
+                  varLoop ''
+                    _val_b64=$(printf '%s' "''${!_var}" | base64 -w0)
+                    printf '%s\0%s\0' "$_var" "$_val_b64" >> "$DEVENV_TASK_EXPORTS_FILE"
+                  '' else
+                  varLoop ''
+                    _var_b64=$(printf '%s' "$_var" | base64 -w0)
+                    _val_b64=$(printf '%s' "''${!_var}" | base64 -w0)
+                    echo "DEVENV_EXPORT:$_var_b64=$_val_b64"
+                  '';
             in
             pkgs.writeScript name ''
               #!${binary}
               ${lib.optionalString (!isStatus && isBash) "set -e"}
               ${command}
-              ${lib.optionalString (config.exports != [] && !isStatus) (exportVars config.exports)}
+              ${lib.optionalString (config.exports != []) (exportVars config.exports)}
             '';
       in
       {

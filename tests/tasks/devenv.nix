@@ -89,6 +89,24 @@
       };
     };
 
+    # Test: exports get merged into DEVENV_TASK_OUTPUT_FILE (they shouldn't)
+    "test:output-and-exports" = {
+      exec = ''
+        echo '{"custom": "data"}' > "$DEVENV_TASK_OUTPUT_FILE"
+        export MY_EXPORTED="from-export"
+      '';
+      exports = [ "MY_EXPORTED" ];
+    };
+
+    # Test: downstream task sees both output and exports merged
+    "test:output-and-exports-verify" = {
+      exec = ''
+        output=$(echo "$DEVENV_TASKS_OUTPUTS" | ${lib.getExe pkgs.jq} -c '."test:output-and-exports"')
+        echo "$output" > "$DEVENV_ROOT/output-exports-result.json"
+      '';
+      after = [ "test:output-and-exports" ];
+    };
+
     "test:with-output" = {
       exec = ''
         echo "VISIBLE_OUTPUT_MARKER"

@@ -23,6 +23,38 @@ pub struct ExecutionContext<'a> {
     pub use_sudo: bool,
     /// Path to the output file for DEVENV_TASK_OUTPUT_FILE.
     pub output_file_path: &'a std::path::Path,
+    /// Path to the exports file for DEVENV_TASK_EXPORTS_FILE.
+    pub exports_file_path: &'a std::path::Path,
+}
+
+impl<'a> ExecutionContext<'a> {
+    /// Build a `tokio::process::Command` from this execution context.
+    pub fn build_command(&self) -> tokio::process::Command {
+        use std::process::Stdio;
+
+        let mut command = if self.use_sudo {
+            let mut sudo_cmd = tokio::process::Command::new("sudo");
+            sudo_cmd.args(["-E", self.command]);
+            sudo_cmd
+        } else {
+            tokio::process::Command::new(self.command)
+        };
+
+        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+        if let Some(cwd) = self.cwd {
+            command.current_dir(cwd);
+        }
+
+        for (key, value) in &self.env {
+            command.env(key, value);
+        }
+
+        command.env("DEVENV_TASK_OUTPUT_FILE", self.output_file_path);
+        command.env("DEVENV_TASK_EXPORTS_FILE", self.exports_file_path);
+
+        command
+    }
 }
 
 /// Callback for streaming output lines during execution.
@@ -63,34 +95,10 @@ impl SubprocessExecutor {
     ) -> ExecutionResult {
         use nix::sys::signal::{self as nix_signal, Signal};
         use nix::unistd::Pid;
-        use std::process::Stdio;
         use tokio::io::{AsyncBufReadExt, BufReader};
-        use tokio::process::Command;
         use tracing::error;
 
-        // Build the command
-        let mut command = if ctx.use_sudo {
-            let mut sudo_cmd = Command::new("sudo");
-            sudo_cmd.args(["-E", ctx.command]);
-            sudo_cmd
-        } else {
-            Command::new(ctx.command)
-        };
-
-        command.stdout(Stdio::piped()).stderr(Stdio::piped());
-
-        // Set working directory if specified
-        if let Some(cwd) = ctx.cwd {
-            command.current_dir(cwd);
-        }
-
-        // Set environment variables
-        for (key, value) in &ctx.env {
-            command.env(key, value);
-        }
-
-        // Set DEVENV_TASK_OUTPUT_FILE
-        command.env("DEVENV_TASK_OUTPUT_FILE", ctx.output_file_path);
+        let mut command = ctx.build_command();
 
         // Spawn the process
         let mut child = match command.spawn() {

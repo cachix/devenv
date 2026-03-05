@@ -4,7 +4,7 @@ set -xe
 
 # Cleanup function
 cleanup() {
-  rm -f test-basic.txt cwd-test.txt python-output.txt should-not-exist.txt input-result.json
+  rm -f test-basic.txt cwd-test.txt python-output.txt should-not-exist.txt input-result.json output-exports-result.json
 }
 
 trap cleanup EXIT
@@ -64,6 +64,30 @@ if devenv tasks run test:python-error 2>&1; then
   exit 1
 fi
 echo "✓ Python error handling works"
+
+# Test: exports get merged into output JSON (demonstrates the coupling)
+devenv tasks run test:output-and-exports-verify --mode all
+RESULT=$(cat output-exports-result.json)
+
+# Custom output should be preserved
+if ! echo "$RESULT" | grep -q '"custom":"data"'; then
+  echo "FAIL: custom output field missing"
+  echo "Got: $RESULT"
+  exit 1
+fi
+
+# Export got merged into output under devenv.env (this is the problematic coupling)
+if ! echo "$RESULT" | grep -q '"devenv"'; then
+  echo "FAIL: devenv.env not present in output (exports not merged)"
+  echo "Got: $RESULT"
+  exit 1
+fi
+if ! echo "$RESULT" | grep -q '"MY_EXPORTED":"from-export"'; then
+  echo "FAIL: exported var not found in output"
+  echo "Got: $RESULT"
+  exit 1
+fi
+echo "Exports merged into output JSON (outputs and exports are coupled)"
 
 # Test: showOutput option displays output
 OUTPUT=$(devenv tasks run test:with-output 2>&1)
