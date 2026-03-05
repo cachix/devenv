@@ -858,23 +858,20 @@ async fn run_devenv_inner(
 
 /// Returns the git revision suffix for the version string.
 ///
-/// Prefers the vergen-injected SHA (available when building from a git checkout),
-/// falls back to DEVENV_GIT_REV (set by Nix builds where .git is unavailable).
+/// VERGEN_GIT_SHA is set by build.rs:
+/// - From vergen when building from a git checkout
+/// - Parsed from DEVENV_GIT_REV for flake builds
+/// - VERGEN_IDEMPOTENT_OUTPUT for tarball builds (nixpkgs)
 fn build_rev() -> Option<String> {
     let sha = env!("VERGEN_GIT_SHA");
-    // vergen emits "VERGEN_IDEMPOTENT_OUTPUT" when git is unavailable
-    if !sha.is_empty() && sha != "VERGEN_IDEMPOTENT_OUTPUT" {
-        let dirty = env!("VERGEN_GIT_DIRTY");
-        if dirty == "true" {
-            return Some(format!("{sha}-dirty"));
-        }
-        return Some(sha.to_string());
+    if sha.is_empty() || sha == "VERGEN_IDEMPOTENT_OUTPUT" {
+        return None;
     }
-
-    // Nix builds pass the flake's git rev via this env var
-    option_env!("DEVENV_GIT_REV")
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
+    if env!("VERGEN_GIT_DIRTY") == "true" {
+        Some(format!("{sha}-dirty"))
+    } else {
+        Some(sha.to_string())
+    }
 }
 
 /// Run shell with hot-reload capability.

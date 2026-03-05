@@ -1,45 +1,60 @@
+use std::env;
 use std::process::Command;
 use vergen_gitcl::{Emitter, GitclBuilder};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!(
         "cargo:rustc-env=TARGET_ARCH={}",
-        std::env::var("CARGO_CFG_TARGET_ARCH").unwrap()
+        env::var("CARGO_CFG_TARGET_ARCH").unwrap()
     );
     println!(
         "cargo:rustc-env=TARGET_OS={}",
-        std::env::var("CARGO_CFG_TARGET_OS").unwrap()
+        env::var("CARGO_CFG_TARGET_OS").unwrap()
     );
     // Rerun if init directory changes
     println!("cargo:rerun-if-changed=init");
 
-    // Git revision info via vergen (works when .git is available)
-    let gitcl = GitclBuilder::default().sha(true).dirty(true).build()?;
-
-    Emitter::default().add_instructions(&gitcl)?.emit()?;
-
-    // Rerun when git state changes (for tag detection and SHA)
-    println!("cargo:rerun-if-changed=.git/HEAD");
-    println!("cargo:rerun-if-changed=.git/refs/tags");
-
-    // Detect if HEAD is on a release tag (for cargo builds with .git)
-    let on_tag = Command::new("git")
-        .args(["describe", "--tags", "--exact-match", "HEAD"])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-    println!("cargo:rustc-env=DEVENV_ON_RELEASE_TAG={on_tag}");
-
-    // Forward DEVENV_GIT_REV for Nix builds where .git is unavailable
-    println!("cargo:rerun-if-env-changed=DEVENV_GIT_REV");
-    if let Ok(rev) = std::env::var("DEVENV_GIT_REV") {
-        println!("cargo:rustc-env=DEVENV_GIT_REV={rev}");
+    // DEVENV_IS_RELEASE can be set explicitly (e.g. in package.nix or CI)
+    // to mark a build as a release. In local builds, auto-detect from git tags.
+    println!("cargo:rerun-if-env-changed=DEVENV_IS_RELEASE");
+    let is_release = env::var("DEVENV_IS_RELEASE").unwrap_or_default();
+    if is_release.is_empty() {
+        let on_tag = Command::new("git")
+            .args(["describe", "--tags", "--exact-match", "HEAD"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        println!("cargo:rustc-env=DEVENV_IS_RELEASE={on_tag}");
+    } else {
+        println!("cargo:rustc-env=DEVENV_IS_RELEASE={is_release}");
     }
 
-    // Forward DEVENV_IS_RELEASE for Nix release builds
-    println!("cargo:rerun-if-env-changed=DEVENV_IS_RELEASE");
-    if let Ok(val) = std::env::var("DEVENV_IS_RELEASE") {
-        println!("cargo:rustc-env=DEVENV_IS_RELEASE={val}");
+    println!("cargo:rerun-if-env-changed=DEVENV_GIT_REV");
+    let git_rev = env::var("DEVENV_GIT_REV").unwrap_or_default();
+
+    if !git_rev.is_empty() {
+        // Flake build:
+        // DEVENV_GIT_REV is set in package.nix from the flake's self.shortRev
+        // or self.dirtyShortRev (which appends "-dirty").
+        let dirty = git_rev.ends_with("-dirty");
+        let sha = git_rev.trim_end_matches("-dirty");
+        println!("cargo:rustc-env=VERGEN_GIT_SHA={sha}");
+        println!("cargo:rustc-env=VERGEN_GIT_DIRTY={dirty}");
+    } else {
+        // Local cargo build or nixpkgs tarball (no DEVENV_GIT_REV):
+        // Let vergen query git.
+        // Idempotent + quiet mode means vergen falls back to
+        // VERGEN_IDEMPOTENT_OUTPUT without warnings when git is unavailable.
+        let gitcl = GitclBuilder::default().sha(true).dirty(true).build()?;
+        Emitter::default()
+            .idempotent()
+            .quiet()
+            .add_instructions(&gitcl)?
+            .emit()?;
+
+        // Rerun when git state changes
+        println!("cargo:rerun-if-changed=.git/HEAD");
+        println!("cargo:rerun-if-changed=.git/refs/tags");
     }
 
     Ok(())

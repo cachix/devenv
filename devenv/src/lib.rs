@@ -25,17 +25,10 @@ pub use devenv_core::{
     NixSettings, Options, SecretspecData, default_system,
 };
 
-/// Returns true if this binary was NOT built from a release tag.
+/// Returns true if this binary was NOT built from a release.
 ///
-/// Uses build-time info from build.rs:
-/// - `DEVENV_ON_RELEASE_TAG`: "true" when HEAD is on an exact tag (cargo builds with .git)
-/// - `DEVENV_IS_RELEASE`: "1" for Nix release builds (set in package.nix, .git unavailable)
+/// DEVENV_IS_RELEASE is set by build.rs: either from the DEVENV_IS_RELEASE
+/// env var (flake/CI builds) or auto-detected via git tag (local builds).
 pub fn is_development_version() -> bool {
-    if env!("DEVENV_ON_RELEASE_TAG") == "true" {
-        return false;
-    }
-    if option_env!("DEVENV_IS_RELEASE") == Some("1") {
-        return false;
-    }
-    true
+    !matches!(env!("DEVENV_IS_RELEASE"), "true" | "1")
 }
