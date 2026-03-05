@@ -266,6 +266,16 @@ impl StdinFilter {
             }
         }
 
+        // If the chunk ended with a bare ESC (state == Esc), flush it now.
+        // A real escape sequence (e.g. OSC) always has `]` in the same read
+        // chunk. A standalone Esc keypress arrives alone, so emit it
+        // immediately instead of holding it until the next keystroke.
+        if matches!(self.state, StdinFilterState::Esc) {
+            output.extend_from_slice(&self.buf);
+            self.buf.clear();
+            self.state = StdinFilterState::Ground;
+        }
+
         &self.output
     }
 }
@@ -1335,5 +1345,69 @@ impl ShellSession {
 impl Default for ShellSession {
     fn default() -> Self {
         Self::with_defaults()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stdin_filter_bare_esc_emitted_immediately() {
+        let mut f = StdinFilter::new();
+        // A standalone Esc keypress must pass through, not be held.
+        assert_eq!(f.filter(&[0x1b]), &[0x1b]);
+    }
+
+    #[test]
+    fn stdin_filter_osc_sequence_dropped() {
+        let mut f = StdinFilter::new();
+        // OSC terminated by BEL: ESC ] 0 ; t i t l e BEL
+        let osc = b"\x1b]0;title\x07";
+        assert_eq!(f.filter(osc), &[] as &[u8]);
+    }
+
+    #[test]
+    fn stdin_filter_osc_sequence_with_st_dropped() {
+        let mut f = StdinFilter::new();
+        // OSC terminated by ST (ESC \): ESC ] 0 ; t i t l e ESC \
+        let osc = b"\x1b]0;title\x1b\\";
+        assert_eq!(f.filter(osc), &[] as &[u8]);
+    }
+
+    #[test]
+    fn stdin_filter_esc_bracket_passthrough() {
+        let mut f = StdinFilter::new();
+        // CSI sequence (e.g. arrow key ESC [ A) must pass through
+        assert_eq!(f.filter(b"\x1b[A"), &[0x1b, b'[', b'A']);
+    }
+
+    #[test]
+    fn stdin_filter_normal_bytes_passthrough() {
+        let mut f = StdinFilter::new();
+        assert_eq!(f.filter(b"hello"), b"hello");
+    }
+
+    #[test]
+    fn stdin_filter_consecutive_bare_esc() {
+        let mut f = StdinFilter::new();
+        // Two consecutive Esc in same chunk: first emitted, second flushed at end
+        assert_eq!(f.filter(&[0x1b, 0x1b]), &[0x1b, 0x1b]);
+    }
+
+    #[test]
+    fn stdin_filter_esc_then_normal_in_next_chunk() {
+        let mut f = StdinFilter::new();
+        // Esc alone in first chunk: emitted immediately
+        assert_eq!(f.filter(&[0x1b]), &[0x1b]);
+        // Normal byte in next chunk: passes through
+        assert_eq!(f.filter(b"a"), b"a");
+    }
+
+    #[test]
+    fn stdin_filter_mixed_esc_and_text() {
+        let mut f = StdinFilter::new();
+        // Text followed by bare Esc at end of chunk
+        assert_eq!(f.filter(b"abc\x1b"), &[b'a', b'b', b'c', 0x1b]);
     }
 }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.2 (unreleased)
+
+### Bug Fixes
+
+- Fixed first Esc keypress being swallowed in shell reload mode ([#2548](https://github.com/cachix/devenv/issues/2548)).
+
 ## 2.0.1 (2026-03-04)
 
 ### Bug Fixes
