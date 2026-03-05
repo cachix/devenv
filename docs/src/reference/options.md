@@ -16081,7 +16081,7 @@ boolean
 *Default:*
 
 ```nix
-false
+true
 ```
 
 
@@ -18655,7 +18655,7 @@ true
 
 
 
-The Node.js package to use.
+The npm package to use. Defaults to the npm output of the javascript package.
 
 
 
@@ -34122,6 +34122,7 @@ The available extensions are:
  - pg_repack
  - pg_roaringbitmap
  - pg_safeupdate
+ - pg_search
  - pg_similarity
  - pg_squeeze
  - pg_tle
@@ -49789,6 +49790,278 @@ string
 
 *Declared by:*
  - [https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix)
+
+
+
+## treefmt.config.programs.json-sort-cli.enable
+
+
+
+Whether to enable json-sort-cli.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix)
+
+
+
+## treefmt.config.programs.json-sort-cli.package
+
+
+
+The json-sort-cli package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.json-sort-cli
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix)
+
+
+
+## treefmt.config.programs.json-sort-cli.autofix
+
+
+
+Update files with fixes instead of just reporting.
+Defaults to ` false `.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix)
+
+
+
+## treefmt.config.programs.json-sort-cli.end-of-line
+
+
+
+Specify the desired line ending for output.
+Defaults to system line ending.
+Overrides ` .editorconfig ` settings if an ` .editorconfig ` is found.
+
+
+
+*Type:*
+null or one of “lf”, “crlf”, “cr”, “unset”
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix)
+
+
+
+## treefmt.config.programs.json-sort-cli.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix)
+
+
+
+## treefmt.config.programs.json-sort-cli.finalPackage
+
+
+
+Resulting ` json-sort-cli ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix)
+
+
+
+## treefmt.config.programs.json-sort-cli.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[
+  "*.json"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix)
+
+
+
+## treefmt.config.programs.json-sort-cli.indent-size
+
+
+
+Number of spaces to indent, or the string “tab” to use tabs.
+Defaults to 2 spaces. Overrides ` .editorconfig ` settings if an ` .editorconfig ` is found.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+
+```nix
+2
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix)
+
+
+
+## treefmt.config.programs.json-sort-cli.indent-style
+
+
+
+Specify the desired indentation style for output.
+Defaults to ` space `. Overrides ` .editorconfig ` settings if an ` .editorconfig ` is found.
+
+
+
+*Type:*
+one of “space”, “tab”
+
+
+
+*Default:*
+
+```nix
+"space"
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix)
+
+
+
+## treefmt.config.programs.json-sort-cli.insert-final-newline
+
+
+
+Insert a final newline after the sort. Defaults to ` false `.
+Overrides ` .editorconfig ` settings if an ` .editorconfig ` is found.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix)
+
+
+
+## treefmt.config.programs.json-sort-cli.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/json-sort-cli.nix)
 
 
 
