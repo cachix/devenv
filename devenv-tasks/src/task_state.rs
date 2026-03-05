@@ -113,12 +113,16 @@ impl TaskState {
     }
 
     /// Prepare environment variables for task execution.
-    /// Returns the environment map and a tempfile for task output.
+    /// Returns the environment map, a tempfile for task output, and optionally a tempfile for exports.
     fn prepare_env(
         &self,
         outputs: &BTreeMap<String, serde_json::Value>,
         shell_env: &std::collections::HashMap<String, String>,
-    ) -> Result<(BTreeMap<String, String>, tempfile::NamedTempFile)> {
+    ) -> Result<(
+        BTreeMap<String, String>,
+        tempfile::NamedTempFile,
+        Option<tempfile::NamedTempFile>,
+    )> {
         // Start with shell env as the base layer
         let mut env: BTreeMap<String, String> = shell_env
             .iter()
@@ -175,7 +179,20 @@ impl TaskState {
             .wrap_err("Failed to serialize task outputs to JSON")?;
         env.insert("DEVENV_TASKS_OUTPUTS".to_string(), outputs_json);
 
-        Ok((env, outputs_file))
+        // Create exports file if task has exports configured
+        let exports_file = if !self.task.exports.is_empty() {
+            Some(
+                tempfile::Builder::new()
+                    .prefix("devenv_task_exports")
+                    .tempfile()
+                    .into_diagnostic()
+                    .wrap_err("Failed to create temporary file for task exports")?,
+            )
+        } else {
+            None
+        };
+
+        Ok((env, outputs_file, exports_file))
     }
 
     fn prepare_command(
@@ -184,7 +201,9 @@ impl TaskState {
         outputs: &BTreeMap<String, serde_json::Value>,
         shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<(Command, tempfile::NamedTempFile)> {
-        let (env, outputs_file) = self.prepare_env(outputs, shell_env)?;
+        // Note: exports_file is intentionally ignored here; prepare_command is only
+        // used for process tasks which don't support exports.
+        let (env, outputs_file, _exports_file) = self.prepare_env(outputs, shell_env)?;
 
         // If we dropped privileges but have sudo context, restore sudo for the task
         let mut command = if let Some(_ctx) = &self.sudo_context {
@@ -240,8 +259,11 @@ impl TaskState {
         Ok((command, outputs_file))
     }
 
-    async fn get_outputs(outputs_file: &tempfile::NamedTempFile) -> Output {
-        let output = match File::open(outputs_file.path()).await {
+    async fn get_outputs(
+        outputs_file: &tempfile::NamedTempFile,
+        exports_file: Option<&tempfile::NamedTempFile>,
+    ) -> Output {
+        let mut output: Option<serde_json::Value> = match File::open(outputs_file.path()).await {
             Ok(mut file) => {
                 let mut contents = String::new();
                 // TODO: report JSON parsing errors
@@ -250,7 +272,55 @@ impl TaskState {
             }
             Err(_) => None,
         };
+
+        // Process exports file: null-separated name\0base64(value)\0 pairs
+        if let Some(exports_file) = exports_file {
+            if let Ok(data) = std::fs::read(exports_file.path()) {
+                let exports = Self::parse_exports(&data);
+                if !exports.is_empty() {
+                    let out = output.get_or_insert_with(|| serde_json::json!({}));
+                    if out.get("devenv").is_none() {
+                        out["devenv"] = serde_json::json!({});
+                    }
+                    if out["devenv"].get("env").is_none() {
+                        out["devenv"]["env"] = serde_json::json!({});
+                    }
+                    if let Some(env_obj) = out["devenv"]["env"].as_object_mut() {
+                        for (k, v) in exports {
+                            env_obj.insert(k, serde_json::Value::String(v));
+                        }
+                    }
+                }
+            }
+        }
+
         Output(output)
+    }
+
+    /// Parse null-separated name\0base64(value)\0 pairs from exports file.
+    fn parse_exports(data: &[u8]) -> Vec<(String, String)> {
+        use base64::Engine;
+
+        let mut exports = Vec::new();
+        let parts: Vec<&[u8]> = data.split(|&b| b == 0).collect();
+        // Pairs: [name, base64_value, name, base64_value, ...] with possible trailing empty
+        let mut i = 0;
+        while i + 1 < parts.len() {
+            let name = parts[i];
+            let value_b64 = parts[i + 1];
+            if !name.is_empty() {
+                let name_str = std::str::from_utf8(name).ok();
+                let value = base64::engine::general_purpose::STANDARD
+                    .decode(value_b64)
+                    .ok()
+                    .and_then(|bytes| String::from_utf8(bytes).ok());
+                if let (Some(name_str), Some(value)) = (name_str, value) {
+                    exports.push((name_str.to_string(), value));
+                }
+            }
+            i += 2;
+        }
+        exports
     }
 
     /// Run a process task (long-running)
@@ -334,75 +404,6 @@ impl TaskState {
         tracing::info!("Process task {} is ready", self.task.name);
 
         Ok(())
-    }
-
-    /// Process DEVENV_EXPORT lines from task stdout and merge into output file.
-    ///
-    /// Format: DEVENV_EXPORT:<base64-var>=<base64-value>
-    /// This allows tasks to export env vars without needing the devenv-tasks binary.
-    async fn process_exports(
-        stdout_lines: &[(std::time::Instant, String)],
-        outputs_file: &tempfile::NamedTempFile,
-    ) {
-        use base64::Engine;
-        use std::io::Write;
-
-        let mut exports: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
-
-        for (_, line) in stdout_lines {
-            if let Some(rest) = line.strip_prefix("DEVENV_EXPORT:") {
-                // Format: <base64-key>=<base64-value>
-                // Base64 uses '=' for padding, so split_once('=') would split
-                // inside the key's padding. Instead, find the separator '=' at the
-                // first position that's a multiple of 4 (end of a valid base64 string).
-                let split_pos = (4..rest.len())
-                    .step_by(4)
-                    .find(|&i| rest.as_bytes()[i] == b'=');
-                if let Some(pos) = split_pos {
-                    let var_b64 = &rest[..pos];
-                    let val_b64 = &rest[pos + 1..];
-                    let engine = base64::engine::general_purpose::STANDARD;
-                    if let (Ok(var_bytes), Ok(val_bytes)) =
-                        (engine.decode(var_b64), engine.decode(val_b64))
-                        && let (Ok(var), Ok(val)) =
-                            (String::from_utf8(var_bytes), String::from_utf8(val_bytes))
-                    {
-                        exports.insert(var, serde_json::Value::String(val));
-                    }
-                }
-            }
-        }
-
-        if exports.is_empty() {
-            return;
-        }
-
-        // Read existing output file content
-        let mut output: serde_json::Value = std::fs::read_to_string(outputs_file.path())
-            .ok()
-            .and_then(|content| serde_json::from_str(&content).ok())
-            .unwrap_or_else(|| serde_json::json!({}));
-
-        // Ensure devenv.env structure exists
-        if output.get("devenv").is_none() {
-            output["devenv"] = serde_json::json!({});
-        }
-        if output["devenv"].get("env").is_none() {
-            output["devenv"]["env"] = serde_json::json!({});
-        }
-
-        // Merge exports into devenv.env
-        if let Some(env_obj) = output["devenv"]["env"].as_object_mut() {
-            for (k, v) in exports {
-                env_obj.insert(k, v);
-            }
-        }
-
-        // Write back to file
-        if let Ok(content) = serde_json::to_string_pretty(&output) {
-            let _ = std::fs::File::create(outputs_file.path())
-                .and_then(|mut f| f.write_all(content.as_bytes()));
-        }
     }
 
     /// Run this task with a pre-assigned activity ID.
@@ -596,7 +597,7 @@ impl TaskState {
         }
 
         // Prepare environment and output file
-        let (env, outputs_file) = self
+        let (env, outputs_file, exports_file) = self
             .prepare_env(outputs, shell_env)
             .wrap_err("Failed to prepare task environment")?;
 
@@ -607,14 +608,12 @@ impl TaskState {
             env,
             use_sudo: self.sudo_context.is_some(),
             output_file_path: outputs_file.path(),
+            exports_file_path: exports_file.as_ref().map(|f| f.path()),
         };
 
         // Execute using the provided executor
         let callback = ActivityCallback::new(task_activity);
         let result = executor.execute(ctx, &callback, cancellation).await;
-
-        // Process any DEVENV_EXPORT lines from stdout and merge into output file
-        Self::process_exports(&result.stdout_lines, &outputs_file).await;
 
         // Only update file states on success - failed tasks should not be cached
         if result.success {
@@ -639,7 +638,7 @@ impl TaskState {
         if result.success {
             Ok(TaskCompleted::Success(
                 now.elapsed(),
-                Self::get_outputs(&outputs_file).await,
+                Self::get_outputs(&outputs_file, exports_file.as_ref()).await,
             ))
         } else {
             cmd_activity.fail();

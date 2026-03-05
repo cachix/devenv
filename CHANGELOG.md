@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.2 (unreleased)
+
+### Improvements
+
+- Replaced stdout based `DEVENV_EXPORT:` protocol in tasks with file based exports (`$DEVENV_TASK_EXPORTS_FILE`), simplifying the encoding and moving JSON construction into Rust.
+
 ## 2.0.1 (2026-03-04)
 
 ### Bug Fixes
