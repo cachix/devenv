@@ -57,42 +57,44 @@ pub fn spawn_supervisor(
     };
 
     // TCP probe for readiness (listen sockets or allocated ports, without notify or exec/http)
-    // Only use TCP probe as fallback when no explicit exec or http probe is configured
-    let tcp_probe_address = if !config.ready.as_ref().is_some_and(|r| r.notify)
-        && exec_probe_cmd.is_none()
-        && http_probe_url.is_none()
-    {
-        // First try listen sockets
-        config
-            .listen
-            .iter()
-            .find_map(|spec| {
-                if spec.kind == ListenKind::Tcp {
-                    spec.address.clone()
-                } else {
-                    None
-                }
-            })
-            // Fall back to the first allocated port
-            .or_else(|| {
-                config
-                    .ports
-                    .values()
-                    .next()
-                    .map(|port| format!("127.0.0.1:{}", port))
-            })
-    } else {
-        None
-    };
+    // Only use TCP probe as fallback when no explicit exec or http probe is configured.
+    let tcp_probe_addresses: Option<Vec<String>> =
+        if !config.ready.as_ref().is_some_and(|r| r.notify)
+            && exec_probe_cmd.is_none()
+            && http_probe_url.is_none()
+        {
+            // Explicit listen socket: probe only the configured address.
+            // Allocated port: probe both IPv4 and IPv6 loopback since we don't
+            // know which interface the process will bind to (e.g. vite uses tcp6).
+            config
+                .listen
+                .iter()
+                .find_map(|spec| {
+                    if spec.kind == ListenKind::Tcp {
+                        spec.address.clone().map(|addr| vec![addr])
+                    } else {
+                        None
+                    }
+                })
+                .or_else(|| {
+                    config
+                        .ports
+                        .values()
+                        .next()
+                        .map(|port| vec![format!("127.0.0.1:{}", port), format!("[::1]:{}", port)])
+                })
+        } else {
+            None
+        };
 
     tokio::spawn(async move {
         let mut state = SupervisorState::new(&config, Instant::now());
 
         // TCP probe: signals the supervisor loop when the port becomes reachable.
         // The supervisor handles the Ready event so status is updated consistently.
-        let mut tcp_probe = tcp_probe_address
+        let mut tcp_probe = tcp_probe_addresses
             .as_ref()
-            .map(|addr| TcpProbe::spawn(addr.clone(), name.clone()));
+            .map(|addrs| TcpProbe::spawn(addrs.clone(), name.clone()));
 
         // Exec probe: runs a shell command periodically until it exits 0
         let process_env = config.env.clone();
@@ -152,8 +154,8 @@ pub fn spawn_supervisor(
         /// Respawn all readiness probes after a process restart.
         macro_rules! respawn_probes {
             () => {
-                if let Some(ref address) = tcp_probe_address {
-                    tcp_probe = Some(TcpProbe::spawn(address.clone(), name.clone()));
+                if let Some(ref addrs) = tcp_probe_addresses {
+                    tcp_probe = Some(TcpProbe::spawn(addrs.clone(), name.clone()));
                 }
                 if let Some(ref cmd) = exec_probe_cmd {
                     exec_probe = Some(ExecProbe::spawn(
@@ -288,8 +290,8 @@ pub fn spawn_supervisor(
                                             let msg = format!("Restarted (attempt {count})");
                                             warn!("Process {} watchdog trigger, restarted (attempt {})", name, count);
                                             activity.log(&msg);
-                                            if let Some(ref address) = tcp_probe_address {
-                                                tcp_probe = Some(TcpProbe::spawn(address.clone(), name.clone()));
+                                            if let Some(ref addrs) = tcp_probe_addresses {
+                                                tcp_probe = Some(TcpProbe::spawn(addrs.clone(), name.clone()));
                                             }
                                         }
                                         Action::GiveUp { reason } => {

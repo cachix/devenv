@@ -6,6 +6,7 @@
 
 - Fixed first Esc keypress being swallowed in shell reload mode ([#2548](https://github.com/cachix/devenv/issues/2548)).
 - Fixed TUI displaying incorrect expected download count.
+- Fixed TCP readiness probes only checking IPv4, causing hangs when processes bind to IPv6 loopback ([#2549](https://github.com/cachix/devenv/issues/2549)).
 
 ## 2.0.1 (2026-03-04)
 

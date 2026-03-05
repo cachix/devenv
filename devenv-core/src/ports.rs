@@ -28,12 +28,14 @@ pub const MAX_ATTEMPTS: u16 = 100;
 /// This implements RAII-style port management: ports are held (via bound TcpListeners)
 /// until this guard is dropped, at which point the listeners are closed and the
 /// ports become available for processes to bind.
+///
+/// Each port may have up to two listeners: one on IPv4 loopback and one on IPv6 loopback.
 pub struct PortReservations {
-    ports: HashMap<u16, TcpListener>,
+    ports: HashMap<u16, Vec<TcpListener>>,
 }
 
 impl PortReservations {
-    pub fn new(ports: HashMap<u16, TcpListener>) -> Self {
+    pub fn new(ports: HashMap<u16, Vec<TcpListener>>) -> Self {
         Self { ports }
     }
 
@@ -61,12 +63,15 @@ impl Drop for PortReservations {
     }
 }
 
-/// Entry for an allocated port, containing the port number and optional listener.
-/// The listener is taken when processes start, but the port value remains for caching.
+/// Entry for an allocated port, containing the port number and held listeners.
+/// Listeners (IPv4 + optionally IPv6) are taken when processes start, but the
+/// port value remains cached for subsequent evaluations.
 struct PortEntry {
     port: u16,
     base: u16,
-    listener: Option<TcpListener>,
+    /// Listeners holding the port reservation. May contain an IPv4 listener,
+    /// an IPv6 listener, or both. Empty after `take_reservations()` is called.
+    listeners: Vec<TcpListener>,
 }
 
 /// Spec for replaying port allocations from cache.
@@ -194,17 +199,27 @@ impl PortAllocator {
 
             let addr = format!("{}:{}", self.host, base);
             match TcpListener::bind(&addr) {
-                Ok(listener) => {
-                    ports.insert(
-                        key,
-                        PortEntry {
-                            port: base,
-                            base,
-                            listener: Some(listener),
-                        },
-                    );
-                    return Ok(base);
-                }
+                Ok(v4) => match bind_with_ipv6(v4, base) {
+                    Ok(listeners) => {
+                        ports.insert(
+                            key,
+                            PortEntry {
+                                port: base,
+                                base,
+                                listeners,
+                            },
+                        );
+                        return Ok(base);
+                    }
+                    Err(()) => {
+                        let process_info = get_process_using_port(base);
+                        return Err(format!(
+                            "Port {} is already in use on IPv6 loopback{}. \
+                             Use --strict-ports=false to auto-allocate an available port.",
+                            base, process_info
+                        ));
+                    }
+                },
                 Err(_) => {
                     let process_info = get_process_using_port(base);
                     return Err(format!(
@@ -229,17 +244,25 @@ impl PortAllocator {
             }
 
             let addr = format!("{}:{}", self.host, port);
-            if let Ok(listener) = TcpListener::bind(&addr) {
-                ports.insert(
-                    key,
-                    PortEntry {
-                        port,
-                        base,
-                        listener: Some(listener),
-                    },
-                );
-                return Ok(port);
-            }
+            let Ok(v4) = TcpListener::bind(&addr) else {
+                continue;
+            };
+
+            // Also check IPv6 loopback: if some other process holds [::1]:PORT, skip
+            // to the next port so the readiness probe cannot get a false positive.
+            let Ok(listeners) = bind_with_ipv6(v4, port) else {
+                continue;
+            };
+
+            ports.insert(
+                key,
+                PortEntry {
+                    port,
+                    base,
+                    listeners,
+                },
+            );
+            return Ok(port);
         }
 
         Err(format!(
@@ -262,9 +285,10 @@ impl PortAllocator {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         // Extract listeners while keeping entries for caching
-        let listeners: HashMap<u16, TcpListener> = ports
+        let listeners: HashMap<u16, Vec<TcpListener>> = ports
             .values_mut()
-            .filter_map(|entry| entry.listener.take().map(|l| (entry.port, l)))
+            .filter(|entry| !entry.listeners.is_empty())
+            .map(|entry| (entry.port, std::mem::take(&mut entry.listeners)))
             .collect();
 
         PortReservations::new(listeners)
@@ -308,22 +332,48 @@ impl PortAllocator {
 
         // Try to bind exactly this port
         let addr = format!("{}:{}", self.host, port);
-        match TcpListener::bind(&addr) {
-            Ok(listener) => {
-                ports.insert(
-                    key,
-                    PortEntry {
-                        port,
-                        base: port, // base == allocated for replay
-                        listener: Some(listener),
-                    },
-                );
-                Ok(port)
-            }
-            Err(e) => {
-                let strict = self.strict.load(Ordering::SeqCst);
-                let allow_in_use = self.allow_in_use.load(Ordering::SeqCst);
+        let strict = self.strict.load(Ordering::SeqCst);
+        let allow_in_use = self.allow_in_use.load(Ordering::SeqCst);
 
+        match TcpListener::bind(&addr) {
+            Ok(v4) => match bind_with_ipv6(v4, port) {
+                Ok(listeners) => {
+                    ports.insert(
+                        key,
+                        PortEntry {
+                            port,
+                            base: port,
+                            listeners,
+                        },
+                    );
+                    Ok(port)
+                }
+                Err(()) => {
+                    if strict {
+                        let info = get_process_using_port(port);
+                        return Err(format!(
+                            "Port {} is already in use on IPv6 loopback{}. \
+                             Use --strict-ports=false to auto-allocate an available port.",
+                            port, info
+                        ));
+                    }
+                    // Non-strict: accept IPv4 only when IPv6 is in use
+                    tracing::debug!(
+                        "Port {} IPv6 loopback in use, accepting IPv4 only (non-strict mode)",
+                        port
+                    );
+                    ports.insert(
+                        key,
+                        PortEntry {
+                            port,
+                            base: port,
+                            listeners: vec![],
+                        },
+                    );
+                    Ok(port)
+                }
+            },
+            Err(e) => {
                 // In strict mode, always fail if port is in use - even during replay
                 // The user explicitly wants to validate that ports are available
                 if strict && e.kind() == ErrorKind::AddrInUse {
@@ -347,7 +397,7 @@ impl PortAllocator {
                         PortEntry {
                             port,
                             base: port,
-                            listener: None,
+                            listeners: vec![],
                         },
                     );
                     return Ok(port);
@@ -406,6 +456,20 @@ impl ReplayableResource for PortAllocator {
 impl Default for PortAllocator {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Given an already-bound IPv4 listener, also try to bind the IPv6 loopback on the
+/// same port. Returns both listeners so both reservations are held until the process starts.
+///
+/// Returns `Err(())` when `[::1]:port` is already in use by another process, meaning
+/// the caller should skip this port to avoid false positive readiness probes.
+/// Returns `Ok` with only the IPv4 listener when IPv6 is not available on the host.
+fn bind_with_ipv6(v4: TcpListener, port: u16) -> Result<Vec<TcpListener>, ()> {
+    match TcpListener::bind(format!("[::1]:{}", port)) {
+        Ok(v6) => Ok(vec![v4, v6]),
+        Err(e) if e.kind() == ErrorKind::AddrInUse => Err(()),
+        Err(_) => Ok(vec![v4]), // IPv6 unavailable on this host — IPv4 only
     }
 }
 
