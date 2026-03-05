@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv test` not using the eval cache due to a temporary state directory being created on every run.
 - Fixed TUI overflow being sent to scrollback instead of being clipped
 - Fixed first Esc keypress being swallowed in shell reload mode ([#2548](https://github.com/cachix/devenv/issues/2548)).
 - Fixed TUI displaying incorrect expected download count.

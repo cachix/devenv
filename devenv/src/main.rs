@@ -527,20 +527,38 @@ async fn run_devenv(
                 None
             };
 
-            let state_tmpdir = match TempDir::new()
-                .into_diagnostic()
-                .wrap_err("Failed to create temporary state directory")
-            {
-                Ok(t) => t,
-                Err(e) => return output(Err(e)),
+            // When using a temporary dotfile (--override-dotfile), also use a temporary state
+            // directory for full isolation. Otherwise, use a stable test-state path so the
+            // eval cache can be reused across test runs.
+            let state_tmpdir = if *override_dotfile {
+                let state_tmpdir = match TempDir::new()
+                    .into_diagnostic()
+                    .wrap_err("Failed to create temporary state directory")
+                {
+                    Ok(t) => t,
+                    Err(e) => return output(Err(e)),
+                };
+                info!(
+                    "Using temporary state directory: {}",
+                    state_tmpdir.path().display()
+                );
+                options.devenv_state = Some(state_tmpdir.path().to_path_buf());
+                Some(state_tmpdir)
+            } else {
+                // Stable test state path: isolates test services from shell state while
+                // keeping the path consistent across runs so the eval cache is effective.
+                let dotfile = options.devenv_dotfile.clone().unwrap_or_else(|| {
+                    std::env::current_dir()
+                        .expect("Failed to get current directory")
+                        .join(".devenv")
+                });
+                let test_state = dotfile.join("test-state");
+                info!("Using test state directory: {}", test_state.display());
+                options.devenv_state = Some(test_state);
+                None
             };
-            info!(
-                "Using temporary state directory: {}",
-                state_tmpdir.path().display()
-            );
-            options.devenv_state = Some(state_tmpdir.path().to_path_buf());
 
-            (dotfile_tmpdir, Some(state_tmpdir))
+            (dotfile_tmpdir, state_tmpdir)
         }
         _ => (None, None),
     };
