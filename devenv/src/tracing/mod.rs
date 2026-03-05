@@ -96,6 +96,7 @@ fn create_filter(level: Level) -> EnvFilter {
         .with_default_directive(LevelFilter::from(level).into())
         .from_env_lossy()
         .add_directive("devenv::activity=trace".parse().unwrap())
+        .add_directive("watchexec=warn".parse().unwrap())
 }
 
 pub fn init_tracing_default() {
