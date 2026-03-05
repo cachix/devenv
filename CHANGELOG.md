@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed TUI overflow being sent to scrollback instead of being clipped
 - Fixed first Esc keypress being swallowed in shell reload mode ([#2548](https://github.com/cachix/devenv/issues/2548)).
 - Fixed TUI displaying incorrect expected download count.
 - Fixed TCP readiness probes only checking IPv4, causing hangs when processes bind to IPv6 loopback ([#2549](https://github.com/cachix/devenv/issues/2549)).
