@@ -260,11 +260,16 @@ in
       enable = lib.mkEnableOption "install npm";
       package = lib.mkOption {
         type = lib.types.package;
-        default = cfg.package.override {
-          enableNpm = true;
-        };
+        default =
+          # nixpkgs 26.05+: nodejs-slim has an npm output
+          if builtins.elem "npm" (cfg.package.outputs or [ ])
+          then lib.getOutput "npm" cfg.package
+          # older nixpkgs: enableNpm override
+          else if cfg.package ? override && lib.functionArgs cfg.package.override ? enableNpm
+          then cfg.package.override { enableNpm = true; }
+          else cfg.package;
         defaultText = lib.literalExpression "languages.javascript.package";
-        description = "The Node.js package to use.";
+        description = "The npm package to use. Defaults to the npm output of the javascript package.";
       };
       install.enable = lib.mkEnableOption "npm install during devenv initialisation";
     };
