@@ -1086,14 +1086,12 @@ impl ShellSession {
                 }
 
                 Event::Command(cmd) => {
-                    let scroll_count = self.handle_command(cmd, vt, renderer)?;
+                    self.handle_command(cmd, vt, renderer)?;
                     queue!(stdout, terminal::BeginSynchronizedUpdate)?;
-                    if scroll_count > 0 {
-                        if renderer.row_offset > 0 {
-                            renderer.render(stdout, vt)?;
-                        } else {
-                            renderer.render_with_scroll(stdout, vt)?;
-                        }
+                    if renderer.row_offset > 0 {
+                        renderer.render(stdout, vt)?;
+                    } else {
+                        renderer.render_with_scroll(stdout, vt)?;
                     }
                     self.draw_status_and_cursor(stdout, vt, renderer)?;
                     queue!(stdout, terminal::EndSynchronizedUpdate)?;
