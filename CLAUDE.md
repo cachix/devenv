@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Development Commands
 
-Use `devenv shell --no-reload` to get a shell with Rust and all dependencies installed.
-Prefix commands with `devenv shell --no-reload --` to run them directly.
+Use `devenv shell` to get a shell with Rust and all dependencies installed.
+Prefix commands with `devenv shell --` to run them directly.
 
 - **Build**: `cargo build`
 - **Run CLI**: `cargo run -- [args]`
