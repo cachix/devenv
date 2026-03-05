@@ -4593,6 +4593,8 @@ Update the Poetry lock file
 
 **` pre-commit-hook-ensure-sops `**
 
+Ensure file encryption with sops.
+
 **` prettier `**
 
 Opinionated multi-language code formatter.
