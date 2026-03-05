@@ -1,6 +1,14 @@
 # Changelog
 
-## 2.0.2 (unreleased)
+## X.Y.Z (YYYY-MM-DD)
+
+### Bug Fixes
+
+### Improvements
+
+### Breaking Changes
+
+## 2.0.2 (2026-03-05)
 
 ### Bug Fixes
 

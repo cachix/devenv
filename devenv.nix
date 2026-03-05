@@ -26,11 +26,13 @@
 
         1. Update version in Cargo.toml to $ARGUMENTS using `cargo set-version`
         2. Run `cargo check` to update Cargo.lock
-        3. Put today's date in CHANGELOG.md
-        4. Ask user for access to nixpkgs repository to bump devenv there
+        3. Put today's date in CHANGELOG.md replacing "(unreleased)"
+        4. Create a new "## X.Y.Z (unreleased)" section above the released version in CHANGELOG.md
+        5. Commit the changes
+        6. At the end, tell the user that the package needs to be bumped in nixpkgs:
            - The package is at pkgs/by-name/de/devenv/package.nix
            - Sync with ./package.nix from this repo and bump version
-        5. If this is a major version bump (X.Y.0, not X.Y.Z patch):
+        7. If this is a major version bump (X.Y.0, not X.Y.Z patch):
            - Generate a blog post in docs/src/blog/posts/
            - Follow the naming convention: devenv-vX.Y-short-description.md
            - Use existing blog posts as reference for format and style
