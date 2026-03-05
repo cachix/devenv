@@ -4649,6 +4649,8 @@ Prevent committing secret keys into your source code
 
 **` rome `**
 
+Unified linting for JavaScript, TypeScript, and the web.
+
 **` ruff `**
 
 An extremely fast Python linter, written in Rust.
