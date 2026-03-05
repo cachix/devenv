@@ -146,6 +146,8 @@ Environment variables `DEVENV_TRACE_OUTPUT` and `DEVENV_TRACE_FORMAT` can be use
 
 ## Changelog
 
+Add Rust/cli changes to changelog:
+
 `CHANGELOG.md` follows this structure:
 
 ```
