@@ -2032,7 +2032,7 @@ impl Devenv {
             .ok()
             .map(|h| h.to_string_lossy().into_owned());
 
-        let username = whoami::fallible::username().ok();
+        let username = whoami::username().ok();
 
         // TODO: remove devenv_dotfile_path and derive the relative path inside NixArgs instead
         let dotfile_relative_path = PathBuf::from(format!(

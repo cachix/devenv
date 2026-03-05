@@ -7,7 +7,7 @@ use miette::Result;
 use rmcp::handler::server::tool::{ToolCallContext, ToolRouter};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{
-    CallToolRequestParam, CallToolResult, ListToolsResult, PaginatedRequestParam,
+    CallToolRequestParams, CallToolResult, ListToolsResult, PaginatedRequestParams,
     ServerCapabilities, ServerInfo,
 };
 use rmcp::service::RequestContext;
@@ -244,19 +244,17 @@ struct SearchOptionsRequest {
 
 impl ServerHandler for DevenvMcpServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some("Devenv MCP server - provides access to devenv packages and configuration options. Process-compose logs are available in $DEVENV_STATE/process-compose/process-compose.log".into()),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_instructions("Devenv MCP server - provides access to devenv packages and configuration options. Process-compose logs are available in $DEVENV_STATE/process-compose/process-compose.log")
     }
 
     fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         std::future::ready(Ok(ListToolsResult {
+            meta: None,
             tools: self.tool_router.list_all(),
             next_cursor: None,
         }))
@@ -264,7 +262,7 @@ impl ServerHandler for DevenvMcpServer {
 
     async fn call_tool(
         &self,
-        request: CallToolRequestParam,
+        request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
         let tool_context = ToolCallContext::new(self, request, context);

@@ -88,16 +88,16 @@ indoc = "2.0.6"
 lazy_static = "1.5.0"
 pathdiff = "0.2.3"
 miette = { version = "7.6.0", features = ["fancy"] }
-nix = { version = "0.30.1", features = ["fs", "process", "signal"] }
+nix = { version = "0.31", features = ["fs", "process", "signal"] }
 num_enum = "0.7"
 once_cell = "1.21.3"
 petgraph = "0.8.2"
 pretty_assertions = { version = "1.4.1", features = ["unstable"] }
 netstat2 = "0.11"
-rand = "0.8.5"
+rand = "0.10"
 regex = "1.11.3"
 schemars = "1.0.4"
-schematic = { version = "0.18.12", features = [
+schematic = { version = "0.19", features = [
   "schema",
   "yaml",
   "renderer_template",
@@ -116,9 +116,9 @@ similar = "2.7.0"
 sha2 = "0.10.9"
 shell-escape = "0.1.5"
 sqlx = { version = "0.8.6", features = ["time", "sqlite", "runtime-tokio"] }
-strum = { version = "0.27", features = ["derive"] }
+strum = { version = "0.28", features = ["derive"] }
 tempfile = "3.23.0"
-termimad = "0.30.0"
+termimad = "0.34"
 tokio-test = "0.4"
 thiserror = "2.0.16"
 tracing = { version = "0.1.41", features = ["valuable"] }
@@ -142,7 +142,7 @@ tokio-util = { version = "0.7.16", features = ["io"] }
 tokio-stream = "0.1"
 uuid = { version = "1.18", features = ["v4"] }
 which = "8.0.0"
-whoami = "1.6.1"
+whoami = "2.1.1"
 xdg = "3.0.0"
 walkdir = "2.5"
 url = "2"
@@ -151,13 +151,13 @@ insta = { version = "1.40", features = ["filters", "json"] }
 watchexec = "8.2"
 watchexec-filterer-globset = "8.0"
 watchexec-supervisor = "5.1"
-signal-hook = "0.3"
-signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
-socket2 = "0.5"
+signal-hook = "0.4"
+signal-hook-tokio = { version = "0.4", features = ["futures-v0_3"] }
+socket2 = "0.6"
 ctrlc = "3.4"
 process-wrap = { version = "9.0", features = ["tokio1"] }
 portable-pty = "0.9.0"
-vergen-gitcl = "1.0"
+vergen-gitcl = "9.0"
 ignore = "0.4.23"
 proptest = "1.8"
 libc = "0.2"
@@ -168,12 +168,12 @@ syn = { version = "2.0", features = ["full", "parsing", "extra-traits"] }
 reqwest = { version = "0.13", features = ["json", "query", "stream"] }
 axum = "0.8"
 caps = "0.5"
-rmcp = { version = "0.7", features = [
+rmcp = { version = "1.1", features = [
   "server",
   "transport-io",
   "transport-streamable-http-server",
 ] }
-rmcp-macros = "0.7"
+rmcp-macros = "1.1"
 sd-notify = "0.4"
 
 # Optional snix dependencies
@@ -186,7 +186,7 @@ nix-compat = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a75
 nix-compat-derive = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
 
 # Ensure crossterm versions match between these
-iocraft = "0.7.16"
+iocraft = "0.7.18"
 crossterm = "0.28.1"
 
 [patch.crates-io]
