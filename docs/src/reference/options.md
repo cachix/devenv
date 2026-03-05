@@ -4261,9 +4261,11 @@ A 100% CommonMark-compatible GitHub Flavored Markdown formatter
 
 **` conform `**
 
-Policy enforcement for commits.
+Policy enforcement for your pipelines.
 
 **` convco `**
+
+Policy enforcement for commits.
 
 **` credo `**
 
