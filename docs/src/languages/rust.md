@@ -297,10 +297,11 @@ package
 
 
 *Default:*
+Depends on the configured toolchain:
 
-```nix
-pkgs.rust-analyzer
-```
+ - ` nixpkgs ` channel: ` pkgs.rust-analyzer `\.
+ - non-nixpkgs channel: the ` rust-analyzer ` component from the rust-overlay toolchain, with a fallback to ` pkgs.rust-analyzer ` if not present in the manifest\.
+ - ` toolchainFile `: the aggregated toolchain package derived from the file\.
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
