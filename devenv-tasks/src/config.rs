@@ -28,6 +28,9 @@ pub struct TaskConfig {
     /// Environment variables to set for this task
     #[serde(default)]
     pub env: std::collections::HashMap<String, String>,
+    /// Environment variable names to export from this task
+    #[serde(default)]
+    pub exports: Vec<String>,
     /// Process-specific configuration (only used when type = "process")
     #[serde(default)]
     pub process: Option<ProcessConfig>,

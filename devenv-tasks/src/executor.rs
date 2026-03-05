@@ -23,6 +23,8 @@ pub struct ExecutionContext<'a> {
     pub use_sudo: bool,
     /// Path to the output file for DEVENV_TASK_OUTPUT_FILE.
     pub output_file_path: &'a std::path::Path,
+    /// Path to the exports file for DEVENV_TASK_EXPORTS_FILE.
+    pub exports_file_path: Option<&'a std::path::Path>,
 }
 
 /// Callback for streaming output lines during execution.
@@ -91,6 +93,11 @@ impl SubprocessExecutor {
 
         // Set DEVENV_TASK_OUTPUT_FILE
         command.env("DEVENV_TASK_OUTPUT_FILE", ctx.output_file_path);
+
+        // Set DEVENV_TASK_EXPORTS_FILE if task has exports
+        if let Some(exports_path) = ctx.exports_file_path {
+            command.env("DEVENV_TASK_EXPORTS_FILE", exports_path);
+        }
 
         // Spawn the process
         let mut child = match command.spawn() {
