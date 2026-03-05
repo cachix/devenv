@@ -25,13 +25,13 @@ tracing.workspace = true
 sqlx.workspace = true
 blake3.workspace = true
 shell-escape.workspace = true
-base64 = "0.22"
-ignore = "0.4.23"
+base64.workspace = true
+ignore.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["user", "signal"] }
 
 [dev-dependencies]
 pretty_assertions.workspace = true
-proptest = "1.8"
-tokio-test = "0.4"
+proptest.workspace = true
+tokio-test.workspace = true

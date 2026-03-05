@@ -70,6 +70,7 @@ blake3 = "1.8.2"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5.48", features = ["derive", "cargo", "env"] }
 clap_complete = { version = "4.5.58", features = ["unstable-dynamic"] }
+clap_mangen = "0.2.29"
 cstr = "0.2"
 daemonize = "0.5"
 cli-table = "0.5.0"
@@ -156,6 +157,13 @@ socket2 = "0.5"
 ctrlc = "3.4"
 process-wrap = { version = "9.0", features = ["tokio1"] }
 portable-pty = "0.9.0"
+vergen-gitcl = "1.0"
+ignore = "0.4.23"
+proptest = "1.8"
+libc = "0.2"
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "parsing", "extra-traits"] }
 
 reqwest = { version = "0.13", features = ["json", "query", "stream"] }
 axum = "0.8"

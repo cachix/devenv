@@ -31,7 +31,7 @@ tracing-subscriber = { workspace = true }
 indexmap = { workspace = true }
 
 # Terminal state management
-libc = "0.2"
+libc.workspace = true
 
 # Error handling
 thiserror = { workspace = true }
@@ -46,19 +46,19 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 # Nix log parsing
-devenv-eval-cache = { path = "../devenv-eval-cache" }
+devenv-eval-cache.workspace = true
 
 # Activity system
-devenv-activity = { path = "../devenv-activity" }
+devenv-activity.workspace = true
 
 # Process control
-devenv-processes = { path = "../devenv-processes" }
+devenv-processes.workspace = true
 
 # Shell session management (provides ShellSession, protocol types)
-devenv-shell = { path = "../devenv-shell" }
+devenv-shell.workspace = true
 
 # Shared task types
-devenv-cache-core = { path = "../devenv-cache-core" }
+devenv-cache-core.workspace = true
 
 # Time handling
 once_cell = { workspace = true }

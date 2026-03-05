@@ -84,7 +84,7 @@ nix-compat = { workspace = true, optional = true }
 nix-compat-derive = { workspace = true, optional = true }
 
 [build-dependencies]
-vergen-gitcl = "1.0"
+vergen-gitcl.workspace = true
 
 [dev-dependencies]
 devenv-nix-backend-macros.workspace = true
