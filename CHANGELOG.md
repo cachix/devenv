@@ -4,6 +4,8 @@
 
 ### Bug Fixes
 
+- Fixed TUI colors being unreadable on light terminal backgrounds.
+
 ### Improvements
 
 ### Breaking Changes

@@ -15,10 +15,10 @@ use std::time::Instant;
 // Shared UI constants - used by both devenv-shell and devenv-tui
 // ============================================================================
 
-/// Bright white for active/in-progress items
-pub const COLOR_ACTIVE: Color = Color::AnsiValue(255);
-/// Dimmer white for nested active items
-pub const COLOR_ACTIVE_NESTED: Color = Color::AnsiValue(246);
+/// Default foreground for active/in-progress items (adapts to terminal theme)
+pub const COLOR_ACTIVE: Color = Color::Reset;
+/// Dimmer text for nested active items
+pub const COLOR_ACTIVE_NESTED: Color = Color::DarkGrey;
 /// Gray for secondary text (cached, phases, etc.)
 pub const COLOR_SECONDARY: Color = Color::AnsiValue(242);
 /// Gray for tree lines and elapsed time
