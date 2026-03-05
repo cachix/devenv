@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Removed debug watchexec logs from showing up in `--no-reload` shells.
 - Fixed TUI colors being unreadable on light terminal backgrounds.
 
 ### Improvements
