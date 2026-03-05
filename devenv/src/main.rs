@@ -630,7 +630,22 @@ async fn run_devenv_inner(
 
     let result = match command {
         Commands::Shell { cmd, ref args } => {
-            if !devenv.shell_settings.reload {
+            use std::io::IsTerminal;
+
+            // The PTY requires an interactive terminal.
+            // We use the exec shell as fallback.
+            let use_pty = devenv.shell_settings.reload && std::io::stdout().is_terminal();
+            if use_pty {
+                // Reload shell needs owned Devenv — return to caller
+                return Ok(InnerResult::ReloadShell {
+                    cmd,
+                    args: args.clone(),
+                    backend_done_tx: backend_done_tx
+                        .take()
+                        .expect("backend_done_tx should exist"),
+                    terminal_ready_rx,
+                });
+            } else {
                 // Run enterShell tasks first (TUI shows progress).
                 // Exports are stored on self so prepare_shell() injects them
                 // into the bash script after the Nix shell env is applied.
@@ -648,16 +663,6 @@ async fn run_devenv_inner(
                 };
 
                 CommandResult::Exec(shell_config.command)
-            } else {
-                // Reload shell needs owned Devenv — return to caller
-                return Ok(InnerResult::ReloadShell {
-                    cmd,
-                    args: args.clone(),
-                    backend_done_tx: backend_done_tx
-                        .take()
-                        .expect("backend_done_tx should exist"),
-                    terminal_ready_rx,
-                });
             }
         }
         Commands::Test { .. } => {
