@@ -624,7 +624,7 @@ pub fn calculate_display_info(
     }
 
     let remaining = available_width - base_width;
-    let suffix_total = suffix.map(|s| s.len() + 1).unwrap_or(0); // +1 for leading margin
+    let suffix_total = suffix.map(|s| s.chars().count() + 1).unwrap_or(0); // +1 for leading margin
 
     // Everything fits
     if path.len() + suffix_total <= remaining {
@@ -633,16 +633,16 @@ pub fn calculate_display_info(
 
     // Doesn't fit. Truncate suffix first, then drop it, then truncate name.
     if let Some(suffix_str) = suffix {
+        let suffix_chars: Vec<char> = suffix_str.chars().collect();
         // How much space is left for suffix after the name?
         let space_for_suffix = remaining.saturating_sub(path.len() + 1); // +1 for margin
-        if space_for_suffix >= suffix_str.len() {
+        if space_for_suffix >= suffix_chars.len() {
             // Suffix fits, name is the problem
             return (path.to_string(), Some(suffix_str.to_string()));
         }
         if space_for_suffix >= 2 {
             // Truncate suffix from the right
-            let chars: Vec<char> = suffix_str.chars().collect();
-            let kept: String = chars[..space_for_suffix - 1].iter().collect();
+            let kept: String = suffix_chars[..space_for_suffix - 1].iter().collect();
             return (path.to_string(), Some(format!("{}…", kept)));
         }
         // No room for suffix at all, drop it
@@ -993,5 +993,21 @@ mod tests {
         let suffix = suffix.expect("suffix should be truncated");
         assert!(suffix.ends_with('…'));
         assert_eq!(suffix.chars().count(), 29);
+    }
+
+    #[test]
+    fn multibyte_suffix_does_not_panic() {
+        // Suffix with multi-byte UTF-8 chars: .len() (bytes) > .chars().count()
+        // This previously panicked because byte length was used for comparison
+        // but char index was used for slicing.
+        // "ä" is 2 bytes in UTF-8, so 30 chars = 60 bytes.
+        // With terminal_width=80, action="building", path="pkg":
+        //   base_width = 2+2+9+1+4 = 18, remaining = 62
+        //   space_for_suffix = 62 - 3 - 1 = 58
+        //   Old code: 58 >= suffix.len()(60) → false, then chars[..57] on 30-char vec → panic!
+        let suffix = "ääääääääääääääääääääääääääääää"; // 30 chars, 60 bytes
+        let (name, _suffix) =
+            calculate_display_info("pkg", 80, "building", Some(suffix), "1.0s", 0);
+        assert_eq!(name, "pkg");
     }
 }
