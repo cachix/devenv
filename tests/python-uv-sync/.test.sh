@@ -4,6 +4,13 @@ python --version
 uv --version
 python -c 'import requests'
 
+# Verify venv python is first on PATH, not the Nix store python
+python_path=$(which python)
+if [[ "$python_path" != *"/state/venv/"* ]]; then
+  echo "ERROR: python resolves to $python_path, expected venv python"
+  exit 1
+fi
+
 # Test the uv2nix import functionality
 echo "Testing uv2nix import..."
 
