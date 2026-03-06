@@ -319,7 +319,7 @@ in
         # Import the mkAggregated function.
         # This symlinkJoins and patches the individual components.
         mkAggregated = import (rust-overlay + "/lib/mk-aggregated.nix") {
-          inherit (pkgs) lib stdenv symlinkJoin bash curl;
+          inherit (pkgs) lib stdenv symlinkJoin bash curl makeWrapper;
           inherit (pkgs.buildPackages) rustc;
           pkgsTargetTarget = pkgs.targetPackages;
         };
