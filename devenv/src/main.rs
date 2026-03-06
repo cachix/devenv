@@ -16,6 +16,13 @@ use tokio::sync::Mutex;
 use tokio_shutdown::Shutdown;
 use tracing::info;
 
+/// Stack size for threads that run Nix evaluation.
+///
+/// Nix evaluation can be deeply recursive (e.g. large nixpkgs traversals),
+/// and the default 8MB thread stack is not always enough. Match the 64MB
+/// stack that the Nix CLI itself uses.
+const NIX_STACK_SIZE: usize = 64 * 1024 * 1024;
+
 /// Create a tokio runtime with worker threads registered with Boehm GC.
 ///
 /// Nix uses Boehm GC with parallel marking. During stop-the-world collection,
@@ -25,6 +32,7 @@ fn build_gc_runtime() -> tokio::runtime::Runtime {
     devenv_nix_backend::nix_init();
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
+        .thread_stack_size(NIX_STACK_SIZE)
         .on_thread_start(|| {
             let _ = devenv_nix_backend::gc_register_current_thread();
         })
@@ -111,6 +119,21 @@ fn main() -> Result<()> {
         .completer("devenv")
         .complete();
 
+    // Re-run on a thread with a larger stack. Nix evaluation via FFI can be
+    // deeply recursive (e.g. large nixpkgs traversals) and the default 8MB
+    // main-thread stack is not always enough. The Nix CLI itself raises
+    // RLIMIT_STACK to 64MB via nix::setStackSize() before evaluating; we
+    // achieve the same by running on a dedicated thread.
+    return std::thread::Builder::new()
+        .name("main".into())
+        .stack_size(NIX_STACK_SIZE)
+        .spawn(main_inner)
+        .expect("Failed to spawn main thread")
+        .join()
+        .map_err(|_| miette::miette!("main thread panicked"))?;
+}
+
+fn main_inner() -> Result<()> {
     loop {
         let mut cli = Cli::parse();
 
