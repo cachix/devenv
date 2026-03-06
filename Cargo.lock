@@ -1394,7 +1394,7 @@ dependencies = [
 
 [[package]]
 name = "devenv"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "async-trait",
  "axum 0.8.8",
@@ -1471,7 +1471,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-activity"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "devenv-activity-macros",
  "humantime",
@@ -1487,7 +1487,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-activity-macros"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1496,7 +1496,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-cache-core"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "blake3",
  "miette",
@@ -1511,7 +1511,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-core"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "async-trait",
  "clap",
@@ -1539,7 +1539,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-eval-cache"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "blake3",
  "devenv-activity",
@@ -1561,7 +1561,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-event-sources"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "async-priority-channel",
  "miette",
@@ -1575,7 +1575,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-nix-backend"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1610,7 +1610,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-nix-backend-macros"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1619,7 +1619,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-processes"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "async-trait",
  "caps",
@@ -1647,7 +1647,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-reload"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "anyhow",
  "avt",
@@ -1665,7 +1665,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-run-tests"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "clap",
  "devenv",
@@ -1680,7 +1680,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-shell"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "avt",
  "crossterm 0.28.1",
@@ -1697,7 +1697,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-snix-backend"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "async-trait",
  "devenv-core",
@@ -1717,7 +1717,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-tasks"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "base64",
  "blake3",
@@ -1748,7 +1748,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-tui"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4258,7 +4258,7 @@ dependencies = [
 
 [[package]]
 name = "nix-conf-parser"
-version = "0.0.1"
+version = "2.0.3"
 dependencies = [
  "indexmap 2.13.0",
  "miette",
@@ -7454,7 +7454,7 @@ dependencies = [
 
 [[package]]
 name = "tokio-shutdown"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "futures",
  "nix 0.31.2",
@@ -9197,7 +9197,7 @@ checksum = "2fb433233f2df9344722454bc7e96465c9d03bff9d77c248f9e7523fe79585b5"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "2.0.3"
 dependencies = [
  "clap",
  "clap_complete",

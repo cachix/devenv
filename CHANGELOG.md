@@ -2,6 +2,8 @@
 
 ## X.Y.Z (YYYY-MM-DD)
 
+## 2.0.3 (2026-03-06)
+
 ### Bug Fixes
 
 - Fixed `devenv test` conflicting with older pinned devenv modules that set `devenv.state` without `lib.mkDefault`.
