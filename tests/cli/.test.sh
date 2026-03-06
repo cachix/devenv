@@ -2,6 +2,7 @@ set -xe
 
 rm devenv.yaml || true
 devenv shell -- env | grep "DEVENV_CMDLINE"
+devenv shell -- env | grep "DEVENV_CLI_TEST_VAR=hello-from-task"
 devenv build languages.python.package
 devenv shell ls -- -la | grep ".test.sh"
 devenv shell ls ../ | grep "cli"

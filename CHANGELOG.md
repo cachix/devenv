@@ -2,6 +2,14 @@
 
 ## X.Y.Z (YYYY-MM-DD)
 
+### Bug Fixes
+
+- Fixed task exports (e.g. `VIRTUAL_ENV`, `PATH` from venv) not being set in the reload shell.
+
+### Improvements
+
+### Breaking Changes
+
 ## 2.0.3 (2026-03-06)
 
 ### Bug Fixes
