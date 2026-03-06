@@ -22,7 +22,8 @@ jobs:
           name: devenv
 
       - name: Install devenv
-        run: nix profile install github:cachix/devenv/latest -L --accept-flake-config
+        # TODO(sander): go back to latest once 2.0.3 is released
+        run: nix profile add github:cachix/devenv/v1.11.2 -L --accept-flake-config
 
       - name: Run formatters
         run: devenv shell -- prek run -a || true
