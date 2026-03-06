@@ -8,6 +8,7 @@
 - Removed debug watchexec logs from showing up in `--no-reload` shells.
 - Fixed TUI colors being unreadable on light terminal backgrounds.
 - Disabled the PTY in non-interactive environments (CI) preventing the shell from hanging.
+- Fixed `navigateExclusion ranges overlap` error in the Nix backend ([#2552](https://github.com/cachix/devenv/issues/2552)).
 
 ### Improvements
 
