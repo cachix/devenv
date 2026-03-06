@@ -9,10 +9,7 @@
 - Fixed TUI colors being unreadable on light terminal backgrounds.
 - Disabled the PTY in non-interactive environments (CI) preventing the shell from hanging.
 - Fixed `navigateExclusion ranges overlap` error in the Nix backend ([#2552](https://github.com/cachix/devenv/issues/2552)).
-
-### Improvements
-
-### Breaking Changes
+- Increased thread stack size to 64MB to prevent stack overflows during deep Nix evaluations ([#2555](https://github.com/cachix/devenv/issues/2555)).
 
 ## 2.0.2 (2026-03-05)
 
