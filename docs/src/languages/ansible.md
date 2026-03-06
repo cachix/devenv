@@ -75,7 +75,7 @@ boolean
 *Default:*
 
 ```nix
-false
+true
 ```
 
 

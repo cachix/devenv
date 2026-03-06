@@ -304,7 +304,7 @@ true
 
 
 
-The Node\.js package to use\.
+The npm package to use\. Defaults to the npm output of the javascript package\.
 
 
 

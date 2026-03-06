@@ -136,6 +136,7 @@ The available extensions are:
  - pg_repack
  - pg_roaringbitmap
  - pg_safeupdate
+ - pg_search
  - pg_similarity
  - pg_squeeze
  - pg_tle
