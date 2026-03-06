@@ -318,11 +318,17 @@ in
         # WARNING: private API
         # Import the mkAggregated function.
         # This symlinkJoins and patches the individual components.
-        mkAggregated = import (rust-overlay + "/lib/mk-aggregated.nix") {
-          inherit (pkgs) lib stdenv symlinkJoin bash curl makeWrapper pkgsHostHost;
+        mkAggregatedFn = import (rust-overlay + "/lib/mk-aggregated.nix");
+        mkAggregatedArgs = builtins.functionArgs mkAggregatedFn;
+        mkAggregated = mkAggregatedFn ({
+          inherit (pkgs) lib stdenv symlinkJoin bash curl;
           inherit (pkgs.buildPackages) rustc;
           pkgsTargetTarget = pkgs.targetPackages;
-        };
+        } // lib.optionalAttrs (mkAggregatedArgs ? makeWrapper) {
+          inherit (pkgs) makeWrapper;
+        } // lib.optionalAttrs (mkAggregatedArgs ? pkgsHostHost) {
+          inherit (pkgs) pkgsHostHost;
+        });
 
         # Get the toolchain for component resolution with error handling
         channel = rustBin.${cfg.channel} or (throw "Invalid Rust channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (lib.filter (c: c != "nixpkgs") validChannels)}");
