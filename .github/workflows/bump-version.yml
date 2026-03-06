@@ -25,7 +25,7 @@ jobs:
           name: devenv
 
       - name: Install devenv.sh
-        run: nix profile install nixpkgs#devenv
+        run: nix profile add nixpkgs#devenv
 
       - name: Bump version
         run: devenv shell -- cargo set-version -p devenv --bump patch

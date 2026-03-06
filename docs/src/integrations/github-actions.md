@@ -42,7 +42,7 @@ steps:
   with:
     name: devenv
 - name: Install devenv.sh
-  run: nix profile install nixpkgs#devenv
+  run: nix profile add nixpkgs#devenv
 ```
 
 The above snippet does the following:
@@ -117,7 +117,7 @@ When setting the default shell, the "Install devenv.sh" step must be amended as 
 ```yaml
 - name: Install devenv.sh
   shell: bash
-  run: nix profile install nixpkgs#devenv
+  run: nix profile add nixpkgs#devenv
 ```
 
 ### Complete Example
@@ -145,7 +145,7 @@ jobs:
       with:
         name: devenv
     - name: Install devenv.sh
-      run: nix profile install nixpkgs#devenv
+      run: nix profile add nixpkgs#devenv
 
     - name: Build the devenv shell and run any pre-commit hooks
       run: devenv test
