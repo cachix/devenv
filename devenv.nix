@@ -34,7 +34,7 @@
            - Use existing blog posts as reference for format and style
         6. Commit the changes
         7. Push the commit(s) to GitHub
-        8. Create a GitHub release with `gh release create v$ARGUMENTS --title "v$ARGUMENTS"`
+        8. Create a GitHub release with `gh release create v$ARGUMENTS --title "v$ARGUMENTS" --latest --notes  "<changelog for this release>"`
         9. At the end, tell the user that the package still needs to be bumped in nixpkgs:
            - The package is at pkgs/by-name/de/devenv/package.nix
            - Sync with ./package.nix from this repo and bump version
