@@ -336,27 +336,14 @@ impl Tasks {
                     // Validate @ready dependencies on process tasks require ready or listen
                     if resolved_kind == DependencyKind::Ready
                         && dep_task.task.r#type == TaskType::Process
+                        && !process_has_ready_config(&dep_task.task)
                     {
-                        let has_ready = dep_task
-                            .task
-                            .process
-                            .as_ref()
-                            .is_some_and(|p| p.ready.is_some());
-                        let has_listen = dep_task.task.process.as_ref().is_some_and(|p| {
-                            p.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
-                        });
-                        let has_ports = dep_task
-                            .task
-                            .process
-                            .as_ref()
-                            .is_some_and(|p| !p.ports.is_empty());
-                        if !has_ready && !has_listen && !has_ports {
-                            validation_errors.push(format!(
-                                "Task '{}' depends on '{}@ready' but process has no ready config, TCP listen config, or allocated ports. \
-                                 Add a ready probe, configure a TCP listen socket, or allocate ports for the process.",
-                                task_state.task.name, dep_spec.name
-                            ));
-                        }
+                        validation_errors.push(format!(
+                            "Task '{}' depends on '{}@ready' but process has no ready config, TCP listen config, or allocated ports. \
+                             Add a ready probe, configure a TCP listen socket, or allocate ports for the process. \
+                             See https://devenv.sh/processes/#ready-probes",
+                            task_state.task.name, dep_spec.name
+                        ));
                     }
                     edges_to_add.push((*dep_idx, index, resolved_kind));
                 } else {
@@ -401,27 +388,14 @@ impl Tasks {
                     // Validate @ready dependencies - current task must have ready or listen if it's a process
                     if resolved_kind == DependencyKind::Ready
                         && task_state.task.r#type == TaskType::Process
+                        && !process_has_ready_config(&task_state.task)
                     {
-                        let has_ready = task_state
-                            .task
-                            .process
-                            .as_ref()
-                            .is_some_and(|p| p.ready.is_some());
-                        let has_listen = task_state.task.process.as_ref().is_some_and(|p| {
-                            p.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
-                        });
-                        let has_ports = task_state
-                            .task
-                            .process
-                            .as_ref()
-                            .is_some_and(|p| !p.ports.is_empty());
-                        if !has_ready && !has_listen && !has_ports {
-                            validation_errors.push(format!(
-                                "Process '{}' has tasks depending on it via @ready but has no ready config, TCP listen config, or allocated ports. \
-                                 Add a ready probe, configure a TCP listen socket, or allocate ports for the process.",
-                                task_state.task.name
-                            ));
-                        }
+                        validation_errors.push(format!(
+                            "Process '{}' has tasks depending on it via @ready but has no ready config, TCP listen config, or allocated ports. \
+                             Add a ready probe, configure a TCP listen socket, or allocate ports for the process. \
+                             See https://devenv.sh/processes/#ready-probes",
+                            task_state.task.name
+                        ));
                     }
                     edges_to_add.push((index, *before_idx, resolved_kind));
                 } else {
@@ -1023,6 +997,15 @@ impl Tasks {
 /// returning edges as (parent_name, child_name) pairs where root tasks have None
 /// as parent.
 ///
+fn process_has_ready_config(task: &crate::TaskConfig) -> bool {
+    let process = task.process.as_ref();
+    let has_ready = process.is_some_and(|p| p.ready.is_some());
+    let has_listen =
+        process.is_some_and(|p| p.listen.iter().any(|spec| spec.kind == ListenKind::Tcp));
+    let has_ports = process.is_some_and(|p| !p.ports.is_empty());
+    has_ready || has_listen || has_ports
+}
+
 /// # Arguments
 /// * `tasks` - The task configurations to process
 ///
