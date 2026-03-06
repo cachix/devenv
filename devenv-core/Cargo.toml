@@ -22,6 +22,7 @@ thiserror.workspace = true
 
 netstat2.workspace = true
 once_cell.workspace = true
+socket2.workspace = true
 schemars.workspace = true
 schematic.workspace = true
 serde.workspace = true

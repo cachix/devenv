@@ -5,6 +5,7 @@
 ### Bug Fixes
 
 - Fixed task exports (e.g. `VIRTUAL_ENV`, `PATH` from venv) not being set in the reload shell.
+- Fixed port allocation not detecting ports bound to `0.0.0.0` or `[::]`, causing multiple devenv instances to allocate the same port ([#2567](https://github.com/cachix/devenv/issues/2567)).
 
 ### Improvements
 

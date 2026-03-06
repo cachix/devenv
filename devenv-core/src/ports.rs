@@ -10,14 +10,13 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::ErrorKind;
 use std::net::TcpListener;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::resource::{ReplayError, ReplayableResource};
 
-/// Default host for port allocation (localhost only).
+/// Default host for port allocation in tests.
 pub const DEFAULT_HOST: &str = "127.0.0.1";
 
 /// Maximum number of ports to try before giving up.
@@ -29,7 +28,8 @@ pub const MAX_ATTEMPTS: u16 = 100;
 /// until this guard is dropped, at which point the listeners are closed and the
 /// ports become available for processes to bind.
 ///
-/// Each port may have up to two listeners: one on IPv4 loopback and one on IPv6 loopback.
+/// Each port may have up to two listeners: one on all IPv4 interfaces and one on
+/// IPv6 loopback.
 pub struct PortReservations {
     ports: HashMap<u16, Vec<TcpListener>>,
 }
@@ -98,7 +98,6 @@ pub struct PortAllocation {
 /// Allocations are keyed by (process_name, port_name) to ensure stable values
 /// across multiple Nix evaluations in the same session.
 pub struct PortAllocator {
-    host: String,
     /// Allocated ports: (process_name, port_name) -> PortEntry
     ports: Mutex<HashMap<(String, String), PortEntry>>,
     /// When true, fail if the requested port is in use instead of finding the next available.
@@ -112,7 +111,6 @@ pub struct PortAllocator {
 impl PortAllocator {
     pub fn new() -> Self {
         Self {
-            host: DEFAULT_HOST.to_string(),
             ports: Mutex::new(HashMap::new()),
             strict: AtomicBool::new(false),
             allow_in_use: AtomicBool::new(false),
@@ -197,30 +195,19 @@ impl PortAllocator {
                 ));
             }
 
-            let addr = format!("{}:{}", self.host, base);
-            match TcpListener::bind(&addr) {
-                Ok(v4) => match bind_with_ipv6(v4, base) {
-                    Ok(listeners) => {
-                        ports.insert(
-                            key,
-                            PortEntry {
-                                port: base,
-                                base,
-                                listeners,
-                            },
-                        );
-                        return Ok(base);
-                    }
-                    Err(()) => {
-                        let process_info = get_process_using_port(base);
-                        return Err(format!(
-                            "Port {} is already in use on IPv6 loopback{}. \
-                             Use --strict-ports=false to auto-allocate an available port.",
-                            base, process_info
-                        ));
-                    }
-                },
-                Err(_) => {
+            match reserve_port(base) {
+                Ok(listeners) => {
+                    ports.insert(
+                        key,
+                        PortEntry {
+                            port: base,
+                            base,
+                            listeners,
+                        },
+                    );
+                    return Ok(base);
+                }
+                Err(()) => {
                     let process_info = get_process_using_port(base);
                     return Err(format!(
                         "Port {} is already in use{}. \
@@ -243,14 +230,7 @@ impl PortAllocator {
                 continue;
             }
 
-            let addr = format!("{}:{}", self.host, port);
-            let Ok(v4) = TcpListener::bind(&addr) else {
-                continue;
-            };
-
-            // Also check IPv6 loopback: if some other process holds [::1]:PORT, skip
-            // to the next port so the readiness probe cannot get a false positive.
-            let Ok(listeners) = bind_with_ipv6(v4, port) else {
+            let Ok(listeners) = reserve_port(port) else {
                 continue;
             };
 
@@ -331,52 +311,24 @@ impl PortAllocator {
         }
 
         // Try to bind exactly this port
-        let addr = format!("{}:{}", self.host, port);
         let strict = self.strict.load(Ordering::SeqCst);
         let allow_in_use = self.allow_in_use.load(Ordering::SeqCst);
 
-        match TcpListener::bind(&addr) {
-            Ok(v4) => match bind_with_ipv6(v4, port) {
-                Ok(listeners) => {
-                    ports.insert(
-                        key,
-                        PortEntry {
-                            port,
-                            base: port,
-                            listeners,
-                        },
-                    );
-                    Ok(port)
-                }
-                Err(()) => {
-                    if strict {
-                        let info = get_process_using_port(port);
-                        return Err(format!(
-                            "Port {} is already in use on IPv6 loopback{}. \
-                             Use --strict-ports=false to auto-allocate an available port.",
-                            port, info
-                        ));
-                    }
-                    // Non-strict: accept IPv4 only when IPv6 is in use
-                    tracing::debug!(
-                        "Port {} IPv6 loopback in use, accepting IPv4 only (non-strict mode)",
-                        port
-                    );
-                    ports.insert(
-                        key,
-                        PortEntry {
-                            port,
-                            base: port,
-                            listeners: vec![],
-                        },
-                    );
-                    Ok(port)
-                }
-            },
-            Err(e) => {
-                // In strict mode, always fail if port is in use - even during replay
-                // The user explicitly wants to validate that ports are available
-                if strict && e.kind() == ErrorKind::AddrInUse {
+        match reserve_port(port) {
+            Ok(listeners) => {
+                ports.insert(
+                    key,
+                    PortEntry {
+                        port,
+                        base: port,
+                        listeners,
+                    },
+                );
+                Ok(port)
+            }
+            Err(()) => {
+                // In strict mode, always fail if port is in use, even during replay
+                if strict {
                     let info = get_process_using_port(port);
                     return Err(format!(
                         "Port {} is already in use{}. \
@@ -387,7 +339,7 @@ impl PortAllocator {
 
                 // In non-strict mode with allow_in_use, accept ports that are in use
                 // (for cache replay when processes are already running)
-                if allow_in_use && e.kind() == ErrorKind::AddrInUse {
+                if allow_in_use {
                     tracing::debug!(
                         "Port {} is in use, accepting due to allow_in_use replay mode",
                         port
@@ -459,18 +411,47 @@ impl Default for PortAllocator {
     }
 }
 
-/// Given an already-bound IPv4 listener, also try to bind the IPv6 loopback on the
-/// same port. Returns both listeners so both reservations are held until the process starts.
+/// Reserve a port by binding listeners that cover all interfaces.
 ///
-/// Returns `Err(())` when `[::1]:port` is already in use by another process, meaning
-/// the caller should skip this port to avoid false positive readiness probes.
-/// Returns `Ok` with only the IPv4 listener when IPv6 is not available on the host.
-fn bind_with_ipv6(v4: TcpListener, port: u16) -> Result<Vec<TcpListener>, ()> {
-    match TcpListener::bind(format!("[::1]:{}", port)) {
+/// Returns held listeners on success. Returns `Err(())` when the port is already
+/// in use by another process.
+///
+/// Uses `socket2` to create sockets without `SO_REUSEADDR`, which Rust's
+/// `TcpListener::bind` sets by default. Without it, binding `0.0.0.0:port`
+/// reliably fails when any process holds that port on any IPv4 address,
+/// including wildcard bindings. This is critical on macOS/BSD where
+/// `SO_REUSEADDR` would allow both `0.0.0.0:port` and `127.0.0.1:port`
+/// to coexist.
+fn reserve_port(port: u16) -> Result<Vec<TcpListener>, ()> {
+    let v4 = bind_no_reuse(socket2::Domain::IPV4, "0.0.0.0", port)?;
+    match bind_no_reuse(socket2::Domain::IPV6, "[::1]", port) {
         Ok(v6) => Ok(vec![v4, v6]),
-        Err(e) if e.kind() == ErrorKind::AddrInUse => Err(()),
-        Err(_) => Ok(vec![v4]), // IPv6 unavailable on this host — IPv4 only
+        Err(()) => {
+            // Check if the failure is AddrInUse (another process) vs IPv6 unavailable.
+            // Try creating an IPv6 socket to distinguish.
+            if socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None).is_ok() {
+                // IPv6 works but port is taken
+                Err(())
+            } else {
+                // IPv6 unavailable on this host
+                Ok(vec![v4])
+            }
+        }
     }
+}
+
+/// Bind a TCP socket to `addr:port` without setting `SO_REUSEADDR`.
+fn bind_no_reuse(domain: socket2::Domain, addr: &str, port: u16) -> Result<TcpListener, ()> {
+    use std::net::SocketAddr;
+
+    let socket = socket2::Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))
+        .map_err(|_| ())?;
+    let sock_addr: SocketAddr = format!("{}:{}", addr, port).parse().map_err(|_| ())?;
+    socket
+        .bind(&socket2::SockAddr::from(sock_addr))
+        .map_err(|_| ())?;
+    socket.listen(1).map_err(|_| ())?;
+    Ok(TcpListener::from(socket))
 }
 
 /// Try to find the process using a given port.
@@ -740,6 +721,43 @@ mod tests {
             .unwrap_err();
         assert!(err.contains("already in use"));
         assert!(err.contains("--strict-ports=false"));
+
+        drop(external);
+    }
+
+    #[test]
+    fn test_allocate_detects_wildcard_ipv4_binding() {
+        // Simulate a process bound to 0.0.0.0 (all interfaces)
+        let external = TcpListener::bind("0.0.0.0:0").unwrap();
+        let port = external.local_addr().unwrap().port();
+
+        let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
+
+        // Allocator should skip this port and allocate the next one
+        let allocated = allocator.allocate("server", "http", port).unwrap();
+        assert_ne!(
+            allocated, port,
+            "Should not allocate a port bound on 0.0.0.0"
+        );
+
+        drop(external);
+    }
+
+    #[test]
+    fn test_allocate_detects_wildcard_ipv6_binding() {
+        // Simulate a process bound to [::1]
+        let external = match TcpListener::bind("[::1]:0") {
+            Ok(l) => l,
+            Err(_) => return, // IPv6 unavailable, skip test
+        };
+        let port = external.local_addr().unwrap().port();
+
+        let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
+
+        let allocated = allocator.allocate("server", "http", port).unwrap();
+        assert_ne!(allocated, port, "Should not allocate a port bound on [::1]");
 
         drop(external);
     }
