@@ -162,7 +162,7 @@ rec {
                   runtime = devenv_runtime;
                 })
                 (lib.optionalAttrs (builtins.hasAttr "state" options.devenv && devenv_state != null) {
-                  state = devenv_state;
+                  state = lib.mkForce devenv_state;
                 })
                 (lib.optionalAttrs (builtins.hasAttr "direnvrcLatestVersion" options.devenv) {
                   direnvrcLatestVersion = devenv_direnvrc_latest_version;
