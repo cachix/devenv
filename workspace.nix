@@ -1,9 +1,18 @@
 # Tooling to build the workspace crates
-{ lib
+
+{
+  # The profile to build with, e.g. "release" or "debug".
+  cargoProfile ? "release"
+, # The git revision to display in `devenv version`.
+  gitRev ? ""
+, # Whether this is a release. If false, release update checks are disabled.
+  isRelease ? false
+
+, # The Nix package to use.
+  nix
+
+, lib
 , callPackage
-, cargoProfile ? "release"
-, gitRev ? ""
-, isRelease ? false
 ,
 }:
 
@@ -68,6 +77,7 @@ in
         cargoProfile
         gitRev
         isRelease
+        nix
         ;
     };
 

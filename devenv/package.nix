@@ -11,7 +11,7 @@
 , rustPlatform
 , cachix
 , nixd
-, gitMinimal
+, gitSetupHook
 , openssl
 , dbus
 , protobuf
@@ -28,10 +28,12 @@ rustPlatform.buildRustPackage {
   pname = "devenv";
   inherit src version cargoLock;
 
-  RUSTFLAGS = "--cfg tracing_unstable";
-  DEVENV_GIT_REV = gitRev;
-  DEVENV_IS_RELEASE = if isRelease then "true" else "";
-  LIBSQLITE3_SYS_USE_PKG_CONFIG = "1";
+  env = {
+    DEVENV_GIT_REV = gitRev;
+    DEVENV_IS_RELEASE = if isRelease then "true" else "";
+    RUSTFLAGS = "--cfg tracing_unstable";
+    LIBSQLITE3_SYS_USE_PKG_CONFIG = "1";
+  };
 
   cargoBuildFlags = [ "-p devenv -p devenv-run-tests" ];
   buildType = cargoProfile;
@@ -41,6 +43,7 @@ rustPlatform.buildRustPackage {
     makeBinaryWrapper
     pkg-config
     protobuf
+    llvmPackages.clang-unwrapped
     rustPlatform.bindgenHook
   ];
 
@@ -55,7 +58,6 @@ rustPlatform.buildRustPackage {
     nix.libs.nix-fetchers-c
     nix.libs.nix-main-c
     boehmgc
-    llvmPackages.clang-unwrapped
   ]
   # secretspec
   ++ lib.optional stdenv.isLinux dbus;
@@ -82,14 +84,7 @@ rustPlatform.buildRustPackage {
     (allow mach-lookup (global-name "com.apple.FSEvents"))
   '';
 
-  nativeCheckInputs = [ gitMinimal bash ];
-  preCheck = ''
-    # Initialize git repo for tests that use git-root-relative imports
-    pushd $NIX_BUILD_TOP/source
-    git init -b main
-    git add -A
-    popd
-  '';
+  nativeCheckInputs = [ gitSetupHook bash ];
 
   useNextest = true;
 
