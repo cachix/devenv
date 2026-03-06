@@ -11,6 +11,7 @@ use crate::Devenv;
 use devenv_core::config::Clean;
 use devenv_reload::{BuildContext, BuildError, CommandBuilder, ShellBuilder};
 use devenv_shell::dialect::{BashDialect, RcfileContext, ShellDialect};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 use tokio::sync::Mutex;
@@ -37,6 +38,8 @@ pub struct DevenvShellBuilder {
     eval_cache_pool: Option<sqlx::SqlitePool>,
     /// Shell cache key (from original devenv, to query file inputs for watching)
     shell_cache_key: Option<devenv_eval_cache::EvalCacheKey>,
+    /// Environment variables exported by enterShell tasks (e.g. VIRTUAL_ENV, PATH from venv)
+    task_exports: HashMap<String, String>,
 }
 
 impl DevenvShellBuilder {
@@ -59,6 +62,7 @@ impl DevenvShellBuilder {
         dotfile: std::path::PathBuf,
         eval_cache_pool: Option<sqlx::SqlitePool>,
         shell_cache_key: Option<devenv_eval_cache::EvalCacheKey>,
+        task_exports: HashMap<String, String>,
     ) -> Self {
         Self {
             handle,
@@ -71,6 +75,7 @@ impl DevenvShellBuilder {
             dotfile,
             eval_cache_pool,
             shell_cache_key,
+            task_exports,
         }
     }
 }
@@ -84,9 +89,18 @@ impl ShellBuilder for DevenvShellBuilder {
         if self.cmd.is_none() {
             let bash = &self.bash_path;
 
-            // Write the devenv environment script to a file
+            // Write the devenv environment script to a file, appending task exports
+            // (e.g. VIRTUAL_ENV, PATH with venv) after the Nix shell env so they take precedence.
             let env_script_path = self.dotfile.join("shell-env.sh");
-            std::fs::write(&env_script_path, &self.initial_env_script)
+            let mut env_script = self.initial_env_script.clone();
+            for (key, value) in &self.task_exports {
+                env_script.push_str(&format!(
+                    "export {}={}\n",
+                    shell_escape::escape(std::borrow::Cow::Borrowed(key)),
+                    shell_escape::escape(std::borrow::Cow::Borrowed(value)),
+                ));
+            }
+            std::fs::write(&env_script_path, &env_script)
                 .map_err(|e| BuildError::new(format!("Failed to write env script: {}", e)))?;
 
             let dialect = BashDialect;

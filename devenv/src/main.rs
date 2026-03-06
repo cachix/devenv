@@ -948,7 +948,7 @@ async fn run_reload_shell(
     // Run enterShell tasks with subprocess executor before spawning PTY.
     // Task exports are stored in devenv.task_exports and injected into the
     // shell script by prepare_shell().
-    let _task_exports = devenv.run_enter_shell_tasks(None, verbosity, tui).await?;
+    let task_exports = devenv.run_enter_shell_tasks(None, verbosity, tui).await?;
 
     // Create reload config - watch files will be populated from eval cache
     // during the first build by DevenvShellBuilder
@@ -973,6 +973,7 @@ async fn run_reload_shell(
         dotfile,
         eval_cache_pool,
         shell_cache_key,
+        task_exports,
     );
 
     // Set up communication channels between coordinator and shell runner
