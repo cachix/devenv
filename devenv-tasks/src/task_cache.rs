@@ -17,6 +17,15 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tracing::{debug, warn};
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModifiedFilesCheck {
+    pub modified: bool,
+    pub pattern_count: usize,
+    pub include_pattern_count: usize,
+    pub exclude_pattern_count: usize,
+    pub matched_file_count: usize,
+}
+
 fn normalize_pattern_for_base_dir(pattern: &str, base_dir: &Path) -> String {
     let (negated, raw_pattern) = match pattern.strip_prefix('!') {
         Some(rest) => (true, rest),
@@ -282,9 +291,34 @@ impl TaskCache {
         task_name: &str,
         files: &[String],
     ) -> CacheResult<bool> {
+        Ok(self
+            .check_modified_files_with_stats(task_name, files)
+            .await?
+            .modified)
+    }
+
+    /// Check if any files have been modified for a given task and return counters
+    /// about the matched pattern set for observability.
+    pub async fn check_modified_files_with_stats(
+        &self,
+        task_name: &str,
+        files: &[String],
+    ) -> CacheResult<ModifiedFilesCheck> {
         if files.is_empty() {
-            return Ok(false);
+            return Ok(ModifiedFilesCheck {
+                modified: false,
+                pattern_count: 0,
+                include_pattern_count: 0,
+                exclude_pattern_count: 0,
+                matched_file_count: 0,
+            });
         }
+
+        let include_pattern_count = files
+            .iter()
+            .filter(|pattern| !pattern.starts_with('!'))
+            .count();
+        let exclude_pattern_count = files.len() - include_pattern_count;
 
         // Expand all patterns and collect results
         let expanded_paths = expand_glob_patterns(files);
@@ -301,7 +335,13 @@ impl TaskCache {
             }
         }
 
-        Ok(any_modified)
+        Ok(ModifiedFilesCheck {
+            modified: any_modified,
+            pattern_count: files.len(),
+            include_pattern_count,
+            exclude_pattern_count,
+            matched_file_count: expanded_paths.len(),
+        })
     }
 
     /// Get current Unix timestamp
@@ -719,6 +759,69 @@ mod tests {
                 .check_modified_files(task_name, &patterns)
                 .await
                 .unwrap()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_check_modified_files_with_stats() {
+        let db_temp_dir = TempDir::new().unwrap();
+        let db_path = db_temp_dir.path().join("tasks-glob-stats.db");
+
+        let cache = TaskCache::with_db_path(db_path).await.unwrap();
+        let test_temp_dir = TempDir::new().unwrap();
+        let src_dir = test_temp_dir.path().join("src");
+        let node_modules_dir = test_temp_dir.path().join("node_modules");
+        tokio::fs::create_dir_all(&src_dir).await.unwrap();
+        tokio::fs::create_dir_all(&node_modules_dir).await.unwrap();
+
+        let included_file = src_dir.join("main.ts");
+        let excluded_file = node_modules_dir.join("ignored.ts");
+        tokio::fs::write(&included_file, "export const value = 1;\n")
+            .await
+            .unwrap();
+        tokio::fs::write(&excluded_file, "export const ignored = true;\n")
+            .await
+            .unwrap();
+
+        let task_name = "test_glob_stats_task";
+        let patterns = vec![
+            format!("{}/**/*.ts", test_temp_dir.path().to_string_lossy()),
+            "!**/node_modules/**".to_string(),
+        ];
+
+        let first = cache
+            .check_modified_files_with_stats(task_name, &patterns)
+            .await
+            .unwrap();
+        assert_eq!(
+            first,
+            ModifiedFilesCheck {
+                modified: true,
+                pattern_count: 2,
+                include_pattern_count: 1,
+                exclude_pattern_count: 1,
+                matched_file_count: 1,
+            }
+        );
+
+        cache
+            .update_file_state(task_name, included_file.to_str().unwrap())
+            .await
+            .unwrap();
+
+        let second = cache
+            .check_modified_files_with_stats(task_name, &patterns)
+            .await
+            .unwrap();
+        assert_eq!(
+            second,
+            ModifiedFilesCheck {
+                modified: false,
+                pattern_count: 2,
+                include_pattern_count: 1,
+                exclude_pattern_count: 1,
+                matched_file_count: 1,
+            }
         );
     }
 
