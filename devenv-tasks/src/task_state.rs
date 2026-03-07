@@ -1,16 +1,19 @@
 use crate::SudoContext;
 use crate::config::TaskConfig;
 use crate::executor::{ExecutionContext, OutputCallback, SubprocessExecutor};
-use crate::task_cache::{TaskCache, expand_glob_patterns};
+use crate::task_cache::{ModifiedFilesCheck, TaskCache, expand_glob_patterns};
 use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
 use devenv_processes::{ListenKind, NativeProcessManager, ProcessConfig};
 use miette::{IntoDiagnostic, Result, WrapErr};
+use rand::RngCore;
+use serde_json::json;
 use std::collections::BTreeMap;
 use std::process::Stdio;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs::File;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
@@ -53,6 +56,13 @@ pub struct TaskState {
     pub sudo_context: Option<SudoContext>,
 }
 
+#[derive(Clone, Debug)]
+struct ExecIfModifiedCheckResult {
+    modified: bool,
+    patterns: ModifiedFilesCheck,
+    command_path: Option<ModifiedFilesCheck>,
+}
+
 impl TaskState {
     pub fn new(
         task: TaskConfig,
@@ -72,34 +82,67 @@ impl TaskState {
     async fn check_files_modified_result(
         &self,
         cache: &TaskCache,
-    ) -> Result<bool, devenv_cache_core::error::CacheError> {
+    ) -> Result<ExecIfModifiedCheckResult, devenv_cache_core::error::CacheError> {
         if self.task.exec_if_modified.is_empty() {
-            return Ok(false);
+            return Ok(ExecIfModifiedCheckResult {
+                modified: false,
+                patterns: ModifiedFilesCheck {
+                    modified: false,
+                    pattern_count: 0,
+                    include_pattern_count: 0,
+                    exclude_pattern_count: 0,
+                    matched_file_count: 0,
+                },
+                command_path: None,
+            });
         }
 
-        let patterns_modified = cache
-            .check_modified_files(&self.task.name, &self.task.exec_if_modified)
+        let patterns = cache
+            .check_modified_files_with_stats(&self.task.name, &self.task.exec_if_modified)
             .await?;
-        if patterns_modified {
-            return Ok(true);
+        if patterns.modified {
+            return Ok(ExecIfModifiedCheckResult {
+                modified: true,
+                patterns,
+                command_path: None,
+            });
         }
 
         // Track command path changes separately so negation patterns in exec_if_modified
         // don't suppress cache invalidation for the task script itself.
         if let Some(cmd) = &self.task.command {
-            return cache
-                .check_modified_files(&self.task.name, std::slice::from_ref(cmd))
-                .await;
+            let command_path = cache
+                .check_modified_files_with_stats(&self.task.name, std::slice::from_ref(cmd))
+                .await?;
+            return Ok(ExecIfModifiedCheckResult {
+                modified: command_path.modified,
+                patterns,
+                command_path: Some(command_path),
+            });
         }
 
-        Ok(false)
+        Ok(ExecIfModifiedCheckResult {
+            modified: false,
+            patterns,
+            command_path: None,
+        })
     }
 
     /// Check if any files specified in exec_if_modified have been modified.
     /// Returns true if any files have been modified or if there was an error checking.
     async fn check_modified_files(&self, cache: &TaskCache) -> bool {
+        let started_at = SystemTime::now();
+        let started_monotonic = Instant::now();
         match self.check_files_modified_result(cache).await {
-            Ok(modified) => modified,
+            Ok(result) => {
+                self.emit_exec_if_modified_status_span(
+                    &result,
+                    started_at,
+                    started_monotonic.elapsed().as_millis(),
+                )
+                .await;
+                result.modified
+            }
             Err(e) => {
                 // Log the error and default to running the task if there's an error
                 tracing::warn!(
@@ -109,6 +152,129 @@ impl TaskState {
                 );
                 true
             }
+        }
+    }
+
+    async fn emit_exec_if_modified_status_span(
+        &self,
+        result: &ExecIfModifiedCheckResult,
+        started_at: SystemTime,
+        eval_ms: u128,
+    ) {
+        if self.task.exec_if_modified.is_empty() {
+            return;
+        }
+
+        if std::env::var_os("OTEL_EXPORTER_OTLP_ENDPOINT").is_none()
+            && std::env::var_os("OTEL_SPAN_SPOOL_DIR").is_none()
+        {
+            return;
+        }
+
+        let end_at = SystemTime::now();
+        let start_ns = match started_at.duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration.as_nanos().to_string(),
+            Err(_) => return,
+        };
+        let end_ns = match end_at.duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration.as_nanos().to_string(),
+            Err(_) => return,
+        };
+
+        let mut trace_id = random_hex(16);
+        let mut parent_span_id = None;
+        if let Some(traceparent) =
+            std::env::var_os("OTEL_TASK_TRACEPARENT").or_else(|| std::env::var_os("TRACEPARENT"))
+            && let Some(parsed) = parse_traceparent(&traceparent.to_string_lossy())
+        {
+            trace_id = parsed.trace_id;
+            parent_span_id = Some(parsed.parent_span_id);
+        }
+
+        let exit_code = if result.modified { 1 } else { 0 };
+        let mut attributes = vec![
+            json!({"key": "service.name", "value": {"stringValue": "dt-task"}}),
+            json!({"key": "exit.code", "value": {"intValue": exit_code.to_string()}}),
+            json!({"key": "task.phase", "value": {"stringValue": "status"}}),
+            json!({"key": "status.method", "value": {"stringValue": "exec_if_modified"}}),
+            json!({"key": "task.exec_if_modified.pattern_count", "value": {"intValue": result.patterns.pattern_count.to_string()}}),
+            json!({"key": "task.exec_if_modified.include_pattern_count", "value": {"intValue": result.patterns.include_pattern_count.to_string()}}),
+            json!({"key": "task.exec_if_modified.exclude_pattern_count", "value": {"intValue": result.patterns.exclude_pattern_count.to_string()}}),
+            json!({"key": "task.exec_if_modified.matched_file_count", "value": {"intValue": result.patterns.matched_file_count.to_string()}}),
+            json!({"key": "task.exec_if_modified.modified", "value": {"boolValue": result.modified}}),
+            json!({"key": "task.exec_if_modified.eval_ms", "value": {"intValue": eval_ms.to_string()}}),
+            json!({"key": "task.cached", "value": {"boolValue": !result.modified}}),
+        ];
+
+        if let Ok(devenv_root) = std::env::var("DEVENV_ROOT") {
+            attributes.push(json!({"key": "devenv.root", "value": {"stringValue": devenv_root}}));
+        }
+
+        if let Some(command_path) = &result.command_path {
+            attributes.push(
+                json!({"key": "task.exec_if_modified.command_path_checked", "value": {"boolValue": true}}),
+            );
+            attributes.push(json!({
+                "key": "task.exec_if_modified.command_path_matched_file_count",
+                "value": {"intValue": command_path.matched_file_count.to_string()}
+            }));
+            attributes.push(json!({
+                "key": "task.exec_if_modified.command_path_modified",
+                "value": {"boolValue": command_path.modified}
+            }));
+        }
+
+        let mut span = json!({
+            "traceId": trace_id,
+            "spanId": random_hex(8),
+            "name": format!("{}:status", self.task.name),
+            "kind": 1,
+            "startTimeUnixNano": start_ns,
+            "endTimeUnixNano": end_ns,
+            "attributes": attributes,
+            "status": {"code": 1},
+        });
+        if let Some(parent_span_id) = parent_span_id {
+            span["parentSpanId"] = json!(parent_span_id);
+        }
+
+        let payload = json!({
+            "resourceSpans": [{
+                "resource": {
+                    "attributes": [
+                        {"key": "service.name", "value": {"stringValue": "dt-task"}}
+                    ]
+                },
+                "scopeSpans": [{
+                    "scope": {"name": "devenv-tasks"},
+                    "spans": [span]
+                }]
+            }]
+        });
+
+        let mut command = Command::new("otel-span");
+        command
+            .arg("emit")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+
+        let Ok(mut child) = command.spawn() else {
+            return;
+        };
+
+        if let Some(mut stdin) = child.stdin.take()
+            && let Ok(payload) = serde_json::to_vec(&payload)
+        {
+            let _ = stdin.write_all(&payload).await;
+        }
+
+        if let Err(error) = child.wait().await {
+            tracing::debug!(
+                "Failed to emit exec_if_modified status span for task {}: {}",
+                self.task.name,
+                error
+            );
         }
     }
 
@@ -654,4 +820,32 @@ impl TaskState {
             ))
         }
     }
+}
+
+struct TraceparentContext {
+    trace_id: String,
+    parent_span_id: String,
+}
+
+fn parse_traceparent(traceparent: &str) -> Option<TraceparentContext> {
+    let mut parts = traceparent.split('-');
+    let _version = parts.next()?;
+    let trace_id = parts.next()?;
+    let parent_span_id = parts.next()?;
+    let _flags = parts.next()?;
+
+    if trace_id.len() != 32 || parent_span_id.len() != 16 {
+        return None;
+    }
+
+    Some(TraceparentContext {
+        trace_id: trace_id.to_string(),
+        parent_span_id: parent_span_id.to_string(),
+    })
+}
+
+fn random_hex(byte_len: usize) -> String {
+    let mut bytes = vec![0_u8; byte_len];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }

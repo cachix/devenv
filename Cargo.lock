@@ -1745,6 +1745,7 @@ dependencies = [
  "tokio-test",
  "tokio-util",
  "tracing",
+ "which 8.0.0",
 ]
 
 [[package]]
