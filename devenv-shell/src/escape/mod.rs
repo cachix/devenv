@@ -95,6 +95,12 @@ pub enum SequenceEvent {
     PrimaryDA {
         raw_bytes: Vec<u8>,
     },
+    /// CSI 5 n (Device Status Report) or CSI 6 n (Cursor Position Report request).
+    /// Programs send CSI 6 n to query cursor position; the terminal responds
+    /// with CSI row ; col R on stdin.
+    DeviceStatusReport {
+        raw_bytes: Vec<u8>,
+    },
     /// `ESC =` (DECKPAM) or `ESC >` (DECKPNM) — keypad application/numeric mode.
     /// Part of `smkx`/`rmkx` terminfo capabilities alongside DECCKM.
     KeypadMode {
@@ -267,6 +273,10 @@ impl EscapeScanner {
                         } else if byte == b'J' && self.csi_param == 3 {
                             let raw_bytes = std::mem::take(&mut self.seq_bytes);
                             events.push(SequenceEvent::ClearScrollback { raw_bytes });
+                            self.state = RouterState::Ground;
+                        } else if byte == b'n' && (self.csi_param == 5 || self.csi_param == 6) {
+                            let raw_bytes = std::mem::take(&mut self.seq_bytes);
+                            events.push(SequenceEvent::DeviceStatusReport { raw_bytes });
                             self.state = RouterState::Ground;
                         } else {
                             self.reset();
@@ -851,6 +861,59 @@ mod tests {
         let events = scanner.scan(b"\x1b[c");
         assert_eq!(events.len(), 1);
         assert!(matches!(events[0], SequenceEvent::PrimaryDA { .. }));
+    }
+
+    // -- Device Status Report (DSR/CPR) tests --
+
+    #[test]
+    fn detects_cpr_request() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[6n");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::DeviceStatusReport { ref raw_bytes } = events[0] else {
+            panic!("expected DeviceStatusReport");
+        };
+        assert_eq!(raw_bytes, b"\x1b[6n");
+    }
+
+    #[test]
+    fn detects_dsr_request() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[5n");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::DeviceStatusReport { ref raw_bytes } = events[0] else {
+            panic!("expected DeviceStatusReport");
+        };
+        assert_eq!(raw_bytes, b"\x1b[5n");
+    }
+
+    #[test]
+    fn cpr_split_across_buffers() {
+        let mut scanner = EscapeScanner::new();
+
+        let events1 = scanner.scan(b"\x1b[");
+        assert!(events1.is_empty());
+
+        let events2 = scanner.scan(b"6");
+        assert!(events2.is_empty());
+
+        let events3 = scanner.scan(b"n");
+        assert_eq!(events3.len(), 1);
+        assert!(matches!(
+            events3[0],
+            SequenceEvent::DeviceStatusReport { .. }
+        ));
+    }
+
+    #[test]
+    fn cpr_interleaved_with_text() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"hello\x1b[6nworld");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            events[0],
+            SequenceEvent::DeviceStatusReport { .. }
+        ));
     }
 
     // -- Keypad mode (DECKPAM/DECKPNM) tests --

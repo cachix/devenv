@@ -1268,8 +1268,9 @@ impl ShellSession {
                     // pushes old TUI content into scrollback.
                     esc.clear_scrollback = true;
                 }
-                SequenceEvent::PrimaryDA { raw_bytes } => {
-                    // Forward to the real terminal. The terminal's DA1 response
+                SequenceEvent::PrimaryDA { raw_bytes }
+                | SequenceEvent::DeviceStatusReport { raw_bytes } => {
+                    // Forward terminal query to the real terminal. The response
                     // arrives on stdin, passes through StdinFilter (it's CSI,
                     // not OSC), gets written to the PTY, and reaches the
                     // program that sent the query.
