@@ -16158,7 +16158,7 @@ true
 
 
 An optional debugger package to use with c.
-The default is ` gdb `, if supported on the current system.
+The default is ` lldb ` on macOS, ` gdb ` on Linux (if supported), or ` null ` otherwise.
 
 
 
