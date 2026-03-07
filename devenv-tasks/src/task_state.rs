@@ -67,6 +67,53 @@ impl TaskState {
         }
     }
 
+    /// Validate that the working directory exists and is a directory.
+    fn validate_cwd(&self) -> Result<()> {
+        if let Some(cwd) = &self.task.cwd {
+            let cwd_path = std::path::Path::new(cwd);
+            if !cwd_path.exists() {
+                miette::bail!(
+                    "Working directory for task '{}' does not exist: {}",
+                    self.task.name,
+                    cwd
+                );
+            }
+            if !cwd_path.is_dir() {
+                miette::bail!(
+                    "Working directory for task '{}' is not a directory: {}",
+                    self.task.name,
+                    cwd
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Try to get cached output for this task, logging any errors.
+    async fn get_cached_output(&self, cache: &TaskCache) -> Option<serde_json::Value> {
+        match cache.get_task_output(&self.task.name).await {
+            Ok(Some(output)) => {
+                tracing::debug!(
+                    "Found cached output for task {} in database",
+                    self.task.name
+                );
+                Some(output)
+            }
+            Ok(None) => {
+                tracing::debug!("No cached output found for task {}", self.task.name);
+                None
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to get cached output for task {}: {}",
+                    self.task.name,
+                    e
+                );
+                None
+            }
+        }
+    }
+
     /// Handle file modification checking with centralized error handling.
     /// Returns a Result with a boolean indicating if files were modified.
     async fn check_files_modified_result(
@@ -203,30 +250,8 @@ impl TaskState {
 
         // Set working directory if specified
         if let Some(cwd) = &self.task.cwd {
-            let cwd_path = std::path::Path::new(cwd);
-            if !cwd_path.exists() {
-                miette::bail!(
-                    "Working directory for task '{}' does not exist: {}",
-                    self.task.name,
-                    cwd
-                );
-            }
-            if !cwd_path.is_dir() {
-                miette::bail!(
-                    "Working directory for task '{}' is not a directory: {}",
-                    self.task.name,
-                    cwd
-                );
-            }
+            self.validate_cwd()?;
             command.current_dir(cwd);
-        }
-
-        // Set DEVENV_TASK_INPUT
-        if let Some(input) = &self.task.input {
-            let input_json = serde_json::to_string(input)
-                .into_diagnostic()
-                .wrap_err("Failed to serialize task input to JSON")?;
-            command.env("DEVENV_TASK_INPUT", input_json);
         }
 
         // Set environment variables
@@ -458,21 +483,7 @@ impl TaskState {
         if !refresh_task_cache {
             if let Some(cmd) = &self.task.status {
                 // First check if we have cached output from a previous run
-                let task_name = &self.task.name;
-                let cached_output = match cache.get_task_output(task_name).await {
-                    Ok(Some(output)) => {
-                        tracing::debug!("Found cached output for task {} in database", task_name);
-                        Some(output)
-                    }
-                    Ok(None) => {
-                        tracing::debug!("No cached output found for task {}", task_name);
-                        None
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to get cached output for task {}: {}", task_name, e);
-                        None
-                    }
-                };
+                let cached_output = self.get_cached_output(cache).await;
 
                 let (mut command, _) = self
                     .prepare_command(cmd, outputs, shell_env)
@@ -492,7 +503,11 @@ impl TaskState {
 
                         if output.status.success() {
                             let output = Output(cached_output);
-                            tracing::debug!("Task {} skipped with output: {:?}", task_name, output);
+                            tracing::debug!(
+                                "Task {} skipped with output: {:?}",
+                                self.task.name,
+                                output
+                            );
                             task_activity.cached();
                             return Ok(TaskCompleted::Skipped(Skipped::Cached(output)));
                         }
@@ -524,35 +539,12 @@ impl TaskState {
                 );
 
                 if !files_modified {
-                    // If no status command but we have paths to check, and none are modified,
-                    // First check if we have outputs in the current run's outputs map
-                    let mut task_output = outputs.get(&self.task.name).cloned();
-
-                    // If not, try to load from the cache
-                    if task_output.is_none() {
-                        match cache.get_task_output(&self.task.name).await {
-                            Ok(Some(cached_output)) => {
-                                tracing::debug!(
-                                    "Found cached output for task {} in database",
-                                    self.task.name
-                                );
-                                task_output = Some(cached_output);
-                            }
-                            Ok(None) => {
-                                tracing::debug!(
-                                    "No cached output found for task {}",
-                                    self.task.name
-                                );
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    "Failed to get cached output for task {}: {}",
-                                    self.task.name,
-                                    e
-                                );
-                            }
-                        }
-                    }
+                    // First check if we have outputs in the current run's outputs map,
+                    // then fall back to the cache
+                    let task_output = match outputs.get(&self.task.name).cloned() {
+                        Some(output) => Some(output),
+                        None => self.get_cached_output(cache).await,
+                    };
 
                     tracing::debug!(
                         "Skipping task {} due to unmodified files, output: {:?}",
@@ -577,23 +569,7 @@ impl TaskState {
             .start();
 
         // Validate working directory if specified
-        if let Some(cwd) = &self.task.cwd {
-            let cwd_path = std::path::Path::new(cwd);
-            if !cwd_path.exists() {
-                miette::bail!(
-                    "Working directory for task '{}' does not exist: {}",
-                    self.task.name,
-                    cwd
-                );
-            }
-            if !cwd_path.is_dir() {
-                miette::bail!(
-                    "Working directory for task '{}' is not a directory: {}",
-                    self.task.name,
-                    cwd
-                );
-            }
-        }
+        self.validate_cwd()?;
 
         // Prepare environment and output file
         let (env, outputs_file) = self
@@ -624,9 +600,7 @@ impl TaskState {
             }
 
             if let Some(cmd) = &self.task.command {
-                for path in expand_glob_patterns(std::slice::from_ref(cmd)) {
-                    cache.update_file_state(&self.task.name, &path).await?;
-                }
+                cache.update_file_state(&self.task.name, cmd).await?;
             }
         }
 
