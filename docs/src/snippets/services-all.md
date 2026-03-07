@@ -29,6 +29,7 @@
   services.prometheus.enable = true;
   services.rabbitmq.enable = true;
   services.redis.enable = true;
+  services.rustfs.enable = true;
   services.sqld.enable = true;
   services.tailscale.enable = true;
   services.temporal.enable = true;
