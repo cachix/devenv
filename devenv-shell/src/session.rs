@@ -47,6 +47,10 @@ struct EscapeState {
     /// Set when CSI 3 J is seen — deferred so the caller can emit it *after*
     /// `scroll_region` pushes old TUI content into scrollback.
     clear_scrollback: bool,
+    /// Kitty keyboard protocol stack depth.
+    kitty_keyboard_depth: u32,
+    /// XTMODIFYOTHERKEYS is enabled.
+    modify_other_keys: bool,
 }
 
 impl EscapeState {
@@ -57,6 +61,8 @@ impl EscapeState {
             keypad_application_mode: false,
             erase_display: false,
             clear_scrollback: false,
+            kitty_keyboard_depth: 0,
+            modify_other_keys: false,
         }
     }
 
@@ -169,6 +175,8 @@ enum StdinFilterState {
     OscDigit,
     OscPayload,
     OscPayloadEsc,
+    DcsPayload,
+    DcsPayloadEsc,
 }
 
 impl StdinFilter {
@@ -201,6 +209,9 @@ impl StdinFilter {
                     if byte == b']' {
                         self.buf.push(byte);
                         self.state = StdinFilterState::OscDigit;
+                    } else if byte == b'P' {
+                        self.buf.push(byte);
+                        self.state = StdinFilterState::DcsPayload;
                     } else if byte == 0x1b {
                         output.push(0x1b);
                         self.buf.clear();
@@ -261,6 +272,35 @@ impl StdinFilter {
                         output.push(byte);
                         self.buf.clear();
                         self.state = StdinFilterState::Ground;
+                    }
+                }
+                StdinFilterState::DcsPayload => {
+                    if byte == 0x1b {
+                        self.buf.push(byte);
+                        self.state = StdinFilterState::DcsPayloadEsc;
+                    } else {
+                        self.buf.push(byte);
+                        if self.buf.len() > 4096 {
+                            output.extend_from_slice(&self.buf);
+                            self.buf.clear();
+                            self.state = StdinFilterState::Ground;
+                        }
+                    }
+                }
+                StdinFilterState::DcsPayloadEsc => {
+                    if byte == b'\\' {
+                        // ST (ESC \) terminates DCS — drop the entire sequence
+                        self.buf.clear();
+                        self.state = StdinFilterState::Ground;
+                    } else if byte == 0x1b {
+                        output.extend_from_slice(&self.buf[..self.buf.len() - 1]);
+                        self.buf.clear();
+                        self.buf.push(byte);
+                        self.state = StdinFilterState::Esc;
+                    } else {
+                        // ESC wasn't ST — continue accumulating
+                        self.buf.push(byte);
+                        self.state = StdinFilterState::DcsPayload;
                     }
                 }
             }
@@ -1268,13 +1308,30 @@ impl ShellSession {
                     // pushes old TUI content into scrollback.
                     esc.clear_scrollback = true;
                 }
-                SequenceEvent::PrimaryDA { raw_bytes }
-                | SequenceEvent::DeviceStatusReport { raw_bytes } => {
-                    // Forward terminal query to the real terminal. The response
-                    // arrives on stdin, passes through StdinFilter (it's CSI,
-                    // not OSC), gets written to the PTY, and reaches the
-                    // program that sent the query.
+                SequenceEvent::ForwardCsi { raw_bytes } => {
                     stdout.write_all(&raw_bytes)?;
+                }
+                SequenceEvent::ForwardDcs { raw_bytes } => {
+                    stdout.write_all(&raw_bytes)?;
+                }
+                SequenceEvent::KittyKeyboard {
+                    raw_bytes,
+                    stack_delta,
+                } => {
+                    stdout.write_all(&raw_bytes)?;
+                    if stack_delta > 0 {
+                        esc.kitty_keyboard_depth =
+                            esc.kitty_keyboard_depth.saturating_add(stack_delta as u32);
+                    } else if stack_delta < 0 {
+                        esc.kitty_keyboard_depth = esc
+                            .kitty_keyboard_depth
+                            .saturating_sub((-stack_delta) as u32);
+                    }
+                    // stack_delta == 0 is "set" — depth stays the same
+                }
+                SequenceEvent::ModifyOtherKeys { raw_bytes, enabled } => {
+                    stdout.write_all(&raw_bytes)?;
+                    esc.modify_other_keys = enabled;
                 }
                 SequenceEvent::KeypadMode { application } => {
                     stdout.write_all(if application { b"\x1b=" } else { b"\x1b>" })?;
@@ -1287,20 +1344,29 @@ impl ShellSession {
 
     /// Reset any forwarded DEC modes on exit so the terminal is left clean.
     fn cleanup_forwarded_modes(esc: &EscapeState, stdout: &mut impl Write) -> io::Result<()> {
+        let mut needs_flush = false;
         if esc.in_alternate_screen {
             queue!(stdout, terminal::LeaveAlternateScreen)?;
+            needs_flush = true;
         }
         for &mode in &esc.forwarded_dec_modes {
             write!(stdout, "\x1b[?{}l", mode)?;
+            needs_flush = true;
         }
         if esc.keypad_application_mode {
-            // Reset to numeric keypad mode (DECKPNM)
             stdout.write_all(b"\x1b>")?;
+            needs_flush = true;
         }
-        if esc.in_alternate_screen
-            || !esc.forwarded_dec_modes.is_empty()
-            || esc.keypad_application_mode
-        {
+        // Pop all kitty keyboard stack entries
+        for _ in 0..esc.kitty_keyboard_depth {
+            stdout.write_all(b"\x1b[<u")?;
+            needs_flush = true;
+        }
+        if esc.modify_other_keys {
+            stdout.write_all(b"\x1b[>n")?;
+            needs_flush = true;
+        }
+        if needs_flush {
             stdout.flush()?;
         }
         Ok(())

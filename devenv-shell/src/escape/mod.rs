@@ -1,8 +1,8 @@
 //! Stateful byte-level scanner for escape sequences in raw PTY output.
 //!
-//! Detects DEC private mode sequences (`CSI ? <params> h/l`) and
-//! OSC queries (`OSC ... ? BEL/ST`) so they can be forwarded to
-//! the real terminal (avt consumes them internally).
+//! Detects DEC private mode sequences, CSI queries, DCS sequences, and
+//! OSC queries so they can be forwarded to the real terminal (avt consumes
+//! them internally).
 
 mod dec_mode;
 mod osc;
@@ -13,12 +13,15 @@ use osc::{OscParser, OscResult};
 /// DEC private modes that should be forwarded to the real terminal.
 const FORWARDED_MODES: &[u16] = &[
     1, // cursor key mode (DECCKM) — applications use smkx/rmkx to toggle
+    9, // X10 mouse mode (legacy)
     47, 1047, 1049, // alternate screen
     1000, 1002, 1003, // mouse tracking
-    1005, 1006, 1015, // mouse encoding
+    1005, 1006, 1015, 1016, // mouse encoding (including SGR pixels)
     2004, // bracketed paste
     1004, // focus events
     2026, // synchronized output
+    2031, // color scheme reporting
+    2048, // in-band size reports
 ];
 
 /// Modes that control alternate screen buffer.
@@ -29,10 +32,13 @@ const ALT_SCREEN_MODES: &[u16] = &[47, 1047, 1049];
 /// 2026, managed per-frame by the renderer).
 pub const CLEANUP_MODES: &[u16] = &[
     1, // cursor key mode (DECCKM)
+    9, // X10 mouse mode
     1000, 1002, 1003, // mouse tracking
-    1005, 1006, 1015, // mouse encoding
+    1005, 1006, 1015, 1016, // mouse encoding
     2004, // bracketed paste
     1004, // focus events
+    2031, // color scheme reporting
+    2048, // in-band size reports
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,16 +95,14 @@ pub enum SequenceEvent {
     ClearScrollback {
         raw_bytes: Vec<u8>,
     },
-    /// CSI c or CSI 0 c — Primary Device Attributes request.
-    /// Programs send this to discover terminal type; crossterm also uses it
-    /// as a sync marker to terminate pending capability queries.
-    PrimaryDA {
+    /// CSI sequence that should be forwarded verbatim to the real terminal.
+    /// Covers terminal queries (DA1, DA2, DA3, DSR, CPR, DECRQM, XTVERSION,
+    /// XTWINOPS, etc.).
+    ForwardCsi {
         raw_bytes: Vec<u8>,
     },
-    /// CSI 5 n (Device Status Report) or CSI 6 n (Cursor Position Report request).
-    /// Programs send CSI 6 n to query cursor position; the terminal responds
-    /// with CSI row ; col R on stdin.
-    DeviceStatusReport {
+    /// DCS sequence that should be forwarded verbatim (XTGETTCAP, DECRQSS).
+    ForwardDcs {
         raw_bytes: Vec<u8>,
     },
     /// `ESC =` (DECKPAM) or `ESC >` (DECKPNM) — keypad application/numeric mode.
@@ -108,6 +112,85 @@ pub enum SequenceEvent {
         /// `false` = numeric mode (DECKPNM, `ESC >`).
         application: bool,
     },
+    /// Kitty keyboard protocol push/pop/set.
+    KittyKeyboard {
+        raw_bytes: Vec<u8>,
+        /// +1 for push, -1 for pop, 0 for set.
+        stack_delta: i8,
+    },
+    /// XTMODIFYOTHERKEYS set/reset.
+    ModifyOtherKeys {
+        raw_bytes: Vec<u8>,
+        enabled: bool,
+    },
+}
+
+/// Maximum number of CSI parameters to accumulate.
+const MAX_CSI_PARAMS: usize = 16;
+/// Maximum number of CSI intermediate bytes.
+const MAX_CSI_INTERMEDIATES: usize = 2;
+/// Maximum DCS payload size before giving up.
+const MAX_DCS_PAYLOAD: usize = 4096;
+
+/// Classification result for a complete CSI sequence.
+enum CsiClass {
+    /// Forward verbatim to the real terminal (query).
+    Forward,
+    /// CSI 2 J — erase display (intercepted for renderer).
+    EraseDisplay,
+    /// CSI 3 J — clear scrollback (intercepted for renderer).
+    ClearScrollback,
+    /// Kitty keyboard push/pop/set.
+    KittyKeyboard { stack_delta: i8 },
+    /// XTMODIFYOTHERKEYS set/reset.
+    ModifyOtherKeys { enabled: bool },
+    /// AVT handles it, no forwarding needed.
+    Ignore,
+}
+
+/// Classify a complete CSI sequence by its intermediates, params, and final byte.
+fn classify_csi(
+    intermediates: &[u8],
+    params: &[u16],
+    param_count: usize,
+    final_byte: u8,
+) -> CsiClass {
+    let p = &params[..param_count];
+    let first = p.first().copied().unwrap_or(0);
+
+    match (intermediates, final_byte) {
+        // Queries — forward to real terminal
+        ([], b'c') if first == 0 => CsiClass::Forward, // DA1
+        ([b'>'], b'c') => CsiClass::Forward,           // DA2
+        ([b'='], b'c') => CsiClass::Forward,           // DA3
+        ([], b'n') if first == 5 || first == 6 => CsiClass::Forward, // DSR/CPR
+        ([b'?'], b'n') => CsiClass::Forward,           // DEC DSR (? 6 n, ? 996 n)
+        ([b'>'], b'q') => CsiClass::Forward,           // XTVERSION
+        ([b'?'], b'u') => CsiClass::Forward,           // Kitty KB query
+        ([b'?', b'$'], b'p') => CsiClass::Forward,     // DECRQM DEC mode
+        ([b'$'], b'p') => CsiClass::Forward,           // DECRQM ANSI mode
+
+        // XTWINOPS queries
+        ([], b't') if matches!(first, 14 | 16 | 18 | 21) => CsiClass::Forward,
+
+        // Erase — intercept for renderer coordination
+        ([], b'J') if first == 2 => CsiClass::EraseDisplay,
+        ([], b'J') if first == 3 => CsiClass::ClearScrollback,
+
+        // Kitty keyboard protocol
+        ([b'>'], b'u') => CsiClass::KittyKeyboard { stack_delta: 1 }, // push
+        ([b'<'], b'u') => CsiClass::KittyKeyboard { stack_delta: -1 }, // pop
+        ([b'='], b'u') => CsiClass::KittyKeyboard { stack_delta: 0 }, // set
+
+        // XTMODIFYOTHERKEYS
+        // CSI > m (no params) or CSI > 0 m → reset (legacy)
+        // CSI > N m where N > 0 → set (may enable depending on sub-params)
+        ([b'>'], b'm') => CsiClass::ModifyOtherKeys { enabled: first > 0 },
+        // CSI > n → reset to default
+        ([b'>'], b'n') => CsiClass::ModifyOtherKeys { enabled: false },
+
+        _ => CsiClass::Ignore,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,25 +198,118 @@ enum RouterState {
     Ground,
     Esc,
     Csi,
-    /// Standard (non-DEC-private) CSI sequence: `CSI <digits> <final>`.
-    CsiStandard,
+    /// Full CSI parameter accumulator.
+    CsiParams,
     Osc,
     /// ESC seen while in OSC — could be ST (`ESC \`) or a new sequence.
     OscEsc,
+    /// DCS sequence accumulator (`ESC P ... ST`).
+    Dcs,
+    /// ESC seen while in DCS — could be ST or start of new sequence.
+    DcsEsc,
+}
+
+/// Full CSI parameter accumulator.
+struct CsiParamState {
+    intermediates: [u8; MAX_CSI_INTERMEDIATES],
+    intermediate_count: usize,
+    params: [u16; MAX_CSI_PARAMS],
+    param_count: usize,
+    current_param: Option<u16>,
+    /// Whether this CSI has a `?` prefix (DEC private mode).
+    has_question: bool,
+    /// Whether the DEC mode parser has rejected (stop feeding it).
+    dec_rejected: bool,
+}
+
+impl CsiParamState {
+    fn reset(&mut self) {
+        self.intermediate_count = 0;
+        self.param_count = 0;
+        self.current_param = None;
+        self.has_question = false;
+        self.dec_rejected = false;
+    }
+
+    /// Feed a byte. Returns true if the byte was consumed (not a final byte).
+    /// Returns false if this is a final byte (0x40-0x7E).
+    fn feed(&mut self, byte: u8) -> Option<u8> {
+        match byte {
+            b'0'..=b'9' => {
+                let cur = self.current_param.get_or_insert(0);
+                *cur = cur
+                    .checked_mul(10)
+                    .and_then(|v| v.checked_add((byte - b'0') as u16))
+                    .unwrap_or(u16::MAX);
+                None
+            }
+            b';' => {
+                if self.param_count < MAX_CSI_PARAMS {
+                    self.params[self.param_count] = self.current_param.unwrap_or(0);
+                    self.param_count += 1;
+                    self.current_param = Some(0);
+                }
+                None
+            }
+            // Intermediate bytes (0x20-0x2F) and private-use markers
+            b'?' => {
+                self.has_question = true;
+                if self.intermediate_count < MAX_CSI_INTERMEDIATES {
+                    self.intermediates[self.intermediate_count] = byte;
+                    self.intermediate_count += 1;
+                }
+                None
+            }
+            b'>' | b'=' | b'<' => {
+                if self.intermediate_count < MAX_CSI_INTERMEDIATES {
+                    self.intermediates[self.intermediate_count] = byte;
+                    self.intermediate_count += 1;
+                }
+                None
+            }
+            b'$' => {
+                if self.intermediate_count < MAX_CSI_INTERMEDIATES {
+                    self.intermediates[self.intermediate_count] = byte;
+                    self.intermediate_count += 1;
+                }
+                None
+            }
+            // Intermediate bytes (space, ", etc.) — not stored since
+            // we don't match on them in the classifier. Sequences using
+            // them (DECSCUSR, DECSCA) are category E (AVT handles).
+            0x20..=0x2F => None,
+            // Final byte (0x40-0x7E)
+            0x40..=0x7E => {
+                // Finalize the last parameter
+                if self.param_count < MAX_CSI_PARAMS
+                    && let Some(val) = self.current_param
+                {
+                    self.params[self.param_count] = val;
+                    self.param_count += 1;
+                }
+                Some(byte)
+            }
+            _ => None,
+        }
+    }
+
+    /// Get the intermediates slice for classification.
+    fn intermediates(&self) -> &[u8] {
+        &self.intermediates[..self.intermediate_count]
+    }
 }
 
 /// Byte-level scanner that detects escape sequences in raw PTY output.
 ///
-/// Routes `ESC [` to the DEC private mode parser and `ESC ]` to the
-/// OSC parser.
+/// Routes `ESC [` to the CSI parameter accumulator, `ESC ]` to the
+/// OSC parser, and `ESC P` to the DCS accumulator.
 /// State persists across calls to handle sequences split across buffer boundaries.
 pub struct EscapeScanner {
     state: RouterState,
     seq_bytes: Vec<u8>,
     dec_parser: DecModeParser,
     osc_parser: OscParser,
-    /// Accumulated numeric parameter for standard CSI sequences.
-    csi_param: u16,
+    csi_params: CsiParamState,
 }
 
 impl EscapeScanner {
@@ -143,7 +319,15 @@ impl EscapeScanner {
             seq_bytes: Vec::new(),
             dec_parser: DecModeParser::new(),
             osc_parser: OscParser::new(),
-            csi_param: 0,
+            csi_params: CsiParamState {
+                intermediates: [0; MAX_CSI_INTERMEDIATES],
+                intermediate_count: 0,
+                params: [0; MAX_CSI_PARAMS],
+                param_count: 0,
+                current_param: None,
+                has_question: false,
+                dec_rejected: false,
+            },
         }
     }
 
@@ -179,10 +363,14 @@ impl EscapeScanner {
                         b'[' => {
                             self.state = RouterState::Csi;
                             self.dec_parser.reset();
+                            self.csi_params.reset();
                         }
                         b']' => {
                             self.state = RouterState::Osc;
                             self.osc_parser.reset();
+                        }
+                        b'P' => {
+                            self.state = RouterState::Dcs;
                         }
                         b'=' | b'>' => {
                             // DECKPAM (ESC =) / DECKPNM (ESC >)
@@ -205,88 +393,83 @@ impl EscapeScanner {
 
                 RouterState::Csi => {
                     if byte == 0x1b {
-                        // ESC aborts current CSI, starts a new sequence
                         self.seq_bytes.clear();
                         self.seq_bytes.push(byte);
                         self.state = RouterState::Esc;
                     } else {
                         self.seq_bytes.push(byte);
-                        match self.dec_parser.feed(byte) {
-                            DecModeResult::Pending => {}
-                            DecModeResult::Complete(action) => {
-                                let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                                let event = match action {
-                                    DecModeAction::Set { modes } => {
-                                        DecModeEvent::Set { modes, raw_bytes }
-                                    }
-                                    DecModeAction::Reset { modes } => {
-                                        DecModeEvent::Reset { modes, raw_bytes }
-                                    }
-                                };
-                                events.push(SequenceEvent::DecMode(event));
-                                self.state = RouterState::Ground;
-                            }
-                            DecModeResult::Reject { private } => {
-                                if private {
-                                    // Had `?` prefix — this is a DEC-private sequence
-                                    // with an unrecognized final byte (e.g. DA1
-                                    // response `CSI ? 62 c`). Don't misinterpret it.
-                                    self.reset();
-                                } else if byte == b'c' {
-                                    // DA1 query with no params (CSI c)
-                                    let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                                    events.push(SequenceEvent::PrimaryDA { raw_bytes });
-                                    self.state = RouterState::Ground;
-                                } else if byte.is_ascii_digit() {
-                                    self.state = RouterState::CsiStandard;
-                                    self.csi_param = (byte - b'0') as u16;
-                                } else {
-                                    self.reset();
-                                }
-                            }
-                        }
-                    }
-                }
 
-                RouterState::CsiStandard => {
-                    if byte == 0x1b {
-                        self.seq_bytes.clear();
-                        self.seq_bytes.push(byte);
-                        self.state = RouterState::Esc;
-                    } else {
-                        self.seq_bytes.push(byte);
-                        if byte.is_ascii_digit() {
-                            self.csi_param = self
-                                .csi_param
-                                .checked_mul(10)
-                                .and_then(|v| v.checked_add((byte - b'0') as u16))
-                                .unwrap_or(u16::MAX);
-                        } else if byte == b'c' && self.csi_param == 0 {
-                            // DA1 with explicit zero param (CSI 0 c)
-                            let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                            events.push(SequenceEvent::PrimaryDA { raw_bytes });
-                            self.state = RouterState::Ground;
-                        } else if byte == b'J' && self.csi_param == 2 {
-                            let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                            events.push(SequenceEvent::EraseDisplay { raw_bytes });
-                            self.state = RouterState::Ground;
-                        } else if byte == b'J' && self.csi_param == 3 {
-                            let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                            events.push(SequenceEvent::ClearScrollback { raw_bytes });
-                            self.state = RouterState::Ground;
-                        } else if byte == b'n' && (self.csi_param == 5 || self.csi_param == 6) {
-                            let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                            events.push(SequenceEvent::DeviceStatusReport { raw_bytes });
-                            self.state = RouterState::Ground;
+                        // First byte after CSI determines the path:
+                        // `?` → DEC private mode (use existing DecModeParser for set/reset)
+                        // Other → general CSI parameter accumulator
+                        if byte == b'?' {
+                            // Feed into both: DecModeParser for h/l, CsiParams for queries
+                            self.dec_parser.feed(byte);
+                            self.csi_params.feed(byte);
+                            self.state = RouterState::CsiParams;
+                        } else if let Some(final_byte) = self.csi_params.feed(byte) {
+                            // Immediate final byte (e.g. CSI c)
+                            self.handle_csi_final(final_byte, events);
+                        } else if byte.is_ascii_digit()
+                            || byte == b';'
+                            || matches!(byte, b'>' | b'=' | b'<' | b'$')
+                            || matches!(byte, 0x20..=0x2F)
+                        {
+                            self.state = RouterState::CsiParams;
                         } else {
                             self.reset();
                         }
                     }
                 }
 
+                RouterState::CsiParams => {
+                    if byte == 0x1b {
+                        self.seq_bytes.clear();
+                        self.seq_bytes.push(byte);
+                        self.state = RouterState::Esc;
+                    } else {
+                        self.seq_bytes.push(byte);
+
+                        // Feed into DecModeParser if we have `?` and it hasn't rejected yet
+                        if self.csi_params.has_question && !self.csi_params.dec_rejected {
+                            let dec_result = self.dec_parser.feed(byte);
+                            match dec_result {
+                                DecModeResult::Pending => {}
+                                DecModeResult::Complete(action) => {
+                                    let raw_bytes = std::mem::take(&mut self.seq_bytes);
+                                    let event = match action {
+                                        DecModeAction::Set { modes } => {
+                                            DecModeEvent::Set { modes, raw_bytes }
+                                        }
+                                        DecModeAction::Reset { modes } => {
+                                            DecModeEvent::Reset { modes, raw_bytes }
+                                        }
+                                    };
+                                    events.push(SequenceEvent::DecMode(event));
+                                    self.state = RouterState::Ground;
+                                    continue;
+                                }
+                                DecModeResult::Reject { private: true } => {
+                                    // Had `?` prefix but wasn't h/l.
+                                    // Stop feeding DecModeParser, fall through
+                                    // to CsiParams for queries like CSI ? u, CSI ? $ p
+                                    self.csi_params.dec_rejected = true;
+                                }
+                                DecModeResult::Reject { private: false } => {
+                                    self.reset();
+                                    continue;
+                                }
+                            }
+                        }
+
+                        if let Some(final_byte) = self.csi_params.feed(byte) {
+                            self.handle_csi_final(final_byte, events);
+                        }
+                    }
+                }
+
                 RouterState::Osc => {
                     if byte == 0x1b {
-                        // Could be ST (ESC \) or a new sequence
                         self.seq_bytes.push(byte);
                         self.state = RouterState::OscEsc;
                     } else {
@@ -307,7 +490,6 @@ impl EscapeScanner {
 
                 RouterState::OscEsc => {
                     if byte == b'\\' {
-                        // ST (ESC \) terminates the OSC
                         self.seq_bytes.push(byte);
                         match self.osc_parser.finish() {
                             OscResult::Complete => {
@@ -320,12 +502,10 @@ impl EscapeScanner {
                             }
                         }
                     } else if byte == 0x1b {
-                        // Another ESC — abort OSC, start new sequence
                         self.seq_bytes.clear();
                         self.seq_bytes.push(byte);
                         self.state = RouterState::Esc;
                     } else {
-                        // ESC wasn't ST — treat ESC + byte as new sequence start
                         self.seq_bytes.clear();
                         self.seq_bytes.push(0x1b);
                         self.seq_bytes.push(byte);
@@ -333,6 +513,7 @@ impl EscapeScanner {
                             b'[' => {
                                 self.state = RouterState::Csi;
                                 self.dec_parser.reset();
+                                self.csi_params.reset();
                             }
                             b']' => {
                                 self.state = RouterState::Osc;
@@ -344,14 +525,98 @@ impl EscapeScanner {
                         }
                     }
                 }
+
+                RouterState::Dcs => {
+                    self.seq_bytes.push(byte);
+                    if byte == 0x1b {
+                        self.state = RouterState::DcsEsc;
+                    } else if self.seq_bytes.len() > MAX_DCS_PAYLOAD {
+                        self.reset();
+                    }
+                }
+
+                RouterState::DcsEsc => {
+                    if byte == b'\\' {
+                        // ST (ESC \) terminates the DCS
+                        self.seq_bytes.push(byte);
+                        let raw_bytes = std::mem::take(&mut self.seq_bytes);
+                        events.push(SequenceEvent::ForwardDcs { raw_bytes });
+                        self.state = RouterState::Ground;
+                    } else if byte == 0x1b {
+                        // Another ESC — abort DCS, start new sequence
+                        self.seq_bytes.clear();
+                        self.seq_bytes.push(byte);
+                        self.state = RouterState::Esc;
+                    } else {
+                        // ESC wasn't ST — abort DCS. The ESC + this byte
+                        // could be a new escape sequence.
+                        self.seq_bytes.clear();
+                        self.seq_bytes.push(0x1b);
+                        self.seq_bytes.push(byte);
+                        match byte {
+                            b'[' => {
+                                self.state = RouterState::Csi;
+                                self.dec_parser.reset();
+                                self.csi_params.reset();
+                            }
+                            b']' => {
+                                self.state = RouterState::Osc;
+                                self.osc_parser.reset();
+                            }
+                            b'P' => {
+                                self.state = RouterState::Dcs;
+                            }
+                            _ => {
+                                self.reset();
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+
+    /// Handle a complete CSI sequence (final byte received).
+    fn handle_csi_final(&mut self, final_byte: u8, events: &mut Vec<SequenceEvent>) {
+        let class = classify_csi(
+            self.csi_params.intermediates(),
+            &self.csi_params.params,
+            self.csi_params.param_count,
+            final_byte,
+        );
+
+        match class {
+            CsiClass::Forward => {
+                let raw_bytes = std::mem::take(&mut self.seq_bytes);
+                events.push(SequenceEvent::ForwardCsi { raw_bytes });
+            }
+            CsiClass::EraseDisplay => {
+                let raw_bytes = std::mem::take(&mut self.seq_bytes);
+                events.push(SequenceEvent::EraseDisplay { raw_bytes });
+            }
+            CsiClass::ClearScrollback => {
+                let raw_bytes = std::mem::take(&mut self.seq_bytes);
+                events.push(SequenceEvent::ClearScrollback { raw_bytes });
+            }
+            CsiClass::KittyKeyboard { stack_delta } => {
+                let raw_bytes = std::mem::take(&mut self.seq_bytes);
+                events.push(SequenceEvent::KittyKeyboard {
+                    raw_bytes,
+                    stack_delta,
+                });
+            }
+            CsiClass::ModifyOtherKeys { enabled } => {
+                let raw_bytes = std::mem::take(&mut self.seq_bytes);
+                events.push(SequenceEvent::ModifyOtherKeys { raw_bytes, enabled });
+            }
+            CsiClass::Ignore => {}
+        }
+        self.state = RouterState::Ground;
     }
 
     fn reset(&mut self) {
         self.state = RouterState::Ground;
         self.seq_bytes.clear();
-        self.csi_param = 0;
     }
 }
 
@@ -802,8 +1067,8 @@ mod tests {
         let mut scanner = EscapeScanner::new();
         let events = scanner.scan(b"\x1b[c");
         assert_eq!(events.len(), 1);
-        let SequenceEvent::PrimaryDA { ref raw_bytes } = events[0] else {
-            panic!("expected PrimaryDA");
+        let SequenceEvent::ForwardCsi { ref raw_bytes } = events[0] else {
+            panic!("expected ForwardCsi, got {:?}", events[0]);
         };
         assert_eq!(raw_bytes, b"\x1b[c");
     }
@@ -813,8 +1078,8 @@ mod tests {
         let mut scanner = EscapeScanner::new();
         let events = scanner.scan(b"\x1b[0c");
         assert_eq!(events.len(), 1);
-        let SequenceEvent::PrimaryDA { ref raw_bytes } = events[0] else {
-            panic!("expected PrimaryDA");
+        let SequenceEvent::ForwardCsi { ref raw_bytes } = events[0] else {
+            panic!("expected ForwardCsi, got {:?}", events[0]);
         };
         assert_eq!(raw_bytes, b"\x1b[0c");
     }
@@ -828,7 +1093,7 @@ mod tests {
 
         let events2 = scanner.scan(b"c");
         assert_eq!(events2.len(), 1);
-        assert!(matches!(events2[0], SequenceEvent::PrimaryDA { .. }));
+        assert!(matches!(events2[0], SequenceEvent::ForwardCsi { .. }));
     }
 
     #[test]
@@ -836,7 +1101,7 @@ mod tests {
         let mut scanner = EscapeScanner::new();
         let events = scanner.scan(b"hello\x1b[cworld");
         assert_eq!(events.len(), 1);
-        assert!(matches!(events[0], SequenceEvent::PrimaryDA { .. }));
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
     }
 
     #[test]
@@ -848,19 +1113,19 @@ mod tests {
         // Scanner recovers
         let events = scanner.scan(b"\x1b[c");
         assert_eq!(events.len(), 1);
-        assert!(matches!(events[0], SequenceEvent::PrimaryDA { .. }));
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
     }
 
     #[test]
     fn da1_response_not_misdetected_as_query() {
         let mut scanner = EscapeScanner::new();
-        // CSI ? 62 c is a DA1 *response*, not a query — must not emit PrimaryDA
+        // CSI ? 62 c is a DA1 *response*, not a query — must not emit ForwardCsi
         let events = scanner.scan(b"\x1b[?62c");
         assert!(events.is_empty());
         // Scanner recovers
         let events = scanner.scan(b"\x1b[c");
         assert_eq!(events.len(), 1);
-        assert!(matches!(events[0], SequenceEvent::PrimaryDA { .. }));
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
     }
 
     // -- Device Status Report (DSR/CPR) tests --
@@ -870,8 +1135,8 @@ mod tests {
         let mut scanner = EscapeScanner::new();
         let events = scanner.scan(b"\x1b[6n");
         assert_eq!(events.len(), 1);
-        let SequenceEvent::DeviceStatusReport { ref raw_bytes } = events[0] else {
-            panic!("expected DeviceStatusReport");
+        let SequenceEvent::ForwardCsi { ref raw_bytes } = events[0] else {
+            panic!("expected ForwardCsi, got {:?}", events[0]);
         };
         assert_eq!(raw_bytes, b"\x1b[6n");
     }
@@ -881,8 +1146,8 @@ mod tests {
         let mut scanner = EscapeScanner::new();
         let events = scanner.scan(b"\x1b[5n");
         assert_eq!(events.len(), 1);
-        let SequenceEvent::DeviceStatusReport { ref raw_bytes } = events[0] else {
-            panic!("expected DeviceStatusReport");
+        let SequenceEvent::ForwardCsi { ref raw_bytes } = events[0] else {
+            panic!("expected ForwardCsi, got {:?}", events[0]);
         };
         assert_eq!(raw_bytes, b"\x1b[5n");
     }
@@ -899,10 +1164,7 @@ mod tests {
 
         let events3 = scanner.scan(b"n");
         assert_eq!(events3.len(), 1);
-        assert!(matches!(
-            events3[0],
-            SequenceEvent::DeviceStatusReport { .. }
-        ));
+        assert!(matches!(events3[0], SequenceEvent::ForwardCsi { .. }));
     }
 
     #[test]
@@ -910,10 +1172,7 @@ mod tests {
         let mut scanner = EscapeScanner::new();
         let events = scanner.scan(b"hello\x1b[6nworld");
         assert_eq!(events.len(), 1);
-        assert!(matches!(
-            events[0],
-            SequenceEvent::DeviceStatusReport { .. }
-        ));
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
     }
 
     // -- Keypad mode (DECKPAM/DECKPNM) tests --
@@ -979,5 +1238,273 @@ mod tests {
             events[1],
             SequenceEvent::KeypadMode { application: false }
         ));
+    }
+
+    // -- New CSI query tests --
+
+    #[test]
+    fn detects_da2() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[>c");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    #[test]
+    fn detects_da3() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[=c");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    #[test]
+    fn detects_xtversion() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[>q");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    #[test]
+    fn detects_kitty_keyboard_query() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[?u");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    #[test]
+    fn detects_dec_dsr() {
+        let mut scanner = EscapeScanner::new();
+        // CSI ? 6 n — origin-mode-aware CPR
+        let events = scanner.scan(b"\x1b[?6n");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    #[test]
+    fn detects_xtwinops_pixel_size() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[14t");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    #[test]
+    fn detects_xtwinops_cell_size() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[16t");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    #[test]
+    fn detects_xtwinops_char_size() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[18t");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    #[test]
+    fn detects_decrqm_dec() {
+        let mut scanner = EscapeScanner::new();
+        // CSI ? 1 $ p — query DEC mode 1
+        let events = scanner.scan(b"\x1b[?1$p");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    #[test]
+    fn detects_decrqm_ansi() {
+        let mut scanner = EscapeScanner::new();
+        // CSI 4 $ p — query ANSI mode 4
+        let events = scanner.scan(b"\x1b[4$p");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    // -- Kitty keyboard protocol tests --
+
+    #[test]
+    fn detects_kitty_keyboard_push() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[>1u");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::KittyKeyboard {
+            stack_delta,
+            ref raw_bytes,
+        } = events[0]
+        else {
+            panic!("expected KittyKeyboard, got {:?}", events[0]);
+        };
+        assert_eq!(stack_delta, 1);
+        assert_eq!(raw_bytes, b"\x1b[>1u");
+    }
+
+    #[test]
+    fn detects_kitty_keyboard_pop() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[<u");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::KittyKeyboard { stack_delta, .. } = events[0] else {
+            panic!("expected KittyKeyboard, got {:?}", events[0]);
+        };
+        assert_eq!(stack_delta, -1);
+    }
+
+    #[test]
+    fn detects_kitty_keyboard_set() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[=1;2u");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::KittyKeyboard { stack_delta, .. } = events[0] else {
+            panic!("expected KittyKeyboard, got {:?}", events[0]);
+        };
+        assert_eq!(stack_delta, 0);
+    }
+
+    // -- XTMODIFYOTHERKEYS tests --
+
+    #[test]
+    fn detects_xtmodifyotherkeys_enable() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[>4m");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::ModifyOtherKeys {
+            enabled,
+            ref raw_bytes,
+        } = events[0]
+        else {
+            panic!("expected ModifyOtherKeys, got {:?}", events[0]);
+        };
+        assert!(enabled);
+        assert_eq!(raw_bytes, b"\x1b[>4m");
+    }
+
+    #[test]
+    fn detects_xtmodifyotherkeys_disable() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[>n");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::ModifyOtherKeys { enabled, .. } = events[0] else {
+            panic!("expected ModifyOtherKeys, got {:?}", events[0]);
+        };
+        assert!(!enabled);
+    }
+
+    #[test]
+    fn xtmodifyotherkeys_no_params_is_reset() {
+        let mut scanner = EscapeScanner::new();
+        // CSI > m with no params resets to legacy (disabled)
+        let events = scanner.scan(b"\x1b[>m");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::ModifyOtherKeys { enabled, .. } = events[0] else {
+            panic!("expected ModifyOtherKeys, got {:?}", events[0]);
+        };
+        assert!(!enabled);
+    }
+
+    #[test]
+    fn xtmodifyotherkeys_zero_param_is_reset() {
+        let mut scanner = EscapeScanner::new();
+        // CSI > 0 m resets to legacy (disabled)
+        let events = scanner.scan(b"\x1b[>0m");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::ModifyOtherKeys { enabled, .. } = events[0] else {
+            panic!("expected ModifyOtherKeys, got {:?}", events[0]);
+        };
+        assert!(!enabled);
+    }
+
+    // -- DCS tests --
+
+    #[test]
+    fn detects_dcs_xtgettcap() {
+        let mut scanner = EscapeScanner::new();
+        // DCS + q 544e ST
+        let events = scanner.scan(b"\x1bP+q544e\x1b\\");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::ForwardDcs { ref raw_bytes } = events[0] else {
+            panic!("expected ForwardDcs, got {:?}", events[0]);
+        };
+        assert_eq!(raw_bytes, b"\x1bP+q544e\x1b\\");
+    }
+
+    #[test]
+    fn detects_dcs_decrqss() {
+        let mut scanner = EscapeScanner::new();
+        // DCS $ q m ST (query SGR)
+        let events = scanner.scan(b"\x1bP$qm\x1b\\");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], SequenceEvent::ForwardDcs { .. }));
+    }
+
+    #[test]
+    fn dcs_split_across_buffers() {
+        let mut scanner = EscapeScanner::new();
+
+        let events1 = scanner.scan(b"\x1bP+q54");
+        assert!(events1.is_empty());
+
+        let events2 = scanner.scan(b"4e\x1b\\");
+        assert_eq!(events2.len(), 1);
+        assert!(matches!(events2[0], SequenceEvent::ForwardDcs { .. }));
+    }
+
+    #[test]
+    fn dcs_esc_mid_sequence_restarts() {
+        let mut scanner = EscapeScanner::new();
+        // ESC P starts DCS, then ESC [ starts a CSI — DCS is aborted
+        let events = scanner.scan(b"\x1bPdata\x1b[c");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    // -- New DEC mode tests --
+
+    #[test]
+    fn mouse_sgr_pixels_mode() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[?1016h");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::DecMode(ref ev) = events[0] else {
+            panic!("expected DecMode");
+        };
+        assert!(ev.has_forwarded_mode());
+    }
+
+    #[test]
+    fn color_scheme_reporting_mode() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[?2031h");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::DecMode(ref ev) = events[0] else {
+            panic!("expected DecMode");
+        };
+        assert!(ev.has_forwarded_mode());
+    }
+
+    #[test]
+    fn in_band_size_reports_mode() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[?2048h");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::DecMode(ref ev) = events[0] else {
+            panic!("expected DecMode");
+        };
+        assert!(ev.has_forwarded_mode());
+    }
+
+    #[test]
+    fn x10_mouse_mode() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[?9h");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::DecMode(ref ev) = events[0] else {
+            panic!("expected DecMode");
+        };
+        assert!(ev.has_forwarded_mode());
     }
 }
