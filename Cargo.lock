@@ -1570,6 +1570,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "watchexec",
  "watchexec-filterer-globset",
 ]
