@@ -185,10 +185,23 @@ in
           );
 
           # Use crate2nix IFD to auto-generate
-          cargoNix = crate2nixTools.appliedCargoNix {
-            name = packageName;
-            src = path;
-          };
+          cargoNix =
+            let
+              toolchain = cfg.toolchainPackage;
+            in
+            pkgs.callPackage
+              (crate2nixTools.generatedCargoNix {
+                name = packageName;
+                src = path;
+              })
+              {
+                buildRustCrateForPkgs =
+                  _:
+                  pkgs.buildRustCrate.override {
+                    rustc = toolchain;
+                    cargo = toolchain;
+                  };
+              };
         in
         cargoNix.rootCrate.build.override args;
     }
