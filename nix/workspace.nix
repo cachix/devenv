@@ -19,7 +19,7 @@
 , installShellFiles
 , glibcLocalesUtf8
 
-  # Rust 
+  # Rust
 , rustPlatform
 , buildRustCrate
 , defaultCrateOverrides
@@ -32,7 +32,7 @@
 }:
 
 let
-  cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
+  cargoToml = builtins.fromTOML (builtins.readFile ../Cargo.toml);
   version = cargoToml.workspace.package.version;
 
   # Override buildRustCrate to use the newer rustc from languages.rust
@@ -43,9 +43,9 @@ let
   };
 
   # Import crate2nix generated file with overrides
-  crateConfig = callPackage ./crate-config.nix { };
+  crateConfig = callPackage ./crate-config.nix { inherit gitRev isRelease; };
 
-  cargoNix = import ./Cargo.nix {
+  cargoNix = import ../Cargo.nix {
     inherit pkgs lib stdenv;
     buildRustCrateForPkgs = _: buildRustCrateNew;
     defaultCrateOverrides = defaultCrateOverrides // crateConfig;
@@ -54,6 +54,8 @@ let
     # This matches the --cfg tracing_unstable passed via crate-config.nix at compile time.
     extraTargetFlags = { tracing_unstable = true; };
   };
+
+  xtask = cargoNix.workspaceMembers.xtask.build;
 
   # Wrap the devenv binary with required paths
   wrapDevenv = drv: stdenv.mkDerivation {
@@ -85,6 +87,22 @@ let
         wrapProgram $out/bin/devenv-run-tests \
           --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
           ${setDefaultLocaleArchive}
+
+        # Generate manpages
+        ${xtask}/bin/xtask generate-manpages --out-dir man
+        installManPage man/*
+
+        # Generate shell completions (devenv must be in PATH)
+        compdir=./completions
+        export PATH="$out/bin:$PATH"
+        for shell in bash fish zsh; do
+          ${xtask}/bin/xtask generate-shell-completion $shell --out-dir $compdir
+        done
+
+        installShellCompletion --cmd devenv \
+          --bash $compdir/devenv.bash \
+          --fish $compdir/devenv.fish \
+          --zsh $compdir/_devenv
       '';
   };
 in

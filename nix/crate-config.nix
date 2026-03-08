@@ -8,13 +8,9 @@
 , pkg-config
 , llvmPackages
 , boehmgc
-, cachix
-, nixd
-, makeBinaryWrapper
-, installShellFiles
-, glibcLocalesUtf8
 , rustPlatform
 , gitRev ? ""
+, isRelease ? false
 }:
 
 let
@@ -46,6 +42,16 @@ let
     export PROTO_ROOT="$NIX_BUILD_TOP/cargo-vendor-dir"
   '';
 
+  tracingUnstable = attrs: {
+    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
+  };
+
+  # Override for crates needing nix C libraries
+  nixLibsOverride = attrs: {
+    buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
+    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
+  };
+
   # Common overrides for crates needing openssl
   opensslOverride = attrs: {
     buildInputs = (attrs.buildInputs or [ ]) ++ [ openssl ];
@@ -64,10 +70,9 @@ let
       ++ lib.optional stdenv.isLinux dbus;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
   };
-in
-{
-  # Main devenv crate - needs all the things
-  devenv = attrs: {
+
+  # Shared override for crates linking against nix, openssl, protobuf, dbus, and bindgen
+  devenvBase = attrs: {
     buildInputs = (attrs.buildInputs or [ ])
       ++ [ openssl ]
       ++ nixLibs
@@ -76,28 +81,23 @@ in
       pkg-config
       protobuf
       rustPlatform.bindgenHook
-      makeBinaryWrapper
-      installShellFiles
     ];
     preConfigure = (attrs.preConfigure or "") + protoSetup;
     extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
+  };
+in
+{
+  # Main devenv crate
+  devenv = attrs: devenvBase attrs // {
     DEVENV_GIT_REV = gitRev;
+    DEVENV_IS_RELEASE = if isRelease then "true" else "";
   };
 
   # devenv-run-tests needs the same deps as devenv
-  devenv-run-tests = attrs: {
-    buildInputs = (attrs.buildInputs or [ ])
-      ++ [ openssl ]
-      ++ nixLibs
-      ++ lib.optional stdenv.isLinux dbus;
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
-      pkg-config
-      protobuf
-      rustPlatform.bindgenHook
-    ];
-    preConfigure = (attrs.preConfigure or "") + protoSetup;
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
-  };
+  devenv-run-tests = devenvBase;
+
+  # xtask links the devenv crate, so it needs the same native libs
+  xtask = devenvBase;
 
   # devenv-nix-backend needs nix libs
   devenv-nix-backend = attrs: {
@@ -128,35 +128,16 @@ in
   # openssl-sys needs openssl
   openssl-sys = opensslOverride;
 
-  # Other crates that need tracing_unstable
-  devenv-core = attrs: {
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
-  };
-
-  devenv-eval-cache = attrs: {
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
-  };
-
-  devenv-tasks = attrs: {
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
-  };
-
-  devenv-tui = attrs: {
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
-  };
-
-  devenv-activity = attrs: {
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
-  };
+  # Crates that need tracing_unstable
+  devenv-core = tracingUnstable;
+  devenv-eval-cache = tracingUnstable;
+  devenv-tasks = tracingUnstable;
+  devenv-tui = tracingUnstable;
+  devenv-activity = tracingUnstable;
 
   # The tracing crate needs tracing_unstable to enable valuable support
-  tracing = attrs: {
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
-  };
-
-  tracing-core = attrs: {
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
-  };
+  tracing = tracingUnstable;
+  tracing-core = tracingUnstable;
 
   # rmcp uses env!("CARGO_CRATE_NAME") at compile time
   rmcp = attrs: {
@@ -172,33 +153,10 @@ in
     ];
   };
 
-  nix-bindings-util = attrs: {
-    buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
-  };
-
-  nix-bindings-store = attrs: {
-    buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
-  };
-
-  nix-bindings-expr = attrs: {
-    buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
-  };
-
-  nix-bindings-flake = attrs: {
-    buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
-  };
-
-  nix-bindings-fetchers = attrs: {
-    buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
-  };
-
-  nix-cmd = attrs: {
-    buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
-  };
+  nix-bindings-util = nixLibsOverride;
+  nix-bindings-store = nixLibsOverride;
+  nix-bindings-expr = nixLibsOverride;
+  nix-bindings-flake = nixLibsOverride;
+  nix-bindings-fetchers = nixLibsOverride;
+  nix-cmd = nixLibsOverride;
 }

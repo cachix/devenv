@@ -96,7 +96,7 @@
           # Use stable Rust from rust-overlay for crate2nix builds
           # (nixpkgs' buildRustCrate uses Rust 1.73 which is too old for some deps)
           rustToolchain = pkgs.rust-bin.stable.latest.default;
-          workspace = pkgs.callPackage ./workspace.nix {
+          workspace = pkgs.callPackage ./nix/workspace.nix {
             inherit pkgs gitRev;
             rustc = rustToolchain;
             cargo = rustToolchain;

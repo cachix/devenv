@@ -1,10 +1,9 @@
-{
-  inputs,
-  pkgs,
-  lib,
-  config,
-  options,
-  ...
+{ inputs
+, pkgs
+, lib
+, config
+, options
+, ...
 }:
 
 let
@@ -42,7 +41,6 @@ in
         8. Create a GitHub release with `gh release create v$ARGUMENTS --title "v$ARGUMENTS" --latest --notes  "<changelog for this release>"`
         9. At the end, tell the user that the package still needs to be bumped in nixpkgs:
            - The package is at pkgs/by-name/de/devenv/package.nix
-           - Sync with ./package.nix from this repo and bump version
       '';
     };
     permissions = {
@@ -125,7 +123,7 @@ in
 
   tasks."devenv:crate2nix" = {
     description = "Generate Cargo.nix from Cargo.lock";
-    exec = "crate2nix generate";
+    exec = "crate2nix generate -h nix/crate-hashes.json";
     execIfModified = [ "Cargo.lock" ];
   };
 
