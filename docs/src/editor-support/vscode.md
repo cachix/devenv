@@ -1,3 +1,5 @@
-It's best to use [direnv integration](../integrations/direnv.md) with [direnv extension](https://marketplace.visualstudio.com/items?itemName=mkhl.direnv).
+Use the [devenv extension for VS Code](https://marketplace.visualstudio.com/items?itemName=datakurre.devenv).
+
+Report any issues at the [extension's issue tracker](https://github.com/datakurre/devenv-vscode/issues).
 
 
