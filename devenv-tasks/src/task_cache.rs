@@ -12,7 +12,7 @@ use ignore::WalkBuilder;
 use ignore::overrides::OverrideBuilder;
 use serde_json::Value;
 use sqlx::Row;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tracing::{debug, warn};
@@ -304,6 +304,62 @@ impl TaskCache {
         Ok(any_modified)
     }
 
+    /// Check if any previously tracked files for a task are no longer in the current set.
+    pub async fn has_removed_files(
+        &self,
+        task_name: &str,
+        current_paths: &[String],
+    ) -> CacheResult<bool> {
+        let db_paths: Vec<String> =
+            sqlx::query_scalar("SELECT path FROM watched_file WHERE task_name = ?")
+                .bind(task_name)
+                .fetch_all(self.pool())
+                .await?;
+
+        let current_set: HashSet<&str> = current_paths.iter().map(|s| s.as_str()).collect();
+        for db_path in &db_paths {
+            if !current_set.contains(db_path.as_str()) {
+                debug!(
+                    "Previously tracked file '{}' for task '{}' no longer matches glob patterns",
+                    db_path, task_name
+                );
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
+
+    /// Remove watched_file entries for a task that are not in the current set of paths.
+    pub async fn cleanup_stale_files(
+        &self,
+        task_name: &str,
+        current_paths: &[String],
+    ) -> CacheResult<()> {
+        let db_paths: Vec<String> =
+            sqlx::query_scalar("SELECT path FROM watched_file WHERE task_name = ?")
+                .bind(task_name)
+                .fetch_all(self.pool())
+                .await?;
+
+        let current_set: HashSet<&str> = current_paths.iter().map(|s| s.as_str()).collect();
+        for db_path in &db_paths {
+            if !current_set.contains(db_path.as_str()) {
+                debug!(
+                    "Removing stale watched_file entry '{}' for task '{}'",
+                    db_path, task_name
+                );
+                sqlx::query("DELETE FROM watched_file WHERE task_name = ? AND path = ?")
+                    .bind(task_name)
+                    .bind(db_path)
+                    .execute(self.pool())
+                    .await?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Get current Unix timestamp
     fn now() -> i64 {
         time::system_time_to_unix_seconds(SystemTime::now())
@@ -494,8 +550,8 @@ impl TaskCache {
             }
             Err(e) => {
                 warn!("Failed to check file {}: {}", path, e);
-                // File doesn't exist or is inaccessible, consider unchanged
-                Ok(false)
+                // File doesn't exist or is inaccessible, consider modified to force re-execution
+                Ok(true)
             }
         }
     }
@@ -1137,5 +1193,97 @@ mod tests {
 
         // Pattern with glob in middle
         assert_eq!(extract_base_dir("/foo/*/bar/*.ts"), Path::new("/foo"));
+    }
+
+    #[sqlx::test]
+    async fn test_deleted_file_detected_as_modified() {
+        let db_temp_dir = TempDir::new().unwrap();
+        let db_path = db_temp_dir.path().join("tasks-del.db");
+        let cache = TaskCache::with_db_path(db_path).await.unwrap();
+
+        let test_temp_dir = TempDir::new().unwrap();
+        let file_a = test_temp_dir.path().join("a.ts");
+        let file_b = test_temp_dir.path().join("b.ts");
+        let file_c = test_temp_dir.path().join("c.ts");
+
+        std::fs::write(&file_a, "a").unwrap();
+        std::fs::write(&file_b, "b").unwrap();
+        std::fs::write(&file_c, "c").unwrap();
+
+        let task_name = "test_delete";
+        let pattern = format!("{}/*.ts", test_temp_dir.path().display());
+
+        // First run: all files are new
+        assert!(
+            cache
+                .check_modified_files(task_name, &[pattern.clone()])
+                .await
+                .unwrap()
+        );
+
+        // Store state for all files
+        for path in expand_glob_patterns(&[pattern.clone()]) {
+            cache.update_file_state(task_name, &path).await.unwrap();
+        }
+
+        // Everything is up to date
+        assert!(
+            !cache
+                .check_modified_files(task_name, &[pattern.clone()])
+                .await
+                .unwrap()
+        );
+
+        // Delete c.ts
+        std::fs::remove_file(&file_c).unwrap();
+
+        // check_modified_files alone won't detect the deletion since c.ts
+        // is no longer in the glob expansion
+        assert!(
+            !cache
+                .check_modified_files(task_name, &[pattern.clone()])
+                .await
+                .unwrap()
+        );
+
+        // has_removed_files detects that a previously tracked file is gone
+        let current_paths = expand_glob_patterns(&[pattern.clone()]);
+        assert!(
+            cache
+                .has_removed_files(task_name, &current_paths)
+                .await
+                .unwrap()
+        );
+    }
+
+    #[sqlx::test]
+    async fn test_inaccessible_file_treated_as_modified() {
+        let db_temp_dir = TempDir::new().unwrap();
+        let db_path = db_temp_dir.path().join("tasks-inacc.db");
+        let cache = TaskCache::with_db_path(db_path).await.unwrap();
+
+        let test_temp_dir = TempDir::new().unwrap();
+        let file_path = test_temp_dir.path().join("test.txt");
+        std::fs::write(&file_path, "content").unwrap();
+
+        let task_name = "test_inaccessible";
+        let path_str = file_path.to_str().unwrap().to_string();
+
+        // Store initial state
+        cache.update_file_state(task_name, &path_str).await.unwrap();
+
+        // File is unchanged
+        assert!(
+            !cache
+                .check_modified_files(task_name, &[path_str.clone()])
+                .await
+                .unwrap()
+        );
+
+        // Delete the file so TrackedFile::new will fail
+        std::fs::remove_file(&file_path).unwrap();
+
+        // is_file_modified should treat the error as modified, not unchanged
+        assert!(cache.is_file_modified(task_name, &path_str).await.unwrap());
     }
 }

@@ -134,12 +134,25 @@ impl TaskState {
         // Track command path changes separately so negation patterns in exec_if_modified
         // don't suppress cache invalidation for the task script itself.
         if let Some(cmd) = &self.task.command {
-            return cache
+            let cmd_modified = cache
                 .check_modified_files(&self.task.name, std::slice::from_ref(cmd))
-                .await;
+                .await?;
+            if cmd_modified {
+                return Ok(true);
+            }
         }
 
-        Ok(false)
+        // Check for files previously tracked in the DB that no longer match the globs
+        // (deleted, renamed, or moved outside the pattern). Build the full set of
+        // currently expected paths so we don't false-positive on command paths.
+        let mut all_current_paths = expand_glob_patterns(&self.task.exec_if_modified);
+        if let Some(cmd) = &self.task.command {
+            all_current_paths.push(cmd.clone());
+        }
+        cache
+            .has_removed_files(&self.task.name, &all_current_paths)
+            .await
+            .map_err(Into::into)
     }
 
     /// Check if any files specified in exec_if_modified have been modified.
@@ -595,9 +608,12 @@ impl TaskState {
         // Only update file states on success - failed tasks should not be cached
         if result.success {
             let expanded_paths = expand_glob_patterns(&self.task.exec_if_modified);
-            for path in expanded_paths {
-                cache.update_file_state(&self.task.name, &path).await?;
+            for path in &expanded_paths {
+                cache.update_file_state(&self.task.name, path).await?;
             }
+            cache
+                .cleanup_stale_files(&self.task.name, &expanded_paths)
+                .await?;
 
             if let Some(cmd) = &self.task.command {
                 cache.update_file_state(&self.task.name, cmd).await?;
