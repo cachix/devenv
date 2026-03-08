@@ -29,6 +29,7 @@
   languages.julia.enable = true;
   languages.kotlin.enable = true;
   languages.lean4.enable = true;
+  languages.lobster.enable = true;
   languages.lua.enable = true;
   languages.nim.enable = true;
   languages.nix.enable = true;
