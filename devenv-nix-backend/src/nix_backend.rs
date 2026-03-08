@@ -30,7 +30,7 @@ use devenv_eval_cache::{
     CacheError, CachedEval, CachingConfig, CachingEvalService, CachingEvalState, ResourceManager,
 };
 use miette::{IntoDiagnostic, Result, WrapErr, miette};
-use nix_bindings_expr::eval_state::{EvalState, EvalStateBuilder, gc_register_my_thread};
+use nix_bindings_expr::eval_state::{EvalState, EvalStateBuilder};
 use nix_bindings_expr::primop::{PrimOp, PrimOpMeta};
 use nix_bindings_expr::to_json::value_to_json;
 use nix_bindings_expr::{EvalCache, SearchParams, SearchResult, search};
@@ -86,7 +86,7 @@ impl Default for ProjectRoot {
 ///
 /// Field order matters: Rust drops fields in declaration order. FFI fields are
 /// ordered at the end so C++ destructors run in the correct dependency order:
-/// caching_eval_state → eval_state → store → settings → activity_logger → _gc_registration
+/// caching_eval_state → eval_state → store → settings → activity_logger
 pub struct NixRustBackend {
     pub nix_settings: NixSettings,
     pub cache_settings: CacheSettings,
@@ -156,10 +156,6 @@ pub struct NixRustBackend {
 
     // Activity logger (must outlive EvalState)
     activity_logger: nix_bindings_expr::logger::ActivityLogger,
-
-    // GC thread registration (must be last FFI field to drop)
-    #[allow(dead_code)]
-    _gc_registration: nix_bindings_expr::eval_state::ThreadRegistrationGuard,
 }
 
 // SAFETY: This is unsafe and relies on several assumptions about the Nix C++ library:
@@ -252,7 +248,9 @@ impl NixRustBackend {
         // Register thread with garbage collector IMMEDIATELY after init()
         // This MUST happen before any other Nix FFI calls (including settings::set)
         // because the Boehm GC requires thread registration before allocations.
-        let gc_registration = gc_register_my_thread()
+        // Uses thread-local storage so deregistration happens on the correct thread,
+        // not whichever thread happens to drop this struct (important in async code).
+        crate::gc_register_current_thread()
             .to_miette()
             .wrap_err("Failed to register thread with Nix garbage collector")?;
 
@@ -439,7 +437,6 @@ impl NixRustBackend {
             flake_settings,
             fetchers_settings,
             activity_logger,
-            _gc_registration: gc_registration,
         };
 
         Ok(backend)
