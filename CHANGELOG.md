@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `execIfModified` task cache not invalidating when a previously watched file is deleted, renamed, or moved outside the glob pattern ([#2577](https://github.com/cachix/devenv/issues/2577)).
 - Fixed task exports (e.g. `VIRTUAL_ENV`, `PATH` from venv) not being set in the reload shell.
 - Fixed port allocation not detecting ports bound to `0.0.0.0` or `[::]`, causing multiple devenv instances to allocate the same port ([#2567](https://github.com/cachix/devenv/issues/2567)).
 - Fixed cursor position requests not being passed through in the shell ([#2570](https://github.com/cachix/devenv/issues/2570)).
