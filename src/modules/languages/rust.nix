@@ -169,6 +169,17 @@ in
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
+      changelogs = [
+        {
+          date = "2026-03-08";
+          title = "`languages.rust.import` now uses your configured toolchain";
+          when = cfg.enable;
+          description = ''
+            Previously, `languages.rust.import` would use the default, stable version of Rust from nixpkgs to build packages. Now, `languages.rust.import` uses the toolchain configured with your development environment (`languages.rust.toolchainPackage`).
+          '';
+        }
+      ];
+
       languages.rust.import = path: args:
         let
           crate2nixTools = pkgs.callPackage "${crate2nix}/tools.nix" { };
