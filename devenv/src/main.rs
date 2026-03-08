@@ -267,28 +267,32 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
 
     // Devenv on background thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
-    let devenv_thread = std::thread::spawn(move || {
-        build_gc_runtime().block_on(async {
-            // Don't race with shutdown - let run_devenv handle shutdown via cancellation token
-            // This ensures process cleanup happens before the future is dropped
-            let output = run_devenv(
-                cli,
-                shutdown_clone.clone(),
-                backend_done_tx,
-                Some(terminal_ready_rx),
-                Some(command_rx),
-            )
-            .await;
+    let devenv_thread = std::thread::Builder::new()
+        .stack_size(NIX_STACK_SIZE)
+        .spawn(move || {
+            build_gc_runtime().block_on(async {
+                // Don't race with shutdown - let run_devenv handle shutdown via cancellation token
+                // This ensures process cleanup happens before the future is dropped
+                let output = run_devenv(
+                    cli,
+                    shutdown_clone.clone(),
+                    backend_done_tx,
+                    Some(terminal_ready_rx),
+                    Some(command_rx),
+                )
+                .await;
 
-            // Trigger shutdown to start cleanup (if not already triggered by signal)
-            shutdown_clone.shutdown();
+                // Trigger shutdown to start cleanup (if not already triggered by signal)
+                shutdown_clone.shutdown();
 
-            // Wait for cleanup to complete (e.g., Nix interrupt, cachix finalization)
-            shutdown_clone.wait_for_shutdown_complete().await;
+                // Wait for cleanup to complete (e.g., Nix interrupt, cachix finalization)
+                shutdown_clone.wait_for_shutdown_complete().await;
 
-            output
+                output
+            })
         })
-    });
+        .into_diagnostic()
+        .wrap_err("Failed to spawn devenv thread")?;
 
     // TUI on main thread (owns terminal)
     // Runs until backend signals completion, then drains remaining events
@@ -366,12 +370,18 @@ impl DevenvOutput {
                 eprintln!("{:?}", err);
             }
             // Run the REPL on a new thread with its own GC-registered runtime
-            let repl_result = std::thread::spawn(move || {
-                build_gc_runtime().block_on(async { devenv.repl().await })
-            })
-            .join()
-            .map_err(|_| miette::miette!("REPL thread panicked"))
-            .and_then(|r| r);
+            let repl_result = std::thread::Builder::new()
+                .stack_size(NIX_STACK_SIZE)
+                .spawn(move || {
+                    build_gc_runtime().block_on(async { devenv.repl().await })
+                })
+                .map_err(|_| miette::miette!("Failed to spawn REPL thread"))
+                .and_then(|handle| {
+                    handle
+                        .join()
+                        .map_err(|_| miette::miette!("REPL thread panicked"))
+                        .and_then(|r| r)
+                });
             DebuggerResult::Launched(repl_result)
         } else {
             DebuggerResult::NotLaunched(self.result)
