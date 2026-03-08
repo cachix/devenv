@@ -10,6 +10,7 @@ mod pty;
 mod session;
 mod status_line;
 mod terminal;
+mod terminal_commands;
 mod utf8_accumulator;
 
 // Protocol types

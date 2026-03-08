@@ -8,10 +8,17 @@ use crate::protocol::{ShellCommand, ShellEvent};
 use crate::pty::{Pty, PtyError, get_terminal_size};
 use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
 use crate::terminal::RawModeGuard;
+use crate::terminal_commands::{
+    CursorPositionQuery, ORIGIN_MODE, ReportTextAreaSize, ResetDecMode, ResetModifyOtherKeys,
+    ResetScrollRegion, SetKeypadMode, SetScrollRegion,
+};
 use crate::utf8_accumulator::Utf8Accumulator;
 use avt::Vt;
 use crossterm::{
-    cursor, queue,
+    Command, cursor,
+    event::PopKeyboardEnhancementFlags,
+    queue,
+    style::ResetColor,
     terminal::{self, Clear, ClearType},
 };
 use portable_pty::PtySize;
@@ -162,6 +169,9 @@ fn feed_vt(vt: &mut Vt, text: &str) -> (usize, usize) {
 /// would be interpreted as user input by readline. This filter removes
 /// OSC response sequences (`ESC ] <digits> ; <payload> <terminator>`)
 /// from the stdin stream while passing everything else through.
+///
+/// DCS responses are NOT filtered — they are replies to queries that the
+/// program itself sent (e.g., XTGETTCAP, DECRQSS) and must reach it.
 struct StdinFilter {
     state: StdinFilterState,
     buf: Vec<u8>,
@@ -175,8 +185,6 @@ enum StdinFilterState {
     OscDigit,
     OscPayload,
     OscPayloadEsc,
-    DcsPayload,
-    DcsPayloadEsc,
 }
 
 impl StdinFilter {
@@ -209,9 +217,6 @@ impl StdinFilter {
                     if byte == b']' {
                         self.buf.push(byte);
                         self.state = StdinFilterState::OscDigit;
-                    } else if byte == b'P' {
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::DcsPayload;
                     } else if byte == 0x1b {
                         output.push(0x1b);
                         self.buf.clear();
@@ -272,35 +277,6 @@ impl StdinFilter {
                         output.push(byte);
                         self.buf.clear();
                         self.state = StdinFilterState::Ground;
-                    }
-                }
-                StdinFilterState::DcsPayload => {
-                    if byte == 0x1b {
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::DcsPayloadEsc;
-                    } else {
-                        self.buf.push(byte);
-                        if self.buf.len() > 4096 {
-                            output.extend_from_slice(&self.buf);
-                            self.buf.clear();
-                            self.state = StdinFilterState::Ground;
-                        }
-                    }
-                }
-                StdinFilterState::DcsPayloadEsc => {
-                    if byte == b'\\' {
-                        // ST (ESC \) terminates DCS — drop the entire sequence
-                        self.buf.clear();
-                        self.state = StdinFilterState::Ground;
-                    } else if byte == 0x1b {
-                        output.extend_from_slice(&self.buf[..self.buf.len() - 1]);
-                        self.buf.clear();
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::Esc;
-                    } else {
-                        // ESC wasn't ST — continue accumulating
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::DcsPayload;
                     }
                 }
             }
@@ -382,12 +358,18 @@ impl Renderer {
         if count == 0 || content_rows == 0 {
             return Ok(());
         }
-        write!(stdout, "\x1b[1;{}r", content_rows)?;
-        write!(stdout, "\x1b[{};1H", content_rows)?;
+        queue!(
+            stdout,
+            SetScrollRegion {
+                top: 1,
+                bottom: content_rows
+            },
+            cursor::MoveTo(0, content_rows - 1)
+        )?;
         for _ in 0..count {
             stdout.write_all(b"\n")?;
         }
-        write!(stdout, "\x1b[r")
+        queue!(stdout, ResetScrollRegion)
     }
 
     /// Write a single VT line's content (SGR-formatted text + reset) to stdout.
@@ -395,7 +377,7 @@ impl Renderer {
         self.line_buf.clear();
         dump_line(&mut self.line_buf, line);
         stdout.write_all(self.line_buf.as_bytes())?;
-        stdout.write_all(b"\x1b[0m")
+        queue!(stdout, ResetColor)
     }
 
     /// Render changed VT lines to stdout. Skips lines that haven't changed
@@ -442,7 +424,13 @@ impl Renderer {
             let batch_size = self.content_rows as usize;
 
             // Set scroll region to protect the status line row.
-            write!(stdout, "\x1b[1;{}r", self.content_rows)?;
+            queue!(
+                stdout,
+                SetScrollRegion {
+                    top: 1,
+                    bottom: self.content_rows
+                }
+            )?;
 
             // Iterate scrollback lines starting from the first unflushed one.
             // vt.line(n) is viewport-relative, so we must use lines() iterator.
@@ -480,7 +468,7 @@ impl Renderer {
                 }
             }
 
-            write!(stdout, "\x1b[r")?;
+            queue!(stdout, ResetScrollRegion)?;
             self.scrollback_flushed = vt_scrollback;
             self.prev_lines.clear();
         }
@@ -728,7 +716,7 @@ impl ShellSession {
         // Skip when stdin is injected (not a real terminal) — the response comes
         // via stdin, so this would hang if stdin is not a TTY.
         let cursor_row = if !injected_stdin && io::stdin().is_terminal() {
-            write!(stdout, "\x1b[6n")?;
+            queue!(stdout, CursorPositionQuery)?;
             stdout.flush()?;
 
             let mut response = Vec::new();
@@ -770,7 +758,7 @@ impl ShellSession {
         // TUI renderers may leave a non-default scroll region/origin mode.
         // Reset both before we start cursor-addressed rendering, otherwise
         // the first shell draw can land in the wrong area and overlap TUI output.
-        write!(stdout, "\x1b[r\x1b[?6l")?;
+        queue!(stdout, ResetScrollRegion, ResetDecMode(ORIGIN_MODE))?;
         stdout.flush()?;
 
         // Get terminal size.
@@ -1031,6 +1019,8 @@ impl ShellSession {
                         &data,
                         &mut esc,
                         stdout,
+                        &pty,
+                        self.pty_size(),
                         &mut esc_events,
                     )?;
 
@@ -1047,6 +1037,8 @@ impl ShellSession {
                                     &more,
                                     &mut esc,
                                     stdout,
+                                    &pty,
+                                    self.pty_size(),
                                     &mut esc_events,
                                 )?;
                                 let text = utf8_acc.accumulate(&more);
@@ -1258,6 +1250,8 @@ impl ShellSession {
         data: &[u8],
         esc: &mut EscapeState,
         stdout: &mut impl Write,
+        pty: &Pty,
+        pty_size: PtySize,
         events_buf: &mut Vec<SequenceEvent>,
     ) -> io::Result<()> {
         events_buf.clear();
@@ -1333,8 +1327,20 @@ impl ShellSession {
                     stdout.write_all(&raw_bytes)?;
                     esc.modify_other_keys = enabled;
                 }
+                SequenceEvent::TextAreaSizeQuery => {
+                    // Respond with PTY dimensions so programs see the correct
+                    // size (which excludes the status line row).
+                    let cmd = ReportTextAreaSize {
+                        rows: pty_size.rows,
+                        cols: pty_size.cols,
+                    };
+                    let mut buf = String::new();
+                    cmd.write_ansi(&mut buf).unwrap();
+                    pty.write_all(buf.as_bytes())?;
+                    pty.flush()?;
+                }
                 SequenceEvent::KeypadMode { application } => {
-                    stdout.write_all(if application { b"\x1b=" } else { b"\x1b>" })?;
+                    queue!(stdout, SetKeypadMode { application })?;
                     esc.keypad_application_mode = application;
                 }
             }
@@ -1350,20 +1356,20 @@ impl ShellSession {
             needs_flush = true;
         }
         for &mode in &esc.forwarded_dec_modes {
-            write!(stdout, "\x1b[?{}l", mode)?;
+            queue!(stdout, ResetDecMode(mode))?;
             needs_flush = true;
         }
         if esc.keypad_application_mode {
-            stdout.write_all(b"\x1b>")?;
+            queue!(stdout, SetKeypadMode { application: false })?;
             needs_flush = true;
         }
         // Pop all kitty keyboard stack entries
         for _ in 0..esc.kitty_keyboard_depth {
-            stdout.write_all(b"\x1b[<u")?;
+            queue!(stdout, PopKeyboardEnhancementFlags)?;
             needs_flush = true;
         }
         if esc.modify_other_keys {
-            stdout.write_all(b"\x1b[>n")?;
+            queue!(stdout, ResetModifyOtherKeys)?;
             needs_flush = true;
         }
         if needs_flush {

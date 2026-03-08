@@ -11,6 +11,13 @@ use dec_mode::{DecModeAction, DecModeParser, DecModeResult};
 use osc::{OscParser, OscResult};
 
 /// DEC private modes that should be forwarded to the real terminal.
+///
+/// NOTE: Mode 2048 (in-band size reports) is intentionally excluded.
+/// The status line reserves 1 row, so the PTY has `rows - 1` rows while
+/// the real terminal has `rows`. Forwarding mode 2048 would cause the
+/// terminal to send resize notifications with the real (larger) size,
+/// making programs like nvim think they have an extra row and draw over
+/// the status line.
 const FORWARDED_MODES: &[u16] = &[
     1, // cursor key mode (DECCKM) — applications use smkx/rmkx to toggle
     9, // X10 mouse mode (legacy)
@@ -21,7 +28,6 @@ const FORWARDED_MODES: &[u16] = &[
     1004, // focus events
     2026, // synchronized output
     2031, // color scheme reporting
-    2048, // in-band size reports
 ];
 
 /// Modes that control alternate screen buffer.
@@ -38,7 +44,6 @@ pub const CLEANUP_MODES: &[u16] = &[
     2004, // bracketed paste
     1004, // focus events
     2031, // color scheme reporting
-    2048, // in-band size reports
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -123,6 +128,9 @@ pub enum SequenceEvent {
         raw_bytes: Vec<u8>,
         enabled: bool,
     },
+    /// CSI 18 t — program is querying text area size in characters.
+    /// The session responds with PTY dimensions (not real terminal size).
+    TextAreaSizeQuery,
 }
 
 /// Maximum number of CSI parameters to accumulate.
@@ -144,6 +152,9 @@ enum CsiClass {
     KittyKeyboard { stack_delta: i8 },
     /// XTMODIFYOTHERKEYS set/reset.
     ModifyOtherKeys { enabled: bool },
+    /// CSI 18 t — text area size query. Intercepted so we can respond
+    /// with PTY dimensions instead of the real terminal size.
+    TextAreaSizeQuery,
     /// AVT handles it, no forwarding needed.
     Ignore,
 }
@@ -170,8 +181,10 @@ fn classify_csi(
         ([b'?', b'$'], b'p') => CsiClass::Forward,     // DECRQM DEC mode
         ([b'$'], b'p') => CsiClass::Forward,           // DECRQM ANSI mode
 
-        // XTWINOPS queries
-        ([], b't') if matches!(first, 14 | 16 | 18 | 21) => CsiClass::Forward,
+        // XTWINOPS queries (see FORWARDED_MODES doc comment for why
+        // size-reporting queries are not forwarded to the real terminal).
+        ([], b't') if first == 18 => CsiClass::TextAreaSizeQuery,
+        ([], b't') if matches!(first, 16 | 21) => CsiClass::Forward,
 
         // Erase — intercept for renderer coordination
         ([], b'J') if first == 2 => CsiClass::EraseDisplay,
@@ -608,6 +621,9 @@ impl EscapeScanner {
             CsiClass::ModifyOtherKeys { enabled } => {
                 let raw_bytes = std::mem::take(&mut self.seq_bytes);
                 events.push(SequenceEvent::ModifyOtherKeys { raw_bytes, enabled });
+            }
+            CsiClass::TextAreaSizeQuery => {
+                events.push(SequenceEvent::TextAreaSizeQuery);
             }
             CsiClass::Ignore => {}
         }
@@ -1284,11 +1300,11 @@ mod tests {
     }
 
     #[test]
-    fn detects_xtwinops_pixel_size() {
+    fn ignores_xtwinops_pixel_size() {
+        // CSI 14 t reports real terminal size; not forwarded (see FORWARDED_MODES).
         let mut scanner = EscapeScanner::new();
         let events = scanner.scan(b"\x1b[14t");
-        assert_eq!(events.len(), 1);
-        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+        assert!(events.is_empty());
     }
 
     #[test]
@@ -1300,11 +1316,12 @@ mod tests {
     }
 
     #[test]
-    fn detects_xtwinops_char_size() {
+    fn intercepts_xtwinops_char_size() {
+        // CSI 18 t is intercepted so the session can respond with PTY dimensions.
         let mut scanner = EscapeScanner::new();
         let events = scanner.scan(b"\x1b[18t");
         assert_eq!(events.len(), 1);
-        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+        assert!(matches!(events[0], SequenceEvent::TextAreaSizeQuery));
     }
 
     #[test]
@@ -1487,14 +1504,15 @@ mod tests {
     }
 
     #[test]
-    fn in_band_size_reports_mode() {
+    fn in_band_size_reports_not_forwarded() {
+        // Mode 2048 is excluded from FORWARDED_MODES (see its doc comment).
         let mut scanner = EscapeScanner::new();
         let events = scanner.scan(b"\x1b[?2048h");
         assert_eq!(events.len(), 1);
         let SequenceEvent::DecMode(ref ev) = events[0] else {
             panic!("expected DecMode");
         };
-        assert!(ev.has_forwarded_mode());
+        assert!(!ev.has_forwarded_mode());
     }
 
     #[test]

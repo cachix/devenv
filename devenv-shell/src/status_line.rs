@@ -5,6 +5,7 @@
 //!
 //! Also exports shared UI constants used by both devenv-shell and devenv-tui.
 
+use crossterm::{cursor, queue, style::ResetColor, terminal::Clear, terminal::ClearType};
 use iocraft::prelude::*;
 use std::collections::HashSet;
 use std::io::{self, Write};
@@ -320,9 +321,13 @@ impl StatusLine {
         }
 
         // Move to the last row, clear it, write content
-        write!(stdout, "\x1b[{};1H\x1b[2K", total_rows)?;
+        queue!(
+            stdout,
+            cursor::MoveTo(0, total_rows - 1),
+            Clear(ClearType::CurrentLine)
+        )?;
         stdout.write_all(&content)?;
-        write!(stdout, "\x1b[0m")?;
+        queue!(stdout, ResetColor)?;
 
         Ok(())
     }
