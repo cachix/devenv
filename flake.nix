@@ -103,7 +103,7 @@
           };
         in
         {
-          inherit (workspace.crates) devenv devenv-tasks devenv-tasks-fast-build;
+          inherit (workspace.crates) devenv devenv-tasks;
           default = self.packages.${system}.devenv;
           crate2nix = inputs.crate2nix.packages.${system}.default;
         }

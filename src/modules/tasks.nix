@@ -50,7 +50,7 @@ let
         cargo = rustToolchain;
       };
     in
-    workspace.crates.devenv-tasks-fast-build;
+    workspace.crates.devenv-tasks;
 
   taskType = types.submodule
     ({ name, config, ... }:

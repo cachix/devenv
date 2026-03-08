@@ -49,7 +49,7 @@ let
     inherit pkgs lib stdenv;
     buildRustCrateForPkgs = _: buildRustCrateNew;
     defaultCrateOverrides = defaultCrateOverrides // crateConfig;
-    release = cargoProfile == "release" || cargoProfile == "release_fast";
+    release = cargoProfile == "release";
     # Enable tracing_unstable for dependency resolution so valuable crate is included.
     # This matches the --cfg tracing_unstable passed via crate-config.nix at compile time.
     extraTargetFlags = { tracing_unstable = true; };
@@ -118,8 +118,5 @@ in
 
     # devenv-tasks standalone
     devenv-tasks = cargoNix.workspaceMembers.devenv-tasks.build;
-
-    # Fast build variant (same as regular since crate2nix doesn't support profiles)
-    devenv-tasks-fast-build = cargoNix.workspaceMembers.devenv-tasks.build;
   };
 }

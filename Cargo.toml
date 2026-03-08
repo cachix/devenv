@@ -201,18 +201,13 @@ crossterm = { git = "https://github.com/sandydoo/crossterm", branch = "0.28-cach
 insta.opt-level = 3
 similar.opt-level = 3
 
-# A release build with full link-time optimization (slow)
 [profile.release]
-strip = "symbols"
+strip = true
 lto = "fat"
 
-# A fast release build without LTO
-# TODO: using underscores because of a normalization bug in buildRustPackage
-[profile.release_fast]
+# A profiling release build that retains debug symbols for better backtraces
+[profile.profiling]
 inherits = "release"
-lto = false
-
-# A fast release build that retains debug symbols for better backtraces
-[profile.release_with_debug]
-inherits = "release_fast"
 debug = true
+strip = false
+lto = false
