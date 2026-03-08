@@ -2012,7 +2012,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2093,7 +2093,7 @@ checksum = "0ce92ff622d6dadf7349484f42c93271a0d49b7cc4d466a936405bacbe10aa78"
 dependencies = [
  "cfg-if",
  "rustix 1.1.4",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3409,7 +3409,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4134,7 +4134,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-bindgen-raw"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#eb293e84db58edcb55434fe9441644557bf14764"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aeb4a5cca98d32b4df8808b54f73495225a09d3d"
 dependencies = [
  "bindgen 0.69.5",
  "pkg-config",
@@ -4143,7 +4143,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-expr"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#eb293e84db58edcb55434fe9441644557bf14764"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aeb4a5cca98d32b4df8808b54f73495225a09d3d"
 dependencies = [
  "anyhow",
  "cstr",
@@ -4159,7 +4159,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-fetchers"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#eb293e84db58edcb55434fe9441644557bf14764"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aeb4a5cca98d32b4df8808b54f73495225a09d3d"
 dependencies = [
  "anyhow",
  "cstr",
@@ -4173,7 +4173,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-flake"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#eb293e84db58edcb55434fe9441644557bf14764"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aeb4a5cca98d32b4df8808b54f73495225a09d3d"
 dependencies = [
  "anyhow",
  "cstr",
@@ -4190,7 +4190,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-store"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#eb293e84db58edcb55434fe9441644557bf14764"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aeb4a5cca98d32b4df8808b54f73495225a09d3d"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -4202,7 +4202,7 @@ dependencies = [
 [[package]]
 name = "nix-bindings-util"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#eb293e84db58edcb55434fe9441644557bf14764"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aeb4a5cca98d32b4df8808b54f73495225a09d3d"
 dependencies = [
  "anyhow",
  "ctor",
@@ -4212,7 +4212,7 @@ dependencies = [
 [[package]]
 name = "nix-cmd"
 version = "0.1.0"
-source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#eb293e84db58edcb55434fe9441644557bf14764"
+source = "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#aeb4a5cca98d32b4df8808b54f73495225a09d3d"
 dependencies = [
  "anyhow",
  "nix-bindings-bindgen-raw",
@@ -5729,7 +5729,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5742,7 +5742,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5810,7 +5810,7 @@ dependencies = [
  "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -7211,10 +7211,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82a72c767771b47409d2345987fda8628641887d5466101319899796367354a0"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.2",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
