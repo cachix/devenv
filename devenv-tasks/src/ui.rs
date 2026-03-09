@@ -6,7 +6,7 @@ use std::time::Instant;
 use devenv_activity::{ActivityEvent, ActivityOutcome, Process as ProcessEvent, Task as TaskEvent};
 use tokio::sync::mpsc;
 
-use crate::types::{TaskCompleted, TaskStatus, TasksStatus};
+use crate::types::{ProcessPhase, ProcessTaskStatus, TaskCompleted, TaskStatus, TasksStatus};
 use crate::{Error, Outputs, Tasks, VerbosityLevel};
 
 /// Line-buffered console output
@@ -405,7 +405,19 @@ impl TasksUi {
         let mut errors = String::new();
         for index in &self.tasks.tasks_order {
             let task_state = self.tasks.graph[*index].read().await;
-            if let TaskStatus::Completed(TaskCompleted::Failed(_, failure)) = &task_state.status {
+            if let TaskStatus::Process(ProcessTaskStatus {
+                phase: ProcessPhase::GaveUp,
+                name,
+            }) = &task_state.status
+            {
+                errors.push_str(&format!(
+                    "\n--- {} (process {}) gave up (crash loop)\n",
+                    task_state.task.name, name
+                ));
+                errors.push_str("---\n");
+            } else if let TaskStatus::Completed(TaskCompleted::Failed(_, failure)) =
+                &task_state.status
+            {
                 errors.push_str(&format!(
                     "\n--- {} failed with error: {}\n",
                     task_state.task.name, failure.error

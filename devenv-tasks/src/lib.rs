@@ -14,8 +14,8 @@ pub use executor::{ExecutionContext, ExecutionResult, OutputCallback, Subprocess
 pub use privileges::SudoContext;
 pub use tasks::{Tasks, TasksBuilder, compute_display_hierarchy};
 pub use types::{
-    DependencyKind, Outputs, TaskCompleted, TaskOutputs, TaskStatus, TaskType, TasksStatus, UiMode,
-    VerbosityLevel, determine_ui_mode, get_devenv_env, is_tty,
+    DependencyKind, Outputs, PROCESS_TASK_PREFIX, TaskCompleted, TaskOutputs, TaskStatus, TaskType,
+    TasksStatus, UiMode, VerbosityLevel, determine_ui_mode, get_devenv_env, is_tty,
 };
 pub use ui::TasksUi;
 

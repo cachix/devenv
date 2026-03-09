@@ -20,11 +20,11 @@ pub enum TaskType {
 #[derive(Default)]
 pub enum DependencyKind {
     /// Wait for task to begin execution (hard dependency).
-    /// Satisfied once the task is Running, ProcessReady, or Completed.
+    /// Satisfied once the task is running or completed.
     Started,
     /// Wait for task to be ready/healthy (default, hard dependency).
     /// - For oneshot tasks: wait for successful completion
-    /// - For process tasks: wait for ProcessReady state
+    /// - For process tasks: wait for Ready state
     ///
     /// Propagates failure: if the dependency fails, this task fails too.
     #[default]
@@ -114,8 +114,7 @@ impl TasksStatus {
 
     /// Check if any tasks failed (excluding soft `@completed`-only failures)
     pub fn has_failures(&self) -> bool {
-        (self.failed - self.soft_failed) > 0
-            || (self.dependency_failed - self.soft_dependency_failed) > 0
+        self.failed > self.soft_failed || self.dependency_failed > self.soft_dependency_failed
     }
 
     /// Get total number of tasks
@@ -248,11 +247,439 @@ impl TaskCompleted {
     }
 }
 
+/// Result of checking whether a dependency is satisfied.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DepSatisfaction {
+    /// The dependency is satisfied; the dependent can proceed.
+    Satisfied,
+    /// The dependency is not yet in a satisfying state; keep waiting.
+    NotYet,
+    /// The dependency completed in a way that can never satisfy the
+    /// required kind (e.g. a failed task for `@ready`). Treat as failure.
+    NeverSatisfiable,
+}
+
+/// Check whether a process task status satisfies the given dependency kind.
+pub fn is_process_dep_satisfied(
+    status: &ProcessTaskStatus,
+    kind: &DependencyKind,
+) -> DepSatisfaction {
+    match (status.phase, kind) {
+        // Waiting: nothing satisfied yet
+        (ProcessPhase::Waiting, _) => DepSatisfaction::NotYet,
+
+        // NotStarted (auto start off): @completed is satisfied immediately,
+        // @started/@ready keep waiting (the process can be started manually later),
+        // @succeeded is never satisfiable without actual execution.
+        (ProcessPhase::NotStarted, DependencyKind::Completed) => DepSatisfaction::Satisfied,
+        (ProcessPhase::NotStarted, DependencyKind::Started | DependencyKind::Ready) => {
+            DepSatisfaction::NotYet
+        }
+        (ProcessPhase::NotStarted, _) => DepSatisfaction::NeverSatisfiable,
+
+        // Starting: @started is satisfied, everything else not yet
+        (ProcessPhase::Starting, DependencyKind::Started) => DepSatisfaction::Satisfied,
+        (ProcessPhase::Starting, _) => DepSatisfaction::NotYet,
+
+        // Ready: @started and @ready are satisfied
+        (ProcessPhase::Ready, DependencyKind::Started | DependencyKind::Ready) => {
+            DepSatisfaction::Satisfied
+        }
+        (ProcessPhase::Ready, _) => DepSatisfaction::NotYet,
+
+        // GaveUp: @completed is satisfied, others are never satisfiable
+        (ProcessPhase::GaveUp, DependencyKind::Completed) => DepSatisfaction::Satisfied,
+        (ProcessPhase::GaveUp, _) => DepSatisfaction::NeverSatisfiable,
+    }
+}
+
+/// Check whether a completed task status satisfies the given dependency kind.
+fn is_completed_dep_satisfied(completed: &TaskCompleted, kind: &DependencyKind) -> DepSatisfaction {
+    match (completed, kind) {
+        // @started — satisfied by any completion
+        (_, DependencyKind::Started) => DepSatisfaction::Satisfied,
+
+        // @ready — success or skipped
+        (TaskCompleted::Success(_, _), DependencyKind::Ready) => DepSatisfaction::Satisfied,
+        (TaskCompleted::Skipped(_), DependencyKind::Ready) => DepSatisfaction::Satisfied,
+
+        // @succeeded — exited with code 0 or skipped
+        (TaskCompleted::Success(_, _), DependencyKind::Succeeded) => DepSatisfaction::Satisfied,
+        (TaskCompleted::Skipped(_), DependencyKind::Succeeded) => DepSatisfaction::Satisfied,
+
+        // @completed — any completion (soft)
+        (_, DependencyKind::Completed) => DepSatisfaction::Satisfied,
+
+        // Completed but doesn't satisfy the required kind
+        (_, _) => DepSatisfaction::NeverSatisfiable,
+    }
+}
+
+/// Check whether `status` satisfies the given `kind`.
+pub fn is_dep_satisfied(status: &TaskStatus, kind: &DependencyKind) -> DepSatisfaction {
+    match status {
+        TaskStatus::Pending => DepSatisfaction::NotYet,
+
+        TaskStatus::Oneshot(OneshotStatus::Running(_)) => match kind {
+            DependencyKind::Started => DepSatisfaction::Satisfied,
+            _ => DepSatisfaction::NotYet,
+        },
+
+        TaskStatus::Process(ps) => is_process_dep_satisfied(ps, kind),
+
+        TaskStatus::Completed(completed) => is_completed_dep_satisfied(completed, kind),
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum OneshotStatus {
+    Running(Instant),
+}
+
+/// Prefix used for process task names (e.g. "devenv:processes:http-server").
+pub const PROCESS_TASK_PREFIX: &str = "devenv:processes:";
+
+/// Strip the `devenv:processes:` prefix to get the short process name.
+pub fn process_name(task_name: &str) -> &str {
+    task_name
+        .strip_prefix(PROCESS_TASK_PREFIX)
+        .unwrap_or(task_name)
+}
+
+pub use devenv_processes::ProcessPhase;
+
+#[derive(Debug, Clone)]
+pub struct ProcessTaskStatus {
+    pub name: String,
+    pub phase: ProcessPhase,
+}
+
 #[derive(Debug, Clone)]
 pub enum TaskStatus {
     Pending,
-    Running(Instant),
-    /// Process task is ready and healthy
-    ProcessReady,
+    Oneshot(OneshotStatus),
+    Process(ProcessTaskStatus),
     Completed(TaskCompleted),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── helpers ──────────────────────────────────────────────────────
+
+    fn make_process_status(phase: ProcessPhase) -> ProcessTaskStatus {
+        ProcessTaskStatus {
+            name: "test".to_string(),
+            phase,
+        }
+    }
+
+    fn make_success() -> TaskCompleted {
+        TaskCompleted::Success(Duration::from_secs(0), Output(None))
+    }
+
+    fn make_skipped_cached() -> TaskCompleted {
+        TaskCompleted::Skipped(Skipped::Cached(Output(None)))
+    }
+
+    fn make_skipped_no_command() -> TaskCompleted {
+        TaskCompleted::Skipped(Skipped::NoCommand)
+    }
+
+    fn make_failed() -> TaskCompleted {
+        TaskCompleted::Failed(
+            Duration::from_secs(0),
+            TaskFailure {
+                stdout: vec![],
+                stderr: vec![],
+                error: "boom".to_string(),
+            },
+        )
+    }
+
+    fn make_dependency_failed() -> TaskCompleted {
+        TaskCompleted::DependencyFailed
+    }
+
+    fn make_cancelled_running() -> TaskCompleted {
+        TaskCompleted::Cancelled(Some(Duration::from_secs(0)))
+    }
+
+    fn make_cancelled_not_running() -> TaskCompleted {
+        TaskCompleted::Cancelled(None)
+    }
+
+    const ALL_KINDS: [DependencyKind; 4] = [
+        DependencyKind::Started,
+        DependencyKind::Ready,
+        DependencyKind::Succeeded,
+        DependencyKind::Completed,
+    ];
+
+    const ALL_PHASES: [ProcessPhase; 5] = [
+        ProcessPhase::NotStarted,
+        ProcessPhase::Waiting,
+        ProcessPhase::Starting,
+        ProcessPhase::Ready,
+        ProcessPhase::GaveUp,
+    ];
+
+    // ── process_name ────────────────────────────────────────────────
+
+    #[test]
+    fn process_name_strips_prefix() {
+        assert_eq!(process_name("devenv:processes:http-server"), "http-server");
+    }
+
+    #[test]
+    fn process_name_strips_prefix_empty_suffix() {
+        assert_eq!(process_name("devenv:processes:"), "");
+    }
+
+    #[test]
+    fn process_name_returns_input_without_prefix() {
+        assert_eq!(process_name("some-task"), "some-task");
+    }
+
+    #[test]
+    fn process_name_returns_empty_for_empty_input() {
+        assert_eq!(process_name(""), "");
+    }
+
+    #[test]
+    fn process_name_partial_prefix_unchanged() {
+        assert_eq!(process_name("devenv:processes"), "devenv:processes");
+    }
+
+    // ── is_process_dep_satisfied ────────────────────────────────────
+
+    /// Table driven test covering every (ProcessPhase, DependencyKind) pair.
+    #[test]
+    fn process_dep_satisfied_exhaustive() {
+        use DepSatisfaction::*;
+
+        let started = DependencyKind::Started;
+        let ready = DependencyKind::Ready;
+        let succeeded = DependencyKind::Succeeded;
+        let completed = DependencyKind::Completed;
+
+        // (phase, kind) -> expected
+        let table: Vec<(ProcessPhase, DependencyKind, DepSatisfaction)> = vec![
+            // Waiting: always NotYet
+            (ProcessPhase::Waiting, started, NotYet),
+            (ProcessPhase::Waiting, ready, NotYet),
+            (ProcessPhase::Waiting, succeeded, NotYet),
+            (ProcessPhase::Waiting, completed, NotYet),
+            // NotStarted
+            (ProcessPhase::NotStarted, started, NotYet),
+            (ProcessPhase::NotStarted, ready, NotYet),
+            (ProcessPhase::NotStarted, succeeded, NeverSatisfiable),
+            (ProcessPhase::NotStarted, completed, Satisfied),
+            // Starting
+            (ProcessPhase::Starting, started, Satisfied),
+            (ProcessPhase::Starting, ready, NotYet),
+            (ProcessPhase::Starting, succeeded, NotYet),
+            (ProcessPhase::Starting, completed, NotYet),
+            // Ready
+            (ProcessPhase::Ready, started, Satisfied),
+            (ProcessPhase::Ready, ready, Satisfied),
+            (ProcessPhase::Ready, succeeded, NotYet),
+            (ProcessPhase::Ready, completed, NotYet),
+            // GaveUp
+            (ProcessPhase::GaveUp, started, NeverSatisfiable),
+            (ProcessPhase::GaveUp, ready, NeverSatisfiable),
+            (ProcessPhase::GaveUp, succeeded, NeverSatisfiable),
+            (ProcessPhase::GaveUp, completed, Satisfied),
+        ];
+
+        for (phase, kind, expected) in &table {
+            let status = make_process_status(*phase);
+            let actual = is_process_dep_satisfied(&status, kind);
+            assert_eq!(
+                actual, *expected,
+                "phase={:?}, kind={:?}: expected {:?}, got {:?}",
+                phase, kind, expected, actual
+            );
+        }
+    }
+
+    /// Verify the table covers every combination.
+    #[test]
+    fn process_dep_satisfied_all_combinations_covered() {
+        for phase in &ALL_PHASES {
+            for kind in &ALL_KINDS {
+                let status = make_process_status(*phase);
+                // Should not panic for any combination
+                let _ = is_process_dep_satisfied(&status, kind);
+            }
+        }
+    }
+
+    // ── is_completed_dep_satisfied ──────────────────────────────────
+
+    #[test]
+    fn completed_dep_satisfied_exhaustive() {
+        use DepSatisfaction::*;
+        use DependencyKind::*;
+
+        // (completed_variant, kind) -> expected
+        let table: Vec<(TaskCompleted, DependencyKind, DepSatisfaction)> = vec![
+            // Success
+            (make_success(), Started, Satisfied),
+            (make_success(), Ready, Satisfied),
+            (make_success(), Succeeded, Satisfied),
+            (make_success(), Completed, Satisfied),
+            // Skipped (Cached)
+            (make_skipped_cached(), Started, Satisfied),
+            (make_skipped_cached(), Ready, Satisfied),
+            (make_skipped_cached(), Succeeded, Satisfied),
+            (make_skipped_cached(), Completed, Satisfied),
+            // Skipped (NoCommand)
+            (make_skipped_no_command(), Started, Satisfied),
+            (make_skipped_no_command(), Ready, Satisfied),
+            (make_skipped_no_command(), Succeeded, Satisfied),
+            (make_skipped_no_command(), Completed, Satisfied),
+            // Failed
+            (make_failed(), Started, Satisfied),
+            (make_failed(), Ready, NeverSatisfiable),
+            (make_failed(), Succeeded, NeverSatisfiable),
+            (make_failed(), Completed, Satisfied),
+            // DependencyFailed
+            (make_dependency_failed(), Started, Satisfied),
+            (make_dependency_failed(), Ready, NeverSatisfiable),
+            (make_dependency_failed(), Succeeded, NeverSatisfiable),
+            (make_dependency_failed(), Completed, Satisfied),
+            // Cancelled (was running)
+            (make_cancelled_running(), Started, Satisfied),
+            (make_cancelled_running(), Ready, NeverSatisfiable),
+            (make_cancelled_running(), Succeeded, NeverSatisfiable),
+            (make_cancelled_running(), Completed, Satisfied),
+            // Cancelled (was not running)
+            (make_cancelled_not_running(), Started, Satisfied),
+            (make_cancelled_not_running(), Ready, NeverSatisfiable),
+            (make_cancelled_not_running(), Succeeded, NeverSatisfiable),
+            (make_cancelled_not_running(), Completed, Satisfied),
+        ];
+
+        for (completed, kind, expected) in &table {
+            let actual = is_completed_dep_satisfied(completed, kind);
+            assert_eq!(
+                actual, *expected,
+                "completed={:?}, kind={:?}: expected {:?}, got {:?}",
+                completed, kind, expected, actual
+            );
+        }
+    }
+
+    // ── is_dep_satisfied ────────────────────────────────────────────
+
+    #[test]
+    fn dep_satisfied_pending_always_not_yet() {
+        for kind in &ALL_KINDS {
+            let actual = is_dep_satisfied(&TaskStatus::Pending, kind);
+            assert_eq!(
+                actual,
+                DepSatisfaction::NotYet,
+                "Pending with kind={:?} should be NotYet",
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn dep_satisfied_oneshot_running() {
+        let status = TaskStatus::Oneshot(OneshotStatus::Running(Instant::now()));
+
+        assert_eq!(
+            is_dep_satisfied(&status, &DependencyKind::Started),
+            DepSatisfaction::Satisfied,
+        );
+        assert_eq!(
+            is_dep_satisfied(&status, &DependencyKind::Ready),
+            DepSatisfaction::NotYet,
+        );
+        assert_eq!(
+            is_dep_satisfied(&status, &DependencyKind::Succeeded),
+            DepSatisfaction::NotYet,
+        );
+        assert_eq!(
+            is_dep_satisfied(&status, &DependencyKind::Completed),
+            DepSatisfaction::NotYet,
+        );
+    }
+
+    #[test]
+    fn dep_satisfied_process_delegates() {
+        // Spot check: delegates to is_process_dep_satisfied
+        let ps = make_process_status(ProcessPhase::Ready);
+        let status = TaskStatus::Process(ps);
+
+        assert_eq!(
+            is_dep_satisfied(&status, &DependencyKind::Ready),
+            DepSatisfaction::Satisfied,
+        );
+        assert_eq!(
+            is_dep_satisfied(&status, &DependencyKind::Succeeded),
+            DepSatisfaction::NotYet,
+        );
+    }
+
+    #[test]
+    fn dep_satisfied_process_delegates_all_combinations() {
+        for phase in &ALL_PHASES {
+            for kind in &ALL_KINDS {
+                let ps = make_process_status(*phase);
+                let expected = is_process_dep_satisfied(&ps, kind);
+                let status = TaskStatus::Process(make_process_status(*phase));
+                let actual = is_dep_satisfied(&status, kind);
+                assert_eq!(
+                    actual, expected,
+                    "Process delegation mismatch: phase={:?}, kind={:?}",
+                    phase, kind
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn dep_satisfied_completed_delegates() {
+        // Spot check: delegates to is_completed_dep_satisfied
+        let status = TaskStatus::Completed(make_failed());
+
+        assert_eq!(
+            is_dep_satisfied(&status, &DependencyKind::Started),
+            DepSatisfaction::Satisfied,
+        );
+        assert_eq!(
+            is_dep_satisfied(&status, &DependencyKind::Ready),
+            DepSatisfaction::NeverSatisfiable,
+        );
+    }
+
+    #[test]
+    fn dep_satisfied_completed_delegates_all_variants() {
+        let completed_variants: Vec<TaskCompleted> = vec![
+            make_success(),
+            make_skipped_cached(),
+            make_skipped_no_command(),
+            make_failed(),
+            make_dependency_failed(),
+            make_cancelled_running(),
+            make_cancelled_not_running(),
+        ];
+
+        for completed in &completed_variants {
+            for kind in &ALL_KINDS {
+                let expected = is_completed_dep_satisfied(completed, kind);
+                let status = TaskStatus::Completed(completed.clone());
+                let actual = is_dep_satisfied(&status, kind);
+                assert_eq!(
+                    actual, expected,
+                    "Completed delegation mismatch: completed={:?}, kind={:?}",
+                    completed, kind
+                );
+            }
+        }
+    }
 }

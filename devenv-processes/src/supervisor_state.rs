@@ -79,6 +79,10 @@ impl JobStatus {
     pub fn is_ready(&self) -> bool {
         self.phase == SupervisorPhase::Ready
     }
+
+    pub fn is_gave_up(&self) -> bool {
+        self.phase == SupervisorPhase::GaveUp
+    }
 }
 
 /// Pure state machine for per-process supervision.

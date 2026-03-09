@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Notify;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -88,10 +89,54 @@ pub struct JobHandle {
     pub output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
 }
 
-/// A managed process entry: either disabled (not running) or active (running).
+/// Lifecycle phase of a managed process.
+///
+/// Shared between the process manager and the task system to avoid
+/// duplicate enum definitions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessPhase {
+    /// Process has `start.enable = false`; not yet launched.
+    NotStarted,
+    /// Registered, waiting for dependencies before starting.
+    Waiting,
+    /// Launched, readiness not yet confirmed.
+    Starting,
+    /// Readiness probe passed.
+    Ready,
+    /// Supervisor gave up (crash loop).
+    GaveUp,
+}
+
+impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
+    fn from(phase: crate::supervisor_state::SupervisorPhase) -> Self {
+        match phase {
+            crate::supervisor_state::SupervisorPhase::Starting => Self::Starting,
+            crate::supervisor_state::SupervisorPhase::Ready => Self::Ready,
+            crate::supervisor_state::SupervisorPhase::GaveUp => Self::GaveUp,
+        }
+    }
+}
+
+/// Collect the names of all active (supervised) processes from the map.
+fn active_names(processes: &HashMap<String, ProcessEntry>) -> Vec<String> {
+    processes
+        .iter()
+        .filter_map(|(name, entry)| match entry {
+            ProcessEntry::Active(_) => Some(name.clone()),
+            ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. } => None,
+        })
+        .collect()
+}
+
+/// A managed process entry: not started, waiting for dependencies, or active.
 enum ProcessEntry {
-    /// Process has `start.enable = false`: visible in TUI but not launched.
-    Disabled {
+    /// Process has `start.enable = false`: visible in TUI but not yet launched.
+    NotStarted {
+        config: ProcessConfig,
+        activity: Activity,
+    },
+    /// Process is waiting for dependencies before starting.
+    Waiting {
         config: ProcessConfig,
         activity: Activity,
     },
@@ -106,6 +151,9 @@ pub struct NativeProcessManager {
     shutdown: CancellationToken,
     /// Parent activity for grouping all processes under "Starting processes"
     processes_activity: Arc<RwLock<Option<Activity>>>,
+    /// Optional notify handle fired when a process lifecycle changes (e.g. not-started
+    /// process is manually started). The task system uses this to re-check dependencies.
+    task_notify: Option<Arc<Notify>>,
 }
 
 /// Build a human-readable description of the readiness probe for TUI display.
@@ -135,7 +183,38 @@ impl NativeProcessManager {
             state_dir,
             shutdown: CancellationToken::new(),
             processes_activity: Arc::new(RwLock::new(None)),
+            task_notify: None,
         })
+    }
+
+    /// Set the notify handle used to wake the task dependency loop
+    /// when process lifecycle changes (e.g. a not-started process is started).
+    pub fn set_task_notify(&mut self, notify: Arc<Notify>) {
+        self.task_notify = Some(notify);
+    }
+
+    /// Query the current lifecycle phase of a process entry.
+    pub async fn get_phase(&self, name: &str) -> Option<ProcessPhase> {
+        let processes = self.processes.read().await;
+        match processes.get(name) {
+            Some(ProcessEntry::NotStarted { .. }) => Some(ProcessPhase::NotStarted),
+            Some(ProcessEntry::Waiting { .. }) => Some(ProcessPhase::Waiting),
+            Some(ProcessEntry::Active(handle)) => Some(handle.status_rx.borrow().phase.into()),
+            None => None,
+        }
+    }
+
+    /// Subscribe to status updates for a given active process.
+    /// Returns a clone of the watch receiver if the process is active.
+    pub async fn subscribe_status(
+        &self,
+        name: &str,
+    ) -> Option<tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>> {
+        let processes = self.processes.read().await;
+        match processes.get(name) {
+            Some(ProcessEntry::Active(handle)) => Some(handle.status_rx.clone()),
+            _ => None,
+        }
     }
 
     /// Get the state directory
@@ -153,23 +232,12 @@ impl NativeProcessManager {
         self.state_dir.join("native.sock")
     }
 
-    /// Start a command with the given configuration.
-    ///
-    /// If `start.enable` is false, the process is registered as disabled (visible
-    /// in TUI as stopped but not running) and `Ok(None)` is returned.
-    pub async fn start_command(
-        &self,
-        config: &ProcessConfig,
-        parent_id: Option<u64>,
-    ) -> Result<Option<Arc<Job>>> {
-        debug!("Starting command '{}': {}", config.name, config.exec);
-
-        // Extract ports from listen config and allocated ports
+    /// Create a TUI activity for a process without launching it.
+    fn create_process_activity(&self, config: &ProcessConfig, parent_id: Option<u64>) -> Activity {
         let mut ports: Vec<String> = config
             .listen
             .iter()
             .filter_map(|spec| {
-                // Extract port from address like "127.0.0.1:8080" -> "name:8080"
                 spec.address.as_ref().and_then(|addr| {
                     addr.rsplit(':')
                         .next()
@@ -177,7 +245,6 @@ impl NativeProcessManager {
                 })
             })
             .collect();
-        // Add allocated ports not already covered by listen specs
         let listen_names: std::collections::HashSet<&str> =
             config.listen.iter().map(|s| s.name.as_str()).collect();
         for (name, port) in &config.ports {
@@ -186,7 +253,6 @@ impl NativeProcessManager {
             }
         }
 
-        // Create activity for tracking this process
         let mut builder = Activity::process(&config.name)
             .command(&config.exec)
             .ports(ports);
@@ -196,22 +262,100 @@ impl NativeProcessManager {
         if let Some(pid) = parent_id {
             builder = builder.parent(Some(pid));
         }
-        let activity = builder.start();
+        builder.start()
+    }
 
+    /// Register a process as waiting for dependencies.
+    ///
+    /// Creates the TUI activity with Waiting status without launching.
+    /// Call `launch_waiting` after dependencies are satisfied.
+    pub async fn register_waiting(&self, config: ProcessConfig, parent_id: Option<u64>) {
+        let activity = self.create_process_activity(&config, parent_id);
+        activity.set_status(ProcessStatus::Waiting);
+        let name = config.name.clone();
+        self.processes
+            .write()
+            .await
+            .insert(name.clone(), ProcessEntry::Waiting { config, activity });
+        info!("Registered waiting process: {}", name);
+    }
+
+    /// Cancel a previously registered waiting process.
+    ///
+    /// Removes the `Waiting` entry and marks the activity as failed so the
+    /// TUI no longer shows the process as "Waiting". Used when a process
+    /// task's dependencies fail or are cancelled.
+    pub async fn cancel_waiting(&self, name: &str) {
+        let mut processes = self.processes.write().await;
+        if let Some(ProcessEntry::Waiting { activity, .. }) = processes.remove(name) {
+            activity.dependency_failed();
+            info!("Cancelled waiting process: {}", name);
+        }
+    }
+
+    /// Launch a previously registered waiting process.
+    ///
+    /// Removes the `Waiting` entry, transitions the activity to `Running`
+    /// status, and launches the process. The TUI elapsed time includes the
+    /// waiting period since the activity was created at registration time.
+    pub async fn launch_waiting(&self, name: &str) -> Result<Option<Arc<Job>>> {
+        let mut processes = self.processes.write().await;
+        let (config, activity) = match processes.remove(name) {
+            Some(ProcessEntry::Waiting { config, activity }) => (config, activity),
+            Some(entry) => {
+                processes.insert(name.to_string(), entry);
+                bail!("Process {} is not in waiting state", name)
+            }
+            None => bail!("Process {} not found", name),
+        };
+        drop(processes);
+
+        let result = self.launch_or_register_not_started(config, activity).await;
+
+        // Wake any API Wait handlers that are blocked on Waiting entries.
+        if let Some(notify) = &self.task_notify {
+            notify.notify_waiters();
+        }
+
+        result
+    }
+
+    /// Start a command with the given configuration.
+    ///
+    /// If `start.enable` is false, the process is registered as not started (visible
+    /// in TUI as stopped but not running) and `Ok(None)` is returned.
+    pub async fn start_command(
+        &self,
+        config: &ProcessConfig,
+        parent_id: Option<u64>,
+    ) -> Result<Option<Arc<Job>>> {
+        debug!("Starting command '{}': {}", config.name, config.exec);
+
+        let activity = self.create_process_activity(config, parent_id);
+
+        self.launch_or_register_not_started(config.clone(), activity)
+            .await
+    }
+
+    /// Launch a process if enabled, or register as not started if auto start is off.
+    ///
+    /// Returns `Ok(None)` for auto start off processes, `Ok(Some(job))` for launched ones.
+    async fn launch_or_register_not_started(
+        &self,
+        config: ProcessConfig,
+        activity: Activity,
+    ) -> Result<Option<Arc<Job>>> {
         if !config.start.enable {
-            activity.set_status(ProcessStatus::Disabled);
+            activity.set_status(ProcessStatus::NotStarted);
+            info!("Registered auto start off process: {}", config.name);
             self.processes.write().await.insert(
                 config.name.clone(),
-                ProcessEntry::Disabled {
-                    config: config.clone(),
-                    activity,
-                },
+                ProcessEntry::NotStarted { config, activity },
             );
-            info!("Registered disabled process: {}", config.name);
             return Ok(None);
         }
 
-        self.launch(config, activity).await.map(Some)
+        self.launch(&config, activity).await.map(Some)
     }
 
     /// Launch a process: sets up probes, sockets, supervisor, and log tailers.
@@ -370,10 +514,14 @@ impl NativeProcessManager {
                 info!("Process {} stopped", name);
                 Ok(())
             }
-            Some(entry @ ProcessEntry::Disabled { .. }) => {
-                // Put it back; disabled processes are not stoppable
+            Some(entry @ (ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. })) => {
+                let state = if matches!(entry, ProcessEntry::NotStarted { .. }) {
+                    "auto start off"
+                } else {
+                    "waiting for dependencies"
+                };
                 processes.insert(name.to_string(), entry);
-                bail!("Process {} is disabled, cannot stop", name)
+                bail!("Process {} is {}, cannot stop", name, state)
             }
             None => bail!("Process {} not found", name),
         }
@@ -386,36 +534,24 @@ impl NativeProcessManager {
         self.shutdown.cancel();
     }
 
-    /// Stop all processes and clear disabled entries
+    /// Stop all processes and clear not-started/waiting entries
     pub async fn stop_all(&self) -> Result<()> {
         debug!("stop_all: shutting down supervisors");
         // Signal supervisors first so they exit gracefully
         self.shutdown_supervisors();
 
-        let processes = self.processes.read().await;
-        let active_names: Vec<String> = processes
-            .iter()
-            .filter_map(|(name, entry)| match entry {
-                ProcessEntry::Active(_) => Some(name.clone()),
-                ProcessEntry::Disabled { .. } => None,
-            })
-            .collect();
-        drop(processes); // Release the read lock
+        let names = active_names(&*self.processes.read().await);
 
-        debug!(
-            "stop_all: stopping {} processes: {:?}",
-            active_names.len(),
-            active_names
-        );
-        for name in &active_names {
+        debug!("stop_all: stopping {} processes: {:?}", names.len(), names);
+        for name in &names {
             let _ = self.stop(name).await; // Continue even if one fails
         }
 
-        // Clear disabled processes (their activities complete on drop)
+        // Clear not-started and waiting processes (their activities complete on drop)
         self.processes
             .write()
             .await
-            .retain(|_, entry| !matches!(entry, ProcessEntry::Disabled { .. }));
+            .retain(|_, entry| matches!(entry, ProcessEntry::Active(_)));
 
         Ok(())
     }
@@ -428,8 +564,9 @@ impl NativeProcessManager {
         let mut processes = self.processes.write().await;
         let handle = match processes.get_mut(name) {
             Some(ProcessEntry::Active(h)) => h,
-            Some(ProcessEntry::Disabled { .. }) => {
-                bail!("Process {} is disabled, use start_disabled", name)
+            Some(_) => {
+                debug!("restart: process {} is not active, ignoring", name);
+                return Ok(());
             }
             None => bail!("Process {} not running", name),
         };
@@ -493,39 +630,44 @@ impl NativeProcessManager {
         Ok(())
     }
 
-    /// Start a previously disabled process, reusing its existing TUI activity.
-    pub async fn start_disabled(&self, name: &str) -> Result<Arc<Job>> {
-        let removed = self.processes.write().await.remove(name);
-        let (config, activity) = match removed {
-            Some(ProcessEntry::Disabled { config, activity }) => (config, activity),
-            Some(entry) => {
-                // Put it back
-                self.processes.write().await.insert(name.to_string(), entry);
-                bail!("Process {} is not disabled", name);
+    /// Start a previously not-started process, reusing its existing TUI activity.
+    pub async fn start_not_started(&self, name: &str) -> Result<Arc<Job>> {
+        let (config, activity) = {
+            let mut processes = self.processes.write().await;
+            match processes.get(name) {
+                Some(ProcessEntry::NotStarted { .. }) => {}
+                Some(_) => bail!("Process {} is not in not-started state", name),
+                None => bail!("Process {} not found", name),
             }
-            None => bail!("Process {} not found", name),
+            // Safe: we just checked the variant above.
+            match processes.remove(name).unwrap() {
+                ProcessEntry::NotStarted { config, activity } => (config, activity),
+                _ => unreachable!(),
+            }
         };
 
         // Reset the activity so it no longer shows as stopped
         activity.reset();
 
-        info!("Starting disabled process: {}", name);
+        info!("Starting not-started process: {}", name);
         // Move the activity into launch (not clone) so the original is not
         // dropped — Activity::drop sends Process::Complete which would
         // immediately mark the process as stopped in the TUI.
-        self.launch(&config, activity).await
+        let job = self.launch(&config, activity).await?;
+
+        // Notify the task system so it re-checks dependencies.
+        // Dependent processes will be launched by the task scheduler once
+        // it sees this dependency's phase has changed.
+        if let Some(notify) = &self.task_notify {
+            notify.notify_waiters();
+        }
+
+        Ok(job)
     }
 
     /// Get list of running processes
     pub async fn list(&self) -> Vec<String> {
-        let processes = self.processes.read().await;
-        processes
-            .iter()
-            .filter_map(|(name, entry)| match entry {
-                ProcessEntry::Active(_) => Some(name.clone()),
-                ProcessEntry::Disabled { .. } => None,
-            })
-            .collect()
+        active_names(&*self.processes.read().await)
     }
 
     /// Wait for a process to become ready, avoiding missed early readiness signals.
@@ -537,8 +679,8 @@ impl NativeProcessManager {
             let processes = self.processes.read().await;
             match processes.get(name) {
                 Some(ProcessEntry::Active(handle)) => handle.status_rx.clone(),
-                Some(ProcessEntry::Disabled { .. }) => {
-                    bail!("Process {} is disabled", name)
+                Some(_) => {
+                    return Ok(());
                 }
                 None => bail!("Process {} not found", name),
             }
@@ -584,6 +726,7 @@ impl NativeProcessManager {
         let sock_path = self.api_socket_path();
         let _ = std::fs::remove_file(&sock_path);
         let processes = self.processes.clone();
+        let task_notify = self.task_notify.clone();
 
         let listener = std::os::unix::net::UnixListener::bind(&sock_path)
             .into_diagnostic()
@@ -597,7 +740,8 @@ impl NativeProcessManager {
                 match listener.accept().await {
                     Ok((stream, _)) => {
                         let processes = processes.clone();
-                        tokio::spawn(Self::handle_api_client(stream, processes));
+                        let task_notify = task_notify.clone();
+                        tokio::spawn(Self::handle_api_client(stream, processes, task_notify));
                     }
                     Err(e) => {
                         warn!("API accept error: {}", e);
@@ -614,6 +758,7 @@ impl NativeProcessManager {
     async fn handle_api_client(
         stream: tokio::net::UnixStream,
         processes: Arc<RwLock<HashMap<String, ProcessEntry>>>,
+        task_notify: Option<Arc<Notify>>,
     ) {
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
@@ -626,32 +771,70 @@ impl NativeProcessManager {
 
         let response = match serde_json::from_str::<ApiRequest>(&line) {
             Ok(ApiRequest::Wait) => {
-                let receivers: Vec<(
-                    String,
-                    tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
-                )> = {
-                    let processes = processes.read().await;
-                    processes
+                // Poll until no Waiting entries remain and all Active processes
+                // are ready. This avoids a race where the API server starts
+                // before processes transition from Waiting to Active.
+                loop {
+                    // Register and enable the notification BEFORE checking state
+                    // to prevent missed wakeups (same pattern as wait_for_task_deps).
+                    let notified = task_notify.as_ref().map(|n| n.notified());
+                    tokio::pin!(notified);
+                    if let Some(n) = notified.as_mut().as_pin_mut() {
+                        n.enable();
+                    }
+
+                    let procs = processes.read().await;
+                    let has_waiting = procs
+                        .values()
+                        .any(|e| matches!(e, ProcessEntry::Waiting { .. }));
+
+                    if has_waiting {
+                        drop(procs);
+                        match notified.as_pin_mut() {
+                            Some(notified) => {
+                                tokio::select! {
+                                    _ = notified => {},
+                                    _ = tokio::time::sleep(Duration::from_secs(1)) => {},
+                                }
+                            }
+                            None => {
+                                tokio::time::sleep(Duration::from_millis(100)).await;
+                            }
+                        }
+                        continue;
+                    }
+
+                    let receivers: Vec<(
+                        String,
+                        tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
+                    )> = procs
                         .iter()
                         .filter_map(|(name, entry)| match entry {
                             ProcessEntry::Active(handle) => {
                                 Some((name.clone(), handle.status_rx.clone()))
                             }
-                            ProcessEntry::Disabled { .. } => None,
+                            ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. } => None,
                         })
-                        .collect()
-                };
+                        .collect();
+                    drop(procs);
 
-                for (name, mut rx) in receivers {
-                    if rx.borrow().is_ready() {
-                        continue;
-                    }
-                    debug!("API: waiting for process {} to become ready", name);
-                    while rx.changed().await.is_ok() {
-                        if rx.borrow().is_ready() {
-                            break;
+                    for (name, mut rx) in receivers {
+                        {
+                            let status = rx.borrow_and_update();
+                            if status.is_ready() || status.is_gave_up() {
+                                continue;
+                            }
+                        }
+                        debug!("API: waiting for process {} to become ready", name);
+                        while rx.changed().await.is_ok() {
+                            let status = rx.borrow();
+                            if status.is_ready() || status.is_gave_up() {
+                                break;
+                            }
                         }
                     }
+
+                    break;
                 }
 
                 ApiResponse::Ready
@@ -749,11 +932,43 @@ impl NativeProcessManager {
         Ok(())
     }
 
-    /// Run the manager event loop in foreground (non-Arc version)
+    /// Handle a single process command (restart, start not-started, etc.).
+    pub async fn handle_command(&self, cmd: ProcessCommand) {
+        match cmd {
+            ProcessCommand::Restart(name) => {
+                let is_not_started = matches!(
+                    self.processes.read().await.get(&name),
+                    Some(ProcessEntry::NotStarted { .. })
+                );
+                if is_not_started {
+                    info!("Starting not-started process: {}", name);
+                    if let Err(e) = self.start_not_started(&name).await {
+                        warn!("Failed to start process {}: {}", name, e);
+                    }
+                } else {
+                    info!("Restarting process: {}", name);
+                    if let Err(e) = self.restart(&name).await {
+                        warn!("Failed to restart process {}: {}", name, e);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Start processing commands in a background task.
     ///
-    /// The cancellation token allows integration with external shutdown coordination
-    /// (e.g., the main app shutdown). When the token is cancelled, all processes are stopped.
-    ///
+    /// This allows commands (e.g. Ctrl-R restart) to be handled while task
+    /// execution is still in progress. The background task exits when the
+    /// sender half of the channel is dropped.
+    pub fn start_command_listener(self: &Arc<Self>, mut rx: mpsc::Receiver<ProcessCommand>) {
+        let pm = Arc::clone(self);
+        tokio::spawn(async move {
+            while let Some(cmd) = rx.recv().await {
+                pm.handle_command(cmd).await;
+            }
+        });
+    }
+
     /// Note: This method relies on the cancellation token for shutdown signals.
     /// Signal handling (SIGINT/SIGTERM) is done by tokio-shutdown in the main app,
     /// which cancels the token when a signal is received.
@@ -784,25 +999,7 @@ impl NativeProcessManager {
                         None => std::future::pending().await,
                     }
                 } => {
-                    match cmd {
-                        ProcessCommand::Restart(name) => {
-                            let is_disabled = matches!(
-                                self.processes.read().await.get(&name),
-                                Some(ProcessEntry::Disabled { .. })
-                            );
-                            if is_disabled {
-                                info!("Starting disabled process: {}", name);
-                                if let Err(e) = self.start_disabled(&name).await {
-                                    warn!("Failed to start disabled process {}: {}", name, e);
-                                }
-                            } else {
-                                info!("Restarting process: {}", name);
-                                if let Err(e) = self.restart(&name).await {
-                                    warn!("Failed to restart process {}: {}", name, e);
-                                }
-                            }
-                        }
-                    }
+                    self.handle_command(cmd).await;
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {
                     if self.processes.read().await.is_empty() {
@@ -832,7 +1029,10 @@ impl NativeProcessManager {
         Ok(pid)
     }
 
-    /// Start processes from the given configs, filtering by name if specified
+    /// Start processes from the given configs, filtering by name if specified.
+    ///
+    /// Processes with dependencies (`after`) are registered in the TUI as "waiting"
+    /// and launched concurrently once their dependencies are satisfied.
     async fn start_processes(
         &self,
         configs: &HashMap<String, ProcessConfig>,
@@ -1107,7 +1307,7 @@ impl Drop for NativeProcessManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::RestartPolicy;
+    use crate::config::{RestartPolicy, StartConfig};
 
     #[tokio::test]
     async fn test_create_manager() {
@@ -1139,5 +1339,181 @@ mod tests {
 
         // Clean up
         let _ = manager.stop_all().await;
+    }
+
+    fn test_config(name: &str) -> ProcessConfig {
+        ProcessConfig {
+            name: name.to_string(),
+            exec: "echo".to_string(),
+            args: vec!["hello".to_string()],
+            restart: crate::config::RestartConfig {
+                on: RestartPolicy::Never,
+                max: Some(5),
+                window: None,
+            },
+            ..Default::default()
+        }
+    }
+
+    fn auto_start_off_config(name: &str) -> ProcessConfig {
+        ProcessConfig {
+            start: StartConfig { enable: false },
+            ..test_config(name)
+        }
+    }
+
+    fn long_running_config(name: &str) -> ProcessConfig {
+        ProcessConfig {
+            name: name.to_string(),
+            exec: "sleep".to_string(),
+            args: vec!["100".to_string()],
+            restart: crate::config::RestartConfig {
+                on: RestartPolicy::Never,
+                max: Some(5),
+                window: None,
+            },
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_register_waiting_sets_phase() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let config = test_config("waiter");
+
+        manager.register_waiting(config, None).await;
+
+        assert_eq!(
+            manager.get_phase("waiter").await,
+            Some(ProcessPhase::Waiting)
+        );
+
+        let _ = manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn test_get_phase_unknown() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        assert_eq!(manager.get_phase("nonexistent").await, None);
+    }
+
+    #[tokio::test]
+    async fn test_cancel_waiting_removes_entry() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let config = test_config("cancel-me");
+
+        manager.register_waiting(config, None).await;
+        assert_eq!(
+            manager.get_phase("cancel-me").await,
+            Some(ProcessPhase::Waiting)
+        );
+
+        manager.cancel_waiting("cancel-me").await;
+        assert_eq!(manager.get_phase("cancel-me").await, None);
+    }
+
+    #[tokio::test]
+    async fn test_cancel_waiting_noop_for_unknown() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // Should not panic
+        manager.cancel_waiting("does-not-exist").await;
+    }
+
+    #[tokio::test]
+    async fn test_launch_waiting_auto_start_off_becomes_not_started() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let config = auto_start_off_config("auto-start-off-proc");
+
+        manager.register_waiting(config, None).await;
+        let result = manager.launch_waiting("auto-start-off-proc").await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+        assert_eq!(
+            manager.get_phase("auto-start-off-proc").await,
+            Some(ProcessPhase::NotStarted)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_launch_waiting_not_found_errors() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        let result = manager.launch_waiting("ghost").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_launch_waiting_not_in_waiting_state_errors() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let config = test_config("active-proc");
+
+        manager.start_command(&config, None).await.unwrap();
+
+        let result = manager.launch_waiting("active-proc").await;
+        assert!(result.is_err());
+
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("not in waiting state"),
+            "Expected error about not being in waiting state, got: {}",
+            err_msg
+        );
+
+        let _ = manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn test_launch_waiting_enabled_starts_process() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let config = long_running_config("long-runner");
+
+        manager.register_waiting(config, None).await;
+        let result = manager.launch_waiting("long-runner").await;
+
+        assert!(result.is_ok());
+        let job = result.unwrap();
+        assert!(job.is_some(), "Expected Some(job) for an enabled process");
+
+        let phase = manager.get_phase("long-runner").await;
+        assert_ne!(phase, Some(ProcessPhase::Waiting));
+
+        let _ = manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn test_launch_waiting_notifies_task_system() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        let notify = Arc::new(Notify::new());
+        manager.set_task_notify(notify.clone());
+
+        let config = auto_start_off_config("notify-proc");
+        manager.register_waiting(config, None).await;
+
+        // Register the notified future before launch_waiting so the
+        // notification is not missed due to a race.
+        let notified = notify.notified();
+        tokio::pin!(notified);
+
+        let _ = manager.launch_waiting("notify-proc").await;
+
+        let completed = tokio::time::timeout(std::time::Duration::from_secs(5), notified).await;
+
+        assert!(
+            completed.is_ok(),
+            "Notification should have fired within the timeout"
+        );
     }
 }

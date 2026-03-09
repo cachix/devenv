@@ -339,12 +339,30 @@ pub enum Process {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Valuable)]
 #[serde(rename_all = "lowercase")]
 pub enum ProcessStatus {
-    /// Process has `start.enable = false`; registered but never launched.
-    Disabled,
+    /// Process has `start.enable = false`; not started yet but can be started later.
+    NotStarted,
+    /// Waiting for dependencies before starting.
+    Waiting,
+    /// Spawned; readiness probe has not yet passed.
+    Starting,
+    /// Running without a readiness probe configured.
     Running,
+    /// Readiness probe passed.
     Ready,
+    /// Stop + start cycle in progress.
     Restarting,
+    /// Exited.
     Stopped,
+}
+
+impl ProcessStatus {
+    /// Whether the process is in an active (non-terminal, non-idle) state.
+    pub fn is_active(&self) -> bool {
+        matches!(
+            self,
+            Self::Waiting | Self::Starting | Self::Running | Self::Ready | Self::Restarting
+        )
+    }
 }
 
 /// Operation activity events - generic devenv operations with log support

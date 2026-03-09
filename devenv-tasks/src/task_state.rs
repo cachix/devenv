@@ -3,12 +3,12 @@ use crate::config::TaskConfig;
 use crate::executor::{ExecutionContext, OutputCallback, SubprocessExecutor};
 use crate::task_cache::{TaskCache, expand_glob_patterns};
 use crate::types::{
-    Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel, get_devenv_env,
-    get_or_create_devenv_env_mut,
+    Output, ProcessPhase, ProcessTaskStatus, Skipped, TaskCompleted, TaskFailure, TaskStatus,
+    TaskType, VerbosityLevel, get_devenv_env, get_or_create_devenv_env_mut, process_name,
 };
 use base64::Engine;
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
-use devenv_processes::{ListenKind, NativeProcessManager, ProcessConfig};
+use devenv_processes::{NativeProcessManager, ProcessConfig};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -48,6 +48,16 @@ impl OutputCallback for ActivityCallback<'_> {
     }
 }
 
+/// Info returned from `run_process` about how the process was launched.
+pub struct ProcessLaunchInfo {
+    /// Whether the process has auto start off (start.enable = false).
+    pub auto_start_off: bool,
+    /// Whether the process has a readiness probe that must be awaited.
+    pub requires_ready_wait: bool,
+    /// The process manager name (stripped `devenv:processes:` prefix).
+    pub process_name: String,
+}
+
 pub struct TaskState {
     pub task: TaskConfig,
     pub status: TaskStatus,
@@ -61,9 +71,16 @@ impl TaskState {
         verbosity: VerbosityLevel,
         sudo_context: Option<SudoContext>,
     ) -> Self {
+        let status = match task.r#type {
+            TaskType::Process => TaskStatus::Process(ProcessTaskStatus {
+                name: process_name(&task.name).to_string(),
+                phase: ProcessPhase::Waiting,
+            }),
+            _ => TaskStatus::Pending,
+        };
         Self {
             task,
-            status: TaskStatus::Pending,
+            status,
             verbosity,
             sudo_context,
         }
@@ -343,51 +360,29 @@ impl TaskState {
         exports
     }
 
-    /// Run a process task (long-running)
+    /// Build a `ProcessConfig` from this task's config, merging environment variables.
     ///
-    /// This spawns a process using NativeProcessManager and immediately returns
-    /// ProcessReady status. The process will stay alive until explicitly stopped
-    /// via the process manager's stop_all().
-    pub async fn run_process(
-        &mut self,
-        manager: &Arc<NativeProcessManager>,
-        parent_id: Option<u64>,
+    /// The process name is derived by stripping the `devenv:processes:` prefix
+    /// from the task name (which all process tasks are expected to have).
+    pub fn build_process_config(
+        &self,
         env: &std::collections::HashMap<String, String>,
         bash: &str,
-        cancel: &tokio_util::sync::CancellationToken,
-    ) -> Result<()> {
-        let Some(cmd) = &self.task.command else {
-            return Err(miette::miette!(
-                "Process task {} has no command",
-                self.task.name
-            ));
-        };
-
-        tracing::info!("Starting process task: {}", self.task.name);
-
-        // Use short process name (strip "devenv:processes:" prefix for display)
-        let process_name = self
+    ) -> Result<ProcessConfig> {
+        let cmd = self
             .task
-            .name
-            .strip_prefix("devenv:processes:")
-            .unwrap_or(&self.task.name)
-            .to_string();
+            .command
+            .as_ref()
+            .ok_or_else(|| miette::miette!("Process task {} has no command", self.task.name))?;
 
-        // Build process config, merging task config with process-specific overrides
-        let mut config = if let Some(ref process) = self.task.process {
-            ProcessConfig {
-                name: process_name,
-                exec: cmd.clone(),
-                cwd: self.task.cwd.clone().map(std::path::PathBuf::from),
-                ..process.clone()
-            }
-        } else {
-            ProcessConfig {
-                name: process_name,
-                exec: cmd.clone(),
-                cwd: self.task.cwd.clone().map(std::path::PathBuf::from),
-                ..Default::default()
-            }
+        let process_name = process_name(&self.task.name).to_string();
+
+        let base = self.task.process.clone().unwrap_or_default();
+        let mut config = ProcessConfig {
+            name: process_name,
+            exec: cmd.clone(),
+            cwd: self.task.cwd.clone().map(std::path::PathBuf::from),
+            ..base
         };
 
         // Merge devenv shell environment into process config
@@ -399,31 +394,36 @@ impl TaskState {
         config.env = merged_env;
         config.bash = bash.to_string();
 
-        // Check if we need to wait for readiness (ready config, has listen sockets, or has allocated ports)
-        let requires_ready_wait = config.ready.is_some()
-            || config
-                .listen
-                .iter()
-                .any(|spec| spec.kind == ListenKind::Tcp)
-            || !config.ports.is_empty();
+        Ok(config)
+    }
 
-        // Start the process via the manager (which tracks it for shutdown).
-        // Returns None for disabled processes (start.enable = false).
-        let started = manager.start_command(&config, parent_id).await?;
+    /// Launch a process task and return info about how it was launched.
+    ///
+    /// This spawns a process using NativeProcessManager but does not wait for
+    /// readiness or set task status. The caller is responsible for status tracking.
+    pub async fn run_process(
+        &self,
+        manager: &Arc<NativeProcessManager>,
+        config: ProcessConfig,
+    ) -> Result<ProcessLaunchInfo> {
+        tracing::info!("Launching process task: {}", self.task.name);
 
-        // Wait for ready signal if the process was actually started
-        if started.is_some() && requires_ready_wait {
-            tracing::info!("Waiting for process {} to signal ready...", self.task.name);
-            manager.wait_ready(&config.name, cancel).await?;
-            tracing::info!("Process {} signaled ready", self.task.name);
+        let requires_ready_wait = config.has_readiness_probe();
+        let process_name = config.name.clone();
+
+        // Launch the pre-registered waiting process.
+        let started = manager.launch_waiting(&config.name).await?;
+
+        let auto_start_off = started.is_none();
+        if auto_start_off {
+            tracing::info!("Process task {} has auto start off", self.task.name);
         }
 
-        // Transition to ProcessReady
-        self.status = TaskStatus::ProcessReady;
-
-        tracing::info!("Process task {} is ready", self.task.name);
-
-        Ok(())
+        Ok(ProcessLaunchInfo {
+            auto_start_off,
+            requires_ready_wait,
+            process_name,
+        })
     }
 
     /// Run this task with a pre-assigned activity ID.

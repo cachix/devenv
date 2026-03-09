@@ -2,11 +2,10 @@ use crate::{
     components::{LOG_VIEWPORT_FAILED, LOG_VIEWPORT_SHOW_OUTPUT, *},
     model::{
         Activity, ActivityModel, ActivitySummary, ActivityVariant, DisplayActivity,
-        NixActivityState, ProcessLifecycle, RenderContext, TaskDisplayStatus, TerminalSize,
-        UiState,
+        NixActivityState, RenderContext, TaskDisplayStatus, TerminalSize, UiState,
     },
 };
-use devenv_activity::ActivityLevel;
+use devenv_activity::{ActivityLevel, ProcessStatus};
 use human_repr::{HumanCount, HumanDuration};
 use iocraft::Context;
 use iocraft::components::ContextProvider;
@@ -628,30 +627,25 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             return main_line;
         }
         ActivityVariant::Process(process_data) => {
-            let is_active = matches!(
-                process_data.lifecycle,
-                ProcessLifecycle::Starting
-                    | ProcessLifecycle::Running
-                    | ProcessLifecycle::Ready
-                    | ProcessLifecycle::Restarting
-            );
+            let is_active = process_data.status.is_active();
 
             // Build status text with optional ports
-            let status_str: std::borrow::Cow<str> = match &process_data.lifecycle {
+            let status_str: std::borrow::Cow<str> = match &process_data.status {
                 _ if *shutting_down && is_active => "stopping".into(),
-                ProcessLifecycle::Disabled => "disabled".into(),
-                ProcessLifecycle::Starting => "starting".into(),
-                ProcessLifecycle::Running => {
+                ProcessStatus::NotStarted => "auto start off".into(),
+                ProcessStatus::Waiting => "waiting".into(),
+                ProcessStatus::Starting => "starting".into(),
+                ProcessStatus::Running => {
                     if let Some(probe) = &process_data.ready_probe {
                         format!("running (not ready: {})", probe).into()
                     } else {
                         "running".into()
                     }
                 }
-                ProcessLifecycle::Ready => "ready".into(),
-                ProcessLifecycle::Restarting => "restarting".into(),
-                ProcessLifecycle::Stopped { success: true } => "stopped".into(),
-                ProcessLifecycle::Stopped { success: false } => "failed".into(),
+                ProcessStatus::Ready => "ready".into(),
+                ProcessStatus::Restarting => "restarting".into(),
+                ProcessStatus::Stopped if *completed == Some(false) => "failed".into(),
+                ProcessStatus::Stopped => "stopped".into(),
             };
 
             // Format ports: extract just the port numbers for brevity
@@ -681,8 +675,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let show_spinner = completed.is_none() && is_active;
             let prefix = build_activity_prefix(*depth, *completed, show_spinner);
 
-            // Hide elapsed time for disabled/stopped processes that were never started
-            let process_elapsed = if matches!(process_data.lifecycle, ProcessLifecycle::Disabled)
+            // Hide elapsed time for not-started/stopped processes
+            let process_elapsed = if matches!(process_data.status, ProcessStatus::NotStarted)
                 || (!is_active && completed.is_none())
             {
                 String::new()

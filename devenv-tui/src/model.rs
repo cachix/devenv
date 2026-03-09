@@ -100,26 +100,9 @@ pub struct MessageActivity {
     pub details: Option<String>,
 }
 
-/// Lifecycle state of a managed process in the TUI.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ProcessLifecycle {
-    /// `start.enable = false`; visible but never launched.
-    Disabled,
-    /// Spawned; readiness probe has not yet passed.
-    Starting,
-    /// Running without a readiness probe configured.
-    Running,
-    /// Readiness probe passed.
-    Ready,
-    /// Stop + start cycle in progress.
-    Restarting,
-    /// Exited.
-    Stopped { success: bool },
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProcessActivity {
-    pub lifecycle: ProcessLifecycle,
+    pub status: ProcessStatus,
     pub ports: Vec<String>,
     /// Human-readable description of the readiness probe (e.g., "exec: pg_isready")
     pub ready_probe: Option<String>,
@@ -655,7 +638,7 @@ impl ActivityModel {
                 ..
             } => {
                 let variant = ActivityVariant::Process(ProcessActivity {
-                    lifecycle: ProcessLifecycle::Starting,
+                    status: ProcessStatus::Starting,
                     ports,
                     ready_probe,
                 });
@@ -665,9 +648,7 @@ impl ActivityModel {
                 if let Some(activity) = self.activities.get_mut(&id)
                     && let ActivityVariant::Process(ref mut proc) = activity.variant
                 {
-                    proc.lifecycle = ProcessLifecycle::Stopped {
-                        success: outcome == ActivityOutcome::Success,
-                    };
+                    proc.status = ProcessStatus::Stopped;
                 }
                 self.handle_activity_complete(id, outcome);
             }
@@ -683,13 +664,7 @@ impl ActivityModel {
                         return;
                     }
                     if let ActivityVariant::Process(ref mut proc) = activity.variant {
-                        proc.lifecycle = match status {
-                            ProcessStatus::Disabled => ProcessLifecycle::Disabled,
-                            ProcessStatus::Running => ProcessLifecycle::Running,
-                            ProcessStatus::Ready => ProcessLifecycle::Ready,
-                            ProcessStatus::Restarting => ProcessLifecycle::Restarting,
-                            ProcessStatus::Stopped => ProcessLifecycle::Stopped { success: true },
-                        };
+                        proc.status = status;
                     }
                 }
             }
@@ -1210,13 +1185,7 @@ impl ActivityModel {
                     }
                 },
                 (ActivityVariant::Process(proc), _) => {
-                    if matches!(
-                        proc.lifecycle,
-                        ProcessLifecycle::Starting
-                            | ProcessLifecycle::Running
-                            | ProcessLifecycle::Ready
-                            | ProcessLifecycle::Restarting
-                    ) {
+                    if proc.status.is_active() {
                         summary.running_processes += 1;
                     }
                 }

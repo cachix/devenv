@@ -1650,13 +1650,13 @@ impl Devenv {
                 let roots: Vec<String> = if processes.is_empty() {
                     task_configs
                         .iter()
-                        .filter(|t| t.name.starts_with("devenv:processes:"))
+                        .filter(|t| t.name.starts_with(devenv_tasks::PROCESS_TASK_PREFIX))
                         .map(|t| t.name.clone())
                         .collect()
                 } else {
                     processes
                         .iter()
-                        .map(|p| format!("devenv:processes:{}", p))
+                        .map(|p| format!("{}{}", devenv_tasks::PROCESS_TASK_PREFIX, p))
                         .collect()
                 };
 
@@ -1693,19 +1693,24 @@ impl Devenv {
                 .await
                 .map_err(|e| miette!("Failed to build task runner: {}", e))?;
 
-                let command_rx = options.command_rx.take();
+                // Start command processing before task execution so that
+                // Ctrl-R works even while tasks are still running (e.g. when
+                // a process task is waiting on an auto start off dependency).
+                if let Some(rx) = options.command_rx.take() {
+                    tasks_runner.process_manager.start_command_listener(rx);
+                }
 
                 // Run process tasks under the Phase 4 activity.
-                // Disabled processes (start.enable = false) are handled by the
+                // Auto start off processes (start.enable = false) are handled by the
                 // process manager: they appear in the TUI as stopped.
                 debug!("devenv.up: running process tasks (run_with_parent_activity)");
                 let _outputs = tasks_runner
                     .run_with_parent_activity(Arc::new(phase4))
                     .await;
-                debug!("devenv.up: process tasks completed, starting API server");
+                debug!("devenv.up: process tasks completed");
 
-                // Start the API server so process IPC (status, restart, etc.) works
-                tasks_runner.process_manager.start_api_server()?;
+                // API server is started inside run_internal() so it's available
+                // while processes are still starting up.
 
                 let pid_file = tasks_runner.process_manager.manager_pid_file();
                 processes::write_pid(&pid_file, std::process::id())
@@ -1719,7 +1724,7 @@ impl Devenv {
                     );
                     let result = tasks_runner
                         .process_manager
-                        .run_foreground(self.shutdown.cancellation_token(), command_rx)
+                        .run_foreground(self.shutdown.cancellation_token(), None)
                         .await
                         .map_err(|e| miette!("Process manager error: {}", e));
                     debug!("devenv.up: run_foreground returned");

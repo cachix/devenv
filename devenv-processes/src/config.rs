@@ -256,6 +256,15 @@ pub struct ProcessConfig {
     pub linux: LinuxConfig,
 }
 
+impl ProcessConfig {
+    /// Whether this config has any readiness mechanism (probe, TCP listen, or allocated ports).
+    pub fn has_readiness_probe(&self) -> bool {
+        self.ready.is_some()
+            || self.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
+            || !self.ports.is_empty()
+    }
+}
+
 impl Default for ProcessConfig {
     fn default() -> Self {
         Self {
