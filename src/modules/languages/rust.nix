@@ -169,6 +169,17 @@ in
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
+      changelogs = [
+        {
+          date = "2026-03-08";
+          title = "`languages.rust.import` now uses your configured toolchain";
+          when = cfg.enable;
+          description = ''
+            Previously, `languages.rust.import` would use the default, stable version of Rust from nixpkgs to build packages. Now, `languages.rust.import` uses the toolchain configured with your development environment (`languages.rust.toolchainPackage`).
+          '';
+        }
+      ];
+
       languages.rust.import = path: args:
         let
           crate2nixTools = pkgs.callPackage "${crate2nix}/tools.nix" { };
@@ -185,10 +196,23 @@ in
           );
 
           # Use crate2nix IFD to auto-generate
-          cargoNix = crate2nixTools.appliedCargoNix {
-            name = packageName;
-            src = path;
-          };
+          cargoNix =
+            let
+              toolchain = cfg.toolchainPackage;
+            in
+            pkgs.callPackage
+              (crate2nixTools.generatedCargoNix {
+                name = packageName;
+                src = path;
+              })
+              {
+                buildRustCrateForPkgs =
+                  _:
+                  pkgs.buildRustCrate.override {
+                    rustc = toolchain;
+                    cargo = toolchain;
+                  };
+              };
         in
         cargoNix.rootCrate.build.override args;
     }
