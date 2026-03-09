@@ -13,7 +13,7 @@ use devenv_core::{
     ports::PortAllocator,
     settings::{CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings},
 };
-use devenv_shell::dialect::{BashDialect, ShellDialect};
+use devenv_shell::dialect::{RcfileContext, create_dialect};
 use include_dir::{Dir, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use nix::sys::signal;
@@ -601,72 +601,86 @@ impl Devenv {
             .trim_end_matches("exec $SHELL")
             .to_string();
 
-        // Load the user's bashrc if it exists and if we're in an interactive shell.
-        // Disable alias expansion to avoid breaking the dev shell script.
-        let mut script = indoc::formatdoc! {
-            r#"
-            if [ -n "$PS1" ] && [ -e $HOME/.bashrc ]; then
-                source $HOME/.bashrc;
-            fi
-
-            shopt -u expand_aliases
-            {}
-            shopt -s expand_aliases
-            "#,
-            shell_env
+        // Determine target shell and dialect
+        let dialect = create_dialect(&self.shell_settings.shell);
+        let target_shell_path = if dialect.name() != "bash" {
+            Some(resolve_shell_path(dialect.name()))
+        } else {
+            None
         };
 
-        // Inject task-exported env vars (e.g., PATH with venv/bin, VIRTUAL_ENV)
-        // after the Nix shell env is applied so they aren't overridden.
-        {
+        // Build task exports string once
+        let task_exports = {
             let exports = self.task_exports.lock().unwrap();
-            for (key, value) in exports.iter() {
-                script.push_str(&format!(
-                    "export {}={}\n",
-                    shell_escape::escape(std::borrow::Cow::Borrowed(key)),
-                    shell_escape::escape(std::borrow::Cow::Borrowed(value))
-                ));
-            }
-        }
+            format_shell_exports(&exports)
+        };
 
-        // Add command for non-interactive mode
-        if let Some(cmd) = &cmd {
+        // For non-interactive commands, always use bash directly
+        if cmd.is_some() {
+            let mut script = bash_init_script(&shell_env);
+            script.push_str(&task_exports);
+
             let command = format!(
                 "\nexec {} {}",
-                cmd,
+                cmd.as_ref().unwrap(),
                 args.iter()
                     .map(|arg| shell_escape::escape(std::borrow::Cow::Borrowed(arg)))
                     .collect::<Vec<_>>()
                     .join(" ")
             );
             script.push_str(&command);
+
+            let script_path = write_executable_script(&self.devenv_dotfile, &script);
+            shell_cmd.arg(&script_path);
+        } else {
+            // Interactive shell
+            let script_path = if target_shell_path.is_some() {
+                // Non-bash: write env script, generate bash wrapper that execs into target shell
+                let env_script_path = self.devenv_dotfile.join("shell-env.sh");
+                let mut env_content = shell_env;
+                env_content.push_str(&task_exports);
+                std::fs::write(&env_script_path, &env_content)
+                    .into_diagnostic()
+                    .wrap_err("Failed to write env script")?;
+
+                let env_diff_helpers = dialect.env_diff_helpers();
+                let target_path_str = target_shell_path.as_deref().unwrap();
+
+                let rcfile_ctx = RcfileContext {
+                    env_script_path: &env_script_path,
+                    env_diff_helpers,
+                    reload_hook: "",
+                    target_shell_path: Some(target_path_str),
+                    init_dir: &self.devenv_dotfile,
+                };
+
+                let rcfile_content = dialect.rcfile_content(&rcfile_ctx);
+                dialect
+                    .write_init_files(&rcfile_ctx)
+                    .into_diagnostic()
+                    .wrap_err("Failed to write shell init files")?;
+
+                write_executable_script(&self.devenv_dotfile, &rcfile_content)
+            } else {
+                // Bash (default)
+                let mut script = bash_init_script(&shell_env);
+                script.push_str(&task_exports);
+                write_executable_script(&self.devenv_dotfile, &script)
+            };
+
+            let interactive_args = dialect.interactive_args();
+            shell_cmd.args(&interactive_args.prefix);
+            shell_cmd.arg(&script_path);
+            shell_cmd.args(&interactive_args.suffix);
         }
 
-        // Write shell script to a content-addressed file
-        // Using content hash in filename allows eval cache to track it properly while
-        // avoiding race conditions between parallel sessions (same content = same file)
-        let script_hash = &compute_string_hash(&script)[..16];
-        let script_path = self
-            .devenv_dotfile
-            .join(format!("shell-{}.sh", script_hash));
-        std::fs::write(&script_path, &script).expect("Failed to write shell script");
-        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
-            .expect("Failed to set permissions");
-
-        match cmd {
-            Some(_) => {
-                shell_cmd.arg(&script_path);
-            }
-            None => {
-                let dialect = BashDialect;
-                let interactive_args = dialect.interactive_args();
-                shell_cmd.args(&interactive_args.prefix);
-                shell_cmd.arg(&script_path);
-                shell_cmd.args(&interactive_args.suffix);
-            }
-        }
-
-        crate::shell_env::apply_shell_env(&mut shell_cmd, &bash, &self.shell_settings.clean);
+        // Use target shell path for SHELL env var when available
+        let shell_for_env = target_shell_path.as_deref().unwrap_or(&bash);
+        crate::shell_env::apply_shell_env(
+            &mut shell_cmd,
+            shell_for_env,
+            &self.shell_settings.clean,
+        );
 
         Ok(shell_cmd)
     }
@@ -2165,6 +2179,77 @@ async fn run_tasks_with_ui(
     }
 }
 
+/// Format a set of key-value pairs as shell export statements.
+pub fn format_shell_exports(exports: &HashMap<String, String>) -> String {
+    let mut buf = String::new();
+    for (key, value) in exports {
+        buf.push_str(&format!(
+            "export {}={}\n",
+            shell_escape::escape(std::borrow::Cow::Borrowed(key)),
+            shell_escape::escape(std::borrow::Cow::Borrowed(value))
+        ));
+    }
+    buf
+}
+
+/// Generate a bash init script that sources .bashrc and applies the devenv shell environment.
+fn bash_init_script(shell_env: &str) -> String {
+    indoc::formatdoc! {
+        r#"
+        if [ -n "$PS1" ] && [ -e $HOME/.bashrc ]; then
+            source $HOME/.bashrc;
+        fi
+
+        shopt -u expand_aliases
+        {}
+        shopt -s expand_aliases
+        "#,
+        shell_env
+    }
+}
+
+/// Write a shell script to a content-addressed file with executable permissions.
+/// Skips the write if the file already exists (same content hash = same file).
+fn write_executable_script(dir: &Path, content: &str) -> PathBuf {
+    let hash = &compute_string_hash(content)[..16];
+    let path = dir.join(format!("shell-{}.sh", hash));
+    if !path.exists() {
+        std::fs::write(&path, content).expect("Failed to write shell script");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .expect("Failed to set permissions");
+    }
+    path
+}
+
+/// Resolve the path to a shell binary.
+///
+/// If `$SHELL` basename matches the requested shell name, uses `$SHELL`.
+/// Otherwise falls back to looking up the shell in `$PATH` via `which`.
+pub fn resolve_shell_path(shell_name: &str) -> String {
+    // If $SHELL is an absolute path whose basename matches, use it directly
+    if let Ok(shell_env) = std::env::var("SHELL") {
+        let path = Path::new(&shell_env);
+        if path.is_absolute() && path.file_name().and_then(|n| n.to_str()) == Some(shell_name) {
+            tracing::debug!("resolve_shell_path: using $SHELL={}", shell_env);
+            return shell_env;
+        }
+    }
+    // Otherwise resolve via PATH (handles both bare names like "zsh" and mismatches)
+    match which::which(shell_name) {
+        Ok(p) => {
+            let resolved = p.to_string_lossy().to_string();
+            tracing::debug!("resolve_shell_path: found {} at {}", shell_name, resolved);
+            resolved
+        }
+        Err(_) => {
+            tracing::warn!(
+                "resolve_shell_path: could not find '{}' in PATH, using bare name",
+                shell_name
+            );
+            shell_name.to_string()
+        }
+    }
+}
 fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
     if std::fs::metadata(file).is_ok() {
         // first output the old version and propose new changes

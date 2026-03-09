@@ -208,6 +208,7 @@ pub struct ShellOptions {
     pub clean: Option<Vec<String>>,
     pub profiles: Vec<String>,
     pub reload: Option<bool>,
+    pub shell: Option<String>,
 }
 
 /// Resolved shell settings.
@@ -216,6 +217,7 @@ pub struct ShellSettings {
     pub clean: Clean,
     pub profiles: Vec<String>,
     pub reload: bool,
+    pub shell: String,
 }
 
 impl Default for ShellSettings {
@@ -224,6 +226,7 @@ impl Default for ShellSettings {
             clean: Clean::default(),
             profiles: Vec::new(),
             reload: true,
+            shell: "bash".to_string(),
         }
     }
 }
@@ -247,10 +250,43 @@ impl ShellSettings {
 
         let reload = options.reload.combine(config.reload).unwrap_or(true);
 
+        let options_shell = options.shell;
+        let shell = options_shell
+            .clone()
+            .or(config.shell.clone())
+            .or_else(|| {
+                std::env::var("SHELL").ok().and_then(|s| {
+                    std::path::Path::new(&s)
+                        .file_name()?
+                        .to_str()
+                        .map(String::from)
+                })
+            })
+            .unwrap_or_else(|| "bash".to_string());
+
+        // Only bash and zsh are supported; fall back to bash for anything else
+        let shell = match shell.as_str() {
+            "bash" | "zsh" => shell,
+            _ => "bash".to_string(),
+        };
+
+        tracing::debug!(
+            "Shell settings resolved: shell={} (source: {})",
+            shell,
+            if options_shell.is_some() {
+                "CLI --shell"
+            } else if config.shell.is_some() {
+                "devenv.yaml"
+            } else {
+                "$SHELL env"
+            }
+        );
+
         Self {
             clean,
             profiles,
             reload,
+            shell,
         }
     }
 }
@@ -523,6 +559,39 @@ mod tests {
         };
         let settings = ShellSettings::resolve(options, &config);
         assert!(!settings.reload);
+    }
+
+    #[test]
+    fn shell_settings_shell_from_options() {
+        let options = ShellOptions {
+            shell: Some("zsh".into()),
+            ..Default::default()
+        };
+        let config = Config::default();
+        let settings = ShellSettings::resolve(options, &config);
+        assert_eq!(settings.shell, "zsh");
+    }
+
+    #[test]
+    fn shell_settings_shell_from_config() {
+        let options = ShellOptions::default();
+        let config = Config {
+            shell: Some("zsh".into()),
+            ..Default::default()
+        };
+        let settings = ShellSettings::resolve(options, &config);
+        assert_eq!(settings.shell, "zsh");
+    }
+
+    #[test]
+    fn shell_settings_unsupported_shell_falls_back_to_bash() {
+        let options = ShellOptions {
+            shell: Some("fish".into()),
+            ..Default::default()
+        };
+        let config = Config::default();
+        let settings = ShellSettings::resolve(options, &config);
+        assert_eq!(settings.shell, "bash");
     }
 
     #[test]

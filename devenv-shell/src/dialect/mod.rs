@@ -5,8 +5,10 @@
 //! hooks, and launch arguments.
 
 mod bash;
+mod zsh;
 
 pub use bash::BashDialect;
+pub use zsh::ZshDialect;
 
 use std::path::{Path, PathBuf};
 
@@ -34,6 +36,13 @@ pub trait ShellDialect: Send + Sync {
 
     /// Generate a shell-specific PS1/prompt prefix for "(devenv)".
     fn prompt_prefix(&self) -> &str;
+
+    /// Write supplementary init files (e.g., zsh's ZDOTDIR .zshrc).
+    /// Default implementation is a no-op (bash doesn't need extra files).
+    fn write_init_files(&self, ctx: &RcfileContext) -> std::io::Result<()> {
+        let _ = ctx;
+        Ok(())
+    }
 }
 
 /// Arguments for launching an interactive shell with a custom init script.
@@ -44,6 +53,14 @@ pub struct InteractiveArgs {
     pub suffix: Vec<String>,
 }
 
+/// Look up a dialect by name, defaulting to bash if no match.
+pub fn create_dialect(shell_name: &str) -> Box<dyn ShellDialect> {
+    match shell_name {
+        "zsh" => Box::new(ZshDialect),
+        _ => Box::new(BashDialect),
+    }
+}
+
 /// Context passed to [`ShellDialect::rcfile_content`] for generating the init script.
 pub struct RcfileContext<'a> {
     /// Path to the devenv environment script to source.
@@ -52,4 +69,8 @@ pub struct RcfileContext<'a> {
     pub env_diff_helpers: &'a str,
     /// Reload hook script (empty if no reload).
     pub reload_hook: &'a str,
+    /// Path to the target shell binary (e.g., /usr/bin/zsh). None for bash (no exec needed).
+    pub target_shell_path: Option<&'a str>,
+    /// Directory for writing shell init files (e.g., .devenv/).
+    pub init_dir: &'a Path,
 }
