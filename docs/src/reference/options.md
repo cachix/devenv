@@ -3398,7 +3398,7 @@ string
 *Default:*
 
 ```nix
-"2.0.1"
+"2.0.3"
 ```
 
 *Declared by:*
