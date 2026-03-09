@@ -372,9 +372,7 @@ impl DevenvOutput {
             // Run the REPL on a new thread with its own GC-registered runtime
             let repl_result = std::thread::Builder::new()
                 .stack_size(NIX_STACK_SIZE)
-                .spawn(move || {
-                    build_gc_runtime().block_on(async { devenv.repl().await })
-                })
+                .spawn(move || build_gc_runtime().block_on(async { devenv.repl().await }))
                 .map_err(|_| miette::miette!("Failed to spawn REPL thread"))
                 .and_then(|handle| {
                     handle
