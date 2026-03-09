@@ -945,6 +945,7 @@ async fn run_reload_shell(
     let initial_env_script = devenv_guard.print_dev_env(false).await?;
     let bash_path = devenv_guard.get_bash_path().await?;
     let clean = devenv_guard.shell_settings.clean.clone();
+    let shell = devenv_guard.shell_settings.shell.clone();
 
     // Get eval cache info (after print_dev_env set it up)
     let eval_cache_pool = devenv_guard.eval_cache_pool().cloned();
@@ -986,6 +987,7 @@ async fn run_reload_shell(
         eval_cache_pool,
         shell_cache_key,
         task_exports,
+        shell,
     );
 
     // Set up communication channels between coordinator and shell runner

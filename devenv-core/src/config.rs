@@ -209,6 +209,9 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(merge = schematic::merge::replace)]
     pub strict_ports: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[setting(merge = schematic::merge::replace)]
+    pub shell: Option<String>,
     /// Git repository root path (not serialized, computed during load)
     #[serde(skip)]
     pub git_root: Option<PathBuf>,

@@ -329,7 +329,9 @@ in
     ++ lib.optional (config.apple.sdk != null) config.apple.sdk;
 
     enterShell = lib.mkBefore ''
-      export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
+      ${lib.optionalString (config.devenv.cli.version == null || !lib.versionAtLeast config.devenv.cli.version "2.1") ''
+        export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
+      ''}
 
       # Override temp directories that stdenv set to NIX_BUILD_TOP.
       # Only reset those that still point to the Nix build dir; leave
