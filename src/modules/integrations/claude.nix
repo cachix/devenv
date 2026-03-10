@@ -627,6 +627,19 @@ in
   };
 
   config = lib.mkMerge [
+    {
+      changelogs = [
+        {
+          date = "2026-03-10";
+          title = "claude.code.hooks.git-hooks-format renamed to git-hooks-run";
+          when = cfg.enable;
+          description = ''
+            The `claude.code.hooks.git-hooks-format` hook has been renamed to `claude.code.hooks.git-hooks-run`.
+          '';
+        }
+      ];
+    }
+
     (lib.mkIf cfg.enable {
       files = lib.mkMerge [
         { "${cfg.settingsPath}".json = settingsContent; }
