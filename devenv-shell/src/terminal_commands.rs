@@ -18,6 +18,22 @@ impl Command for ReportTextAreaSize {
     }
 }
 
+/// Mode 2048 in-band resize notification (CSI 48 ; rows ; cols ; height_px ; width_px t).
+///
+/// Sent through the PTY to notify programs of a terminal size change.
+/// Spec: <https://gist.github.com/rockorager/e695fb2924d36b2bcf1fff4a3704bd83>
+/// Adopted by kitty, ghostty, foot, iTerm2: <https://github.com/kovidgoyal/kitty/issues/7642>
+pub struct InBandResizeNotification {
+    pub rows: u16,
+    pub cols: u16,
+}
+
+impl Command for InBandResizeNotification {
+    fn write_ansi(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        write!(f, "\x1b[48;{};{};0;0t", self.rows, self.cols)
+    }
+}
+
 /// DECSTBM — set top/bottom scroll region (CSI top ; bottom r).
 pub struct SetScrollRegion {
     pub top: u16,

@@ -9,8 +9,8 @@ use crate::pty::{Pty, PtyError, get_terminal_size};
 use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
 use crate::terminal::RawModeGuard;
 use crate::terminal_commands::{
-    CursorPositionQuery, ORIGIN_MODE, ReportTextAreaSize, ResetDecMode, ResetModifyOtherKeys,
-    ResetScrollRegion, SetKeypadMode, SetScrollRegion,
+    CursorPositionQuery, InBandResizeNotification, ORIGIN_MODE, ReportTextAreaSize, ResetDecMode,
+    ResetModifyOtherKeys, ResetScrollRegion, SetKeypadMode, SetScrollRegion,
 };
 use crate::utf8_accumulator::Utf8Accumulator;
 use avt::Vt;
@@ -1155,6 +1155,21 @@ impl ShellSession {
                         let pty_size = self.pty_size();
                         renderer.content_rows = pty_size.rows;
                         let _ = pty.resize(pty_size);
+                        // Send a mode 2048 in-band resize notification
+                        // through the PTY. The mode itself is not forwarded
+                        // to the real terminal because it would report the
+                        // wrong size (real terminal rows vs PTY rows-1).
+                        // Programs like neovim detect terminal support via
+                        // DA2 and rely on this instead of SIGWINCH, so we
+                        // send the notification with the correct PTY
+                        // dimensions.
+                        let cmd = InBandResizeNotification {
+                            rows: pty_size.rows,
+                            cols: pty_size.cols,
+                        };
+                        let mut buf = String::new();
+                        cmd.write_ansi(&mut buf).unwrap();
+                        let _ = pty.write_all(buf.as_bytes());
                         vt.resize(pty_size.cols as usize, pty_size.rows as usize);
                         renderer.mark_scrollback_flushed(vt);
                         renderer.render_full(stdout, vt)?;
