@@ -1691,7 +1691,7 @@ Hooks that run at different points in Claude Code’s workflow.
 
 
 *Type:*
-attribute set of (submodule)
+open submodule of attribute set of (submodule)
 
 
 
@@ -1759,12 +1759,159 @@ boolean
 true
 ```
 
+
+
+## claude.code.hooks.\<name>.command
+
+
+
+The command to execute.
+
+
+
+*Type:*
+string
+
+
+
+## claude.code.hooks.\<name>.hookType
+
+
+
+The type of hook:
+
+ - PreToolUse: Runs before tool calls (can block them)
+ - PostToolUse: Runs after tool calls complete
+ - PostToolUseFailure: Runs after a tool call fails
+ - Notification: Runs when Claude Code sends notifications
+ - UserPromptSubmit: Runs when user submits a prompt
+ - SessionStart: Runs when a Claude Code session starts
+ - SessionEnd: Runs when a Claude Code session ends
+ - Stop: Runs when Claude Code finishes responding
+ - SubagentStart: Runs when a subagent task starts
+ - SubagentStop: Runs when subagent tasks complete
+ - PreCompact: Runs before message compaction
+ - PermissionRequest: Runs when a permission is requested
+ - WorktreeCreate: Runs when a new worktree is created
+ - WorktreeRemove: Runs when a worktree is removed
+ - TeammateIdle: Runs when a teammate agent becomes idle
+ - TaskCompleted: Runs when a task is completed
+ - ConfigChange: Runs when configuration changes
+
+
+
+*Type:*
+one of “PreToolUse”, “PostToolUse”, “PostToolUseFailure”, “Notification”, “UserPromptSubmit”, “SessionStart”, “SessionEnd”, “Stop”, “SubagentStart”, “SubagentStop”, “PreCompact”, “PermissionRequest”, “WorktreeCreate”, “WorktreeRemove”, “TeammateIdle”, “TaskCompleted”, “ConfigChange”
+
+
+
+*Default:*
+
+```nix
+"PostToolUse"
+```
+
+
+
+## claude.code.hooks.\<name>.matcher
+
+
+
+Regex pattern to match against tool names (for PreToolUse/PostToolUse hooks).
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+""
+```
+
+
+
+## claude.code.hooks.\<name>.name
+
+
+
+The name of the hook (appears in logs).
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+""
+```
+
+
+
+## claude.code.hooks.git-hooks-run
+
+
+
+Automatically runs git-hooks after Claude edits files.
+Enabled by default when ` git-hooks.enable ` is true.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+
+```nix
+{
+  enable = config.git-hooks.enable;
+  name = "Run git-hooks";
+  hookType = "PostToolUse";
+  matcher = "^(Edit|MultiEdit|Write)$";
+  command = "cd \"$DEVENV_ROOT\" && \${config.git-hooks.package.meta.mainProgram} run";
+}
+
+```
+
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
 
 
 
-## claude.code.hooks.\<name>.command
+## claude.code.hooks.git-hooks-run.enable
+
+
+
+Whether to enable this hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.hooks.git-hooks-run.command
 
 
 
@@ -1780,7 +1927,7 @@ string
 
 
 
-## claude.code.hooks.\<name>.hookType
+## claude.code.hooks.git-hooks-run.hookType
 
 
 
@@ -1822,7 +1969,7 @@ one of “PreToolUse”, “PostToolUse”, “PostToolUseFailure”, “Notific
 
 
 
-## claude.code.hooks.\<name>.matcher
+## claude.code.hooks.git-hooks-run.matcher
 
 
 
@@ -1846,7 +1993,7 @@ string
 
 
 
-## claude.code.hooks.\<name>.name
+## claude.code.hooks.git-hooks-run.name
 
 
 
@@ -1856,6 +2003,14 @@ The name of the hook (appears in logs).
 
 *Type:*
 string
+
+
+
+*Default:*
+
+```nix
+""
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -2611,8 +2766,6 @@ list of (submodule)
 
 ## containers.\<name>.layers.\*.copyToRoot
 
-
-
 A list of derivations copied to the image root directory.
 
 Store path prefixes ` /nix/store/hash-path ` are removed in order to relocate them to the image ` / `.
@@ -2766,6 +2919,8 @@ null
 
 
 ## containers.\<name>.layers.\*.perms.\*.gname
+
+
 
 The group name to apply to all of the files matched by the ` regex `.
 
@@ -5888,8 +6043,6 @@ false
 
 ## git-hooks.hooks.biome.description
 
-
-
 Description of the hook. Used for metadata purposes only.
 
 
@@ -6035,6 +6188,8 @@ false
 
 
 ## git-hooks.hooks.black.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
@@ -8177,8 +8332,6 @@ string
 
 ## git-hooks.hooks.gotest
 
-
-
 gotest hook
 
 
@@ -8288,6 +8441,8 @@ submodule
 
 
 ## git-hooks.hooks.headache.enable
+
+
 
 Whether to enable this pre-commit hook.
 

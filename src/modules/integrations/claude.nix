@@ -31,6 +31,73 @@ let
   # Reserved keys that are not tool names (for backward compat detection)
   reservedPermissionKeys = [ "defaultMode" "disableBypassPermissionsMode" "additionalDirectories" "rules" ];
 
+  # Hook submodule type (reused for both freeform hooks and named integrations)
+  hookSubmodule = lib.types.submodule {
+    options = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether to enable this hook.";
+      };
+      name = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "The name of the hook (appears in logs).";
+      };
+      hookType = lib.mkOption {
+        type = lib.types.enum [
+          "PreToolUse"
+          "PostToolUse"
+          "PostToolUseFailure"
+          "Notification"
+          "UserPromptSubmit"
+          "SessionStart"
+          "SessionEnd"
+          "Stop"
+          "SubagentStart"
+          "SubagentStop"
+          "PreCompact"
+          "PermissionRequest"
+          "WorktreeCreate"
+          "WorktreeRemove"
+          "TeammateIdle"
+          "TaskCompleted"
+          "ConfigChange"
+        ];
+        default = "PostToolUse";
+        description = ''
+          The type of hook:
+          - PreToolUse: Runs before tool calls (can block them)
+          - PostToolUse: Runs after tool calls complete
+          - PostToolUseFailure: Runs after a tool call fails
+          - Notification: Runs when Claude Code sends notifications
+          - UserPromptSubmit: Runs when user submits a prompt
+          - SessionStart: Runs when a Claude Code session starts
+          - SessionEnd: Runs when a Claude Code session ends
+          - Stop: Runs when Claude Code finishes responding
+          - SubagentStart: Runs when a subagent task starts
+          - SubagentStop: Runs when subagent tasks complete
+          - PreCompact: Runs before message compaction
+          - PermissionRequest: Runs when a permission is requested
+          - WorktreeCreate: Runs when a new worktree is created
+          - WorktreeRemove: Runs when a worktree is removed
+          - TeammateIdle: Runs when a teammate agent becomes idle
+          - TaskCompleted: Runs when a task is completed
+          - ConfigChange: Runs when configuration changes
+        '';
+      };
+      matcher = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Regex pattern to match against tool names (for PreToolUse/PostToolUse hooks).";
+      };
+      command = lib.mkOption {
+        type = lib.types.str;
+        description = "The command to execute.";
+      };
+    };
+  };
+
   # Build hooks configuration
   buildHooks =
     hookType: hooks:
@@ -49,14 +116,6 @@ let
         })
         hooks;
 
-  # Auto-format hook using git-hooks if enabled
-  preCommitHook = lib.optional config.git-hooks.enable {
-    matcher = "^(Edit|MultiEdit|Write)$";
-    command = ''
-      cd "$DEVENV_ROOT" && ${config.git-hooks.package.meta.mainProgram} run
-    '';
-  };
-
   # Collect all hooks by type
   allHooks = lib.mapAttrsToList
     (
@@ -74,9 +133,6 @@ let
   groupedHooks = lib.mapAttrs (k: v: map (h: h.hook) v) (
     lib.groupBy (h: h.type) allHooks
   );
-
-  # Add pre-commit hook if git-hooks are enabled
-  postToolUseHooks = (groupedHooks.PostToolUse or [ ]) ++ preCommitHook;
 
   # Build permissions configuration
   # Transforms per-tool permissions to Claude Code's flat format: Tool(pattern)
@@ -142,7 +198,7 @@ let
   settingsContent = lib.filterAttrs (n: v: v != null) {
     hooks = lib.filterAttrs (n: v: v != null) {
       PreToolUse = buildHooks "PreToolUse" (groupedHooks.PreToolUse or [ ]);
-      PostToolUse = buildHooks "PostToolUse" postToolUseHooks;
+      PostToolUse = buildHooks "PostToolUse" (groupedHooks.PostToolUse or [ ]);
       PostToolUseFailure = buildHooks "PostToolUseFailure" (groupedHooks.PostToolUseFailure or [ ]);
       Notification = buildHooks "Notification" (groupedHooks.Notification or [ ]);
       UserPromptSubmit = buildHooks "UserPromptSubmit" (groupedHooks.UserPromptSubmit or [ ]);
@@ -179,72 +235,36 @@ in
     enable = lib.mkEnableOption "Claude Code integration with automatic hooks and commands setup";
 
     hooks = lib.mkOption {
-      type = lib.types.attrsOf (
-        lib.types.submodule {
-          options = {
-            enable = lib.mkOption {
-              type = lib.types.bool;
-              default = true;
-              description = "Whether to enable this hook.";
-            };
-            name = lib.mkOption {
-              type = lib.types.str;
-              description = "The name of the hook (appears in logs).";
-            };
-            hookType = lib.mkOption {
-              type = lib.types.enum [
-                "PreToolUse"
-                "PostToolUse"
-                "PostToolUseFailure"
-                "Notification"
-                "UserPromptSubmit"
-                "SessionStart"
-                "SessionEnd"
-                "Stop"
-                "SubagentStart"
-                "SubagentStop"
-                "PreCompact"
-                "PermissionRequest"
-                "WorktreeCreate"
-                "WorktreeRemove"
-                "TeammateIdle"
-                "TaskCompleted"
-                "ConfigChange"
-              ];
-              default = "PostToolUse";
-              description = ''
-                The type of hook:
-                - PreToolUse: Runs before tool calls (can block them)
-                - PostToolUse: Runs after tool calls complete
-                - PostToolUseFailure: Runs after a tool call fails
-                - Notification: Runs when Claude Code sends notifications
-                - UserPromptSubmit: Runs when user submits a prompt
-                - SessionStart: Runs when a Claude Code session starts
-                - SessionEnd: Runs when a Claude Code session ends
-                - Stop: Runs when Claude Code finishes responding
-                - SubagentStart: Runs when a subagent task starts
-                - SubagentStop: Runs when subagent tasks complete
-                - PreCompact: Runs before message compaction
-                - PermissionRequest: Runs when a permission is requested
-                - WorktreeCreate: Runs when a new worktree is created
-                - WorktreeRemove: Runs when a worktree is removed
-                - TeammateIdle: Runs when a teammate agent becomes idle
-                - TaskCompleted: Runs when a task is completed
-                - ConfigChange: Runs when configuration changes
-              '';
-            };
-            matcher = lib.mkOption {
-              type = lib.types.str;
-              default = "";
-              description = "Regex pattern to match against tool names (for PreToolUse/PostToolUse hooks).";
-            };
-            command = lib.mkOption {
-              type = lib.types.str;
-              description = "The command to execute.";
-            };
+      type = lib.types.submodule {
+        freeformType = lib.types.attrsOf hookSubmodule;
+        options.git-hooks-run = lib.mkOption {
+          type = hookSubmodule;
+          default = {
+            enable = config.git-hooks.enable;
+            name = "Run git-hooks";
+            hookType = "PostToolUse";
+            matcher = "^(Edit|MultiEdit|Write)$";
+            command =
+              if config.git-hooks.enable then
+                ''cd "$DEVENV_ROOT" && ${config.git-hooks.package.meta.mainProgram} run''
+              else
+                "true";
           };
-        }
-      );
+          defaultText = lib.literalExpression ''
+            {
+              enable = config.git-hooks.enable;
+              name = "Run git-hooks";
+              hookType = "PostToolUse";
+              matcher = "^(Edit|MultiEdit|Write)$";
+              command = "cd \"$DEVENV_ROOT\" && \''${config.git-hooks.package.meta.mainProgram} run";
+            }
+          '';
+          description = ''
+            Automatically runs git-hooks after Claude edits files.
+            Enabled by default when `git-hooks.enable` is true.
+          '';
+        };
+      };
       default = { };
       description = ''
         Hooks that run at different points in Claude Code's workflow.
@@ -606,69 +626,85 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    files = lib.mkMerge [
-      { "${cfg.settingsPath}".json = settingsContent; }
+  config = lib.mkMerge [
+    {
+      changelogs = [
+        {
+          date = "2026-03-10";
+          title = "claude.code.hooks.git-hooks-format renamed to git-hooks-run";
+          when = cfg.enable;
+          description = ''
+            The `claude.code.hooks.git-hooks-format` hook has been renamed to `claude.code.hooks.git-hooks-run`.
+          '';
+        }
+      ];
+    }
 
-      # MCP configuration file
-      (lib.mkIf (cfg.mcpServers != { }) {
-        ".mcp.json".json = mcpContent;
-      })
+    (lib.mkIf cfg.enable {
+      files = lib.mkMerge [
+        { "${cfg.settingsPath}".json = settingsContent; }
 
-      # Command files
-      (lib.mapAttrs'
-        (name: content: {
-          name = ".claude/commands/${name}.md";
-          value = {
-            text = content;
-          };
+        # MCP configuration file
+        (lib.mkIf (cfg.mcpServers != { }) {
+          ".mcp.json".json = mcpContent;
         })
-        cfg.commands)
 
-      # Sub-agent files
-      (lib.mapAttrs'
-        (name: agent: {
-          name = ".claude/agents/${name}.md";
-          value = {
-            text = ''
-              ---
-              name: ${name}
-              description: ${agent.description}
-              proactive: ${lib.boolToString agent.proactive}
-              ${lib.optionalString (agent.tools != []) "tools:\n${lib.concatMapStringsSep "\n" (tool: "  - ${tool}") agent.tools}"}
-              ${lib.optionalString (agent.model != null) "model: ${agent.model}"}
-              ${lib.optionalString (agent.permissionMode != null) "permissionMode: ${agent.permissionMode}"}
-              ---
+        # Command files
+        (lib.mapAttrs'
+          (name: content: {
+            name = ".claude/commands/${name}.md";
+            value = {
+              text = content;
+            };
+          })
+          cfg.commands)
 
-              ${agent.prompt}
-            '';
-          };
-        })
-        cfg.agents)
-    ];
+        # Sub-agent files
+        (lib.mapAttrs'
+          (name: agent: {
+            name = ".claude/agents/${name}.md";
+            value = {
+              text = ''
+                ---
+                name: ${name}
+                description: ${agent.description}
+                proactive: ${lib.boolToString agent.proactive}
+                ${lib.optionalString (agent.tools != []) "tools:\n${lib.concatMapStringsSep "\n" (tool: "  - ${tool}") agent.tools}"}
+                ${lib.optionalString (agent.model != null) "model: ${agent.model}"}
+                ${lib.optionalString (agent.permissionMode != null) "permissionMode: ${agent.permissionMode}"}
+                ---
 
-    # Add a message about the integration
-    infoSections."claude" = [
-      ''
-        Claude Code integration is enabled with automatic hooks and commands setup.
-        Settings are configured at: ${cfg.settingsPath}
-        ${lib.optionalString config.git-hooks.enable "- Auto-formatting: enabled via git-hooks (pre-commit)"}
-        ${lib.optionalString (cfg.commands != { })
-          "- Project commands: ${
-            lib.concatStringsSep ", " (map (cmd: "/${cmd}") (lib.attrNames cfg.commands))
-          }"
-        }
-        ${lib.optionalString (cfg.agents != { })
-          "- Sub-agents: ${
-            lib.concatStringsSep ", " (lib.attrNames cfg.agents)
-          }"
-        }
-        ${lib.optionalString (cfg.mcpServers != { })
-          "- MCP servers: ${
-            lib.concatStringsSep ", " (lib.attrNames cfg.mcpServers)
-          } (configured at ${config.devenv.root}/.mcp.json)"
-        }
-      ''
-    ];
-  };
+                ${agent.prompt}
+              '';
+            };
+          })
+          cfg.agents)
+      ];
+
+      # Add a message about the integration
+      infoSections."claude" = [
+        ''
+          Claude Code integration is enabled with automatic hooks and commands setup.
+          Settings are configured at: ${cfg.settingsPath}
+          ${lib.optionalString config.git-hooks.enable "- Auto-formatting: enabled via git-hooks (git-hooks-run)"}
+          ${lib.optionalString (cfg.commands != { })
+            "- Project commands: ${
+              lib.concatStringsSep ", " (map (cmd: "/${cmd}") (lib.attrNames cfg.commands))
+            }"
+          }
+          ${lib.optionalString (cfg.agents != { })
+            "- Sub-agents: ${
+              lib.concatStringsSep ", " (lib.attrNames cfg.agents)
+            }"
+          }
+          ${lib.optionalString (cfg.mcpServers != { })
+            "- MCP servers: ${
+              lib.concatStringsSep ", " (lib.attrNames cfg.mcpServers)
+            } (configured at ${config.devenv.root}/.mcp.json)"
+          }
+        ''
+      ];
+    })
+
+  ];
 }
