@@ -67,7 +67,7 @@ impl CliValue {
     /// Render this value as a Nix literal string.
     ///
     /// For list types (`PkgList`), `force` controls whether to replace
-    /// (`lib.mkForce`) or append (`config.packages ++ ...`).
+    /// (`lib.mkForce`) or append (plain list, merged by the module system).
     /// Scalar types always use `lib.mkForce` regardless of the flag.
     fn to_nix_literal(&self, force: bool) -> String {
         match self {
@@ -91,7 +91,7 @@ impl CliValue {
                 if force {
                     format!("lib.mkForce [ {} ]", pkgs.join(" "))
                 } else {
-                    format!("config.packages ++ [ {} ]", pkgs.join(" "))
+                    format!("[ {} ]", pkgs.join(" "))
                 }
             }
         }
@@ -693,8 +693,9 @@ mod tests {
         assert!(!options[0].force);
 
         // Verify append-mode serialization via to_nix_literal
+        // Uses plain list (module system merges automatically)
         let literal = options[0].value.to_nix_literal(false);
-        assert_eq!(literal, "config.packages ++ [ pkgs.hello pkgs.cowsay ]");
+        assert_eq!(literal, "[ pkgs.hello pkgs.cowsay ]");
     }
 
     #[test]

@@ -64,6 +64,11 @@ cd ..
 rm -rf test-from-only
 echo "✓ --from works without local devenv.nix"
 
+# Test -O packages:pkgs appends packages
+echo "Testing -O packages:pkgs..."
+devenv -O packages:pkgs "hello" shell -- hello | grep -q "Hello, world"
+echo "✓ -O packages:pkgs works"
+
 # Test -f short form
 echo "Testing -f short form..."
 output=$(devenv -f ./from-test info)
