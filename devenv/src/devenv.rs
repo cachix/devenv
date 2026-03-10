@@ -1,7 +1,7 @@
 use super::{processes, tasks, util};
 use clap::crate_version;
 use cli_table::Table;
-use cli_table::{WithTitle, print_stderr};
+use cli_table::WithTitle;
 use devenv_activity::ActivityInstrument;
 use devenv_activity::{Activity, ActivityLevel, activity, message};
 use devenv_cache_core::compute_string_hash;
@@ -989,7 +989,7 @@ impl Devenv {
     }
 
     #[activity("Searching options and packages")]
-    pub async fn search(&self, name: &str) -> Result<()> {
+    pub async fn search(&self, name: &str) -> Result<String> {
         self.assemble().await?;
 
         // Run both searches concurrently
@@ -999,18 +999,30 @@ impl Devenv {
         let results_options_count = options_results.len();
         let package_results_count = package_results.len();
 
+        let mut output = String::new();
+
         if !package_results.is_empty() {
-            print_stderr(package_results.with_title()).expect("Failed to print package results");
+            let table_display = package_results
+                .with_title()
+                .table()
+                .display()
+                .expect("Failed to format package results");
+            output.push_str(&format!("{table_display}\n"));
         }
 
         if !options_results.is_empty() {
-            print_stderr(options_results.with_title()).expect("Failed to print options results");
+            let table_display = options_results
+                .with_title()
+                .table()
+                .display()
+                .expect("Failed to format options results");
+            output.push_str(&format!("{table_display}\n"));
         }
 
-        eprintln!(
-            "Found {package_results_count} packages and {results_options_count} options for '{name}'."
-        );
-        Ok(())
+        output.push_str(&format!(
+            "Found {package_results_count} packages and {results_options_count} options for '{name}'.\n"
+        ));
+        Ok(output)
     }
 
     async fn search_options(&self, name: &str) -> Result<Vec<DevenvOptionResult>> {

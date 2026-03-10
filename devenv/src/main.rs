@@ -738,8 +738,8 @@ async fn run_devenv_inner(
             "})
         }
         Commands::Search { name } => {
-            devenv.search(&name).await?;
-            CommandResult::Done
+            let output = devenv.search(&name).await?;
+            CommandResult::Print(output)
         }
         Commands::Gc {} => {
             let (paths_deleted, bytes_freed) = devenv.gc().await?;
