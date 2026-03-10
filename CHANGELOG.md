@@ -10,6 +10,7 @@
 - Fixed cursor position requests not being passed through in the shell ([#2570](https://github.com/cachix/devenv/issues/2570)).
 - Fixed "Threads explicit registering is not previously enabled" crash on some Nix versions by calling `GC_allow_register_threads()` after `libexpr_init()` ([#2576](https://github.com/cachix/devenv/issues/2576)).
 - Fixed `-O packages:pkgs` causing infinite recursion by using NixOS module system merging instead of self-referencing `config.packages`.
+- Fixed `--clean` shell environment capture keeping all host variables except the keep list (inverted filter).
 
 ### Improvements
 

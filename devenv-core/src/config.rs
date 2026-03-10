@@ -133,6 +133,23 @@ pub struct Clean {
     // TODO: executables?
 }
 
+impl Clean {
+    /// Return host environment variables filtered by the clean/keep settings.
+    ///
+    /// When `enabled`, only variables whose name appears in `keep` are
+    /// returned. Otherwise every host variable is returned.
+    pub fn kept_env_vars(&self) -> HashMap<String, String> {
+        let vars = std::env::vars();
+        if self.enabled {
+            let keep: HashSet<&str> = self.keep.iter().map(|s| s.as_str()).collect();
+            vars.filter(|(key, _)| keep.contains(key.as_str()))
+                .collect()
+        } else {
+            vars.collect()
+        }
+    }
+}
+
 #[derive(schematic::Config, Clone, Serialize, Debug, JsonSchema)]
 #[config(rename_all = "camelCase", allow_unknown_fields)]
 #[serde(rename_all = "camelCase")]

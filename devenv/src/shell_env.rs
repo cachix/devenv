@@ -39,10 +39,8 @@ impl CommandEnv for devenv_reload::CommandBuilder {
 pub(crate) fn apply_shell_env(cmd: &mut impl CommandEnv, bash_path: &str, clean: &Clean) {
     if clean.enabled {
         cmd.clear_env();
-        for (k, v) in std::env::vars() {
-            if clean.keep.contains(&k) {
-                cmd.set_env(&k, &v);
-            }
+        for (k, v) in clean.kept_env_vars() {
+            cmd.set_env(&k, &v);
         }
     }
 

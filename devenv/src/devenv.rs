@@ -40,7 +40,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::process;
 use tokio::sync::{OnceCell, Semaphore};
-use tracing::{Instrument, debug, info, instrument, trace};
+use tracing::{Instrument, debug, info, instrument};
 
 // templates
 // Note: gitignore is stored without the dot to work around include_dir not including dotfiles
@@ -588,13 +588,7 @@ impl Devenv {
             &owned_dev_env.output
         };
 
-        let bash = match self.nix.get_bash(false).await {
-            Err(e) => {
-                trace!("Failed to get bash: {}. Rebuilding.", e);
-                self.nix.get_bash(true).await?
-            }
-            Ok(bash) => bash,
-        };
+        let bash = self.get_bash_path().await?;
 
         let mut shell_cmd = process::Command::new(&bash);
 
@@ -845,7 +839,7 @@ impl Devenv {
                 Some(&gc_root),
             )
             .await?;
-        let container_store_path = paths[0].to_string_lossy().to_string();
+        let container_store_path = paths[0].to_string_lossy().into_owned();
         Ok(container_store_path)
     }
 
@@ -871,7 +865,7 @@ impl Devenv {
                 Some(&gc_root),
             )
             .await?;
-        let copy_script = paths[0].to_string_lossy().to_string();
+        let copy_script = paths[0].to_string_lossy().into_owned();
 
         let envs = self.capture_shell_environment().await?;
 
@@ -908,22 +902,7 @@ impl Devenv {
             .build()
             .await?;
 
-        let (status, _outputs) = if tui {
-            let outputs = tasks.run(false).await;
-            let status = tasks.get_completion_status().await;
-            (status, outputs)
-        } else {
-            let (activity_rx, activity_handle) = devenv_activity::init();
-            let _activity_guard = activity_handle.install();
-
-            let tasks = Arc::new(tasks);
-            let tasks_clone = Arc::clone(&tasks);
-
-            let run_handle = tokio::spawn(async move { tasks_clone.run(false).await });
-
-            let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
-            ui.run(run_handle).await?
-        };
+        let (status, _outputs) = run_tasks_with_ui(tasks, verbosity, tui).await?;
 
         if status.has_failures() {
             bail!("Failed to copy container");
@@ -1181,27 +1160,7 @@ impl Devenv {
             .build()
             .await?;
 
-        // In TUI mode, skip TasksUi to avoid corrupting the TUI display
-        // TUI captures activity events directly via the channel initialized in main.rs
-        let (status, outputs) = if tui {
-            let outputs = tasks.run(false).await;
-            let status = tasks.get_completion_status().await;
-            (status, outputs)
-        } else {
-            // Shell mode - initialize activity channel for TasksUi
-            let (activity_rx, activity_handle) = devenv_activity::init();
-            let _activity_guard = activity_handle.install();
-
-            let tasks = Arc::new(tasks);
-            let tasks_clone = Arc::clone(&tasks);
-
-            // Spawn task runner - UI will detect completion via JoinHandle
-            let run_handle = tokio::spawn(async move { tasks_clone.run(false).await });
-
-            // Run UI - processes events and waits for run_handle
-            let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
-            ui.run(run_handle).await?
-        };
+        let (status, outputs) = run_tasks_with_ui(tasks, verbosity, tui).await?;
 
         if status.has_failures() {
             miette::bail!("Some tasks failed");
@@ -1271,26 +1230,7 @@ impl Devenv {
             .build()
             .await?;
 
-        // In TUI mode, skip TasksUi to avoid corrupting the TUI display —
-        // the TUI captures activity events directly via the channel in main.rs.
-        let outputs = if tui {
-            tasks.run(false).await
-        } else {
-            // Shell mode - initialize activity channel for TasksUi
-            let (activity_rx, activity_handle) = devenv_activity::init();
-            let _activity_guard = activity_handle.install();
-
-            let tasks = Arc::new(tasks);
-            let tasks_clone = Arc::clone(&tasks);
-
-            // Spawn task runner - UI will detect completion via JoinHandle
-            let run_handle = tokio::spawn(async move { tasks_clone.run(false).await });
-
-            // Run UI - processes events and waits for run_handle
-            let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
-            let (_status, outputs) = ui.run(run_handle).await?;
-            outputs
-        };
+        let (_status, outputs) = run_tasks_with_ui(tasks, verbosity, tui).await?;
 
         // Note: Task failures are shown in the TUI/UI output, no need to bail here.
         // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
@@ -1388,15 +1328,7 @@ impl Devenv {
             })?;
         let shell_envs = Self::parse_env_null_separated(&content);
 
-        let mut envs: HashMap<String, String> = {
-            let vars = std::env::vars();
-            if self.shell_settings.clean.enabled {
-                let keep = &self.shell_settings.clean.keep;
-                vars.filter(|(key, _)| !keep.contains(key)).collect()
-            } else {
-                vars.collect()
-            }
-        };
+        let mut envs: HashMap<String, String> = self.shell_settings.clean.kept_env_vars();
 
         for (key, value) in shell_envs {
             envs.insert(key, value);
@@ -1471,7 +1403,7 @@ impl Devenv {
                     .nix
                     .build(&["devenv.config.test"], None, Some(&gc_root))
                     .await?;
-                Ok::<String, miette::Report>(test_script[0].to_string_lossy().to_string())
+                Ok::<String, miette::Report>(test_script[0].to_string_lossy().into_owned())
             }
             .in_activity(&phase3)
             .await?
@@ -2063,11 +1995,7 @@ impl Devenv {
                 .map(|resolved| SecretspecData {
                     profile: resolved.profile.clone(),
                     provider: resolved.provider.clone(),
-                    secrets: resolved
-                        .secrets
-                        .iter()
-                        .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect(),
+                    secrets: resolved.secrets.clone().into_iter().collect(),
                 });
 
         let active_profiles = &self.shell_settings.profiles;
@@ -2195,7 +2123,7 @@ impl Devenv {
             self.devenv_dotfile.join("input-paths.txt"),
             env.inputs
                 .iter()
-                .map(|path| path.to_string_lossy().to_string())
+                .map(|path| path.to_string_lossy().into_owned())
                 .collect::<Vec<_>>()
                 .join("\n"),
         )?;
@@ -2210,6 +2138,34 @@ impl Devenv {
     #[activity("Configuring shell")]
     pub async fn get_dev_environment(&self, json: bool) -> Result<DevEnv> {
         self.get_dev_environment_inner(json).await
+    }
+}
+
+/// Run tasks, dispatching to TUI mode (direct run) or shell mode (with TasksUi).
+///
+/// In TUI mode the activity channel is already set up in main.rs, so tasks run
+/// directly and status is read afterwards. In shell mode we initialise a local
+/// activity channel and drive TasksUi for interactive output.
+async fn run_tasks_with_ui(
+    tasks: Tasks,
+    verbosity: tasks::VerbosityLevel,
+    tui: bool,
+) -> Result<(tasks::TasksStatus, tasks::Outputs)> {
+    if tui {
+        let outputs = tasks.run(false).await;
+        let status = tasks.get_completion_status().await;
+        Ok((status, outputs))
+    } else {
+        let (activity_rx, activity_handle) = devenv_activity::init();
+        let _activity_guard = activity_handle.install();
+
+        let tasks = Arc::new(tasks);
+        let tasks_clone = Arc::clone(&tasks);
+
+        let run_handle = tokio::spawn(async move { tasks_clone.run(false).await });
+
+        let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
+        Ok(ui.run(run_handle).await?)
     }
 }
 
