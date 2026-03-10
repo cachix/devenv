@@ -1860,7 +1860,7 @@ string
 
 
 Automatically runs git-hooks after Claude edits files.
-Only active when ` git-hooks.enable ` is true.
+Enabled by default when ` git-hooks.enable ` is true.
 
 
 
@@ -1873,10 +1873,13 @@ submodule
 
 ```nix
 {
-  command = "true";
-  enable = false;
+  enable = config.git-hooks.enable;
   name = "Run git-hooks";
+  hookType = "PostToolUse";
+  matcher = "^(Edit|MultiEdit|Write)$";
+  command = "cd \"$DEVENV_ROOT\" && \${config.git-hooks.package.meta.mainProgram} run";
 }
+
 ```
 
 *Declared by:*
