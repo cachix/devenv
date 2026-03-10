@@ -11,13 +11,22 @@
 - Fixed "Threads explicit registering is not previously enabled" crash on some Nix versions by calling `GC_allow_register_threads()` after `libexpr_init()` ([#2576](https://github.com/cachix/devenv/issues/2576)).
 - Fixed `-O packages:pkgs` causing infinite recursion by using NixOS module system merging instead of self-referencing `config.packages`.
 - Fixed `--clean` shell environment capture keeping all host variables except the keep list (inverted filter).
+- Fixed `devenv search` output being drawn directly to stdout over the TUI.
+- Fixed the shell not forwarding several terminal escape sequences (DA2, DA3, XTVERSION, DCS, DECRQM, Kitty keyboard protocol, XTMODIFYOTHERKEYS, mouse modes, and color scheme reporting), which broke TUI programs like neovim and helix.
+- Fixed the shell not cleaning up Kitty keyboard protocol and XTMODIFYOTHERKEYS state on exit, which left the terminal in a broken state after a program crash.
+- Fixed the shell not sending in-band resize notifications (mode 2048) through the PTY, which caused programs that rely on this protocol to miss resize events.
+- Fixed the shell forwarding text area size queries (CSI 18 t) to the real terminal, which returned incorrect dimensions that included the status line row.
+- Fixed the devenv main thread and REPL thread using the default stack size instead of 64MB, which could cause stack overflows during deep Nix evaluations.
 
 ### Improvements
 
 - Replaced stdout based `DEVENV_EXPORT:` protocol in tasks with file based exports (`$DEVENV_TASK_EXPORTS_FILE`), simplifying the encoding and moving JSON construction into Rust.
 - Task exports are now always produced, including when a task is skipped via its `status` command.
+- Validation errors for `@ready` process dependencies now include a link to the documentation.
 
 ### Breaking Changes
+
+- Removed `devenv-tasks export` subcommand, replaced by file-based exports via `$DEVENV_TASK_EXPORTS_FILE`.
 
 ## 2.0.3 (2026-03-06)
 
