@@ -240,13 +240,28 @@ in
         options.git-hooks-run = lib.mkOption {
           type = hookSubmodule;
           default = {
-            enable = false;
+            enable = config.git-hooks.enable;
             name = "Run git-hooks";
-            command = "true";
+            hookType = "PostToolUse";
+            matcher = "^(Edit|MultiEdit|Write)$";
+            command =
+              if config.git-hooks.enable then
+                ''cd "$DEVENV_ROOT" && ${config.git-hooks.package.meta.mainProgram} run''
+              else
+                "true";
           };
+          defaultText = lib.literalExpression ''
+            {
+              enable = config.git-hooks.enable;
+              name = "Run git-hooks";
+              hookType = "PostToolUse";
+              matcher = "^(Edit|MultiEdit|Write)$";
+              command = "cd \"$DEVENV_ROOT\" && \''${config.git-hooks.package.meta.mainProgram} run";
+            }
+          '';
           description = ''
             Automatically runs git-hooks after Claude edits files.
-            Only active when `git-hooks.enable` is true.
+            Enabled by default when `git-hooks.enable` is true.
           '';
         };
       };
@@ -678,16 +693,5 @@ in
       ];
     })
 
-    (lib.mkIf (cfg.enable && config.git-hooks.enable) {
-      claude.code.hooks.git-hooks-run = {
-        enable = lib.mkDefault true;
-        name = lib.mkDefault "Run git-hooks";
-        hookType = lib.mkDefault "PostToolUse";
-        matcher = lib.mkDefault "^(Edit|MultiEdit|Write)$";
-        command = lib.mkDefault ''
-          cd "$DEVENV_ROOT" && ${config.git-hooks.package.meta.mainProgram} run
-        '';
-      };
-    })
   ];
 }
