@@ -142,16 +142,16 @@
         "nixpkgs-regression": []
       },
       "locked": {
-        "lastModified": 1772748357,
-        "narHash": "sha256-vtf03lfgQKNkPH9FdXdboBDS5DtFkXB8xRw5EBpuDas=",
+        "lastModified": 1773169354,
+        "narHash": "sha256-MZyvPH8XdSfYpARlTjQTSbRlZ8Dj4jUW3/oc0tdf97Y=",
         "owner": "cachix",
         "repo": "nix",
-        "rev": "41eee9d3b1f611b1b90d51caa858b6d83834c44a",
+        "rev": "3c8f32beba01be57ca02bc9d8739431590f444cd",
         "type": "github"
       },
       "original": {
         "owner": "cachix",
-        "ref": "devenv-2.32",
+        "ref": "fix/builder-umask",
         "repo": "nix",
         "type": "github"
       }
