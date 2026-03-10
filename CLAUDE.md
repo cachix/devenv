@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+When creating git commits, add entry to CHANGELOG.md (skip for src/modules/*):
+
 ## Build & Development Commands
 
 Use `devenv shell` to get a shell with Rust and all dependencies installed.
@@ -96,32 +98,6 @@ Integration tests live in `tests/` and `examples/` directories. Each test is a d
   Replaces spinner animation and elapsed time formatting with static placeholders (`[TIME]`, fixed spinner frame) so that TUI snapshot tests produce deterministic output.
   Enabled automatically by `test-all` on both crates.
 
-## Adding New CLI Subcommands
-
-1. **Create implementation module** in `devenv/src/`:
-```rust
-// devenv/src/myfeature/mod.rs
-pub async fn run(devenv: &crate::Devenv, args: Args) -> miette::Result<()> {
-    Ok(())
-}
-```
-
-2. **Add to CLI** in `devenv/src/cli.rs`:
-```rust
-#[derive(Subcommand, Clone)]
-pub enum MyFeatureCommand {
-    #[command(about = "Description.")]
-    Action { ... },
-}
-
-// Add to Commands enum:
-MyFeature {
-    #[command(subcommand)]
-    command: MyFeatureCommand,
-},
-```
-
-3. **Wire up** in `devenv/src/main.rs` `run_devenv()` function.
 
 ## Tracing / Debugging
 
@@ -146,7 +122,6 @@ Environment variables `DEVENV_TRACE_OUTPUT` and `DEVENV_TRACE_FORMAT` can be use
 
 ## Changelog
 
-Add git commits explanations to changelog (except for src/modules):
 
 `CHANGELOG.md` follows this structure:
 
