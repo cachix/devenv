@@ -26,7 +26,7 @@
     };
   };
   inputs.nix = {
-    url = "github:cachix/nix/devenv-2.32";
+    url = "github:cachix/nix/fix/temproot-fetch-to-store";
     inputs = {
       nixpkgs.follows = "nixpkgs";
       flake-compat.follows = "flake-compat";
