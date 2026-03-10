@@ -1342,11 +1342,7 @@ impl Devenv {
     fn collect_task_exports(outputs: &tasks::Outputs) -> HashMap<String, String> {
         let mut envs = HashMap::new();
         for value in outputs.values() {
-            if let Some(env_obj) = value
-                .get("devenv")
-                .and_then(|d| d.get("env"))
-                .and_then(|e| e.as_object())
-            {
+            if let Some(env_obj) = tasks::get_devenv_env(value) {
                 for (env_key, env_value) in env_obj {
                     if let Some(env_str) = env_value.as_str() {
                         envs.insert(env_key.clone(), env_str.to_string());

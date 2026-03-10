@@ -138,6 +138,35 @@ impl TasksStatus {
 /// Output data from tasks
 pub type TaskOutputs = serde_json::Value;
 
+/// Read the `devenv.env` object from a task output JSON value.
+pub fn get_devenv_env(
+    value: &serde_json::Value,
+) -> Option<&serde_json::Map<String, serde_json::Value>> {
+    value
+        .get("devenv")
+        .and_then(|d| d.get("env"))
+        .and_then(|e| e.as_object())
+}
+
+/// Get or create the mutable `devenv.env` object in a task output JSON value.
+pub(crate) fn get_or_create_devenv_env_mut(
+    value: &mut serde_json::Value,
+) -> Option<&mut serde_json::Map<String, serde_json::Value>> {
+    value
+        .as_object_mut()
+        .and_then(|obj| {
+            obj.entry("devenv")
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+        })
+        .and_then(|devenv| {
+            devenv
+                .entry("env")
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+        })
+}
+
 /// Terminal detection utility
 pub fn is_tty() -> bool {
     console::Term::stdout().is_term() && console::Term::stderr().is_term()

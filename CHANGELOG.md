@@ -14,6 +14,9 @@
 
 ### Improvements
 
+- Replaced stdout based `DEVENV_EXPORT:` protocol in tasks with file based exports (`$DEVENV_TASK_EXPORTS_FILE`), simplifying the encoding and moving JSON construction into Rust.
+- Task exports are now always produced, including when a task is skipped via its `status` command.
+
 ### Breaking Changes
 
 ## 2.0.3 (2026-03-06)
