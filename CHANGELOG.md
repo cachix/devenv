@@ -24,6 +24,7 @@
 
 ### Improvements
 
+- Bumped secretspec to 0.8.0 and enabled all provider features (Google Cloud Secret Manager, AWS Secrets Manager, HashiCorp Vault).
 - Replaced stdout based `DEVENV_EXPORT:` protocol in tasks with file based exports (`$DEVENV_TASK_EXPORTS_FILE`), simplifying the encoding and moving JSON construction into Rust.
 - Task exports are now always produced, including when a task is skipped via its `status` command.
 - Validation errors for `@ready` process dependencies now include a link to the documentation.
