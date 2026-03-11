@@ -226,7 +226,7 @@ pub struct Devenv {
     // Task-exported env vars (e.g., PATH with venv/bin, VIRTUAL_ENV) set by
     // run_enter_shell_tasks(). Injected into the bash script by prepare_shell()
     // so they take effect AFTER the Nix shell env is applied.
-    task_exports: std::sync::Mutex<HashMap<String, String>>,
+    task_exports: std::sync::Mutex<BTreeMap<String, String>>,
 }
 
 /// Sanitize profile name to be filesystem-safe
@@ -394,7 +394,7 @@ impl Devenv {
             port_allocator,
             native_process_manager: Arc::new(OnceCell::new()),
             shutdown: options.shutdown,
-            task_exports: std::sync::Mutex::new(HashMap::new()),
+            task_exports: std::sync::Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -1186,7 +1186,7 @@ impl Devenv {
         pre_captured_envs: Option<HashMap<String, String>>,
         verbosity: tasks::VerbosityLevel,
         tui: bool,
-    ) -> Result<HashMap<String, String>> {
+    ) -> Result<BTreeMap<String, String>> {
         self.assemble().await?;
 
         let envs = match pre_captured_envs {
@@ -1207,7 +1207,7 @@ impl Devenv {
         envs: HashMap<String, String>,
         verbosity: tasks::VerbosityLevel,
         tui: bool,
-    ) -> Result<HashMap<String, String>> {
+    ) -> Result<BTreeMap<String, String>> {
         let config = tasks::Config {
             roots: vec!["devenv:enterShell".to_string()],
             tasks: task_configs,
@@ -1333,8 +1333,8 @@ impl Devenv {
 
     /// Extract env vars exported by tasks (e.g., PATH from Python venv)
     /// from task outputs into a HashMap.
-    fn collect_task_exports(outputs: &tasks::Outputs) -> HashMap<String, String> {
-        let mut envs = HashMap::new();
+    fn collect_task_exports(outputs: &tasks::Outputs) -> BTreeMap<String, String> {
+        let mut envs = BTreeMap::new();
         for value in outputs.values() {
             if let Some(env_obj) = tasks::get_devenv_env(value) {
                 for (env_key, env_value) in env_obj {
@@ -1349,13 +1349,11 @@ impl Devenv {
 
     /// Format a map of task exports as bash `export KEY=VALUE` lines.
     ///
-    /// Keys are sorted for deterministic output (important for direnv diffing).
-    pub fn format_task_exports_bash(exports: &HashMap<String, String>) -> String {
+    /// Keys are already sorted (BTreeMap), giving deterministic output (important for direnv diffing).
+    pub fn format_task_exports_bash(exports: &BTreeMap<String, String>) -> String {
         use std::borrow::Cow;
-        let mut pairs: Vec<_> = exports.iter().collect();
-        pairs.sort_by_key(|(k, _)| k.as_str());
-        let mut result = String::with_capacity(pairs.len() * 50);
-        for (key, value) in pairs {
+        let mut result = String::with_capacity(exports.len() * 50);
+        for (key, value) in exports {
             result.push_str("export ");
             result.push_str(&shell_escape::escape(Cow::Borrowed(key)));
             result.push('=');

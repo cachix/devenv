@@ -11,7 +11,7 @@ use crate::Devenv;
 use devenv_core::config::Clean;
 use devenv_reload::{BuildContext, BuildError, CommandBuilder, ShellBuilder};
 use devenv_shell::dialect::{BashDialect, RcfileContext, ShellDialect};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 use tokio::sync::Mutex;
@@ -39,7 +39,7 @@ pub struct DevenvShellBuilder {
     /// Shell cache key (from original devenv, to query file inputs for watching)
     shell_cache_key: Option<devenv_eval_cache::EvalCacheKey>,
     /// Environment variables exported by enterShell tasks (e.g. VIRTUAL_ENV, PATH from venv)
-    task_exports: HashMap<String, String>,
+    task_exports: BTreeMap<String, String>,
 }
 
 impl DevenvShellBuilder {
@@ -62,7 +62,7 @@ impl DevenvShellBuilder {
         dotfile: std::path::PathBuf,
         eval_cache_pool: Option<sqlx::SqlitePool>,
         shell_cache_key: Option<devenv_eval_cache::EvalCacheKey>,
-        task_exports: HashMap<String, String>,
+        task_exports: BTreeMap<String, String>,
     ) -> Self {
         Self {
             handle,

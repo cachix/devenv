@@ -10,7 +10,7 @@ use devenv::{
 use devenv_activity::ActivityLevel;
 use devenv_core::config::{self, Config};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
-use std::{collections::HashMap, process::Command, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, process::Command, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio_shutdown::Shutdown;
@@ -856,7 +856,7 @@ async fn run_devenv_inner(
                 Ok(exports) => exports,
                 Err(e) => {
                     tracing::warn!("enterShell tasks failed, skipping exports: {e}");
-                    HashMap::new()
+                    BTreeMap::new()
                 }
             };
             output.push_str(&Devenv::format_task_exports_bash(&task_exports));
