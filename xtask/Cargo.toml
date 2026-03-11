@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-version = "2.0.3"
+version = "2.0.4"
 edition.workspace = true
 license.workspace = true
 

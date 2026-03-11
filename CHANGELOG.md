@@ -2,6 +2,8 @@
 
 ## X.Y.Z (YYYY-MM-DD)
 
+## 2.0.4 (2026-03-11)
+
 ### Bug Fixes
 
 - Fixed `files` and other task-based features not working via direnv in devenv v2 because `devenv direnv-export` did not run enterShell tasks ([#2602](https://github.com/cachix/devenv/issues/2602)).
