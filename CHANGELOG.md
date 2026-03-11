@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `files` and other task-based features not working via direnv in devenv v2 because `devenv direnv-export` did not run enterShell tasks ([#2602](https://github.com/cachix/devenv/issues/2602)).
 - Fixed `devenv shell` hanging in certain CI environments by requiring both stdin and stdout to be a real terminal before launching the PTY reload shell ([#2597](https://github.com/cachix/devenv/issues/2597)).
 - Added a timeout to the terminal cursor position query to prevent hangs in PTY environments that don't respond to DSR queries.
 - Fixed process dependencies not being respected in the native process manager ([#2554](https://github.com/cachix/devenv/issues/2554)).

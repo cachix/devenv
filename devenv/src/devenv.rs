@@ -620,13 +620,7 @@ impl Devenv {
         // after the Nix shell env is applied so they aren't overridden.
         {
             let exports = self.task_exports.lock().unwrap();
-            for (key, value) in exports.iter() {
-                script.push_str(&format!(
-                    "export {}={}\n",
-                    shell_escape::escape(std::borrow::Cow::Borrowed(key)),
-                    shell_escape::escape(std::borrow::Cow::Borrowed(value))
-                ));
-            }
+            script.push_str(&Self::format_task_exports_bash(&exports));
         }
 
         // Add command for non-interactive mode
@@ -1351,6 +1345,24 @@ impl Devenv {
             }
         }
         envs
+    }
+
+    /// Format a map of task exports as bash `export KEY=VALUE` lines.
+    ///
+    /// Keys are sorted for deterministic output (important for direnv diffing).
+    pub fn format_task_exports_bash(exports: &HashMap<String, String>) -> String {
+        use std::borrow::Cow;
+        let mut pairs: Vec<_> = exports.iter().collect();
+        pairs.sort_by_key(|(k, _)| k.as_str());
+        let mut result = String::with_capacity(pairs.len() * 50);
+        for (key, value) in pairs {
+            result.push_str("export ");
+            result.push_str(&shell_escape::escape(Cow::Borrowed(key)));
+            result.push('=');
+            result.push_str(&shell_escape::escape(Cow::Borrowed(value)));
+            result.push('\n');
+        }
+        result
     }
 
     pub async fn test(&self, verbosity: tasks::VerbosityLevel, tui: bool) -> Result<()> {

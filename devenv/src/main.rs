@@ -10,7 +10,7 @@ use devenv::{
 use devenv_activity::ActivityLevel;
 use devenv_core::config::{self, Config};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
-use std::{process::Command, sync::Arc, time::Duration};
+use std::{collections::HashMap, process::Command, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio_shutdown::Shutdown;
@@ -851,7 +851,15 @@ async fn run_devenv_inner(
             CommandResult::Print(output)
         }
         Commands::DirenvExport => {
-            let output = devenv.print_dev_env(false).await?;
+            let mut output = devenv.print_dev_env(false).await?;
+            let task_exports = match devenv.run_enter_shell_tasks(None, verbosity, tui).await {
+                Ok(exports) => exports,
+                Err(e) => {
+                    tracing::warn!("enterShell tasks failed, skipping exports: {e}");
+                    HashMap::new()
+                }
+            };
+            output.push_str(&Devenv::format_task_exports_bash(&task_exports));
             CommandResult::Print(output)
         }
         Commands::GenerateJSONSchema => {

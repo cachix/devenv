@@ -93,13 +93,7 @@ impl ShellBuilder for DevenvShellBuilder {
             // (e.g. VIRTUAL_ENV, PATH with venv) after the Nix shell env so they take precedence.
             let env_script_path = self.dotfile.join("shell-env.sh");
             let mut env_script = self.initial_env_script.clone();
-            for (key, value) in &self.task_exports {
-                env_script.push_str(&format!(
-                    "export {}={}\n",
-                    shell_escape::escape(std::borrow::Cow::Borrowed(key)),
-                    shell_escape::escape(std::borrow::Cow::Borrowed(value)),
-                ));
-            }
+            env_script.push_str(&Devenv::format_task_exports_bash(&self.task_exports));
             std::fs::write(&env_script_path, &env_script)
                 .map_err(|e| BuildError::new(format!("Failed to write env script: {}", e)))?;
 
