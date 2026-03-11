@@ -237,6 +237,18 @@ inputs:
     follows: git-hooks
 ```
 
+## `pre-commit` renamed to `prek`
+
+The `pre-commit` command has been replaced by `prek`, a Rust rewrite. If you invoke `pre-commit` directly in scripts or shell commands, update them to use `prek` instead:
+
+```bash
+# Before
+pre-commit run --all-files
+
+# After
+prek run --all-files
+```
+
 ## `devenv build` returns JSON
 
 `devenv build` now outputs JSON instead of plain store paths:
