@@ -100,69 +100,69 @@ fn create_filter(level: Level) -> EnvFilter {
 }
 
 pub fn init_tracing_default() {
-    init_cli_tracing(Level::default(), None);
+    init_tracing(Level::default(), TraceFormat::Json, None, true);
 }
 
-/// Initialize tracing for legacy CLI mode.
-/// Export format is always JSON.
-pub fn init_cli_tracing(level: Level, trace_output: Option<&TraceOutput>) {
-    let ansi = io::stderr().is_terminal();
-    let export_writer = trace_output.and_then(create_trace_writer);
-
-    Registry::default()
-        .with(create_filter(level))
-        .with(SpanIdLayer)
-        .with(DevenvLayer::new())
-        .with(
-            tracing_subscriber::fmt::layer()
-                .event_format(DevenvFormat::default())
-                .with_writer(io::stderr)
-                .with_ansi(ansi),
-        )
-        .with(export_writer.map(create_json_layer))
-        .try_init()
-        .ok();
-}
-
-/// Initialize tracing with the specified format and output destination.
+/// Initialize tracing.
 ///
-/// If `trace_output` is None, no traces are output.
-/// If `trace_output` is Some, traces go to that destination (stdout, stderr, or file).
-pub fn init_tracing(level: Level, trace_format: TraceFormat, trace_output: Option<&TraceOutput>) {
+/// When `cli_output` is true, a human-readable stderr layer is added for
+/// direct terminal output (used when no TUI is active).
+///
+/// `trace_format` and `trace_output` control an optional export layer for
+/// structured trace output to stdout, stderr, or a file.
+pub fn init_tracing(
+    level: Level,
+    trace_format: TraceFormat,
+    trace_output: Option<&TraceOutput>,
+    cli_output: bool,
+) {
     let base = Registry::default()
         .with(create_filter(level))
         .with(SpanIdLayer)
         .with(DevenvLayer::new());
 
+    // CLI output: human-readable format on stderr (when no TUI handles display)
+    let cli_layer = if cli_output {
+        let ansi = io::stderr().is_terminal();
+        Some(
+            tracing_subscriber::fmt::layer()
+                .event_format(DevenvFormat::default())
+                .with_writer(io::stderr)
+                .with_ansi(ansi),
+        )
+    } else {
+        None
+    };
+
+    // Export layer: configurable format to chosen destination
     let ansi = match trace_output {
         Some(TraceOutput::Stdout) => io::stdout().is_terminal(),
         Some(TraceOutput::Stderr) => io::stderr().is_terminal(),
         Some(TraceOutput::File(_)) | None => false,
     };
-
     let writer = trace_output.and_then(create_trace_writer);
 
     let _ = match trace_format {
         TraceFormat::Full => {
-            let layer = writer.map(|w| {
+            let export_layer = writer.map(|w| {
                 tracing_subscriber::fmt::layer()
                     .with_ansi(ansi)
                     .with_writer(w)
             });
-            base.with(layer).try_init()
+            base.with(cli_layer).with(export_layer).try_init()
         }
         TraceFormat::Pretty => {
-            let layer = writer.map(|w| {
+            let export_layer = writer.map(|w| {
                 tracing_subscriber::fmt::layer()
                     .with_ansi(ansi)
                     .with_writer(w)
                     .pretty()
             });
-            base.with(layer).try_init()
+            base.with(cli_layer).with(export_layer).try_init()
         }
         TraceFormat::Json => {
-            let layer = writer.map(create_json_layer);
-            base.with(layer).try_init()
+            let export_layer = writer.map(create_json_layer);
+            base.with(cli_layer).with(export_layer).try_init()
         }
     };
 }
