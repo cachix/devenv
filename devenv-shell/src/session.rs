@@ -9,8 +9,8 @@ use crate::pty::{Pty, PtyError, get_terminal_size};
 use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
 use crate::terminal::RawModeGuard;
 use crate::terminal_commands::{
-    CursorPositionQuery, InBandResizeNotification, ORIGIN_MODE, ReportTextAreaSize, ResetDecMode,
-    ResetModifyOtherKeys, ResetScrollRegion, SetKeypadMode, SetScrollRegion,
+    InBandResizeNotification, ORIGIN_MODE, ReportTextAreaSize, ResetDecMode, ResetModifyOtherKeys,
+    ResetScrollRegion, SetKeypadMode, SetScrollRegion,
 };
 use crate::utf8_accumulator::Utf8Accumulator;
 use avt::Vt;
@@ -715,41 +715,16 @@ impl ShellSession {
         // This tells us where TUI left the cursor after its final render.
         // Skip when stdin is injected (not a real terminal) — the response comes
         // via stdin, so this would hang if stdin is not a TTY.
+        // crossterm::cursor::position() handles the DSR query, parsing, and has a
+        // built-in 2s timeout for environments that don't respond (Docker, CI).
         let cursor_row = if !injected_stdin && io::stdin().is_terminal() {
-            queue!(stdout, CursorPositionQuery)?;
-            stdout.flush()?;
-
-            let mut response = Vec::new();
-            let mut stdin_real = io::stdin();
-            let mut buf = [0u8; 1];
-            loop {
-                match stdin_real.read(&mut buf) {
-                    Ok(0) => break, // EOF
-                    Ok(_) if buf[0] != 0 => {
-                        response.push(buf[0]);
-                        if buf[0] == b'R' {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
-                    _ => {}
-                }
-                if response.len() > 20 {
-                    break;
+            match crossterm::cursor::position() {
+                Ok((_col, row)) => row + 1, // crossterm returns 0-based, we need 1-based
+                Err(e) => {
+                    tracing::debug!("session: cursor position query failed: {e}, assuming row 1");
+                    1
                 }
             }
-
-            // Parse cursor row from response: ESC [ row ; col R
-            response
-                .iter()
-                .position(|&b| b == b'[')
-                .and_then(|start| {
-                    let s = String::from_utf8_lossy(
-                        &response[start + 1..response.len().saturating_sub(1)],
-                    );
-                    s.split(';').next()?.parse::<u16>().ok()
-                })
-                .unwrap_or(1)
         } else {
             1
         };

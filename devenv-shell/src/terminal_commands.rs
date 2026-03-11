@@ -67,15 +67,6 @@ impl Command for ResetDecMode {
     }
 }
 
-/// DSR — device status report / cursor position query (CSI 6 n).
-pub struct CursorPositionQuery;
-
-impl Command for CursorPositionQuery {
-    fn write_ansi(&self, f: &mut impl fmt::Write) -> fmt::Result {
-        f.write_str("\x1b[6n")
-    }
-}
-
 /// DECKPAM (ESC =) / DECKPNM (ESC >).
 pub struct SetKeypadMode {
     pub application: bool,

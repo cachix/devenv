@@ -663,9 +663,14 @@ async fn run_devenv_inner(
         Commands::Shell { cmd, ref args } => {
             use std::io::IsTerminal;
 
-            // The PTY requires an interactive terminal.
-            // We use the exec shell as fallback.
-            let use_pty = devenv.shell_settings.reload && std::io::stdout().is_terminal();
+            // The PTY reload shell is for interactive use only: it requires a
+            // real terminal on both stdin and stdout, and no explicit command.
+            // One-shot commands (`devenv shell -- cmd`) are exec'd directly
+            // without PTY overhead.
+            let use_pty = devenv.shell_settings.reload
+                && cmd.is_none()
+                && std::io::stdin().is_terminal()
+                && std::io::stdout().is_terminal();
             if use_pty {
                 // Reload shell needs owned Devenv — return to caller
                 return Ok(InnerResult::ReloadShell {

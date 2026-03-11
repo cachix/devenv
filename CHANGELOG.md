@@ -4,6 +4,8 @@
 
 ### Bug Fixes
 
+- Fixed `devenv shell` hanging in certain CI environments by requiring both stdin and stdout to be a real terminal before launching the PTY reload shell ([#2597](https://github.com/cachix/devenv/issues/2597)).
+- Added a timeout to the terminal cursor position query to prevent hangs in PTY environments that don't respond to DSR queries.
 - Fixed process dependencies not being respected in the native process manager ([#2554](https://github.com/cachix/devenv/issues/2554)).
 - Fixed `execIfModified` task cache not invalidating when a previously watched file is deleted, renamed, or moved outside the glob pattern ([#2577](https://github.com/cachix/devenv/issues/2577)).
 - Fixed task exports (e.g. `VIRTUAL_ENV`, `PATH` from venv) not being set in the reload shell.
