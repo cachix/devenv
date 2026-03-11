@@ -302,11 +302,19 @@ This is particularly useful for:
 
 ### Strict port mode
 
-If you want devenv to fail when a port is already in use instead of automatically finding the next available port, use the `--strict-ports` flag:
+If you want devenv to fail when a port is already in use instead of automatically finding the next available port, you can set it in `devenv.yaml`:
+
+```yaml
+strictPorts: true
+```
+
+Or use the `--strict-ports` CLI flag:
 
 ```shell-session
 $ devenv up --strict-ports
 ```
+
+The CLI flag takes precedence over the config value.
 
 This is useful when you need deterministic port assignments and want to be notified of conflicts rather than having them silently resolved. When a port conflict is detected in strict mode, devenv will show an error message including which process is currently using the port.
 
