@@ -35,6 +35,13 @@ EOF
 direnv allow
 direnv_eval
 
+# Verify that packages are on PATH via direnv (#2574)
+if ! command -v hello &>/dev/null; then
+  echo "FAIL: 'hello' package is not on PATH after direnv eval" >&2
+  exit 1
+fi
+echo "PASS: 'hello' package is on PATH via direnv" >&2
+
 # Verify that enterShell tasks ran and exported env vars
 if [[ "${DEVENV_DIRENV_TASK_VAR:-}" != "hello-from-direnv-task" ]]; then
 	echo "FAIL: DEVENV_DIRENV_TASK_VAR not set by task, got: '${DEVENV_DIRENV_TASK_VAR:-}'" >&2

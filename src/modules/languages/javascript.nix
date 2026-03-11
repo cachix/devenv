@@ -323,11 +323,14 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages
-      # Node ships with npm. If npm is enabled, use its package instead.
-      =
-      lib.optional (!cfg.npm.enable) cfg.package
-      ++ lib.optional cfg.npm.enable (cfg.npm.package)
+    packages =
+      let
+        # On newer nixpkgs, nodejs has a separate npm output that doesn't
+        # include the node binary. Add the base package to keep node on PATH.
+        npmIsSeparateOutput = builtins.elem "npm" (cfg.package.outputs or [ ]);
+      in
+      lib.optional (!cfg.npm.enable || npmIsSeparateOutput) cfg.package
+      ++ lib.optional cfg.npm.enable cfg.npm.package
       ++ lib.optional cfg.pnpm.enable (cfg.pnpm.package)
       ++ lib.optional cfg.yarn.enable (cfg.yarn.package.override { nodejs = cfg.package; })
       ++ lib.optional cfg.bun.enable (cfg.bun.package)
