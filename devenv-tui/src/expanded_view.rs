@@ -6,6 +6,7 @@
 //! Supports mouse-based text selection with OSC 52 clipboard copy.
 
 use crate::TuiConfig;
+use crate::app::ExitFlag;
 use crate::model::{ActivityModel, UiState, ViewMode};
 use base64::Engine;
 use crossterm::event::MouseButton;
@@ -172,11 +173,13 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
     });
 
-    // Check if we should exit (view mode changed)
-    let should_exit = ui_state
-        .read()
-        .map(|ui| !matches!(ui.view_mode, ViewMode::ExpandedLogs { .. }))
-        .unwrap_or(false);
+    // Check if we should exit (backend done or view mode changed)
+    let exit_flag = hooks.use_context::<ExitFlag>();
+    let should_exit = exit_flag.is_set()
+        || ui_state
+            .read()
+            .map(|ui| !matches!(ui.view_mode, ViewMode::ExpandedLogs { .. }))
+            .unwrap_or(false);
     if should_exit {
         hooks.use_context_mut::<SystemContext>().exit();
         return element!(View).into_any();

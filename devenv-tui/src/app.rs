@@ -12,10 +12,36 @@ use devenv_activity::{ActivityEvent, ActivityLevel};
 use devenv_processes::ProcessCommand;
 use iocraft::prelude::*;
 use std::io::{self, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
-use tokio::sync::{Notify, mpsc, watch};
+use tokio::sync::{Notify, mpsc};
 use tokio_shutdown::Shutdown;
 use tracing::debug;
+
+/// Cooperative exit flag for TUI shutdown.
+///
+/// The event processor sets this when the backend is done, and TUI components
+/// check it each render cycle to call `system.exit()`. This avoids cancelling
+/// iocraft's render loop mid frame, which can leave the cursor at the wrong
+/// position and overwrite the shell prompt.
+#[derive(Clone)]
+pub struct ExitFlag(Arc<AtomicBool>);
+
+impl ExitFlag {
+    pub fn new() -> Self {
+        Self(Arc::new(AtomicBool::new(false)))
+    }
+
+    /// Signal that the TUI should exit. Must be called before `Notify::notify_waiters()`
+    /// so the triggered re render sees the flag.
+    pub fn set(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+
+    pub fn is_set(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+}
 
 /// Original terminal settings saved before TUI enters raw mode.
 static ORIGINAL_TERMIOS: OnceLock<libc::termios> = OnceLock::new();
@@ -137,7 +163,8 @@ impl TuiApp {
         let shutdown = self.shutdown;
         let command_tx = self.command_tx;
         let shutdown_on_backend_done = self.shutdown_on_backend_done;
-        let (exit_tx, mut exit_rx) = watch::channel(false);
+
+        let exit_flag = ExitFlag::new();
 
         // Spawn event processor with batching for performance
         // This only writes to ActivityModel, never touches UiState
@@ -146,10 +173,10 @@ impl TuiApp {
             let activity_model = activity_model.clone();
             let notify = notify.clone();
             let shutdown = shutdown.clone();
+            let exit_flag = exit_flag.clone();
             let event_batch_size = config.event_batch_size;
             let mut activity_rx = self.activity_rx;
             let mut backend_done = backend_done;
-            let exit_tx = exit_tx.clone();
             async move {
                 let mut batch = Vec::with_capacity(event_batch_size);
 
@@ -158,7 +185,8 @@ impl TuiApp {
                         event = activity_rx.recv() => {
                             let Some(event) = event else {
                                 // Channel closed unexpectedly
-                                let _ = exit_tx.send(true);
+                                exit_flag.set();
+                                notify.notify_waiters();
                                 if shutdown_on_backend_done {
                                     shutdown.shutdown();
                                 }
@@ -194,10 +222,13 @@ impl TuiApp {
                                         m.apply_activity_event(event);
                                     }
                                 }
-                                notify.notify_waiters();
                             }
 
-                            let _ = exit_tx.send(true);
+                            // Signal component to exit cooperatively. Set before
+                            // notify so the triggered re-render sees the flag.
+                            exit_flag.set();
+                            notify.notify_waiters();
+
                             if shutdown_on_backend_done {
                                 shutdown.shutdown();
                             }
@@ -216,29 +247,29 @@ impl TuiApp {
         // UiState is only modified by the UI thread.
         let ui_state = Arc::new(RwLock::new(UiState::new()));
 
-        // Main loop - runs until backend signals completion via exit_rx.
-        // We intentionally do NOT break on shutdown signal here so the TUI
-        // stays alive to show process shutdown progress. The loop exits only
-        // when the backend sends on exit_rx (after stop_all finishes).
+        // Main loop - runs until backend signals completion via exit_flag.
+        // The render loop exits cooperatively: the component checks exit_flag
+        // each render cycle and calls system.exit() when set, ensuring iocraft
+        // always completes its current frame before returning. This prevents
+        // the cursor position race that occurs when cancelling mid-frame.
         loop {
-            tokio::select! {
-                biased;
+            let _ = run_view(
+                activity_model.clone(),
+                ui_state.clone(),
+                notify.clone(),
+                shutdown.clone(),
+                config.clone(),
+                command_tx.clone(),
+                &mut pre_expand_height,
+                exit_flag.clone(),
+            )
+            .await;
 
-                changed = exit_rx.changed() => {
-                    if changed.is_err() || *exit_rx.borrow() {
-                        break;
-                    }
-                }
-
-                _ = run_view(
-                    activity_model.clone(),
-                    ui_state.clone(),
-                    notify.clone(),
-                    shutdown.clone(),
-                    config.clone(),
-                    command_tx.clone(),
-                    &mut pre_expand_height,
-                ) => { }
+            // run_view returned either because:
+            // - The backend is done (exit_flag is set)
+            // - The user switched view modes (e.g. pressed 'e' for expanded)
+            if exit_flag.is_set() {
+                break;
             }
         }
 
@@ -565,6 +596,14 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
     });
 
+    // Exit cooperatively when the backend signals completion via exit_flag.
+    // This ensures the render loop completes its current frame before returning,
+    // leaving the cursor at the correct position for the final render.
+    let exit_flag = hooks.use_context::<ExitFlag>();
+    if exit_flag.is_set() {
+        system.exit();
+    }
+
     // Exit for explicit view mode switch (user pressed 'e' to expand)
     // Note: We do NOT exit on shutdown.is_cancelled() - we keep running until
     // the backend is fully done so all events are processed and displayed.
@@ -616,6 +655,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     rendered
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_view(
     activity_model: Arc<RwLock<ActivityModel>>,
     ui_state: Arc<RwLock<UiState>>,
@@ -624,6 +664,7 @@ async fn run_view(
     config: Arc<TuiConfig>,
     command_tx: Option<mpsc::Sender<ProcessCommand>>,
     pre_expand_height: &mut u16,
+    exit_flag: ExitFlag,
 ) -> std::io::Result<()> {
     // Copy view_mode in a block to ensure the guard is dropped before any await
     let view_mode = {
@@ -650,7 +691,9 @@ async fn run_view(
                             ContextProvider(value: Context::owned(activity_model.clone())) {
                                 ContextProvider(value: Context::owned(ui_state.clone())) {
                                     ContextProvider(value: Context::owned(command_tx.clone())) {
-                                        MainView
+                                        ContextProvider(value: Context::owned(exit_flag.clone())) {
+                                            MainView
+                                        }
                                     }
                                 }
                             }
@@ -686,8 +729,10 @@ async fn run_view(
                         ContextProvider(value: Context::owned(notify.clone())) {
                             ContextProvider(value: Context::owned(activity_model.clone())) {
                                 ContextProvider(value: Context::owned(ui_state.clone())) {
-                                    ContextProvider(value: Context::owned(activity_id)) {
-                                        ExpandedLogView
+                                    ContextProvider(value: Context::owned(exit_flag.clone())) {
+                                        ContextProvider(value: Context::owned(activity_id)) {
+                                            ExpandedLogView
+                                        }
                                     }
                                 }
                             }

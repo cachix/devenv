@@ -17,6 +17,7 @@
 - Fixed the shell not sending in-band resize notifications (mode 2048) through the PTY, which caused programs that rely on this protocol to miss resize events.
 - Fixed the shell forwarding text area size queries (CSI 18 t) to the real terminal, which returned incorrect dimensions that included the status line row.
 - Fixed the devenv main thread and REPL thread using the default stack size instead of 64MB, which could cause stack overflows during deep Nix evaluations.
+- Fixed TUI sometimes overwriting the shell prompt/command line after commands like `devenv update`, caused by cancelling iocraft's render loop mid-frame.
 
 ### Improvements
 
