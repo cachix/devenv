@@ -25,6 +25,7 @@
 
 ### Improvements
 
+- Added `strictPorts` option to `devenv.yaml` for configuring strict port mode as a project default, along with `--no-strict-ports` CLI flag to override it ([#2606](https://github.com/cachix/devenv/issues/2606)).
 - Bumped secretspec to 0.8.0 and enabled all provider features (Google Cloud Secret Manager, AWS Secrets Manager, HashiCorp Vault).
 - Replaced stdout based `DEVENV_EXPORT:` protocol in tasks with file based exports (`$DEVENV_TASK_EXPORTS_FILE`), simplifying the encoding and moving JSON construction into Rust.
 - Task exports are now always produced, including when a task is skipped via its `status` command.
