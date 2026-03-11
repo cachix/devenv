@@ -206,6 +206,9 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(merge = schematic::merge::replace)]
     pub reload: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[setting(merge = schematic::merge::replace)]
+    pub strict_ports: Option<bool>,
     /// Git repository root path (not serialized, computed during load)
     #[serde(skip)]
     pub git_root: Option<PathBuf>,
@@ -1065,6 +1068,40 @@ mod tests {
         // The second value should override the first
         let merged_profile = config2.profile.or(config1.profile);
         assert_eq!(merged_profile, Some("override".to_string()));
+    }
+
+    #[test]
+    fn strict_ports_field_none_by_default() {
+        let config = Config::default();
+        assert_eq!(config.strict_ports, None);
+    }
+
+    #[test]
+    fn strict_ports_field_serializes_as_camel_case() {
+        let mut config = Config::default();
+        config.strict_ports = Some(true);
+
+        let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
+        assert!(yaml.contains("strictPorts: true"));
+    }
+
+    #[test]
+    fn strict_ports_field_not_serialized_when_none() {
+        let config = Config::default();
+        let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
+        assert!(!yaml.contains("strictPorts"));
+    }
+
+    #[test]
+    fn strict_ports_field_respects_replace_merge_strategy() {
+        let mut config1 = Config::default();
+        config1.strict_ports = Some(false);
+
+        let mut config2 = Config::default();
+        config2.strict_ports = Some(true);
+
+        let merged_strict_ports = config2.strict_ports.or(config1.strict_ports);
+        assert_eq!(merged_strict_ports, Some(true));
     }
 
     #[test]

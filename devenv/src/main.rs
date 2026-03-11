@@ -464,6 +464,8 @@ async fn run_backend(
         }
     }
 
+    let config_strict_ports = config.strict_ports.unwrap_or(false);
+
     let mut options = devenv::DevenvOptions {
         inputs: config.inputs,
         imports: config.imports,
@@ -589,7 +591,15 @@ async fn run_backend(
     }
 
     // All other commands
-    let result = dispatch_command(&devenv, command, verbosity, tui, command_rx).await;
+    let result = dispatch_command(
+        &devenv,
+        command,
+        verbosity,
+        tui,
+        command_rx,
+        config_strict_ports,
+    )
+    .await;
 
     // Signal TUI that backend is done
     backend_done.notify_one();
@@ -649,6 +659,7 @@ async fn dispatch_command(
     verbosity: devenv::tasks::VerbosityLevel,
     tui: bool,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
+    config_strict_ports: bool,
 ) -> Result<CommandResult> {
     match command {
         Commands::Shell { cmd, ref args } => {
@@ -745,6 +756,7 @@ async fn dispatch_command(
             processes,
             detach,
             strict_ports,
+            no_strict_ports,
         }
         | Commands::Processes {
             command:
@@ -752,8 +764,11 @@ async fn dispatch_command(
                     processes,
                     detach,
                     strict_ports,
+                    no_strict_ports,
                 },
         } => {
+            let strict_ports = devenv_core::settings::flag(strict_ports, no_strict_ports)
+                .unwrap_or(config_strict_ports);
             let options = devenv::ProcessOptions {
                 envs: None,
                 detach,
