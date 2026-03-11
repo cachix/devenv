@@ -30,16 +30,17 @@ in
 
         1. Update version in Cargo.toml to $ARGUMENTS using `cargo set-version`
         2. Run `cargo check` to update Cargo.lock
-        3. Put today's date in CHANGELOG.md replacing "(unreleased)"
-        4. Create a new "## X.Y.Z (unreleased)" section above the released version in CHANGELOG.md
-        5. If this is a major version bump (X.Y.0, not X.Y.Z patch):
+        3. Run `crate2nix generate -h nix/crate-hashes.json` to update Cargo.nix
+        4. Put today's date in CHANGELOG.md replacing "(unreleased)"
+        5. Create a new "## X.Y.Z (unreleased)" section above the released version in CHANGELOG.md
+        6. If this is a major version bump (X.Y.0, not X.Y.Z patch):
            - Generate a blog post in docs/src/blog/posts/
            - Follow the naming convention: devenv-vX.Y-short-description.md
            - Use existing blog posts as reference for format and style
-        6. Commit the changes
-        7. Push the commit(s) to GitHub
-        8. Create a GitHub release with `gh release create v$ARGUMENTS --title "v$ARGUMENTS" --latest --notes  "<changelog for this release>"`
-        9. At the end, tell the user that the package still needs to be bumped in nixpkgs:
+        7. Commit the changes
+        8. Push the commit(s) to GitHub
+        9. Create a GitHub release with `gh release create v$ARGUMENTS --title "v$ARGUMENTS" --latest --notes  "<changelog for this release>"`
+        10. At the end, tell the user that the package still needs to be bumped in nixpkgs:
            - The package is at pkgs/by-name/de/devenv/package.nix
       '';
     };
