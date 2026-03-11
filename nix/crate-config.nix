@@ -139,6 +139,13 @@ in
   tracing = tracingUnstable;
   tracing-core = tracingUnstable;
 
+  # netstat2 uses bindgen in its build script, needs libclang
+  netstat2 = attrs: {
+    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
+      rustPlatform.bindgenHook
+    ];
+  };
+
   # rmcp uses env!("CARGO_CRATE_NAME") at compile time
   rmcp = attrs: {
     CARGO_CRATE_NAME = "rmcp";
