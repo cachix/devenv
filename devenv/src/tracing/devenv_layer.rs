@@ -275,13 +275,22 @@ where
             }
         }
         if let Some(msg) = visitor.message {
+            let meta = event.metadata();
+            let level = *meta.level();
+
+            // Only show user-facing messages and errors/warnings;
+            // skip internal info/debug traces that aren't meant for end users.
+            if !visitor.is_user_message
+                && !matches!(level, tracing::Level::ERROR | tracing::Level::WARN)
+            {
+                return Ok(());
+            }
+
             if visitor.is_user_message {
-                let meta = event.metadata();
                 let ansi = writer.has_ansi_escapes();
 
                 if ansi && !self.verbose {
-                    let level = meta.level();
-                    match *level {
+                    match level {
                         tracing::Level::ERROR => {
                             write!(writer, "{} ", style("✖").red())?;
                         }
