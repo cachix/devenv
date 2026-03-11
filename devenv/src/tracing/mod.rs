@@ -118,15 +118,15 @@ pub fn init_tracing(
 ) {
     let base = Registry::default()
         .with(create_filter(level))
-        .with(SpanIdLayer)
-        .with(DevenvLayer::new());
+        .with(SpanIdLayer);
 
     // CLI output: human-readable format on stderr (when no TUI handles display)
     let cli_layer = if cli_output {
         let ansi = io::stderr().is_terminal();
+        let verbose = level >= Level::Debug;
         Some(
             tracing_subscriber::fmt::layer()
-                .event_format(DevenvFormat::default())
+                .event_format(DevenvFormat { verbose })
                 .with_writer(io::stderr)
                 .with_ansi(ansi),
         )
@@ -142,6 +142,9 @@ pub fn init_tracing(
     };
     let writer = trace_output.and_then(create_trace_writer);
 
+    // DevenvLayer must be outermost: its on_new_span/on_close emit events via
+    // ctx.event(), which only dispatches to layers *below* it. Placing it last
+    // ensures cli_layer and export_layer receive those events.
     let _ = match trace_format {
         TraceFormat::Full => {
             let export_layer = writer.map(|w| {
@@ -149,7 +152,10 @@ pub fn init_tracing(
                     .with_ansi(ansi)
                     .with_writer(w)
             });
-            base.with(cli_layer).with(export_layer).try_init()
+            base.with(cli_layer)
+                .with(export_layer)
+                .with(DevenvLayer::new())
+                .try_init()
         }
         TraceFormat::Pretty => {
             let export_layer = writer.map(|w| {
@@ -158,11 +164,17 @@ pub fn init_tracing(
                     .with_writer(w)
                     .pretty()
             });
-            base.with(cli_layer).with(export_layer).try_init()
+            base.with(cli_layer)
+                .with(export_layer)
+                .with(DevenvLayer::new())
+                .try_init()
         }
         TraceFormat::Json => {
             let export_layer = writer.map(create_json_layer);
-            base.with(cli_layer).with(export_layer).try_init()
+            base.with(cli_layer)
+                .with(export_layer)
+                .with(DevenvLayer::new())
+                .try_init()
         }
     };
 }

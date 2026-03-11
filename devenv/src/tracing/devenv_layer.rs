@@ -280,7 +280,9 @@ where
 
             // Only show user-facing messages and errors/warnings;
             // skip internal info/debug traces that aren't meant for end users.
-            if !visitor.is_user_message
+            // In verbose mode, show all messages.
+            if !self.verbose
+                && !visitor.is_user_message
                 && !matches!(level, tracing::Level::ERROR | tracing::Level::WARN)
             {
                 return Ok(());
