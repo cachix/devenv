@@ -497,6 +497,12 @@ pub enum Commands {
             help = "Error if a port is already in use instead of auto-allocating the next available port."
         )]
         strict_ports: bool,
+
+        #[arg(
+            long,
+            help = "Disable strict port mode, overriding strictPorts from devenv.yaml."
+        )]
+        no_strict_ports: bool,
     },
 
     Processes {
@@ -617,6 +623,12 @@ pub enum ProcessesCommand {
             help = "Error if a port is already in use instead of auto-allocating the next available port."
         )]
         strict_ports: bool,
+
+        #[arg(
+            long,
+            help = "Disable strict port mode, overriding strictPorts from devenv.yaml."
+        )]
+        no_strict_ports: bool,
     },
 
     #[command(alias = "stop", about = "Stop processes running in the background.")]
@@ -720,11 +732,49 @@ pub enum InputsCommand {
 
 #[cfg(test)]
 mod tests {
-    use super::Cli;
+    use super::{Cli, Commands, ProcessesCommand};
+    use clap::Parser;
 
     #[test]
     fn verify_cli() {
         use clap::CommandFactory;
         Cli::command().debug_assert()
+    }
+
+    #[test]
+    fn up_accepts_no_strict_ports() {
+        let cli = Cli::parse_from(["devenv", "up", "--no-strict-ports"]);
+
+        match cli.command {
+            Some(Commands::Up {
+                strict_ports,
+                no_strict_ports,
+                ..
+            }) => {
+                assert!(!strict_ports);
+                assert!(no_strict_ports);
+            }
+            _ => panic!("expected `devenv up` command"),
+        }
+    }
+
+    #[test]
+    fn processes_up_accepts_no_strict_ports() {
+        let cli = Cli::parse_from(["devenv", "processes", "up", "--no-strict-ports"]);
+
+        match cli.command {
+            Some(Commands::Processes {
+                command:
+                    ProcessesCommand::Up {
+                        strict_ports,
+                        no_strict_ports,
+                        ..
+                    },
+            }) => {
+                assert!(!strict_ports);
+                assert!(no_strict_ports);
+            }
+            _ => panic!("expected `devenv processes up` command"),
+        }
     }
 }

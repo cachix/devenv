@@ -591,8 +591,15 @@ async fn run_backend(
     }
 
     // All other commands
-    let result =
-        dispatch_command(&devenv, command, verbosity, tui, command_rx, config_strict_ports).await;
+    let result = dispatch_command(
+        &devenv,
+        command,
+        verbosity,
+        tui,
+        command_rx,
+        config_strict_ports,
+    )
+    .await;
 
     // Signal TUI that backend is done
     backend_done.notify_one();
@@ -749,6 +756,7 @@ async fn dispatch_command(
             processes,
             detach,
             strict_ports,
+            no_strict_ports,
         }
         | Commands::Processes {
             command:
@@ -756,13 +764,16 @@ async fn dispatch_command(
                     processes,
                     detach,
                     strict_ports,
+                    no_strict_ports,
                 },
         } => {
+            let strict_ports = devenv_core::settings::flag(strict_ports, no_strict_ports)
+                .unwrap_or(config_strict_ports);
             let options = devenv::ProcessOptions {
                 envs: None,
                 detach,
                 log_to_file: detach,
-                strict_ports: strict_ports || config_strict_ports,
+                strict_ports,
                 command_rx,
             };
             match devenv.up(processes, options, verbosity, tui).await? {

@@ -29,7 +29,7 @@
 | nixpkgs.per-platform.&lt;system&gt;.permittedUnfreePackages   | (per-platform) A list of unfree packages to allow by name. Defaults to `[]`   |
 |                                                               |                                                                               |
 | profile                                                       | Default profile to activate. Can be overridden by `--profile` CLI flags.       |
-| strictPorts                                                   | Error if a port is already in use instead of auto-allocating the next available port. Defaults to `false`. Can be overridden by `--strict-ports` CLI flag. |
+| strictPorts                                                   | Error if a port is already in use instead of auto-allocating the next available port. Defaults to `false`. Can be overridden by `--strict-ports` or `--no-strict-ports` CLI flags. |
 |                                                               |                                                                               |
 | secretspec.enable                                             | Enable [secretspec integration](../integrations/secretspec.md). Defaults to `false`.                           |
 | secretspec.profile                                            | Secretspec profile name to use.                                               |

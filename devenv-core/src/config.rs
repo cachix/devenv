@@ -1071,6 +1071,40 @@ mod tests {
     }
 
     #[test]
+    fn strict_ports_field_none_by_default() {
+        let config = Config::default();
+        assert_eq!(config.strict_ports, None);
+    }
+
+    #[test]
+    fn strict_ports_field_serializes_as_camel_case() {
+        let mut config = Config::default();
+        config.strict_ports = Some(true);
+
+        let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
+        assert!(yaml.contains("strictPorts: true"));
+    }
+
+    #[test]
+    fn strict_ports_field_not_serialized_when_none() {
+        let config = Config::default();
+        let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
+        assert!(!yaml.contains("strictPorts"));
+    }
+
+    #[test]
+    fn strict_ports_field_respects_replace_merge_strategy() {
+        let mut config1 = Config::default();
+        config1.strict_ports = Some(false);
+
+        let mut config2 = Config::default();
+        config2.strict_ports = Some(true);
+
+        let merged_strict_ports = config2.strict_ports.or(config1.strict_ports);
+        assert_eq!(merged_strict_ports, Some(true));
+    }
+
+    #[test]
     fn relative_path_url_resolved_from_correct_config_directory() {
         // Test that when a base config and imported config both define inputs
         // with relative path URLs like "path:.", each is resolved relative
