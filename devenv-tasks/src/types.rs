@@ -198,17 +198,53 @@ pub fn determine_ui_mode(verbosity: VerbosityLevel, has_tui_sender: bool) -> UiM
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Outputs(pub BTreeMap<String, serde_json::Value>);
 
 #[derive(Debug, Clone)]
 pub struct Output(pub Option<serde_json::Value>);
+
+impl Outputs {
+    pub fn new() -> Self {
+        Self(BTreeMap::new())
+    }
+
+    /// Extract all `devenv.env` vars from task outputs into a flat map.
+    ///
+    /// Each task's JSON output may contain `{"devenv": {"env": {"KEY": "VALUE"}}}`.
+    /// This merges them all into a single `BTreeMap<String, String>`.
+    pub fn collect_env_exports(&self) -> BTreeMap<String, String> {
+        let mut envs = BTreeMap::new();
+        for value in self.0.values() {
+            if let Some(env_obj) = get_devenv_env(value) {
+                for (env_key, env_value) in env_obj {
+                    if let Some(env_str) = env_value.as_str() {
+                        envs.insert(env_key.clone(), env_str.to_string());
+                    }
+                }
+            }
+        }
+        envs
+    }
+}
+
+impl Default for Outputs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl std::ops::Deref for Outputs {
     type Target = BTreeMap<String, serde_json::Value>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl std::ops::DerefMut for Outputs {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

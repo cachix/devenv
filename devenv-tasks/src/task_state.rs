@@ -3,8 +3,8 @@ use crate::config::TaskConfig;
 use crate::executor::{ExecutionContext, OutputCallback, SubprocessExecutor};
 use crate::task_cache::{TaskCache, expand_glob_patterns};
 use crate::types::{
-    Output, ProcessPhase, ProcessTaskStatus, Skipped, TaskCompleted, TaskFailure, TaskStatus,
-    TaskType, VerbosityLevel, get_devenv_env, get_or_create_devenv_env_mut, process_name,
+    Output, Outputs, ProcessPhase, ProcessTaskStatus, Skipped, TaskCompleted, TaskFailure,
+    TaskStatus, TaskType, VerbosityLevel, get_or_create_devenv_env_mut, process_name,
 };
 use base64::Engine;
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
@@ -194,7 +194,7 @@ impl TaskState {
     /// Prepare environment variables for task execution.
     fn prepare_env(
         &self,
-        outputs: &BTreeMap<String, serde_json::Value>,
+        outputs: &Outputs,
         shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<BTreeMap<String, String>> {
         // Start with shell env as the base layer
@@ -212,21 +212,16 @@ impl TaskState {
         }
 
         // Set environment variables from task outputs
+        let env_exports = outputs.collect_env_exports();
         let mut devenv_env = String::new();
-        for (_, value) in outputs.iter() {
-            if let Some(env_obj) = get_devenv_env(value) {
-                for (env_key, env_value) in env_obj {
-                    if let Some(env_str) = env_value.as_str() {
-                        env.insert(env_key.clone(), env_str.to_string());
-                        devenv_env.push_str(&format!(
-                            "export {}={}\n",
-                            env_key,
-                            shell_escape::escape(std::borrow::Cow::Borrowed(env_str))
-                        ));
-                    }
-                }
-            }
+        for (env_key, env_str) in &env_exports {
+            devenv_env.push_str(&format!(
+                "export {}={}\n",
+                env_key,
+                shell_escape::escape(std::borrow::Cow::Borrowed(env_str))
+            ));
         }
+        env.extend(env_exports);
         // Internal for now
         env.insert("DEVENV_TASK_ENV".to_string(), devenv_env);
 
@@ -431,7 +426,7 @@ impl TaskState {
     pub async fn run(
         &self,
         now: Instant,
-        outputs: &BTreeMap<String, serde_json::Value>,
+        outputs: &Outputs,
         cache: &TaskCache,
         cancellation: CancellationToken,
         activity_id: u64,
@@ -460,7 +455,7 @@ impl TaskState {
     async fn run_inner(
         &self,
         now: Instant,
-        outputs: &BTreeMap<String, serde_json::Value>,
+        outputs: &Outputs,
         cache: &TaskCache,
         cancellation: CancellationToken,
         task_activity: &Activity,

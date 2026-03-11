@@ -13,7 +13,7 @@ use petgraph::algo::{has_path_connecting, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{EdgeRef, Reversed};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify, RwLock};
@@ -747,7 +747,7 @@ impl Tasks {
         let total_tasks = self.tasks_order.len() as u64;
         let completed_tasks = Arc::new(std::sync::atomic::AtomicU64::new(0));
 
-        let outputs = Arc::new(Mutex::new(BTreeMap::new()));
+        let outputs = Arc::new(Mutex::new(Outputs::new()));
         let mut running_tasks = self.shutdown.join_set();
 
         // Pre-register all process tasks with the process manager so they
@@ -1202,7 +1202,7 @@ impl Tasks {
         self.notify_finished.notify_waiters();
         self.notify_ui.notify_one();
 
-        Outputs(Arc::try_unwrap(outputs).unwrap().into_inner())
+        Arc::try_unwrap(outputs).unwrap().into_inner()
     }
 }
 

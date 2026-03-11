@@ -1229,7 +1229,7 @@ impl Devenv {
         // Note: Task failures are shown in the TUI/UI output, no need to bail here.
         // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
 
-        let exports = Self::collect_task_exports(&outputs);
+        let exports = outputs.collect_env_exports();
         // Store on self so prepare_shell() can inject them into the bash script
         *self.task_exports.lock().unwrap() = exports.clone();
         Ok(exports)
@@ -1329,22 +1329,6 @@ impl Devenv {
         }
 
         Ok(envs)
-    }
-
-    /// Extract env vars exported by tasks (e.g., PATH from Python venv)
-    /// from task outputs into a HashMap.
-    fn collect_task_exports(outputs: &tasks::Outputs) -> BTreeMap<String, String> {
-        let mut envs = BTreeMap::new();
-        for value in outputs.values() {
-            if let Some(env_obj) = tasks::get_devenv_env(value) {
-                for (env_key, env_value) in env_obj {
-                    if let Some(env_str) = env_value.as_str() {
-                        envs.insert(env_key.clone(), env_str.to_string());
-                    }
-                }
-            }
-        }
-        envs
     }
 
     /// Format a map of task exports as bash `export KEY=VALUE` lines.
