@@ -238,11 +238,32 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
         prev_hook(info);
     }));
 
-    // For shell commands, backend_done is a handoff signal when reload is active; keep TUI alive
-    // until the shutdown signal from the backend thread. When --no-reload is explicit, TUI can
-    // shut down immediately on backend_done. For all other commands, always shut down on done.
-    let shutdown_on_backend_done =
-        !matches!(&cli.command, Some(Commands::Shell { .. })) || cli.shell_args.no_reload;
+    // Determine whether the PTY reload shell will be used. This must be known
+    // before the TUI starts so shutdown_on_backend_done can be set correctly.
+    // use_pty requires: interactive shell (no cmd), reload enabled, real terminal.
+    let use_pty = matches!(&cli.command, Some(Commands::Shell { cmd: None, .. }))
+        && std::io::IsTerminal::is_terminal(&std::io::stdin())
+        && std::io::IsTerminal::is_terminal(&std::io::stdout())
+        && {
+            // Resolve reload setting from CLI flags + config file.
+            // Config::load() is cheap (reads 1-2 YAML files) and will be loaded
+            // again inside run_devenv; the double load is negligible.
+            let reload_from_cli =
+                devenv_core::settings::flag(cli.shell_args.reload, cli.shell_args.no_reload);
+            match reload_from_cli {
+                Some(reload) => reload,
+                None => Config::load()
+                    .ok()
+                    .and_then(|config| config.reload)
+                    .unwrap_or(true),
+            }
+        };
+
+    // When the PTY reload shell is active, backend_done is a handoff signal — the shell
+    // session sends it when the TUI should release the terminal, but the process keeps
+    // running. Don't trigger global shutdown in that case.
+    // For all other commands, shut down when the backend is done.
+    let shutdown_on_backend_done = !use_pty;
 
     // Shutdown coordination
     // Signal handlers catch external signals (SIGINT from `kill`, SIGTERM, etc.)
