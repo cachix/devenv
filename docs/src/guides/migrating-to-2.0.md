@@ -228,6 +228,15 @@ inputs:
 
 If you don't use git-hooks, no changes are needed.
 
+The `pre-commit-hooks` to `git-hooks` alias has also been removed.
+If you often switch between devenv v1.x and v2.x, add the `pre-commit-hooks` input as well to prevent lockfile changes when switching versions:
+
+  ```yaml
+inputs:
+  pre-commit-hooks:
+    follows: git-hooks
+```
+
 ## `devenv build` returns JSON
 
 `devenv build` now outputs JSON instead of plain store paths:
