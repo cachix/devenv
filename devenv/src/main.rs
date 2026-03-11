@@ -33,219 +33,6 @@ use tracing::info;
 /// stack that the Nix CLI itself uses.
 const NIX_STACK_SIZE: usize = 64 * 1024 * 1024;
 
-/// Create a tokio runtime with worker threads registered with Boehm GC.
-///
-/// Nix uses Boehm GC with parallel marking. During stop-the-world collection,
-/// only registered threads are paused. This ensures all tokio worker threads
-/// are properly registered to avoid race conditions.
-fn build_gc_runtime() -> tokio::runtime::Runtime {
-    devenv_nix_backend::nix_init();
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .thread_stack_size(NIX_STACK_SIZE)
-        .on_thread_start(|| {
-            let _ = devenv_nix_backend::gc_register_current_thread();
-        })
-        .build()
-        .expect("Failed to create tokio runtime")
-}
-
-/// Result of a CLI command execution.
-/// This is a CLI concern - the library returns domain types.
-#[derive(Debug)]
-enum CommandResult {
-    /// Command completed normally
-    Done,
-    /// Print this string after UI cleanup
-    Print(String),
-    /// Exec into this command after cleanup (TUI shutdown, terminal restore)
-    Exec(Command),
-    /// Exit with a specific code (e.g., from shell exit)
-    ExitCode(i32),
-}
-
-impl CommandResult {
-    /// Execute the pending action.
-    /// - Done: returns Ok(())
-    /// - Print: prints to stdout and returns Ok(())
-    /// - Exec: replaces the current process (never returns on success)
-    fn exec(self) -> Result<()> {
-        match self {
-            CommandResult::Done => Ok(()),
-            CommandResult::Print(output) => {
-                print!("{output}");
-                Ok(())
-            }
-            CommandResult::Exec(mut cmd) => {
-                use std::os::unix::process::CommandExt;
-                let err = cmd.exec();
-                miette::bail!("Failed to exec: {}", err);
-            }
-            CommandResult::ExitCode(code) => {
-                std::process::exit(code);
-            }
-        }
-    }
-}
-
-/// Prompt for missing secretspec secrets interactively.
-fn prompt_secrets(provider: Option<String>, profile: Option<String>) -> Result<()> {
-    let mut secrets = secretspec::Secrets::load()
-        .map_err(|e| miette::miette!("Failed to load secretspec: {}", e))?;
-
-    if let Some(ref p) = provider {
-        secrets.set_provider(p);
-    }
-    if let Some(ref p) = profile {
-        secrets.set_profile(p);
-    }
-
-    secrets
-        .ensure_secrets(provider, profile, true)
-        .map_err(|e| miette::miette!("Failed to set secrets: {}", e))?;
-
-    Ok(())
-}
-
-/// Everything resolved from CLI + config + environment, before any async runtime.
-struct LaunchConfig {
-    command: Commands,
-    config: Config,
-    nix_settings: NixSettings,
-    shell_settings: ShellSettings,
-    cache_settings: CacheSettings,
-    secret_settings: SecretSettings,
-    nixpkgs_config: NixpkgsConfig,
-    input_overrides: InputOverrides,
-    from_external: bool,
-    verbosity: devenv::tasks::VerbosityLevel,
-    tui: bool,
-    use_pty: bool,
-    nix_debugger: bool,
-    is_testing: bool,
-    log_level: devenv_tracing::Level,
-    tracing_format: TraceFormat,
-    tracing_output: Option<TraceOutput>,
-}
-
-/// Resolve all configuration from CLI + config files + environment.
-/// This is a sync function that runs before any async runtime.
-fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
-    // Resolve TUI flag: explicit --tui/--no-tui wins, otherwise default
-    // to TUI when running interactively outside CI.
-    let tui_requested = devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
-        .unwrap_or_else(|| {
-            let is_ci = std::env::var_os("CI").is_some();
-            let is_tty = std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
-            !is_ci && is_tty
-        });
-
-    // Some commands don't support the TUI regardless of user options
-    let tui_unsupported = matches!(
-        &cli.command,
-        Some(Commands::Mcp { http: None }) // stdio mode needs stderr for output
-            | Some(Commands::Lsp { .. }) // LSP needs direct stdout for protocol/config output
-            | Some(Commands::PrintPaths) // print output directly, no TUI needed
-            | Some(Commands::Init { .. }) // interactive prompts (dialoguer) need direct terminal
-    );
-
-    let tui = tui_requested && !tui_unsupported && !cli.tracing_args.use_tracing_mode();
-
-    let command = cli.command.take().expect("Command should exist");
-
-    // Extract values from CLI before consuming fields via From conversions
-    let log_level = cli.get_log_level();
-    let nix_debugger = cli.nix_args.nix_debugger;
-    let verbosity = if cli.cli_options.quiet {
-        devenv::tasks::VerbosityLevel::Quiet
-    } else if cli.cli_options.verbose {
-        devenv::tasks::VerbosityLevel::Verbose
-    } else {
-        devenv::tasks::VerbosityLevel::Normal
-    };
-    let tracing_format = cli.tracing_args.trace_format;
-    let tracing_output = cli.tracing_args.trace_output;
-
-    let mut config = Config::load()?;
-
-    let input_overrides = InputOverrides::from(cli.input_overrides);
-
-    for input in input_overrides.override_inputs.chunks_exact(2) {
-        config
-            .override_input_url(&input[0], &input[1])
-            .wrap_err_with(|| {
-                format!(
-                    "Failed to override input {} with URL {}",
-                    &input[0], &input[1]
-                )
-            })?;
-    }
-
-    // If --from is provided, create a new input and add it to imports
-    let from_external = cli.from.is_some();
-    if let Some(ref from) = cli.from {
-        let url = if let Some(path_str) = from.strip_prefix("path:") {
-            let path = std::path::Path::new(path_str);
-            let full_path = if path.is_relative() {
-                std::env::current_dir().unwrap_or_default().join(path)
-            } else {
-                path.to_path_buf()
-            };
-            let abs_path = std::fs::canonicalize(&full_path).unwrap_or(full_path);
-            format!("path:{}", abs_path.display())
-        } else {
-            from.clone()
-        };
-
-        let from_input = devenv_core::config::Input {
-            url: Some(url),
-            flake: true,
-            follows: None,
-            inputs: BTreeMap::new(),
-            overlays: Vec::new(),
-        };
-        config.inputs.insert("from".to_string(), from_input);
-        config.imports.push("from".to_string());
-    }
-
-    // Resolve settings from CLI + Config (pure functions, no mutation).
-    let nix_settings = NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
-    let shell_settings =
-        ShellSettings::resolve(devenv_core::ShellOptions::from(cli.shell_args), &config);
-    let cache_settings = CacheSettings::resolve(devenv_core::CacheOptions::from(cli.cache_args));
-    let secret_settings =
-        SecretSettings::resolve(devenv_core::SecretOptions::from(cli.secret_args), &config);
-    let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
-
-    // Determine use_pty from resolved settings (single source of truth)
-    let use_pty = shell_settings.reload
-        && matches!(&command, Commands::Shell { cmd: None, .. })
-        && std::io::stdin().is_terminal()
-        && std::io::stdout().is_terminal();
-
-    let is_testing = matches!(&command, Commands::Test { .. });
-
-    Ok(LaunchConfig {
-        command,
-        config,
-        nix_settings,
-        shell_settings,
-        cache_settings,
-        secret_settings,
-        nixpkgs_config,
-        input_overrides,
-        from_external,
-        verbosity,
-        tui,
-        use_pty,
-        nix_debugger,
-        is_testing,
-        log_level,
-        tracing_format,
-        tracing_output,
-    })
-}
-
 fn main() -> Result<()> {
     // Handle shell completion requests (COMPLETE=bash devenv)
     // Use "devenv" as completer so scripts work after installation (not absolute path)
@@ -312,53 +99,144 @@ fn main_inner() -> Result<()> {
     }
 }
 
-/// Output from run_backend containing the command result.
-struct DevenvOutput {
-    result: Result<CommandResult>,
-    /// Devenv instance for debugger mode - kept alive when nix_debugger is enabled and error occurs
-    devenv_for_debugger: Option<devenv::Devenv>,
+/// Everything resolved from CLI + config + environment, before any async runtime.
+struct LaunchConfig {
+    command: Commands,
+    config: Config,
+    nix_settings: NixSettings,
+    shell_settings: ShellSettings,
+    cache_settings: CacheSettings,
+    secret_settings: SecretSettings,
+    nixpkgs_config: NixpkgsConfig,
+    input_overrides: InputOverrides,
+    from_external: bool,
+    verbosity: devenv::tasks::VerbosityLevel,
+    tui: bool,
+    use_pty: bool,
+    nix_debugger: bool,
+    is_testing: bool,
+    log_level: devenv_tracing::Level,
+    tracing_format: TraceFormat,
+    tracing_output: Option<TraceOutput>,
 }
 
-/// Result of attempting to launch the debugger.
-enum DebuggerResult {
-    /// Debugger was launched and returned this result
-    Launched(Result<()>),
-    /// Debugger was not launched, proceed with normal command result
-    NotLaunched(Result<CommandResult>),
-}
+/// Resolve all configuration from CLI + config files + environment.
+/// This is a sync function that runs before any async runtime.
+fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
+    let command = cli.command.take().expect("Command should exist");
 
-impl DevenvOutput {
-    /// If debugger mode is enabled and we have a devenv instance, launch the REPL.
-    fn try_launch_debugger(self) -> DebuggerResult {
-        if let Some(devenv) = self.devenv_for_debugger {
-            // Print the error first so user knows what went wrong
-            if let Err(ref err) = self.result {
-                eprintln!("{:?}", err);
-            }
-            // Run the REPL on a new thread with its own GC-registered runtime
-            let repl_result = std::thread::Builder::new()
-                .stack_size(NIX_STACK_SIZE)
-                .spawn(move || build_gc_runtime().block_on(async { devenv.repl().await }))
-                .map_err(|_| miette::miette!("Failed to spawn REPL thread"))
-                .and_then(|handle| {
-                    handle
-                        .join()
-                        .map_err(|_| miette::miette!("REPL thread panicked"))
-                        .and_then(|r| r)
-                });
-            DebuggerResult::Launched(repl_result)
+    // Extract values from CLI before consuming fields via From conversions
+    let log_level = cli.get_log_level();
+    let nix_debugger = cli.nix_args.nix_debugger;
+    let verbosity = if cli.cli_options.quiet {
+        devenv::tasks::VerbosityLevel::Quiet
+    } else if cli.cli_options.verbose {
+        devenv::tasks::VerbosityLevel::Verbose
+    } else {
+        devenv::tasks::VerbosityLevel::Normal
+    };
+    let use_tracing_mode = cli.tracing_args.use_tracing_mode();
+    let tracing_format = cli.tracing_args.trace_format;
+    let tracing_output = cli.tracing_args.trace_output;
+
+    let mut config = Config::load()?;
+
+    let input_overrides = InputOverrides::from(cli.input_overrides);
+
+    for input in input_overrides.override_inputs.chunks_exact(2) {
+        config
+            .override_input_url(&input[0], &input[1])
+            .wrap_err_with(|| {
+                format!(
+                    "Failed to override input {} with URL {}",
+                    &input[0], &input[1]
+                )
+            })?;
+    }
+
+    // If --from is provided, create a new input and add it to imports
+    let from_external = cli.from.is_some();
+    if let Some(ref from) = cli.from {
+        let url = if let Some(path_str) = from.strip_prefix("path:") {
+            let path = std::path::Path::new(path_str);
+            let full_path = if path.is_relative() {
+                std::env::current_dir().unwrap_or_default().join(path)
+            } else {
+                path.to_path_buf()
+            };
+            let abs_path = std::fs::canonicalize(&full_path).unwrap_or(full_path);
+            format!("path:{}", abs_path.display())
         } else {
-            DebuggerResult::NotLaunched(self.result)
-        }
+            from.clone()
+        };
+
+        let from_input = devenv_core::config::Input {
+            url: Some(url),
+            flake: true,
+            follows: None,
+            inputs: BTreeMap::new(),
+            overlays: Vec::new(),
+        };
+        config.inputs.insert("from".to_string(), from_input);
+        config.imports.push("from".to_string());
     }
 
-    /// Handle debugger launch and execute the command result.
-    fn finish(self) -> Result<()> {
-        match self.try_launch_debugger() {
-            DebuggerResult::Launched(result) => result,
-            DebuggerResult::NotLaunched(result) => result?.exec(),
-        }
-    }
+    // Resolve settings from CLI + Config (pure functions, no mutation).
+    let nix_settings = NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
+    let shell_settings =
+        ShellSettings::resolve(devenv_core::ShellOptions::from(cli.shell_args), &config);
+    let cache_settings = CacheSettings::resolve(devenv_core::CacheOptions::from(cli.cache_args));
+    let secret_settings =
+        SecretSettings::resolve(devenv_core::SecretOptions::from(cli.secret_args), &config);
+    let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
+
+    // Resolve TUI flag: explicit --tui/--no-tui wins, otherwise default
+    // to TUI when running interactively outside CI.
+    let tui_requested = devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
+        .unwrap_or_else(|| {
+            let is_ci = std::env::var_os("CI").is_some();
+            let is_tty = std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+            is_tty && !is_ci
+        });
+
+    // Some commands don't support the TUI regardless of user options
+    let tui_unsupported = matches!(
+        &command,
+        Commands::Mcp { http: None } // stdio mode needs stderr for output
+            | Commands::Lsp { .. } // LSP needs direct stdout for protocol/config output
+            | Commands::PrintPaths // print output directly, no TUI needed
+            | Commands::Init { .. } // interactive prompts (dialoguer) need direct terminal
+    );
+
+    let tui = tui_requested && !tui_unsupported && !use_tracing_mode;
+
+    // Determine use_pty from resolved settings (single source of truth)
+    let use_pty = shell_settings.reload
+        && matches!(&command, Commands::Shell { cmd: None, .. })
+        && std::io::stdin().is_terminal()
+        && std::io::stdout().is_terminal();
+
+    let is_testing = matches!(&command, Commands::Test { .. });
+
+    Ok(LaunchConfig {
+        command,
+        config,
+        nix_settings,
+        shell_settings,
+        cache_settings,
+        secret_settings,
+        nixpkgs_config,
+        input_overrides,
+        from_external,
+        verbosity,
+        tui,
+        use_pty,
+        nix_debugger,
+        is_testing,
+        log_level,
+        tracing_format,
+        tracing_output,
+    })
 }
 
 /// Single entry point for all command execution.
@@ -410,12 +288,13 @@ fn run(launch: LaunchConfig) -> Result<()> {
     // - backend_done: signals TUI when backend is fully done
     // - command: process commands (restart, etc.) from TUI to process manager
     // - terminal_ready: signals ShellSession when TUI has released the terminal
-    let (backend_done_tx, backend_done_rx) = tokio::sync::oneshot::channel();
+    let backend_done = Arc::new(tokio::sync::Notify::new());
     let (command_tx, command_rx) = tokio::sync::mpsc::channel::<ProcessCommand>(16);
     let (terminal_ready_tx, terminal_ready_rx) = tokio::sync::oneshot::channel::<u16>();
 
     // Backend on dedicated thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
+    let backend_done_clone = backend_done.clone();
     let devenv_thread = std::thread::Builder::new()
         .stack_size(NIX_STACK_SIZE)
         .spawn(move || {
@@ -425,7 +304,7 @@ fn run(launch: LaunchConfig) -> Result<()> {
                 let output = run_backend(
                     launch,
                     shutdown_clone.clone(),
-                    backend_done_tx,
+                    backend_done_clone,
                     Some(terminal_ready_rx),
                     Some(command_rx),
                 )
@@ -464,7 +343,7 @@ fn run(launch: LaunchConfig) -> Result<()> {
                 // When PTY reload shell is active, don't shut down on backend_done —
                 // the shell session sends it as a handoff signal, not a completion signal
                 .shutdown_on_backend_done(!use_pty)
-                .run(backend_done_rx)
+                .run(backend_done.clone())
                 .await
                 .unwrap_or(0)
         })
@@ -484,12 +363,61 @@ fn run(launch: LaunchConfig) -> Result<()> {
     devenv_output.finish()
 }
 
+/// Output from run_backend containing the command result.
+struct DevenvOutput {
+    result: Result<CommandResult>,
+    /// Devenv instance for debugger mode - kept alive when nix_debugger is enabled and error occurs
+    devenv_for_debugger: Option<devenv::Devenv>,
+}
+
+/// Result of attempting to launch the debugger.
+enum DebuggerResult {
+    /// Debugger was launched and returned this result
+    Launched(Result<()>),
+    /// Debugger was not launched, proceed with normal command result
+    NotLaunched(Result<CommandResult>),
+}
+
+impl DevenvOutput {
+    /// If debugger mode is enabled and we have a devenv instance, launch the REPL.
+    fn try_launch_debugger(self) -> DebuggerResult {
+        if let Some(devenv) = self.devenv_for_debugger {
+            // Print the error first so user knows what went wrong
+            if let Err(ref err) = self.result {
+                eprintln!("{:?}", err);
+            }
+            // Run the REPL on a new thread with its own GC-registered runtime
+            let repl_result = std::thread::Builder::new()
+                .stack_size(NIX_STACK_SIZE)
+                .spawn(move || build_gc_runtime().block_on(async { devenv.repl().await }))
+                .map_err(|_| miette::miette!("Failed to spawn REPL thread"))
+                .and_then(|handle| {
+                    handle
+                        .join()
+                        .map_err(|_| miette::miette!("REPL thread panicked"))
+                        .and_then(|r| r)
+                });
+            DebuggerResult::Launched(repl_result)
+        } else {
+            DebuggerResult::NotLaunched(self.result)
+        }
+    }
+
+    /// Handle debugger launch and execute the command result.
+    fn finish(self) -> Result<()> {
+        match self.try_launch_debugger() {
+            DebuggerResult::Launched(result) => result,
+            DebuggerResult::NotLaunched(result) => result?.exec(),
+        }
+    }
+}
+
 /// Run the backend: construct Devenv and dispatch the command.
 /// All config loading and settings resolution has already happened in prepare_launch_config.
 async fn run_backend(
     launch: LaunchConfig,
     shutdown: Arc<Shutdown>,
-    backend_done_tx: tokio::sync::oneshot::Sender<()>,
+    backend_done: Arc<tokio::sync::Notify>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
 ) -> DevenvOutput {
@@ -508,7 +436,7 @@ async fn run_backend(
         use_pty,
         nix_debugger,
         is_testing,
-        // Consumed by run_tui_mode/run_direct_mode before run_backend is called
+        // Consumed by run() before run_backend is called
         log_level: _,
         tracing_format: _,
         tracing_output: _,
@@ -635,7 +563,7 @@ async fn run_backend(
             devenv.clone(),
             cmd,
             args,
-            backend_done_tx,
+            backend_done,
             terminal_ready_rx,
             verbosity,
             tui,
@@ -664,7 +592,7 @@ async fn run_backend(
     let result = dispatch_command(&devenv, command, verbosity, tui, command_rx).await;
 
     // Signal TUI that backend is done
-    let _ = backend_done_tx.send(());
+    backend_done.notify_one();
 
     // Debugger on error
     match result {
@@ -673,6 +601,44 @@ async fn run_backend(
             devenv_for_debugger: Some(devenv),
         },
         _ => output(result),
+    }
+}
+
+/// Result of a CLI command execution.
+/// This is a CLI concern - the library returns domain types.
+#[derive(Debug)]
+enum CommandResult {
+    /// Command completed normally
+    Done,
+    /// Print this string after UI cleanup
+    Print(String),
+    /// Exec into this command after cleanup (TUI shutdown, terminal restore)
+    Exec(Command),
+    /// Exit with a specific code (e.g., from shell exit)
+    ExitCode(i32),
+}
+
+impl CommandResult {
+    /// Execute the pending action.
+    /// - Done: returns Ok(())
+    /// - Print: prints to stdout and returns Ok(())
+    /// - Exec: replaces the current process (never returns on success)
+    fn exec(self) -> Result<()> {
+        match self {
+            CommandResult::Done => Ok(()),
+            CommandResult::Print(output) => {
+                print!("{output}");
+                Ok(())
+            }
+            CommandResult::Exec(mut cmd) => {
+                use std::os::unix::process::CommandExt;
+                let err = cmd.exec();
+                miette::bail!("Failed to exec: {}", err);
+            }
+            CommandResult::ExitCode(code) => {
+                std::process::exit(code);
+            }
+        }
     }
 }
 
@@ -895,24 +861,6 @@ async fn dispatch_command(
     }
 }
 
-/// Returns the git revision suffix for the version string.
-///
-/// VERGEN_GIT_SHA is set by build.rs:
-/// - From vergen when building from a git checkout
-/// - Parsed from DEVENV_GIT_REV for flake builds
-/// - VERGEN_IDEMPOTENT_OUTPUT for tarball builds (nixpkgs)
-fn build_rev() -> Option<String> {
-    let sha = env!("VERGEN_GIT_SHA");
-    if sha.is_empty() || sha == "VERGEN_IDEMPOTENT_OUTPUT" {
-        return None;
-    }
-    if env!("VERGEN_GIT_DIRTY") == "true" {
-        Some(format!("{sha}-dirty"))
-    } else {
-        Some(sha.to_string())
-    }
-}
-
 /// Run shell with hot-reload capability.
 ///
 /// This function manages a shell session that automatically reloads
@@ -924,13 +872,13 @@ fn build_rev() -> Option<String> {
 /// allowing parallel execution through the DAG task system.
 ///
 /// Terminal handoff:
-/// - `backend_done_tx`: Signals TUI to exit (sent after initial build completes)
+/// - `backend_done`: Signals TUI to exit (notified after initial build completes)
 /// - `terminal_ready_rx`: Waits for TUI cleanup before ShellSession takes terminal (receives render height)
 async fn run_reload_shell(
     devenv: Arc<Mutex<Devenv>>,
     cmd: Option<String>,
     args: Vec<String>,
-    backend_done_tx: tokio::sync::oneshot::Sender<()>,
+    backend_done: Arc<tokio::sync::Notify>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
     verbosity: devenv::tasks::VerbosityLevel,
     tui: bool,
@@ -1006,7 +954,7 @@ async fn run_reload_shell(
         rx
     });
     let handoff = Some(TuiHandoff {
-        backend_done_tx,
+        backend_done,
         terminal_ready_rx,
     });
 
@@ -1021,4 +969,58 @@ async fn run_reload_shell(
     let _ = coordinator_handle.await;
 
     Ok(exit_code)
+}
+
+/// Create a tokio runtime with worker threads registered with Boehm GC.
+///
+/// Nix uses Boehm GC with parallel marking. During stop-the-world collection,
+/// only registered threads are paused. This ensures all tokio worker threads
+/// are properly registered to avoid race conditions.
+fn build_gc_runtime() -> tokio::runtime::Runtime {
+    devenv_nix_backend::nix_init();
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(NIX_STACK_SIZE)
+        .on_thread_start(|| {
+            let _ = devenv_nix_backend::gc_register_current_thread();
+        })
+        .build()
+        .expect("Failed to create tokio runtime")
+}
+
+/// Prompt for missing secretspec secrets interactively.
+fn prompt_secrets(provider: Option<String>, profile: Option<String>) -> Result<()> {
+    let mut secrets = secretspec::Secrets::load()
+        .map_err(|e| miette::miette!("Failed to load secretspec: {}", e))?;
+
+    if let Some(ref p) = provider {
+        secrets.set_provider(p);
+    }
+    if let Some(ref p) = profile {
+        secrets.set_profile(p);
+    }
+
+    secrets
+        .ensure_secrets(provider, profile, true)
+        .map_err(|e| miette::miette!("Failed to set secrets: {}", e))?;
+
+    Ok(())
+}
+
+/// Returns the git revision suffix for the version string.
+///
+/// VERGEN_GIT_SHA is set by build.rs:
+/// - From vergen when building from a git checkout
+/// - Parsed from DEVENV_GIT_REV for flake builds
+/// - VERGEN_IDEMPOTENT_OUTPUT for tarball builds (nixpkgs)
+fn build_rev() -> Option<String> {
+    let sha = env!("VERGEN_GIT_SHA");
+    if sha.is_empty() || sha == "VERGEN_IDEMPOTENT_OUTPUT" {
+        return None;
+    }
+    if env!("VERGEN_GIT_DIRTY") == "true" {
+        Some(format!("{sha}-dirty"))
+    } else {
+        Some(sha.to_string())
+    }
 }

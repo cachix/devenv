@@ -149,14 +149,11 @@ impl TuiApp {
 
     /// Run the TUI application until the backend completes.
     ///
-    /// The `backend_done` receiver signals when the backend has completed its
+    /// The `backend_done` notify signals when the backend has completed its
     /// initial phase (or fully completed). The TUI will drain any remaining
     /// events and then exit.
     /// Run the TUI and return the final render height (for cursor positioning after handoff).
-    pub async fn run(
-        self,
-        backend_done: tokio::sync::oneshot::Receiver<()>,
-    ) -> std::io::Result<u16> {
+    pub async fn run(self, backend_done: Arc<Notify>) -> std::io::Result<u16> {
         let config = Arc::new(self.config);
         let activity_model = Arc::new(RwLock::new(ActivityModel::with_config(config.clone())));
         let notify = Arc::new(Notify::new());
@@ -176,9 +173,10 @@ impl TuiApp {
             let exit_flag = exit_flag.clone();
             let event_batch_size = config.event_batch_size;
             let mut activity_rx = self.activity_rx;
-            let mut backend_done = backend_done;
             async move {
                 let mut batch = Vec::with_capacity(event_batch_size);
+                let backend_notified = backend_done.notified();
+                tokio::pin!(backend_notified);
 
                 loop {
                     tokio::select! {
@@ -210,7 +208,7 @@ impl TuiApp {
                             notify.notify_waiters();
                         }
 
-                        _ = &mut backend_done => {
+                        _ = &mut backend_notified => {
                             // Backend is done - drain any remaining events
                             while let Ok(event) = activity_rx.try_recv() {
                                 batch.push(event);
