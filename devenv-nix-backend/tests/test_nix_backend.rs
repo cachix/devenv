@@ -4,9 +4,11 @@
 //! These tests verify the functionality of the Rust FFI-based NixBackend,
 //! including input overrides via NixOptions.
 
+use devenv_core::eval_op::EvalOp;
 use devenv_core::{
     CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixOptions, Options,
 };
+use devenv_eval_cache::EvalInputCollector;
 use devenv_nix_backend::nix_backend::NixRustBackend;
 use devenv_nix_backend_macros::nix_test;
 use std::path::PathBuf;
@@ -2285,4 +2287,99 @@ async fn test_concurrent_build_operations() {
     assert!(!paths1.is_empty(), "Build 1 should return paths");
     assert!(!paths2.is_empty(), "Build 2 should return paths");
     assert!(!paths3.is_empty(), "Build 3 should return paths");
+}
+
+/// Extract file paths from EvalOp::EvaluatedFile entries, filtering out /nix/store paths
+/// which are immutable and not relevant for cache invalidation.
+fn evaluated_files(ops: &[EvalOp]) -> std::collections::HashSet<PathBuf> {
+    ops.iter()
+        .filter_map(|op| match op {
+            EvalOp::EvaluatedFile { source } => Some(source.clone()),
+            _ => None,
+        })
+        .filter(|p| !p.starts_with("/nix/store"))
+        .collect()
+}
+
+/// Verify that the cached Value replay delivers complete file dependencies.
+///
+/// After assemble(), the devenv Value is already cached (get_cachix_config evaluates it).
+/// Subsequent eval() calls reuse the cached Value. The replay mechanism must inject
+/// the base file dependencies (default.nix, bootstrapLib.nix) into any observer that
+/// is active during eval, so that the eval cache records complete dependencies.
+/// Without replay, eval observers would see zero base file deps on cache hits.
+#[nix_test]
+async fn test_cached_value_replays_file_deps_to_subsequent_evals() {
+    let yaml = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+"#;
+    let (temp_dir, _cwd_guard, backend, paths, config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default());
+    backend
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config(get_current_system()),
+        ))
+        .await
+        .expect("Failed to assemble");
+    copy_fixture_lock(temp_dir.path());
+
+    let bridge = backend.log_bridge();
+
+    // After assemble(), the devenv Value is already cached (get_cachix_config triggers
+    // eval_import_with_primops). All subsequent evals hit the cache and rely on replay.
+
+    // First eval: observer should see replayed base file deps
+    let collector1 = EvalInputCollector::start();
+    bridge.add_observer(collector1.clone());
+    let result1 = backend.eval(&["config.devenv.root"]).await;
+    assert!(
+        result1.is_ok(),
+        "First eval should succeed: {:?}",
+        result1.err()
+    );
+    let ops1 = collector1.take_ops();
+    bridge.clear_observers();
+
+    let files1 = evaluated_files(&ops1);
+    assert!(
+        !files1.is_empty(),
+        "Eval observer should see replayed base file deps (default.nix, etc.), got 0 ops"
+    );
+
+    // Second eval (different attribute): should also see the same base file deps
+    let collector2 = EvalInputCollector::start();
+    bridge.add_observer(collector2.clone());
+    let result2 = backend.eval(&["config.devenv.cliVersion"]).await;
+    assert!(
+        result2.is_ok(),
+        "Second eval should succeed: {:?}",
+        result2.err()
+    );
+    let ops2 = collector2.take_ops();
+    bridge.clear_observers();
+
+    let files2 = evaluated_files(&ops2);
+
+    // Both evals must see the same base files from replay
+    let missing: Vec<_> = files1.difference(&files2).collect();
+    assert!(
+        missing.is_empty(),
+        "Second eval is missing {} base file deps that first eval saw: {:?}",
+        missing.len(),
+        missing
+    );
+
+    // And vice versa — the base files should be identical
+    let extra: Vec<_> = files2.difference(&files1).collect();
+    assert!(
+        extra.is_empty(),
+        "Second eval has {} extra base file deps not in first eval: {:?}",
+        extra.len(),
+        extra
+    );
 }

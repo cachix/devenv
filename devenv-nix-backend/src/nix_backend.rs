@@ -20,6 +20,7 @@ use devenv_cache_core::compute_string_hash;
 use devenv_core::PortAllocator;
 use devenv_core::cachix::{CachixCacheInfo, CachixConfig, CachixManager};
 use devenv_core::config::{Input, NixpkgsConfig};
+use devenv_core::eval_op::EvalOp;
 use devenv_core::nix_args::NixArgs;
 use devenv_core::nix_backend::{
     DevEnvOutput, DevenvPaths, NixBackend, Options, PackageSearchResult, SearchResults,
@@ -138,8 +139,11 @@ pub struct NixRustBackend {
     // Shared with eval cache for resource replay on cache hits
     port_allocator: Arc<PortAllocator>,
 
-    // Cached result of eval_import_with_primops (cleared on invalidate)
-    cached_devenv_value: Mutex<Option<nix_bindings_expr::value::Value>>,
+    // Cached result of eval_import_with_primops with its file dependency ops (cleared on invalidate).
+    // On cache hit, the ops are replayed into active observers so that the eval cache
+    // records complete file dependencies even when the Value is reused.
+    // Lock ordering: cached_devenv_value → nix_log_bridge.observers (via replay_ops).
+    cached_devenv_value: Mutex<Option<(nix_bindings_expr::value::Value, Vec<EvalOp>)>>,
 
     // Caching wrapper around EvalState (drops first — releases Arc to eval_state)
     caching_eval_state: OnceCell<CachingEvalState<Arc<Mutex<EvalState>>>>,
@@ -449,6 +453,12 @@ impl NixRustBackend {
         Ok(backend)
     }
 
+    /// Access the log bridge for testing (registering observers to verify file deps).
+    #[cfg(feature = "test-nix-store")]
+    pub fn log_bridge(&self) -> &Arc<NixLogBridge> {
+        &self.nix_log_bridge
+    }
+
     /// Create an eval session with activity tracking.
     ///
     /// This method:
@@ -634,6 +644,9 @@ impl NixRustBackend {
     }
 
     /// Return the cached result of `eval_import_with_primops`, evaluating on first call.
+    ///
+    /// On cache hit, replays the file-dependency ops into the log bridge's active
+    /// observers so that the eval cache records complete dependencies for every caller.
     fn get_or_eval_devenv(
         &self,
         eval_state: &mut EvalState,
@@ -642,12 +655,23 @@ impl NixRustBackend {
             .cached_devenv_value
             .lock()
             .map_err(|e| miette!("Failed to lock cached devenv value: {}", e))?;
-        if let Some(value) = cached.as_ref() {
+        if let Some((value, ops)) = cached.as_ref() {
+            // Replay file-dependency ops so the current eval cache observer sees them
+            self.nix_log_bridge.replay_ops(ops);
             return Ok(value.clone());
         }
-        let value = self.eval_import_with_primops(eval_state)?;
-        *cached = Some(value);
-        Ok(cached.as_ref().unwrap().clone())
+        // Collect ops emitted during eval_import_with_primops alongside any
+        // already-registered observers (e.g. the eval cache's own collector).
+        let collector = devenv_eval_cache::EvalInputCollector::start();
+        let observer: Arc<dyn devenv_core::eval_op::OpObserver> = collector.clone();
+        self.nix_log_bridge.add_observer(observer.clone());
+        let result = self.eval_import_with_primops(eval_state);
+        // Always remove our private collector, even on eval failure
+        let ops = collector.take_ops();
+        self.nix_log_bridge.remove_observer(&observer);
+        let value = result?;
+        *cached = Some((value, ops));
+        Ok(cached.as_ref().unwrap().0.clone())
     }
 
     /// Apply resolved Nix settings to the Nix environment.

@@ -193,6 +193,29 @@ impl NixLogBridge {
         }
     }
 
+    /// Remove a specific observer by identity (Arc pointer equality).
+    pub fn remove_observer(&self, observer: &Arc<dyn OpObserver>) {
+        if let Ok(mut guard) = self.observers.lock() {
+            guard.retain(|o| !Arc::ptr_eq(o, observer));
+        }
+    }
+
+    /// Replay a set of ops into all currently active observers.
+    ///
+    /// Used to inject cached file-dependency information so that eval cache
+    /// entries record complete dependencies even when evaluation is skipped.
+    pub fn replay_ops(&self, ops: &[EvalOp]) {
+        if let Ok(guard) = self.observers.lock() {
+            for observer in guard.iter() {
+                if observer.is_active() {
+                    for op in ops {
+                        observer.on_op(op.clone());
+                    }
+                }
+            }
+        }
+    }
+
     /// Begin an evaluation scope.
     ///
     /// Returns a guard that calls `end_eval` when dropped.
@@ -927,5 +950,195 @@ mod tests {
         // Both categories should start fresh
         assert_eq!(tracker.update(2, ExpectedCategory::Build, 1), Some(1),);
         assert_eq!(tracker.update(2, ExpectedCategory::Download, 1), Some(1),);
+    }
+
+    /// Helper: create a mock observer that records ops in a shared Vec.
+    struct MockObserver {
+        ops: Mutex<Vec<EvalOp>>,
+        active: std::sync::atomic::AtomicBool,
+    }
+
+    impl MockObserver {
+        fn new() -> Arc<Self> {
+            Arc::new(Self {
+                ops: Mutex::new(Vec::new()),
+                active: std::sync::atomic::AtomicBool::new(true),
+            })
+        }
+
+        fn collected_ops(&self) -> Vec<EvalOp> {
+            self.ops.lock().unwrap().clone()
+        }
+    }
+
+    impl OpObserver for MockObserver {
+        fn on_op(&self, op: EvalOp) {
+            self.ops.lock().unwrap().push(op);
+        }
+
+        fn is_active(&self) -> bool {
+            self.active.load(std::sync::atomic::Ordering::Acquire)
+        }
+    }
+
+    fn sample_ops() -> Vec<EvalOp> {
+        vec![
+            EvalOp::EvaluatedFile {
+                source: "/tmp/default.nix".into(),
+            },
+            EvalOp::ReadFile {
+                source: "/tmp/config.nix".into(),
+            },
+            EvalOp::GetEnv {
+                name: "HOME".into(),
+            },
+        ]
+    }
+
+    #[test]
+    fn test_replay_ops_delivers_to_active_observer() {
+        let bridge = NixLogBridge::new();
+        let observer = MockObserver::new();
+        bridge.add_observer(observer.clone());
+
+        bridge.replay_ops(&sample_ops());
+
+        assert_eq!(observer.collected_ops().len(), 3);
+        assert_eq!(
+            observer.collected_ops()[0],
+            EvalOp::EvaluatedFile {
+                source: "/tmp/default.nix".into()
+            }
+        );
+    }
+
+    #[test]
+    fn test_replay_ops_skips_inactive_observer() {
+        let bridge = NixLogBridge::new();
+        let observer = MockObserver::new();
+        observer
+            .active
+            .store(false, std::sync::atomic::Ordering::Release);
+        bridge.add_observer(observer.clone());
+
+        bridge.replay_ops(&sample_ops());
+
+        assert_eq!(observer.collected_ops().len(), 0);
+    }
+
+    #[test]
+    fn test_replay_ops_delivers_to_multiple_observers() {
+        let bridge = NixLogBridge::new();
+        let obs1 = MockObserver::new();
+        let obs2 = MockObserver::new();
+        bridge.add_observer(obs1.clone());
+        bridge.add_observer(obs2.clone());
+
+        bridge.replay_ops(&sample_ops());
+
+        assert_eq!(obs1.collected_ops().len(), 3);
+        assert_eq!(obs2.collected_ops().len(), 3);
+    }
+
+    #[test]
+    fn test_remove_observer_by_identity() {
+        let bridge = NixLogBridge::new();
+        let obs1 = MockObserver::new();
+        let obs2 = MockObserver::new();
+        let obs1_dyn: Arc<dyn OpObserver> = obs1.clone();
+        let obs2_dyn: Arc<dyn OpObserver> = obs2.clone();
+        bridge.add_observer(obs1_dyn.clone());
+        bridge.add_observer(obs2_dyn.clone());
+
+        // Remove obs1, keep obs2
+        bridge.remove_observer(&obs1_dyn);
+
+        bridge.replay_ops(&sample_ops());
+
+        assert_eq!(obs1.collected_ops().len(), 0);
+        assert_eq!(obs2.collected_ops().len(), 3);
+    }
+
+    #[test]
+    fn test_remove_observer_nonexistent_is_noop() {
+        let bridge = NixLogBridge::new();
+        let obs1 = MockObserver::new();
+        let obs2 = MockObserver::new();
+        let obs1_dyn: Arc<dyn OpObserver> = obs1.clone();
+        let obs2_dyn: Arc<dyn OpObserver> = obs2.clone();
+        bridge.add_observer(obs1_dyn.clone());
+
+        // Remove obs2 which was never added — should not affect obs1
+        bridge.remove_observer(&obs2_dyn);
+
+        bridge.replay_ops(&sample_ops());
+
+        assert_eq!(obs1.collected_ops().len(), 3);
+    }
+
+    #[test]
+    fn test_replay_ops_empty_is_noop() {
+        let bridge = NixLogBridge::new();
+        let observer = MockObserver::new();
+        bridge.add_observer(observer.clone());
+
+        bridge.replay_ops(&[]);
+
+        assert_eq!(observer.collected_ops().len(), 0);
+    }
+
+    /// Simulate the get_or_eval_devenv pattern:
+    /// 1. First call: an outer observer + private collector both capture ops
+    /// 2. Private collector is removed, outer observer stays
+    /// 3. Second call: cached ops are replayed into a new outer observer
+    /// Verifies both outer observers see complete file dependencies.
+    #[test]
+    fn test_collect_then_replay_pattern() {
+        let bridge = NixLogBridge::new();
+        let ops = sample_ops();
+
+        // --- First eval (cache miss) ---
+        // Outer observer (simulates eval cache's EvalInputCollector)
+        let outer1 = MockObserver::new();
+        bridge.add_observer(outer1.clone());
+
+        // Private collector (simulates get_or_eval_devenv's collector)
+        let collector = MockObserver::new();
+        let collector_dyn: Arc<dyn OpObserver> = collector.clone();
+        bridge.add_observer(collector_dyn.clone());
+
+        // Simulate Nix C++ emitting file-read events (uses the same dispatch as replay_ops)
+        bridge.replay_ops(&ops);
+
+        // Both should have captured the ops
+        let cached_ops = collector.collected_ops();
+        assert_eq!(cached_ops.len(), 3, "collector should capture all ops");
+        assert_eq!(
+            outer1.collected_ops().len(),
+            3,
+            "outer1 should capture all ops"
+        );
+
+        // Remove private collector, clear outer1 (simulates eval scope ending)
+        bridge.remove_observer(&collector_dyn);
+        bridge.clear_observers();
+
+        // --- Second eval (cache hit) ---
+        let outer2 = MockObserver::new();
+        bridge.add_observer(outer2.clone());
+
+        // Replay cached ops (simulates get_or_eval_devenv cache hit)
+        bridge.replay_ops(&cached_ops);
+
+        assert_eq!(
+            outer2.collected_ops().len(),
+            3,
+            "outer2 should see replayed ops from first eval"
+        );
+        assert_eq!(
+            outer2.collected_ops(),
+            ops,
+            "replayed ops should match originals"
+        );
     }
 }
