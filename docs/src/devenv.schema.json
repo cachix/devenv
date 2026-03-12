@@ -68,18 +68,6 @@
         "string",
         "null"
       ]
-    },
-    "reload": {
-      "type": [
-        "boolean",
-        "null"
-      ]
-    },
-    "strictPorts": {
-      "type": [
-        "boolean",
-        "null"
-      ]
     }
   },
   "$defs": {
