@@ -385,6 +385,59 @@ impl TuiApp {
     }
 }
 
+pub(crate) fn request_interrupt_prompt(
+    command_tx: Option<&mpsc::Sender<ProcessCommand>>,
+    ui_state: &Arc<RwLock<UiState>>,
+) -> bool {
+    let Some(tx) = command_tx else {
+        return false;
+    };
+
+    match tx.try_send(ProcessCommand::InterruptAll) {
+        Ok(()) => {
+            if let Ok(mut ui) = ui_state.write() {
+                ui.show_interrupt_prompt();
+            }
+            true
+        }
+        Err(err) => {
+            debug!("Failed to forward SIGINT to managed processes: {}", err);
+            false
+        }
+    }
+}
+
+pub(crate) fn handle_interrupt_prompt_key(
+    key_event: &KeyEvent,
+    ui_state: &Arc<RwLock<UiState>>,
+    shutdown: &Arc<Shutdown>,
+) -> bool {
+    let prompt_active = ui_state
+        .read()
+        .map(|ui| ui.interrupt_prompt_active())
+        .unwrap_or(false);
+    if !prompt_active {
+        return false;
+    }
+
+    match key_event.code {
+        KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+            shutdown.handle_interrupt();
+        }
+        KeyCode::Char('a') => {
+            shutdown.handle_interrupt();
+        }
+        KeyCode::Char('c') => {
+            if let Ok(mut ui) = ui_state.write() {
+                ui.clear_interrupt_prompt();
+            }
+        }
+        _ => {}
+    }
+
+    true
+}
+
 /// Save the current terminal state before starting the TUI.
 ///
 /// Must be called before iocraft's render_loop enters raw mode, so we have
@@ -528,9 +581,15 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 && key_event.kind != KeyEventKind::Release
             {
                 debug!("Key event: {:?}", key_event);
+                if handle_interrupt_prompt_key(&key_event, &ui_state, &shutdown) {
+                    return;
+                }
+
                 match key_event.code {
                     KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        shutdown.handle_interrupt();
+                        if !request_interrupt_prompt(command_tx.as_ref(), &ui_state) {
+                            shutdown.handle_interrupt();
+                        }
                     }
                     KeyCode::Char('r') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                         // Restart selected process
@@ -727,9 +786,11 @@ async fn run_view(
                         ContextProvider(value: Context::owned(notify.clone())) {
                             ContextProvider(value: Context::owned(activity_model.clone())) {
                                 ContextProvider(value: Context::owned(ui_state.clone())) {
-                                    ContextProvider(value: Context::owned(exit_flag.clone())) {
-                                        ContextProvider(value: Context::owned(activity_id)) {
-                                            ExpandedLogView
+                                    ContextProvider(value: Context::owned(command_tx.clone())) {
+                                        ContextProvider(value: Context::owned(exit_flag.clone())) {
+                                            ContextProvider(value: Context::owned(activity_id)) {
+                                                ExpandedLogView
+                                            }
                                         }
                                     }
                                 }

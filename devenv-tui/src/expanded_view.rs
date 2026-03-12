@@ -6,16 +6,17 @@
 //! Supports mouse-based text selection with OSC 52 clipboard copy.
 
 use crate::TuiConfig;
-use crate::app::ExitFlag;
+use crate::app::{ExitFlag, handle_interrupt_prompt_key, request_interrupt_prompt};
 use crate::model::{ActivityModel, UiState, ViewMode};
 use base64::Engine;
 use crossterm::event::MouseButton;
+use devenv_processes::ProcessCommand;
 use iocraft::prelude::*;
 use iocraft::{FullscreenMouseEvent, MouseEventKind};
 use std::collections::VecDeque;
 use std::io::Write as _;
 use std::sync::{Arc, RwLock};
-use tokio::sync::Notify;
+use tokio::sync::{Notify, mpsc};
 use tokio_shutdown::Shutdown;
 
 /// Line number prefix width: "NNNNN | " = 8 chars
@@ -84,6 +85,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let activity_id = *hooks.use_context::<u64>();
     let notify = hooks.use_context::<Arc<Notify>>();
     let shutdown = hooks.use_context::<Arc<Shutdown>>();
+    let command_tx = hooks.use_context::<Option<mpsc::Sender<ProcessCommand>>>();
     let (width, height) = hooks.use_terminal_size();
 
     // Component-local scroll state - updates are immediate, no model lock needed
@@ -135,6 +137,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     hooks.use_terminal_events({
         let ui_state = ui_state.clone();
         let shutdown = shutdown.clone();
+        let command_tx = command_tx.clone();
         move |event| match event {
             TerminalEvent::Key(key_event) => {
                 if key_event.kind == KeyEventKind::Release {
@@ -144,6 +147,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     key_event,
                     &ui_state,
                     &shutdown,
+                    command_tx.as_ref(),
                     &mut scroll_offset,
                     total_lines,
                     viewport_height,
@@ -159,15 +163,21 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 );
             }
             TerminalEvent::FullscreenMouse(mouse_event) => {
-                handle_mouse_event(
-                    mouse_event,
-                    &mut scroll_offset,
-                    total_lines,
-                    viewport_height,
-                    &mut selection_anchor,
-                    &mut selection_cursor,
-                    &mut is_selecting,
-                );
+                let prompt_active = ui_state
+                    .read()
+                    .map(|ui| ui.interrupt_prompt_active())
+                    .unwrap_or(false);
+                if !prompt_active {
+                    handle_mouse_event(
+                        mouse_event,
+                        &mut scroll_offset,
+                        total_lines,
+                        viewport_height,
+                        &mut selection_anchor,
+                        &mut selection_cursor,
+                        &mut is_selecting,
+                    );
+                }
             }
             TerminalEvent::Resize(_, _) | _ => {}
         }
@@ -193,7 +203,18 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             None
         };
 
-    render_expanded_view(&state, width, height, selection.as_ref())
+    let interrupt_prompt_active = ui_state
+        .read()
+        .map(|ui| ui.interrupt_prompt_active())
+        .unwrap_or(false);
+
+    render_expanded_view(
+        &state,
+        width,
+        height,
+        selection.as_ref(),
+        interrupt_prompt_active,
+    )
 }
 
 /// State extracted from the model for rendering
@@ -261,11 +282,16 @@ fn handle_key_event(
     key_event: KeyEvent,
     ui_state: &Arc<RwLock<UiState>>,
     shutdown: &Arc<Shutdown>,
+    command_tx: Option<&mpsc::Sender<ProcessCommand>>,
     scroll_offset: &mut State<usize>,
     total_lines: usize,
     viewport_height: usize,
     sel: &mut SelectionState<'_>,
 ) {
+    if handle_interrupt_prompt_key(&key_event, ui_state, shutdown) {
+        return;
+    }
+
     let max_offset = total_lines.saturating_sub(viewport_height);
 
     match key_event.code {
@@ -332,7 +358,7 @@ fn handle_key_event(
                     }
                 }
                 sel.clear();
-            } else {
+            } else if !request_interrupt_prompt(command_tx, ui_state) {
                 shutdown.handle_interrupt();
             }
         }
@@ -459,6 +485,7 @@ fn render_expanded_view(
     width: u16,
     height: u16,
     selection: Option<&Selection>,
+    interrupt_prompt_active: bool,
 ) -> AnyElement<'static> {
     let viewport_height = calculate_viewport_height(height);
 
@@ -488,7 +515,16 @@ fn render_expanded_view(
     let progress = build_progress_indicator(clamped_offset, viewport_height, state.total_lines);
 
     // Build footer text - show copy hint when selection is active
-    let footer_text = if selection.is_some() {
+    let footer_text = if interrupt_prompt_active {
+        if width < 88 {
+            format!("{} \u{2502} SIGINT sent  c:continue  a:^C:abort", progress)
+        } else {
+            format!(
+                "{} \u{2502} Interrupt sent to managed processes  c:continue  a:abort  ^C:abort",
+                progress
+            )
+        }
+    } else if selection.is_some() {
         format!(
             "{} \u{2502} j/k:line  PgUp/PgDn:page  g/G:top/bottom  Ctrl+C:copy  Esc:deselect  q:back",
             progress

@@ -18,6 +18,8 @@ use tracing::{debug, info, warn};
 /// Commands that can be sent to control processes
 #[derive(Debug, Clone)]
 pub enum ProcessCommand {
+    /// Forward SIGINT to all active managed processes
+    InterruptAll,
     /// Restart a running process, or start a stopped process
     Restart(String),
 }
@@ -556,6 +558,35 @@ impl NativeProcessManager {
         Ok(())
     }
 
+    /// Forward SIGINT to all active managed processes without shutting down the manager.
+    pub async fn interrupt_all(&self) {
+        let handles: Vec<_> = {
+            let processes = self.processes.read().await;
+            processes
+                .iter()
+                .filter_map(|(name, entry)| match entry {
+                    ProcessEntry::Active(handle) => Some((
+                        name.clone(),
+                        handle.resources.job.clone(),
+                        handle.resources.activity.ref_handle(),
+                    )),
+                    ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. } => None,
+                })
+                .collect()
+        };
+
+        if handles.is_empty() {
+            debug!("interrupt_all: no active processes to signal");
+            return;
+        }
+
+        for (name, job, activity) in handles {
+            info!("Forwarding SIGINT to process: {}", name);
+            activity.log("Interrupt signal sent");
+            job.signal(Signal::Interrupt).await;
+        }
+    }
+
     /// Restart a process by name
     ///
     /// This resets the restart count and activity state, respawns the supervision
@@ -935,6 +966,9 @@ impl NativeProcessManager {
     /// Handle a single process command (restart, start not-started, etc.).
     pub async fn handle_command(&self, cmd: ProcessCommand) {
         match cmd {
+            ProcessCommand::InterruptAll => {
+                self.interrupt_all().await;
+            }
             ProcessCommand::Restart(name) => {
                 let is_not_started = matches!(
                     self.processes.read().await.get(&name),
@@ -1376,6 +1410,23 @@ mod tests {
         }
     }
 
+    fn sigint_ignoring_config(name: &str) -> ProcessConfig {
+        ProcessConfig {
+            name: name.to_string(),
+            exec: "sh".to_string(),
+            args: vec![
+                "-c".to_string(),
+                "trap '' INT; while true; do sleep 1; done".to_string(),
+            ],
+            restart: crate::config::RestartConfig {
+                on: RestartPolicy::Never,
+                max: Some(5),
+                window: None,
+            },
+            ..Default::default()
+        }
+    }
+
     #[tokio::test]
     async fn test_register_waiting_sets_phase() {
         let temp_dir = tempfile::tempdir().unwrap();
@@ -1487,6 +1538,27 @@ mod tests {
 
         let phase = manager.get_phase("long-runner").await;
         assert_ne!(phase, Some(ProcessPhase::Waiting));
+
+        let _ = manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn test_interrupt_all_leaves_process_running_when_it_handles_sigint() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let config = sigint_ignoring_config("sigint-handler");
+
+        manager.start_command(&config, None).await.unwrap();
+        manager.handle_command(ProcessCommand::InterruptAll).await;
+
+        tokio::time::sleep(Duration::from_millis(250)).await;
+
+        let running = manager.list().await;
+        assert!(
+            running.iter().any(|name| name == "sigint-handler"),
+            "Expected sigint-handler to remain active after SIGINT, got: {:?}",
+            running
+        );
 
         let _ = manager.stop_all().await;
     }
