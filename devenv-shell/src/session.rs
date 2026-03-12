@@ -58,6 +58,8 @@ struct EscapeState {
     kitty_keyboard_depth: u32,
     /// XTMODIFYOTHERKEYS is enabled.
     modify_other_keys: bool,
+    /// Mode 2048 (in-band resize) is enabled by the PTY program.
+    in_band_resize: bool,
 }
 
 impl EscapeState {
@@ -70,6 +72,7 @@ impl EscapeState {
             clear_scrollback: false,
             kitty_keyboard_depth: 0,
             modify_other_keys: false,
+            in_band_resize: false,
         }
     }
 
@@ -1131,20 +1134,19 @@ impl ShellSession {
                         renderer.content_rows = pty_size.rows;
                         let _ = pty.resize(pty_size);
                         // Send a mode 2048 in-band resize notification
-                        // through the PTY. The mode itself is not forwarded
-                        // to the real terminal because it would report the
-                        // wrong size (real terminal rows vs PTY rows-1).
-                        // Programs like neovim detect terminal support via
-                        // DA2 and rely on this instead of SIGWINCH, so we
-                        // send the notification with the correct PTY
-                        // dimensions.
-                        let cmd = InBandResizeNotification {
-                            rows: pty_size.rows,
-                            cols: pty_size.cols,
-                        };
-                        let mut buf = String::new();
-                        cmd.write_ansi(&mut buf).unwrap();
-                        let _ = pty.write_all(buf.as_bytes());
+                        // through the PTY, but only if the program has
+                        // enabled mode 2048. Sending it unconditionally
+                        // causes shells that don't understand it to display
+                        // the raw escape sequence as input text.
+                        if esc.in_band_resize {
+                            let cmd = InBandResizeNotification {
+                                rows: pty_size.rows,
+                                cols: pty_size.cols,
+                            };
+                            let mut buf = String::new();
+                            cmd.write_ansi(&mut buf).unwrap();
+                            let _ = pty.write_all(buf.as_bytes());
+                        }
                         vt.resize(pty_size.cols as usize, pty_size.rows as usize);
                         renderer.mark_scrollback_flushed(vt);
                         renderer.render_full(stdout, vt)?;
@@ -1249,6 +1251,14 @@ impl ShellSession {
         for event in events_buf.drain(..) {
             match event {
                 SequenceEvent::DecMode(event) => {
+                    // Track mode 2048 (in-band resize) even though it's
+                    // not forwarded to the real terminal.
+                    if event.enables_in_band_resize() {
+                        esc.in_band_resize = true;
+                    } else if event.disables_in_band_resize() {
+                        esc.in_band_resize = false;
+                    }
+
                     if !event.has_forwarded_mode() {
                         continue;
                     }

@@ -2,6 +2,10 @@
 
 ## X.Y.Z (YYYY-MM-DD)
 
+### Bug Fixes
+
+- Fixed in-band resize events being sent to the shell when the app did not opt-in to receiving them.
+
 ## 2.0.4 (2026-03-11)
 
 ### Bug Fixes
