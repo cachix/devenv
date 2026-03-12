@@ -1231,3 +1231,27 @@ pub fn format_duration(duration: Duration) -> String {
     }
     duration.human_duration().to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_summary_interrupt_prompt_renders() {
+        let mut element = build_summary_view_impl(
+            &ActivitySummary::default(),
+            None,
+            false,
+            false,
+            false,
+            true,
+            100,
+        );
+        let output = element.render(Some(100)).to_string();
+
+        assert!(output.contains("Interrupt sent to managed"));
+        assert!(output.contains("processes"));
+        assert!(output.contains("continue"));
+        assert!(output.contains("abort"));
+    }
+}

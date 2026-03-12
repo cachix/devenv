@@ -96,10 +96,17 @@ cargo run --bin tui-replay <(zstd -dc trace.jsonl.zst)
 ### Main View
 - `↑/↓` or `j/k`: Navigate activities
 - `Ctrl+E`: Expand logs for selected activity
+- `Ctrl+R`: Restart the selected managed process
+- `Ctrl+C`: Send `SIGINT` to running managed processes and open the interrupt prompt
+- `c`: Continue after the interrupt prompt
+- `a` or `Ctrl+C`: Abort from the interrupt prompt
 - `Esc`: Clear selection
 
 ### Expanded Logs
 - `↑/↓` or `j/k`: Scroll one line
 - `PgUp/PgDn` or `Space`: Scroll page
 - `g/G`: Jump to top/bottom
+- `Ctrl+C`: Copy the current selection, or send `SIGINT` when no selection is active
+- `c`: Continue after the interrupt prompt
+- `a` or `Ctrl+C`: Abort from the interrupt prompt
 - `q/Esc`: Return to main view

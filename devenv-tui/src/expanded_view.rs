@@ -138,6 +138,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         let ui_state = ui_state.clone();
         let shutdown = shutdown.clone();
         let command_tx = command_tx.clone();
+        let activity_model = activity_model.clone();
         move |event| match event {
             TerminalEvent::Key(key_event) => {
                 if key_event.kind == KeyEventKind::Release {
@@ -148,6 +149,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     &ui_state,
                     &shutdown,
                     command_tx.as_ref(),
+                    &activity_model,
                     &mut scroll_offset,
                     total_lines,
                     viewport_height,
@@ -283,6 +285,7 @@ fn handle_key_event(
     ui_state: &Arc<RwLock<UiState>>,
     shutdown: &Arc<Shutdown>,
     command_tx: Option<&mpsc::Sender<ProcessCommand>>,
+    activity_model: &Arc<RwLock<ActivityModel>>,
     scroll_offset: &mut State<usize>,
     total_lines: usize,
     viewport_height: usize,
@@ -358,7 +361,7 @@ fn handle_key_event(
                     }
                 }
                 sel.clear();
-            } else if !request_interrupt_prompt(command_tx, ui_state) {
+            } else if !request_interrupt_prompt(command_tx, ui_state, activity_model) {
                 shutdown.handle_interrupt();
             }
         }
@@ -564,6 +567,27 @@ fn render_expanded_view(
         }
     }
     .into_any()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_render_expanded_view_interrupt_prompt_footer() {
+        let state = ExpandedViewState {
+            activity_name: "api".to_string(),
+            scroll_offset: 0,
+            logs: Arc::new(VecDeque::new()),
+            total_lines: 0,
+        };
+
+        let mut element = render_expanded_view(&state, 100, 8, None, true);
+        let output = element.render(Some(100)).to_string();
+
+        assert!(output.contains("Interrupt sent to managed processes"));
+        assert!(output.contains("c:continue"));
+    }
 }
 
 /// Build elements for visible log lines

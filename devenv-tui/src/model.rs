@@ -1214,6 +1214,22 @@ impl ActivityModel {
         summary
     }
 
+    /// Whether there is at least one managed process that can currently receive SIGINT.
+    pub fn has_interruptible_processes(&self) -> bool {
+        self.activities.values().any(|activity| {
+            matches!(
+                activity.variant,
+                ActivityVariant::Process(ProcessActivity {
+                    status: ProcessStatus::Starting
+                        | ProcessStatus::Running
+                        | ProcessStatus::Ready
+                        | ProcessStatus::Restarting,
+                    ..
+                })
+            )
+        })
+    }
+
     pub fn get_activity(&self, activity_id: u64) -> Option<&Activity> {
         self.activities.get(&activity_id)
     }
@@ -1552,6 +1568,50 @@ mod tests {
         let summary = model.calculate_summary();
         assert_eq!(summary.expected_builds, Some(7));
         assert_eq!(summary.expected_downloads, Some(12));
+    }
+
+    fn process_start_event(id: u64, name: &str) -> ActivityEvent {
+        ActivityEvent::Process(Process::Start {
+            id,
+            name: name.to_string(),
+            parent: None,
+            command: None,
+            ports: Vec::new(),
+            ready_probe: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        })
+    }
+
+    #[test]
+    fn test_has_interruptible_processes_only_for_running_native_jobs() {
+        let mut model = ActivityModel::default();
+
+        assert!(!model.has_interruptible_processes());
+
+        model.apply_activity_event(process_start_event(1, "api"));
+        assert!(model.has_interruptible_processes());
+
+        model.apply_activity_event(ActivityEvent::Process(Process::Status {
+            id: 1,
+            status: ProcessStatus::Waiting,
+            timestamp: Timestamp::now(),
+        }));
+        assert!(!model.has_interruptible_processes());
+
+        model.apply_activity_event(ActivityEvent::Process(Process::Status {
+            id: 1,
+            status: ProcessStatus::Ready,
+            timestamp: Timestamp::now(),
+        }));
+        assert!(model.has_interruptible_processes());
+
+        model.apply_activity_event(ActivityEvent::Process(Process::Status {
+            id: 1,
+            status: ProcessStatus::NotStarted,
+            timestamp: Timestamp::now(),
+        }));
+        assert!(!model.has_interruptible_processes());
     }
 
     #[test]
