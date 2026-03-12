@@ -2,6 +2,10 @@
 
 ## X.Y.Z (YYYY-MM-DD)
 
+### Improvements
+
+- `devenv-run-tests`: `--only` and `--exclude` now support glob patterns (e.g. `--only 'python-*'`).
+
 ### Bug Fixes
 
 - Fixed `nix run` trying to run `devenv-wrapped` which doesn't exist.

@@ -1,225 +1,100 @@
 # devenv-run-tests
 
-A test runner for devenv that executes integration tests in isolated environments.
+Test runner for devenv integration tests.
+It runs each test in an isolated temporary directory with a clean environment, automatically wiring the local `src/modules` as the `devenv` input.
 
-## Overview
+## Commands
 
-`devenv-run-tests` runs integration tests by:
-1. Creating temporary directories for each test
-2. Copying test files to the temporary directory
-3. Setting up the devenv environment
-4. Running test scripts in the devenv shell
-5. Reporting results
-
-## Usage
+### `run` — Run tests
 
 ```bash
 # Run all tests in default directories (examples/ and tests/)
-devenv-run-tests
+devenv-run-tests run
 
 # Run tests in specific directories
-devenv-run-tests path/to/tests another/path
-
-# Run only specific tests
-devenv-run-tests --only test1 --only test2
-
-# Exclude specific tests
-devenv-run-tests --exclude flaky-test --exclude slow-test
-
-# Override inputs in devenv.yaml
-devenv-run-tests --override-input nixpkgs github:NixOS/nixpkgs/nixos-unstable
+devenv-run-tests run path/to/tests another/path
 ```
 
-## Test Structure
+#### Filtering
 
-Each test is a directory containing:
-- `devenv.nix` - The devenv configuration
-- `devenv.yaml` - Input specifications (optional)
-- Additional test files and scripts
-
-### Test Execution Files
-
-#### `.test.sh` (Optional)
-An optional test script that defines custom test logic. This script runs inside the devenv shell. If not present, the test runner will use `devenv test` which executes the `enterTest` defined in your `devenv.nix`.
+`--only` and `--exclude` accept glob patterns matched against test directory names:
 
 ```bash
-#!/usr/bin/env bash
-set -ex
+# Run a single test
+devenv-run-tests run tests --only my-test
 
-# Your test logic here
-echo "Running test..."
-some-command
+# Run tests matching a glob pattern
+devenv-run-tests run tests --only 'python-*'
+
+# Exclude tests matching a glob pattern
+devenv-run-tests run tests --exclude 'slow-*'
 ```
 
-#### `.setup.sh` (Optional)
-A setup script that runs inside the devenv shell before the test. Use this to prepare the environment or install dependencies.
+#### Overriding inputs
+
+Pass `--override-input` (`-o`) to override `devenv.yaml` inputs:
 
 ```bash
-#!/usr/bin/env bash
-set -ex
-
-# Setup logic here
-npm install
-createdb myapp
+devenv-run-tests run tests -o nixpkgs github:NixOS/nixpkgs/nixos-unstable
 ```
 
-#### `.patch.sh` (Optional)
-A patch script that runs in the working directory before the devenv shell is created. Use this to modify files before devenv evaluation.
+### `generate-json` — Generate test metadata
+
+Outputs JSON metadata for all discovered tests (used by CI):
 
 ```bash
-#!/usr/bin/env bash
-set -ex
-
-# Patch files before devenv starts
-echo 'additional-config' >> devenv.nix
-sed -i 's/old-value/new-value/' some-file.txt
+devenv-run-tests generate-json [directories...]
+devenv-run-tests generate-json --all  # include tests unsupported on current system
 ```
 
-#### `.test-config.yml` or `.test-config.yaml` (Optional)
-A YAML configuration file that controls test behavior.
+## Writing tests
+
+Each test is a subdirectory inside `tests/` or `examples/` containing:
+
+| File | Required | Description |
+|---|---|---|
+| `devenv.nix` | yes | The devenv configuration to test |
+| `.test.sh` | no | Test script (runs inside `devenv shell` by default) |
+| `.test-config.yml` | no | Test configuration (see below) |
+| `.setup.sh` | no | Setup script that runs in the shell before the test |
+| `.patch.sh` | no | Patch script that runs *before* config is loaded (outside the shell) |
+
+### Test configuration (`.test-config.yml`)
+
+All fields are optional with sensible defaults:
 
 ```yaml
-# Whether to initialize a git repository for the test
-# Default: true
-git_init: false
+# Run .test.sh inside devenv shell (default: true).
+# When false, .test.sh runs directly with bash and must exist.
+use_shell: true
 
-# Whether to run .test.sh inside the devenv shell
-# Default: true
-use_shell: false
+# Initialize a git repo in the temp directory (default: true).
+git_init: true
+
+# Run in a temporary directory (default: true).
+# When false, the test runs directly in its source directory.
+use_tmp_dir: true
+
+# Restrict to specific systems (empty = all systems).
+supported_systems:
+  - x86_64-linux
+  - aarch64-darwin
+
+# Mark systems where the test is known broken.
+broken_systems:
+  - aarch64-linux
 ```
 
-## Test Configuration
+## Execution order
 
-### Git Repository Behavior
+For each test directory:
 
-By default, each test runs in a temporary directory with a fresh git repository. This helps:
-- Nix Flakes find the project root
-- git-hooks tests work correctly
-- Tests run in isolation
-
-To disable git repository creation for a test, create a `.test-config.yml` file:
-
-```yaml
-git_init: false
-```
-
-This is useful for:
-- Testing behavior outside of git repositories
-- Testing flake evaluation without git context
-- Debugging caching issues that only occur in non-git environments
-
-### Shell Execution Behavior
-
-By default, tests run inside the devenv shell environment using `devenv test`. This provides:
-- Access to all environment variables and PATH modifications
-- Helper functions like `wait_for_port` and `wait_for_processes`
-- Automatic `.test.sh` execution if it exists
-
-To run `.test.sh` directly outside the shell environment, create a `.test-config.yml` file:
-
-```yaml
-use_shell: false
-```
-
-When `use_shell: false`:
-- `.test.sh` must exist or the test will fail
-- The script runs directly with bash, outside the devenv shell
-- No helper functions or environment modifications are available
-- Useful for testing scenarios where you need to avoid shell overhead
-
-## Execution Order
-
-For each test directory, devenv-run-tests:
-
-1. **Copies test files** to a temporary directory
-2. **Changes to the temporary directory**
-3. **Runs `.patch.sh`** (if present) in the working directory
-4. **Initializes git repository** (if `git_init: true` in config)
-5. **Sets up devenv environment**
-6. **Runs `.setup.sh`** (if present) inside the devenv shell
-7. **Runs test**: 
-   - If `use_shell: true` (default): Uses `devenv test` which runs inside the shell and executes `.test.sh` if present, or `enterTest` from `devenv.nix`
-   - If `use_shell: false`: Runs `.test.sh` directly with bash outside the devenv shell
-8. **Reports test results**
-
-## Examples
-
-### Basic Test (using enterTest)
-```
-tests/my-test/
-├── devenv.nix     # Contains enterTest definition
-└── devenv.yaml
-```
-
-### Basic Test (using custom script)
-```
-tests/my-test/
-├── devenv.nix
-├── devenv.yaml
-└── .test.sh       # Custom test script
-```
-
-### Test with Setup
-```
-tests/database-test/
-├── devenv.nix
-├── devenv.yaml
-├── .setup.sh      # Initialize database
-└── .test.sh       # Run database tests
-```
-
-### Test without Git
-```
-tests/no-git-test/
-├── devenv.nix
-├── devenv.yaml
-├── .test-config.yml   # git_init: false
-└── .test.sh
-```
-
-### Test with Direct Shell Execution
-```
-tests/direct-test/
-├── devenv.nix
-├── devenv.yaml
-├── .test-config.yml   # use_shell: false
-└── .test.sh           # Required when use_shell: false
-```
-
-### Test with Patching
-```
-tests/patch-test/
-├── devenv.nix
-├── devenv.yaml
-├── .patch.sh      # Modify files before devenv
-└── .test.sh
-```
-
-## Environment Variables
-
-- `DEVENV_NIX` - Path to the custom Nix build (required)
-- `DEVENV_RUN_TESTS` - Internal flag to control test execution
-
-## Exit Codes
-
-- `0` - All tests passed
-- `1` - One or more tests failed
-
-## Output
-
-The test runner provides:
-- Progress indicators for each test
-- Summary of passed/failed tests
-- Details about failed tests
-
-```
-Running Tests
-Running in directory tests
-  Running my-test
-  Running database-test
-  Running no-git-test
-
-my-test: Failed
-
-Ran 3 tests, 1 failed.
-```
+1. Copy test files to a temporary directory (if `use_tmp_dir: true`)
+2. Run `.patch.sh` (if present) — runs outside the shell
+3. Initialize git repository (if `git_init: true`)
+4. Load devenv configuration
+5. Run `.setup.sh` (if present) — runs inside the devenv shell
+6. Run the test:
+   - `use_shell: true` (default): runs `devenv test`
+   - `use_shell: false`: runs `.test.sh` directly with bash
+7. Report pass/fail

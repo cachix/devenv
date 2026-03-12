@@ -1,5 +1,6 @@
 use clap::Parser;
 use devenv::{Config, Devenv, DevenvOptions, NixSettings, tracing as devenv_tracing};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -36,11 +37,19 @@ enum Commands {
 
 #[derive(Parser, Debug)]
 struct RunArgs {
-    #[clap(long, value_parser, help = "Exclude these tests.")]
-    exclude: Vec<PathBuf>,
+    #[clap(
+        long,
+        value_parser,
+        help = "Exclude tests matching these glob patterns (e.g. 'python-*')."
+    )]
+    exclude: Vec<String>,
 
-    #[clap(long, value_parser, help = "Only run these tests.")]
-    only: Vec<PathBuf>,
+    #[clap(
+        long,
+        value_parser,
+        help = "Only run tests matching these glob patterns (e.g. 'python-*')."
+    )]
+    only: Vec<String>,
 
     #[clap(
         short,
@@ -252,6 +261,18 @@ fn discover_tests(directories: &[PathBuf]) -> Result<Vec<TestInfo>> {
     Ok(test_infos)
 }
 
+fn build_glob_set(patterns: &[String]) -> Result<GlobSet> {
+    let mut builder = GlobSetBuilder::new();
+    for pattern in patterns {
+        builder.add(
+            Glob::new(pattern)
+                .into_diagnostic()
+                .wrap_err_with(|| format!("Invalid glob pattern: {pattern}"))?,
+        );
+    }
+    builder.build().into_diagnostic()
+}
+
 async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
     let cwd = env::current_dir().into_diagnostic()?;
 
@@ -259,15 +280,17 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
     let current_system = get_current_system();
     let mut test_results = vec![];
 
+    let only_set = build_glob_set(&args.only)?;
+    let exclude_set = build_glob_set(&args.exclude)?;
+
     test_infos.retain(|test_info| {
-        let path = &test_info.path;
         let name = &test_info.name;
 
-        if !args.only.is_empty() {
-            if !args.only.iter().any(|only| path.ends_with(only)) {
-                return false;
-            }
-        } else if args.exclude.iter().any(|exclude| path.ends_with(exclude)) {
+        if !only_set.is_empty() && !only_set.is_match(name) {
+            return false;
+        }
+
+        if exclude_set.is_match(name) {
             eprintln!("Excluding {name}");
             return false;
         }

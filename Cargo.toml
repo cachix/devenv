@@ -145,6 +145,7 @@ which = "8.0.0"
 whoami = "2.1.1"
 xdg = "3.0.0"
 walkdir = "2.5"
+globset = "0.4"
 url = "2"
 human-repr = "1.1"
 insta = { version = "1.40", features = ["filters", "json"] }
