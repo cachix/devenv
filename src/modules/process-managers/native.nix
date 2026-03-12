@@ -153,10 +153,10 @@ in
     changelogs = [
       {
         date = "2026-03-12";
-        title = "Native TUI now forwards the first Ctrl-C to managed processes";
+        title = "Native TUI no longer exits on the first Ctrl-C";
         when = cfg.enable;
         description = ''
-          In the native process manager's interactive TUI, the first `Ctrl-C` now sends `SIGINT` to running managed processes instead of immediately shutting down devenv.
+          In the native process manager's interactive TUI, the first `Ctrl-C` now opens a quit prompt instead of immediately shutting down devenv.
 
           After the interrupt prompt appears, press `c` to dismiss it or `q`/`Ctrl-C` to quit the environment.
         '';

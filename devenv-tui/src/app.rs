@@ -388,31 +388,16 @@ impl TuiApp {
 pub(crate) fn request_interrupt_prompt(
     command_tx: Option<&mpsc::Sender<ProcessCommand>>,
     ui_state: &Arc<RwLock<UiState>>,
-    activity_model: &Arc<RwLock<ActivityModel>>,
 ) -> bool {
-    let Some(tx) = command_tx else {
-        return false;
-    };
-
-    let has_interruptible_processes = activity_model
-        .read()
-        .map(|model| model.has_interruptible_processes())
-        .unwrap_or(false);
-    if !has_interruptible_processes {
+    if command_tx.is_none() {
         return false;
     }
 
-    match tx.try_send(ProcessCommand::InterruptAll) {
-        Ok(()) => {
-            if let Ok(mut ui) = ui_state.write() {
-                ui.show_interrupt_prompt();
-            }
-            true
-        }
-        Err(err) => {
-            debug!("Failed to forward SIGINT to managed processes: {}", err);
-            false
-        }
+    if let Ok(mut ui) = ui_state.write() {
+        ui.show_interrupt_prompt();
+        true
+    } else {
+        false
     }
 }
 
@@ -434,9 +419,6 @@ pub(crate) fn handle_interrupt_prompt_key(
             shutdown.handle_interrupt();
         }
         KeyCode::Char('q') => {
-            shutdown.handle_interrupt();
-        }
-        KeyCode::Char('a') => {
             shutdown.handle_interrupt();
         }
         KeyCode::Esc => {
@@ -604,11 +586,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
                 match key_event.code {
                     KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        if !request_interrupt_prompt(
-                            command_tx.as_ref(),
-                            &ui_state,
-                            &activity_model,
-                        ) {
+                        if !request_interrupt_prompt(command_tx.as_ref(), &ui_state) {
                             shutdown.handle_interrupt();
                         }
                     }
@@ -829,47 +807,19 @@ async fn run_view(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use devenv_activity::{ActivityEvent, ActivityLevel, Process, Timestamp};
-
-    fn process_start_event(id: u64, name: &str) -> ActivityEvent {
-        ActivityEvent::Process(Process::Start {
-            id,
-            name: name.to_string(),
-            parent: None,
-            command: None,
-            ports: Vec::new(),
-            ready_probe: None,
-            level: ActivityLevel::Info,
-            timestamp: Timestamp::now(),
-        })
-    }
+    use tokio::sync::mpsc;
 
     #[test]
-    fn test_request_interrupt_prompt_requires_interruptible_process() {
+    fn test_request_interrupt_prompt_requires_native_process_manager() {
         let (tx, mut rx) = mpsc::channel(1);
         let ui_state = Arc::new(RwLock::new(UiState::new()));
-        let activity_model = Arc::new(RwLock::new(ActivityModel::default()));
 
-        assert!(!request_interrupt_prompt(
-            Some(&tx),
-            &ui_state,
-            &activity_model
-        ));
+        assert!(!request_interrupt_prompt(None, &ui_state));
         assert!(!ui_state.read().unwrap().interrupt_prompt_active());
-        assert!(rx.try_recv().is_err());
 
-        activity_model
-            .write()
-            .unwrap()
-            .apply_activity_event(process_start_event(1, "api"));
-
-        assert!(request_interrupt_prompt(
-            Some(&tx),
-            &ui_state,
-            &activity_model
-        ));
+        assert!(request_interrupt_prompt(Some(&tx), &ui_state));
         assert!(ui_state.read().unwrap().interrupt_prompt_active());
-        assert!(matches!(rx.try_recv(), Ok(ProcessCommand::InterruptAll)));
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]

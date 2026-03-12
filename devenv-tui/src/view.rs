@@ -930,9 +930,9 @@ fn build_summary_view_impl(
 ) -> AnyElement<'static> {
     if interrupt_prompt_active {
         let prompt_text = if terminal_width < 72 {
-            "Ctrl-C sent to processes"
+            "Ctrl-C received, still running"
         } else {
-            "Ctrl-C sent to running processes"
+            "Ctrl-C received, processes are still running"
         };
 
         return element!(View(
@@ -1249,8 +1249,8 @@ mod tests {
         );
         let output = element.render(Some(100)).to_string();
 
-        assert!(output.contains("Ctrl-C sent to running"));
-        assert!(output.contains("processes"));
+        assert!(output.contains("Ctrl-C received"));
+        assert!(output.contains("running"));
         assert!(output.contains("dismiss"));
         assert!(output.contains("quit"));
     }
