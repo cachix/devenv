@@ -138,6 +138,9 @@ pub struct NixRustBackend {
     // Shared with eval cache for resource replay on cache hits
     port_allocator: Arc<PortAllocator>,
 
+    // Cached result of eval_import_with_primops (cleared on invalidate)
+    cached_devenv_value: Mutex<Option<nix_bindings_expr::value::Value>>,
+
     // Caching wrapper around EvalState (drops first — releases Arc to eval_state)
     caching_eval_state: OnceCell<CachingEvalState<Arc<Mutex<EvalState>>>>,
 
@@ -433,6 +436,7 @@ impl NixRustBackend {
             cached_args_nix_eval: Arc::new(OnceCell::new()),
             shutdown: shutdown.clone(),
             port_allocator,
+            cached_devenv_value: Mutex::new(None),
             caching_eval_state: OnceCell::new(),
             eval_state: Arc::new(Mutex::new(eval_state)),
             store: Arc::new(store),
@@ -627,6 +631,23 @@ impl NixRustBackend {
             .call(import_fn, final_args)
             .to_miette()
             .wrap_err("Failed to evaluate devenv configuration")
+    }
+
+    /// Return the cached result of `eval_import_with_primops`, evaluating on first call.
+    fn get_or_eval_devenv(
+        &self,
+        eval_state: &mut EvalState,
+    ) -> Result<nix_bindings_expr::value::Value> {
+        let mut cached = self
+            .cached_devenv_value
+            .lock()
+            .map_err(|e| miette!("Failed to lock cached devenv value: {}", e))?;
+        if let Some(value) = cached.as_ref() {
+            return Ok(value.clone());
+        }
+        let value = self.eval_import_with_primops(eval_state)?;
+        *cached = Some(value);
+        Ok(cached.as_ref().unwrap().clone())
     }
 
     /// Apply resolved Nix settings to the Nix environment.
@@ -1333,7 +1354,7 @@ impl NixBackend for NixRustBackend {
                 .wrap_err("Debugger REPL failed")?
         } else {
             // Load default.nix with primops into the REPL scope
-            let devenv_attrs = self.eval_import_with_primops(&mut eval_state)?;
+            let devenv_attrs = self.get_or_eval_devenv(&mut eval_state)?;
 
             // Create a ValMap to inject variables into the REPL scope
             let mut env = nix_cmd::ValMap::new()
@@ -1719,7 +1740,7 @@ impl NixBackend for NixRustBackend {
         let mut eval_state = self.eval_session(&activity)?;
 
         // Import default.nix with primops to get the configured pkgs
-        let devenv = self.eval_import_with_primops(&mut eval_state)?;
+        let devenv = self.get_or_eval_devenv(&mut eval_state)?;
 
         // Extract the pkgs attribute from the devenv output
         let pkgs = self.enriched(
@@ -1901,6 +1922,20 @@ impl NixBackend for NixRustBackend {
         // Set the invalidation flag so the next dev_env() call bypasses cache
         self.cache_invalidated.store(true, Ordering::Release);
 
+        // Clear cached devenv value — it belongs to the old EvalState's GC heap.
+        // If this fails, we must NOT replace the EvalState, as the cached Value
+        // would point into the freed GC heap (use-after-free).
+        match self.cached_devenv_value.lock() {
+            Ok(mut cached) => *cached = None,
+            Err(e) => {
+                tracing::error!(
+                    "Failed to clear cached devenv value, skipping EvalState replacement: {}",
+                    e
+                );
+                return;
+            }
+        }
+
         // Replace the EvalState to clear C++ fileEvalCache.
         // The old EvalState caches evalFile() results by path, so reusing it
         // returns stale ASTs even when files have changed on disk.
@@ -2079,7 +2114,7 @@ impl NixRustBackend {
         let mut eval_state = self.eval_session(activity)?;
 
         // Import default.nix with primops to get the attribute set
-        let root_attrs = self.eval_import_with_primops(&mut eval_state)?;
+        let root_attrs = self.get_or_eval_devenv(&mut eval_state)?;
 
         // Navigate to the attribute using the Nix API
         let value = self.enriched(
@@ -2121,7 +2156,7 @@ impl NixRustBackend {
     fn build_shell_uncached(&self, activity: &Activity) -> Result<CachedShellPaths> {
         let mut eval_state = self.eval_session(activity)?;
 
-        let devenv = self.eval_import_with_primops(&mut eval_state)?;
+        let devenv = self.get_or_eval_devenv(&mut eval_state)?;
 
         // Get the shell derivation from devenv.shell
         let shell_drv = self.enriched(
@@ -2201,7 +2236,7 @@ impl NixRustBackend {
     fn build_attr_uncached(&self, attr_path: &str, activity: &Activity) -> Result<String> {
         let mut eval_state = self.eval_session(activity)?;
 
-        let root_attrs = self.eval_import_with_primops(&mut eval_state)?;
+        let root_attrs = self.get_or_eval_devenv(&mut eval_state)?;
 
         // Navigate to the attribute and force evaluation
         let value = self.enriched(
