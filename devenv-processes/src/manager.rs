@@ -582,7 +582,7 @@ impl NativeProcessManager {
 
         for (name, job, activity) in handles {
             info!("Forwarding SIGINT to process: {}", name);
-            activity.log("Interrupt signal sent");
+            activity.log("Ctrl-C forwarded by devenv");
             job.signal(Signal::Interrupt).await;
         }
     }

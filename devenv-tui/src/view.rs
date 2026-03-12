@@ -930,9 +930,9 @@ fn build_summary_view_impl(
 ) -> AnyElement<'static> {
     if interrupt_prompt_active {
         let prompt_text = if terminal_width < 72 {
-            "SIGINT sent to processes"
+            "Ctrl-C sent to processes"
         } else {
-            "Interrupt sent to managed processes"
+            "Ctrl-C sent to running processes"
         };
 
         return element!(View(
@@ -945,11 +945,11 @@ fn build_summary_view_impl(
             }
             View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
                 Text(content: "c", color: COLOR_INTERACTIVE)
-                Text(content: " continue • ")
-                Text(content: "a", color: COLOR_INTERACTIVE)
-                Text(content: " abort • ")
+                Text(content: " dismiss • ")
+                Text(content: "q", color: COLOR_INTERACTIVE)
+                Text(content: " quit • ")
                 Text(content: "^C", color: COLOR_INTERACTIVE)
-                Text(content: " abort")
+                Text(content: " quit")
             }
         })
         .into_any();
@@ -1249,9 +1249,9 @@ mod tests {
         );
         let output = element.render(Some(100)).to_string();
 
-        assert!(output.contains("Interrupt sent to managed"));
+        assert!(output.contains("Ctrl-C sent to running"));
         assert!(output.contains("processes"));
-        assert!(output.contains("continue"));
-        assert!(output.contains("abort"));
+        assert!(output.contains("dismiss"));
+        assert!(output.contains("quit"));
     }
 }

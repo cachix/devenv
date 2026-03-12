@@ -520,10 +520,10 @@ fn render_expanded_view(
     // Build footer text - show copy hint when selection is active
     let footer_text = if interrupt_prompt_active {
         if width < 88 {
-            format!("{} \u{2502} SIGINT sent  c:continue  a:^C:abort", progress)
+            format!("{} \u{2502} Ctrl-C sent  c:dismiss  q/^C:quit", progress)
         } else {
             format!(
-                "{} \u{2502} Interrupt sent to managed processes  c:continue  a:abort  ^C:abort",
+                "{} \u{2502} Ctrl-C sent to running processes  c:dismiss  q:quit  ^C:quit",
                 progress
             )
         }
@@ -585,8 +585,9 @@ mod tests {
         let mut element = render_expanded_view(&state, 100, 8, None, true);
         let output = element.render(Some(100)).to_string();
 
-        assert!(output.contains("Interrupt sent to managed processes"));
-        assert!(output.contains("c:continue"));
+        assert!(output.contains("Ctrl-C sent to running processes"));
+        assert!(output.contains("c:dismiss"));
+        assert!(output.contains("q:quit"));
     }
 }
 

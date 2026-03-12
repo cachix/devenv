@@ -433,8 +433,16 @@ pub(crate) fn handle_interrupt_prompt_key(
         KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
             shutdown.handle_interrupt();
         }
+        KeyCode::Char('q') => {
+            shutdown.handle_interrupt();
+        }
         KeyCode::Char('a') => {
             shutdown.handle_interrupt();
+        }
+        KeyCode::Esc => {
+            if let Ok(mut ui) = ui_state.write() {
+                ui.clear_interrupt_prompt();
+            }
         }
         KeyCode::Char('c') => {
             if let Ok(mut ui) = ui_state.write() {
@@ -862,5 +870,22 @@ mod tests {
         ));
         assert!(ui_state.read().unwrap().interrupt_prompt_active());
         assert!(matches!(rx.try_recv(), Ok(ProcessCommand::InterruptAll)));
+    }
+
+    #[test]
+    fn test_interrupt_prompt_keys_dismiss_and_quit() {
+        let ui_state = Arc::new(RwLock::new(UiState::new()));
+        ui_state.write().unwrap().show_interrupt_prompt();
+        let shutdown = tokio_shutdown::Shutdown::new();
+
+        let dismiss = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('c'));
+        assert!(handle_interrupt_prompt_key(&dismiss, &ui_state, &shutdown));
+        assert!(!ui_state.read().unwrap().interrupt_prompt_active());
+        assert!(!shutdown.is_cancelled());
+
+        ui_state.write().unwrap().show_interrupt_prompt();
+        let quit = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'));
+        assert!(handle_interrupt_prompt_key(&quit, &ui_state, &shutdown));
+        assert!(shutdown.is_cancelled());
     }
 }
