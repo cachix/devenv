@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `nix run` trying to run `devenv-wrapped` which doesn't exist.
 - Fixed in-band resize events being sent to the shell when the app did not opt-in to receiving them.
 
 ## 2.0.4 (2026-03-11)

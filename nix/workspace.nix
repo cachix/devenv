@@ -104,6 +104,8 @@ let
           --fish $compdir/devenv.fish \
           --zsh $compdir/_devenv
       '';
+
+    meta.mainProgram = "devenv";
   };
 in
 {
