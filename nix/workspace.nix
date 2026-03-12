@@ -8,7 +8,6 @@
 , protobuf
 , pkg-config
 , llvmPackages
-, boehmgc
 , cachix
 , nix
 , nixd

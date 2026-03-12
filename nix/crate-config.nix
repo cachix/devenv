@@ -7,7 +7,6 @@
 , protobuf
 , pkg-config
 , llvmPackages
-, boehmgc
 , rustPlatform
 , gitRev ? ""
 , isRelease ? false
@@ -22,7 +21,6 @@ let
     nix.libs.nix-cmd-c
     nix.libs.nix-fetchers-c
     nix.libs.nix-main-c
-    boehmgc
     llvmPackages.clang-unwrapped
   ];
 
