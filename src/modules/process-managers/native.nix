@@ -158,7 +158,7 @@ in
         description = ''
           In the native process manager's interactive TUI, the first `Ctrl-C` now opens a quit prompt instead of immediately shutting down devenv.
 
-          After the interrupt prompt appears, press `c` to dismiss it or `q`/`Ctrl-C` to quit the environment.
+          After the interrupt prompt appears, press `c` to keep running or `q`/`Ctrl-C` to quit the environment.
         '';
       }
     ];

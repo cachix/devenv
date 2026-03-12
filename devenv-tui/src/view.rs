@@ -930,9 +930,9 @@ fn build_summary_view_impl(
 ) -> AnyElement<'static> {
     if interrupt_prompt_active {
         let prompt_text = if terminal_width < 72 {
-            "Ctrl-C received, still running"
+            "Quit devenv? Nothing stopped."
         } else {
-            "Ctrl-C received, processes are still running"
+            "Quit devenv? Nothing has been stopped yet."
         };
 
         return element!(View(
@@ -945,7 +945,7 @@ fn build_summary_view_impl(
             }
             View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
                 Text(content: "c", color: COLOR_INTERACTIVE)
-                Text(content: " dismiss • ")
+                Text(content: " keep running • ")
                 Text(content: "q", color: COLOR_INTERACTIVE)
                 Text(content: " quit • ")
                 Text(content: "^C", color: COLOR_INTERACTIVE)
@@ -1249,9 +1249,9 @@ mod tests {
         );
         let output = element.render(Some(100)).to_string();
 
-        assert!(output.contains("Ctrl-C received"));
-        assert!(output.contains("running"));
-        assert!(output.contains("dismiss"));
+        assert!(output.contains("Quit devenv?"));
+        assert!(output.contains("stopped"));
+        assert!(output.contains("keep running"));
         assert!(output.contains("quit"));
     }
 }

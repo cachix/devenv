@@ -518,12 +518,12 @@ fn render_expanded_view(
     let footer_text = if interrupt_prompt_active {
         if width < 88 {
             format!(
-                "{} \u{2502} Ctrl-C received  c:dismiss  q/^C:quit",
+                "{} \u{2502} Quit devenv?  c:keep running  q/^C:quit",
                 progress
             )
         } else {
             format!(
-                "{} \u{2502} Ctrl-C received, processes still running  c:dismiss  q:quit  ^C:quit",
+                "{} \u{2502} Quit devenv? Nothing has been stopped yet  c:keep running  q:quit  ^C:quit",
                 progress
             )
         }
@@ -585,8 +585,8 @@ mod tests {
         let mut element = render_expanded_view(&state, 100, 8, None, true);
         let output = element.render(Some(100)).to_string();
 
-        assert!(output.contains("Ctrl-C received, processes still running"));
-        assert!(output.contains("c:dismiss"));
+        assert!(output.contains("Quit devenv? Nothing has been stopped yet"));
+        assert!(output.contains("c:keep running"));
         assert!(output.contains("q:quit"));
     }
 }
