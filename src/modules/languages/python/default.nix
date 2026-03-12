@@ -78,15 +78,15 @@ let
       ${
         if cfg.uv.enable then
           ''
-            echo uv venv -p ${cfg.package.interpreter} "$VENV_PATH"
-            uv venv -p ${cfg.package.interpreter} "$VENV_PATH"
+            echo uv venv -p ${cfg.package.interpreter} --system-site-packages "$VENV_PATH"
+            uv venv -p ${cfg.package.interpreter} --system-site-packages "$VENV_PATH"
           ''
         else
           ''
-            echo ${cfg.package.interpreter} -m venv ${
+            echo ${cfg.package.interpreter} -m venv --system-site-packages ${
               if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""
             } "$VENV_PATH"
-            ${cfg.package.interpreter} -m venv ${
+            ${cfg.package.interpreter} -m venv --system-site-packages ${
               if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""
             } "$VENV_PATH"
           ''
@@ -203,6 +203,13 @@ let
     ${lib.optionalString (cfg.venv.requirements != null) ''
       echo "Warning: uv sync is enabled, and requirements are being ignored. Dependencies will be installed from pyproject.toml."
     ''}
+
+    # Pre-create the venv with --system-site-packages so Nix-provided
+    # Python packages (e.g. from withPackages) are accessible at runtime.
+    # uv sync will reuse this venv via UV_PROJECT_ENVIRONMENT.
+    if [ ! -d "$VENV_PATH" ]; then
+      ${cfg.uv.package}/bin/uv venv --system-site-packages "$VENV_PATH"
+    fi
 
     if [ ! -f "pyproject.toml" ]
     then
@@ -696,9 +703,8 @@ in
         UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
         # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
         UV_PYTHON_DOWNLOADS = "never";
-        # Make uv choose the first python on PATH that is not uv provided.
-        # The one it finds is then consistently the one from nix (which is what we want).
-        UV_PYTHON_PREFERENCE = "only-system";
+        # Configure uv to use the python interpreter from the profile
+        UV_PYTHON = toString cfg.package.interpreter;
       })
       // (lib.optionalAttrs cfg.poetry.enable {
         # Make poetry use DEVENV_ROOT/.venv
@@ -707,6 +713,8 @@ in
         POETRY_VIRTUALENVS_CREATE = "true";
         # Make poetry stop accessing any other virtualenvs in $HOME.
         POETRY_VIRTUALENVS_PATH = "/var/empty";
+        # Give the venv access to Nix-provided Python packages (e.g. from withPackages).
+        POETRY_VIRTUALENVS_OPTIONS_SYSTEM_SITE_PACKAGES = "true";
       });
 
     assertions = [
