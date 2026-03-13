@@ -349,8 +349,10 @@ in
         default =
           if config.devenv.cli.version != null && lib.versionAtLeast config.devenv.cli.version "2.0"
           then "native"
+          else if config.devenv.flakesIntegration
+          then "native"
           else "process-compose";
-        defaultText = lib.literalMD "`native` for devenv 2.0+, `process-compose` otherwise";
+        defaultText = lib.literalMD "`native` for devenv 2.0+ or flake integration, `process-compose` otherwise";
         example = "process-compose";
       };
 
