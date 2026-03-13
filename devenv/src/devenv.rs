@@ -519,7 +519,7 @@ impl Devenv {
         }
 
         for (source_name, target_name) in REQUIRED_FILES {
-            info!("Creating {}", target_name);
+            info!(devenv.is_user_message = true, "Creating {}", target_name);
 
             let path = PROJECT_DIR
                 .get_file(source_name)
@@ -1428,7 +1428,7 @@ impl Devenv {
             message(ActivityLevel::Error, "Tests failed :(");
             bail!("Tests failed");
         } else {
-            info!("Tests passed :)");
+            info!(devenv.is_user_message = true, "Tests passed :)");
             Ok(())
         }
     }
@@ -1893,6 +1893,7 @@ impl Devenv {
             // Log warning when secretspec.toml exists but is not configured
             if !secretspec_enabled && !secretspec_config_exists {
                 info!(
+                    devenv.is_user_message = true,
                     "{}",
                     indoc::formatdoc! {"
                     Found secretspec.toml but secretspec integration is not enabled.
