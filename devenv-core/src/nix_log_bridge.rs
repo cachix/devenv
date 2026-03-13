@@ -205,13 +205,18 @@ impl NixLogBridge {
     /// Used to inject cached file-dependency information so that eval cache
     /// entries record complete dependencies even when evaluation is skipped.
     pub fn replay_ops(&self, ops: &[EvalOp]) {
-        if let Ok(guard) = self.observers.lock() {
-            for observer in guard.iter() {
-                if observer.is_active() {
-                    for op in ops {
-                        observer.on_op(op.clone());
+        match self.observers.lock() {
+            Ok(guard) => {
+                for observer in guard.iter() {
+                    if observer.is_active() {
+                        for op in ops {
+                            observer.on_op(op.clone());
+                        }
                     }
                 }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to replay ops: observers mutex poisoned: {}", e);
             }
         }
     }

@@ -651,14 +651,16 @@ impl NixRustBackend {
         &self,
         eval_state: &mut EvalState,
     ) -> Result<nix_bindings_expr::value::Value> {
-        let mut cached = self
-            .cached_devenv_value
-            .lock()
-            .map_err(|e| miette!("Failed to lock cached devenv value: {}", e))?;
-        if let Some((value, ops)) = cached.as_ref() {
-            // Replay file-dependency ops so the current eval cache observer sees them
-            self.nix_log_bridge.replay_ops(ops);
-            return Ok(value.clone());
+        {
+            let cached = self
+                .cached_devenv_value
+                .lock()
+                .map_err(|e| miette!("Failed to lock cached devenv value: {}", e))?;
+            if let Some((value, ops)) = cached.as_ref() {
+                // Replay file-dependency ops so the current eval cache observer sees them
+                self.nix_log_bridge.replay_ops(ops);
+                return Ok(value.clone());
+            }
         }
         // Collect ops emitted during eval_import_with_primops alongside any
         // already-registered observers (e.g. the eval cache's own collector).
@@ -670,8 +672,12 @@ impl NixRustBackend {
         let ops = collector.take_ops();
         self.nix_log_bridge.remove_observer(&observer);
         let value = result?;
-        *cached = Some((value, ops));
-        Ok(cached.as_ref().unwrap().0.clone())
+        let mut cached = self
+            .cached_devenv_value
+            .lock()
+            .map_err(|e| miette!("Failed to lock cached devenv value: {}", e))?;
+        *cached = Some((value.clone(), ops));
+        Ok(value)
     }
 
     /// Apply resolved Nix settings to the Nix environment.
