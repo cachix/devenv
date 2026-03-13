@@ -137,6 +137,19 @@ impl ProcessManager for ProcessComposeManager {
         }
 
         if options.detach {
+            // Make the child its own process group leader so that stop()
+            // can signal the entire group with kill(-pid, SIGTERM).
+            unsafe {
+                cmd.pre_exec(|| {
+                    nix::unistd::setpgid(
+                        nix::unistd::Pid::from_raw(0),
+                        nix::unistd::Pid::from_raw(0),
+                    )
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                    Ok(())
+                });
+            }
+
             // Detached mode: spawn and save PID
             let process = if options.log_to_file {
                 let log_file = std::fs::File::create(self.log_file()).into_diagnostic()?;

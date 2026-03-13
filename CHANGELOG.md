@@ -8,7 +8,7 @@
 
 ### Bug Fixes
 
-- Fixed child processes (postgres, redis, etc.) being left running after `devenv up` exits or `devenv processes down` is called. The wrapper script now uses `exec` so the service process receives signals directly, and the process-compose backend sends SIGTERM to the process group instead of just the PID ([#2619](https://github.com/cachix/devenv/issues/2619)).
+- Fixed child processes (postgres, redis, etc.) being left running after `devenv up` exits or `devenv processes down` is called. The native manager wrapper now forwards TERM/INT signals to the child process group, and the process-compose backend creates a proper process group for signaling ([#2619](https://github.com/cachix/devenv/issues/2619)).
 - Fixed secretspec prompting for secrets in non-interactive contexts like direnv.
 - Fixed `devenv search` showing truncated package names (e.g. `pkgs.` instead of `pkgs.ncdu`).
 - Fixed TUI hanging when the backend encounters an error in the PTY shell path (e.g. Nix evaluation failure).

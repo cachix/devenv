@@ -122,6 +122,17 @@ fn build_wrapper_script(
     )
     .unwrap();
 
+    // Forward TERM/INT to the child process group so that services like
+    // postgres and redis (and their workers) are properly shut down when
+    // devenv exits. Without this, bash exits on signal but the child
+    // becomes orphaned.
+    writeln!(script, "_child_pid=").unwrap();
+    writeln!(
+        script,
+        "trap '[ -n \"$_child_pid\" ] && kill -TERM -- -\"$_child_pid\" 2>/dev/null; wait \"$_child_pid\"; exit' TERM INT"
+    )
+    .unwrap();
+
     let mut cmd = String::new();
 
     write!(cmd, "{}", config.exec).unwrap();
@@ -130,10 +141,9 @@ fn build_wrapper_script(
         write!(cmd, " {}", shell_escape::escape(arg.into())).unwrap();
     }
 
-    // Use exec so the actual command replaces bash and becomes the session
-    // leader. Without exec, bash runs the command as a child process and
-    // SIGTERM only kills bash, leaving the service (and its children) orphaned.
-    writeln!(script, "exec {}", cmd).unwrap();
+    writeln!(script, "{} &", cmd).unwrap();
+    writeln!(script, "_child_pid=$!").unwrap();
+    writeln!(script, "wait $_child_pid").unwrap();
 
     debug!("Generated wrapper script for {}: {}", config.name, script);
     script
