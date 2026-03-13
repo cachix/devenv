@@ -130,7 +130,10 @@ fn build_wrapper_script(
         write!(cmd, " {}", shell_escape::escape(arg.into())).unwrap();
     }
 
-    writeln!(script, "{}", cmd).unwrap();
+    // Use exec so the actual command replaces bash and becomes the session
+    // leader. Without exec, bash runs the command as a child process and
+    // SIGTERM only kills bash, leaving the service (and its children) orphaned.
+    writeln!(script, "exec {}", cmd).unwrap();
 
     debug!("Generated wrapper script for {}: {}", config.name, script);
     script

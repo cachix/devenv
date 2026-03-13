@@ -292,6 +292,75 @@ async fn test_stdin_closed_for_processes() {
     .expect("Test timed out");
 }
 
+/// Test that stopping a process also kills its child processes.
+///
+/// Simulates a service (like postgres) that spawns a child worker. When the
+/// parent is stopped, the child must also be terminated.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stop_kills_child_processes() {
+    timeout(Duration::from_secs(15), async {
+        let ctx = TestContext::new();
+        let child_pid_file = ctx.temp_path().join("child.pid");
+        let ready_file = ctx.temp_path().join("ready.txt");
+
+        let config = ProcessConfig {
+            name: "parent-with-child".to_string(),
+            // Spawn a background child process and write its PID to a file
+            exec: format!(
+                r#"bash -c 'sleep 3600 &
+echo $! > {}
+echo ready > {}
+wait'"#,
+                child_pid_file.display(),
+                ready_file.display()
+            ),
+            ..Default::default()
+        };
+
+        let manager = ctx.create_manager();
+        manager
+            .start_command(&config, None)
+            .await
+            .expect("Failed to start");
+
+        assert!(
+            wait_for_file(&ready_file, STARTUP_TIMEOUT).await,
+            "Process should signal ready"
+        );
+
+        // Read the child PID
+        let child_pid_str = tokio::fs::read_to_string(&child_pid_file)
+            .await
+            .expect("Failed to read child PID");
+        let child_pid: i32 = child_pid_str.trim().parse().expect("Invalid child PID");
+
+        // Verify child is running
+        assert_eq!(
+            unsafe { nix::libc::kill(child_pid, 0) },
+            0,
+            "Child process should be running before stop"
+        );
+
+        // Stop the parent
+        manager
+            .stop("parent-with-child")
+            .await
+            .expect("Failed to stop");
+
+        // Wait briefly for signals to propagate
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Verify child is also gone
+        assert_ne!(
+            unsafe { nix::libc::kill(child_pid, 0) },
+            0,
+            "Child process should be killed after parent is stopped"
+        );
+    })
+    .await
+    .expect("Test timed out");
+}
+
 /// Test process that writes stdout/stderr via shell command
 #[tokio::test(flavor = "multi_thread")]
 async fn test_process_output_capture() {
