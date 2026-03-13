@@ -10,6 +10,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv test` not running `enterTest` tasks (e.g., `git-hooks:run`) in devenv 2.0+. Also: `devenv test` now fails early when enterTest tasks fail, and skips redundant `load_tasks()` when tasks are already handled.
 - Fixed file watcher dropping change events during the initial bootstrap file flood by switching from `try_send` to backpressure, which caused `devenv.nix` changes to go undetected during hot reload.
 - Fixed `exec_if_modified` performance when negation patterns were used, avoiding a full walk of the parent directory for literal file paths.
 - Fixed child processes (postgres, redis, etc.) being left running after `devenv up` exits or `devenv processes down` is called. The native manager wrapper now forwards TERM/INT signals to the child process group, and the process-compose backend creates a proper process group for signaling ([#2619](https://github.com/cachix/devenv/issues/2619)).

@@ -125,6 +125,8 @@ pub struct ProcessOptions<'a> {
     pub log_to_file: bool,
     /// When true, fail if a port is in use instead of auto-allocating the next available.
     pub strict_ports: bool,
+    /// When true, skip running enterShell tasks (caller already ran them).
+    pub skip_tasks: bool,
     /// Command receiver for process control (restart, etc.)
     pub command_rx: Option<tokio::sync::mpsc::Receiver<processes::ProcessCommand>>,
 }
@@ -1201,7 +1203,7 @@ impl Devenv {
             .await
     }
 
-    /// Core logic for running enterShell tasks with a pre-loaded task config.
+    /// Core logic for running tasks with a pre-loaded task config.
     /// Stores task-exported env vars on self so prepare_shell() can inject them.
     async fn run_enter_shell_tasks_inner(
         &self,
@@ -1210,8 +1212,31 @@ impl Devenv {
         verbosity: tasks::VerbosityLevel,
         tui: bool,
     ) -> Result<BTreeMap<String, String>> {
+        // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
+        // Task failures are shown in the TUI/UI output, no need to bail here.
+        let (_status, exports) = self
+            .run_tasks_with_roots(
+                vec!["devenv:enterShell".to_string()],
+                task_configs,
+                envs,
+                verbosity,
+                tui,
+            )
+            .await?;
+        Ok(exports)
+    }
+
+    /// Run tasks with the given roots, storing exports on self for prepare_shell().
+    async fn run_tasks_with_roots(
+        &self,
+        roots: Vec<String>,
+        task_configs: Vec<tasks::TaskConfig>,
+        envs: HashMap<String, String>,
+        verbosity: tasks::VerbosityLevel,
+        tui: bool,
+    ) -> Result<(tasks::TasksStatus, BTreeMap<String, String>)> {
         let config = tasks::Config {
-            roots: vec!["devenv:enterShell".to_string()],
+            roots,
             tasks: task_configs,
             run_mode: devenv_tasks::RunMode::All,
             runtime_dir: self.devenv_runtime.clone(),
@@ -1226,15 +1251,12 @@ impl Devenv {
             .build()
             .await?;
 
-        let (_status, outputs) = run_tasks_with_ui(tasks, verbosity, tui).await?;
-
-        // Note: Task failures are shown in the TUI/UI output, no need to bail here.
-        // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
+        let (status, outputs) = run_tasks_with_ui(tasks, verbosity, tui).await?;
 
         let exports = outputs.collect_env_exports();
         // Store on self so prepare_shell() can inject them into the bash script
         *self.task_exports.lock().unwrap() = exports.clone();
-        Ok(exports)
+        Ok((status, exports))
     }
 
     /// Get the shell environment as a map of environment variables.
@@ -1373,17 +1395,27 @@ impl Devenv {
             .await?
         };
 
-        // ── Phase 2: Running enterShell tasks ─────────────────────
-        // Run tasks like devenv:python:virtualenv that set up the environment
-        // (e.g., create venv, pip install, export PATH/VIRTUAL_ENV).
-        // In devenv 2.0+, these don't run via the bash enterShell hook.
-        // Exports are stored on self so prepare_shell() injects them into the
-        // bash script AFTER the Nix shell env is applied.
-        // When processes are present, up() (Phase 4) calls run_enter_shell_tasks_inner()
-        // as part of its startup sequence, storing exports in self.task_exports.
-        if !has_processes {
-            self.run_enter_shell_tasks(Some(envs.clone()), verbosity, tui)
+        // ── Phase 2: Running enterTest tasks ─────────────────────────
+        // Run all tasks rooted at devenv:enterTest, which includes enterShell
+        // tasks (e.g., devenv:python:virtualenv) as dependencies. This runs
+        // git-hooks:run and other enterTest tasks in a single pass.
+        // Exports are stored on self so prepare_shell() injects them.
+        let mut envs = envs;
+        {
+            let task_configs = self.load_tasks().await?;
+            let (status, exports) = self
+                .run_tasks_with_roots(
+                    vec!["devenv:enterTest".to_string()],
+                    task_configs,
+                    envs.clone(),
+                    verbosity,
+                    tui,
+                )
                 .await?;
+            if status.has_failures() {
+                bail!("enterTest tasks failed");
+            }
+            envs.extend(exports);
         }
 
         // ── Phase 3: Building tests ─────────────────────────────────
@@ -1402,12 +1434,14 @@ impl Devenv {
         };
 
         // ── Phase 4: Starting processes (if needed) ─────────────────
+        // skip_tasks: enterShell tasks already ran as part of enterTest in Phase 2.
         if has_processes {
             let options = ProcessOptions {
                 envs: Some(&envs),
                 detach: true,
                 log_to_file: false,
                 strict_ports: false,
+                skip_tasks: true,
                 command_rx: None,
             };
             self.up(vec![], options, verbosity, tui).await?;
@@ -1598,20 +1632,23 @@ impl Devenv {
             .await?
         };
 
-        // ── Phase 2: Loading tasks ──────────────────────────────────
-        // load_tasks() already has #[activity("Loading tasks")]
-        let task_configs = self.load_tasks().await?;
-
-        // ── Phase 3: Running enterShell tasks ───────────────────────
-        // Merge task-exported env vars (e.g., PATH with venv/bin) on top of
-        // the nix shell env. Task exports take precedence.
-        // Exports are also stored on self so prepare_shell() can inject them
-        // into the bash script (e.g. when called from test()).
-        // Reuse task_configs from Phase 2 to avoid a redundant load_tasks() call.
-        {
+        // ── Phase 2: Loading and running enterShell tasks ─────────────
+        // Skip when caller (e.g. test()) already ran tasks including enterShell.
+        if !options.skip_tasks {
+            // load_tasks() already has #[activity("Loading tasks")]
+            let task_configs = self.load_tasks().await?;
+            // Merge task-exported env vars (e.g., PATH with venv/bin) on top of
+            // the nix shell env. Task exports take precedence.
+            // Exports are also stored on self so prepare_shell() can inject them
+            // into the bash script (e.g. when called from test()).
             let exports = self
-                .run_enter_shell_tasks_inner(task_configs.clone(), envs.clone(), verbosity, tui)
+                .run_enter_shell_tasks_inner(task_configs, envs.clone(), verbosity, tui)
                 .await?;
+            envs.extend(exports);
+        } else {
+            // Tasks already ran — merge their cached exports into envs
+            // so processes see them (e.g., PATH with venv/bin, mkdocs).
+            let exports = self.task_exports.lock().unwrap().clone();
             envs.extend(exports);
         }
 
@@ -1642,7 +1679,7 @@ impl Devenv {
             if impl_result == "native" {
                 info!("Using native process manager with task-based dependency ordering");
 
-                // Reuse task_configs from Phase 2 for process tasks
+                let task_configs = self.load_tasks().await?;
                 let roots: Vec<String> = if processes.is_empty() {
                     task_configs
                         .iter()

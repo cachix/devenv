@@ -808,6 +808,7 @@ async fn dispatch_command(
                 log_to_file: detach,
                 strict_ports,
                 command_rx,
+                ..Default::default()
             };
             match devenv.up(processes, options, verbosity, tui).await? {
                 RunMode::Detached => Ok(CommandResult::Done),
