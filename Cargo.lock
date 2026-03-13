@@ -1956,6 +1956,7 @@ version = "2.0.5"
 dependencies = [
  "async-priority-channel",
  "miette",
+ "notify",
  "reqwest 0.13.2",
  "tempfile",
  "tokio",

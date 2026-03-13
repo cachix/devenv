@@ -149,6 +149,7 @@ globset = "0.4"
 url = "2"
 human-repr = "1.1"
 insta = { version = "1.40", features = ["filters", "json"] }
+notify = { version = "8", default-features = false }
 watchexec = "8.2"
 watchexec-filterer-globset = "8.0"
 watchexec-supervisor = "5.1"
