@@ -394,6 +394,12 @@ in
             echo "You must first stop keycloak and then run this command again." >&2
             exit 1
           fi
+
+          # Ensure the KC_HOME_DIR is set up for the export command.
+          mkdir -p "$KC_HOME_DIR/conf"
+          ln -fs ${keycloakBuild}/providers "$KC_HOME_DIR/"
+          ln -fs ${keycloakBuild}/lib "$KC_HOME_DIR/"
+          install -D -m 0600 ${confFile} "$KC_HOME_DIR/conf/keycloak.conf"
         ''
       ];
 
@@ -402,7 +408,7 @@ in
           assertKeycloakStopped
           ++ [
             ''
-              ${keycloakBuild}/bin/kc.sh export --realm "$1" --file "$2"
+              ${keycloakBuild}/bin/kc.sh export --optimized --realm "$1" --file "$2"
             ''
           ]
         )
@@ -427,7 +433,7 @@ in
                 ''
                   echo "Exporting realm '${realm}' to '${file}'."
                   mkdir -p "$(dirname "${file}")"
-                  ${keycloakBuild}/bin/kc.sh export --realm "${realm}" --file "${file}"
+                  ${keycloakBuild}/bin/kc.sh export --optimized --realm "${realm}" --file "${file}"
 
                   echo "Beautifying realm export '${file}' for diffing."
                   temp_file=$(${pkgs.coreutils}/bin/mktemp)
