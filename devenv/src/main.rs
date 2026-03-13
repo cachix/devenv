@@ -89,6 +89,11 @@ fn main_inner() -> Result<()> {
         match result {
             Err(err) => match err.downcast::<devenv::SecretsNeedPrompting>() {
                 Ok(secrets_err) => {
+                    // Only prompt interactively when stdin is a terminal;
+                    // in non-interactive contexts (e.g. direnv), fail with the error.
+                    if !std::io::stdin().is_terminal() {
+                        return Err(secrets_err.into());
+                    }
                     prompt_secrets(secrets_err.provider, secrets_err.profile)?;
                     continue;
                 }

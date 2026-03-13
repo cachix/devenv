@@ -151,7 +151,10 @@ pub enum RunMode {
 /// Error indicating that secrets need to be prompted for interactively.
 /// This is used to signal the CLI to stop the TUI and prompt for secrets.
 #[derive(Debug, miette::Diagnostic)]
-#[diagnostic(code(devenv::secrets_need_prompting))]
+#[diagnostic(
+    code(devenv::secrets_need_prompting),
+    help("Run `devenv shell` to set the missing secrets.")
+)]
 pub struct SecretsNeedPrompting {
     pub provider: Option<String>,
     pub profile: Option<String>,
