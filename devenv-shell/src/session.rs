@@ -937,10 +937,13 @@ impl ShellSession {
         let mut esc = EscapeState::new();
         let mut resize_pending = false;
         let mut esc_events = Vec::new();
+        let mut pending_event: Option<Event> = None;
 
         loop {
             // Use select! to handle both events and spinner animation
-            let event = if resize_pending {
+            let event = if let Some(evt) = pending_event.take() {
+                Some(evt)
+            } else if resize_pending {
                 resize_pending = false;
                 Some(Event::Resize)
             } else if self.status_line.state().building {
@@ -1008,6 +1011,24 @@ impl ShellSession {
                     if !filtered.is_empty() {
                         pty.write_all(filtered)?;
                         pty.flush()?;
+                    }
+                    // Drain any additional pending stdin bytes so multi-byte
+                    // key sequences (e.g. ESC + Ctrl-R) are forwarded together
+                    // without a spinner draw splitting them apart.
+                    while let Ok(event) = event_rx.try_recv() {
+                        match event {
+                            Event::Stdin(more) => {
+                                let filtered = stdin_filter.filter(&more);
+                                if !filtered.is_empty() {
+                                    pty.write_all(filtered)?;
+                                    pty.flush()?;
+                                }
+                            }
+                            other => {
+                                pending_event = Some(other);
+                                break;
+                            }
+                        }
                     }
                 }
 
