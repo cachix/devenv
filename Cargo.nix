@@ -7206,6 +7206,10 @@ rec {
             packageId = "devenv";
           }
           {
+            name = "globset";
+            packageId = "globset";
+          }
+          {
             name = "miette";
             packageId = "miette";
             features = [ "fancy" ];
