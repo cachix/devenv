@@ -54,10 +54,11 @@ Note that `platformTools.version` and `emulator.version` default to the latest a
 }
 ```
 
-Since Android contains many unfree packages, you need to set allowUnfree: true in devenv.yaml:
+Since Android contains many unfree packages, you need to allow unfree packages in devenv.yaml:
 
-```nix title="devenv.yaml"
-allowUnfree: true
+```yaml title="devenv.yaml"
+nixpkgs:
+  allowUnfree: true
 ```
 
 ## Emulators

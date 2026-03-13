@@ -16,24 +16,29 @@
 |                                                               |                                                                              |
 | nixpkgs.allowBroken                                           | Allow packages marked as broken. Defaults to `false`.                         |
 | nixpkgs.allowUnfree                                           | Allow unfree packages. Defaults to `false`.                                   |
-| nixpkgs.cudaCapabilities                                      | Select CUDA capabilities for nixpkgs. Defaults to `[]`                        |
+| nixpkgs.cudaCapabilities                                      | Select CUDA capabilities for nixpkgs. Defaults to `[]`.                       |
 | nixpkgs.cudaSupport                                           | Enable CUDA support for nixpkgs. Defaults to `false`.                         |
-| nixpkgs.permittedInsecurePackages                             | A list of insecure permitted packages. Defaults to `[]`                       |
-| nixpkgs.permittedUnfreePackages                               | A list of unfree packages to allow by name. Defaults to `[]`                  |
+| nixpkgs.permittedInsecurePackages                             | A list of insecure permitted packages. Defaults to `[]`.                      |
+| nixpkgs.permittedUnfreePackages                               | A list of unfree packages to allow by name. Defaults to `[]`.                 |
 |                                                               |                                                                               |
 | nixpkgs.per-platform.&lt;system&gt;.allowBroken               | (per-platform) Allow packages marked as broken. Defaults to `false`.          |
 | nixpkgs.per-platform.&lt;system&gt;.allowUnfree               | (per-platform) Allow unfree packages. Defaults to `false`.                    |
-| nixpkgs.per-platform.&lt;system&gt;.cudaCapabilities          | (per-platform) Select CUDA capabilities for nixpkgs. Defaults to `[]`         |
+| nixpkgs.per-platform.&lt;system&gt;.cudaCapabilities          | (per-platform) Select CUDA capabilities for nixpkgs. Defaults to `[]`.        |
 | nixpkgs.per-platform.&lt;system&gt;.cudaSupport               | (per-platform) Enable CUDA support for nixpkgs. Defaults to `false`.          |
-| nixpkgs.per-platform.&lt;system&gt;.permittedInsecurePackages | (per-platform) A list of insecure permitted packages. Defaults to `[]`        |
-| nixpkgs.per-platform.&lt;system&gt;.permittedUnfreePackages   | (per-platform) A list of unfree packages to allow by name. Defaults to `[]`   |
+| nixpkgs.per-platform.&lt;system&gt;.permittedInsecurePackages | (per-platform) A list of insecure permitted packages. Defaults to `[]`.       |
+| nixpkgs.per-platform.&lt;system&gt;.permittedUnfreePackages   | (per-platform) A list of unfree packages to allow by name. Defaults to `[]`.  |
 |                                                               |                                                                               |
-| profile                                                       | Default profile to activate. Can be overridden by `--profile` CLI flags.       |
+| profile                                                       | Default profile to activate. Can be overridden by `--profile` CLI flag.       |
+| reload                                                        | Enable auto-reload of the shell when files change. Defaults to `true`. Can be overridden by `--reload` or `--no-reload` CLI flags. |
 | strictPorts                                                   | Error if a port is already in use instead of auto-allocating the next available port. Defaults to `false`. Can be overridden by `--strict-ports` or `--no-strict-ports` CLI flags. |
 |                                                               |                                                                               |
 | secretspec.enable                                             | Enable [secretspec integration](../integrations/secretspec.md). Defaults to `false`.                           |
 | secretspec.profile                                            | Secretspec profile name to use.                                               |
 | secretspec.provider                                           | Secretspec provider to use.                                                   |
+
+!!! note "Added in 2.0"
+
+    - `reload`
 
 !!! note "Added in 1.11"
 
@@ -56,7 +61,6 @@
     - relative file support in imports: `./mymodule.nix`
     - `clean`
     - `impure`
-    - `allowBroken`
 
 ## Inputs
 
@@ -146,11 +150,34 @@ inputs:
         follows: nixpkgs
 ```
 
+## Using permittedUnfreePackages
+
+Instead of allowing all unfree packages with `nixpkgs.allowUnfree: true`, you can selectively permit specific unfree packages by name:
+
+```yaml
+# Use the nixpkgs-scoped configuration
+nixpkgs:
+  permittedUnfreePackages:
+    - terraform
+    - vscode
+
+# Or configure per-platform
+nixpkgs:
+  per-platform:
+    x86_64-linux:
+      permittedUnfreePackages:
+        - some-package
+    aarch64-darwin:
+      permittedUnfreePackages:
+        - some-package
+
+```
 ## An extensive example
 
 ```yaml
-allowUnfree: true
-allowBroken: true
+nixpkgs:
+  allowUnfree: true
+  allowBroken: true
 clean:
   enabled: true
   keep:
@@ -182,25 +209,3 @@ imports:
 !!! note "Added in 1.0"
 
     - relative file support in imports: `./mymodule.nix`
-
-## Using permittedUnfreePackages
-
-Instead of allowing all unfree packages with `nixpkgs.allowUnfree: true`, you can selectively permit specific unfree packages by name:
-
-```yaml
-# Use the nixpkgs-scoped configuration
-nixpkgs:
-  permittedUnfreePackages:
-    - terraform
-    - vscode
-
-# Or configure per-platform
-nixpkgs:
-  per-platform:
-    x86_64-linux:
-      permittedUnfreePackages:
-        - some-package
-    aarch64-darwin:
-      permittedUnfreePackages:
-        - some-package
-```
