@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- Improved eval performance by caching the initial Nix Value, avoiding re-evaluation of nixpkgs and the module system on subsequent attribute lookups (~2x time-to-shell improvement).
 - `devenv-run-tests`: `--only` and `--exclude` now support glob patterns (e.g. `--only 'python-*'`).
 
 ### Bug Fixes
