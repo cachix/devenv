@@ -17,6 +17,8 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tracing::{debug, warn};
 
+const GLOB_SPECIAL_CHARS: &[char] = &['*', '?', '[', '{'];
+
 fn normalize_pattern_for_base_dir(pattern: &str, base_dir: &Path) -> String {
     let (negated, raw_pattern) = match pattern.strip_prefix('!') {
         Some(rest) => (true, rest),
@@ -56,10 +58,7 @@ fn normalize_pattern_for_base_dir(pattern: &str, base_dir: &Path) -> String {
 }
 
 fn is_literal_pattern(pattern: &str) -> bool {
-    !pattern.contains('*')
-        && !pattern.contains('?')
-        && !pattern.contains('[')
-        && !pattern.contains('{')
+    !pattern.contains(GLOB_SPECIAL_CHARS)
 }
 
 fn pattern_explicitly_targets_hidden_path(pattern: &str) -> bool {
@@ -83,10 +82,9 @@ fn has_hidden_component(path: &Path, base_dir: &Path) -> bool {
 /// This is used to determine where to start walking the filesystem.
 fn extract_base_dir(pattern: &str) -> &Path {
     // Find the first occurrence of any glob special character
-    let special_chars = ['*', '?', '[', '{'];
     let first_special = pattern
         .char_indices()
-        .find(|(_, c)| special_chars.contains(c))
+        .find(|(_, c)| GLOB_SPECIAL_CHARS.contains(c))
         .map(|(i, _)| i)
         .unwrap_or(pattern.len());
 
@@ -150,7 +148,7 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
     let mut results: Vec<String> = Vec::new();
     let mut groups: BTreeMap<PathBuf, Vec<&str>> = BTreeMap::new();
     for pattern in &positive_patterns {
-        if is_literal_pattern(pattern) && negation_patterns.is_empty() {
+        if is_literal_pattern(pattern) {
             let path = Path::new(pattern);
             if path.exists()
                 && let Some(path_str) = path.to_str()
@@ -182,22 +180,28 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
             }
         }
 
-        let overrides = match overrides_builder.build() {
+        // We build overrides twice: once for the walker (efficient directory pruning)
+        // and once for explicit match checking. The walker yields entries that are
+        // *not ignored* (including directories that match no rule), so we use
+        // overrides_for_match to select only positively matched files.
+        let overrides_for_match = match overrides_builder.build() {
             Ok(overrides) => overrides,
             Err(e) => {
-                warn!("Failed to build ignore overrides: {}", e);
+                warn!("Failed to build ignore overrides: {e}");
                 continue;
             }
         };
-        // We pass overrides to the walker for efficient directory pruning, but also
-        // keep a copy for explicit match checking. The walker yields entries that are
-        // *not ignored* (including directories that match no rule), so we use
-        // overrides_for_match to select only positively matched files.
-        let overrides_for_match = overrides.clone();
-        let hidden_overrides = match hidden_overrides_builder.build() {
-            Ok(hidden_overrides) => hidden_overrides,
+        let overrides_for_walk = match overrides_builder.build() {
+            Ok(overrides) => overrides,
             Err(e) => {
-                warn!("Failed to build hidden ignore overrides: {}", e);
+                warn!("Failed to build ignore overrides: {e}");
+                continue;
+            }
+        };
+        let hidden_overrides = match hidden_overrides_builder.build() {
+            Ok(overrides) => overrides,
+            Err(e) => {
+                warn!("Failed to build hidden ignore overrides: {e}");
                 continue;
             }
         };
@@ -211,7 +215,7 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
             .git_exclude(false)
             .parents(false)
             .follow_links(true)
-            .overrides(overrides);
+            .overrides(overrides_for_walk);
 
         for entry in walk_builder.build() {
             let Ok(entry) = entry else {
@@ -236,6 +240,27 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
                     results.push(path_str.to_string());
                 }
             }
+        }
+    }
+
+    // Filter literal paths against negation patterns.
+    // Glob results are already filtered by the walker above.
+    if !negation_patterns.is_empty() {
+        let base = Path::new("/");
+        let mut builder = OverrideBuilder::new(base);
+        for neg in &negation_patterns {
+            let normalized = normalize_pattern_for_base_dir(neg, base);
+            if let Err(e) = builder.add(&normalized) {
+                warn!("Invalid negation pattern '{}': {}", normalized, e);
+            }
+        }
+        if let Ok(overrides) = builder.build() {
+            results.retain(|path_str| {
+                !matches!(
+                    overrides.matched(Path::new(path_str), false),
+                    Match::Ignore(_)
+                )
+            });
         }
     }
 

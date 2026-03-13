@@ -9,6 +9,7 @@
 
 ### Bug Fixes
 
+- Fixed `exec_if_modified` performance when negation patterns were used, avoiding a full walk of the parent directory for literal file paths.
 - Fixed child processes (postgres, redis, etc.) being left running after `devenv up` exits or `devenv processes down` is called. The native manager wrapper now forwards TERM/INT signals to the child process group, and the process-compose backend creates a proper process group for signaling ([#2619](https://github.com/cachix/devenv/issues/2619)).
 - Fixed secretspec prompting for secrets in non-interactive contexts like direnv.
 - Fixed `devenv search` showing truncated package names (e.g. `pkgs.` instead of `pkgs.ncdu`).
