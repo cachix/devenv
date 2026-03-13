@@ -8,6 +8,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv search` showing truncated package names (e.g. `pkgs.` instead of `pkgs.ncdu`).
 - Fixed TUI hanging when the backend encounters an error in the PTY shell path (e.g. Nix evaluation failure).
 - Fixed `nix run` trying to run `devenv-wrapped` which doesn't exist.
 - Fixed in-band resize events being sent to the shell when the app did not opt-in to receiving them.

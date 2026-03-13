@@ -1044,10 +1044,7 @@ impl Devenv {
         let results = search_results
             .into_iter()
             .map(|(key, value)| DevenvPackageResult {
-                name: format!(
-                    "pkgs.{}",
-                    key.split('.').skip(2).collect::<Vec<_>>().join(".")
-                ),
+                name: format!("pkgs.{key}"),
                 version: value.version,
                 description: value.description.chars().take(80).collect::<String>(),
             })
