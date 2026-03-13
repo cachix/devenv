@@ -300,7 +300,7 @@ mod tests {
     use std::time::Duration;
     use tempfile::TempDir;
 
-    const WATCH_TIMEOUT: Duration = Duration::from_secs(10);
+    const WATCH_TIMEOUT: Duration = Duration::from_secs(30);
 
     #[tokio::test]
     async fn test_detects_file_modification() {

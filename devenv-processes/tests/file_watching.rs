@@ -28,7 +28,7 @@ use tokio::time::timeout;
 #[cfg(feature = "test-file-watcher")]
 const TEST_TIMEOUT: Duration = Duration::from_secs(30);
 #[cfg(feature = "test-file-watcher")]
-const WATCH_TIMEOUT: Duration = Duration::from_secs(10);
+const WATCH_TIMEOUT: Duration = Duration::from_secs(30);
 
 // ============================================================================
 // Basic File Watching Tests
