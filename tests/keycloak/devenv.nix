@@ -1,6 +1,9 @@
 { pkgs, ... }:
 
 {
+  # TODO: upgrade to native process manager
+  process.manager.implementation = "process-compose";
+
   services.keycloak = {
     enable = true;
     settings.http-port = 8089;
