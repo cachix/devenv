@@ -106,7 +106,6 @@ Initialize a new developer environment with `devenv init`.
 
 ```shell-session
 $ devenv init
-• Creating .envrc
 • Creating devenv.nix
 • Creating devenv.yaml
 • Creating .gitignore
@@ -123,7 +122,6 @@ $ devenv init
 
 ## Learn more
 
-- About ``.envrc`` in [direnv integration](integrations/direnv.md).
 - About ``devenv.yaml`` in [Inputs](inputs.md) and [Composing using imports](composing-using-imports.md).
 - About ``devenv.nix`` in the **Writing devenv.nix** section, starting with [the basics](basics.md).
 
