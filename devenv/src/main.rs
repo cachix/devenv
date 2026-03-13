@@ -776,10 +776,10 @@ async fn dispatch_command(
             let json = devenv.eval(&attributes).await?;
             Ok(CommandResult::Print(format!("{json}\n")))
         }
-        Commands::Update { name } => {
-            devenv.update(&name).await?;
-            Ok(CommandResult::Done)
-        }
+        Commands::Update { name } => Ok(devenv
+            .update(&name)
+            .await?
+            .map_or(CommandResult::Done, CommandResult::Print)),
         Commands::Up {
             processes,
             detach,
@@ -843,10 +843,10 @@ async fn dispatch_command(
         },
         // inputs add is early-dispatched above before Devenv construction
         Commands::Inputs { .. } => unreachable!(),
-        Commands::Changelogs {} => {
-            devenv.changelogs().await?;
-            Ok(CommandResult::Done)
-        }
+        Commands::Changelogs {} => Ok(devenv
+            .changelogs()
+            .await?
+            .map_or(CommandResult::Done, CommandResult::Print)),
         // hidden
         Commands::Assemble => {
             devenv.assemble().await?;

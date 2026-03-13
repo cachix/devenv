@@ -43,7 +43,7 @@ impl<'a> Changelog<'a> {
         }
     }
 
-    pub async fn show_new(&self) -> Result<()> {
+    pub async fn show_new(&self) -> Result<Option<String>> {
         // Load all current changelogs
         let all_changelogs = match self.load_changelogs().await {
             Ok(changelogs) => changelogs,
@@ -52,7 +52,7 @@ impl<'a> Changelog<'a> {
                 tracing::warn!(
                     "Changelog not available. Update devenv modules for changelog support."
                 );
-                return Ok(());
+                return Ok(None);
             }
         };
 
@@ -62,34 +62,38 @@ impl<'a> Changelog<'a> {
         // Filter to unseen entries
         let new_changelogs = self.filter_unseen_changelogs(all_changelogs, &cache);
 
-        if !new_changelogs.is_empty() {
-            // Display new changelogs
-            self.display_changelogs(&new_changelogs)?;
-
-            // Update cache with newly shown hashes
-            for entry in &new_changelogs {
-                cache.shown_hashes.insert(entry.hash());
-            }
-
-            // Save updated cache
-            save_cache(&self.cache_file, &cache)?;
+        if new_changelogs.is_empty() {
+            return Ok(None);
         }
 
-        Ok(())
+        // Render changelogs to string
+        let output = Self::render_changelogs(&new_changelogs);
+
+        // Update cache with newly shown hashes
+        for entry in &new_changelogs {
+            cache.shown_hashes.insert(entry.hash());
+        }
+
+        // Save updated cache
+        save_cache(&self.cache_file, &cache)?;
+
+        Ok(Some(output))
     }
 
-    pub async fn show_all(&self) -> Result<()> {
+    pub async fn show_all(&self) -> Result<Option<String>> {
         let all_changelogs = match self.load_changelogs().await {
             Ok(changelogs) => changelogs,
             Err(_) => {
                 tracing::warn!(
                     "Changelog not available. Update devenv modules for changelog support."
                 );
-                return Ok(());
+                return Ok(None);
             }
         };
-        self.display_changelogs(&all_changelogs)?;
-        Ok(())
+        if all_changelogs.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(Self::render_changelogs(&all_changelogs)))
     }
 
     async fn load_changelogs(&self) -> Result<Vec<ChangelogEntry>> {
@@ -138,35 +142,33 @@ impl<'a> Changelog<'a> {
         unseen
     }
 
-    /// Display changelogs with markdown rendering
-    fn display_changelogs(&self, changelogs: &[ChangelogEntry]) -> Result<()> {
-        if changelogs.is_empty() {
-            return Ok(());
-        }
+    /// Render changelogs with markdown rendering to a string
+    fn render_changelogs(changelogs: &[ChangelogEntry]) -> String {
+        use std::fmt::Write;
 
-        println!("\n📋 changelog\n");
-
+        let mut output = String::new();
         let skin = MadSkin::default();
+
+        writeln!(output, "\n📋 changelog\n").unwrap();
 
         for entry in changelogs {
             // Format: date: **title**
             let header = format!("{}: **{}**", entry.date, entry.title);
-            println!("{}", skin.inline(&header));
-            println!();
+            writeln!(output, "{}", skin.inline(&header)).unwrap();
+            writeln!(output).unwrap();
 
             // Render markdown description with indentation
-            let lines = entry.description.lines();
-            for line in lines {
+            for line in entry.description.lines() {
                 if line.trim().is_empty() {
-                    println!();
+                    writeln!(output).unwrap();
                 } else {
-                    println!("  {}", skin.inline(line));
+                    writeln!(output, "  {}", skin.inline(line)).unwrap();
                 }
             }
-            println!();
+            writeln!(output).unwrap();
         }
 
-        Ok(())
+        output
     }
 }
 

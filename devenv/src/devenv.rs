@@ -549,10 +549,9 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn changelogs(&self) -> Result<()> {
+    pub async fn changelogs(&self) -> Result<Option<String>> {
         let changelog = crate::changelog::Changelog::new(&**self.nix, &self.paths());
-        changelog.show_all().await?;
-        Ok(())
+        changelog.show_all().await
     }
 
     /// Invalidate cached state for hot-reload.
@@ -768,7 +767,7 @@ impl Devenv {
         })
     }
 
-    pub async fn update(&self, input_name: &Option<String>) -> Result<()> {
+    pub async fn update(&self, input_name: &Option<String>) -> Result<Option<String>> {
         let msg = match input_name {
             Some(input_name) => format!("Updating devenv.lock with input {input_name}"),
             None => "Updating devenv.lock".to_string(),
@@ -790,17 +789,20 @@ impl Devenv {
             Ok(_) => {
                 // Show new changelogs (if any)
                 let changelog = crate::changelog::Changelog::new(&**self.nix, &self.paths());
-                if let Err(e) = changelog.show_new().await {
-                    // Don't fail the update if changelogs fail to load
-                    tracing::warn!("Failed to show changelogs: {}", e);
+                match changelog.show_new().await {
+                    Ok(output) => Ok(output),
+                    Err(e) => {
+                        // Don't fail the update if changelogs fail to load
+                        tracing::warn!("Failed to show changelogs: {}", e);
+                        Ok(None)
+                    }
                 }
             }
             Err(e) => {
                 tracing::warn!("Failed to assemble environment, skipping changelog: {}", e);
+                Ok(None)
             }
         }
-
-        Ok(())
     }
 
     #[activity(format!("{name} container"), kind = build)]
