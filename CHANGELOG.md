@@ -8,6 +8,7 @@
 
 ### Bug Fixes
 
+- Fixed TUI hanging when the backend encounters an error in the PTY shell path (e.g. Nix evaluation failure).
 - Fixed `nix run` trying to run `devenv-wrapped` which doesn't exist.
 - Fixed in-band resize events being sent to the shell when the app did not opt-in to receiving them.
 - Fixed a packaging error in nixpkgs that resulted in the macOS builds of devenv to include two conflicting copies of the Boehm GC (#2552, #2576).

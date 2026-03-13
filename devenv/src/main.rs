@@ -412,6 +412,31 @@ impl DevenvOutput {
     }
 }
 
+/// Guard that ensures `backend_done.notify_one()` is called when the backend
+/// exits, even on early returns or panics. Without this, the TUI hangs forever
+/// waiting for a notification that never arrives.
+struct BackendDoneGuard(Option<Arc<tokio::sync::Notify>>);
+
+impl BackendDoneGuard {
+    fn new(notify: Arc<tokio::sync::Notify>) -> Self {
+        Self(Some(notify))
+    }
+
+    /// Take the inner Notify for passing to subsystems (e.g., PTY shell handoff).
+    /// After this, the guard no longer notifies on drop.
+    fn take(&mut self) -> Arc<tokio::sync::Notify> {
+        self.0.take().expect("backend_done already taken")
+    }
+}
+
+impl Drop for BackendDoneGuard {
+    fn drop(&mut self) {
+        if let Some(notify) = &self.0 {
+            notify.notify_one();
+        }
+    }
+}
+
 /// Run the backend: construct Devenv and dispatch the command.
 /// All config loading and settings resolution has already happened in prepare_launch_config.
 async fn run_backend(
@@ -441,6 +466,9 @@ async fn run_backend(
         tracing_format: _,
         tracing_output: _,
     } = launch;
+
+    // Ensure TUI is notified when backend exits, even on early return or panic.
+    let mut backend_done_guard = BackendDoneGuard::new(backend_done);
 
     // Helper to create output without debugger context
     let output = |result| DevenvOutput {
@@ -565,7 +593,7 @@ async fn run_backend(
             devenv.clone(),
             cmd,
             args,
-            backend_done,
+            backend_done_guard.take(),
             terminal_ready_rx,
             verbosity,
             tui,
@@ -601,8 +629,8 @@ async fn run_backend(
     )
     .await;
 
-    // Signal TUI that backend is done
-    backend_done.notify_one();
+    // Notify TUI before debugger check, so TUI shuts down before debugger takes the terminal.
+    drop(backend_done_guard);
 
     // Debugger on error
     match result {
@@ -902,6 +930,9 @@ async fn run_reload_shell(
     use devenv_tui::{SessionIo, ShellSession, TuiHandoff};
     use tokio::sync::mpsc;
 
+    // Guard ensures TUI is notified even if we return early from eval errors.
+    let mut backend_done_guard = BackendDoneGuard::new(backend_done);
+
     let devenv_guard = devenv.lock().await;
     let dotfile = devenv_guard.dotfile().to_path_buf();
 
@@ -969,7 +1000,7 @@ async fn run_reload_shell(
         rx
     });
     let handoff = Some(TuiHandoff {
-        backend_done,
+        backend_done: backend_done_guard.take(),
         terminal_ready_rx,
     });
 
