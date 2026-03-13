@@ -64,7 +64,93 @@ There are a few special inputs passed into `devenv.nix`:
 
     ``...`` is a catch-all pattern for any additional inputs, so you can safely omit the inputs you're not using.
 
-See [devenv.yaml reference](reference/yaml-options.md) for all supported inputs.
+See [devenv.yaml reference](reference/yaml-options.md) for all supported input options.
+
+## Supported URI formats
+
+`inputs.<name>.url` is a URI format that allows importing external repositories, files, directories, and more as inputs to your development environment.
+
+devenv supports the same URI specification for inputs as Nix Flakes.
+
+For a more detailed description of the supported URI formats, see the [Nix manual](<https://nix.dev/manual/nix/latest/command-ref/new-cli/nix3-flake.html#types>).
+
+We'll list the most common examples below.
+
+### GitHub
+
+- `github:NixOS/nixpkgs/master`
+- `github:NixOS/nixpkgs?rev=238b18d7b2c8239f676358634bfb32693d3706f3`
+- `github:org/repo?dir=subdir`
+- `github:org/repo?ref=v1.0.0`
+
+### GitLab
+
+- `gitlab:owner/repo/branch`
+- `gitlab:owner/repo/commit`
+- `gitlab:owner/repo?host=git.example.org`
+
+### Git repositories
+
+- `git+ssh://git@github.com/NixOS/nix?ref=v1.2.3`
+- `git+https://git.somehost.tld/user/path?ref=branch&rev=fdc8ef970de2b4634e1b3dca296e1ed918459a9e`
+- `git+file:///some/absolute/path/to/repo`
+
+### Mercurial
+
+- `hg+https://...`
+- `hg+ssh://...`
+- `hg+file://...`
+
+### Sourcehut
+
+- `sourcehut:~misterio/nix-colors/21c1a380a6915d890d408e9f22203436a35bb2de?host=hg.sr.ht`
+
+### Tarballs
+
+- `tarball+https://example.com/foobar.tar.gz`
+
+### Local files
+
+Path inputs don't respect `.gitignore` and will copy the entire directory to the Nix store.
+To avoid unnecessarily copying large development directories, consider using `git+file` instead.
+
+- `path:/path/to/repo`
+- `file+https://`
+- `file:///some/absolute/file.tar.gz`
+
+## Following inputs
+
+Inputs can also "follow" other inputs by name.
+
+The two main use-cases for this are to:
+
+- Inherit inputs from other `devenv.yaml`s or external flake projects.
+- Reduce the number of repeated inputs that need to be downloaded by overriding nested inputs.
+
+`follows` are specified by name. Nested inputs can be referenced by name using `/` as a separator.
+
+For example, to use a `nixpkgs` input from a shared `base-project` input:
+
+```yaml hl_lines="5"
+inputs:
+  base-project:
+    url: github:owner/repo
+  nixpkgs:
+    follows: base-project/nixpkgs
+```
+
+Or to override the `nixpkgs` input of another input to reduce the number of times `nixpkgs` has to be downloaded:
+
+```yaml hl_lines="6-8"
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+```
 
 ## Locking and updating inputs
 

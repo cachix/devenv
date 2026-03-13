@@ -1,211 +1,150 @@
 # devenv.yaml
 
-| Key                                                           | Value                                                                         |
-|---------------------------------------------------------------|-------------------------------------------------------------------------------|
-| clean.enabled                                                 | Clean the environment when entering the shell. Defaults to `false`.           |
-| clean.keep                                                    | A list of environment variables to keep when cleaning the environment.        |
-| imports                                                       | A list of relative paths, absolute paths, or references to inputs to import ``devenv.nix`` and ``devenv.yaml`` files. |
-| impure                                                        | Relax the hermeticity of the environment.                                     |
-| inputs                                                        | Defaults to `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`.       |
-| inputs.&lt;name&gt;                                           | Identifier name used when passing the input in your ``devenv.nix`` function.  |
-| inputs.&lt;name&gt;.flake                                     | Does the input contain ``flake.nix`` or ``devenv.nix``. Defaults to ``true``. |
-| inputs.&lt;name&gt;.follows                                       | Another input to "inherit" from by name. [Following inputs](#following-inputs).                                |
-| inputs.&lt;name&gt;.inputs.&lt;name&gt;.follows                                      | Override nested inputs by name. [Supported formats](#supported-uri-formats).                                |
-| inputs.&lt;name&gt;.overlays                                  | A list of overlays to include from the input.                                 |
-| inputs.&lt;name&gt;.url                                       | URI specification of the input. [Supported formats](#supported-uri-formats).                                |
-|                                                               |                                                                              |
-| nixpkgs.allowBroken                                           | Allow packages marked as broken. Defaults to `false`.                         |
-| nixpkgs.allowUnfree                                           | Allow unfree packages. Defaults to `false`.                                   |
-| nixpkgs.cudaCapabilities                                      | Select CUDA capabilities for nixpkgs. Defaults to `[]`.                       |
-| nixpkgs.cudaSupport                                           | Enable CUDA support for nixpkgs. Defaults to `false`.                         |
-| nixpkgs.permittedInsecurePackages                             | A list of insecure permitted packages. Defaults to `[]`.                      |
-| nixpkgs.permittedUnfreePackages                               | A list of unfree packages to allow by name. Defaults to `[]`.                 |
-|                                                               |                                                                               |
-| nixpkgs.per-platform.&lt;system&gt;.allowBroken               | (per-platform) Allow packages marked as broken. Defaults to `false`.          |
-| nixpkgs.per-platform.&lt;system&gt;.allowUnfree               | (per-platform) Allow unfree packages. Defaults to `false`.                    |
-| nixpkgs.per-platform.&lt;system&gt;.cudaCapabilities          | (per-platform) Select CUDA capabilities for nixpkgs. Defaults to `[]`.        |
-| nixpkgs.per-platform.&lt;system&gt;.cudaSupport               | (per-platform) Enable CUDA support for nixpkgs. Defaults to `false`.          |
-| nixpkgs.per-platform.&lt;system&gt;.permittedInsecurePackages | (per-platform) A list of insecure permitted packages. Defaults to `[]`.       |
-| nixpkgs.per-platform.&lt;system&gt;.permittedUnfreePackages   | (per-platform) A list of unfree packages to allow by name. Defaults to `[]`.  |
-|                                                               |                                                                               |
-| profile                                                       | Default profile to activate. Can be overridden by `--profile` CLI flag.       |
-| reload                                                        | Enable auto-reload of the shell when files change. Defaults to `true`. Can be overridden by `--reload` or `--no-reload` CLI flags. |
-| strictPorts                                                   | Error if a port is already in use instead of auto-allocating the next available port. Defaults to `false`. Can be overridden by `--strict-ports` or `--no-strict-ports` CLI flags. |
-|                                                               |                                                                               |
-| secretspec.enable                                             | Enable [secretspec integration](../integrations/secretspec.md). Defaults to `false`.                           |
-| secretspec.profile                                            | Secretspec profile name to use.                                               |
-| secretspec.provider                                           | Secretspec provider to use.                                                   |
+## clean.enabled
 
-!!! note "Added in 2.0"
+Clean the environment when entering the shell.
 
-    - `reload`
+*Type:* `boolean` · *Default:* `false` · *Added in 1.0*
 
-!!! note "Added in 1.11"
+## clean.keep
 
-    - `profile`
+A list of environment variables to keep when cleaning the environment.
 
-!!! note "Added in 1.9"
+*Type:* `list of string` · *Default:* `[]` · *Added in 1.0*
 
-    - nixpkgs.permittedUnfreePackages
+## imports
 
-!!! note "Added in 1.8"
+A list of relative paths, absolute paths, or references to inputs to import `devenv.nix` and `devenv.yaml` files.
+See [Composing using imports](../composing-using-imports.md).
 
-    - `secretspec`
+*Type:* `list of string` · *Default:* `[]`
 
-!!! note "Added in 1.7"
+## impure
 
-    - `nixpkgs`
+Relax the hermeticity of the environment.
 
-!!! note "Added in 1.0"
+*Type:* `boolean` · *Default:* `false` · *Added in 1.0*
 
-    - relative file support in imports: `./mymodule.nix`
-    - `clean`
-    - `impure`
+## inputs
 
-## Inputs
+Map of Nix inputs.
+See [Inputs](../inputs.md).
 
-### Supported URI formats
+*Type:* `attribute set of input` · *Default:* `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`
 
-`inputs.<name>.url` is a URI format that allows importing external repositories, files, directories, and more as inputs to your development environment.
+## inputs.\<name\>.flake
 
-devenv supports the same URI specification for inputs as Nix Flakes.
+Does the input contain `flake.nix` or `devenv.nix`.
 
-For a more detailed description of the supported URI formats, see the [Nix manual](<https://nix.dev/manual/nix/latest/command-ref/new-cli/nix3-flake.html#types>).
+*Type:* `boolean` · *Default:* `true`
 
-We'll list the most common examples below.
+## inputs.\<name\>.follows
 
-#### GitHub
+Another input to "inherit" from by name.
+See [Following inputs](../inputs.md#following-inputs).
 
-- `github:NixOS/nixpkgs/master`
-- `github:NixOS/nixpkgs?rev=238b18d7b2c8239f676358634bfb32693d3706f3`
-- `github:org/repo?dir=subdir`
-- `github:org/repo?ref=v1.0.0`
+*Type:* `string`
 
-#### GitLab
+## inputs.\<name\>.inputs.\<name\>.follows
 
-- `gitlab:owner/repo/branch`
-- `gitlab:owner/repo/commit`
-- `gitlab:owner/repo?host=git.example.org`
+Override nested inputs by name.
+See [Following inputs](../inputs.md#following-inputs).
 
-#### Git repositories
+*Type:* `string`
 
-- `git+ssh://git@github.com/NixOS/nix?ref=v1.2.3`
-- `git+https://git.somehost.tld/user/path?ref=branch&rev=fdc8ef970de2b4634e1b3dca296e1ed918459a9e`
-- `git+file:///some/absolute/path/to/repo`
+## inputs.\<name\>.overlays
 
-#### Mercurial
+A list of overlays to include from the input.
+See [Overlays](../overlays.md).
 
-- `hg+https://...`
-- `hg+ssh://...`
-- `hg+file://...`
+*Type:* `list of string` · *Default:* `[]`
 
-#### Sourcehut
+## inputs.\<name\>.url
 
-- `sourcehut:~misterio/nix-colors/21c1a380a6915d890d408e9f22203436a35bb2de?host=hg.sr.ht`
+URI specification of the input.
+See [Supported URI formats](../inputs.md#supported-uri-formats).
 
-#### Tarballs
+*Type:* `string`
 
-- `tarball+https://example.com/foobar.tar.gz`
+## nixpkgs.allowBroken
 
-#### Local files
+Allow packages marked as broken.
 
-Path inputs don't respect `.gitignore` and will copy the entire directory to the Nix store.
-To avoid unnecessarily copying large development directories, consider using `git+file` instead.
+*Type:* `boolean` · *Default:* `false` · *Added in 1.7*
 
-- `path:/path/to/repo`
-- `file+https://`
-- `file:///some/absolute/file.tar.gz`
+## nixpkgs.allowUnfree
 
-### Following inputs
+Allow unfree packages.
 
-Inputs can also "follow" other inputs by name.
+*Type:* `boolean` · *Default:* `false` · *Added in 1.7*
 
-The two main use-cases for this are to:
+## nixpkgs.cudaCapabilities
 
-- Inherit inputs from other `devenv.yaml`s or external flake projects.
-- Reduce the number of repeated inputs that need to be downloaded by overriding nested inputs.
+Select CUDA capabilities for nixpkgs.
 
-`follows` are specified by name. Nested inputs can be referenced by name using `/` as a separator.
+*Type:* `list of string` · *Default:* `[]` · *Added in 1.7*
 
-For example, to use a `nixpkgs` input from a shared `base-project` input:
+## nixpkgs.cudaSupport
 
-```yaml hl_lines="5"
-inputs:
-  base-project:
-    url: github:owner/repo
-  nixpkgs:
-    follows: base-project/nixpkgs
-```
+Enable CUDA support for nixpkgs.
 
-Or to override the `nixpkgs` input of another input to reduce the number of times `nixpkgs` has to be downloaded:
+*Type:* `boolean` · *Default:* `false` · *Added in 1.7*
 
-```yaml hl_lines="6-8"
-inputs:
-  nixpkgs:
-    url: github:cachix/devenv-nixpkgs/rolling
-  git-hooks:
-    url: github:cachix/git-hooks.nix
-    inputs:
-      nixpkgs:
-        follows: nixpkgs
-```
+## nixpkgs.permittedInsecurePackages
 
-## Using permittedUnfreePackages
+A list of insecure permitted packages.
 
-Instead of allowing all unfree packages with `nixpkgs.allowUnfree: true`, you can selectively permit specific unfree packages by name:
+*Type:* `list of string` · *Default:* `[]` · *Added in 1.7*
 
-```yaml
-# Use the nixpkgs-scoped configuration
-nixpkgs:
-  permittedUnfreePackages:
-    - terraform
-    - vscode
+## nixpkgs.permittedUnfreePackages
 
-# Or configure per-platform
-nixpkgs:
-  per-platform:
-    x86_64-linux:
-      permittedUnfreePackages:
-        - some-package
-    aarch64-darwin:
-      permittedUnfreePackages:
-        - some-package
+A list of unfree packages to allow by name.
 
-```
-## An extensive example
+*Type:* `list of string` · *Default:* `[]` · *Added in 1.9*
 
-```yaml
-nixpkgs:
-  allowUnfree: true
-  allowBroken: true
-clean:
-  enabled: true
-  keep:
-    - EDITOR
-inputs:
-  nixpkgs:
-    url: github:cachix/devenv-nixpkgs/rolling
-  myproject:
-    url: github:owner/myproject
-    flake: false
-  myproject2:
-    url: github:owner/myproject
-    overlays:
-      - default
-imports:
-  - ./frontend
-  - ./backend
-  - ./mymodule.nix
-  - /absolute/path/from/git/root
-  - myproject
-  - myproject/relative/path
-```
+## nixpkgs.per-platform.\<system\>
 
-!!! note "Added in 1.10"
+Per-platform nixpkgs configuration.
+Accepts the same options as `nixpkgs` (`allowBroken`, `allowUnfree`, `cudaCapabilities`, `cudaSupport`, `permittedInsecurePackages`, `permittedUnfreePackages`).
 
-    - local imports now merge `devenv.yaml` (remote inputs not yet supported)
-    - absolute path support in imports: `/absolute/path/from/git/root`
+*Type:* `attribute set of nixpkgs config` · *Added in 1.7*
 
-!!! note "Added in 1.0"
+## profile
 
-    - relative file support in imports: `./mymodule.nix`
+Default profile to activate.
+Can be overridden by `--profile` CLI flag.
+See [Profiles](../profiles.md).
+
+*Type:* `string` · *Added in 1.11*
+
+## reload
+
+Enable auto-reload of the shell when files change.
+Can be overridden by `--reload` or `--no-reload` CLI flags.
+
+*Type:* `boolean` · *Default:* `true` · *Added in 2.0*
+
+## secretspec.enable
+
+Enable [secretspec integration](../integrations/secretspec.md).
+
+*Type:* `boolean` · *Default:* `false` · *Added in 1.8*
+
+## secretspec.profile
+
+Secretspec profile name to use.
+
+*Type:* `string` · *Added in 1.8*
+
+## secretspec.provider
+
+Secretspec provider to use.
+
+*Type:* `string` · *Added in 1.8*
+
+## strictPorts
+
+Error if a port is already in use instead of auto-allocating the next available port.
+Can be overridden by `--strict-ports` or `--no-strict-ports` CLI flags.
+
+*Type:* `boolean` · *Default:* `false`

@@ -29,4 +29,4 @@ For example, ``devenv up`` will start both the frontend and backend processes.
     Composing ``devenv.yaml`` files is now supported for local files (relative and absolute paths).
     Remote inputs are not yet supported for ``devenv.yaml`` imports.
 
-See [devenv.yaml reference](reference/yaml-options.md#an-extensive-example) for all supported imports.
+See [devenv.yaml reference](reference/yaml-options.md#imports) for all supported import options.
