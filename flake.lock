@@ -516,16 +516,16 @@
         "nixpkgs-regression": []
       },
       "locked": {
-        "lastModified": 1772748357,
-        "narHash": "sha256-vtf03lfgQKNkPH9FdXdboBDS5DtFkXB8xRw5EBpuDas=",
+        "lastModified": 1773158757,
+        "narHash": "sha256-l/UMzByfYOww3Hq8Cvyule9/S8XgOniXd2zvQFYEIq0=",
         "owner": "cachix",
         "repo": "nix",
-        "rev": "41eee9d3b1f611b1b90d51caa858b6d83834c44a",
+        "rev": "ae751039ffee783c0549ea36307b162c40bc01d5",
         "type": "github"
       },
       "original": {
         "owner": "cachix",
-        "ref": "devenv-2.32",
+        "ref": "fix/temproot-fetch-to-store",
         "repo": "nix",
         "type": "github"
       }
