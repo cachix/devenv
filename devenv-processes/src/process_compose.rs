@@ -137,6 +137,19 @@ impl ProcessManager for ProcessComposeManager {
         }
 
         if options.detach {
+            // Make the child its own process group leader so that stop()
+            // can signal the entire group with kill(-pid, SIGTERM).
+            unsafe {
+                cmd.pre_exec(|| {
+                    nix::unistd::setpgid(
+                        nix::unistd::Pid::from_raw(0),
+                        nix::unistd::Pid::from_raw(0),
+                    )
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                    Ok(())
+                });
+            }
+
             // Detached mode: spawn and save PID
             let process = if options.log_to_file {
                 let log_file = std::fs::File::create(self.log_file()).into_diagnostic()?;
@@ -178,16 +191,31 @@ impl ProcessManager for ProcessComposeManager {
         let pid = pid::read_pid(&pid_file).await?;
         info!("Stopping process with PID {}", pid);
 
-        // Send SIGTERM
-        match signal::kill(pid, Signal::SIGTERM) {
+        // Send SIGTERM to the process group so child processes also receive
+        // the signal. If the process is a group leader (which it will be when
+        // spawned in detached mode), this reaches all its descendants.
+        let pgid = Pid::from_raw(-pid.as_raw());
+        match signal::kill(pgid, Signal::SIGTERM) {
             Ok(_) => {}
             Err(nix::errno::Errno::ESRCH) => {
-                warn!("Process with PID {} not found, cleaning up PID file", pid);
-                pid::remove_pid(&pid_file).await?;
-                return Ok(());
+                warn!(
+                    "Process group for PID {} not found, trying PID directly",
+                    pid
+                );
+                match signal::kill(pid, Signal::SIGTERM) {
+                    Ok(_) => {}
+                    Err(nix::errno::Errno::ESRCH) => {
+                        warn!("Process with PID {} not found, cleaning up PID file", pid);
+                        pid::remove_pid(&pid_file).await?;
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        bail!("Failed to send SIGTERM to PID {}: {}", pid, e);
+                    }
+                }
             }
             Err(e) => {
-                bail!("Failed to send SIGTERM to PID {}: {}", pid, e);
+                bail!("Failed to send SIGTERM to process group {}: {}", pid, e);
             }
         }
 
