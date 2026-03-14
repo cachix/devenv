@@ -101,10 +101,7 @@ async fn main() -> Result<()> {
     let shutdown = Shutdown::new();
     shutdown.install_signals().await;
 
-    tokio::select! {
-        result = run_tasks(shutdown.clone()) => result?,
-        _ = shutdown.wait_for_shutdown() => {}
-    };
+    run_tasks(shutdown).await?;
 
     Ok(())
 }
