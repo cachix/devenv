@@ -52,6 +52,12 @@ let
     follows = [ "nixpkgs" ];
   };
 
+  # Write a .pth file into a venv's site-packages so that Nix profile
+  # packages are importable, but venv-installed packages take priority.
+  writePthFile = venvPath: ''
+    echo "$DEVENV_PROFILE/${cfg.package.sitePackages}" > "${venvPath}/${cfg.package.sitePackages}/devenv-profile.pth"
+  '';
+
   initVenvScript = ''
     pushd "${cfg.directory}"
 
@@ -78,21 +84,23 @@ let
       ${
         if cfg.uv.enable then
           ''
-            echo uv venv -p ${cfg.package.interpreter} --system-site-packages "$VENV_PATH"
-            uv venv -p ${cfg.package.interpreter} --system-site-packages "$VENV_PATH"
+            echo uv venv -p ${cfg.package.interpreter} "$VENV_PATH"
+            uv venv -p ${cfg.package.interpreter} "$VENV_PATH"
           ''
         else
           ''
-            echo ${cfg.package.interpreter} -m venv --system-site-packages ${
+            echo ${cfg.package.interpreter} -m venv ${
               if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""
             } "$VENV_PATH"
-            ${cfg.package.interpreter} -m venv --system-site-packages ${
+            ${cfg.package.interpreter} -m venv ${
               if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""
             } "$VENV_PATH"
           ''
       }
       echo "${cfg.package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
     fi
+
+    ${writePthFile "$VENV_PATH"}
 
     source "$VENV_PATH"/bin/activate
 
@@ -204,19 +212,13 @@ let
       echo "Warning: uv sync is enabled, and requirements are being ignored. Dependencies will be installed from pyproject.toml."
     ''}
 
-    # Pre-create the venv with --system-site-packages so Nix-provided
-    # Python packages (e.g. from withPackages) are accessible at runtime.
-    # uv sync will reuse this venv via UV_PROJECT_ENVIRONMENT.
-    if [ ! -d "$VENV_PATH" ]; then
-      ${cfg.uv.package}/bin/uv venv --system-site-packages "$VENV_PATH"
-    fi
-
     if [ ! -f "pyproject.toml" ]
     then
       echo "No pyproject.toml found. Make sure you have a pyproject.toml file in your project." >&2
       exit 1
     else
       _devenv_uv_sync
+      ${writePthFile "$VENV_PATH"}
       ${lib.optionalString cfg.venv.enable ''
         source "$VENV_PATH"/bin/activate
       ''}
@@ -271,6 +273,7 @@ let
       exit 1
     else
       _devenv_init_poetry_venv
+      ${writePthFile ".venv"}
       ${lib.optionalString cfg.poetry.install.enable ''
         _devenv_poetry_install
       ''}
@@ -423,7 +426,7 @@ in
         - Executables use `--inherit-argv0` and `--resolve-argv0` to ensure Python initializes with correct `sys.prefix` and `sys.base_prefix`
         - Python package scripts are unwrapped to invoke the environment's interpreter directly
 
-        Without these fixes, venvs cannot access environment packages via `--system-site-packages`.
+        Without these fixes, Python may not initialize with the correct prefix paths.
 
         Enabled by default.
         Newer nixpkgs releases may include upstream fixes that make this patch obsolete.
@@ -713,8 +716,6 @@ in
         POETRY_VIRTUALENVS_CREATE = "true";
         # Make poetry stop accessing any other virtualenvs in $HOME.
         POETRY_VIRTUALENVS_PATH = "/var/empty";
-        # Give the venv access to Nix-provided Python packages (e.g. from withPackages).
-        POETRY_VIRTUALENVS_OPTIONS_SYSTEM_SITE_PACKAGES = "true";
       });
 
     assertions = [
