@@ -331,9 +331,12 @@ in
     enterShell = lib.mkBefore ''
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
 
-      # override temp directories after "nix develop"
+      # Override temp directories that stdenv set to NIX_BUILD_TOP.
+      # Only reset those that still point to the Nix build dir; leave
+      # any user/CI-supplied value intact so child processes (e.g.
+      # `devenv processes wait`) compute the same runtime directory.
       for var in TMP TMPDIR TEMP TEMPDIR; do
-        if [ -n "''${!var-}" ]; then
+        if [ -n "''${!var-}" ] && [ "''${!var}" = "''${NIX_BUILD_TOP-}" ]; then
           export "$var"=${config.devenv.tmpdir}
         fi
       done
