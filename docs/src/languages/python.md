@@ -242,7 +242,7 @@ Whether to apply fixes to Python’s ` buildEnv ` for correct runtime initializa
  - Executables use ` --inherit-argv0 ` and ` --resolve-argv0 ` to ensure Python initializes with correct ` sys.prefix ` and ` sys.base_prefix `
  - Python package scripts are unwrapped to invoke the environment’s interpreter directly
 
-Without these fixes, venvs cannot access environment packages via ` --system-site-packages `\.
+Without these fixes, Python may not initialize with the correct prefix paths\.
 
 Enabled by default\.
 Newer nixpkgs releases may include upstream fixes that make this patch obsolete\.
