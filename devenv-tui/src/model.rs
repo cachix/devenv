@@ -172,6 +172,7 @@ pub struct UiState {
     pub scroll: ScrollState,
     pub view_options: ViewOptions,
     pub terminal_size: TerminalSize,
+    pub interrupt_prompt_active: bool,
     pub view_mode: ViewMode,
 }
 
@@ -195,6 +196,7 @@ impl UiState {
                 show_details: false,
             },
             terminal_size: TerminalSize { width, height },
+            interrupt_prompt_active: false,
             view_mode: ViewMode::Main,
         }
     }
@@ -202,6 +204,18 @@ impl UiState {
     /// Update terminal size (call on resize events).
     pub fn set_terminal_size(&mut self, width: u16, height: u16) {
         self.terminal_size = TerminalSize { width, height };
+    }
+
+    pub fn show_interrupt_prompt(&mut self) {
+        self.interrupt_prompt_active = true;
+    }
+
+    pub fn clear_interrupt_prompt(&mut self) {
+        self.interrupt_prompt_active = false;
+    }
+
+    pub fn interrupt_prompt_active(&self) -> bool {
+        self.interrupt_prompt_active
     }
 
     /// Select the next activity from the list of selectable IDs.
@@ -1538,5 +1552,18 @@ mod tests {
         let summary = model.calculate_summary();
         assert_eq!(summary.expected_builds, Some(7));
         assert_eq!(summary.expected_downloads, Some(12));
+    }
+
+    #[test]
+    fn test_ui_state_interrupt_prompt_can_be_toggled() {
+        let mut ui = UiState::new();
+
+        assert!(!ui.interrupt_prompt_active());
+
+        ui.show_interrupt_prompt();
+        assert!(ui.interrupt_prompt_active());
+
+        ui.clear_interrupt_prompt();
+        assert!(!ui.interrupt_prompt_active());
     }
 }

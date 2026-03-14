@@ -150,6 +150,19 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    changelogs = [
+      {
+        date = "2026-03-12";
+        title = "Native TUI no longer exits on the first Ctrl-C";
+        when = cfg.enable;
+        description = ''
+          In the native process manager's interactive TUI, the first `Ctrl-C` now opens a quit prompt instead of immediately shutting down devenv.
+
+          After the interrupt prompt appears, press `c` to keep running or `q`/`Ctrl-C` to quit the environment.
+        '';
+      }
+    ];
+
     packages = [ cfg.package ];
 
     # Wire up native-specific process configuration from process.process-compose for migration

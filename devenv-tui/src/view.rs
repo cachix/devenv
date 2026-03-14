@@ -144,6 +144,7 @@ pub fn view(
             showing_logs: selected_logs.is_some(),
             can_go_up,
             can_go_down,
+            interrupt_prompt_active: ui_state.interrupt_prompt_active(),
         })) {
             SummaryView
         }
@@ -889,6 +890,7 @@ struct SummaryViewContext {
     showing_logs: bool,
     can_go_up: bool,
     can_go_down: bool,
+    interrupt_prompt_active: bool,
 }
 
 /// Summary view component that adapts to terminal width
@@ -902,6 +904,7 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         showing_logs,
         can_go_up,
         can_go_down,
+        interrupt_prompt_active,
     } = &*ctx;
 
     build_summary_view_impl(
@@ -910,6 +913,7 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         *showing_logs,
         *can_go_up,
         *can_go_down,
+        *interrupt_prompt_active,
         terminal_width,
     )
 }
@@ -921,8 +925,36 @@ fn build_summary_view_impl(
     showing_logs: bool,
     can_go_up: bool,
     can_go_down: bool,
+    interrupt_prompt_active: bool,
     terminal_width: u16,
 ) -> AnyElement<'static> {
+    if interrupt_prompt_active {
+        let prompt_text = if terminal_width < 72 {
+            "Quit devenv? Nothing stopped."
+        } else {
+            "Quit devenv? Nothing has been stopped yet."
+        };
+
+        return element!(View(
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceBetween,
+            width: 100pct
+        ) {
+            View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                Text(content: prompt_text, color: Color::Yellow, weight: Weight::Bold)
+            }
+            View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
+                Text(content: "c", color: COLOR_INTERACTIVE)
+                Text(content: " keep running • ")
+                Text(content: "q", color: COLOR_INTERACTIVE)
+                Text(content: " quit • ")
+                Text(content: "^C", color: COLOR_INTERACTIVE)
+                Text(content: " quit")
+            }
+        })
+        .into_any();
+    }
+
     let mut children = vec![];
     let mut has_content = false;
 
@@ -1198,4 +1230,28 @@ pub fn format_duration(duration: Duration) -> String {
         return "[TIME]".to_string();
     }
     duration.human_duration().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_summary_interrupt_prompt_renders() {
+        let mut element = build_summary_view_impl(
+            &ActivitySummary::default(),
+            None,
+            false,
+            false,
+            false,
+            true,
+            100,
+        );
+        let output = element.render(Some(100)).to_string();
+
+        assert!(output.contains("Quit devenv?"));
+        assert!(output.contains("stopped"));
+        assert!(output.contains("keep running"));
+        assert!(output.contains("quit"));
+    }
 }
