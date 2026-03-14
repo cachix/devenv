@@ -702,7 +702,14 @@ in
     ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
     env =
-      (lib.optionalAttrs cfg.uv.enable {
+      {
+        # Prevent nixpkgs setup hooks from adding individual package store
+        # paths to PYTHONPATH. PYTHONPATH is prepended to sys.path before
+        # site-packages, breaking venv package priority. Nix-provided
+        # packages are made available via .pth files instead.
+        dontAddPythonPath = "1";
+      }
+      // (lib.optionalAttrs cfg.uv.enable {
         UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
         # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
         UV_PYTHON_DOWNLOADS = "never";
