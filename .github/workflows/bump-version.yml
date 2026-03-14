@@ -30,6 +30,9 @@ jobs:
       - name: Bump version
         run: devenv shell -- cargo set-version -p devenv --bump patch
 
+      - name: Update Cargo.nix
+        run: devenv shell -- crate2nix generate -h nix/crate-hashes.json
+
       - name: Get new version
         id: get-version
         run: echo "VERSION=$(nix eval --raw --expr '(builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version' --impure)" >> $GITHUB_OUTPUT
@@ -42,5 +45,5 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v6
         with:
           commit_message: "Next release is ${{ steps.get-version.outputs.VERSION }}"
-          file_pattern: "Cargo.toml Cargo.lock"
+          file_pattern: "Cargo.toml Cargo.lock Cargo.nix"
           branch: ${{ steps.get-branch.outputs.BRANCH }}
