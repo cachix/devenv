@@ -52,6 +52,12 @@ let
     follows = [ "nixpkgs" ];
   };
 
+  # Write a .pth file into a venv's site-packages so that Nix profile
+  # packages are importable, but venv-installed packages take priority.
+  writePthFile = venvPath: ''
+    echo "$DEVENV_PROFILE/${cfg.package.sitePackages}" > "${venvPath}/${cfg.package.sitePackages}/devenv-profile.pth"
+  '';
+
   initVenvScript = ''
     pushd "${cfg.directory}"
 
@@ -93,6 +99,8 @@ let
       }
       echo "${cfg.package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
     fi
+
+    ${writePthFile "$VENV_PATH"}
 
     source "$VENV_PATH"/bin/activate
 
@@ -210,6 +218,7 @@ let
       exit 1
     else
       _devenv_uv_sync
+      ${writePthFile "$VENV_PATH"}
       ${lib.optionalString cfg.venv.enable ''
         source "$VENV_PATH"/bin/activate
       ''}
@@ -264,6 +273,7 @@ let
       exit 1
     else
       _devenv_init_poetry_venv
+      ${writePthFile ".venv"}
       ${lib.optionalString cfg.poetry.install.enable ''
         _devenv_poetry_install
       ''}
@@ -416,7 +426,7 @@ in
         - Executables use `--inherit-argv0` and `--resolve-argv0` to ensure Python initializes with correct `sys.prefix` and `sys.base_prefix`
         - Python package scripts are unwrapped to invoke the environment's interpreter directly
 
-        Without these fixes, venvs cannot access environment packages via `--system-site-packages`.
+        Without these fixes, Python may not initialize with the correct prefix paths.
 
         Enabled by default.
         Newer nixpkgs releases may include upstream fixes that make this patch obsolete.
@@ -692,14 +702,19 @@ in
     ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
     env =
-      (lib.optionalAttrs cfg.uv.enable {
-        # ummmmm how does this work? Can I even know the path to the devenv/state at this point?
+      {
+        # Prevent nixpkgs setup hooks from adding individual package store
+        # paths to PYTHONPATH. PYTHONPATH is prepended to sys.path before
+        # site-packages, breaking venv package priority. Nix-provided
+        # packages are made available via .pth files instead.
+        dontAddPythonPath = "1";
+      }
+      // (lib.optionalAttrs cfg.uv.enable {
         UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
         # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
         UV_PYTHON_DOWNLOADS = "never";
-        # Make uv choose the first python on PATH that is not uv provided.
-        # The one it finds is then consistently the one from nix (which is what we want).
-        UV_PYTHON_PREFERENCE = "only-system";
+        # Configure uv to use the python interpreter from the profile
+        UV_PYTHON = toString cfg.package.interpreter;
       })
       // (lib.optionalAttrs cfg.poetry.enable {
         # Make poetry use DEVENV_ROOT/.venv
@@ -745,9 +760,5 @@ in
         before = [ "devenv:enterShell" ];
       };
     };
-
-    enterShell = ''
-      export PYTHONPATH="$DEVENV_PROFILE/${cfg.package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
-    '';
   };
 }
