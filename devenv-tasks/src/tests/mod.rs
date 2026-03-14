@@ -511,7 +511,7 @@ async fn test_refresh_task_cache_with_exec_if_modified() -> Result<(), Error> {
     let temp_dir = TempDir::new().unwrap();
     let db_path = temp_dir.path().join("tasks.db");
 
-    let test_file = tempfile::NamedTempFile::new()?;
+    let test_file = tempfile::NamedTempFile::new_in(temp_dir.path())?;
     let test_file_path = test_file.path().to_str().unwrap().to_string();
     fs::write(&test_file_path, "initial content").await?;
 
@@ -605,7 +605,7 @@ async fn test_exec_if_modified() -> Result<(), Error> {
     let db_path = temp_dir.path().join("tasks.db");
 
     // Create a dummy file that will be modified
-    let test_file = tempfile::NamedTempFile::new()?;
+    let test_file = tempfile::NamedTempFile::new_in(temp_dir.path())?;
     let test_file_path = test_file.path().to_str().unwrap().to_string();
 
     // Write initial content to ensure file exists
@@ -797,10 +797,10 @@ async fn test_exec_if_modified_multiple_files() -> Result<(), Error> {
     );
 
     // Create multiple files to monitor
-    let test_file1 = tempfile::NamedTempFile::new()?;
+    let test_file1 = tempfile::NamedTempFile::new_in(temp_dir.path())?;
     let test_file_path1 = test_file1.path().to_str().unwrap().to_string();
 
-    let test_file2 = tempfile::NamedTempFile::new()?;
+    let test_file2 = tempfile::NamedTempFile::new_in(temp_dir.path())?;
     let test_file_path2 = test_file2.path().to_str().unwrap().to_string();
 
     // Create a command script that writes valid JSON to the outputs file
@@ -1012,7 +1012,7 @@ async fn test_preserved_output_on_skip() -> Result<(), Error> {
     );
 
     // Create a test file to monitor
-    let test_file = tempfile::NamedTempFile::new()?;
+    let test_file = tempfile::NamedTempFile::new_in(temp_dir.path())?;
     let test_file_path = test_file.path().to_str().unwrap().to_string();
 
     // Write initial content
@@ -3086,7 +3086,7 @@ async fn test_exec_if_modified_command_change() -> Result<(), Error> {
     let db_path = temp_dir.path().join("tasks.db");
 
     // Create a watched file that won't change throughout the test
-    let watched_file = tempfile::NamedTempFile::new()?;
+    let watched_file = tempfile::NamedTempFile::new_in(temp_dir.path())?;
     let watched_file_path = watched_file.path().to_str().unwrap().to_string();
     fs::write(&watched_file_path, "unchanged content").await?;
 
@@ -3206,7 +3206,7 @@ async fn test_exec_if_modified_command_change_with_negation() -> Result<(), Erro
     let temp_dir = TempDir::new().unwrap();
     let db_path = temp_dir.path().join("tasks.db");
 
-    let watched_file = tempfile::NamedTempFile::new()?;
+    let watched_file = tempfile::NamedTempFile::new_in(temp_dir.path())?;
     let watched_file_path = watched_file.path().to_str().unwrap().to_string();
     fs::write(&watched_file_path, "unchanged content").await?;
 
