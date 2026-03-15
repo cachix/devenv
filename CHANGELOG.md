@@ -6,6 +6,7 @@
 
 - Fixed cachix daemon log output leaking into and corrupting the TUI display by capturing daemon stderr and forwarding it through the push activity ([#2648](https://github.com/cachix/devenv/issues/2648)).
 - Fixed `devenv test` hanging when a process outputs non-UTF-8 bytes by using lossy UTF-8 decoding instead of closing the pipe, which caused a deadlock between the parent waiting for the child to exit and the child blocking on a full stdout pipe ([#2590](https://github.com/cachix/devenv/issues/2590)).
+- Fixed hot reload sometimes picking up stale configuration or crashing due to the old Nix evaluator not being fully cleaned up before creating a new one. Errors during reload are now reported instead of silently breaking subsequent evaluations.
 - Fixed `DEVENV_TUI=false` and `DEVENV_TUI=0` not disabling the TUI ([#2646](https://github.com/cachix/devenv/issues/2646)).
 - Migrated `certificates` and `hosts` modules to use tasks instead of `process.manager.before`/`process.manager.after` for the native process manager ([#2569](https://github.com/cachix/devenv/issues/2569)).
 - Fixed stale shell eval cache entries causing `devenv shell` and `direnv` activation to ignore changes to `devenv.nix` config such as `languages`, `env`, `packages`, and `scripts` ([#2643](https://github.com/cachix/devenv/pull/2643)).

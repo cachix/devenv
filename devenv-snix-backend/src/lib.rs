@@ -209,7 +209,8 @@ impl NixBackend for SnixBackend {
         bail!("is_trusted_user is not yet implemented for Snix backend")
     }
 
-    fn invalidate(&self) {
+    fn invalidate(&self) -> Result<()> {
         // No-op: Snix backend doesn't have caching yet
+        Ok(())
     }
 }

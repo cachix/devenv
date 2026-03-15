@@ -163,7 +163,7 @@ pub trait NixBackend: Send + Sync {
     ///
     /// This clears any cached evaluation state to force re-evaluation on the next operation.
     /// Used by hot-reload to ensure file changes are picked up.
-    fn invalidate(&self);
+    fn invalidate(&self) -> Result<()>;
 }
 
 #[cfg(test)]

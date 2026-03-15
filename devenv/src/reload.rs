@@ -238,7 +238,9 @@ impl ShellBuilder for DevenvShellBuilder {
             let devenv = devenv.lock().await;
 
             // Invalidate cached state to force re-evaluation on file changes
-            devenv.invalidate_for_reload();
+            devenv.invalidate_for_reload().map_err(|e| {
+                BuildError::new(format!("Failed to invalidate state for reload: {}", e))
+            })?;
 
             // Get the bash environment script (like direnv's print-dev-env)
             let env_script = devenv
