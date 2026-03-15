@@ -65,7 +65,7 @@ impl WatcherHandle {
 
         {
             let mut paths = self.watched_paths.lock().unwrap();
-            if !paths.insert(canonical) {
+            if !paths.insert(canonical.clone()) {
                 return;
             }
 
@@ -264,7 +264,15 @@ impl FileWatcher {
                     }
                     for (path, _) in event.paths() {
                         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-                        let _ = watch_tx.try_send(FileChangeEvent { path: canonical });
+                        // Use send().await instead of try_send to apply backpressure
+                        // rather than silently dropping events when the channel is full.
+                        if watch_tx
+                            .send(FileChangeEvent { path: canonical })
+                            .await
+                            .is_err()
+                        {
+                            return;
+                        }
                     }
                 }
             }
@@ -533,5 +541,53 @@ mod tests {
                 Err(_) => panic!("timeout waiting for runtime file change event"),
             }
         }
+    }
+
+    /// Reproduces the devenv hot-reload scenario:
+    /// watcher starts with NO initial paths, ALL paths added via handle,
+    /// then a file is modified in-place (preserving inode).
+    #[tokio::test]
+    async fn test_empty_watcher_with_handle_paths() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let base = temp_dir.path().canonicalize().expect("canonicalize");
+
+        let file1 = base.join("devenv.nix");
+        let file2 = base.join("devenv.lock");
+
+        File::create(&file1)
+            .expect("create")
+            .write_all(b"initial content")
+            .expect("write");
+        File::create(&file2)
+            .expect("create")
+            .write_all(b"lock content")
+            .expect("write");
+
+        // Create watcher with NO initial paths (like devenv reload does)
+        let mut watcher = FileWatcher::new(
+            FileWatcherConfig {
+                paths: &[],
+                recursive: false,
+                ..Default::default()
+            },
+            "test-empty",
+        )
+        .await;
+
+        let handle = watcher.handle();
+
+        // Add paths via handle (like add_watch_paths_from_cache does)
+        handle.watch(&file1).await;
+        handle.watch(&file2).await;
+
+        // Modify file in-place (like swap.sh does with > redirection)
+        std::fs::write(&file1, "modified content").expect("write");
+
+        let event = tokio::time::timeout(WATCH_TIMEOUT, watcher.recv())
+            .await
+            .expect("timeout waiting for event")
+            .expect("event");
+
+        assert_eq!(event.path, file1);
     }
 }
