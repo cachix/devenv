@@ -474,6 +474,143 @@ async fn test_backend_dev_env() {
     );
 }
 
+/// Helper for hot-reload invalidation tests.
+/// Sets up env, runs dev_env, modifies a file, invalidates, runs dev_env again,
+/// and asserts the new value is picked up.
+async fn assert_invalidate_picks_up_change(
+    yaml: &str,
+    nix_content: &str,
+    extra_files: &[(&str, &str)],
+    modify_file: &str,
+    modified_content: &str,
+    expected_before: &str,
+    expected_after: &str,
+) {
+    let (temp_dir, _cwd_guard, backend, paths, config) =
+        setup_isolated_test_env(yaml, Some(nix_content), NixOptions::default());
+
+    for (name, content) in extra_files {
+        std::fs::write(temp_dir.path().join(name), content).expect("Failed to write extra file");
+    }
+
+    backend
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config(get_current_system()),
+        ))
+        .await
+        .expect("Failed to assemble");
+
+    copy_fixture_lock(temp_dir.path());
+    let gc_root = temp_dir.path().join(".devenv/profile");
+
+    let output1 = backend
+        .dev_env(false, &gc_root)
+        .await
+        .expect("First dev_env should succeed");
+    let env1 = String::from_utf8_lossy(&output1.bash_env);
+    assert!(
+        env1.contains(expected_before),
+        "First dev_env should contain '{expected_before}'"
+    );
+
+    std::fs::write(temp_dir.path().join(modify_file), modified_content)
+        .expect("Failed to write modified file");
+
+    backend.invalidate();
+
+    let output2 = backend
+        .dev_env(false, &gc_root)
+        .await
+        .expect("Second dev_env after invalidate should succeed");
+    let env2 = String::from_utf8_lossy(&output2.bash_env);
+    assert!(
+        env2.contains(expected_after),
+        "After invalidate should contain '{expected_after}', got stale result"
+    );
+}
+
+/// Simulate hot-reload: dev_env() -> modify devenv.nix -> invalidate() -> dev_env()
+///
+/// This exercises the full code path including the SQLite eval cache,
+/// which is where stale results were observed during hot-reload.
+#[nix_test]
+async fn test_dev_env_after_invalidate() {
+    let yaml = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+"#;
+    assert_invalidate_picks_up_change(
+        yaml,
+        r#"{ pkgs, ... }: { env.TEST_RELOAD_VAR = "version1"; }"#,
+        &[],
+        "devenv.nix",
+        r#"{ pkgs, ... }: { env.TEST_RELOAD_VAR = "version2"; }"#,
+        "version1",
+        "version2",
+    )
+    .await;
+}
+
+/// Simulate hot-reload when a file IMPORTED by devenv.nix changes.
+///
+/// devenv.nix imports ./extra.nix. We modify extra.nix and invalidate.
+/// This tests whether imported files are tracked in the eval cache.
+#[nix_test]
+async fn test_dev_env_after_invalidate_imported_file() {
+    let yaml = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+"#;
+    assert_invalidate_picks_up_change(
+        yaml,
+        r#"{ pkgs, ... }: { imports = [ ./extra.nix ]; }"#,
+        &[(
+            "extra.nix",
+            r#"{ ... }: { env.TEST_IMPORT_VAR = "original"; }"#,
+        )],
+        "extra.nix",
+        r#"{ ... }: { env.TEST_IMPORT_VAR = "updated"; }"#,
+        "original",
+        "updated",
+    )
+    .await;
+}
+
+/// Simulate hot-reload when a file imported via devenv.yaml `imports` changes.
+///
+/// devenv.yaml lists `imports: [./extra.nix]`. We modify extra.nix and invalidate.
+/// This goes through bootstrapLib.nix's importModule path.
+#[nix_test]
+async fn test_dev_env_after_invalidate_yaml_import() {
+    let yaml = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+imports:
+  - ./extra.nix
+"#;
+    assert_invalidate_picks_up_change(
+        yaml,
+        r#"{ ... }: { }"#,
+        &[(
+            "extra.nix",
+            r#"{ ... }: { env.TEST_YAML_IMPORT = "original"; }"#,
+        )],
+        "extra.nix",
+        r#"{ ... }: { env.TEST_YAML_IMPORT = "updated"; }"#,
+        "original",
+        "updated",
+    )
+    .await;
+}
+
 #[nix_test]
 async fn test_backend_metadata() {
     let yaml = r#"inputs:
