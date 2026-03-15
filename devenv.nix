@@ -25,6 +25,12 @@ in
   claude.code = {
     enable = true;
     commands = {
+      bump-nix = ''
+        Bump the nix input in both devenv.lock and flake.lock
+
+        1. Run `devenv update nix` and `nix flake update nix` in parallel
+        2. Commit the changes
+      '';
       release = ''
         Release devenv version $ARGUMENTS
 
