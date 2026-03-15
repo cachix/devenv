@@ -30,7 +30,7 @@ use devenv_core::{CacheSettings, NixSettings};
 use devenv_eval_cache::{
     CacheError, CachedEval, CachingConfig, CachingEvalService, CachingEvalState, ResourceManager,
 };
-use miette::{IntoDiagnostic, Result, WrapErr, miette};
+use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use nix_bindings_expr::eval_state::{EvalState, EvalStateBuilder, gc_register_my_thread};
 use nix_bindings_expr::primop::{PrimOp, PrimOpMeta};
 use nix_bindings_expr::to_json::value_to_json;
@@ -48,7 +48,6 @@ use once_cell::sync::OnceCell;
 use ser_nix;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -108,10 +107,6 @@ pub struct NixRustBackend {
     // Note: Uses tokio::sync::OnceCell to match the framework layer type
     eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
 
-    // Flag to force cache bypass on next operation (for hot-reload)
-    // Set by invalidate(), checked and cleared by dev_env()
-    cache_invalidated: AtomicBool,
-
     // Cachix manager for handling binary cache configuration
     cachix_manager: Arc<CachixManager>,
 
@@ -150,10 +145,11 @@ pub struct NixRustBackend {
     devenv_value_invalidated: Arc<AtomicBool>,
 
     // Caching wrapper around EvalState (drops first — releases Arc to eval_state)
-    caching_eval_state: OnceCell<CachingEvalState<Arc<Mutex<EvalState>>>>,
+    caching_eval_state: OnceCell<CachingEvalState<Arc<Mutex<Option<EvalState>>>>>,
 
-    // EvalState (drops after caching wrapper; its C++ destructor may reference the store)
-    eval_state: Arc<Mutex<EvalState>>,
+    // EvalState (drops after caching wrapper; its C++ destructor may reference the store).
+    // Option allows dropping old state before creating new one during hot-reload.
+    eval_state: Arc<Mutex<Option<EvalState>>>,
 
     // Store (EvalState destructor may reference it)
     #[allow(dead_code)]
@@ -215,20 +211,20 @@ unsafe impl Sync for NixRustBackend {}
 /// The caller owns the Activity and controls its lifecycle. This guard just
 /// ensures file evaluations are logged to the correct activity.
 pub(crate) struct EvalSession<'a> {
-    guard: std::sync::MutexGuard<'a, EvalState>,
+    guard: std::sync::MutexGuard<'a, Option<EvalState>>,
     _eval_activity: EvalActivityGuard<'a>,
 }
 
 impl<'a> std::ops::Deref for EvalSession<'a> {
     type Target = EvalState;
     fn deref(&self) -> &Self::Target {
-        &self.guard
+        self.guard.as_ref().expect("EvalState not available")
     }
 }
 
 impl<'a> std::ops::DerefMut for EvalSession<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.guard
+        self.guard.as_mut().expect("EvalState not available")
     }
 }
 
@@ -436,7 +432,6 @@ impl NixRustBackend {
             nixpkgs_config_path,
             nix_log_bridge: log_bridge,
             eval_cache_pool,
-            cache_invalidated: AtomicBool::new(false),
             cachix_manager,
             cachix_daemon: cachix_daemon.clone(),
             cachix_activity: cachix_activity.clone(),
@@ -447,7 +442,7 @@ impl NixRustBackend {
             cached_devenv_value: Mutex::new(None),
             devenv_value_invalidated: Arc::new(AtomicBool::new(false)),
             caching_eval_state: OnceCell::new(),
-            eval_state: Arc::new(Mutex::new(eval_state)),
+            eval_state: Arc::new(Mutex::new(Some(eval_state))),
             store: Arc::new(store),
             flake_settings,
             fetchers_settings,
@@ -479,6 +474,10 @@ impl NixRustBackend {
             .eval_state
             .lock()
             .map_err(|e| miette!("Failed to lock eval state: {}", e))?;
+
+        if guard.is_none() {
+            bail!("EvalState is not available (hot-reload may have failed to create a new one)");
+        }
 
         // begin_eval returns a guard that calls end_eval on drop
         let eval_activity = self.nix_log_bridge.begin_eval(activity.id());
@@ -1211,18 +1210,11 @@ impl NixBackend for NixRustBackend {
         // Create cache key for shell paths
         let cache_key = caching_state.cache_key("shell");
 
-        // Check if cache was invalidated (for hot-reload)
-        let cache_invalidated = self.cache_invalidated.swap(false, Ordering::AcqRel);
-        if cache_invalidated {
-            tracing::debug!("Cache bypassed due to invalidation (hot-reload)");
-        }
-
         // Try to get cached paths and verify they still exist
         // Note: dev_env requires explicit path validation because store paths can be GC'd
-        let cached_paths: Option<CachedShellPaths> = if cache_invalidated {
-            // Skip cache lookup entirely when invalidated
-            None
-        } else if let Some(service) = caching_state.cached_eval().service() {
+        let cached_paths: Option<CachedShellPaths> = if let Some(service) =
+            caching_state.cached_eval().service()
+        {
             match service.get_cached(&cache_key).await {
                 Ok(Some(cached)) => {
                     match serde_json::from_str::<CachedShellPaths>(&cached.json_output) {
@@ -1303,7 +1295,9 @@ impl NixBackend for NixRustBackend {
             activity.cached();
             (paths.drv_path, paths.out_path, paths.env_path, true)
         } else {
-            // Cache miss or invalid paths - do full evaluation
+            // Cache miss, invalid paths, or force_refresh (hot-reload) - do full evaluation.
+            // eval_typed handles force_refresh: skips its own cache lookup but still
+            // collects inputs and stores the result, keeping the cache up to date.
             let result = async {
                 caching_state
                     .cached_eval()
@@ -1983,38 +1977,40 @@ impl NixBackend for NixRustBackend {
     }
 
     fn invalidate(&self) {
-        // Set the invalidation flag so the next dev_env() call bypasses cache
-        self.cache_invalidated.store(true, Ordering::Release);
+        // Drop old EvalState BEFORE creating new one to ensure C++ global state
+        // (fileEvalCache, GC roots, etc.) is fully cleaned up first.
+        match self.eval_state.lock() {
+            Ok(mut guard) => {
+                let old_state = guard.take();
+                drop(old_state);
+                tracing::debug!("Old EvalState dropped for hot-reload");
 
-        // Clear cached devenv value — it belongs to the old EvalState's GC heap.
-        // If this fails, we must NOT replace the EvalState, as the cached Value
-        // would point into the freed GC heap (use-after-free).
-        match self.cached_devenv_value.lock() {
-            Ok(mut cached) => *cached = None,
-            Err(e) => {
-                tracing::error!(
-                    "Failed to clear cached devenv value, skipping EvalState replacement: {}",
-                    e
-                );
-                return;
+                // Clear cached devenv value — it belongs to the old EvalState's GC heap.
+                // If this fails, we must NOT replace the EvalState, as the cached Value
+                // would point into the freed GC heap (use-after-free).
+                match self.cached_devenv_value.lock() {
+                    Ok(mut cached) => *cached = None,
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to clear cached devenv value, skipping EvalState replacement: {}",
+                            e
+                        );
+                        return;
+                    }
+                }
+
+                match self.create_fresh_eval_state() {
+                    Ok(new_state) => {
+                        *guard = Some(new_state);
+                        tracing::debug!("Fresh EvalState created for hot-reload");
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to create fresh eval state for reload: {}", e);
+                    }
+                }
             }
-        }
-
-        // Replace the EvalState to clear C++ fileEvalCache.
-        // The old EvalState caches evalFile() results by path, so reusing it
-        // returns stale ASTs even when files have changed on disk.
-        match self.create_fresh_eval_state() {
-            Ok(new_state) => match self.eval_state.lock() {
-                Ok(mut guard) => {
-                    *guard = new_state;
-                    tracing::debug!("EvalState replaced for hot-reload");
-                }
-                Err(e) => {
-                    tracing::error!("Failed to lock eval state for replacement: {}", e);
-                }
-            },
             Err(e) => {
-                tracing::error!("Failed to create fresh eval state for reload: {}", e);
+                tracing::error!("Failed to lock eval state for replacement: {}", e);
             }
         }
     }
