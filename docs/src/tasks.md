@@ -40,9 +40,15 @@ Succeeded         myapp:test          350ms
 3 Succeeded                           479.14ms
 ```
 
-## enterShell / enterTest
+## Lifecycle events
 
-If you'd like the tasks to run as part of the `enterShell` or `enterTest`:
+`devenv:enterShell` and `devenv:enterTest` are built-in lifecycle events that run setup tasks at specific points:
+
+- **`devenv:enterShell`** runs before the shell is entered (`devenv shell`) and before processes start (`devenv up`).
+- **`devenv:enterTest`** runs before tests execute (`devenv test`).
+  It depends on `devenv:enterShell`, so all shell setup tasks run first automatically.
+
+To hook into these events, use `before` to declare that your task should run before the event completes:
 
 ```nix title="devenv.nix"
 { pkgs, lib, config, ... }:
@@ -51,7 +57,12 @@ If you'd like the tasks to run as part of the `enterShell` or `enterTest`:
   tasks = {
     "bash:hello" = {
       exec = "echo 'Hello world from bash!'";
-      before = [ "devenv:enterShell" "devenv:enterTest" ];
+      before = [ "devenv:enterShell" ];
+    };
+
+    "myapp:test-setup" = {
+      exec = "echo 'Preparing test fixtures...'";
+      before = [ "devenv:enterTest" ];
     };
   };
 }
@@ -61,11 +72,14 @@ If you'd like the tasks to run as part of the `enterShell` or `enterTest`:
 $ devenv shell
 ...
 Running tasks     devenv:enterShell
-Succeeded         devenv:pre-commit:install 25ms
+Succeeded         devenv:git-hooks:install  25ms
 Succeeded         bash:hello                 9ms
 Succeeded         devenv:enterShell         13ms
 3 Succeeded                                 28.14ms
 ```
+
+Many devenv modules automatically hook into these events.
+For example, enabling git hooks registers `devenv:git-hooks:install` as a dependency of `devenv:enterShell`.
 
 ## Using your favourite language
 
