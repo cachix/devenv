@@ -55,7 +55,7 @@ let
         (database:
           let
             psqlUserFlags =
-              if (database.user != null && database.pass != null)
+              if (database.user != null)
               then "--user ${database.user}"
               else "";
           in
@@ -69,19 +69,19 @@ let
             )"
             echo $dbAlreadyExists
             if [ 1 -ne "$dbAlreadyExists" ]; then
-              ${lib.optionalString (database.user != null && database.pass != null) ''
+              ${lib.optionalString (database.user != null) ''
               echo "Creating role ${database.user}..."
               psql --dbname postgres <<'EOF'
               DO $$
                   BEGIN
-                      CREATE ROLE "${database.user}" WITH LOGIN PASSWORD '${database.pass}';
+                      CREATE ROLE "${database.user}" WITH LOGIN${lib.optionalString (database.pass != null) " PASSWORD '${database.pass}'"};
                       EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
                   END
               $$;
               EOF
             ''}
               echo "Creating database: ${database.name}"
-              echo 'CREATE DATABASE "${database.name}"${lib.optionalString (database.user != null && database.pass != null) " OWNER \"${database.user}\""};' | psql --dbname postgres
+              echo 'CREATE DATABASE "${database.name}"${lib.optionalString (database.user != null) " OWNER \"${database.user}\""};' | psql --dbname postgres
               if [ ${q database.initialSQL} != null ]
               then
                 echo "Running initial SQL on database ${database.name}"
@@ -328,14 +328,14 @@ in
             type = types.nullOr types.str;
             default = null;
             description = ''
-              Username of owner of the database (if null, the default $USER is used, only takes effect if `pass` is not `null`).
+              Username of owner of the database. If set, a role with this name is created and the database is owned by it. If null, the default $USER is used.
             '';
           };
           pass = lib.mkOption {
             type = types.nullOr types.str;
             default = null;
             description = ''
-              Password of owner of the database (only takes effect if `user` is not `null`).
+              Password of the database owner. Requires `user` to be set.
             '';
           };
           initialSQL = lib.mkOption {
