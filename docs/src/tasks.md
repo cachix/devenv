@@ -40,7 +40,7 @@ Succeeded         myapp:test          350ms
 3 Succeeded                           479.14ms
 ```
 
-## Lifecycle events
+## enterShell / enterTest
 
 `devenv:enterShell` and `devenv:enterTest` are built-in lifecycle events that run setup tasks at specific points:
 
