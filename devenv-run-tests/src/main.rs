@@ -620,9 +620,12 @@ exec '{bin_dir}/devenv' \
         env.push(("TZDIR", tzdir));
     }
     // RUST_LOG is needed for tests that verify environment variable handling
-    if let Ok(rust_log) = env::var("RUST_LOG") {
-        env.push(("RUST_LOG", rust_log));
-    }
+    // (e.g., the clean test checks that clean.keep preserves it).
+    // Always set it so the test works even when the parent doesn't export it.
+    env.push((
+        "RUST_LOG",
+        env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
+    ));
 
     let mut cmd = Command::new(&executable_path);
     cmd.stdin(Stdio::inherit())
