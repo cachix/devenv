@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- Show a quit prompt on first Ctrl+C in the TUI instead of immediately terminating ([#2607](https://github.com/cachix/devenv/pull/2607)).
 - Patched Nix to avoid hitting GitHub rate limits when fetching flake inputs (upstreamed as [NixOS/nix#15470](https://github.com/NixOS/nix/pull/15470)).
 - Improved eval performance by caching the initial Nix Value, avoiding re-evaluation of nixpkgs and the module system on subsequent attribute lookups (~2x time-to-shell improvement).
 - `devenv-run-tests`: `--only` and `--exclude` now support glob patterns (e.g. `--only 'python-*'`).
