@@ -404,7 +404,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         config
             .add_input(
                 "devenv",
-                &format!("path:{}?dir=src/modules", cwd.display()),
+                &format!("git+file:{}?dir=src/modules", cwd.display()),
                 &[],
             )
             .wrap_err("Failed to add devenv input")?;
@@ -561,7 +561,7 @@ done
 
 # Execute devenv with our devenv override first, then user overrides, then other arguments
 exec '{bin_dir}/devenv' \
-  --override-input devenv 'path:{cwd}?dir=src/modules' \
+  --override-input devenv 'git+file:{cwd}?dir=src/modules' \
   "${{override_inputs[@]}}" \
   "${{other_args[@]}}"
 "#,
