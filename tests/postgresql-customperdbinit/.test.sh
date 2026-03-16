@@ -33,3 +33,14 @@ psql \
     --username=testuser \
     --dbname=testdb \
     --command="INSERT INTO user_owned_table (name) VALUES ('test'); SELECT * FROM user_owned_table;"
+
+# verify testuser has a password set
+psql \
+    --set ON_ERROR_STOP=on \
+    --tuples-only \
+    --dbname=postgres \
+    -c "SELECT 1 FROM pg_authid WHERE rolname = 'testuser' AND rolpassword IS NOT NULL;" \
+    | grep -q '1' || {
+    echo "FAIL: testuser does not have a password set"
+    exit 1
+}

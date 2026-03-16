@@ -24,7 +24,6 @@
       }
       {
         name = "testdb2";
-        pass = "testuserpass";
       }
     ];
   };

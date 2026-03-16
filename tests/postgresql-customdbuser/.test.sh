@@ -5,6 +5,8 @@ wait_for_port 2345
 pg_isready -d template1
 
 # negative check (whether error handling in the test is reliable)
+# the following psql error is expected:
+echo "Expecting connection failure for non-existent user..."
 psql \
 	--set ON_ERROR_STOP=on \
 	--username=notexists \
@@ -14,6 +16,7 @@ psql \
 	echo "Problem with error handling!!!"
 	exit 1
 }
+echo "OK: connection correctly rejected"
 
 # verify testuser owns the database
 psql \
