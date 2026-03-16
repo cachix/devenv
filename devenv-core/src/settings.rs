@@ -264,9 +264,9 @@ impl ShellSettings {
             })
             .unwrap_or_else(|| "bash".to_string());
 
-        // Only bash and zsh are supported; fall back to bash for anything else
+        // Only bash, zsh, fish, and nu are supported; fall back to bash for anything else
         let shell = match shell.as_str() {
-            "bash" | "zsh" => shell,
+            "bash" | "zsh" | "fish" | "nu" => shell,
             _ => "bash".to_string(),
         };
 
@@ -586,12 +586,34 @@ mod tests {
     #[test]
     fn shell_settings_unsupported_shell_falls_back_to_bash() {
         let options = ShellOptions {
-            shell: Some("fish".into()),
+            shell: Some("tcsh".into()),
             ..Default::default()
         };
         let config = Config::default();
         let settings = ShellSettings::resolve(options, &config);
         assert_eq!(settings.shell, "bash");
+    }
+
+    #[test]
+    fn shell_settings_fish_from_options() {
+        let options = ShellOptions {
+            shell: Some("fish".into()),
+            ..Default::default()
+        };
+        let config = Config::default();
+        let settings = ShellSettings::resolve(options, &config);
+        assert_eq!(settings.shell, "fish");
+    }
+
+    #[test]
+    fn shell_settings_nu_from_options() {
+        let options = ShellOptions {
+            shell: Some("nu".into()),
+            ..Default::default()
+        };
+        let config = Config::default();
+        let settings = ShellSettings::resolve(options, &config);
+        assert_eq!(settings.shell, "nu");
     }
 
     #[test]

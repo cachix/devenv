@@ -218,8 +218,8 @@ pub struct ShellCliArgs {
         long,
         global = true,
         env = "DEVENV_SHELL_TYPE",
-        value_parser = clap::builder::PossibleValuesParser::new(["bash", "zsh"]),
-        help = "Shell to use for interactive sessions (bash, zsh)."
+        value_parser = clap::builder::PossibleValuesParser::new(["bash", "zsh", "fish", "nu"]),
+        help = "Shell to use for interactive sessions (bash, zsh, fish, nu)."
     )]
     pub shell: Option<String>,
 }

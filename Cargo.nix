@@ -859,6 +859,194 @@ rec {
         ];
 
       };
+      "aws-config" = rec {
+        crateName = "aws-config";
+        version = "1.8.15";
+        edition = "2021";
+        sha256 = "1g3x0jzw2v45mkg9lh654hcsk6sjvnba116jibxp0chlml5knj8i";
+        libName = "aws_config";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "Russell Cohen <rcoh@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+            features = [ "test-util" ];
+          }
+          {
+            name = "aws-runtime";
+            packageId = "aws-runtime";
+          }
+          {
+            name = "aws-sdk-sso";
+            packageId = "aws-sdk-sso";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "aws-sdk-ssooidc";
+            packageId = "aws-sdk-ssooidc";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "aws-sdk-sts";
+            packageId = "aws-sdk-sts";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+          }
+          {
+            name = "aws-smithy-http";
+            packageId = "aws-smithy-http";
+          }
+          {
+            name = "aws-smithy-json";
+            packageId = "aws-smithy-json";
+          }
+          {
+            name = "aws-smithy-runtime";
+            packageId = "aws-smithy-runtime";
+            features = [ "client" ];
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "client" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+          }
+          {
+            name = "aws-types";
+            packageId = "aws-types";
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "fastrand";
+            packageId = "fastrand";
+          }
+          {
+            name = "hex";
+            packageId = "hex";
+            optional = true;
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+          }
+          {
+            name = "sha1";
+            packageId = "sha1";
+            optional = true;
+          }
+          {
+            name = "time";
+            packageId = "time";
+            features = [ "parsing" ];
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "sync" ];
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+          }
+          {
+            name = "url";
+            packageId = "url";
+          }
+          {
+            name = "zeroize";
+            packageId = "zeroize";
+            optional = true;
+          }
+        ];
+        devDependencies = [
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+            features = [ "rt-tokio" "test-util" ];
+          }
+          {
+            name = "aws-smithy-runtime";
+            packageId = "aws-smithy-runtime";
+            features = [ "client" "test-util" ];
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "test-util" ];
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "full" "test-util" ];
+          }
+        ];
+        features = {
+          "client-hyper" = [ "aws-smithy-runtime/default-https-client" ];
+          "credentials-login" = [ "dep:aws-sdk-signin" "dep:sha2" "dep:zeroize" "dep:hex" "dep:base64-simd" "dep:uuid" "uuid?/v4" "dep:p256" "p256?/arithmetic" "p256?/pem" "dep:rand" ];
+          "credentials-process" = [ "tokio/process" ];
+          "default" = [ "default-https-client" "rt-tokio" "credentials-process" "sso" ];
+          "default-https-client" = [ "aws-smithy-runtime/default-https-client" ];
+          "rt-tokio" = [ "aws-smithy-async/rt-tokio" "aws-smithy-runtime/rt-tokio" "tokio/rt" ];
+          "rustls" = [ "client-hyper" ];
+          "sso" = [ "dep:aws-sdk-sso" "dep:aws-sdk-ssooidc" "dep:sha1" "dep:hex" "dep:zeroize" "aws-smithy-runtime-api/http-auth" ];
+          "test-util" = [ "aws-runtime/test-util" ];
+        };
+        resolvedDefaultFeatures = [ "credentials-process" "default" "default-https-client" "rt-tokio" "sso" ];
+      };
+      "aws-credential-types" = rec {
+        crateName = "aws-credential-types";
+        version = "1.2.14";
+        edition = "2021";
+        sha256 = "1xyagxr44jzl9li8z1vk2m0zj2h9qahgn19hzqhy26rs6ydpj84g";
+        libName = "aws_credential_types";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "client" "http-auth" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+          }
+          {
+            name = "zeroize";
+            packageId = "zeroize";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "test-util" ];
+          }
+        ];
+        features = {
+          "test-util" = [ "aws-smithy-runtime-api/test-util" ];
+        };
+        resolvedDefaultFeatures = [ "test-util" ];
+      };
       "aws-lc-rs" = rec {
         crateName = "aws-lc-rs";
         version = "1.16.1";
@@ -931,6 +1119,1379 @@ rec {
         };
         resolvedDefaultFeatures = [ "prebuilt-nasm" ];
       };
+      "aws-runtime" = rec {
+        crateName = "aws-runtime";
+        version = "1.7.2";
+        edition = "2021";
+        sha256 = "05wdp71rs6fzbrhlgmq3k3hkd6aap1h14g0m8wp21173awf6bh2z";
+        libName = "aws_runtime";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+          }
+          {
+            name = "aws-sigv4";
+            packageId = "aws-sigv4";
+            features = [ "http0-compat" ];
+          }
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+          }
+          {
+            name = "aws-smithy-http";
+            packageId = "aws-smithy-http";
+          }
+          {
+            name = "aws-smithy-runtime";
+            packageId = "aws-smithy-runtime";
+            features = [ "client" ];
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "client" "http-1x" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+            features = [ "http-body-1-x" ];
+          }
+          {
+            name = "aws-types";
+            packageId = "aws-types";
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "bytes-utils";
+            packageId = "bytes-utils";
+          }
+          {
+            name = "fastrand";
+            packageId = "fastrand";
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            rename = "http-1x";
+          }
+          {
+            name = "http-body";
+            packageId = "http-body 1.0.1";
+            rename = "http-body-1x";
+          }
+          {
+            name = "percent-encoding";
+            packageId = "percent-encoding";
+          }
+          {
+            name = "pin-project-lite";
+            packageId = "pin-project-lite";
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+          }
+          {
+            name = "uuid";
+            packageId = "uuid";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+            features = [ "test-util" ];
+          }
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+            features = [ "test-util" ];
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "test-util" "http-1x" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+            features = [ "test-util" ];
+          }
+          {
+            name = "bytes-utils";
+            packageId = "bytes-utils";
+          }
+        ];
+        features = {
+          "event-stream" = [ "dep:aws-smithy-eventstream" "aws-sigv4/sign-eventstream" ];
+          "http-02x" = [ "dep:http-02x" "dep:http-body-04x" ];
+          "sigv4a" = [ "aws-sigv4/sigv4a" ];
+          "test-util" = [ "dep:regex-lite" ];
+        };
+      };
+      "aws-sdk-secretsmanager" = rec {
+        crateName = "aws-sdk-secretsmanager";
+        version = "1.102.0";
+        edition = "2021";
+        sha256 = "086darwnrxjq75nmxjqc0ca0q7q54zl3nsk0kkpxg3zify26dsf9";
+        libName = "aws_sdk_secretsmanager";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "Russell Cohen <rcoh@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+          }
+          {
+            name = "aws-runtime";
+            packageId = "aws-runtime";
+          }
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+          }
+          {
+            name = "aws-smithy-http";
+            packageId = "aws-smithy-http";
+          }
+          {
+            name = "aws-smithy-json";
+            packageId = "aws-smithy-json";
+          }
+          {
+            name = "aws-smithy-observability";
+            packageId = "aws-smithy-observability";
+          }
+          {
+            name = "aws-smithy-runtime";
+            packageId = "aws-smithy-runtime";
+            features = [ "client" ];
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "client" "http-1x" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+            features = [ "http-body-1-x" ];
+          }
+          {
+            name = "aws-types";
+            packageId = "aws-types";
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "fastrand";
+            packageId = "fastrand";
+          }
+          {
+            name = "http";
+            packageId = "http 0.2.12";
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            rename = "http-1x";
+          }
+          {
+            name = "regex-lite";
+            packageId = "regex-lite";
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+            features = [ "test-util" ];
+          }
+        ];
+        features = {
+          "default" = [ "rustls" "default-https-client" "rt-tokio" ];
+          "default-https-client" = [ "aws-smithy-runtime/default-https-client" ];
+          "rt-tokio" = [ "aws-smithy-async/rt-tokio" "aws-smithy-types/rt-tokio" ];
+          "rustls" = [ "aws-smithy-runtime/tls-rustls" ];
+          "test-util" = [ "aws-credential-types/test-util" "aws-smithy-runtime/test-util" ];
+        };
+        resolvedDefaultFeatures = [ "default" "default-https-client" "rt-tokio" "rustls" ];
+      };
+      "aws-sdk-sso" = rec {
+        crateName = "aws-sdk-sso";
+        version = "1.96.0";
+        edition = "2021";
+        sha256 = "1cgmprph5svl4xl34yfi7ak8xd6xmqr5v4bfjr9v9ij8sbg6wjpn";
+        libName = "aws_sdk_sso";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "Russell Cohen <rcoh@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+          }
+          {
+            name = "aws-runtime";
+            packageId = "aws-runtime";
+          }
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+          }
+          {
+            name = "aws-smithy-http";
+            packageId = "aws-smithy-http";
+          }
+          {
+            name = "aws-smithy-json";
+            packageId = "aws-smithy-json";
+          }
+          {
+            name = "aws-smithy-observability";
+            packageId = "aws-smithy-observability";
+          }
+          {
+            name = "aws-smithy-runtime";
+            packageId = "aws-smithy-runtime";
+            features = [ "client" ];
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "client" "http-1x" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+            features = [ "http-body-1-x" ];
+          }
+          {
+            name = "aws-types";
+            packageId = "aws-types";
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "fastrand";
+            packageId = "fastrand";
+          }
+          {
+            name = "http";
+            packageId = "http 0.2.12";
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            rename = "http-1x";
+          }
+          {
+            name = "regex-lite";
+            packageId = "regex-lite";
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+            features = [ "test-util" ];
+          }
+        ];
+        features = {
+          "default" = [ "rustls" "default-https-client" "rt-tokio" ];
+          "default-https-client" = [ "aws-smithy-runtime/default-https-client" ];
+          "rt-tokio" = [ "aws-smithy-async/rt-tokio" "aws-smithy-types/rt-tokio" ];
+          "rustls" = [ "aws-smithy-runtime/tls-rustls" ];
+          "test-util" = [ "aws-credential-types/test-util" "aws-smithy-runtime/test-util" ];
+        };
+      };
+      "aws-sdk-ssooidc" = rec {
+        crateName = "aws-sdk-ssooidc";
+        version = "1.98.0";
+        edition = "2021";
+        sha256 = "0krl1bi0m84d86slqn5hv1bn5kkj9aqc9qds12zgq8n6schdg5nv";
+        libName = "aws_sdk_ssooidc";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "Russell Cohen <rcoh@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+          }
+          {
+            name = "aws-runtime";
+            packageId = "aws-runtime";
+          }
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+          }
+          {
+            name = "aws-smithy-http";
+            packageId = "aws-smithy-http";
+          }
+          {
+            name = "aws-smithy-json";
+            packageId = "aws-smithy-json";
+          }
+          {
+            name = "aws-smithy-observability";
+            packageId = "aws-smithy-observability";
+          }
+          {
+            name = "aws-smithy-runtime";
+            packageId = "aws-smithy-runtime";
+            features = [ "client" ];
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "client" "http-1x" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+            features = [ "http-body-1-x" ];
+          }
+          {
+            name = "aws-types";
+            packageId = "aws-types";
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "fastrand";
+            packageId = "fastrand";
+          }
+          {
+            name = "http";
+            packageId = "http 0.2.12";
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            rename = "http-1x";
+          }
+          {
+            name = "regex-lite";
+            packageId = "regex-lite";
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+            features = [ "test-util" ];
+          }
+        ];
+        features = {
+          "default" = [ "rustls" "default-https-client" "rt-tokio" ];
+          "default-https-client" = [ "aws-smithy-runtime/default-https-client" ];
+          "rt-tokio" = [ "aws-smithy-async/rt-tokio" "aws-smithy-types/rt-tokio" ];
+          "rustls" = [ "aws-smithy-runtime/tls-rustls" ];
+          "test-util" = [ "aws-credential-types/test-util" "aws-smithy-runtime/test-util" ];
+        };
+      };
+      "aws-sdk-sts" = rec {
+        crateName = "aws-sdk-sts";
+        version = "1.100.0";
+        edition = "2021";
+        sha256 = "1jn7zifkb1v6vp6162l2i9xrc2srvcl87zjxkilpzxck7fjdvyzs";
+        libName = "aws_sdk_sts";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "Russell Cohen <rcoh@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+          }
+          {
+            name = "aws-runtime";
+            packageId = "aws-runtime";
+          }
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+          }
+          {
+            name = "aws-smithy-http";
+            packageId = "aws-smithy-http";
+          }
+          {
+            name = "aws-smithy-json";
+            packageId = "aws-smithy-json";
+          }
+          {
+            name = "aws-smithy-observability";
+            packageId = "aws-smithy-observability";
+          }
+          {
+            name = "aws-smithy-query";
+            packageId = "aws-smithy-query";
+          }
+          {
+            name = "aws-smithy-runtime";
+            packageId = "aws-smithy-runtime";
+            features = [ "client" ];
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "client" "http-1x" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+            features = [ "http-body-1-x" ];
+          }
+          {
+            name = "aws-smithy-xml";
+            packageId = "aws-smithy-xml";
+          }
+          {
+            name = "aws-types";
+            packageId = "aws-types";
+          }
+          {
+            name = "fastrand";
+            packageId = "fastrand";
+          }
+          {
+            name = "http";
+            packageId = "http 0.2.12";
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            rename = "http-1x";
+          }
+          {
+            name = "regex-lite";
+            packageId = "regex-lite";
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+            features = [ "test-util" ];
+          }
+          {
+            name = "aws-runtime";
+            packageId = "aws-runtime";
+            features = [ "test-util" ];
+          }
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+            features = [ "test-util" ];
+          }
+          {
+            name = "aws-smithy-runtime";
+            packageId = "aws-smithy-runtime";
+            features = [ "test-util" ];
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "test-util" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+            features = [ "http-body-1-x" "test-util" ];
+          }
+        ];
+        features = {
+          "default" = [ "rustls" "default-https-client" "rt-tokio" ];
+          "default-https-client" = [ "aws-smithy-runtime/default-https-client" ];
+          "rt-tokio" = [ "aws-smithy-async/rt-tokio" "aws-smithy-types/rt-tokio" ];
+          "rustls" = [ "aws-smithy-runtime/tls-rustls" ];
+          "test-util" = [ "aws-credential-types/test-util" "aws-smithy-runtime/test-util" ];
+        };
+      };
+      "aws-sigv4" = rec {
+        crateName = "aws-sigv4";
+        version = "1.4.2";
+        edition = "2021";
+        sha256 = "1x6inl28qk6a9i5j0s2zy3yl8iw53wgy4y3pg4isp0v6780n1dmh";
+        libName = "aws_sigv4";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "David Barsky <me@davidbarsky.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+          }
+          {
+            name = "aws-smithy-http";
+            packageId = "aws-smithy-http";
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "client" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "form_urlencoded";
+            packageId = "form_urlencoded";
+            optional = true;
+          }
+          {
+            name = "hex";
+            packageId = "hex";
+          }
+          {
+            name = "hmac";
+            packageId = "hmac";
+          }
+          {
+            name = "http";
+            packageId = "http 0.2.12";
+            rename = "http0";
+            optional = true;
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            optional = true;
+          }
+          {
+            name = "percent-encoding";
+            packageId = "percent-encoding";
+            optional = true;
+          }
+          {
+            name = "sha2";
+            packageId = "sha2";
+          }
+          {
+            name = "time";
+            packageId = "time";
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+            features = [ "test-util" "hardcoded-credentials" ];
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "client" "test-util" ];
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "time";
+            packageId = "time";
+            features = [ "parsing" ];
+          }
+        ];
+        features = {
+          "default" = [ "sign-http" "http1" ];
+          "http0-compat" = [ "dep:http0" ];
+          "http1" = [ "dep:http" ];
+          "sign-eventstream" = [ "dep:aws-smithy-eventstream" ];
+          "sign-http" = [ "dep:http0" "dep:percent-encoding" "dep:form_urlencoded" ];
+          "sigv4a" = [ "dep:p256" "dep:crypto-bigint" "dep:subtle" "dep:zeroize" "dep:ring" ];
+        };
+        resolvedDefaultFeatures = [ "default" "http0-compat" "http1" "sign-http" ];
+      };
+      "aws-smithy-async" = rec {
+        crateName = "aws-smithy-async";
+        version = "1.2.14";
+        edition = "2021";
+        sha256 = "1z5cb4dasm2s698x8py79mirhi94d8r0qh3835bq996xddiazz1g";
+        libName = "aws_smithy_async";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "John DiSanti <jdisanti@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "futures-util";
+            packageId = "futures-util";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "pin-project-lite";
+            packageId = "pin-project-lite";
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "sync" ];
+          }
+        ];
+        devDependencies = [
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "rt" "macros" "test-util" ];
+          }
+        ];
+        features = {
+          "rt-tokio" = [ "tokio/time" ];
+          "test-util" = [ "rt-tokio" "tokio/rt" ];
+        };
+        resolvedDefaultFeatures = [ "rt-tokio" ];
+      };
+      "aws-smithy-http" = rec {
+        crateName = "aws-smithy-http";
+        version = "0.63.6";
+        edition = "2021";
+        sha256 = "0cajps6ywn129gxmhh4k1s5vw49gqhrx703isbm4jdrc3kfb46ms";
+        libName = "aws_smithy_http";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "Russell Cohen <rcoh@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "client" "http-1x" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+            features = [ "byte-stream-poll-next" "http-body-1-x" ];
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "bytes-utils";
+            packageId = "bytes-utils";
+          }
+          {
+            name = "futures-core";
+            packageId = "futures-core";
+          }
+          {
+            name = "futures-util";
+            packageId = "futures-util";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            rename = "http-1x";
+          }
+          {
+            name = "http-body";
+            packageId = "http-body 1.0.1";
+            rename = "http-body-1x";
+          }
+          {
+            name = "http-body-util";
+            packageId = "http-body-util";
+          }
+          {
+            name = "percent-encoding";
+            packageId = "percent-encoding";
+          }
+          {
+            name = "pin-project-lite";
+            packageId = "pin-project-lite";
+          }
+          {
+            name = "pin-utils";
+            packageId = "pin-utils";
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "futures-util";
+            packageId = "futures-util";
+            usesDefaultFeatures = false;
+          }
+        ];
+        features = {
+          "aws-smithy-eventstream" = [ "dep:aws-smithy-eventstream" ];
+          "event-stream" = [ "aws-smithy-eventstream" ];
+          "rt-tokio" = [ "aws-smithy-types/rt-tokio" ];
+        };
+      };
+      "aws-smithy-http-client" = rec {
+        crateName = "aws-smithy-http-client";
+        version = "1.1.12";
+        edition = "2021";
+        sha256 = "0sgpqnkznfd468d439krf7xg91qr3059v2cb09iz5rpfgxd1cbva";
+        libName = "aws_smithy_http_client";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "client" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+          }
+          {
+            name = "h2";
+            packageId = "h2 0.3.27";
+            rename = "h2-0-3";
+            optional = true;
+          }
+          {
+            name = "h2";
+            packageId = "h2 0.4.13";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "http";
+            packageId = "http 0.2.12";
+            rename = "http-02x";
+            optional = true;
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            rename = "http-1x";
+            optional = true;
+          }
+          {
+            name = "http-body";
+            packageId = "http-body 0.4.6";
+            rename = "http-body-04x";
+            optional = true;
+          }
+          {
+            name = "hyper";
+            packageId = "hyper 0.14.32";
+            rename = "hyper-0-14";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "client" "http1" "http2" "tcp" "stream" ];
+          }
+          {
+            name = "hyper";
+            packageId = "hyper 1.8.1";
+            optional = true;
+            features = [ "client" "http1" "http2" ];
+          }
+          {
+            name = "hyper-rustls";
+            packageId = "hyper-rustls 0.24.2";
+            rename = "legacy-hyper-rustls";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "http1" "tls12" "logging" "acceptor" "tokio-runtime" "http2" ];
+          }
+          {
+            name = "hyper-rustls";
+            packageId = "hyper-rustls 0.27.7";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "http2" "http1" "native-tokio" "tls12" ];
+          }
+          {
+            name = "hyper-util";
+            packageId = "hyper-util";
+            optional = true;
+            features = [ "http1" "http2" ];
+          }
+          {
+            name = "pin-project-lite";
+            packageId = "pin-project-lite";
+          }
+          {
+            name = "rustls";
+            packageId = "rustls 0.21.12";
+            rename = "legacy-rustls";
+            optional = true;
+          }
+          {
+            name = "rustls";
+            packageId = "rustls 0.23.37";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "rustls-native-certs";
+            packageId = "rustls-native-certs";
+            optional = true;
+          }
+          {
+            name = "rustls-pki-types";
+            packageId = "rustls-pki-types";
+            optional = true;
+            features = [ "std" ];
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+          }
+          {
+            name = "tokio-rustls";
+            packageId = "tokio-rustls 0.26.4";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "tower";
+            packageId = "tower 0.5.3";
+            optional = true;
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+            features = [ "rt-tokio" "test-util" ];
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "test-util" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+            features = [ "http-body-0-4-x" "test-util" ];
+          }
+          {
+            name = "hyper-util";
+            packageId = "hyper-util";
+            features = [ "full" ];
+          }
+          {
+            name = "rustls-pki-types";
+            packageId = "rustls-pki-types";
+            features = [ "std" ];
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "macros" "rt" "rt-multi-thread" "test-util" "full" ];
+          }
+          {
+            name = "tokio-rustls";
+            packageId = "tokio-rustls 0.26.4";
+          }
+        ];
+        features = {
+          "default-client" = [ "aws-smithy-runtime-api/http-1x" "aws-smithy-types/http-body-1-x" "dep:hyper" "dep:hyper-util" "hyper-util?/client-legacy" "hyper-util?/client-proxy" "dep:http-1x" "dep:tower" "dep:rustls-pki-types" "dep:rustls-native-certs" ];
+          "hyper-014" = [ "aws-smithy-runtime-api/http-02x" "aws-smithy-types/http-body-0-4-x" "dep:http-02x" "dep:http-body-04x" "dep:hyper-0-14" "dep:h2-0-3" ];
+          "legacy-rustls-ring" = [ "dep:legacy-hyper-rustls" "dep:legacy-rustls" "dep:rustls-native-certs" "hyper-014" ];
+          "legacy-test-util" = [ "test-util" "dep:http-02x" "aws-smithy-runtime-api/http-02x" "aws-smithy-types/http-body-0-4-x" ];
+          "rustls-aws-lc" = [ "dep:rustls" "rustls?/aws_lc_rs" "rustls?/prefer-post-quantum" "dep:hyper-rustls" "dep:tokio-rustls" "default-client" ];
+          "rustls-aws-lc-fips" = [ "dep:rustls" "rustls?/fips" "rustls?/prefer-post-quantum" "dep:hyper-rustls" "dep:tokio-rustls" "default-client" ];
+          "rustls-ring" = [ "dep:rustls" "rustls?/ring" "dep:hyper-rustls" "dep:tokio-rustls" "default-client" ];
+          "s2n-tls" = [ "dep:s2n-tls" "dep:s2n-tls-hyper" "dep:s2n-tls-tokio" "default-client" ];
+          "test-util" = [ "dep:aws-smithy-protocol-test" "dep:serde" "dep:serde_json" "dep:indexmap" "dep:bytes" "dep:http-1x" "aws-smithy-runtime-api/http-1x" "dep:http-body-1x" "aws-smithy-types/http-body-1-x" "tokio/rt" ];
+          "wire-mock" = [ "test-util" "default-client" "hyper-util?/server" "hyper-util?/server-auto" "hyper-util?/service" "hyper-util?/server-graceful" "tokio/macros" "dep:http-body-util" ];
+        };
+        resolvedDefaultFeatures = [ "default-client" "hyper-014" "legacy-rustls-ring" "rustls-aws-lc" ];
+      };
+      "aws-smithy-json" = rec {
+        crateName = "aws-smithy-json";
+        version = "0.62.5";
+        edition = "2021";
+        sha256 = "0sl553j1frrnd3vgprfy7a71ybc238mavijj822dvvm2haxv0j4n";
+        libName = "aws_smithy_json";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "John DiSanti <jdisanti@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+          }
+        ];
+
+      };
+      "aws-smithy-observability" = rec {
+        crateName = "aws-smithy-observability";
+        version = "0.2.6";
+        edition = "2021";
+        sha256 = "176amda1ravk36bgrh7409q855cn32ks72ys40cvzvbks4aj6v50";
+        libName = "aws_smithy_observability";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+          }
+        ];
+
+      };
+      "aws-smithy-query" = rec {
+        crateName = "aws-smithy-query";
+        version = "0.60.15";
+        edition = "2021";
+        sha256 = "1g8yyaj6msisn2g21jr2jhxis4hy1239vxrff9fxngpv8jbxfmhs";
+        libName = "aws_smithy_query";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "John DiSanti <jdisanti@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+            features = [ "http-body-1-x" ];
+          }
+          {
+            name = "urlencoding";
+            packageId = "urlencoding";
+          }
+        ];
+
+      };
+      "aws-smithy-runtime" = rec {
+        crateName = "aws-smithy-runtime";
+        version = "1.10.3";
+        edition = "2021";
+        sha256 = "0411mz9d3nky19ljgwqwlxrwyhx6qkpgjckjd65dabrddl2rk282";
+        libName = "aws_smithy_runtime";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "Zelda Hessler <zhessler@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+          }
+          {
+            name = "aws-smithy-http";
+            packageId = "aws-smithy-http";
+          }
+          {
+            name = "aws-smithy-http-client";
+            packageId = "aws-smithy-http-client";
+            optional = true;
+          }
+          {
+            name = "aws-smithy-observability";
+            packageId = "aws-smithy-observability";
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+            features = [ "http-body-0-4-x" ];
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "fastrand";
+            packageId = "fastrand";
+          }
+          {
+            name = "http";
+            packageId = "http 0.2.12";
+            rename = "http-02x";
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            rename = "http-1x";
+          }
+          {
+            name = "http-body";
+            packageId = "http-body 0.4.6";
+            rename = "http-body-04x";
+          }
+          {
+            name = "http-body";
+            packageId = "http-body 1.0.1";
+            rename = "http-body-1x";
+          }
+          {
+            name = "http-body-util";
+            packageId = "http-body-util";
+          }
+          {
+            name = "pin-project-lite";
+            packageId = "pin-project-lite";
+          }
+          {
+            name = "pin-utils";
+            packageId = "pin-utils";
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+            features = [ "rt-tokio" "test-util" ];
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "test-util" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+            features = [ "test-util" ];
+          }
+          {
+            name = "fastrand";
+            packageId = "fastrand";
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "macros" "rt" "rt-multi-thread" "test-util" "full" ];
+          }
+        ];
+        features = {
+          "client" = [ "aws-smithy-runtime-api/client" "aws-smithy-types/http-body-1-x" ];
+          "connector-hyper-0-14-x" = [ "dep:aws-smithy-http-client" "aws-smithy-http-client?/hyper-014" ];
+          "default-https-client" = [ "dep:aws-smithy-http-client" "aws-smithy-http-client?/rustls-aws-lc" ];
+          "http-auth" = [ "aws-smithy-runtime-api/http-auth" ];
+          "legacy-test-util" = [ "aws-smithy-runtime-api/test-util" "dep:tracing-subscriber" "aws-smithy-http-client/test-util" "connector-hyper-0-14-x" "aws-smithy-http-client/legacy-test-util" ];
+          "rt-tokio" = [ "tokio/rt" ];
+          "test-util" = [ "aws-smithy-runtime-api/test-util" "dep:tracing-subscriber" "aws-smithy-http-client/test-util" "legacy-test-util" ];
+          "tls-rustls" = [ "dep:aws-smithy-http-client" "aws-smithy-http-client?/legacy-rustls-ring" "connector-hyper-0-14-x" ];
+          "wire-mock" = [ "legacy-test-util" "aws-smithy-http-client/wire-mock" ];
+        };
+        resolvedDefaultFeatures = [ "client" "connector-hyper-0-14-x" "default-https-client" "rt-tokio" "tls-rustls" ];
+      };
+      "aws-smithy-runtime-api" = rec {
+        crateName = "aws-smithy-runtime-api";
+        version = "1.11.6";
+        edition = "2021";
+        sha256 = "1rkr79rw6wjj2y5jc2fsmcywc7p294q0ly1bl15vm4cpqb4v6sl7";
+        libName = "aws_smithy_runtime_api";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "Zelda Hessler <zhessler@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+            features = [ "http-body-1-x" ];
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "http";
+            packageId = "http 0.2.12";
+            rename = "http-02x";
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            rename = "http-1x";
+          }
+          {
+            name = "pin-project-lite";
+            packageId = "pin-project-lite";
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "sync" ];
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+          }
+          {
+            name = "zeroize";
+            packageId = "zeroize";
+            optional = true;
+          }
+        ];
+        devDependencies = [
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "macros" "rt" "rt-multi-thread" ];
+          }
+        ];
+        features = {
+          "http-auth" = [ "dep:zeroize" ];
+          "test-util" = [ "aws-smithy-types/test-util" "http-1x" ];
+        };
+        resolvedDefaultFeatures = [ "client" "default" "http-02x" "http-1x" "http-auth" "test-util" ];
+      };
+      "aws-smithy-types" = rec {
+        crateName = "aws-smithy-types";
+        version = "1.4.7";
+        edition = "2021";
+        sha256 = "0p69816m27cfznmn18q96n179ljqp607c4s5j1xwajwfmbxxnwwx";
+        libName = "aws_smithy_types";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "Russell Cohen <rcoh@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "base64-simd";
+            packageId = "base64-simd";
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "bytes-utils";
+            packageId = "bytes-utils";
+          }
+          {
+            name = "futures-core";
+            packageId = "futures-core";
+            optional = true;
+          }
+          {
+            name = "http";
+            packageId = "http 0.2.12";
+            optional = true;
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            rename = "http-1x";
+          }
+          {
+            name = "http-body";
+            packageId = "http-body 0.4.6";
+            rename = "http-body-0-4";
+            optional = true;
+          }
+          {
+            name = "http-body";
+            packageId = "http-body 1.0.1";
+            rename = "http-body-1-0";
+            optional = true;
+          }
+          {
+            name = "http-body-util";
+            packageId = "http-body-util";
+            optional = true;
+          }
+          {
+            name = "itoa";
+            packageId = "itoa";
+          }
+          {
+            name = "num-integer";
+            packageId = "num-integer";
+          }
+          {
+            name = "pin-project-lite";
+            packageId = "pin-project-lite";
+          }
+          {
+            name = "pin-utils";
+            packageId = "pin-utils";
+          }
+          {
+            name = "ryu";
+            packageId = "ryu";
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            target = { target, features }: (target."aws_sdk_unstable" or false);
+            features = [ "derive" ];
+          }
+          {
+            name = "time";
+            packageId = "time";
+            features = [ "parsing" ];
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            optional = true;
+          }
+          {
+            name = "tokio-util";
+            packageId = "tokio-util";
+            optional = true;
+          }
+        ];
+        devDependencies = [
+          {
+            name = "serde";
+            packageId = "serde";
+            features = [ "derive" ];
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "macros" "rt" "rt-multi-thread" "fs" "io-util" ];
+          }
+        ];
+        features = {
+          "http-body-0-4-x" = [ "dep:http-body-0-4" "dep:http" ];
+          "http-body-1-x" = [ "dep:http-body-1-0" "dep:http-body-util" "dep:http-body-0-4" "dep:http" ];
+          "hyper-0-14-x" = [ "dep:hyper-0-14" ];
+          "rt-tokio" = [ "dep:http-body-0-4" "dep:tokio-util" "dep:tokio" "tokio?/rt" "tokio?/fs" "tokio?/io-util" "tokio-util?/io" "dep:futures-core" "dep:http" ];
+        };
+        resolvedDefaultFeatures = [ "byte-stream-poll-next" "http-body-0-4-x" "http-body-1-x" "rt-tokio" "test-util" ];
+      };
+      "aws-smithy-xml" = rec {
+        crateName = "aws-smithy-xml";
+        version = "0.60.15";
+        edition = "2021";
+        sha256 = "1cr27lfx4p0lkjbyicd12xgsjiihpvf83pwa5w17srx33bfjmq0c";
+        libName = "aws_smithy_xml";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "Russell Cohen <rcoh@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "xmlparser";
+            packageId = "xmlparser";
+          }
+        ];
+
+      };
+      "aws-types" = rec {
+        crateName = "aws-types";
+        version = "1.3.14";
+        edition = "2021";
+        sha256 = "1nb2b5rdhk9pz21chmwr2zymivydx4d0a4rwbf6kr6yxk4v35j27";
+        libName = "aws_types";
+        authors = [
+          "AWS Rust SDK Team <aws-sdk-rust@amazon.com>"
+          "Russell Cohen <rcoh@amazon.com>"
+        ];
+        dependencies = [
+          {
+            name = "aws-credential-types";
+            packageId = "aws-credential-types";
+          }
+          {
+            name = "aws-smithy-async";
+            packageId = "aws-smithy-async";
+          }
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "client" ];
+          }
+          {
+            name = "aws-smithy-types";
+            packageId = "aws-smithy-types";
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+          }
+        ];
+        buildDependencies = [
+          {
+            name = "rustc_version";
+            packageId = "rustc_version";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "aws-smithy-runtime-api";
+            packageId = "aws-smithy-runtime-api";
+            features = [ "http-02x" ];
+          }
+        ];
+        features = {
+          "aws-smithy-runtime" = [ "dep:aws-smithy-runtime" ];
+          "examples" = [ "dep:hyper-rustls" "aws-smithy-runtime/client" "aws-smithy-runtime/connector-hyper-0-14-x" "aws-smithy-runtime/tls-rustls" ];
+        };
+      };
       "axum 0.7.9" = rec {
         crateName = "axum";
         version = "0.7.9";
@@ -957,11 +2518,11 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
           }
           {
             name = "http-body-util";
@@ -1074,11 +2635,11 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
           }
           {
             name = "http-body-util";
@@ -1086,7 +2647,7 @@ rec {
           }
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             optional = true;
           }
           {
@@ -1174,7 +2735,7 @@ rec {
         devDependencies = [
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             features = [ "client" ];
           }
           {
@@ -1240,11 +2801,11 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
           }
           {
             name = "http-body-util";
@@ -1305,11 +2866,11 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
           }
           {
             name = "http-body-util";
@@ -1433,6 +2994,31 @@ rec {
         };
         resolvedDefaultFeatures = [ "alloc" "default" "std" ];
       };
+      "base64-simd" = rec {
+        crateName = "base64-simd";
+        version = "0.8.0";
+        edition = "2021";
+        sha256 = "15cihnjqpxy0h7llpk816czyp5z613yrvsivw9i8f5vkivkvp6ik";
+        libName = "base64_simd";
+        dependencies = [
+          {
+            name = "outref";
+            packageId = "outref";
+          }
+          {
+            name = "vsimd";
+            packageId = "vsimd";
+          }
+        ];
+        features = {
+          "alloc" = [ "vsimd/alloc" ];
+          "default" = [ "std" "detect" ];
+          "detect" = [ "vsimd/detect" ];
+          "std" = [ "alloc" "vsimd/std" ];
+          "unstable" = [ "vsimd/unstable" ];
+        };
+        resolvedDefaultFeatures = [ "alloc" "default" "detect" "std" ];
+      };
       "base64ct" = rec {
         crateName = "base64ct";
         version = "1.8.3";
@@ -1465,7 +3051,7 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "hyper-util";
@@ -1993,10 +3579,47 @@ rec {
           "Carl Lerche <me@carllerche.com>"
           "Sean McArthur <sean@seanmonstar.com>"
         ];
+        dependencies = [
+          {
+            name = "serde";
+            packageId = "serde";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "alloc" ];
+          }
+        ];
         features = {
           "default" = [ "std" ];
           "extra-platforms" = [ "dep:extra-platforms" ];
           "serde" = [ "dep:serde" ];
+        };
+        resolvedDefaultFeatures = [ "default" "serde" "std" ];
+      };
+      "bytes-utils" = rec {
+        crateName = "bytes-utils";
+        version = "0.1.4";
+        edition = "2021";
+        sha256 = "0dcd0lxfpj367j9nwm7izj4mkib3slg61rg4wqmpw0kvfnlf7bvx";
+        libName = "bytes_utils";
+        authors = [
+          "Michal 'vorner' Vaner <vorner@vorner.cz>"
+        ];
+        dependencies = [
+          {
+            name = "bytes";
+            packageId = "bytes";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "either";
+            packageId = "either";
+            usesDefaultFeatures = false;
+          }
+        ];
+        features = {
+          "default" = [ "std" ];
+          "serde" = [ "dep:serde" "bytes/serde" ];
+          "std" = [ "bytes/default" ];
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
@@ -4691,6 +6314,7 @@ rec {
           {
             name = "secretspec";
             packageId = "secretspec";
+            features = [ "cli" "keyring" "gcsm" "awssm" "vault" ];
           }
           {
             name = "ser_nix";
@@ -5180,6 +6804,12 @@ rec {
             features = [ "fancy" ];
           }
           {
+            name = "notify";
+            packageId = "notify";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
             name = "reqwest";
             packageId = "reqwest 0.13.2";
             features = [ "json" "query" "stream" ];
@@ -5209,7 +6839,11 @@ rec {
             packageId = "tempfile";
           }
         ];
-
+        features = {
+          "macos-kqueue" = [ "notify/macos_kqueue" ];
+          "notify" = [ "dep:notify" ];
+        };
+        resolvedDefaultFeatures = [ "default" "macos-kqueue" "notify" ];
       };
       "devenv-nix-backend" = rec {
         crateName = "devenv-nix-backend";
@@ -5294,6 +6928,7 @@ rec {
           {
             name = "secretspec";
             packageId = "secretspec";
+            features = [ "cli" "keyring" "gcsm" "awssm" "vault" ];
           }
           {
             name = "ser_nix";
@@ -5490,6 +7125,7 @@ rec {
         ];
         features = {
           "test-all" = [ "test-file-watcher" ];
+          "test-file-watcher" = [ "devenv-event-sources/macos-kqueue" ];
         };
         resolvedDefaultFeatures = [ "default" "test-all" "test-file-watcher" ];
       };
@@ -5579,6 +7215,10 @@ rec {
           {
             name = "devenv";
             packageId = "devenv";
+          }
+          {
+            name = "globset";
+            packageId = "globset";
           }
           {
             name = "miette";
@@ -7694,7 +9334,7 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "http-body-util";
@@ -7702,13 +9342,13 @@ rec {
           }
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             usesDefaultFeatures = false;
             features = [ "client" "http1" "http2" ];
           }
           {
             name = "hyper-rustls";
-            packageId = "hyper-rustls";
+            packageId = "hyper-rustls 0.27.7";
             usesDefaultFeatures = false;
             features = [ "http1" "http2" ];
           }
@@ -8917,6 +10557,821 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "log" ];
       };
+      "google-cloud-auth" = rec {
+        crateName = "google-cloud-auth";
+        version = "1.7.0";
+        edition = "2024";
+        sha256 = "1hxr9pbqvwki65rv1sggz48phdqd3jqd5a6jiarsdx4d41fbr0qz";
+        libName = "google_cloud_auth";
+        authors = [
+          "Google LLC"
+        ];
+        dependencies = [
+          {
+            name = "async-trait";
+            packageId = "async-trait";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "base64";
+            packageId = "base64";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+            usesDefaultFeatures = false;
+            features = [ "serde" ];
+          }
+          {
+            name = "chrono";
+            packageId = "chrono";
+            usesDefaultFeatures = false;
+            features = [ "clock" ];
+          }
+          {
+            name = "google-cloud-gax";
+            packageId = "google-cloud-gax";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "hex";
+            packageId = "hex";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "hmac";
+            packageId = "hmac";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "reqwest";
+            packageId = "reqwest 0.13.2";
+            usesDefaultFeatures = false;
+            features = [ "form" "json" "query" "rustls-no-provider" ];
+          }
+          {
+            name = "rustls";
+            packageId = "rustls 0.23.37";
+            usesDefaultFeatures = false;
+            features = [ "logging" "std" "tls12" ];
+          }
+          {
+            name = "rustls-pki-types";
+            packageId = "rustls-pki-types";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            usesDefaultFeatures = false;
+            features = [ "serde_derive" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "sha2";
+            packageId = "sha2";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "thiserror";
+            packageId = "thiserror 2.0.18";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "time";
+            packageId = "time";
+            usesDefaultFeatures = false;
+            features = [ "serde" ];
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            usesDefaultFeatures = false;
+            features = [ "fs" "process" ];
+          }
+          {
+            name = "url";
+            packageId = "url";
+            usesDefaultFeatures = false;
+          }
+        ];
+        buildDependencies = [
+          {
+            name = "rustc_version";
+            packageId = "rustc_version";
+            usesDefaultFeatures = false;
+          }
+        ];
+        devDependencies = [
+          {
+            name = "tokio";
+            packageId = "tokio";
+            usesDefaultFeatures = false;
+            features = [ "macros" "rt-multi-thread" "test-util" ];
+          }
+          {
+            name = "url";
+            packageId = "url";
+            usesDefaultFeatures = false;
+          }
+        ];
+        features = {
+          "default" = [ "default-idtoken-backend" "default-rustls-provider" ];
+          "default-idtoken-backend" = [ "dep:aws-lc-rs" "jsonwebtoken?/aws_lc_rs" ];
+          "default-rustls-provider" = [ "reqwest/default-tls" "rustls/aws_lc_rs" ];
+          "idtoken" = [ "dep:jsonwebtoken" "jsonwebtoken" ];
+          "jsonwebtoken" = [ "dep:jsonwebtoken" ];
+        };
+        resolvedDefaultFeatures = [ "default-rustls-provider" ];
+      };
+      "google-cloud-gax" = rec {
+        crateName = "google-cloud-gax";
+        version = "1.8.0";
+        edition = "2024";
+        sha256 = "0mh9slqh4lkgi962x3cgarfn9d8490rc09akd51lwj3w7djhk28q";
+        libName = "google_cloud_gax";
+        authors = [
+          "Google LLC"
+        ];
+        dependencies = [
+          {
+            name = "base64";
+            packageId = "base64";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+            usesDefaultFeatures = false;
+            features = [ "serde" ];
+          }
+          {
+            name = "futures";
+            packageId = "futures";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "google-cloud-rpc";
+            packageId = "google-cloud-rpc";
+            rename = "google-cloud-rpc";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "google-cloud-wkt";
+            packageId = "google-cloud-wkt";
+            rename = "wkt";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "pin-project";
+            packageId = "pin-project";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "rand";
+            packageId = "rand 0.10.0";
+            usesDefaultFeatures = false;
+            features = [ "thread_rng" ];
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            usesDefaultFeatures = false;
+            features = [ "serde_derive" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "thiserror";
+            packageId = "thiserror 2.0.18";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            usesDefaultFeatures = false;
+            features = [ "macros" "rt-multi-thread" "time" ];
+          }
+        ];
+        devDependencies = [
+          {
+            name = "serde";
+            packageId = "serde";
+            usesDefaultFeatures = false;
+            features = [ "serde_derive" ];
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            usesDefaultFeatures = false;
+            features = [ "test-util" ];
+          }
+        ];
+        features = {
+        };
+      };
+      "google-cloud-gax-internal" = rec {
+        crateName = "google-cloud-gax-internal";
+        version = "0.7.10";
+        edition = "2024";
+        sha256 = "18j2s102bcz6yz6xz4mkw5n8fb6m94dalc45lial2a673m60k5bk";
+        libName = "google_cloud_gax_internal";
+        authors = [
+          "Google LLC"
+        ];
+        dependencies = [
+          {
+            name = "bytes";
+            packageId = "bytes";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "serde" "serde" ];
+          }
+          {
+            name = "futures";
+            packageId = "futures";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "google-cloud-auth";
+            packageId = "google-cloud-auth";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "google-cloud-gax";
+            packageId = "google-cloud-gax";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "google-cloud-rpc";
+            packageId = "google-cloud-rpc";
+            rename = "google-cloud-rpc";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "http-body-util";
+            packageId = "http-body-util";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "hyper";
+            packageId = "hyper 1.8.1";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "lazy_static";
+            packageId = "lazy_static";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "opentelemetry";
+            packageId = "opentelemetry 0.31.0";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "internal-logs" "metrics" ];
+          }
+          {
+            name = "opentelemetry-semantic-conventions";
+            packageId = "opentelemetry-semantic-conventions 0.31.0";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "semconv_experimental" ];
+          }
+          {
+            name = "percent-encoding";
+            packageId = "percent-encoding";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "pin-project";
+            packageId = "pin-project";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "reqwest";
+            packageId = "reqwest 0.13.2";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "json" "query" ];
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "serde_derive" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "thiserror";
+            packageId = "thiserror 2.0.18";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "macros" "rt-multi-thread" ];
+          }
+          {
+            name = "tonic";
+            packageId = "tonic 0.14.5";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "tls-native-roots" ];
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "attributes" ];
+          }
+        ];
+        buildDependencies = [
+          {
+            name = "rustc_version";
+            packageId = "rustc_version";
+            usesDefaultFeatures = false;
+          }
+        ];
+        devDependencies = [
+          {
+            name = "bytes";
+            packageId = "bytes";
+            usesDefaultFeatures = false;
+            features = [ "serde" ];
+          }
+          {
+            name = "lazy_static";
+            packageId = "lazy_static";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            usesDefaultFeatures = false;
+            features = [ "test-util" ];
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+            usesDefaultFeatures = false;
+            features = [ "attributes" "std" ];
+          }
+        ];
+        features = {
+          "_default-rustls-provider" = [ "google-cloud-auth?/default-rustls-provider" "tonic?/tls-aws-lc" ];
+          "_internal-common" = [ "dep:bytes" "dep:futures" "dep:google-cloud-auth" "dep:google-cloud-gax" "dep:google-cloud-rpc" "dep:http" "dep:http-body-util" "dep:opentelemetry" "dep:opentelemetry-semantic-conventions" "dep:percent-encoding" "dep:pin-project" "dep:thiserror" "dep:tokio" "dep:tracing" ];
+          "_internal-grpc-client" = [ "_internal-common" "dep:http-body" "dep:prost" "dep:prost-types" "dep:serde_json" "dep:tokio-stream" "dep:tonic" "dep:tonic-prost" "dep:tower" "dep:wkt" ];
+          "_internal-http-client" = [ "_internal-common" "dep:hyper" "dep:lazy_static" "dep:reqwest" "dep:serde" "dep:serde_json" ];
+          "_internal-http-multipart" = [ "_internal-http-client" "reqwest?/multipart" ];
+          "_internal-http-stream" = [ "_internal-http-client" "reqwest?/stream" ];
+          "default" = [ "_default-rustls-provider" ];
+        };
+        resolvedDefaultFeatures = [ "_default-rustls-provider" "_internal-common" "_internal-http-client" ];
+      };
+      "google-cloud-iam-v1" = rec {
+        crateName = "google-cloud-iam-v1";
+        version = "1.6.0";
+        edition = "2024";
+        sha256 = "0xc9kiwxpm60bi0ccd3r2zkns04hcrslfzpk6bps70f5ndgr8dpl";
+        libName = "google_cloud_iam_v1";
+        authors = [
+          "Google LLC"
+        ];
+        dependencies = [
+          {
+            name = "async-trait";
+            packageId = "async-trait";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+            usesDefaultFeatures = false;
+            features = [ "serde" ];
+          }
+          {
+            name = "google-cloud-gax";
+            packageId = "google-cloud-gax";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "google-cloud-gax-internal";
+            packageId = "google-cloud-gax-internal";
+            rename = "gaxi";
+            usesDefaultFeatures = false;
+            features = [ "_internal-http-client" ];
+          }
+          {
+            name = "google-cloud-type";
+            packageId = "google-cloud-type";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "google-cloud-wkt";
+            packageId = "google-cloud-wkt";
+            rename = "wkt";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "lazy_static";
+            packageId = "lazy_static";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            usesDefaultFeatures = false;
+            features = [ "serde_derive" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "serde_with";
+            packageId = "serde_with";
+            usesDefaultFeatures = false;
+            features = [ "base64" "macros" "std" ];
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+            usesDefaultFeatures = false;
+            features = [ "attributes" ];
+          }
+        ];
+        features = {
+          "default" = [ "default-rustls-provider" ];
+          "default-rustls-provider" = [ "gaxi/_default-rustls-provider" ];
+        };
+      };
+      "google-cloud-location" = rec {
+        crateName = "google-cloud-location";
+        version = "1.6.0";
+        edition = "2024";
+        sha256 = "02a9nqpkz5hq36q8p4wkjbi28a0dr3wcf4klv4hvfhrk9q4yhahv";
+        libName = "google_cloud_location";
+        authors = [
+          "Google LLC"
+        ];
+        dependencies = [
+          {
+            name = "async-trait";
+            packageId = "async-trait";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+            usesDefaultFeatures = false;
+            features = [ "serde" ];
+          }
+          {
+            name = "google-cloud-gax";
+            packageId = "google-cloud-gax";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "google-cloud-gax-internal";
+            packageId = "google-cloud-gax-internal";
+            rename = "gaxi";
+            usesDefaultFeatures = false;
+            features = [ "_internal-http-client" ];
+          }
+          {
+            name = "google-cloud-wkt";
+            packageId = "google-cloud-wkt";
+            rename = "wkt";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "lazy_static";
+            packageId = "lazy_static";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            usesDefaultFeatures = false;
+            features = [ "serde_derive" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "serde_with";
+            packageId = "serde_with";
+            usesDefaultFeatures = false;
+            features = [ "base64" "macros" "std" ];
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+            usesDefaultFeatures = false;
+            features = [ "attributes" ];
+          }
+        ];
+        features = {
+          "default" = [ "default-rustls-provider" ];
+          "default-rustls-provider" = [ "gaxi/_default-rustls-provider" ];
+        };
+      };
+      "google-cloud-rpc" = rec {
+        crateName = "google-cloud-rpc";
+        version = "1.2.0";
+        edition = "2024";
+        sha256 = "0c2h4g48yxqp90jy0abk32ygawnby779zrkbmnflz2faa5vyj45x";
+        libName = "google_cloud_rpc";
+        authors = [
+          "Google LLC"
+        ];
+        dependencies = [
+          {
+            name = "bytes";
+            packageId = "bytes";
+            usesDefaultFeatures = false;
+            features = [ "serde" ];
+          }
+          {
+            name = "google-cloud-wkt";
+            packageId = "google-cloud-wkt";
+            rename = "wkt";
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            usesDefaultFeatures = false;
+            features = [ "serde_derive" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "serde_with";
+            packageId = "serde_with";
+            usesDefaultFeatures = false;
+            features = [ "base64" "macros" "std" ];
+          }
+        ];
+
+      };
+      "google-cloud-secretmanager-v1" = rec {
+        crateName = "google-cloud-secretmanager-v1";
+        version = "1.6.0";
+        edition = "2024";
+        sha256 = "0cdn7rdxn042b1mapsjaqf80yz2vix07d5jg0myvabda4v38m995";
+        libName = "google_cloud_secretmanager_v1";
+        authors = [
+          "Google LLC"
+        ];
+        dependencies = [
+          {
+            name = "async-trait";
+            packageId = "async-trait";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+            usesDefaultFeatures = false;
+            features = [ "serde" ];
+          }
+          {
+            name = "google-cloud-gax";
+            packageId = "google-cloud-gax";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "google-cloud-gax-internal";
+            packageId = "google-cloud-gax-internal";
+            rename = "gaxi";
+            usesDefaultFeatures = false;
+            features = [ "_internal-http-client" ];
+          }
+          {
+            name = "google-cloud-iam-v1";
+            packageId = "google-cloud-iam-v1";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "google-cloud-location";
+            packageId = "google-cloud-location";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "google-cloud-wkt";
+            packageId = "google-cloud-wkt";
+            rename = "wkt";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "lazy_static";
+            packageId = "lazy_static";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            usesDefaultFeatures = false;
+            features = [ "serde_derive" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "serde_with";
+            packageId = "serde_with";
+            usesDefaultFeatures = false;
+            features = [ "base64" "macros" "std" ];
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+            usesDefaultFeatures = false;
+            features = [ "attributes" ];
+          }
+        ];
+        features = {
+          "default" = [ "default-rustls-provider" ];
+          "default-rustls-provider" = [ "gaxi/_default-rustls-provider" ];
+        };
+        resolvedDefaultFeatures = [ "default" "default-rustls-provider" ];
+      };
+      "google-cloud-type" = rec {
+        crateName = "google-cloud-type";
+        version = "1.2.0";
+        edition = "2024";
+        sha256 = "1xkmxi2gfsx9fmnp4cf18kfwhipmp5jyl9bbjm1gz0lq7wpsr44k";
+        libName = "google_cloud_type";
+        authors = [
+          "Google LLC"
+        ];
+        dependencies = [
+          {
+            name = "bytes";
+            packageId = "bytes";
+            usesDefaultFeatures = false;
+            features = [ "serde" ];
+          }
+          {
+            name = "google-cloud-wkt";
+            packageId = "google-cloud-wkt";
+            rename = "wkt";
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            usesDefaultFeatures = false;
+            features = [ "serde_derive" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "serde_with";
+            packageId = "serde_with";
+            usesDefaultFeatures = false;
+            features = [ "base64" "macros" "std" ];
+          }
+        ];
+
+      };
+      "google-cloud-wkt" = rec {
+        crateName = "google-cloud-wkt";
+        version = "1.2.1";
+        edition = "2024";
+        sha256 = "0ajwkw0hqfxx7jji028rwd9z9gq3d1r8wz0ldx5wpaag1rdydbd0";
+        libName = "google_cloud_wkt";
+        authors = [
+          "Google LLC"
+        ];
+        dependencies = [
+          {
+            name = "base64";
+            packageId = "base64";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+            usesDefaultFeatures = false;
+            features = [ "serde" ];
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            usesDefaultFeatures = false;
+            features = [ "serde_derive" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "serde_with";
+            packageId = "serde_with";
+            usesDefaultFeatures = false;
+            features = [ "base64" "macros" "std" ];
+          }
+          {
+            name = "thiserror";
+            packageId = "thiserror 2.0.18";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "time";
+            packageId = "time";
+            usesDefaultFeatures = false;
+            features = [ "formatting" "parsing" ];
+          }
+          {
+            name = "url";
+            packageId = "url";
+            usesDefaultFeatures = false;
+          }
+        ];
+        devDependencies = [
+          {
+            name = "time";
+            packageId = "time";
+            usesDefaultFeatures = false;
+            features = [ "formatting" "macros" "parsing" ];
+          }
+        ];
+        features = {
+          "chrono" = [ "dep:chrono" ];
+        };
+      };
       "grid" = rec {
         crateName = "grid";
         version = "0.14.0";
@@ -8931,7 +11386,80 @@ rec {
         };
         resolvedDefaultFeatures = [ "std" ];
       };
-      "h2" = rec {
+      "h2 0.3.27" = rec {
+        crateName = "h2";
+        version = "0.3.27";
+        edition = "2018";
+        sha256 = "0b92141hilij015av6i5ziw9xfx4py3lbjy17yc35z5ih01sbv0b";
+        authors = [
+          "Carl Lerche <me@carllerche.com>"
+          "Sean McArthur <sean@seanmonstar.com>"
+        ];
+        dependencies = [
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "fnv";
+            packageId = "fnv";
+          }
+          {
+            name = "futures-core";
+            packageId = "futures-core";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "futures-sink";
+            packageId = "futures-sink";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "futures-util";
+            packageId = "futures-util";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "http";
+            packageId = "http 0.2.12";
+          }
+          {
+            name = "indexmap";
+            packageId = "indexmap 2.13.0";
+            features = [ "std" ];
+          }
+          {
+            name = "slab";
+            packageId = "slab";
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "io-util" ];
+          }
+          {
+            name = "tokio-util";
+            packageId = "tokio-util";
+            features = [ "codec" "io" ];
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+        ];
+        devDependencies = [
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "rt-multi-thread" "macros" "sync" "net" ];
+          }
+        ];
+        features = {
+        };
+      };
+      "h2 0.4.13" = rec {
         crateName = "h2";
         version = "0.4.13";
         edition = "2021";
@@ -8965,7 +11493,7 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "indexmap";
@@ -9322,7 +11850,33 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" ];
       };
-      "http" = rec {
+      "http 0.2.12" = rec {
+        crateName = "http";
+        version = "0.2.12";
+        edition = "2018";
+        sha256 = "1w81s4bcbmcj9bjp7mllm8jlz6b31wzvirz8bgpzbqkpwmbvn730";
+        authors = [
+          "Alex Crichton <alex@alexcrichton.com>"
+          "Carl Lerche <me@carllerche.com>"
+          "Sean McArthur <sean@seanmonstar.com>"
+        ];
+        dependencies = [
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "fnv";
+            packageId = "fnv";
+          }
+          {
+            name = "itoa";
+            packageId = "itoa";
+          }
+        ];
+
+      };
+      "http 1.4.0" = rec {
         crateName = "http";
         version = "1.4.0";
         edition = "2021";
@@ -9347,7 +11901,34 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
-      "http-body" = rec {
+      "http-body 0.4.6" = rec {
+        crateName = "http-body";
+        version = "0.4.6";
+        edition = "2018";
+        sha256 = "1lmyjfk6bqk6k9gkn1dxq770sb78pqbqshga241hr5p995bb5skw";
+        libName = "http_body";
+        authors = [
+          "Carl Lerche <me@carllerche.com>"
+          "Lucio Franco <luciofranco14@gmail.com>"
+          "Sean McArthur <sean@seanmonstar.com>"
+        ];
+        dependencies = [
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "http";
+            packageId = "http 0.2.12";
+          }
+          {
+            name = "pin-project-lite";
+            packageId = "pin-project-lite";
+          }
+        ];
+
+      };
+      "http-body 1.0.1" = rec {
         crateName = "http-body";
         version = "1.0.1";
         edition = "2018";
@@ -9365,7 +11946,7 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
         ];
 
@@ -9393,11 +11974,11 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
           }
           {
             name = "pin-project-lite";
@@ -9455,7 +12036,114 @@ rec {
         features = {
         };
       };
-      "hyper" = rec {
+      "hyper 0.14.32" = rec {
+        crateName = "hyper";
+        version = "0.14.32";
+        edition = "2018";
+        sha256 = "1rvcb0smz8q1i0y6p7rwxr02x5sclfg2hhxf3g0774zczn0cgps1";
+        authors = [
+          "Sean McArthur <sean@seanmonstar.com>"
+        ];
+        dependencies = [
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "futures-channel";
+            packageId = "futures-channel";
+          }
+          {
+            name = "futures-core";
+            packageId = "futures-core";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "futures-util";
+            packageId = "futures-util";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "h2";
+            packageId = "h2 0.3.27";
+            optional = true;
+          }
+          {
+            name = "http";
+            packageId = "http 0.2.12";
+          }
+          {
+            name = "http-body";
+            packageId = "http-body 0.4.6";
+          }
+          {
+            name = "httparse";
+            packageId = "httparse";
+          }
+          {
+            name = "httpdate";
+            packageId = "httpdate";
+          }
+          {
+            name = "itoa";
+            packageId = "itoa";
+          }
+          {
+            name = "pin-project-lite";
+            packageId = "pin-project-lite";
+          }
+          {
+            name = "socket2";
+            packageId = "socket2 0.5.10";
+            optional = true;
+            features = [ "all" ];
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "sync" ];
+          }
+          {
+            name = "tower-service";
+            packageId = "tower-service";
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "want";
+            packageId = "want";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "futures-util";
+            packageId = "futures-util";
+            usesDefaultFeatures = false;
+            features = [ "alloc" ];
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "fs" "macros" "io-std" "io-util" "rt" "rt-multi-thread" "sync" "time" "test-util" ];
+          }
+        ];
+        features = {
+          "ffi" = [ "libc" ];
+          "full" = [ "client" "http1" "http2" "server" "stream" "runtime" ];
+          "h2" = [ "dep:h2" ];
+          "http2" = [ "h2" ];
+          "libc" = [ "dep:libc" ];
+          "runtime" = [ "tcp" "tokio/rt" "tokio/time" ];
+          "socket2" = [ "dep:socket2" ];
+          "tcp" = [ "socket2" "tokio/net" "tokio/rt" "tokio/time" ];
+        };
+        resolvedDefaultFeatures = [ "client" "h2" "http1" "http2" "runtime" "server" "socket2" "stream" "tcp" ];
+      };
+      "hyper 1.8.1" = rec {
         crateName = "hyper";
         version = "1.8.1";
         edition = "2021";
@@ -9485,16 +12173,16 @@ rec {
           }
           {
             name = "h2";
-            packageId = "h2";
+            packageId = "h2 0.4.13";
             optional = true;
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
           }
           {
             name = "httparse";
@@ -9565,7 +12253,83 @@ rec {
         };
         resolvedDefaultFeatures = [ "client" "default" "http1" "http2" "server" ];
       };
-      "hyper-rustls" = rec {
+      "hyper-rustls 0.24.2" = rec {
+        crateName = "hyper-rustls";
+        version = "0.24.2";
+        edition = "2021";
+        sha256 = "1475j4a2nczz4aajzzsq3hpwg1zacmzbqg393a14j80ff8izsgpc";
+        libName = "hyper_rustls";
+        dependencies = [
+          {
+            name = "futures-util";
+            packageId = "futures-util";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "http";
+            packageId = "http 0.2.12";
+          }
+          {
+            name = "hyper";
+            packageId = "hyper 0.14.32";
+            usesDefaultFeatures = false;
+            features = [ "client" ];
+          }
+          {
+            name = "log";
+            packageId = "log";
+            optional = true;
+          }
+          {
+            name = "rustls";
+            packageId = "rustls 0.21.12";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+          }
+          {
+            name = "tokio-rustls";
+            packageId = "tokio-rustls 0.24.1";
+            usesDefaultFeatures = false;
+          }
+        ];
+        devDependencies = [
+          {
+            name = "hyper";
+            packageId = "hyper 0.14.32";
+            features = [ "full" ];
+          }
+          {
+            name = "rustls";
+            packageId = "rustls 0.21.12";
+            usesDefaultFeatures = false;
+            features = [ "tls12" ];
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "io-std" "macros" "net" "rt-multi-thread" ];
+          }
+        ];
+        features = {
+          "acceptor" = [ "hyper/server" "tokio-runtime" ];
+          "default" = [ "native-tokio" "http1" "tls12" "logging" "acceptor" ];
+          "http1" = [ "hyper/http1" ];
+          "http2" = [ "hyper/http2" ];
+          "log" = [ "dep:log" ];
+          "logging" = [ "log" "tokio-rustls/logging" "rustls/logging" ];
+          "native-tokio" = [ "tokio-runtime" "rustls-native-certs" ];
+          "rustls-native-certs" = [ "dep:rustls-native-certs" ];
+          "tls12" = [ "tokio-rustls/tls12" "rustls/tls12" ];
+          "tokio-runtime" = [ "hyper/runtime" ];
+          "webpki-roots" = [ "dep:webpki-roots" ];
+          "webpki-tokio" = [ "tokio-runtime" "webpki-roots" ];
+        };
+        resolvedDefaultFeatures = [ "acceptor" "http1" "http2" "log" "logging" "tls12" "tokio-runtime" ];
+      };
+      "hyper-rustls 0.27.7" = rec {
         crateName = "hyper-rustls";
         version = "0.27.7";
         edition = "2021";
@@ -9574,11 +12338,11 @@ rec {
         dependencies = [
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             usesDefaultFeatures = false;
           }
           {
@@ -9589,7 +12353,7 @@ rec {
           }
           {
             name = "rustls";
-            packageId = "rustls";
+            packageId = "rustls 0.23.37";
             usesDefaultFeatures = false;
           }
           {
@@ -9608,12 +12372,17 @@ rec {
           }
           {
             name = "tokio-rustls";
-            packageId = "tokio-rustls";
+            packageId = "tokio-rustls 0.26.4";
             usesDefaultFeatures = false;
           }
           {
             name = "tower-service";
             packageId = "tower-service";
+          }
+          {
+            name = "webpki-roots";
+            packageId = "webpki-roots 1.0.6";
+            optional = true;
           }
         ];
         devDependencies = [
@@ -9625,7 +12394,7 @@ rec {
           }
           {
             name = "rustls";
-            packageId = "rustls";
+            packageId = "rustls 0.23.37";
             usesDefaultFeatures = false;
             features = [ "tls12" ];
           }
@@ -9651,7 +12420,7 @@ rec {
           "webpki-roots" = [ "dep:webpki-roots" ];
           "webpki-tokio" = [ "webpki-roots" ];
         };
-        resolvedDefaultFeatures = [ "aws-lc-rs" "http1" "http2" "native-tokio" "ring" "rustls-native-certs" "tls12" ];
+        resolvedDefaultFeatures = [ "aws-lc-rs" "http1" "http2" "native-tokio" "ring" "rustls-native-certs" "tls12" "webpki-roots" "webpki-tokio" ];
       };
       "hyper-timeout" = rec {
         crateName = "hyper-timeout";
@@ -9665,7 +12434,7 @@ rec {
         dependencies = [
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
           }
           {
             name = "hyper-util";
@@ -9688,7 +12457,7 @@ rec {
         devDependencies = [
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             features = [ "http1" ];
           }
           {
@@ -9736,15 +12505,15 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
           }
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
           }
           {
             name = "ipnet";
@@ -9815,7 +12584,7 @@ rec {
           }
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             features = [ "full" ];
           }
           {
@@ -13734,7 +16503,7 @@ rec {
       };
       "nix-conf-parser" = rec {
         crateName = "nix-conf-parser";
-        version = "2.0.3";
+        version = "2.0.4";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./nix-conf-parser; };
         libName = "nix_conf_parser";
@@ -13925,7 +16694,7 @@ rec {
           "serde" = [ "notify-types/serde" ];
           "serialization-compat-6" = [ "notify-types/serialization-compat-6" ];
         };
-        resolvedDefaultFeatures = [ "default" "fsevent-sys" "macos_fsevent" ];
+        resolvedDefaultFeatures = [ "default" "fsevent-sys" "kqueue" "macos_fsevent" "macos_kqueue" "mio" ];
       };
       "notify-types" = rec {
         crateName = "notify-types";
@@ -14110,7 +16879,7 @@ rec {
           "default" = [ "std" ];
           "std" = [ "num-traits/std" ];
         };
-        resolvedDefaultFeatures = [ "i128" ];
+        resolvedDefaultFeatures = [ "default" "i128" "std" ];
       };
       "num-iter" = rec {
         crateName = "num-iter";
@@ -14433,7 +17202,7 @@ rec {
           }
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             optional = true;
             usesDefaultFeatures = false;
           }
@@ -14527,7 +17296,7 @@ rec {
         devDependencies = [
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             features = [ "server" ];
           }
           {
@@ -14654,7 +17423,7 @@ rec {
         ];
 
       };
-      "opentelemetry" = rec {
+      "opentelemetry 0.28.0" = rec {
         crateName = "opentelemetry";
         version = "0.28.0";
         edition = "2021";
@@ -14707,6 +17476,39 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "futures-core" "futures-sink" "internal-logs" "logs" "metrics" "pin-project-lite" "thiserror" "trace" "tracing" ];
       };
+      "opentelemetry 0.31.0" = rec {
+        crateName = "opentelemetry";
+        version = "0.31.0";
+        edition = "2021";
+        sha256 = "18629xsj4rsyiby9aj511q6wcw6s9m09gx3ymw1yjcvix1mcsjxq";
+        dependencies = [
+          {
+            name = "js-sys";
+            packageId = "js-sys";
+            target = { target, features }: (("wasm32" == target."arch" or null) && (!("wasi" == target."os" or null)));
+          }
+          {
+            name = "tracing";
+            packageId = "tracing";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+        ];
+        features = {
+          "default" = [ "trace" "metrics" "logs" "internal-logs" "futures" ];
+          "futures" = [ "futures-core" "futures-sink" "pin-project-lite" ];
+          "futures-core" = [ "dep:futures-core" ];
+          "futures-sink" = [ "dep:futures-sink" ];
+          "internal-logs" = [ "tracing" ];
+          "pin-project-lite" = [ "dep:pin-project-lite" ];
+          "spec_unstable_logs_enabled" = [ "logs" ];
+          "testing" = [ "trace" ];
+          "thiserror" = [ "dep:thiserror" ];
+          "trace" = [ "futures" "thiserror" ];
+          "tracing" = [ "dep:tracing" ];
+        };
+        resolvedDefaultFeatures = [ "internal-logs" "metrics" "tracing" ];
+      };
       "opentelemetry-http" = rec {
         crateName = "opentelemetry-http";
         version = "0.28.0";
@@ -14724,13 +17526,13 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
             usesDefaultFeatures = false;
             features = [ "std" ];
           }
           {
             name = "opentelemetry";
-            packageId = "opentelemetry";
+            packageId = "opentelemetry 0.28.0";
             features = [ "trace" ];
           }
           {
@@ -14775,14 +17577,14 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
             optional = true;
             usesDefaultFeatures = false;
             features = [ "std" ];
           }
           {
             name = "opentelemetry";
-            packageId = "opentelemetry";
+            packageId = "opentelemetry 0.28.0";
             usesDefaultFeatures = false;
           }
           {
@@ -14886,7 +17688,7 @@ rec {
         dependencies = [
           {
             name = "opentelemetry";
-            packageId = "opentelemetry";
+            packageId = "opentelemetry 0.28.0";
             usesDefaultFeatures = false;
           }
           {
@@ -14930,7 +17732,7 @@ rec {
         };
         resolvedDefaultFeatures = [ "gen-tonic" "gen-tonic-messages" "logs" "metrics" "prost" "tonic" "trace" ];
       };
-      "opentelemetry-semantic-conventions" = rec {
+      "opentelemetry-semantic-conventions 0.28.0" = rec {
         crateName = "opentelemetry-semantic-conventions";
         version = "0.28.0";
         edition = "2021";
@@ -14939,6 +17741,16 @@ rec {
         features = {
         };
         resolvedDefaultFeatures = [ "default" ];
+      };
+      "opentelemetry-semantic-conventions 0.31.0" = rec {
+        crateName = "opentelemetry-semantic-conventions";
+        version = "0.31.0";
+        edition = "2021";
+        sha256 = "0in8plv2l2ar7anzi7lrbll0fjfvaymkg5vc5bnvibs1w3gjjbp6";
+        libName = "opentelemetry_semantic_conventions";
+        features = {
+        };
+        resolvedDefaultFeatures = [ "semconv_experimental" ];
       };
       "opentelemetry_sdk" = rec {
         crateName = "opentelemetry_sdk";
@@ -14972,7 +17784,7 @@ rec {
           }
           {
             name = "opentelemetry";
-            packageId = "opentelemetry";
+            packageId = "opentelemetry 0.28.0";
           }
           {
             name = "percent-encoding";
@@ -15082,6 +17894,13 @@ rec {
           "uniquote" = [ "dep:uniquote" ];
         };
         resolvedDefaultFeatures = [ "conversions" "default" "memchr" "raw_os_str" ];
+      };
+      "outref" = rec {
+        crateName = "outref";
+        version = "0.5.2";
+        edition = "2021";
+        sha256 = "03pzw9aj4qskqhh0fkagy2mkgfwgj5a1m67ajlba5hw80h68100s";
+
       };
       "owo-colors" = rec {
         crateName = "owo-colors";
@@ -16715,7 +19534,7 @@ rec {
           }
           {
             name = "rustls";
-            packageId = "rustls";
+            packageId = "rustls 0.23.37";
             optional = true;
             usesDefaultFeatures = false;
             features = [ "std" ];
@@ -16832,7 +19651,7 @@ rec {
           }
           {
             name = "rustls";
-            packageId = "rustls";
+            packageId = "rustls 0.23.37";
             optional = true;
             usesDefaultFeatures = false;
             features = [ "std" ];
@@ -17603,6 +20422,21 @@ rec {
         };
         resolvedDefaultFeatures = [ "alloc" "dfa-build" "dfa-onepass" "dfa-search" "hybrid" "meta" "nfa" "nfa-backtrack" "nfa-pikevm" "nfa-thompson" "perf" "perf-inline" "perf-literal" "perf-literal-multisubstring" "perf-literal-substring" "std" "syntax" "unicode" "unicode-age" "unicode-bool" "unicode-case" "unicode-gencat" "unicode-perl" "unicode-script" "unicode-segment" "unicode-word-boundary" ];
       };
+      "regex-lite" = rec {
+        crateName = "regex-lite";
+        version = "0.1.9";
+        edition = "2021";
+        sha256 = "0wzr31ysmiy9sw48i36raqbm1iyk2xnq0lp4zbs6fzi47p3k9f6a";
+        libName = "regex_lite";
+        authors = [
+          "The Rust Project Developers"
+          "Andrew Gallant <jamslam@gmail.com>"
+        ];
+        features = {
+          "default" = [ "std" "string" ];
+        };
+        resolvedDefaultFeatures = [ "default" "std" "string" ];
+      };
       "regex-syntax" = rec {
         crateName = "regex-syntax";
         version = "0.8.10";
@@ -17656,17 +20490,17 @@ rec {
           }
           {
             name = "h2";
-            packageId = "h2";
+            packageId = "h2 0.4.13";
             optional = true;
             target = { target, features }: (!("wasm32" == target."arch" or null));
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
             target = { target, features }: (!("wasm32" == target."arch" or null));
           }
           {
@@ -17676,13 +20510,13 @@ rec {
           }
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             target = { target, features }: (!("wasm32" == target."arch" or null));
             features = [ "http1" "client" ];
           }
           {
             name = "hyper-rustls";
-            packageId = "hyper-rustls";
+            packageId = "hyper-rustls 0.27.7";
             optional = true;
             usesDefaultFeatures = false;
             target = { target, features }: (!("wasm32" == target."arch" or null));
@@ -17724,7 +20558,7 @@ rec {
           }
           {
             name = "rustls";
-            packageId = "rustls";
+            packageId = "rustls 0.23.37";
             optional = true;
             usesDefaultFeatures = false;
             target = { target, features }: (!("wasm32" == target."arch" or null));
@@ -17775,7 +20609,7 @@ rec {
           }
           {
             name = "tokio-rustls";
-            packageId = "tokio-rustls";
+            packageId = "tokio-rustls 0.26.4";
             optional = true;
             usesDefaultFeatures = false;
             target = { target, features }: (!("wasm32" == target."arch" or null));
@@ -17834,6 +20668,12 @@ rec {
             target = { target, features }: ("wasm32" == target."arch" or null);
             features = [ "AbortController" "AbortSignal" "Headers" "Request" "RequestInit" "RequestMode" "Response" "Window" "FormData" "Blob" "BlobPropertyBag" "ServiceWorkerGlobalScope" "RequestCredentials" "File" "ReadableStream" "RequestCache" ];
           }
+          {
+            name = "webpki-roots";
+            packageId = "webpki-roots 1.0.6";
+            optional = true;
+            target = { target, features }: (!("wasm32" == target."arch" or null));
+          }
         ];
         devDependencies = [
           {
@@ -17845,7 +20685,7 @@ rec {
           }
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             usesDefaultFeatures = false;
             target = { target, features }: (!("wasm32" == target."arch" or null));
             features = [ "http1" "http2" "client" "server" ];
@@ -17916,7 +20756,7 @@ rec {
           "system-proxy" = [ "hyper-util/client-proxy-system" ];
           "zstd" = [ "tower-http/decompression-zstd" ];
         };
-        resolvedDefaultFeatures = [ "__rustls" "__rustls-ring" "__tls" "blocking" "h2" "http2" "json" "rustls-tls-native-roots" "rustls-tls-native-roots-no-provider" "stream" ];
+        resolvedDefaultFeatures = [ "__rustls" "__rustls-ring" "__tls" "blocking" "h2" "http2" "json" "rustls-tls" "rustls-tls-native-roots" "rustls-tls-native-roots-no-provider" "rustls-tls-webpki-roots" "rustls-tls-webpki-roots-no-provider" "stream" ];
       };
       "reqwest 0.13.2" = rec {
         crateName = "reqwest";
@@ -17954,17 +20794,17 @@ rec {
           }
           {
             name = "h2";
-            packageId = "h2";
+            packageId = "h2 0.4.13";
             optional = true;
             target = { target, features }: (!("wasm32" == target."arch" or null));
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
             target = { target, features }: (!("wasm32" == target."arch" or null));
           }
           {
@@ -17974,13 +20814,13 @@ rec {
           }
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             target = { target, features }: (!("wasm32" == target."arch" or null));
             features = [ "http1" "client" ];
           }
           {
             name = "hyper-rustls";
-            packageId = "hyper-rustls";
+            packageId = "hyper-rustls 0.27.7";
             optional = true;
             usesDefaultFeatures = false;
             target = { target, features }: (!("wasm32" == target."arch" or null));
@@ -18028,7 +20868,7 @@ rec {
           }
           {
             name = "rustls";
-            packageId = "rustls";
+            packageId = "rustls 0.23.37";
             optional = true;
             usesDefaultFeatures = false;
             target = { target, features }: (!("wasm32" == target."arch" or null));
@@ -18076,7 +20916,7 @@ rec {
           }
           {
             name = "tokio-rustls";
-            packageId = "tokio-rustls";
+            packageId = "tokio-rustls 0.26.4";
             optional = true;
             usesDefaultFeatures = false;
             target = { target, features }: (!("wasm32" == target."arch" or null));
@@ -18146,7 +20986,7 @@ rec {
           }
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             usesDefaultFeatures = false;
             target = { target, features }: (!("wasm32" == target."arch" or null));
             features = [ "http1" "http2" "client" "server" ];
@@ -18214,7 +21054,7 @@ rec {
           "system-proxy" = [ "hyper-util/client-proxy-system" ];
           "zstd" = [ "tower-http/decompression-zstd" ];
         };
-        resolvedDefaultFeatures = [ "__rustls" "__rustls-aws-lc-rs" "__tls" "charset" "default" "default-tls" "http2" "json" "query" "rustls" "stream" "system-proxy" ];
+        resolvedDefaultFeatures = [ "__rustls" "__rustls-aws-lc-rs" "__tls" "charset" "default" "default-tls" "form" "http2" "json" "query" "rustls" "rustls-no-provider" "stream" "system-proxy" ];
       };
       "reqwest-middleware" = rec {
         crateName = "reqwest-middleware";
@@ -18236,7 +21076,7 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "reqwest";
@@ -18297,7 +21137,7 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "matchit";
@@ -18305,7 +21145,7 @@ rec {
           }
           {
             name = "opentelemetry";
-            packageId = "opentelemetry";
+            packageId = "opentelemetry 0.28.0";
             rename = "opentelemetry_0_28_pkg";
             optional = true;
           }
@@ -18498,12 +21338,12 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
             optional = true;
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
             optional = true;
           }
           {
@@ -19095,7 +21935,48 @@ rec {
         };
         resolvedDefaultFeatures = [ "alloc" "default" "fs" "std" "stdio" "termios" ];
       };
-      "rustls" = rec {
+      "rustls 0.21.12" = rec {
+        crateName = "rustls";
+        version = "0.21.12";
+        edition = "2021";
+        sha256 = "0gjdg2a9r81sdwkyw3n5yfbkrr6p9gyk3xr2kcsr3cs83x6s2miz";
+        dependencies = [
+          {
+            name = "log";
+            packageId = "log";
+            optional = true;
+          }
+          {
+            name = "ring";
+            packageId = "ring";
+          }
+          {
+            name = "rustls-webpki";
+            packageId = "rustls-webpki 0.101.7";
+            rename = "webpki";
+            features = [ "alloc" "std" ];
+          }
+          {
+            name = "sct";
+            packageId = "sct";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "log";
+            packageId = "log";
+          }
+        ];
+        features = {
+          "default" = [ "logging" "tls12" ];
+          "log" = [ "dep:log" ];
+          "logging" = [ "log" ];
+          "read_buf" = [ "rustversion" ];
+          "rustversion" = [ "dep:rustversion" ];
+        };
+        resolvedDefaultFeatures = [ "default" "log" "logging" "tls12" ];
+      };
+      "rustls 0.23.37" = rec {
         crateName = "rustls";
         version = "0.23.37";
         edition = "2021";
@@ -19131,7 +22012,7 @@ rec {
           }
           {
             name = "rustls-webpki";
-            packageId = "rustls-webpki";
+            packageId = "rustls-webpki 0.103.9";
             rename = "webpki";
             usesDefaultFeatures = false;
             features = [ "alloc" ];
@@ -19168,7 +22049,7 @@ rec {
           "std" = [ "webpki/std" "pki-types/std" "once_cell/std" ];
           "zlib" = [ "dep:zlib-rs" ];
         };
-        resolvedDefaultFeatures = [ "aws-lc-rs" "aws_lc_rs" "log" "logging" "ring" "std" "tls12" ];
+        resolvedDefaultFeatures = [ "aws-lc-rs" "aws_lc_rs" "log" "logging" "prefer-post-quantum" "ring" "std" "tls12" ];
       };
       "rustls-native-certs" = rec {
         crateName = "rustls-native-certs";
@@ -19293,7 +22174,7 @@ rec {
           }
           {
             name = "rustls";
-            packageId = "rustls";
+            packageId = "rustls 0.23.37";
             usesDefaultFeatures = false;
             features = [ "std" ];
           }
@@ -19309,21 +22190,21 @@ rec {
           }
           {
             name = "rustls-webpki";
-            packageId = "rustls-webpki";
+            packageId = "rustls-webpki 0.103.9";
             rename = "webpki";
             usesDefaultFeatures = false;
             target = { target, features }: ((target."unix" or false) && (!("android" == target."os" or null)) && (!("apple" == target."vendor" or null)) && (!("wasm32" == target."arch" or null)));
           }
           {
             name = "rustls-webpki";
-            packageId = "rustls-webpki";
+            packageId = "rustls-webpki 0.103.9";
             rename = "webpki";
             usesDefaultFeatures = false;
             target = { target, features }: ("wasm32" == target."arch" or null);
           }
           {
             name = "rustls-webpki";
-            packageId = "rustls-webpki";
+            packageId = "rustls-webpki 0.103.9";
             rename = "webpki";
             usesDefaultFeatures = false;
             target = { target, features }: ("android" == target."os" or null);
@@ -19354,7 +22235,7 @@ rec {
         devDependencies = [
           {
             name = "rustls";
-            packageId = "rustls";
+            packageId = "rustls 0.23.37";
             usesDefaultFeatures = false;
             features = [ "ring" ];
           }
@@ -19381,7 +22262,31 @@ rec {
         libName = "rustls_platform_verifier_android";
 
       };
-      "rustls-webpki" = rec {
+      "rustls-webpki 0.101.7" = rec {
+        crateName = "rustls-webpki";
+        version = "0.101.7";
+        edition = "2021";
+        sha256 = "0rapfhpkqp75552i8r0y7f4vq7csb4k7gjjans0df73sxv8paqlb";
+        libName = "webpki";
+        dependencies = [
+          {
+            name = "ring";
+            packageId = "ring";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "untrusted";
+            packageId = "untrusted";
+          }
+        ];
+        features = {
+          "alloc" = [ "ring/alloc" ];
+          "default" = [ "std" ];
+          "std" = [ "alloc" ];
+        };
+        resolvedDefaultFeatures = [ "alloc" "default" "std" ];
+      };
+      "rustls-webpki 0.103.9" = rec {
         crateName = "rustls-webpki";
         version = "0.103.9";
         edition = "2021";
@@ -19964,6 +22869,26 @@ rec {
           "default" = [ "use_std" ];
         };
       };
+      "sct" = rec {
+        crateName = "sct";
+        version = "0.7.1";
+        edition = "2021";
+        sha256 = "056lmi2xkzdg1dbai6ha3n57s18cbip4pnmpdhyljli3m99n216s";
+        authors = [
+          "Joseph Birr-Pixton <jpixton@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "ring";
+            packageId = "ring";
+          }
+          {
+            name = "untrusted";
+            packageId = "untrusted";
+          }
+        ];
+
+      };
       "sd-notify" = rec {
         crateName = "sd-notify";
         version = "0.4.5";
@@ -20010,16 +22935,26 @@ rec {
       };
       "secretspec" = rec {
         crateName = "secretspec";
-        version = "0.7.2";
+        version = "0.8.0";
         edition = "2024";
         crateBin = [];
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/secretspec";
-          rev = "65f6bd6bcbd9d39492b42f39faf04d641d861281";
-          sha256 = "0lbr28585y8f0abx2iv6d680rqr9whna33zz6lkhpv3g1mn22zmx";
+          rev = "423da6356c76b33e2147ce577e0644a29d2615a5";
+          sha256 = "1mrw9ij93ni8q6hba7d9hpw54cw0xpqg4aa6mg2h6fkfdxrbv8i7";
         };
         dependencies = [
+          {
+            name = "aws-config";
+            packageId = "aws-config";
+            optional = true;
+          }
+          {
+            name = "aws-sdk-secretsmanager";
+            packageId = "aws-sdk-secretsmanager";
+            optional = true;
+          }
           {
             name = "clap";
             packageId = "clap";
@@ -20040,6 +22975,11 @@ rec {
           {
             name = "etcetera";
             packageId = "etcetera 0.11.0";
+          }
+          {
+            name = "google-cloud-secretmanager-v1";
+            packageId = "google-cloud-secretmanager-v1";
+            optional = true;
           }
           {
             name = "inquire";
@@ -20070,6 +23010,13 @@ rec {
             packageId = "rand 0.9.2";
           }
           {
+            name = "reqwest";
+            packageId = "reqwest 0.12.28";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "json" "rustls-tls" ];
+          }
+          {
             name = "secrecy";
             packageId = "secrecy";
             features = [ "serde" ];
@@ -20096,6 +23043,11 @@ rec {
             packageId = "thiserror 2.0.18";
           }
           {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "rt" "rt-multi-thread" ];
+          }
+          {
             name = "toml";
             packageId = "toml 0.9.12+spec-1.1.0";
           }
@@ -20115,11 +23067,13 @@ rec {
           }
         ];
         features = {
+          "awssm" = [ "dep:aws-config" "dep:aws-sdk-secretsmanager" ];
           "default" = [ "cli" "keyring" ];
-          "gcsm" = [ "dep:google-cloud-secretmanager-v1" "dep:tokio" ];
+          "gcsm" = [ "dep:google-cloud-secretmanager-v1" ];
           "keyring" = [ "dep:keyring" "dep:whoami" ];
+          "vault" = [ "dep:reqwest" ];
         };
-        resolvedDefaultFeatures = [ "cli" "default" "keyring" ];
+        resolvedDefaultFeatures = [ "awssm" "cli" "default" "gcsm" "keyring" "vault" ];
       };
       "security-framework 2.11.1" = rec {
         crateName = "security-framework";
@@ -22496,12 +25450,12 @@ rec {
         dependencies = [
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
             optional = true;
           }
           {
             name = "opentelemetry";
-            packageId = "opentelemetry";
+            packageId = "opentelemetry 0.28.0";
             optional = true;
           }
           {
@@ -22517,7 +25471,7 @@ rec {
           }
           {
             name = "opentelemetry-semantic-conventions";
-            packageId = "opentelemetry-semantic-conventions";
+            packageId = "opentelemetry-semantic-conventions 0.28.0";
             optional = true;
           }
           {
@@ -22865,7 +25819,7 @@ rec {
           }
           {
             name = "rustls";
-            packageId = "rustls";
+            packageId = "rustls 0.23.37";
             optional = true;
             usesDefaultFeatures = false;
             features = [ "std" "tls12" ];
@@ -23673,7 +26627,7 @@ rec {
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
           }
           {
             name = "http-body-util";
@@ -25017,7 +27971,40 @@ rec {
         ];
 
       };
-      "tokio-rustls" = rec {
+      "tokio-rustls 0.24.1" = rec {
+        crateName = "tokio-rustls";
+        version = "0.24.1";
+        edition = "2018";
+        sha256 = "10bhibg57mqir7xjhb2xmf24xgfpx6fzpyw720a4ih8a737jg0y2";
+        libName = "tokio_rustls";
+        dependencies = [
+          {
+            name = "rustls";
+            packageId = "rustls 0.21.12";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "full" ];
+          }
+        ];
+        features = {
+          "dangerous_configuration" = [ "rustls/dangerous_configuration" ];
+          "default" = [ "logging" "tls12" ];
+          "logging" = [ "rustls/logging" ];
+          "secret_extraction" = [ "rustls/secret_extraction" ];
+          "tls12" = [ "rustls/tls12" ];
+        };
+        resolvedDefaultFeatures = [ "logging" "tls12" ];
+      };
+      "tokio-rustls 0.26.4" = rec {
         crateName = "tokio-rustls";
         version = "0.26.4";
         edition = "2021";
@@ -25026,7 +28013,7 @@ rec {
         dependencies = [
           {
             name = "rustls";
-            packageId = "rustls";
+            packageId = "rustls 0.23.37";
             usesDefaultFeatures = false;
             features = [ "std" ];
           }
@@ -25548,16 +28535,16 @@ rec {
           }
           {
             name = "h2";
-            packageId = "h2";
+            packageId = "h2 0.4.13";
             optional = true;
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
           }
           {
             name = "http-body-util";
@@ -25565,7 +28552,7 @@ rec {
           }
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             optional = true;
             features = [ "http1" "http2" ];
           }
@@ -25619,7 +28606,7 @@ rec {
           }
           {
             name = "tokio-rustls";
-            packageId = "tokio-rustls";
+            packageId = "tokio-rustls 0.26.4";
             optional = true;
             usesDefaultFeatures = false;
             features = [ "logging" "tls12" "ring" ];
@@ -25707,16 +28694,16 @@ rec {
           }
           {
             name = "h2";
-            packageId = "h2";
+            packageId = "h2 0.4.13";
             optional = true;
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
           }
           {
             name = "http-body-util";
@@ -25724,7 +28711,7 @@ rec {
           }
           {
             name = "hyper";
-            packageId = "hyper";
+            packageId = "hyper 1.8.1";
             optional = true;
             features = [ "http1" "http2" ];
           }
@@ -25748,6 +28735,11 @@ rec {
             packageId = "pin-project";
           }
           {
+            name = "rustls-native-certs";
+            packageId = "rustls-native-certs";
+            optional = true;
+          }
+          {
             name = "socket2";
             packageId = "socket2 0.6.3";
             optional = true;
@@ -25765,7 +28757,7 @@ rec {
           }
           {
             name = "tokio-rustls";
-            packageId = "tokio-rustls";
+            packageId = "tokio-rustls 0.26.4";
             optional = true;
             usesDefaultFeatures = false;
             features = [ "logging" "tls12" ];
@@ -25823,7 +28815,7 @@ rec {
           "transport" = [ "server" "channel" ];
           "zstd" = [ "dep:zstd" ];
         };
-        resolvedDefaultFeatures = [ "_tls-any" "channel" "codegen" "default" "router" "server" "tls-aws-lc" "tls-connect-info" "transport" ];
+        resolvedDefaultFeatures = [ "_tls-any" "channel" "codegen" "default" "router" "server" "tls-aws-lc" "tls-connect-info" "tls-native-roots" "transport" ];
       };
       "tonic-build 0.12.3" = rec {
         crateName = "tonic-build";
@@ -26347,11 +29339,11 @@ rec {
           }
           {
             name = "http";
-            packageId = "http";
+            packageId = "http 1.4.0";
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
             optional = true;
           }
           {
@@ -26394,7 +29386,7 @@ rec {
           }
           {
             name = "http-body";
-            packageId = "http-body";
+            packageId = "http-body 1.0.1";
           }
           {
             name = "tower";
@@ -26687,7 +29679,7 @@ rec {
           }
           {
             name = "opentelemetry";
-            packageId = "opentelemetry";
+            packageId = "opentelemetry 0.28.0";
             usesDefaultFeatures = false;
             features = [ "trace" ];
           }
@@ -26733,7 +29725,7 @@ rec {
         devDependencies = [
           {
             name = "opentelemetry";
-            packageId = "opentelemetry";
+            packageId = "opentelemetry 0.28.0";
             features = [ "trace" "metrics" ];
           }
           {
@@ -27332,6 +30324,17 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
+      "urlencoding" = rec {
+        crateName = "urlencoding";
+        version = "2.1.3";
+        edition = "2021";
+        sha256 = "1nj99jp37k47n0hvaz5fvz7z6jd0sb4ppvfy3nphr1zbnyixpy6s";
+        authors = [
+          "Kornel <kornel@geekhood.net>"
+          "Bertram Truong <b@bertramtruong.com>"
+        ];
+
+      };
       "utf8_iter" = rec {
         crateName = "utf8_iter";
         version = "1.0.4";
@@ -27705,6 +30708,17 @@ rec {
           "serde_derive" = [ "dep:serde_derive" ];
           "with-serde" = [ "serde" "serde_derive" ];
         };
+      };
+      "vsimd" = rec {
+        crateName = "vsimd";
+        version = "0.8.0";
+        edition = "2021";
+        sha256 = "0r4wn54jxb12r0x023r5yxcrqk785akmbddqkcafz9fm03584c2w";
+        features = {
+          "detect" = [ "std" ];
+          "std" = [ "alloc" ];
+        };
+        resolvedDefaultFeatures = [ "alloc" "detect" "std" ];
       };
       "vt100" = rec {
         crateName = "vt100";
@@ -32832,9 +35846,22 @@ rec {
           "serde" = [ "dep:serde" ];
         };
       };
+      "xmlparser" = rec {
+        crateName = "xmlparser";
+        version = "0.13.6";
+        edition = "2018";
+        sha256 = "1r796g21c70p983ax0j6rmhzmalg4rhx61mvd4farxdhfyvy1zk6";
+        authors = [
+          "Yevhenii Reizner <razrfalcon@gmail.com>"
+        ];
+        features = {
+          "default" = [ "std" ];
+        };
+        resolvedDefaultFeatures = [ "default" "std" ];
+      };
       "xtask" = rec {
         crateName = "xtask";
-        version = "2.0.3";
+        version = "2.0.4";
         edition = "2024";
         crateBin = [
           {

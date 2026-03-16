@@ -5,9 +5,13 @@
 //! hooks, and launch arguments.
 
 mod bash;
+mod fish;
+mod nushell;
 mod zsh;
 
 pub use bash::BashDialect;
+pub use fish::FishDialect;
+pub use nushell::NushellDialect;
 pub use zsh::ZshDialect;
 
 use std::path::{Path, PathBuf};
@@ -57,6 +61,8 @@ pub struct InteractiveArgs {
 pub fn create_dialect(shell_name: &str) -> Box<dyn ShellDialect> {
     match shell_name {
         "zsh" => Box::new(ZshDialect),
+        "fish" => Box::new(FishDialect),
+        "nu" => Box::new(NushellDialect),
         _ => Box::new(BashDialect),
     }
 }
