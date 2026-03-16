@@ -16,15 +16,15 @@
   };
 
   enterTest = ''
-        # Test that packages from `packages = [ pkgs.python3Packages.requests ]` are importable
-        python -c "import requests; print('requests version:', requests.__version__)"
+    # Test that packages from `packages = [ pkgs.python3Packages.requests ]` are importable
+    python -c "import requests; print('requests version:', requests.__version__)"
 
-        # Test that venv-installed packages are importable
-        python -c "import numpy; print('numpy version:', numpy.__version__)"
+    # Test that venv-installed packages are importable
+    python -c "import numpy; print('numpy version:', numpy.__version__)"
 
-        # Test that venv packages take priority over profile packages.
-        # numpy is installed in the venv, so its path should be under the venv.
-        python <<'PYEOF'
+    # Test that venv packages take priority over profile packages.
+    # numpy is installed in the venv, so its path should be under the venv.
+    python <<'PYEOF'
     import numpy, os
     venv = os.environ.get("VIRTUAL_ENV", "")
     assert venv, "VIRTUAL_ENV should be set"

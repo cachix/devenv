@@ -6,10 +6,22 @@ let
     map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
 
   drvOrPackageToPaths = drvOrPackage:
-    if drvOrPackage ? outputs then
-      builtins.map (output: drvOrPackage.${output}) drvOrPackage.outputs
-    else
-      [ drvOrPackage ];
+    let
+      outputs =
+        if drvOrPackage ? outputs then
+          builtins.map (output: drvOrPackage.${output}) drvOrPackage.outputs
+        else
+          [ drvOrPackage ];
+      # Include transitive Python dependencies so they end up in the profile's
+      # site-packages. Without this, packages added via `packages = [ pkgs.python3Packages.foo ]`
+      # would be importable but their dependencies (propagatedBuildInputs) would not,
+      # since dontAddPythonPath prevents the setup hook from adding them to PYTHONPATH.
+      pythonDeps =
+        if drvOrPackage ? requiredPythonModules
+        then drvOrPackage.requiredPythonModules
+        else [ ];
+    in
+    outputs ++ pythonDeps;
 
   profile = pkgs.buildEnv {
     name = "devenv-profile";
