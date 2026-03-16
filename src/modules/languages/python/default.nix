@@ -54,6 +54,10 @@ let
 
   # Write a .pth file into a venv's site-packages so that Nix profile
   # packages are importable, but venv-installed packages take priority.
+  # Note: this is a secondary mechanism; NIX_PYTHONPATH in env also makes
+  # profile packages available via sitecustomize.py (which uses site.addsitedir
+  # to append after venv site-packages). The .pth file is kept for environments
+  # where sitecustomize.py may not run (e.g. python -S).
   writePthFile = venvPath: ''
     echo "$DEVENV_PROFILE/${cfg.package.sitePackages}" > "${venvPath}/${cfg.package.sitePackages}/devenv-profile.pth"
   '';
@@ -706,8 +710,13 @@ in
         # Prevent nixpkgs setup hooks from adding individual package store
         # paths to PYTHONPATH. PYTHONPATH is prepended to sys.path before
         # site-packages, breaking venv package priority. Nix-provided
-        # packages are made available via .pth files instead.
+        # packages are made available via NIX_PYTHONPATH instead.
         dontAddPythonPath = "1";
+        # Make profile packages (including transitive deps from packages added
+        # via `packages = [ pkgs.python3Packages.foo ]`) importable. Nix's
+        # sitecustomize.py processes this using site.addsitedir(), which appends
+        # paths after venv site-packages, preserving venv package priority.
+        NIX_PYTHONPATH = "${config.devenv.profile}/${cfg.package.sitePackages}";
       }
       // (lib.optionalAttrs cfg.uv.enable {
         UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
