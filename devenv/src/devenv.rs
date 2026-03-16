@@ -115,18 +115,13 @@ impl Default for DevenvOptions {
 }
 
 #[derive(Default, Debug)]
-pub struct ProcessOptions<'a> {
-    /// An optional environment map to pass to the process.
-    /// If not provided, the process will be executed inside a freshly evaluated shell.
-    pub envs: Option<&'a HashMap<String, String>>,
+pub struct ProcessOptions {
     /// Whether the process should be detached from the current process.
     pub detach: bool,
     /// Whether the process should be logged to a file.
     pub log_to_file: bool,
     /// When true, fail if a port is in use instead of auto-allocating the next available.
     pub strict_ports: bool,
-    /// When true, skip running enterShell tasks (caller already ran them).
-    pub skip_tasks: bool,
     /// Command receiver for process control (restart, etc.)
     pub command_rx: Option<tokio::sync::mpsc::Receiver<processes::ProcessCommand>>,
 }
@@ -1199,19 +1194,6 @@ impl Devenv {
         };
 
         let task_configs = self.load_tasks().await?;
-        self.run_enter_shell_tasks_inner(task_configs, envs, verbosity, tui)
-            .await
-    }
-
-    /// Core logic for running tasks with a pre-loaded task config.
-    /// Stores task-exported env vars on self so prepare_shell() can inject them.
-    async fn run_enter_shell_tasks_inner(
-        &self,
-        task_configs: Vec<tasks::TaskConfig>,
-        envs: HashMap<String, String>,
-        verbosity: tasks::VerbosityLevel,
-        tui: bool,
-    ) -> Result<BTreeMap<String, String>> {
         // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
         // Task failures are shown in the TUI/UI output, no need to bail here.
         let (_status, exports) = self
@@ -1257,12 +1239,6 @@ impl Devenv {
         // Store on self so prepare_shell() can inject them into the bash script
         *self.task_exports.lock().unwrap() = exports.clone();
         Ok((status, exports))
-    }
-
-    /// Get the shell environment as a map of environment variables.
-    /// This captures the environment after running the devenv shell script.
-    pub async fn get_shell_environment(&self) -> Result<HashMap<String, String>> {
-        self.capture_shell_environment().await
     }
 
     /// Get the path to bash.
@@ -1317,7 +1293,7 @@ impl Devenv {
         // Run script and capture the Nix shell environment variables.
         // Skip the legacy shellHook task runner (devenv-tasks run devenv:enterShell)
         // because the 2.0+ Rust code runs enterShell tasks separately via
-        // run_enter_shell_tasks_inner(). Running them inside this subprocess would
+        // run_enter_shell_tasks(). Running them inside this subprocess would
         // be redundant and, worse, a @completed task failure there would cause the
         // subprocess to exit non-zero, aborting the environment capture.
         let mut cmd = self
@@ -1371,29 +1347,29 @@ impl Devenv {
         result
     }
 
+    /// Assemble, build dev environment, cache it, and capture shell env vars.
+    async fn configure_shell(&self) -> Result<HashMap<String, String>> {
+        let phase1 = Activity::operation("Configuring shell")
+            .parent(None)
+            .start();
+        async {
+            self.assemble().await?;
+            let dev_env = self.get_dev_environment_inner(false).await?;
+            let _ = self.dev_env_cache.set(dev_env);
+            self.capture_shell_environment().await
+        }
+        .in_activity(&phase1)
+        .await
+    }
+
     pub async fn test(&self, verbosity: tasks::VerbosityLevel, tui: bool) -> Result<()> {
         // Enable port allocation before assemble so that ports resolved
         // during Nix evaluation (e.g. in enterTest) are properly allocated.
         self.port_allocator.set_enabled(true);
 
         // ── Phase 1: Configuring shell ──────────────────────────────
-        // Assemble with testing enabled, build dev environment, cache it,
-        // check for processes, and capture shell env vars.
-        let (has_processes, envs) = {
-            let phase1 = Activity::operation("Configuring shell")
-                .parent(None)
-                .start();
-            async {
-                self.assemble().await?;
-                let dev_env = self.get_dev_environment_inner(false).await?;
-                let _ = self.dev_env_cache.set(dev_env);
-                let has_processes = self.has_processes().await?;
-                let envs = self.capture_shell_environment().await?;
-                Ok::<(bool, HashMap<String, String>), miette::Report>((has_processes, envs))
-            }
-            .in_activity(&phase1)
-            .await?
-        };
+        let envs = self.configure_shell().await?;
+        let has_processes = self.has_processes().await?;
 
         // ── Phase 2: Running enterTest tasks ─────────────────────────
         // Run all tasks rooted at devenv:enterTest, which includes enterShell
@@ -1434,17 +1410,12 @@ impl Devenv {
         };
 
         // ── Phase 4: Starting processes (if needed) ─────────────────
-        // skip_tasks: enterShell tasks already ran as part of enterTest in Phase 2.
         if has_processes {
             let options = ProcessOptions {
-                envs: Some(&envs),
                 detach: true,
-                log_to_file: false,
-                strict_ports: false,
-                skip_tasks: true,
-                command_rx: None,
+                ..Default::default()
             };
-            self.up(vec![], options, verbosity, tui).await?;
+            self.start_processes(vec![], envs, options).await?;
         }
 
         // ── Phase 5: Running tests ──────────────────────────────────
@@ -1585,10 +1556,10 @@ impl Devenv {
         .await
     }
 
-    pub async fn up<'a>(
+    pub async fn up(
         &self,
         processes: Vec<String>,
-        mut options: ProcessOptions<'a>,
+        options: ProcessOptions,
         verbosity: tasks::VerbosityLevel,
         tui: bool,
     ) -> Result<RunMode> {
@@ -1597,215 +1568,186 @@ impl Devenv {
         self.port_allocator.set_enabled(true);
 
         // ── Phase 1: Configuring shell ──────────────────────────────
-        // Assemble, check processes, build dev environment, capture shell env vars.
-        // When called from test(), dev_env_cache is already populated and envs are
-        // passed in, so we skip the activity to avoid a duplicate "Configuring shell".
-        let mut envs = if self.dev_env_cache.get().is_some() && options.envs.is_some() {
-            options.envs.unwrap().clone()
-        } else {
-            let phase1 = Activity::operation("Configuring shell")
-                .parent(None)
-                .start();
-            async {
-                self.assemble().await?;
-                if !self.has_processes().await? {
-                    message(
-                        ActivityLevel::Error,
-                        "No 'processes' option defined: https://devenv.sh/processes/",
-                    );
-                    bail!("No processes defined");
-                }
+        let mut envs = self.configure_shell().await?;
 
-                let dev_env = self.get_dev_environment_inner(false).await?;
-                let _ = self.dev_env_cache.set(dev_env);
-
-                // Capture shell environment (uses cached dev_env via prepare_shell)
-                let envs = if let Some(envs) = options.envs {
-                    envs.clone()
-                } else {
-                    self.capture_shell_environment().await?
-                };
-
-                Ok::<HashMap<String, String>, miette::Report>(envs)
-            }
-            .in_activity(&phase1)
-            .await?
-        };
-
-        // ── Phase 2: Loading and running enterShell tasks ─────────────
-        // Skip when caller (e.g. test()) already ran tasks including enterShell.
-        if !options.skip_tasks {
-            // load_tasks() already has #[activity("Loading tasks")]
-            let task_configs = self.load_tasks().await?;
-            // Merge task-exported env vars (e.g., PATH with venv/bin) on top of
-            // the nix shell env. Task exports take precedence.
-            // Exports are also stored on self so prepare_shell() can inject them
-            // into the bash script (e.g. when called from test()).
-            let exports = self
-                .run_enter_shell_tasks_inner(task_configs, envs.clone(), verbosity, tui)
-                .await?;
-            envs.extend(exports);
-        } else {
-            // Tasks already ran — merge their cached exports into envs
-            // so processes see them (e.g., PATH with venv/bin, mkdocs).
-            let exports = self.task_exports.lock().unwrap().clone();
-            envs.extend(exports);
+        if !self.has_processes().await? {
+            message(
+                ActivityLevel::Error,
+                "No 'processes' option defined: https://devenv.sh/processes/",
+            );
+            bail!("No processes defined");
         }
 
-        // ── Phase 4: Running processes ──────────────────────────────
+        // ── Phase 2: Loading and running enterShell tasks ─────────────
+        let task_configs = self.load_tasks().await?;
+        let (_status, exports) = self
+            .run_tasks_with_roots(
+                vec!["devenv:enterShell".to_string()],
+                task_configs,
+                envs.clone(),
+                verbosity,
+                tui,
+            )
+            .await?;
+        envs.extend(exports);
+
+        // ── Phase 3: Running processes ──────────────────────────────
+        self.start_processes(processes, envs, options).await
+    }
+
+    /// Start processes after shell environment and tasks are already configured.
+    async fn start_processes(
+        &self,
+        processes: Vec<String>,
+        envs: HashMap<String, String>,
+        mut options: ProcessOptions,
+    ) -> Result<RunMode> {
         // Release port reservations so processes can bind their allocated ports.
         // The port allocator holds TcpListeners during Nix evaluation to prevent
         // race conditions; dropping them here makes the ports available.
         drop(self.port_allocator.take_reservations());
 
-        // Check which process manager to use
-
-        {
-            let phase4 = Activity::operation("Running processes")
-                .parent(None)
-                .start();
-            let impl_result = async {
-                self.nix
-                    .eval(&["devenv.config.process.manager.implementation"])
-                    .await
-            }
-            .in_activity(&phase4)
-            .await?
-            .trim()
-            .trim_matches('"')
-            .to_string();
-
-            // Create appropriate manager based on implementation
-            if impl_result == "native" {
-                info!("Using native process manager with task-based dependency ordering");
-
-                let task_configs = self.load_tasks().await?;
-                let roots: Vec<String> = if processes.is_empty() {
-                    task_configs
-                        .iter()
-                        .filter(|t| t.name.starts_with(devenv_tasks::PROCESS_TASK_PREFIX))
-                        .map(|t| t.name.clone())
-                        .collect()
-                } else {
-                    processes
-                        .iter()
-                        .map(|p| format!("{}{}", devenv_tasks::PROCESS_TASK_PREFIX, p))
-                        .collect()
-                };
-
-                if roots.is_empty() {
-                    bail!("No process tasks found to run");
-                }
-
-                debug!(
-                    "Running {} process tasks with dependency ordering: {:?}",
-                    roots.len(),
-                    roots
-                );
-
-                let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
-                let bash = self.get_bash_path().await?;
-                let config = tasks::Config {
-                    tasks: task_configs,
-                    roots,
-                    run_mode: tasks::RunMode::All,
-                    runtime_dir,
-                    cache_dir: self.devenv_dotfile.clone(),
-                    sudo_context: None,
-                    env: envs,
-                    bash,
-                    ignore_process_deps: false,
-                };
-
-                let tasks_runner = tasks::Tasks::builder(
-                    config,
-                    tasks::VerbosityLevel::Normal,
-                    self.shutdown.clone(),
-                )
-                .build()
+        let phase4 = Activity::operation("Running processes")
+            .parent(None)
+            .start();
+        let impl_result = async {
+            self.nix
+                .eval(&["devenv.config.process.manager.implementation"])
                 .await
-                .map_err(|e| miette!("Failed to build task runner: {}", e))?;
+        }
+        .in_activity(&phase4)
+        .await?
+        .trim()
+        .trim_matches('"')
+        .to_string();
 
-                // Start command processing before task execution so that
-                // Ctrl-R works even while tasks are still running (e.g. when
-                // a process task is waiting on an auto start off dependency).
-                if let Some(rx) = options.command_rx.take() {
-                    tasks_runner.process_manager.start_command_listener(rx);
-                }
+        // Create appropriate manager based on implementation
+        if impl_result == "native" {
+            info!("Using native process manager with task-based dependency ordering");
 
-                // Run process tasks under the Phase 4 activity.
-                // Auto start off processes (start.enable = false) are handled by the
-                // process manager: they appear in the TUI as stopped.
-                debug!("devenv.up: running process tasks (run_with_parent_activity)");
-                let _outputs = tasks_runner
-                    .run_with_parent_activity(Arc::new(phase4))
-                    .await;
-                debug!("devenv.up: process tasks completed");
-
-                // API server is started inside run_internal() so it's available
-                // while processes are still starting up.
-
-                let pid_file = tasks_runner.process_manager.manager_pid_file();
-                processes::write_pid(&pid_file, std::process::id())
-                    .await
-                    .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
-
-                if !options.detach {
-                    debug!(
-                        "devenv.up: calling run_foreground (native manager, detach=false), global_token_cancelled={}",
-                        self.shutdown.is_cancelled()
-                    );
-                    let result = tasks_runner
-                        .process_manager
-                        .run_foreground(self.shutdown.cancellation_token(), None)
-                        .await
-                        .map_err(|e| miette!("Process manager error: {}", e));
-                    debug!("devenv.up: run_foreground returned");
-
-                    let _ = tokio::fs::remove_file(&pid_file).await;
-                    result?;
-                } else {
-                    // Store manager for later stop via down()
-                    let _ = self
-                        .native_process_manager
-                        .set(Arc::clone(&tasks_runner.process_manager));
-                }
-
-                return Ok(RunMode::Detached);
-            }
-
-            // Non-native manager (process-compose)
-            let procfile_script = async {
-                let gc_root = self.devenv_dot_gc.join("procfilescript");
-                let paths = self
-                    .nix
-                    .build(&["devenv.config.procfileScript"], None, Some(&gc_root))
-                    .await?;
-                Ok::<PathBuf, miette::Report>(paths[0].clone())
-            }
-            .in_activity(&phase4)
-            .await?;
-
-            let manager =
-                processes::ProcessComposeManager::new(procfile_script, self.devenv_dotfile.clone());
-
-            if options.detach {
-                let start_options = processes::StartOptions {
-                    process_configs: HashMap::new(),
-                    processes,
-                    detach: true,
-                    log_to_file: options.log_to_file,
-                    env: envs,
-                    cancellation_token: Some(self.shutdown.cancellation_token()),
-                };
-                manager.start(start_options).await?;
-                Ok::<RunMode, miette::Report>(RunMode::Detached)
+            let task_configs = self.load_tasks().await?;
+            let roots: Vec<String> = if processes.is_empty() {
+                task_configs
+                    .iter()
+                    .filter(|t| t.name.starts_with(devenv_tasks::PROCESS_TASK_PREFIX))
+                    .map(|t| t.name.clone())
+                    .collect()
             } else {
-                let command = manager
-                    .prepare_foreground_command(&processes, &envs)
-                    .await?;
-                Ok(RunMode::Foreground(ShellCommand { command }))
+                processes
+                    .iter()
+                    .map(|p| format!("{}{}", devenv_tasks::PROCESS_TASK_PREFIX, p))
+                    .collect()
+            };
+
+            if roots.is_empty() {
+                bail!("No process tasks found to run");
             }
+
+            debug!(
+                "Running {} process tasks with dependency ordering: {:?}",
+                roots.len(),
+                roots
+            );
+
+            let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
+            let bash = self.get_bash_path().await?;
+            let config = tasks::Config {
+                tasks: task_configs,
+                roots,
+                run_mode: tasks::RunMode::All,
+                runtime_dir,
+                cache_dir: self.devenv_dotfile.clone(),
+                sudo_context: None,
+                env: envs,
+                bash,
+                ignore_process_deps: false,
+            };
+
+            let tasks_runner =
+                tasks::Tasks::builder(config, tasks::VerbosityLevel::Normal, self.shutdown.clone())
+                    .build()
+                    .await
+                    .map_err(|e| miette!("Failed to build task runner: {}", e))?;
+
+            // Start command processing before task execution so that
+            // Ctrl-R works even while tasks are still running (e.g. when
+            // a process task is waiting on an auto start off dependency).
+            if let Some(rx) = options.command_rx.take() {
+                tasks_runner.process_manager.start_command_listener(rx);
+            }
+
+            // Run process tasks under the Phase 4 activity.
+            // Auto start off processes (start.enable = false) are handled by the
+            // process manager: they appear in the TUI as stopped.
+            debug!("devenv.up: running process tasks (run_with_parent_activity)");
+            let _outputs = tasks_runner
+                .run_with_parent_activity(Arc::new(phase4))
+                .await;
+            debug!("devenv.up: process tasks completed");
+
+            // API server is started inside run_internal() so it's available
+            // while processes are still starting up.
+
+            let pid_file = tasks_runner.process_manager.manager_pid_file();
+            processes::write_pid(&pid_file, std::process::id())
+                .await
+                .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
+
+            if !options.detach {
+                debug!(
+                    "devenv.up: calling run_foreground (native manager, detach=false), global_token_cancelled={}",
+                    self.shutdown.is_cancelled()
+                );
+                let result = tasks_runner
+                    .process_manager
+                    .run_foreground(self.shutdown.cancellation_token(), None)
+                    .await
+                    .map_err(|e| miette!("Process manager error: {}", e));
+                debug!("devenv.up: run_foreground returned");
+
+                let _ = tokio::fs::remove_file(&pid_file).await;
+                result?;
+            } else {
+                // Store manager for later stop via down()
+                let _ = self
+                    .native_process_manager
+                    .set(Arc::clone(&tasks_runner.process_manager));
+            }
+
+            return Ok(RunMode::Detached);
+        }
+
+        // Non-native manager (process-compose)
+        let procfile_script = async {
+            let gc_root = self.devenv_dot_gc.join("procfilescript");
+            let paths = self
+                .nix
+                .build(&["devenv.config.procfileScript"], None, Some(&gc_root))
+                .await?;
+            Ok::<PathBuf, miette::Report>(paths[0].clone())
+        }
+        .in_activity(&phase4)
+        .await?;
+
+        let manager =
+            processes::ProcessComposeManager::new(procfile_script, self.devenv_dotfile.clone());
+
+        if options.detach {
+            let start_options = processes::StartOptions {
+                process_configs: HashMap::new(),
+                processes,
+                detach: true,
+                log_to_file: options.log_to_file,
+                env: envs,
+                cancellation_token: Some(self.shutdown.cancellation_token()),
+            };
+            manager.start(start_options).await?;
+            Ok(RunMode::Detached)
+        } else {
+            let command = manager
+                .prepare_foreground_command(&processes, &envs)
+                .await?;
+            Ok(RunMode::Foreground(ShellCommand { command }))
         }
     }
 

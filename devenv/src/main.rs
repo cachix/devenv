@@ -803,12 +803,10 @@ async fn dispatch_command(
             let strict_ports = devenv_core::settings::flag(strict_ports, no_strict_ports)
                 .unwrap_or(config_strict_ports);
             let options = devenv::ProcessOptions {
-                envs: None,
                 detach,
                 log_to_file: detach,
                 strict_ports,
                 command_rx,
-                ..Default::default()
             };
             match devenv.up(processes, options, verbosity, tui).await? {
                 RunMode::Detached => Ok(CommandResult::Done),
