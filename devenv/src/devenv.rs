@@ -259,18 +259,33 @@ impl Devenv {
         let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
         let devenv_home_gc = devenv_home.join("gc");
 
-        let devenv_root = options
-            .devenv_root
-            .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
+        let devenv_root = {
+            let root = options.devenv_root.unwrap_or_else(|| {
+                std::env::current_dir().expect("Failed to get current directory")
+            });
+            // Canonicalize to resolve symlinks (e.g. /var -> /private/var on macOS),
+            // ensuring consistent runtime directory hashes across processes.
+            std::fs::canonicalize(&root).unwrap_or(root)
+        };
 
         let nix_settings = options.nix_settings;
         let shell_settings = options.shell_settings;
         let cache_settings = options.cache_settings;
         let secret_settings = options.secret_settings;
 
-        // Compute profile-aware dotfile path for state isolation
+        // Compute profile-aware dotfile path for state isolation.
+        // Canonicalize the parent to resolve symlinks (e.g. /var -> /private/var on macOS),
+        // ensuring consistent runtime directory hashes across processes.
+        // The default path (devenv_root.join(".devenv")) is already canonical since
+        // devenv_root was canonicalized above; this handles custom --dotfile paths.
         let base_devenv_dotfile = options
             .devenv_dotfile
+            .map(|p| {
+                p.parent()
+                    .and_then(|parent| std::fs::canonicalize(parent).ok())
+                    .map(|parent| parent.join(p.file_name().expect("dotfile must have a filename")))
+                    .unwrap_or(p)
+            })
             .unwrap_or_else(|| devenv_root.join(".devenv"));
         let devenv_dotfile =
             if let Some(suffix) = compute_profile_dir_suffix(&shell_settings.profiles) {
@@ -289,8 +304,7 @@ impl Devenv {
         let devenv_state_hash = {
             let mut hasher = sha2::Sha256::new();
             hasher.update(devenv_dotfile.to_string_lossy().as_bytes());
-            let result = hasher.finalize();
-            hex::encode(result)
+            hex::encode(hasher.finalize())
         };
 
         // Runtime directory for sockets - XDG_RUNTIME_DIR is the correct location

@@ -16,6 +16,7 @@
 - Fixed child processes (postgres, redis, etc.) being left running after `devenv up` exits or `devenv processes down` is called. The native manager wrapper now forwards TERM/INT signals to the child process group, and the process-compose backend creates a proper process group for signaling ([#2619](https://github.com/cachix/devenv/issues/2619)).
 - Fixed secretspec prompting for secrets in non-interactive contexts like direnv.
 - Fixed `devenv search` showing truncated package names (e.g. `pkgs.` instead of `pkgs.ncdu`).
+- Fixed runtime directory path (`devenv-<hash>`) being inconsistent on macOS when paths contain symlinks (e.g. `/tmp` vs `/private/tmp`), which could cause processes to look for sockets in the wrong directory.
 - Fixed TUI hanging when the backend encounters an error in the PTY shell path (e.g. Nix evaluation failure).
 - Fixed `nix run` trying to run `devenv-wrapped` which doesn't exist.
 - Fixed in-band resize events being sent to the shell when the app did not opt-in to receiving them.
