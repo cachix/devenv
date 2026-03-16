@@ -377,7 +377,7 @@ string
 
 
 
-Password of owner of the database (only takes effect if ` user ` is not ` null `)\.
+Password of the database owner role\. Requires ` user ` to be set\.
 
 
 
@@ -426,7 +426,7 @@ null
 
 
 
-Username of owner of the database (if null, the default $USER is used, only takes effect if ` pass ` is not ` null `)\.
+Username of owner of the database\. If set, a role with this name is created and the database is owned by it\. If null, the default $USER is used\.
 
 
 
