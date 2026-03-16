@@ -1,6 +1,8 @@
 # Changelog
 
-## X.Y.Z (YYYY-MM-DD)
+## X.Y.Z (unreleased)
+
+## 2.0.5 (2026-03-16)
 
 ### Improvements
 
