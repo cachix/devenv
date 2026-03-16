@@ -15,6 +15,17 @@ psql \
 	exit 1
 }
 
+# verify testuser owns the database
+psql \
+	--set ON_ERROR_STOP=on \
+	--tuples-only \
+	--dbname=testdb \
+	-c "SELECT 1 FROM pg_database WHERE datname = 'testdb' AND datdba = (SELECT oid FROM pg_roles WHERE rolname = 'testuser');" \
+	| grep -q '1' || {
+	echo "FAIL: testuser does not own testdb"
+	exit 1
+}
+
 # now check whether we can connect to our db as our new user and have permission to do stuff with the DB
 psql \
 	--set ON_ERROR_STOP=on \

@@ -69,8 +69,6 @@ let
             )"
             echo $dbAlreadyExists
             if [ 1 -ne "$dbAlreadyExists" ]; then
-              echo "Creating database: ${database.name}"
-              echo 'CREATE DATABASE "${database.name}";' | psql --dbname postgres
               ${lib.optionalString (database.user != null && database.pass != null) ''
               echo "Creating role ${database.user}..."
               psql --dbname postgres <<'EOF'
@@ -80,11 +78,10 @@ let
                       EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
                   END
               $$;
-              GRANT ALL PRIVILEGES ON DATABASE "${database.name}" TO "${database.user}";
-              \c ${database.name}
-              GRANT ALL PRIVILEGES ON SCHEMA public TO "${database.user}";
               EOF
             ''}
+              echo "Creating database: ${database.name}"
+              echo 'CREATE DATABASE "${database.name}"${lib.optionalString (database.user != null && database.pass != null) " OWNER \"${database.user}\""};' | psql --dbname postgres
               if [ ${q database.initialSQL} != null ]
               then
                 echo "Running initial SQL on database ${database.name}"
