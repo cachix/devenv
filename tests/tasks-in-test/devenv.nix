@@ -1,7 +1,7 @@
 { ... }:
 {
   # Task that exports an env var before enterShell.
-  # This tests that run_enter_shell_tasks() is called during `devenv test`
+  # This tests that enterShell tasks run during `devenv test`
   # and that exported env vars are available in the test script.
   tasks."test:export-env" = {
     exec = ''
@@ -29,5 +29,16 @@
     '';
     exports = [ "DEVENV_TEST_FROM_SECOND" ];
     before = [ "devenv:enterShell" ];
+  };
+
+  # Task that runs before enterTest (but not enterShell).
+  # This tests that `devenv test` runs the enterTest task root,
+  # not just enterShell tasks.
+  tasks."test:enter-test-only" = {
+    exec = ''
+      export DEVENV_TEST_ENTER_TEST_RAN="yes"
+    '';
+    exports = [ "DEVENV_TEST_ENTER_TEST_RAN" ];
+    before = [ "devenv:enterTest" ];
   };
 }
