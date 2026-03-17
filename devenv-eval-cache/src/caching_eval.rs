@@ -24,7 +24,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use tracing::{debug, trace, warn};
 
-use crate::db::{self, EnvInputRow, EvalRow, FileInputRow};
+use crate::db::{self, EnvInputRow, EvalRow, FileInputRow, empty_to_none};
 use crate::eval_inputs::{
     EnvInputDesc, FileInputDesc, FileState, Input, check_env_state, check_file_state,
 };
@@ -282,14 +282,10 @@ impl CachingEvalService {
 
         // Check env states
         for row in env_rows {
-            // Handle empty string → None normalization (empty string in DB means unset)
+            // Handle empty string to None normalization (empty string in DB means unset)
             let desc = EnvInputDesc {
                 name: row.name.clone(),
-                content_hash: if row.content_hash.is_empty() {
-                    None
-                } else {
-                    Some(row.content_hash.clone())
-                },
+                content_hash: empty_to_none(row.content_hash.clone()),
             };
             match check_env_state(&desc) {
                 Ok(FileState::Unchanged) => {}

@@ -14,7 +14,6 @@ use serde_json::Value;
 use sqlx::Row;
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 use tracing::{debug, warn};
 
 const GLOB_SPECIAL_CHARS: &[char] = &['*', '?', '[', '{'];
@@ -385,15 +384,10 @@ impl TaskCache {
         Ok(())
     }
 
-    /// Get current Unix timestamp
-    fn now() -> i64 {
-        time::system_time_to_unix_seconds(SystemTime::now())
-    }
-
     /// Store task output in the cache.
     pub async fn store_task_output(&self, task_name: &str, output: &Value) -> CacheResult<()> {
         let output_json = serde_json::to_string(output)?;
-        let now = Self::now();
+        let now = time::now_as_unix_seconds();
 
         sqlx::query(
             r#"

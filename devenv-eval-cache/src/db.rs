@@ -7,6 +7,11 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+/// Convert an empty string to `None`, non-empty to `Some`.
+pub(crate) fn empty_to_none(s: String) -> Option<String> {
+    if s.is_empty() { None } else { Some(s) }
+}
+
 // Create a constant for embedded migrations
 pub const MIGRATIONS: sqlx::migrate::Migrator = sqlx::migrate!();
 
@@ -66,11 +71,7 @@ impl From<FileInputRow> for FileInputDesc {
         Self {
             path: row.path,
             is_directory: row.is_directory,
-            content_hash: if row.content_hash.is_empty() {
-                None
-            } else {
-                Some(row.content_hash)
-            },
+            content_hash: empty_to_none(row.content_hash),
             modified_at: row.modified_at,
         }
     }
@@ -100,11 +101,7 @@ impl From<EnvInputRow> for EnvInputDesc {
     fn from(row: EnvInputRow) -> Self {
         Self {
             name: row.name,
-            content_hash: if row.content_hash.is_empty() {
-                None
-            } else {
-                Some(row.content_hash)
-            },
+            content_hash: empty_to_none(row.content_hash),
         }
     }
 }
@@ -115,7 +112,7 @@ pub async fn update_file_modified_at<P: AsRef<Path>>(
     modified_at: SystemTime,
 ) -> Result<(), sqlx::Error> {
     let modified_at = time::system_time_to_unix_seconds(modified_at);
-    let now = time::system_time_to_unix_seconds(SystemTime::now());
+    let now = time::now_as_unix_seconds();
 
     sqlx::query(
         r#"
@@ -281,7 +278,7 @@ where
     A: Acquire<'a, Database = Sqlite>,
 {
     let mut conn = conn.acquire().await?;
-    let now = time::system_time_to_unix_seconds(SystemTime::now());
+    let now = time::now_as_unix_seconds();
 
     sqlx::query(
         r#"
@@ -320,7 +317,7 @@ where
         RETURNING id
     "#;
 
-    let now = time::system_time_to_unix_seconds(SystemTime::now());
+    let now = time::now_as_unix_seconds();
     let mut file_ids = Vec::with_capacity(file_inputs.len());
     for FileInputDesc {
         path,
@@ -333,7 +330,7 @@ where
         let id: i64 = sqlx::query(insert_file_input)
             .bind(path.to_path_buf().into_os_string().as_bytes())
             .bind(is_directory)
-            .bind(content_hash.as_ref().unwrap_or(&"".to_string()))
+            .bind(content_hash.as_deref().unwrap_or(""))
             .bind(modified_at)
             .bind(now)
             .fetch_one(&mut *conn)
@@ -378,13 +375,13 @@ where
         RETURNING id
     "#;
 
-    let now = time::system_time_to_unix_seconds(SystemTime::now());
+    let now = time::now_as_unix_seconds();
     let mut env_input_ids = Vec::with_capacity(env_inputs.len());
     for EnvInputDesc { name, content_hash } in env_inputs {
         let id: i64 = sqlx::query(insert_env_input)
             .bind(eval_id)
             .bind(name)
-            .bind(content_hash.as_ref().unwrap_or(&"".to_string()))
+            .bind(content_hash.as_deref().unwrap_or(""))
             .bind(now)
             .fetch_one(&mut *conn)
             .await?
