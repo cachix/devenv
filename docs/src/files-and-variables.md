@@ -59,3 +59,7 @@ Defaults to `$XDG_RUNTIME_DIR` and falls back to `$TMPDIR` and finally `/tmp`.
 Points to the Nix store path that has final profile of packages/scripts provided by devenv.
 
 Useful for teaching other programs about `/bin`, `/etc`, `/var` folders.
+
+### $DEVENV_HOME
+
+Points to `~/.local/share/devenv` (following the XDG data directory convention). Stores GC roots and other persistent per user data.

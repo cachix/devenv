@@ -156,6 +156,7 @@ Tasks support passing inputs and produce outputs, both as JSON objects:
 - `$DEVENV_TASK_INPUT`: JSON object of `tasks."myapp:mytask".input`.
 - `$DEVENV_TASKS_OUTPUTS`: JSON object with dependent tasks as keys and their outputs as values.
 - `$DEVENV_TASK_OUTPUT_FILE`: a writable file with tasks' outputs in JSON.
+- `$DEVENV_TASK_EXPORTS_FILE`: a writable file where tasks can export environment variables. Write `name\0base64(value)\0` pairs to this file and they will be set in the environment of dependent tasks.
 
 ```nix title="devenv.nix"
 { pkgs, lib, config, ... }:

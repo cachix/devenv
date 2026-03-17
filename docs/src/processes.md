@@ -25,6 +25,20 @@ To start the processes, run:
 $ devenv up
 ```
 
+To stop detached processes:
+
+```shell-session
+$ devenv processes down
+```
+
+To wait for all processes to become ready (useful in CI):
+
+```shell-session
+$ devenv processes wait --timeout 120
+```
+
+The default timeout is 120 seconds.
+
 ## Dependencies
 
 Processes can depend on other processes and tasks using `after` and `before`:
