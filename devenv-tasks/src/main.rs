@@ -101,10 +101,7 @@ async fn main() -> Result<()> {
     let shutdown = Shutdown::new();
     shutdown.install_signals().await;
 
-    tokio::select! {
-        result = run_tasks(shutdown.clone()) => result?,
-        _ = shutdown.wait_for_shutdown() => {}
-    };
+    run_tasks(shutdown.clone()).await?;
 
     Ok(())
 }
@@ -205,6 +202,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             let (status, _) = ui.run(run_handle).await?;
 
             if shutdown.last_signal().is_some() {
+                let _ = tasks.process_manager.stop_all().await;
                 shutdown.exit_process();
             }
 
