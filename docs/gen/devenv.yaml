@@ -14,6 +14,10 @@ inputs:
       nixpkgs:
         follows: nixpkgs
 
+  # devenv 1.0 compat
+  pre-commit-hooks:
+    follows: git-hooks
+
   treefmt-nix:
     url: github:numtide/treefmt-nix
     inputs:
