@@ -2,6 +2,10 @@
 
 ## X.Y.Z (unreleased)
 
+### Bug Fixes
+
+- Fixed child processes being left running on shutdown when using non-native process managers like process-compose ([#2586](https://github.com/cachix/devenv/issues/2586)).
+
 ## 2.0.5 (2026-03-16)
 
 ### Improvements
