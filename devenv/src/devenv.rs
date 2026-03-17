@@ -18,7 +18,7 @@ use include_dir::{Dir, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use nix::sys::signal;
 use nix::unistd::Pid;
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell as SyncOnceCell};
 use processes::ProcessManager as _;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
@@ -189,6 +189,7 @@ pub struct Devenv {
     devenv_home_gc: PathBuf,
     devenv_tmp: PathBuf,
     devenv_runtime: PathBuf,
+    process_runtime_dir: SyncOnceCell<PathBuf>,
 
     // Container name for container builds, set before assemble
     container_name: std::sync::OnceLock<String>,
@@ -396,6 +397,7 @@ impl Devenv {
             devenv_home_gc,
             devenv_tmp,
             devenv_runtime,
+            process_runtime_dir: SyncOnceCell::new(),
             nix: Arc::new(nix),
             container_name: std::sync::OnceLock::new(),
             assembled: Arc::new(AtomicBool::new(false)),
@@ -470,8 +472,37 @@ impl Devenv {
         &self.devenv_dotfile
     }
 
+    /// Get the process runtime directory, creating it on first access.
+    fn process_runtime_dir(&self) -> Result<&PathBuf> {
+        self.process_runtime_dir
+            .get_or_try_init(|| processes::get_process_runtime_dir(&self.devenv_runtime))
+    }
+
+    /// Build a `tasks::Config` with common fields filled in.
+    fn make_task_config(
+        &self,
+        roots: Vec<String>,
+        tasks: Vec<tasks::TaskConfig>,
+        run_mode: devenv_tasks::RunMode,
+        env: HashMap<String, String>,
+        bash: String,
+    ) -> Result<tasks::Config> {
+        let runtime_dir = self.process_runtime_dir()?.clone();
+        Ok(tasks::Config {
+            roots,
+            tasks,
+            run_mode,
+            runtime_dir,
+            cache_dir: self.devenv_dotfile.clone(),
+            sudo_context: None,
+            env,
+            bash,
+            ignore_process_deps: false,
+        })
+    }
+
     pub fn native_manager_pid_file(&self) -> PathBuf {
-        processes::get_process_runtime_dir(&self.devenv_runtime)
+        self.process_runtime_dir()
             .map(|dir| dir.join("native-manager.pid"))
             .unwrap_or_else(|_| self.devenv_dotfile.join("native-manager.pid"))
     }
@@ -894,18 +925,13 @@ impl Devenv {
             "copy_args": copy_args,
         }));
 
-        let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
-        let config = tasks::Config {
-            roots: vec![task_name.to_string()],
-            tasks: task_configs,
-            run_mode: devenv_tasks::RunMode::Single,
-            runtime_dir,
-            cache_dir: self.devenv_dotfile.clone(),
-            sudo_context: None,
-            env: envs,
-            bash: String::new(),
-            ignore_process_deps: false,
-        };
+        let config = self.make_task_config(
+            vec![task_name.to_string()],
+            task_configs,
+            devenv_tasks::RunMode::Single,
+            envs,
+            String::new(),
+        )?;
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
             .with_refresh_task_cache(self.cache_settings.refresh_task_cache)
@@ -1144,18 +1170,7 @@ impl Devenv {
             }
         }
 
-        let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
-        let config = tasks::Config {
-            roots,
-            tasks,
-            run_mode,
-            runtime_dir,
-            cache_dir: self.devenv_dotfile.clone(),
-            sudo_context: None,
-            env: envs,
-            bash: String::new(),
-            ignore_process_deps: false,
-        };
+        let config = self.make_task_config(roots, tasks, run_mode, envs, String::new())?;
 
         if let Ok(config_value) = devenv_activity::SerdeValue::from_serialize(&config) {
             use valuable::Valuable;
@@ -1663,19 +1678,9 @@ impl Devenv {
                 roots
             );
 
-            let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
             let bash = self.get_bash_path().await?;
-            let config = tasks::Config {
-                tasks: task_configs,
-                roots,
-                run_mode: tasks::RunMode::All,
-                runtime_dir,
-                cache_dir: self.devenv_dotfile.clone(),
-                sudo_context: None,
-                env: envs,
-                bash,
-                ignore_process_deps: false,
-            };
+            let config =
+                self.make_task_config(roots, task_configs, tasks::RunMode::All, envs, bash)?;
 
             let tasks_runner =
                 tasks::Tasks::builder(config, tasks::VerbosityLevel::Normal, self.shutdown.clone())
@@ -1776,7 +1781,7 @@ impl Devenv {
         let manager: Box<dyn processes::ProcessManager> = if self.native_manager_pid_file().exists()
         {
             // Native process manager is running
-            let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
+            let runtime_dir = self.process_runtime_dir()?.clone();
             Box::new(processes::NativeProcessManager::new(runtime_dir)?)
         } else if self.processes_pid().exists() {
             // Process-compose is running
@@ -1794,8 +1799,7 @@ impl Devenv {
 
     pub async fn wait_for_ready(&self, timeout: std::time::Duration) -> Result<()> {
         if self.native_manager_pid_file().exists() {
-            let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
-            let socket_path = runtime_dir.join("native.sock");
+            let socket_path = self.process_runtime_dir()?.join("native.sock");
             tokio::time::timeout(
                 timeout,
                 processes::NativeProcessManager::wait_for_ready(&socket_path),
