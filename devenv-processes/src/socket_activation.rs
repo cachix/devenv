@@ -42,9 +42,8 @@ impl ActivatedSockets {
 
     /// Consume and return the raw FDs, caller takes ownership
     pub fn into_fds(self) -> Vec<RawFd> {
-        let fds = self.fds.clone();
-        std::mem::forget(self); // Don't close FDs in drop
-        fds
+        let mut this = std::mem::ManuallyDrop::new(self);
+        std::mem::take(&mut this.fds)
     }
 }
 

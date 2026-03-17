@@ -620,11 +620,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         if let Ok(model) = activity_model.read() {
                             let selectable = model.get_selectable_activity_ids();
                             if let Ok(mut ui) = ui_state.write() {
-                                if key_event.code == KeyCode::Down {
-                                    ui.select_next_activity(&selectable);
-                                } else {
-                                    ui.select_previous_activity(&selectable);
-                                }
+                                ui.select_activity(&selectable, key_event.code == KeyCode::Down);
                                 if let Some(selected_id) = ui.selected_activity
                                     && *scroll_view_active.read()
                                 {

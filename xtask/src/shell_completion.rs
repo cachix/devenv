@@ -3,17 +3,22 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Returns (shell_name, file_extension) for a given shell.
+fn shell_info(shell: clap_complete::Shell) -> Result<(&'static str, &'static str)> {
+    match shell {
+        clap_complete::Shell::Bash => Ok(("bash", "bash")),
+        clap_complete::Shell::Zsh => Ok(("zsh", "zsh")),
+        clap_complete::Shell::Fish => Ok(("fish", "fish")),
+        clap_complete::Shell::PowerShell => Ok(("powershell", "ps1")),
+        clap_complete::Shell::Elvish => Ok(("elvish", "elv")),
+        _ => bail!("Unsupported shell"),
+    }
+}
+
 pub fn generate(shell: clap_complete::Shell, out_dir: impl AsRef<Path>) -> Result<()> {
     fs::create_dir_all(&out_dir).into_diagnostic()?;
 
-    let shell_name = match shell {
-        clap_complete::Shell::Bash => "bash",
-        clap_complete::Shell::Zsh => "zsh",
-        clap_complete::Shell::Fish => "fish",
-        clap_complete::Shell::PowerShell => "powershell",
-        clap_complete::Shell::Elvish => "elvish",
-        _ => bail!("Unsupported shell"),
-    };
+    let (shell_name, extension) = shell_info(shell)?;
 
     // Find devenv binary - first check next to current exe (local cargo build),
     // then fall back to PATH (nix build where $out/bin is in PATH)
@@ -35,15 +40,6 @@ pub fn generate(shell: clap_complete::Shell, out_dir: impl AsRef<Path>) -> Resul
             String::from_utf8_lossy(&output.stderr)
         );
     }
-
-    let extension = match shell {
-        clap_complete::Shell::Bash => "bash",
-        clap_complete::Shell::Zsh => "zsh",
-        clap_complete::Shell::Fish => "fish",
-        clap_complete::Shell::PowerShell => "ps1",
-        clap_complete::Shell::Elvish => "elv",
-        _ => "txt",
-    };
 
     // zsh completions should be named _devenv
     let filename = if shell == clap_complete::Shell::Zsh {

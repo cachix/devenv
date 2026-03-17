@@ -21,12 +21,11 @@ pub enum PidStatus {
 /// Check if a PID file exists and the process is still running.
 /// Removes stale PID files automatically.
 pub async fn check_pid_file(pid_file: &Path) -> Result<PidStatus> {
-    if !pid_file.exists() {
-        return Ok(PidStatus::NotFound);
-    }
-
     let pid_str = match fs::read_to_string(pid_file).await {
         Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(PidStatus::NotFound);
+        }
         Err(e) => {
             warn!("Unreadable PID file {}: {}", pid_file.display(), e);
             let _ = fs::remove_file(pid_file).await;

@@ -14,7 +14,22 @@ use watchexec_supervisor::{ProcessEnd, Signal};
 
 use crate::config::ListenKind;
 use crate::manager::ProcessResources;
-use crate::supervisor_state::{Action, Event, ExitStatus, SupervisorPhase, SupervisorState};
+use crate::supervisor_state::{
+    Action, Event, ExitStatus, JobStatus, SupervisorPhase, SupervisorState,
+};
+
+/// Handle a successful probe by marking the process as ready.
+fn handle_probe_success(
+    activity: &devenv_activity::ActivityRef,
+    state: &mut SupervisorState,
+    status_tx: &tokio::sync::watch::Sender<JobStatus>,
+    probe_name: &str,
+) {
+    activity.log(format!("{} probe succeeded - process ready", probe_name));
+    activity.set_status(ProcessStatus::Ready);
+    let _ = state.on_event(Event::Ready, Instant::now());
+    let _ = status_tx.send(state.status());
+}
 
 /// Spawn a supervision task that monitors a job and handles restarts.
 ///
@@ -195,10 +210,7 @@ pub fn spawn_supervisor(
                         None => std::future::pending::<Option<()>>().await,
                     }
                 } => {
-                    activity.log("TCP probe succeeded - process ready");
-                    activity.set_status(ProcessStatus::Ready);
-                    let _ = state.on_event(Event::Ready, Instant::now());
-                    let _ = status_tx.send(state.status());
+                    handle_probe_success(&activity, &mut state, &status_tx, "TCP");
                     tcp_probe = None;
                 }
 
@@ -208,10 +220,7 @@ pub fn spawn_supervisor(
                         None => std::future::pending::<Option<()>>().await,
                     }
                 } => {
-                    activity.log("Exec probe succeeded - process ready");
-                    activity.set_status(ProcessStatus::Ready);
-                    let _ = state.on_event(Event::Ready, Instant::now());
-                    let _ = status_tx.send(state.status());
+                    handle_probe_success(&activity, &mut state, &status_tx, "Exec");
                     exec_probe = None;
                 }
 
@@ -221,10 +230,7 @@ pub fn spawn_supervisor(
                         None => std::future::pending::<Option<()>>().await,
                     }
                 } => {
-                    activity.log("HTTP probe succeeded - process ready");
-                    activity.set_status(ProcessStatus::Ready);
-                    let _ = state.on_event(Event::Ready, Instant::now());
-                    let _ = status_tx.send(state.status());
+                    handle_probe_success(&activity, &mut state, &status_tx, "HTTP");
                     http_probe = None;
                 }
 

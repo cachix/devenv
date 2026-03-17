@@ -37,8 +37,7 @@ impl NixConf {
                 continue;
             }
 
-            let mut tokens = line.split_whitespace().collect::<Vec<_>>();
-            tokens.retain(|t| !t.is_empty());
+            let tokens = line.split_whitespace().collect::<Vec<_>>();
 
             if tokens.is_empty() {
                 continue;

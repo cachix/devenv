@@ -139,6 +139,8 @@ impl ProcessManager for ProcessComposeManager {
         if options.detach {
             // Make the child its own process group leader so that stop()
             // can signal the entire group with kill(-pid, SIGTERM).
+            // SAFETY: pre_exec runs in a forked child process before exec.
+            // setpgid is async-signal-safe and does not allocate or access shared state.
             unsafe {
                 cmd.pre_exec(|| {
                     nix::unistd::setpgid(

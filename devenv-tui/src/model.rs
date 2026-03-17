@@ -218,39 +218,29 @@ impl UiState {
         self.interrupt_prompt_active
     }
 
-    /// Select the next activity from the list of selectable IDs.
-    pub fn select_next_activity(&mut self, selectable: &[u64]) {
+    /// Select the next or previous activity from the list of selectable IDs.
+    ///
+    /// When `forward` is true, selects the next activity (or first if none selected).
+    /// When `forward` is false, selects the previous activity (or last if none selected).
+    pub fn select_activity(&mut self, selectable: &[u64], forward: bool) {
         if selectable.is_empty() {
             return;
         }
         match self.selected_activity {
             None => {
-                self.selected_activity = selectable.first().copied();
-            }
-            Some(current_id) => {
-                if let Some(current_pos) = selectable.iter().position(|&id| id == current_id) {
-                    if current_pos + 1 < selectable.len() {
-                        self.selected_activity = Some(selectable[current_pos + 1]);
-                    }
+                self.selected_activity = if forward {
+                    selectable.first().copied()
                 } else {
-                    self.selected_activity = selectable.first().copied();
-                }
-            }
-        }
-    }
-
-    /// Select the previous activity from the list of selectable IDs.
-    pub fn select_previous_activity(&mut self, selectable: &[u64]) {
-        if selectable.is_empty() {
-            return;
-        }
-        match self.selected_activity {
-            None => {
-                self.selected_activity = selectable.last().copied();
+                    selectable.last().copied()
+                };
             }
             Some(current_id) => {
                 if let Some(current_pos) = selectable.iter().position(|&id| id == current_id) {
-                    if current_pos > 0 {
+                    if forward {
+                        if current_pos + 1 < selectable.len() {
+                            self.selected_activity = Some(selectable[current_pos + 1]);
+                        }
+                    } else if current_pos > 0 {
                         self.selected_activity = Some(selectable[current_pos - 1]);
                     }
                 } else {

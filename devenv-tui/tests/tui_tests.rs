@@ -1267,16 +1267,16 @@ fn test_selectable_ids_dedup_for_multi_parent_tasks() {
     let selectable = model.get_selectable_activity_ids();
     assert_eq!(selectable, vec![1, 3]);
 
-    ui_state.select_next_activity(&selectable);
+    ui_state.select_activity(&selectable, true);
     assert_eq!(ui_state.selected_activity, Some(1));
 
-    ui_state.select_next_activity(&selectable);
+    ui_state.select_activity(&selectable, true);
     assert_eq!(ui_state.selected_activity, Some(3));
 
-    ui_state.select_next_activity(&selectable);
+    ui_state.select_activity(&selectable, true);
     assert_eq!(ui_state.selected_activity, Some(3));
 
-    ui_state.select_previous_activity(&selectable);
+    ui_state.select_activity(&selectable, false);
     assert_eq!(ui_state.selected_activity, Some(1));
 }
 

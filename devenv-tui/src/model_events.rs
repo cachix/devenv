@@ -26,11 +26,11 @@ impl UiEvent {
                 match key_code {
                     Down => {
                         let selectable = activity_model.get_selectable_activity_ids();
-                        ui_state.select_next_activity(&selectable);
+                        ui_state.select_activity(&selectable, true);
                     }
                     Up => {
                         let selectable = activity_model.get_selectable_activity_ids();
-                        ui_state.select_previous_activity(&selectable);
+                        ui_state.select_activity(&selectable, false);
                     }
                     Esc => {
                         ui_state.selected_activity = None;
