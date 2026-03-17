@@ -3,12 +3,12 @@
     "devenv": {
       "locked": {
         "dir": "src/modules",
-        "path": "../..",
+        "path": "../../",
         "type": "path"
       },
       "original": {
         "dir": "src/modules",
-        "path": "../..",
+        "path": "../../",
         "type": "path"
       },
       "parent": []
