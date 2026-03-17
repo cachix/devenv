@@ -486,23 +486,8 @@ pub enum Commands {
 
     #[command(about = "Start processes in the foreground. https://devenv.sh/processes/")]
     Up {
-        #[arg(help = "Start a specific process(es).")]
-        processes: Vec<String>,
-
-        #[arg(short, long, help = "Start processes in the background.")]
-        detach: bool,
-
-        #[arg(
-            long,
-            help = "Error if a port is already in use instead of auto-allocating the next available port."
-        )]
-        strict_ports: bool,
-
-        #[arg(
-            long,
-            help = "Disable strict port mode, overriding strictPorts from devenv.yaml."
-        )]
-        no_strict_ports: bool,
+        #[command(flatten)]
+        up_args: UpArgs,
     },
 
     Processes {
@@ -608,27 +593,34 @@ pub enum Commands {
     },
 }
 
+#[derive(clap::Args, Clone, Debug)]
+pub struct UpArgs {
+    #[arg(help = "Start a specific process(es).")]
+    pub processes: Vec<String>,
+
+    #[arg(short, long, help = "Start processes in the background.")]
+    pub detach: bool,
+
+    #[arg(
+        long,
+        help = "Error if a port is already in use instead of auto-allocating the next available port."
+    )]
+    pub strict_ports: bool,
+
+    #[arg(
+        long,
+        help = "Disable strict port mode, overriding strictPorts from devenv.yaml."
+    )]
+    pub no_strict_ports: bool,
+}
+
 #[derive(Subcommand, Clone)]
 #[clap(about = "Start or stop processes. https://devenv.sh/processes/")]
 pub enum ProcessesCommand {
     #[command(alias = "start", about = "Start processes in the foreground.")]
     Up {
-        processes: Vec<String>,
-
-        #[arg(short, long, help = "Start processes in the background.")]
-        detach: bool,
-
-        #[arg(
-            long,
-            help = "Error if a port is already in use instead of auto-allocating the next available port."
-        )]
-        strict_ports: bool,
-
-        #[arg(
-            long,
-            help = "Disable strict port mode, overriding strictPorts from devenv.yaml."
-        )]
-        no_strict_ports: bool,
+        #[command(flatten)]
+        up_args: UpArgs,
     },
 
     #[command(alias = "stop", about = "Stop processes running in the background.")]
@@ -746,13 +738,9 @@ mod tests {
         let cli = Cli::parse_from(["devenv", "up", "--no-strict-ports"]);
 
         match cli.command {
-            Some(Commands::Up {
-                strict_ports,
-                no_strict_ports,
-                ..
-            }) => {
-                assert!(!strict_ports);
-                assert!(no_strict_ports);
+            Some(Commands::Up { up_args }) => {
+                assert!(!up_args.strict_ports);
+                assert!(up_args.no_strict_ports);
             }
             _ => panic!("expected `devenv up` command"),
         }
@@ -764,15 +752,10 @@ mod tests {
 
         match cli.command {
             Some(Commands::Processes {
-                command:
-                    ProcessesCommand::Up {
-                        strict_ports,
-                        no_strict_ports,
-                        ..
-                    },
+                command: ProcessesCommand::Up { up_args },
             }) => {
-                assert!(!strict_ports);
-                assert!(no_strict_ports);
+                assert!(!up_args.strict_ports);
+                assert!(up_args.no_strict_ports);
             }
             _ => panic!("expected `devenv processes up` command"),
         }

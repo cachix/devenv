@@ -785,30 +785,23 @@ async fn dispatch_command(
             .update(&name)
             .await?
             .map_or(CommandResult::Done, CommandResult::Print)),
-        Commands::Up {
-            processes,
-            detach,
-            strict_ports,
-            no_strict_ports,
-        }
+        Commands::Up { up_args }
         | Commands::Processes {
-            command:
-                ProcessesCommand::Up {
-                    processes,
-                    detach,
-                    strict_ports,
-                    no_strict_ports,
-                },
+            command: ProcessesCommand::Up { up_args },
         } => {
-            let strict_ports = devenv_core::settings::flag(strict_ports, no_strict_ports)
-                .unwrap_or(config_strict_ports);
+            let strict_ports =
+                devenv_core::settings::flag(up_args.strict_ports, up_args.no_strict_ports)
+                    .unwrap_or(config_strict_ports);
             let options = devenv::ProcessOptions {
-                detach,
-                log_to_file: detach,
+                detach: up_args.detach,
+                log_to_file: up_args.detach,
                 strict_ports,
                 command_rx,
             };
-            match devenv.up(processes, options, verbosity, tui).await? {
+            match devenv
+                .up(up_args.processes, options, verbosity, tui)
+                .await?
+            {
                 RunMode::Detached => Ok(CommandResult::Done),
                 RunMode::Foreground(shell_command) => {
                     Ok(CommandResult::Exec(shell_command.command))
