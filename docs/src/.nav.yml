@@ -28,6 +28,9 @@ nav:
       - Composing: composing-using-imports.md
     - Overview:
       - Garbage collection: garbage-collection.md
+      - REPL: repl.md
+      - Language Server: lsp.md
+      - MCP: mcp.md
     - Extending: extending.md
     - Guides: guides
     - Integrations: integrations
