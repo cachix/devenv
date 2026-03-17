@@ -29,6 +29,109 @@ pub enum ActivityType {
     Operation,
 }
 
+/// Create a log event for the given activity type.
+///
+/// Returns `None` for activity types that do not support logging (e.g. Fetch)
+/// or when `is_error` is true for Evaluate (which has no error log variant).
+fn make_log_event(
+    id: u64,
+    activity_type: ActivityType,
+    line: String,
+    is_error: bool,
+) -> Option<ActivityEvent> {
+    let timestamp = Timestamp::now();
+    let event = match activity_type {
+        ActivityType::Build => ActivityEvent::Build(Build::Log {
+            id,
+            line,
+            is_error,
+            timestamp,
+        }),
+        ActivityType::Evaluate => {
+            if is_error {
+                return None;
+            }
+            ActivityEvent::Evaluate(Evaluate::Log {
+                id,
+                line,
+                timestamp,
+            })
+        }
+        ActivityType::Task => ActivityEvent::Task(Task::Log {
+            id,
+            line,
+            is_error,
+            timestamp,
+        }),
+        ActivityType::Command => ActivityEvent::Command(Command::Log {
+            id,
+            line,
+            is_error,
+            timestamp,
+        }),
+        ActivityType::Process => ActivityEvent::Process(Process::Log {
+            id,
+            line,
+            is_error,
+            timestamp,
+        }),
+        ActivityType::Operation => ActivityEvent::Operation(Operation::Log {
+            id,
+            line,
+            is_error,
+            timestamp,
+        }),
+        _ => return None,
+    };
+    Some(event)
+}
+
+/// Create a complete event for the given activity type.
+fn make_complete_event(
+    id: u64,
+    activity_type: ActivityType,
+    outcome: ActivityOutcome,
+) -> ActivityEvent {
+    let timestamp = Timestamp::now();
+    match activity_type {
+        ActivityType::Build => ActivityEvent::Build(Build::Complete {
+            id,
+            outcome,
+            timestamp,
+        }),
+        ActivityType::Fetch(_) => ActivityEvent::Fetch(Fetch::Complete {
+            id,
+            outcome,
+            timestamp,
+        }),
+        ActivityType::Evaluate => ActivityEvent::Evaluate(Evaluate::Complete {
+            id,
+            outcome,
+            timestamp,
+        }),
+        ActivityType::Task => ActivityEvent::Task(Task::Complete {
+            id,
+            outcome,
+            timestamp,
+        }),
+        ActivityType::Command => ActivityEvent::Command(Command::Complete {
+            id,
+            outcome,
+            timestamp,
+        }),
+        ActivityType::Process => ActivityEvent::Process(Process::Complete {
+            id,
+            outcome,
+            timestamp,
+        }),
+        ActivityType::Operation => ActivityEvent::Operation(Operation::Complete {
+            id,
+            outcome,
+            timestamp,
+        }),
+    }
+}
+
 /// Guard that tracks an activity's lifecycle via tracing spans.
 /// Activity is Send + Sync, allowing storage in Mutex for async callbacks.
 #[must_use = "Activity will complete immediately if dropped"]
@@ -298,45 +401,9 @@ impl Activity {
         {
             tracing::info!("{}", line_str);
         }
-        let event = match self.activity_type {
-            ActivityType::Build => ActivityEvent::Build(Build::Log {
-                id: self.id,
-                line: line_str,
-                is_error: false,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Evaluate => ActivityEvent::Evaluate(Evaluate::Log {
-                id: self.id,
-                line: line_str,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Task => ActivityEvent::Task(Task::Log {
-                id: self.id,
-                line: line_str,
-                is_error: false,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Command => ActivityEvent::Command(Command::Log {
-                id: self.id,
-                line: line_str,
-                is_error: false,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Process => ActivityEvent::Process(Process::Log {
-                id: self.id,
-                line: line_str,
-                is_error: false,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Operation => ActivityEvent::Operation(Operation::Log {
-                id: self.id,
-                line: line_str,
-                is_error: false,
-                timestamp: Timestamp::now(),
-            }),
-            _ => return,
-        };
-        send_activity_event(event);
+        if let Some(event) = make_log_event(self.id, self.activity_type, line_str, false) {
+            send_activity_event(event);
+        }
     }
 
     /// Log an error
@@ -351,40 +418,9 @@ impl Activity {
         {
             tracing::warn!("{}", line_str);
         }
-        let event = match self.activity_type {
-            ActivityType::Build => ActivityEvent::Build(Build::Log {
-                id: self.id,
-                line: line_str,
-                is_error: true,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Task => ActivityEvent::Task(Task::Log {
-                id: self.id,
-                line: line_str,
-                is_error: true,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Command => ActivityEvent::Command(Command::Log {
-                id: self.id,
-                line: line_str,
-                is_error: true,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Process => ActivityEvent::Process(Process::Log {
-                id: self.id,
-                line: line_str,
-                is_error: true,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Operation => ActivityEvent::Operation(Operation::Log {
-                id: self.id,
-                line: line_str,
-                is_error: true,
-                timestamp: Timestamp::now(),
-            }),
-            _ => return,
-        };
-        send_activity_event(event);
+        if let Some(event) = make_log_event(self.id, self.activity_type, line_str, true) {
+            send_activity_event(event);
+        }
     }
 
     /// Set process status (for Process activities only)
@@ -439,16 +475,9 @@ impl ActivityRef {
         {
             tracing::info!("{}", line_str);
         }
-        let event = match self.activity_type {
-            ActivityType::Process => ActivityEvent::Process(Process::Log {
-                id: self.id,
-                line: line_str,
-                is_error: false,
-                timestamp: Timestamp::now(),
-            }),
-            _ => return,
-        };
-        send_activity_event(event);
+        if let Some(event) = make_log_event(self.id, self.activity_type, line_str, false) {
+            send_activity_event(event);
+        }
     }
 
     /// Log an error
@@ -463,16 +492,9 @@ impl ActivityRef {
         {
             tracing::warn!("{}", line_str);
         }
-        let event = match self.activity_type {
-            ActivityType::Process => ActivityEvent::Process(Process::Log {
-                id: self.id,
-                line: line_str,
-                is_error: true,
-                timestamp: Timestamp::now(),
-            }),
-            _ => return,
-        };
-        send_activity_event(event);
+        if let Some(event) = make_log_event(self.id, self.activity_type, line_str, true) {
+            send_activity_event(event);
+        }
     }
 
     /// Set process status (for Process activities only)
@@ -543,44 +565,6 @@ impl Drop for Activity {
             .map(|o| *o)
             .unwrap_or(ActivityOutcome::Success);
 
-        // Send the correct Complete event based on activity type
-        let event = match self.activity_type {
-            ActivityType::Build => ActivityEvent::Build(Build::Complete {
-                id: self.id,
-                outcome,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Fetch(_) => ActivityEvent::Fetch(Fetch::Complete {
-                id: self.id,
-                outcome,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Evaluate => ActivityEvent::Evaluate(Evaluate::Complete {
-                id: self.id,
-                outcome,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Task => ActivityEvent::Task(Task::Complete {
-                id: self.id,
-                outcome,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Command => ActivityEvent::Command(Command::Complete {
-                id: self.id,
-                outcome,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Process => ActivityEvent::Process(Process::Complete {
-                id: self.id,
-                outcome,
-                timestamp: Timestamp::now(),
-            }),
-            ActivityType::Operation => ActivityEvent::Operation(Operation::Complete {
-                id: self.id,
-                outcome,
-                timestamp: Timestamp::now(),
-            }),
-        };
-        send_activity_event(event);
+        send_activity_event(make_complete_event(self.id, self.activity_type, outcome));
     }
 }
