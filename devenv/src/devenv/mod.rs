@@ -1,7 +1,9 @@
+mod container;
+mod gc;
+mod search;
+
 use super::{processes, tasks, util};
 use clap::crate_version;
-use cli_table::Table;
-use cli_table::WithTitle;
 use devenv_activity::ActivityInstrument;
 use devenv_activity::{Activity, ActivityLevel, activity, message};
 use devenv_cache_core::compute_string_hash;
@@ -9,7 +11,7 @@ use devenv_core::{
     cachix::{CachixManager, CachixPaths},
     config::{Input, NixBackendType, NixpkgsConfig},
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
-    nix_backend::{DevenvPaths, NixBackend, Options},
+    nix_backend::{DevenvPaths, NixBackend},
     ports::PortAllocator,
     settings::{CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings},
 };
@@ -21,7 +23,6 @@ use nix::unistd::Pid;
 use once_cell::sync::{Lazy, OnceCell as SyncOnceCell};
 use processes::ProcessManager as _;
 use secrecy::ExposeSecret;
-use serde::Deserialize;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
 use sqlx::SqlitePool;
@@ -52,7 +53,7 @@ const REQUIRED_FILES: [(&str, &str); 3] = [
 const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
 pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
-    include_str!("../direnvrc").replace(
+    include_str!("../../direnvrc").replace(
         "DEVENV_DIRENVRC_ROLLING_UPGRADE=0",
         "DEVENV_DIRENVRC_ROLLING_UPGRADE=1",
     )
@@ -850,247 +851,10 @@ impl Devenv {
         }
     }
 
-    #[activity(format!("{name} container"), kind = build)]
-    pub async fn container_build(&self, name: &str) -> Result<String> {
-        let _ = self.container_name.set(name.to_string());
-        self.assemble().await?;
-
-        let sanitized_name = sanitize_container_name(name);
-        let gc_root = self
-            .devenv_dot_gc
-            .join(format!("container-{sanitized_name}-derivation"));
-        let host_arch = env!("TARGET_ARCH");
-        let host_os = env!("TARGET_OS");
-        let target_system = if host_os == "macos" {
-            match host_arch {
-                "aarch64" => "aarch64-linux",
-                "x86_64" => "x86_64-linux",
-                _ => bail!("Unsupported container architecture for macOS: {host_arch}"),
-            }
-        } else {
-            &self.nix_settings.system
-        };
-        let paths = self
-            .nix
-            .build(
-                &[&format!(
-                    "devenv.perSystem.{target_system}.config.containers.{name}.derivation"
-                )],
-                None,
-                Some(&gc_root),
-            )
-            .await?;
-        let container_store_path = paths[0].to_string_lossy().into_owned();
-        Ok(container_store_path)
-    }
-
-    pub async fn container_copy(
-        &self,
-        name: &str,
-        copy_args: &[String],
-        registry: Option<&str>,
-        verbosity: tasks::VerbosityLevel,
-        tui: bool,
-    ) -> Result<()> {
-        let spec = self.container_build(name).await?;
-
-        let sanitized_name = sanitize_container_name(name);
-        let gc_root = self
-            .devenv_dot_gc
-            .join(format!("container-{sanitized_name}-copy"));
-        let paths = self
-            .nix
-            .build(
-                &[&format!("devenv.config.containers.{name}.copyScript")],
-                None,
-                Some(&gc_root),
-            )
-            .await?;
-        let copy_script = paths[0].to_string_lossy().into_owned();
-
-        let envs = self.capture_shell_environment().await?;
-
-        let task_name = "devenv:container:copy";
-        let mut task_configs = self.load_tasks().await?;
-
-        let task = task_configs
-            .iter_mut()
-            .find(|t| t.name == task_name)
-            .ok_or_else(|| miette!("Task {task_name} not found"))?;
-
-        task.input = Some(serde_json::json!({
-            "copy_script": copy_script,
-            "spec": spec,
-            "registry": registry.unwrap_or("false"),
-            "copy_args": copy_args,
-        }));
-
-        let config = self.make_task_config(
-            vec![task_name.to_string()],
-            task_configs,
-            devenv_tasks::RunMode::Single,
-            envs,
-            String::new(),
-        )?;
-
-        let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
-            .with_refresh_task_cache(self.cache_settings.refresh_task_cache)
-            .build()
-            .await?;
-
-        let (status, _outputs) = run_tasks_with_ui(tasks, verbosity, tui).await?;
-
-        if status.has_failures() {
-            bail!("Failed to copy container");
-        }
-
-        Ok(())
-    }
-
-    pub async fn container_run(
-        &self,
-        name: &str,
-        copy_args: &[String],
-        verbosity: tasks::VerbosityLevel,
-        tui: bool,
-    ) -> Result<ShellCommand> {
-        self.container_copy(name, copy_args, Some("docker-daemon:"), verbosity, tui)
-            .await?;
-
-        let sanitized_name = sanitize_container_name(name);
-        let gc_root = self
-            .devenv_dot_gc
-            .join(format!("container-{sanitized_name}-run"));
-        let paths = self
-            .nix
-            .build(
-                &[&format!("devenv.config.containers.{name}.dockerRun")],
-                None,
-                Some(&gc_root),
-            )
-            .await?;
-
-        Ok(ShellCommand {
-            command: std::process::Command::new(&paths[0]),
-        })
-    }
-
     pub async fn repl(&self) -> Result<()> {
         self.assemble().await?;
         self.nix.repl().await?;
         Ok(())
-    }
-
-    /// Garbage collect devenv environments and store paths.
-    /// Returns (paths_deleted, bytes_freed).
-    pub async fn gc(&self) -> Result<(u64, u64)> {
-        let (to_gc, _removed_symlinks) = {
-            let activity = Activity::operation(format!(
-                "Removing non-existing symlinks in {}",
-                &self.devenv_home_gc.display()
-            ))
-            .start();
-            cleanup_symlinks(&self.devenv_home_gc)
-                .in_activity(&activity)
-                .await
-        };
-
-        let (paths_deleted, bytes_freed) = {
-            let activity = Activity::operation("Running garbage collection").start();
-            self.nix.gc(to_gc).in_activity(&activity).await?
-        };
-
-        Ok((paths_deleted, bytes_freed))
-    }
-
-    #[activity("Searching options and packages")]
-    pub async fn search(&self, name: &str) -> Result<String> {
-        self.assemble().await?;
-
-        // Run both searches concurrently
-        let (options_results, package_results) =
-            tokio::try_join!(self.search_options(name), self.search_packages(name))?;
-
-        let results_options_count = options_results.len();
-        let package_results_count = package_results.len();
-
-        let mut output = String::new();
-
-        if !package_results.is_empty() {
-            let table_display = package_results
-                .with_title()
-                .table()
-                .display()
-                .expect("Failed to format package results");
-            output.push_str(&format!("{table_display}\n"));
-        }
-
-        if !options_results.is_empty() {
-            let table_display = options_results
-                .with_title()
-                .table()
-                .display()
-                .expect("Failed to format options results");
-            output.push_str(&format!("{table_display}\n"));
-        }
-
-        output.push_str(&format!(
-            "Found {package_results_count} packages and {results_options_count} options for '{name}'.\n"
-        ));
-        Ok(output)
-    }
-
-    async fn search_options(&self, name: &str) -> Result<Vec<DevenvOptionResult>> {
-        let build_options = Options {
-            cache_output: true,
-            ..Default::default()
-        };
-        let options = self
-            .nix
-            .build(&["optionsJSON"], Some(build_options), None)
-            .await?;
-        let options_path = options[0]
-            .join("share")
-            .join("doc")
-            .join("nixos")
-            .join("options.json");
-        let options_contents = fs::read(options_path)
-            .await
-            .expect("Failed to read options.json");
-        let options_json: OptionResults =
-            serde_json::from_slice(&options_contents).expect("Failed to parse options.json");
-
-        let options_results = options_json
-            .0
-            .into_iter()
-            .filter(|(key, _)| key.contains(name))
-            .map(|(key, value)| DevenvOptionResult {
-                name: key,
-                type_: value.type_,
-                default: value.default.unwrap_or_default(),
-                description: value.description,
-            })
-            .collect::<Vec<_>>();
-
-        Ok(options_results)
-    }
-
-    async fn search_packages(&self, name: &str) -> Result<Vec<DevenvPackageResult>> {
-        let search_options = Options {
-            cache_output: true,
-            ..Default::default()
-        };
-        let search_results = self.nix.search(name, Some(search_options)).await?;
-        let results = search_results
-            .into_iter()
-            .map(|(key, value)| DevenvPackageResult {
-                name: format!("pkgs.{key}"),
-                version: value.version,
-                description: value.description.chars().take(80).collect::<String>(),
-            })
-            .collect::<Vec<_>>();
-
-        Ok(results)
     }
 
     pub async fn has_processes(&self) -> Result<bool> {
@@ -1692,7 +1456,7 @@ impl Devenv {
             // Ctrl-R works even while tasks are still running (e.g. when
             // a process task is waiting on an auto start off dependency).
             if let Some(rx) = options.command_rx.take() {
-                tasks_runner.process_manager.start_command_listener(rx);
+                tasks_runner.process_manager().start_command_listener(rx);
             }
 
             // Run process tasks under the Phase 4 activity.
@@ -1707,7 +1471,7 @@ impl Devenv {
             // API server is started inside run_internal() so it's available
             // while processes are still starting up.
 
-            let pid_file = tasks_runner.process_manager.manager_pid_file();
+            let pid_file = tasks_runner.process_manager().manager_pid_file();
             processes::write_pid(&pid_file, std::process::id())
                 .await
                 .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
@@ -1718,7 +1482,7 @@ impl Devenv {
                     self.shutdown.is_cancelled()
                 );
                 let result = tasks_runner
-                    .process_manager
+                    .process_manager()
                     .run_foreground(self.shutdown.cancellation_token(), None)
                     .await
                     .map_err(|e| miette!("Process manager error: {}", e));
@@ -1730,7 +1494,7 @@ impl Devenv {
                 // Store manager for later stop via down()
                 let _ = self
                     .native_process_manager
-                    .set(Arc::clone(&tasks_runner.process_manager));
+                    .set(Arc::clone(tasks_runner.process_manager()));
             }
 
             return Ok(RunMode::Detached);
@@ -2200,94 +1964,6 @@ fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
 
 pub struct DevEnv {
     output: Vec<u8>,
-}
-
-#[derive(Deserialize)]
-struct OptionResults(BTreeMap<String, OptionResult>);
-
-#[derive(Deserialize)]
-struct OptionResult {
-    #[serde(rename = "type")]
-    type_: String,
-    default: Option<String>,
-    description: String,
-}
-
-#[derive(Table)]
-struct DevenvOptionResult {
-    #[table(title = "Option")]
-    name: String,
-    #[table(title = "Type")]
-    type_: String,
-    #[table(title = "Default")]
-    default: String,
-    #[table(title = "Description")]
-    description: String,
-}
-
-#[derive(Table)]
-struct DevenvPackageResult {
-    #[table(title = "Package")]
-    name: String,
-    #[table(title = "Version")]
-    version: String,
-    #[table(title = "Description")]
-    description: String,
-}
-
-fn sanitize_container_name(name: &str) -> String {
-    name.chars()
-        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
-        .collect::<String>()
-}
-
-async fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
-    use futures::StreamExt;
-    use tokio_stream::wrappers::ReadDirStream;
-
-    if !root.exists() {
-        fs::create_dir_all(root)
-            .await
-            .expect("Failed to create gc directory");
-    }
-
-    let read_dir = fs::read_dir(root).await.expect("Failed to read directory");
-
-    let results: Vec<_> = ReadDirStream::new(read_dir)
-        .filter_map(|e| async { e.ok() })
-        .map(|e| e.path())
-        .filter(|p| std::future::ready(p.is_symlink()))
-        .map(|path| async move {
-            if !path.exists() {
-                // Dangling symlink - delete it
-                if fs::remove_file(&path).await.is_ok() {
-                    (None, Some(path))
-                } else {
-                    (None, None)
-                }
-            } else {
-                match fs::canonicalize(&path).await {
-                    Ok(target) => (Some(target), None),
-                    Err(_) => (None, None),
-                }
-            }
-        })
-        .buffer_unordered(100)
-        .collect()
-        .await;
-
-    let mut to_gc = Vec::new();
-    let mut removed_symlinks = Vec::new();
-    for (target, removed) in results {
-        if let Some(t) = target {
-            to_gc.push(t);
-        }
-        if let Some(r) = removed {
-            removed_symlinks.push(r);
-        }
-    }
-
-    (to_gc, removed_symlinks)
 }
 
 /// Parse CLI `--input key=value` and `--input-json '{...}'` into a JSON object map.

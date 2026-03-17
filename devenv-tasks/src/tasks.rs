@@ -144,28 +144,28 @@ impl std::fmt::Debug for Tasks {
 }
 
 pub struct Tasks {
-    pub roots: Vec<NodeIndex>,
+    pub(crate) roots: Vec<NodeIndex>,
     // Stored for reporting
-    pub root_names: Vec<String>,
-    pub longest_task_name: usize,
-    pub graph: DiGraph<Arc<RwLock<TaskState>>, DependencyKind>,
-    pub tasks_order: Vec<NodeIndex>,
-    pub notify_finished: Arc<Notify>,
-    pub notify_ui: Arc<Notify>,
-    pub run_mode: RunMode,
-    pub cache: TaskCache,
-    pub shutdown: Arc<tokio_shutdown::Shutdown>,
+    pub(crate) root_names: Vec<String>,
+    pub(crate) longest_task_name: usize,
+    pub(crate) graph: DiGraph<Arc<RwLock<TaskState>>, DependencyKind>,
+    pub(crate) tasks_order: Vec<NodeIndex>,
+    pub(crate) notify_finished: Arc<Notify>,
+    pub(crate) notify_ui: Arc<Notify>,
+    pub(crate) run_mode: RunMode,
+    pub(crate) cache: TaskCache,
+    pub(crate) shutdown: Arc<tokio_shutdown::Shutdown>,
     /// Process manager for running long-lived process tasks
-    pub process_manager: Arc<NativeProcessManager>,
+    pub(crate) process_manager: Arc<NativeProcessManager>,
     /// Environment variables to pass to processes
-    pub env: HashMap<String, String>,
+    pub(crate) env: HashMap<String, String>,
     /// Path to the bash binary to use for probe commands
-    pub bash: String,
-    pub executor: SubprocessExecutor,
+    pub(crate) bash: String,
+    pub(crate) executor: SubprocessExecutor,
     /// Force a refresh of the task cache, skipping cache reads
-    pub refresh_task_cache: bool,
+    pub(crate) refresh_task_cache: bool,
     /// When true, exclude non-root process-type tasks from the scheduled subgraph
-    pub ignore_process_deps: bool,
+    pub(crate) ignore_process_deps: bool,
 }
 
 impl Tasks {
@@ -176,6 +176,11 @@ impl Tasks {
         shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
     ) -> TasksBuilder {
         TasksBuilder::new(config, verbosity, shutdown)
+    }
+
+    /// Returns a reference to the process manager used for long-lived process tasks.
+    pub fn process_manager(&self) -> &Arc<NativeProcessManager> {
+        &self.process_manager
     }
 
     /// Get the current task completion status
