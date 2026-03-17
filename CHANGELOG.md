@@ -8,6 +8,10 @@
 - Fixed stale eval cache invalidation for `devenv up` process config changes caused by overlapping evaluations clearing each other's file dependency observers ([#2632](https://github.com/cachix/devenv/pull/2632)).
 - Fixed child processes being left running on shutdown when using non-native process managers like process-compose ([#2586](https://github.com/cachix/devenv/issues/2586)).
 
+### Improvements
+
+- Extracted container, search, and gc methods from `devenv.rs` into separate submodule files for better code organization.
+
 ## 2.0.5 (2026-03-16)
 
 ### Improvements

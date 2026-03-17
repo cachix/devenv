@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-When creating git commits, add entry to CHANGELOG.md (skip for src/modules/*):
+When creating git commits, add entry to CHANGELOG.md (skip for src/modules/* and docs/*):
 
 ## Build & Development Commands
 
