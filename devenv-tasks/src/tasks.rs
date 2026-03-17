@@ -60,25 +60,18 @@ impl TasksBuilder {
     /// Build the Tasks instance
     pub async fn build(self) -> Result<Tasks, Error> {
         let cache = if let Some(db_path) = self.db_path {
-            TaskCache::with_db_path(db_path).await.map_err(|e| {
-                Error::IoError(std::io::Error::other(format!(
-                    "Failed to initialize task cache: {e}"
-                )))
-            })?
+            TaskCache::with_db_path(db_path)
+                .await
+                .map_err(|e| Error::io(format!("Failed to initialize task cache: {e}")))?
         } else {
-            TaskCache::new(&self.config.cache_dir).await.map_err(|e| {
-                Error::IoError(std::io::Error::other(format!(
-                    "Failed to initialize task cache: {e}"
-                )))
-            })?
+            TaskCache::new(&self.config.cache_dir)
+                .await
+                .map_err(|e| Error::io(format!("Failed to initialize task cache: {e}")))?
         };
 
         // Create process manager for long-running process tasks
-        let mut pm = NativeProcessManager::new(self.config.runtime_dir.clone()).map_err(|e| {
-            Error::IoError(std::io::Error::other(format!(
-                "Failed to initialize process manager: {e}"
-            )))
-        })?;
+        let mut pm = NativeProcessManager::new(self.config.runtime_dir.clone())
+            .map_err(|e| Error::io(format!("Failed to initialize process manager: {e}")))?;
 
         let notify_finished = Arc::new(Notify::new());
         pm.set_task_notify(Arc::clone(&notify_finished));

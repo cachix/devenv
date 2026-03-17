@@ -94,9 +94,10 @@ impl TasksUi {
         }
 
         // Phase 1: Process events until task runner completes
-        let outputs = self.consume_events_until(run_handle).await.map_err(|e| {
-            Error::IoError(std::io::Error::other(format!("Task runner panicked: {e}")))
-        })?;
+        let outputs = self
+            .consume_events_until(run_handle)
+            .await
+            .map_err(|e| Error::io(format!("Task runner panicked: {e}")))?;
 
         // Phase 2: If processes are still running (e.g., devenv-tasks invoked by
         // process-compose), keep forwarding output and wait for them to exit.
@@ -111,7 +112,7 @@ impl TasksUi {
                 .map_err(|e| format!("Process manager panicked: {e}"))
                 .and_then(|r| r.map_err(|e| format!("Process manager error: {e}")))
             {
-                return Err(Error::IoError(std::io::Error::other(e)));
+                return Err(Error::io(e));
             }
         }
 
@@ -309,75 +310,27 @@ impl TasksUi {
         let final_status = self.tasks.get_completion_status().await;
 
         if self.verbosity != VerbosityLevel::Quiet {
-            let status_summary = [
-                if final_status.pending > 0 {
-                    format!(
-                        "{} {}",
-                        final_status.pending,
-                        console::style("Pending").blue().bold()
-                    )
-                } else {
-                    String::new()
-                },
-                if final_status.running > 0 {
-                    format!(
-                        "{} {}",
-                        final_status.running,
-                        console::style("Running").blue().bold()
-                    )
-                } else {
-                    String::new()
-                },
-                if final_status.skipped > 0 {
-                    format!(
-                        "{} {}",
-                        final_status.skipped,
-                        console::style("Skipped").blue().bold()
-                    )
-                } else {
-                    String::new()
-                },
-                if final_status.succeeded > 0 {
-                    format!(
-                        "{} {}",
-                        final_status.succeeded,
-                        console::style("Succeeded").green().bold()
-                    )
-                } else {
-                    String::new()
-                },
-                if final_status.failed > 0 {
-                    format!(
-                        "{} {}",
-                        final_status.failed,
-                        console::style("Failed").red().bold()
-                    )
-                } else {
-                    String::new()
-                },
-                if final_status.dependency_failed > 0 {
-                    format!(
-                        "{} {}",
-                        final_status.dependency_failed,
-                        console::style("Dependency Failed").red().bold()
-                    )
-                } else {
-                    String::new()
-                },
-                if final_status.cancelled > 0 {
-                    format!(
-                        "{} {}",
-                        final_status.cancelled,
-                        console::style("Cancelled").yellow().bold()
-                    )
-                } else {
-                    String::new()
-                },
-            ]
-            .into_iter()
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join(", ");
+            let blue = console::Style::new().blue().bold();
+            let green = console::Style::new().green().bold();
+            let red = console::Style::new().red().bold();
+            let yellow = console::Style::new().yellow().bold();
+
+            let items: &[(usize, &str, &console::Style)] = &[
+                (final_status.pending, "Pending", &blue),
+                (final_status.running, "Running", &blue),
+                (final_status.skipped, "Skipped", &blue),
+                (final_status.succeeded, "Succeeded", &green),
+                (final_status.failed, "Failed", &red),
+                (final_status.dependency_failed, "Dependency Failed", &red),
+                (final_status.cancelled, "Cancelled", &yellow),
+            ];
+
+            let status_summary = items
+                .iter()
+                .filter(|(count, _, _)| *count > 0)
+                .map(|(count, label, style)| format!("{} {}", count, style.apply_to(label)))
+                .collect::<Vec<_>>()
+                .join(", ");
 
             self.console_write_stderr(&status_summary);
         }

@@ -70,7 +70,7 @@ impl std::fmt::Display for VerbosityLevel {
 }
 
 /// Current status counters for all tasks in execution
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TasksStatus {
     pub pending: usize,
     pub running: usize,
@@ -85,26 +85,10 @@ pub struct TasksStatus {
     pub soft_dependency_failed: usize,
 }
 
-impl Default for TasksStatus {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl TasksStatus {
     /// Create a new empty TasksStatus
     pub fn new() -> Self {
-        Self {
-            pending: 0,
-            running: 0,
-            succeeded: 0,
-            failed: 0,
-            skipped: 0,
-            dependency_failed: 0,
-            cancelled: 0,
-            soft_failed: 0,
-            soft_dependency_failed: 0,
-        }
+        Self::default()
     }
 
     /// Check if all tasks are complete (no pending or running tasks)
