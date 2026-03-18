@@ -51,6 +51,31 @@
     tryGetInput = { name, url, attribute, follows ? [ ] }:
       inputs.${name} or null;
 
+    # Like getInput but for multiple inputs at once.
+    # Returns an attrset keyed by input name.
+    # Throws a single error listing all missing inputs.
+    getInputs = argsList:
+      let
+        results = map
+          (args: {
+            inherit args;
+            value = config.lib.tryGetInput args;
+          })
+          argsList;
+        missing = builtins.filter (r: r.value == null) results;
+        missingErrors = map (r: config.lib._mkInputError r.args) missing;
+        check =
+          if missingErrors != [ ]
+          then throw (builtins.concatStringsSep "\n\n" missingErrors)
+          else null;
+      in
+      builtins.listToAttrs (map
+        (r: {
+          name = r.args.name;
+          value = if r.value != null then r.value else builtins.seq check null;
+        })
+        results);
+
     mkTests = folder:
       let
         mk = dir: {
