@@ -187,7 +187,11 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
     }
 
     // Resolve settings from CLI + Config (pure functions, no mutation).
-    let nix_settings = NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
+    let mut nix_settings =
+        NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
+    if matches!(command, Commands::Update { .. }) {
+        nix_settings.refresh_fetchers = true;
+    }
     let shell_settings =
         ShellSettings::resolve(devenv_core::ShellOptions::from(cli.shell_args), &config);
     let cache_settings = CacheSettings::resolve(devenv_core::CacheOptions::from(cli.cache_args));

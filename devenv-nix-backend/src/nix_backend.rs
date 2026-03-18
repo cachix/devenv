@@ -776,6 +776,13 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to set use-registries")?;
 
+        // refresh_fetchers: bypass Nix's fetcher cache (equivalent to nix --refresh)
+        if nix_settings.refresh_fetchers {
+            settings::set("tarball-ttl", "0")
+                .to_miette()
+                .wrap_err("Failed to set tarball-ttl")?;
+        }
+
         // nix_options: apply custom Nix configuration pairs
         // These are passed as pairs: ["key1", "value1", "key2", "value2", ...]
         for pair in nix_settings.nix_options.chunks_exact(2) {

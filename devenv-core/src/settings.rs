@@ -123,6 +123,9 @@ pub struct NixSettings {
     pub nix_options: Vec<String>,
     pub nix_debugger: bool,
     pub backend: NixBackendType,
+    /// When true, bypass Nix's fetcher cache (equivalent to `nix --refresh`).
+    /// Sets `tarball-ttl` to 0 so inputs resolve to the latest revision.
+    pub refresh_fetchers: bool,
 }
 
 impl Default for NixSettings {
@@ -137,6 +140,7 @@ impl Default for NixSettings {
             nix_options: Vec::new(),
             nix_debugger: false,
             backend: NixBackendType::default(),
+            refresh_fetchers: false,
         }
     }
 }
@@ -157,6 +161,7 @@ impl NixSettings {
             nix_options: options.nix_options,
             nix_debugger: options.nix_debugger.unwrap_or(false),
             backend: options.backend.unwrap_or_else(|| config.backend.clone()),
+            refresh_fetchers: false,
         }
     }
 }
