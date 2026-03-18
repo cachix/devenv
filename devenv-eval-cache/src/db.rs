@@ -510,6 +510,25 @@ where
     Ok(())
 }
 
+/// Delete all cached evals that have associated resource specs.
+///
+/// When a port replay fails for one attr, all port-dependent cache entries
+/// must be purged to prevent inconsistent port values across attrs.
+/// The existing `ON DELETE CASCADE` on `eval_resource_spec` and `eval_input_path`
+/// handles cleanup of related rows.
+pub async fn delete_evals_with_resource_specs(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query(
+        r#"
+        DELETE FROM cached_eval
+        WHERE id IN (SELECT DISTINCT cached_eval_id FROM eval_resource_spec)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected())
+}
+
 /// Delete resource specs for a cached eval.
 pub async fn delete_resource_specs_by_eval_id<'a, A>(
     conn: A,
@@ -743,5 +762,74 @@ mod tests {
 
         // File should be reused (same ID)
         assert_eq!(file_ids1[0], file_ids2[0]);
+    }
+
+    #[sqlx::test]
+    async fn test_delete_evals_with_resource_specs(pool: SqlitePool) {
+        let modified_at = SystemTime::now();
+
+        // Insert eval WITH resource specs
+        let key_with = compute_string_hash("expr:with_ports");
+        let inputs = vec![Input::File(FileInputDesc {
+            path: "/path/to/a.nix".into(),
+            is_directory: false,
+            content_hash: Some("h1".to_string()),
+            modified_at,
+        })];
+        let input_hash = Input::compute_input_hash(&inputs);
+        let (eval_id_with, _, _) = insert_eval_with_inputs(
+            &pool,
+            &key_with,
+            "with_ports",
+            &input_hash,
+            r#"{"port":8080}"#,
+            &inputs,
+        )
+        .await
+        .unwrap();
+
+        insert_resource_specs(
+            &pool,
+            eval_id_with,
+            &[crate::resource_manager::ResourceSpec {
+                type_id: "port".to_string(),
+                data: serde_json::json!({"port": 8080}),
+            }],
+        )
+        .await
+        .unwrap();
+
+        // Insert eval WITHOUT resource specs
+        let key_without = compute_string_hash("expr:no_ports");
+        let (_, _, _) = insert_eval_with_inputs(
+            &pool,
+            &key_without,
+            "no_ports",
+            &input_hash,
+            r#"{"value":42}"#,
+            &inputs,
+        )
+        .await
+        .unwrap();
+
+        // Delete evals with resource specs
+        let deleted = delete_evals_with_resource_specs(&pool).await.unwrap();
+        assert_eq!(deleted, 1);
+
+        // The one with specs should be gone
+        assert!(
+            get_eval_by_key_hash(&pool, &key_with)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        // The one without specs should remain
+        assert!(
+            get_eval_by_key_hash(&pool, &key_without)
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 }

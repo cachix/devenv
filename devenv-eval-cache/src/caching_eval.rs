@@ -339,6 +339,7 @@ pub struct CachedEval {
     log_bridge: Arc<NixLogBridge>,
     config: CachingConfig,
     resource_manager: Option<Arc<ResourceManager>>,
+    on_resource_invalidation: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl CachedEval {
@@ -355,6 +356,7 @@ impl CachedEval {
             log_bridge,
             config,
             resource_manager: None,
+            on_resource_invalidation: None,
         }
     }
 
@@ -368,6 +370,7 @@ impl CachedEval {
             log_bridge,
             config: CachingConfig::default(),
             resource_manager: None,
+            on_resource_invalidation: None,
         }
     }
 
@@ -379,6 +382,14 @@ impl CachedEval {
     /// is now occupied), the cache entry is invalidated and evaluation re-runs.
     pub fn with_resource_manager(mut self, resource_manager: Arc<ResourceManager>) -> Self {
         self.resource_manager = Some(resource_manager);
+        self
+    }
+
+    /// Set a callback invoked when resource replay fails and all port-dependent
+    /// cache entries are purged. Use this to clear any in-memory cached Nix values
+    /// so that re-evaluation starts from a clean state.
+    pub fn with_on_resource_invalidation(mut self, f: Arc<dyn Fn() + Send + Sync>) -> Self {
+        self.on_resource_invalidation = Some(f);
         self
     }
 
@@ -420,6 +431,28 @@ impl CachedEval {
     pub fn clear_resources(&self) {
         if let Some(ref rm) = self.resource_manager {
             rm.clear_all();
+        }
+    }
+
+    /// Handle a resource replay failure by purging all port-dependent cache
+    /// entries, resetting the port allocator, and invoking the invalidation
+    /// callback so the caller can clear any in-memory cached Nix values.
+    async fn handle_replay_failure(
+        &self,
+        service: &CachingEvalService,
+        rm: &ResourceManager,
+        error: &CacheError,
+    ) {
+        warn!(error = %error, "Resource replay failed, invalidating all port-dependent cache entries");
+
+        if let Err(db_err) = db::delete_evals_with_resource_specs(service.pool()).await {
+            warn!(error = %db_err, "Failed to delete port-dependent cache entries");
+        }
+
+        rm.clear_all();
+
+        if let Some(ref cb) = self.on_resource_invalidation {
+            cb();
         }
     }
 
@@ -525,9 +558,7 @@ impl CachedEval {
                             return Ok((cached.json_output, true));
                         }
                         Err(e) => {
-                            // Replay failed (e.g., port now in use) - invalidate and re-evaluate
-                            warn!(error = %e, "Resource replay failed, re-evaluating");
-                            rm.clear_all();
+                            self.handle_replay_failure(service, rm, &e).await;
                             // Fall through to evaluation
                         }
                     }
@@ -620,9 +651,7 @@ impl CachedEval {
                             return Ok((value, true));
                         }
                         Err(e) => {
-                            // Replay failed - invalidate and re-evaluate
-                            warn!(error = %e, "Resource replay failed, re-evaluating");
-                            rm.clear_all();
+                            self.handle_replay_failure(service, rm, &e).await;
                             // Fall through to evaluation
                         }
                     }
@@ -1177,5 +1206,135 @@ mod tests {
             assert!(result.is_some());
             assert_eq!(result.unwrap().json_output, r#"{"persistent":true}"#);
         }
+    }
+
+    #[sqlx::test]
+    async fn test_replay_failure_invalidates_all_port_dependent_entries(pool: SqlitePool) {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let log_bridge = devenv_core::nix_log_bridge::NixLogBridge::new();
+
+        // Create a port allocator and resource manager
+        let allocator = Arc::new(devenv_core::ports::PortAllocator::new());
+        allocator.set_enabled(true);
+        let resource_manager = Arc::new(ResourceManager::new(allocator.clone()));
+
+        // Track whether the invalidation callback fires
+        let callback_fired = Arc::new(AtomicBool::new(false));
+        let callback_flag = callback_fired.clone();
+
+        // Build CachedEval with caching, resource manager, and callback
+        let service = CachingEvalService::new(pool.clone());
+        let config = CachingConfig::default();
+        let cached_eval = CachedEval::with_cache(service, log_bridge, config)
+            .with_resource_manager(resource_manager)
+            .with_on_resource_invalidation(Arc::new(move || {
+                callback_flag.store(true, Ordering::Release);
+            }));
+
+        // Manually insert two cache entries with resource specs (ports).
+        // Entry 1: "config.processes" with port 50300
+        let key1 = EvalCacheKey::from_test_string("(import /test {})", "config.processes");
+        let service = cached_eval.service().unwrap();
+        let eval_id1 = service
+            .store(&key1, r#"{"port":50300}"#, vec![])
+            .await
+            .unwrap();
+        db::insert_resource_specs(
+            service.pool(),
+            eval_id1,
+            &[crate::resource_manager::ResourceSpec {
+                type_id: "ports".to_string(),
+                data: serde_json::json!({
+                    "allocations": [{
+                        "process_name": "postgres",
+                        "port_name": "default",
+                        "base_port": 50300,
+                        "allocated_port": 50300
+                    }]
+                }),
+            }],
+        )
+        .await
+        .unwrap();
+
+        // Entry 2: "config.info" with port 50301
+        let key2 = EvalCacheKey::from_test_string("(import /test {})", "config.info");
+        let eval_id2 = service
+            .store(&key2, r#"{"port":50301}"#, vec![])
+            .await
+            .unwrap();
+        db::insert_resource_specs(
+            service.pool(),
+            eval_id2,
+            &[crate::resource_manager::ResourceSpec {
+                type_id: "ports".to_string(),
+                data: serde_json::json!({
+                    "allocations": [{
+                        "process_name": "redis",
+                        "port_name": "default",
+                        "base_port": 50301,
+                        "allocated_port": 50301
+                    }]
+                }),
+            }],
+        )
+        .await
+        .unwrap();
+
+        // Entry 3: no resource specs (should survive the purge)
+        let key3 = EvalCacheKey::from_test_string("(import /test {})", "config.simple");
+        service
+            .store(&key3, r#"{"no_ports":true}"#, vec![])
+            .await
+            .unwrap();
+
+        // Pre-occupy port 50300 so that replay of entry 1 will fail.
+        // allocate() grabs a real TCP listener on the port.
+        allocator
+            .allocate("other_process", "blocker", 50300)
+            .unwrap();
+
+        // Now call eval() for key1. The cache hit will try to replay port 50300
+        // for "postgres:default", but it is already held by "other_process:blocker",
+        // so replay fails and handle_replay_failure should fire.
+        let activity = devenv_activity::Activity::evaluate("test").start();
+        let (result, cache_hit) = cached_eval
+            .eval(&key1, &activity, || async {
+                Ok(r#"{"port":50302}"#.to_string())
+            })
+            .await
+            .unwrap();
+
+        // Should NOT be a cache hit (replay failed, fell through to eval_fn)
+        assert!(!cache_hit);
+        assert_eq!(result, r#"{"port":50302}"#);
+
+        // The invalidation callback should have fired
+        assert!(callback_fired.load(Ordering::Acquire));
+
+        // key1 is re-stored by eval() after the fallback evaluation,
+        // so it exists again with the new result from eval_fn.
+        let key1_row = db::get_eval_by_key_hash(&pool, &key1.key_hash)
+            .await
+            .unwrap()
+            .expect("key1 should be re-stored after re-evaluation");
+        assert_eq!(key1_row.json_output, r#"{"port":50302}"#);
+
+        // key2 was deleted by handle_replay_failure and never re-evaluated
+        assert!(
+            db::get_eval_by_key_hash(&pool, &key2.key_hash)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        // The entry without resource specs should still exist
+        assert!(
+            db::get_eval_by_key_hash(&pool, &key3.key_hash)
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 }

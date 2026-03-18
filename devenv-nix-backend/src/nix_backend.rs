@@ -145,6 +145,10 @@ pub struct NixRustBackend {
     // Lock ordering: cached_devenv_value → nix_log_bridge.observers (via replay_ops).
     cached_devenv_value: Mutex<Option<(nix_bindings_expr::value::Value, Vec<EvalOp>)>>,
 
+    // Flag set by the resource invalidation callback to signal that cached_devenv_value
+    // should be cleared before the next use. Needed because Value is not Send.
+    devenv_value_invalidated: Arc<AtomicBool>,
+
     // Caching wrapper around EvalState (drops first — releases Arc to eval_state)
     caching_eval_state: OnceCell<CachingEvalState<Arc<Mutex<EvalState>>>>,
 
@@ -441,6 +445,7 @@ impl NixRustBackend {
             shutdown: shutdown.clone(),
             port_allocator,
             cached_devenv_value: Mutex::new(None),
+            devenv_value_invalidated: Arc::new(AtomicBool::new(false)),
             caching_eval_state: OnceCell::new(),
             eval_state: Arc::new(Mutex::new(eval_state)),
             store: Arc::new(store),
@@ -651,6 +656,14 @@ impl NixRustBackend {
         &self,
         eval_state: &mut EvalState,
     ) -> Result<nix_bindings_expr::value::Value> {
+        // Check if the resource invalidation callback requested clearing the cache
+        if self.devenv_value_invalidated.swap(false, Ordering::AcqRel) {
+            let mut cached = self
+                .cached_devenv_value
+                .lock()
+                .map_err(|e| miette!("Failed to lock cached devenv value: {}", e))?;
+            *cached = None;
+        }
         {
             let cached = self
                 .cached_devenv_value
@@ -1140,8 +1153,12 @@ impl NixBackend for NixRustBackend {
                     };
                     let service = CachingEvalService::with_config(pool.clone(), config.clone());
                     tracing::debug!(?config, "Eval caching enabled from framework pool");
+                    let invalidation_flag = self.devenv_value_invalidated.clone();
                     CachedEval::with_cache(service, self.nix_log_bridge.clone(), config)
                         .with_resource_manager(resource_manager)
+                        .with_on_resource_invalidation(Arc::new(move || {
+                            invalidation_flag.store(true, Ordering::Release);
+                        }))
                 } else {
                     tracing::debug!("Eval caching disabled (pool not ready)");
                     CachedEval::without_cache(self.nix_log_bridge.clone())
@@ -1226,7 +1243,17 @@ impl NixBackend for NixRustBackend {
                                             error = %e,
                                             "Resource replay failed for shell cache hit, re-evaluating"
                                         );
+                                        // Purge all port-dependent cache entries
+                                        if let Some(svc) = caching_state.cached_eval().service() {
+                                            if let Err(db_err) = devenv_eval_cache::db::delete_evals_with_resource_specs(svc.pool()).await {
+                                                tracing::warn!(error = %db_err, "Failed to delete port-dependent cache entries");
+                                            }
+                                        }
                                         caching_state.cached_eval().clear_resources();
+                                        // Clear cached Nix value to force fresh evaluation
+                                        if let Ok(mut cached) = self.cached_devenv_value.lock() {
+                                            *cached = None;
+                                        }
                                         None
                                     }
                                 }
