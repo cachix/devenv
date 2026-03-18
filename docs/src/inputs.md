@@ -152,6 +152,20 @@ inputs:
         follows: nixpkgs
 ```
 
+## Adding inputs from the CLI
+
+You can add an input to `devenv.yaml` without editing the file manually:
+
+```shell-session
+$ devenv inputs add nixpkgs-stable github:NixOS/nixpkgs/nixos-23.11
+```
+
+To make the new input follow an existing input:
+
+```shell-session
+$ devenv inputs add my-input github:org/repo --follows nixpkgs
+```
+
 ## Locking and updating inputs
 
 When you run any of the commands, `devenv` resolves inputs like `github:NixOS/nixpkgs/nixpkgs-unstable` into a commit revision and writes them to `devenv.lock`. This ensures that your environment is reproducible.

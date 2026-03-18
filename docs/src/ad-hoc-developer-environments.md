@@ -60,6 +60,17 @@ $ devenv --option languages.elixir.enable:bool true shell iex
 
 This example launches an Elixir interactive shell (`iex`) immediately after creating the environment.
 
+## Replacing vs. Appending Lists
+
+List types like `:pkgs` append to existing values by default. To replace the entire list instead, add a
+`!` suffix to the type:
+
+```shell-session
+$ devenv -O packages:pkgs! "ncdu git" shell
+```
+
+This replaces all packages rather than appending to whatever `devenv.nix` already defines.
+
 ## Combining with `devenv.nix`
 
 When used with an existing `devenv.nix` file, `--option` values will override the configuration in the file.
