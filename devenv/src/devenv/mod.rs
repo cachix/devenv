@@ -1170,22 +1170,20 @@ impl Devenv {
         // git-hooks:run and other enterTest tasks in a single pass.
         // Exports are stored on self so prepare_shell() injects them.
         let mut envs = envs;
-        {
-            let task_configs = self.load_tasks().await?;
-            let (status, exports) = self
-                .run_tasks_with_roots(
-                    vec!["devenv:enterTest".to_string()],
-                    task_configs,
-                    envs.clone(),
-                    verbosity,
-                    tui,
-                )
-                .await?;
-            if status.has_failures() {
-                bail!("enterTest tasks failed");
-            }
-            envs.extend(exports);
+        let task_configs = self.load_tasks().await?;
+        let (status, exports) = self
+            .run_tasks_with_roots(
+                vec!["devenv:enterTest".to_string()],
+                task_configs.clone(),
+                envs.clone(),
+                verbosity,
+                tui,
+            )
+            .await?;
+        if status.has_failures() {
+            bail!("enterTest tasks failed");
         }
+        envs.extend(exports);
 
         // ── Phase 3: Building tests ─────────────────────────────────
         let test_script = {
@@ -1208,7 +1206,8 @@ impl Devenv {
                 detach: true,
                 ..Default::default()
             };
-            self.start_processes(vec![], envs, options).await?;
+            self.start_processes(vec![], envs, options, Some(task_configs))
+                .await?;
         }
 
         // ── Phase 5: Running tests ──────────────────────────────────
@@ -1376,7 +1375,7 @@ impl Devenv {
         let (_status, exports) = self
             .run_tasks_with_roots(
                 vec!["devenv:enterShell".to_string()],
-                task_configs,
+                task_configs.clone(),
                 envs.clone(),
                 verbosity,
                 tui,
@@ -1385,7 +1384,8 @@ impl Devenv {
         envs.extend(exports);
 
         // ── Phase 3: Running processes ──────────────────────────────
-        self.start_processes(processes, envs, options).await
+        self.start_processes(processes, envs, options, Some(task_configs))
+            .await
     }
 
     /// Start processes after shell environment and tasks are already configured.
@@ -1394,6 +1394,7 @@ impl Devenv {
         processes: Vec<String>,
         envs: HashMap<String, String>,
         mut options: ProcessOptions,
+        task_configs: Option<Vec<tasks::TaskConfig>>,
     ) -> Result<RunMode> {
         // Release port reservations so processes can bind their allocated ports.
         // The port allocator holds TcpListeners during Nix evaluation to prevent
@@ -1418,7 +1419,10 @@ impl Devenv {
         if impl_result == "native" {
             info!("Using native process manager with task-based dependency ordering");
 
-            let task_configs = self.load_tasks().await?;
+            let task_configs = match task_configs {
+                Some(task_configs) => task_configs,
+                None => self.load_tasks().await?,
+            };
             let roots: Vec<String> = if processes.is_empty() {
                 task_configs
                     .iter()

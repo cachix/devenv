@@ -7,10 +7,7 @@ use devenv_event_sources::{
 use futures::future::Either;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, warn};
-
-use watchexec_supervisor::job::CommandState;
-use watchexec_supervisor::{ProcessEnd, Signal};
+use tracing::{debug, error, info, warn};
 
 use crate::config::ListenKind;
 use crate::manager::ProcessResources;
@@ -40,11 +37,18 @@ pub fn spawn_supervisor(
     shutdown: CancellationToken,
 ) -> JoinHandle<()> {
     let config = resources.config.clone();
-    let job = resources.job.clone();
+    let pty = resources.pty.clone();
     let activity = resources.activity.ref_handle();
     let notify_socket = resources.notify_socket.clone();
     let status_tx = resources.status_tx.clone();
     let name = config.name.clone();
+    let state_dir = resources
+        .stderr_log
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
 
     // Probe timing from ready config
     let initial_delay = Duration::from_secs(config.ready.as_ref().map_or(0, |r| r.initial_delay));
@@ -195,242 +199,321 @@ pub fn spawn_supervisor(
             };
         }
 
+        // Helper to spawn the process via PtyProcess
+        let spawn_pty = |config: &crate::config::ProcessConfig,
+                         state_dir: &std::path::Path,
+                         activity: &devenv_activity::ActivityRef|
+         -> Result<crate::pty::PtyProcess, miette::Error> {
+            let watchdog_usec = config.watchdog.as_ref().map(|w| w.usec);
+            let proc_cmd = crate::command::build_command(
+                state_dir,
+                config,
+                None, // We handle notify elsewhere or wrapper script handles it
+                watchdog_usec,
+            )
+            .map_err(|e| miette::miette!("Failed to build command: {}", e))?;
+
+            crate::pty::PtyProcess::spawn(
+                "bash",
+                &["-c".to_string(), proc_cmd.script],
+                None,
+                &std::collections::HashMap::new(),
+                Some(proc_cmd.stdout_log.clone()),
+                Some(activity.clone()),
+            )
+        };
+
+        respawn_probes!();
+
         'supervisor: loop {
-            tokio::select! {
-                biased;
+            let mut exit_rx = {
+                let pty_guard = pty.read().await;
+                pty_guard.as_ref().map(|p| p.exit_status())
+            };
 
-                _ = shutdown.cancelled() => {
-                    debug!("Shutdown requested for {}", name);
-                    break;
-                }
-
-                Some(()) = async {
-                    match &mut tcp_probe {
-                        Some(probe) => probe.recv().await,
-                        None => std::future::pending::<Option<()>>().await,
-                    }
-                } => {
-                    handle_probe_success(&activity, &mut state, &status_tx, "TCP");
-                    tcp_probe = None;
-                }
-
-                Some(()) = async {
-                    match &mut exec_probe {
-                        Some(probe) => probe.recv().await,
-                        None => std::future::pending::<Option<()>>().await,
-                    }
-                } => {
-                    handle_probe_success(&activity, &mut state, &status_tx, "Exec");
-                    exec_probe = None;
-                }
-
-                Some(()) = async {
-                    match &mut http_probe {
-                        Some(probe) => probe.recv().await,
-                        None => std::future::pending::<Option<()>>().await,
-                    }
-                } => {
-                    handle_probe_success(&activity, &mut state, &status_tx, "HTTP");
-                    http_probe = None;
-                }
-
-                _ = file_watcher.recv() => {
-                    // Bail if shutdown fired while another select arm was executing.
-                    // The biased select catches it next iteration, but we skip
-                    // expensive restart work below.
-                    if shutdown.is_cancelled() { break 'supervisor; }
-                    info!("File change detected for {}, restarting", name);
-                    activity.log("File change detected, restarting");
-                    match state.on_event(Event::FileChange, Instant::now()) {
-                        Action::Restart => {
-                            job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                            job.start().await;
-                            state.on_restart_complete(Instant::now());
-                            let count = state.restart_count();
-                            activity.log(format!("Restarted (attempt {})", count));
-                            respawn_probes!();
+            loop {
+                let exit_fut = async {
+                    if let Some(ref mut rx) = exit_rx {
+                        loop {
+                            if let Some(code) = *rx.borrow() {
+                                return Some(code);
+                            }
+                            if rx.changed().await.is_err() {
+                                return None;
+                            }
                         }
-                        Action::GiveUp { reason } => {
-                            warn!("{}: {}", name, reason);
-                            activity.error(reason);
-                            activity.fail();
-                            let _ = status_tx.send(state.status());
-                            break;
-                        }
-                        Action::None => {}
+                    } else {
+                        std::future::pending().await
                     }
-                    let _ = status_tx.send(state.status());
-                }
+                };
 
-                result = async {
-                    match &notify_socket {
-                        Some(socket) => socket.recv().await,
-                        None => std::future::pending().await,
+                tokio::select! {
+                    biased;
+
+                    _ = shutdown.cancelled() => {
+                        debug!("Shutdown requested for {}", name);
+                        let mut pty_guard = pty.write().await;
+                        if let Some(ref mut pty_proc) = *pty_guard {
+                            let _ = pty_proc.kill().await;
+                        }
+                        break 'supervisor;
                     }
-                } => {
-                    if let Ok(messages) = result {
-                        for msg in messages {
-                            match msg {
-                                NotifyMessage::Ready => {
-                                    info!("Process {} signaled ready", name);
-                                    activity.log("Process signaled ready");
-                                    activity.set_status(ProcessStatus::Ready);
-                                    let _ = state.on_event(Event::Ready, Instant::now());
-                                    let _ = status_tx.send(state.status());
-                                }
-                                NotifyMessage::Watchdog => {
-                                    debug!("Watchdog ping from {}", name);
-                                    let _ = state.on_event(Event::WatchdogPing, Instant::now());
-                                    let _ = status_tx.send(state.status());
-                                }
-                                NotifyMessage::WatchdogTrigger => {
-                                    if shutdown.is_cancelled() { break 'supervisor; }
-                                    debug!("Watchdog trigger from {}", name);
-                                    match state.on_event(Event::WatchdogTrigger, Instant::now()) {
-                                        Action::Restart => {
-                                            activity.error("Watchdog trigger - process signaled failure");
-                                            job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
-                                            state.on_restart_complete(Instant::now());
-                                            let count = state.restart_count();
-                                            let msg = format!("Restarted (attempt {count})");
-                                            warn!("Process {} watchdog trigger, restarted (attempt {})", name, count);
-                                            activity.log(&msg);
-                                            if let Some(ref addrs) = tcp_probe_addresses {
-                                                tcp_probe = Some(TcpProbe::spawn(addrs.clone(), name.clone()));
-                                            }
+
+                    Some(()) = async {
+                        match &mut tcp_probe {
+                            Some(probe) => probe.recv().await,
+                            None => std::future::pending::<Option<()>>().await,
+                        }
+                    } => {
+                        handle_probe_success(&activity, &mut state, &status_tx, "TCP");
+                        tcp_probe = None;
+                    }
+
+                    Some(()) = async {
+                        match &mut exec_probe {
+                            Some(probe) => probe.recv().await,
+                            None => std::future::pending::<Option<()>>().await,
+                        }
+                    } => {
+                        handle_probe_success(&activity, &mut state, &status_tx, "Exec");
+                        exec_probe = None;
+                    }
+
+                    Some(()) = async {
+                        match &mut http_probe {
+                            Some(probe) => probe.recv().await,
+                            None => std::future::pending::<Option<()>>().await,
+                        }
+                    } => {
+                        handle_probe_success(&activity, &mut state, &status_tx, "HTTP");
+                        http_probe = None;
+                    }
+
+                    _ = file_watcher.recv() => {
+                        if shutdown.is_cancelled() { break 'supervisor; }
+                        info!("File change detected for {}, restarting", name);
+                        activity.log("File change detected, restarting");
+                        match state.on_event(Event::FileChange, Instant::now()) {
+                            Action::Restart => {
+                                {
+                                    let mut pty_guard = pty.write().await;
+                                    if let Some(ref mut pty_proc) = *pty_guard {
+                                        let _ = pty_proc.kill().await;
+                                    }
+                                    tokio::time::sleep(Duration::from_millis(100)).await;
+                                    match spawn_pty(&config, &state_dir, &activity) {
+                                        Ok(new_pty) => {
+                                            *pty_guard = Some(new_pty);
                                         }
-                                        Action::GiveUp { reason } => {
-                                            warn!("{}: {}", name, reason);
-                                            activity.error(reason);
-                                            activity.fail();
-                                            let _ = status_tx.send(state.status());
+                                        Err(e) => {
+                                            error!("Failed to restart {}: {}", name, e);
                                             break 'supervisor;
                                         }
-                                        Action::None => {}
                                     }
-                                    let _ = status_tx.send(state.status());
                                 }
-                                NotifyMessage::ExtendTimeout { usec } => {
-                                    debug!("Extend timeout from {}: {} usec", name, usec);
-                                    let _ = state.on_event(Event::ExtendTimeout { usec }, Instant::now());
-                                    let _ = status_tx.send(state.status());
-                                    // Eagerly refresh deadline since ExtendTimeout changes it
-                                    refresh_deadline!(state, current_deadline, deadline_fut);
-                                }
-                                NotifyMessage::Status(status) => {
-                                    debug!("Status from {}: {}", name, status);
-                                    activity.log(format!("Status: {}", status));
-                                }
-                                NotifyMessage::Stopping => {
-                                    debug!("Process {} signaled stopping", name);
-                                    activity.log("Process signaled stopping");
-                                }
-                                NotifyMessage::Reloading => {
-                                    debug!("Process {} signaled reloading", name);
-                                    activity.log("Process reloading configuration");
-                                }
-                                NotifyMessage::Unknown(s) => {
-                                    debug!("Unknown notify message from {}: {}", name, s);
+                                state.on_restart_complete(Instant::now());
+                                let count = state.restart_count();
+                                activity.log(format!("Restarted (attempt {})", count));
+                                respawn_probes!();
+                                break; // Break inner loop to recreate exit_rx
+                            }
+                            Action::GiveUp { reason } => {
+                                warn!("{}: {}", name, reason);
+                                activity.error(reason);
+                                activity.fail();
+                                let _ = status_tx.send(state.status());
+                                break 'supervisor;
+                            }
+                            Action::None => {}
+                        }
+                        let _ = status_tx.send(state.status());
+                    }
+
+                    result = async {
+                        match &notify_socket {
+                            Some(socket) => socket.recv().await,
+                            None => std::future::pending().await,
+                        }
+                    } => {
+                        if let Ok(messages) = result {
+                            for msg in messages {
+                                match msg {
+                                    NotifyMessage::Ready => {
+                                        info!("Process {} signaled ready", name);
+                                        activity.log("Process signaled ready");
+                                        activity.set_status(ProcessStatus::Ready);
+                                        let _ = state.on_event(Event::Ready, Instant::now());
+                                        let _ = status_tx.send(state.status());
+                                    }
+                                    NotifyMessage::Watchdog => {
+                                        debug!("Watchdog ping from {}", name);
+                                        let _ = state.on_event(Event::WatchdogPing, Instant::now());
+                                        let _ = status_tx.send(state.status());
+                                    }
+                                    NotifyMessage::WatchdogTrigger => {
+                                        if shutdown.is_cancelled() { break 'supervisor; }
+                                        debug!("Watchdog trigger from {}", name);
+                                        match state.on_event(Event::WatchdogTrigger, Instant::now()) {
+                                            Action::Restart => {
+                                                activity.error("Watchdog trigger - process signaled failure");
+                                                {
+                                                    let mut pty_guard = pty.write().await;
+                                                    if let Some(ref mut pty_proc) = *pty_guard {
+                                                        let _ = pty_proc.kill().await;
+                                                    }
+                                                    match spawn_pty(&config, &state_dir, &activity) {
+                                                        Ok(new_pty) => {
+                                                            *pty_guard = Some(new_pty);
+                                                        }
+                                                        Err(e) => {
+                                                            error!("Failed to restart {}: {}", name, e);
+                                                            break 'supervisor;
+                                                        }
+                                                    }
+                                                }
+                                                state.on_restart_complete(Instant::now());
+                                                let count = state.restart_count();
+                                                let msg = format!("Restarted (attempt {count})");
+                                                warn!("Process {} watchdog trigger, restarted (attempt {})", name, count);
+                                                activity.log(&msg);
+                                                respawn_probes!();
+                                                break; // Break inner loop to recreate exit_rx
+                                            }
+                                            Action::GiveUp { reason } => {
+                                                warn!("{}: {}", name, reason);
+                                                activity.error(reason);
+                                                activity.fail();
+                                                let _ = status_tx.send(state.status());
+                                                break 'supervisor;
+                                            }
+                                            Action::None => {}
+                                        }
+                                        let _ = status_tx.send(state.status());
+                                    }
+                                    NotifyMessage::ExtendTimeout { usec } => {
+                                        debug!("Extend timeout from {}: {} usec", name, usec);
+                                        let _ = state.on_event(Event::ExtendTimeout { usec }, Instant::now());
+                                        let _ = status_tx.send(state.status());
+                                        refresh_deadline!(state, current_deadline, deadline_fut);
+                                    }
+                                    NotifyMessage::Status(status) => {
+                                        debug!("Status from {}: {}", name, status);
+                                        activity.log(format!("Status: {}", status));
+                                    }
+                                    NotifyMessage::Stopping => {
+                                        debug!("Process {} signaled stopping", name);
+                                        activity.log("Process signaled stopping");
+                                    }
+                                    NotifyMessage::Reloading => {
+                                        debug!("Process {} signaled reloading", name);
+                                        activity.log("Process reloading configuration");
+                                    }
+                                    NotifyMessage::Unknown(s) => {
+                                        debug!("Unknown notify message from {}: {}", name, s);
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                _ = &mut deadline_fut => {
-                    if shutdown.is_cancelled() { break 'supervisor; }
-                    let now = Instant::now();
-                    let is_startup = state.phase() == SupervisorPhase::Starting;
-                    if is_startup {
-                        warn!("Startup timeout for process {}", name);
-                        activity.error("Startup timeout - process did not become ready");
-                    } else {
-                        warn!("Watchdog timeout for process {}", name);
-                        activity.error("Watchdog timeout - no heartbeat received");
-                    }
-                    match state.on_event(
-                        if is_startup { Event::StartupTimeout } else { Event::WatchdogTimeout },
-                        now,
-                    ) {
-                        Action::Restart => {
-                            job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
-                            state.on_restart_complete(Instant::now());
-                            let count = state.restart_count();
-                            let msg = format!("Restarted (attempt {count})");
-                            info!("Restarted process {} (attempt {})", name, count);
-                            activity.log(&msg);
-                            respawn_probes!();
-                        }
-                        Action::GiveUp { reason } => {
-                            warn!("{}: {}", name, reason);
-                            activity.error(reason);
-                            activity.fail();
-                            let _ = status_tx.send(state.status());
-                            break;
-                        }
-                        Action::None => {}
-                    }
-                    let _ = status_tx.send(state.status());
-                }
-
-                _ = job.to_wait() => {
-                    if shutdown.is_cancelled() { break 'supervisor; }
-                    // Extract exit status from the job
-                    let (tx, rx) = tokio::sync::oneshot::channel();
-                    job.run_async(move |ctx| {
-                        let status = if let CommandState::Finished { status, .. } = ctx.current {
-                            Some(if matches!(status, ProcessEnd::Success) {
-                                ExitStatus::Success
-                            } else {
-                                ExitStatus::Failure
-                            })
+                    _ = &mut deadline_fut => {
+                        if shutdown.is_cancelled() { break 'supervisor; }
+                        let now = Instant::now();
+                        let is_startup = state.phase() == SupervisorPhase::Starting;
+                        if is_startup {
+                            warn!("Startup timeout for process {}", name);
+                            activity.error("Startup timeout - process did not become ready");
                         } else {
-                            None
+                            warn!("Watchdog timeout for process {}", name);
+                            activity.error("Watchdog timeout - no heartbeat received");
+                        }
+                        match state.on_event(
+                            if is_startup { Event::StartupTimeout } else { Event::WatchdogTimeout },
+                            now,
+                        ) {
+                            Action::Restart => {
+                                {
+                                    let mut pty_guard = pty.write().await;
+                                    if let Some(ref mut pty_proc) = *pty_guard {
+                                        let _ = pty_proc.kill().await;
+                                    }
+                                    match spawn_pty(&config, &state_dir, &activity) {
+                                        Ok(new_pty) => {
+                                            *pty_guard = Some(new_pty);
+                                        }
+                                        Err(e) => {
+                                            error!("Failed to restart {}: {}", name, e);
+                                            break 'supervisor;
+                                        }
+                                    }
+                                }
+                                state.on_restart_complete(Instant::now());
+                                let count = state.restart_count();
+                                let msg = format!("Restarted (attempt {count})");
+                                info!("Restarted process {} (attempt {})", name, count);
+                                activity.log(&msg);
+                                respawn_probes!();
+                                break; // Break inner loop to recreate exit_rx
+                            }
+                            Action::GiveUp { reason } => {
+                                warn!("{}: {}", name, reason);
+                                activity.error(reason);
+                                activity.fail();
+                                let _ = status_tx.send(state.status());
+                                break 'supervisor;
+                            }
+                            Action::None => {}
+                        }
+                        let _ = status_tx.send(state.status());
+                    }
+
+                    code = exit_fut => {
+                        if shutdown.is_cancelled() { break 'supervisor; }
+                        let exit_status = match code {
+                            Some(0) => ExitStatus::Success,
+                            _ => ExitStatus::Failure,
                         };
-                        Box::new(async move {
-                            let _ = tx.send(status);
-                        })
-                    }).await;
 
-                    let exit_status = match rx.await {
-                        Ok(Some(status)) => status,
-                        _ => {
-                            debug!("Process {} exited (unknown status)", name);
-                            break;
-                        }
-                    };
-
-                    match state.on_event(Event::ProcessExit { status: exit_status }, Instant::now()) {
-                        Action::Restart => {
-                            activity.log(format!("Process exited ({exit_status:?}), restarting"));
-                            job.start().await;
-                            state.on_restart_complete(Instant::now());
-                            let count = state.restart_count();
-                            let msg = format!("Restarted (attempt {count})");
-                            info!("Restarted process {} (attempt {})", name, count);
-                            activity.log(&msg);
-                            respawn_probes!();
-                        }
-                        Action::GiveUp { reason } => {
-                            warn!("{}: {}", name, reason);
-                            activity.error(reason);
-                            activity.fail();
-                            let _ = status_tx.send(state.status());
-                            break;
-                        }
-                        Action::None => {
-                            debug!("Process {} exited, not restarting", name);
-                            let _ = status_tx.send(state.status());
-                            break;
+                        match state.on_event(Event::ProcessExit { status: exit_status }, Instant::now()) {
+                            Action::Restart => {
+                                activity.log(format!("Process exited ({exit_status:?}), restarting"));
+                                {
+                                    let mut pty_guard = pty.write().await;
+                                    match spawn_pty(&config, &state_dir, &activity) {
+                                        Ok(new_pty) => {
+                                            *pty_guard = Some(new_pty);
+                                        }
+                                        Err(e) => {
+                                            error!("Failed to restart {}: {}", name, e);
+                                            break 'supervisor;
+                                        }
+                                    }
+                                }
+                                state.on_restart_complete(Instant::now());
+                                let count = state.restart_count();
+                                let msg = format!("Restarted (attempt {count})");
+                                info!("Restarted process {} (attempt {})", name, count);
+                                activity.log(&msg);
+                                respawn_probes!();
+                                break; // Break inner loop to recreate exit_rx
+                            }
+                            Action::GiveUp { reason } => {
+                                warn!("{}: {}", name, reason);
+                                activity.error(reason);
+                                activity.fail();
+                                let _ = status_tx.send(state.status());
+                                break 'supervisor;
+                            }
+                            Action::None => {
+                                debug!("Process {} exited, not restarting", name);
+                                let _ = status_tx.send(state.status());
+                                break 'supervisor;
+                            }
                         }
                     }
-                    let _ = status_tx.send(state.status());
                 }
+                refresh_deadline!(state, current_deadline, deadline_fut);
             }
-
-            // Refresh the pinned deadline future only when the deadline changed
-            refresh_deadline!(state, current_deadline, deadline_fut);
         }
 
         debug!("Supervision task for {} exiting", name);

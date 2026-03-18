@@ -1,7 +1,8 @@
 use crate::{
     expanded_view::ExpandedLogView,
+    input,
     model::{ActivityModel, RenderContext, UiState, ViewMode},
-    view::{ActivityHeights, SUMMARY_BAR_HEIGHT, ScrollState, view},
+    view::{ActivityHeights, ScrollState, view},
 };
 use crossterm::{
     cursor, event, execute,
@@ -18,6 +19,9 @@ use tokio::sync::{Notify, mpsc};
 use tokio_shutdown::Shutdown;
 use tracing::debug;
 
+const TMUX_MAX_FPS: u64 = 12;
+const MAIN_VIEW_PAGE_SCROLL_OVERLAP: i32 = 1;
+
 /// Cooperative exit flag for TUI shutdown.
 ///
 /// The event processor sets this when the backend is done, and TUI components
@@ -32,7 +36,7 @@ impl ExitFlag {
         Self(Arc::new(AtomicBool::new(false)))
     }
 
-    /// Signal that the TUI should exit. Must be called before `Notify::notify_waiters()`
+    /// Signal that the TUI should exit. Must be called before `Notify::notify_one()`
     /// so the triggered re render sees the flag.
     pub fn set(&self) {
         self.0.store(true, Ordering::Release);
@@ -73,7 +77,11 @@ impl Default for TuiConfig {
             max_log_messages: 1000,
             max_log_lines_per_build: 1000,
             log_viewport_collapsed: 10,
-            max_fps: 30,
+            max_fps: if std::env::var_os("TMUX").is_some() {
+                TMUX_MAX_FPS
+            } else {
+                30
+            },
             filter_level: ActivityLevel::Info,
         }
     }
@@ -86,6 +94,11 @@ pub struct TuiApp {
     shutdown: Arc<Shutdown>,
     command_tx: Option<mpsc::Sender<ProcessCommand>>,
     shutdown_on_backend_done: bool,
+    fullscreen: bool,
+}
+
+fn should_present_final_snapshot(shutdown: &Shutdown) -> bool {
+    shutdown.last_signal().is_none()
 }
 
 impl TuiApp {
@@ -100,7 +113,14 @@ impl TuiApp {
             shutdown,
             command_tx: None,
             shutdown_on_backend_done: true,
+            fullscreen: false,
         }
+    }
+
+    /// Set whether the TUI should run in fullscreen mode.
+    pub fn fullscreen(mut self, enabled: bool) -> Self {
+        self.fullscreen = enabled;
+        self
     }
 
     /// Set the command sender for process control commands.
@@ -184,7 +204,7 @@ impl TuiApp {
                             let Some(event) = event else {
                                 // Channel closed unexpectedly
                                 exit_flag.set();
-                                notify.notify_waiters();
+                                notify.notify_one();
                                 if shutdown_on_backend_done {
                                     shutdown.shutdown();
                                 }
@@ -205,7 +225,7 @@ impl TuiApp {
                                 }
                             }
 
-                            notify.notify_waiters();
+                            notify.notify_one();
                         }
 
                         _ = &mut backend_notified => {
@@ -225,7 +245,7 @@ impl TuiApp {
                             // Signal component to exit cooperatively. Set before
                             // notify so the triggered re-render sees the flag.
                             exit_flag.set();
-                            notify.notify_waiters();
+                            notify.notify_one();
 
                             if shutdown_on_backend_done {
                                 shutdown.shutdown();
@@ -237,54 +257,43 @@ impl TuiApp {
             }
         });
 
-        // Track height to clear when returning from expanded view
-        let mut pre_expand_height: u16 = 0;
-
         // UiState is separate from ActivityModel to avoid lock contention.
         // The event processor only writes to ActivityModel, never UiState.
         // UiState is only modified by the UI thread.
         let ui_state = Arc::new(RwLock::new(UiState::new()));
-
-        // Main loop - runs until backend signals completion via exit_flag.
-        // The render loop exits cooperatively: the component checks exit_flag
-        // each render cycle and calls system.exit() when set, ensuring iocraft
-        // always completes its current frame before returning. This prevents
-        // the cursor position race that occurs when cancelling mid-frame.
-        loop {
-            let _ = run_view(
-                activity_model.clone(),
-                ui_state.clone(),
-                notify.clone(),
-                shutdown.clone(),
-                config.clone(),
-                command_tx.clone(),
-                &mut pre_expand_height,
-                exit_flag.clone(),
-            )
-            .await;
-
-            // run_view returned either because:
-            // - The backend is done (exit_flag is set)
-            // - The user switched view modes (e.g. pressed 'e' for expanded)
-            if exit_flag.is_set() {
-                break;
-            }
+        if let Ok(mut ui) = ui_state.write() {
+            ui.fullscreen = self.fullscreen;
         }
+
+        let _ = run_view(
+            activity_model.clone(),
+            ui_state.clone(),
+            notify.clone(),
+            shutdown.clone(),
+            config.clone(),
+            command_tx.clone(),
+            exit_flag.clone(),
+            self.fullscreen,
+        )
+        .await;
 
         // Wait for event processor to finish draining events before final render.
         // This ensures all activity completion events are processed and visible.
         let _ = event_processor_handle.await;
 
         // Final render pass to ensure all drained events are displayed.
-        // Clear previous inline render, then render final state.
+        // On user-triggered exit, leave the alternate screen without writing any
+        // extra cursor movement into the main terminal buffer.
         let mut final_render_height: u16 = 0;
         {
             let ui = ui_state.read().unwrap();
             if let Ok(model_guard) = activity_model.read() {
+                if !should_present_final_snapshot(&shutdown) {
+                    return Ok(0);
+                }
+
                 let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
 
-                // Measure the last inline render's height so we clear the right
-                // number of lines. Rendered once here at cleanup, not every frame.
                 let mut measure = element! {
                     View(width: terminal_width) {
                         #(vec![view(&model_guard, &ui, RenderContext::Normal, None, false).into()])
@@ -292,7 +301,7 @@ impl TuiApp {
                 };
                 let lines_to_clear = measure.render(Some(terminal_width as usize)).height() as u16;
 
-                if lines_to_clear > 0 {
+                if lines_to_clear > 0 && self.fullscreen {
                     let mut stderr = io::stderr();
                     let _ = execute!(
                         stderr,
@@ -493,7 +502,64 @@ fn activity_height(heights: &std::collections::HashMap<u64, i32>, id: u64) -> i3
     heights.get(&id).copied().unwrap_or(1)
 }
 
-/// Scroll the viewport so the selected activity is visible.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MainViewScrollAction {
+    UpLine,
+    DownLine,
+    UpPage,
+    DownPage,
+    Top,
+    Bottom,
+}
+
+fn main_view_scroll_action_for_key(key_event: &KeyEvent) -> Option<MainViewScrollAction> {
+    if key_event.modifiers.contains(KeyModifiers::CONTROL)
+        || key_event.modifiers.contains(KeyModifiers::ALT)
+        || key_event.modifiers.contains(KeyModifiers::SUPER)
+    {
+        return None;
+    }
+
+    match key_event.code {
+        KeyCode::PageUp => Some(MainViewScrollAction::UpPage),
+        KeyCode::PageDown => Some(MainViewScrollAction::DownPage),
+        KeyCode::Home => Some(MainViewScrollAction::Top),
+        KeyCode::End => Some(MainViewScrollAction::Bottom),
+        KeyCode::Char('k') => Some(MainViewScrollAction::UpLine),
+        KeyCode::Char('j') => Some(MainViewScrollAction::DownLine),
+        _ => None,
+    }
+}
+
+fn selected_process(
+    activity_model: &Arc<RwLock<ActivityModel>>,
+    ui_state: &Arc<RwLock<UiState>>,
+) -> Option<(u64, String)> {
+    let activity_id = ui_state.read().ok()?.selected_activity?;
+    let model = activity_model.read().ok()?;
+    let activity = model.get_activity(activity_id)?;
+    matches!(activity.variant, crate::model::ActivityVariant::Process(_))
+        .then(|| (activity.id, activity.name.clone()))
+}
+
+fn apply_main_view_scroll_action(handle: &mut ScrollViewHandle, action: MainViewScrollAction) {
+    match action {
+        MainViewScrollAction::UpLine => handle.scroll_by(-1),
+        MainViewScrollAction::DownLine => handle.scroll_by(1),
+        MainViewScrollAction::UpPage => {
+            let page = (handle.viewport_height() as i32 - MAIN_VIEW_PAGE_SCROLL_OVERLAP).max(1);
+            handle.scroll_by(-page);
+        }
+        MainViewScrollAction::DownPage => {
+            let page = (handle.viewport_height() as i32 - MAIN_VIEW_PAGE_SCROLL_OVERLAP).max(1);
+            handle.scroll_by(page);
+        }
+        MainViewScrollAction::Top => handle.scroll_to_top(),
+        MainViewScrollAction::Bottom => handle.scroll_to_bottom(),
+    }
+}
+
+/// Scroll the viewport so the selected activity becomes visible.
 fn scroll_selected_into_view(
     handle: &mut ScrollViewHandle,
     heights: &std::collections::HashMap<u64, i32>,
@@ -507,22 +573,64 @@ fn scroll_selected_into_view(
         return;
     };
 
-    let offset: i32 = display_activities[..position]
+    let item_top: i32 = display_activities[..position]
         .iter()
         .map(|da| activity_height(heights, da.activity.id))
         .sum();
-    let target_height = activity_height(heights, selected_id);
 
-    let vp = handle.viewport_height() as i32;
-    let current = handle.scroll_offset();
-    if offset < current {
-        handle.scroll_to(offset);
-    } else if offset + target_height > current + vp {
-        handle.scroll_to(offset + target_height - vp);
+    let item_height = activity_height(heights, selected_id);
+    let item_bottom = item_top + item_height;
+
+    let viewport_top = handle.scroll_offset();
+    let viewport_height = handle.viewport_height() as i32;
+    let viewport_bottom = viewport_top + viewport_height;
+
+    if item_top < viewport_top {
+        // If the item starts above the viewport, scroll to its top.
+        handle.scroll_to(item_top);
+    } else if item_bottom > viewport_bottom {
+        // If the item ends below the viewport:
+        if item_height > viewport_height {
+            // If it's taller than the viewport, prioritize seeing its top (the "selection" header).
+            handle.scroll_to(item_top);
+        } else {
+            // If it fits in the viewport, scroll just enough to make its bottom visible.
+            handle.scroll_to(item_bottom - viewport_height);
+        }
     }
 }
 
-/// Main TUI component (inline mode)
+#[component]
+fn FullscreenView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let ui_state = hooks.use_context::<Arc<RwLock<UiState>>>();
+    let exit_flag = hooks.use_context::<ExitFlag>();
+    let mut system = hooks.use_context_mut::<SystemContext>();
+    let mut exit_triggered = hooks.use_state(|| false);
+
+    if exit_flag.is_set() {
+        exit_triggered.set(true);
+    }
+    if exit_triggered.get() {
+        system.exit();
+        return element!(View).into_any();
+    }
+
+    let view_mode = ui_state
+        .read()
+        .map(|ui| ui.view_mode)
+        .unwrap_or(ViewMode::Main);
+    match view_mode {
+        ViewMode::Main => element!(MainView).into_any(),
+        ViewMode::ExpandedLogs { activity_id } => element! {
+            ContextProvider(value: Context::owned(activity_id)) {
+                ExpandedLogView
+            }
+        }
+        .into_any(),
+    }
+}
+
+/// Main TUI component
 #[component]
 fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let config = hooks.use_context::<Arc<TuiConfig>>();
@@ -530,14 +638,13 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let ui_state = hooks.use_context::<Arc<RwLock<UiState>>>();
     let notify = hooks.use_context::<Arc<Notify>>();
     let (terminal_width, terminal_height) = hooks.use_terminal_size();
-    let mut should_exit = hooks.use_state(|| false);
     let shutdown = hooks.use_context::<Arc<Shutdown>>();
-    let mut system = hooks.use_context_mut::<SystemContext>();
+    let command_tx = hooks.use_context::<Option<mpsc::Sender<ProcessCommand>>>();
 
     // ScrollView handle and per-activity height measurements
     let scroll_handle = hooks.use_ref_default::<ScrollViewHandle>();
     let mut activity_heights: ActivityHeights = hooks.use_ref_default();
-    // Tracks whether the ScrollView is currently rendered (and handle is valid)
+    // Tracks whether the main ScrollView has rendered and the handle is valid.
     let mut scroll_view_active = hooks.use_ref_default::<bool>();
 
     // Redraw when notified of activity model changes (throttled)
@@ -561,15 +668,22 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         if let Ok(mut ui) = ui_state.write() {
             ui.set_terminal_size(current_size.width, current_size.height);
         }
+        if let Ok(mut model) = activity_model.write() {
+            model.resize_vts(current_size.width, current_size.height);
+        }
+        if let Some(tx) = command_tx.as_ref() {
+            let _ = tx.try_send(ProcessCommand::Resize {
+                cols: current_size.width,
+                rows: current_size.height,
+            });
+        }
     }
-
-    // Get optional command sender for process control
-    let command_tx = hooks.use_context::<Option<mpsc::Sender<ProcessCommand>>>();
 
     // Handle keyboard events - only UI state updates, no activity model writes
     hooks.use_terminal_events({
         let activity_model = activity_model.clone();
         let ui_state = ui_state.clone();
+        let notify = notify.clone();
         let shutdown = shutdown.clone();
         let command_tx = command_tx.clone();
         let mut scroll_handle = scroll_handle;
@@ -580,7 +694,52 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 && key_event.kind != KeyEventKind::Release
             {
                 debug!("Key event: {:?}", key_event);
+
                 if handle_interrupt_prompt_key(&key_event, &ui_state, &shutdown) {
+                    notify.notify_one();
+                    return;
+                }
+
+                if shutdown.is_cancelled() {
+                    return;
+                }
+
+                let focused_activity = ui_state.read().ok().and_then(|ui| ui.focused_activity);
+
+                if let Some(activity_id) = focused_activity {
+                    if input::is_input_toggle(&key_event) {
+                        if let Ok(mut ui) = ui_state.write()
+                            && ui.focused_activity == Some(activity_id)
+                        {
+                            ui.focused_activity = None;
+                        }
+                        notify.notify_one();
+                        return;
+                    }
+
+                    if let Some(tx) = command_tx.as_ref()
+                        && let Some(data) = input::encode_key_event(&key_event)
+                    {
+                        let _ = tx.try_send(ProcessCommand::SendInput { activity_id, data });
+                        notify.notify_one();
+                    }
+                    return;
+                }
+
+                if input::is_input_toggle(&key_event) {
+                    if let Ok(ui) = ui_state.read()
+                        && let Some(activity_id) = ui.selected_activity
+                        && let Ok(model) = activity_model.read()
+                        && let Some(activity) = model.get_activity(activity_id)
+                        && matches!(activity.variant, crate::model::ActivityVariant::Process(_))
+                    {
+                        drop(model);
+                        drop(ui);
+                        if let Ok(mut ui) = ui_state.write() {
+                            ui.focused_activity = Some(activity_id);
+                        }
+                        notify.notify_one();
+                    }
                     return;
                 }
 
@@ -589,31 +748,31 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         if !request_interrupt_prompt(command_tx.as_ref(), &ui_state) {
                             shutdown.handle_interrupt();
                         }
+                        notify.notify_one();
                     }
                     KeyCode::Char('r') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        // Restart selected process
                         if let Some(tx) = command_tx.as_ref()
-                            && let Ok(ui) = ui_state.read()
-                            && let Some(activity_id) = ui.selected_activity
+                            && let Some((_, name)) = selected_process(&activity_model, &ui_state)
                         {
-                            // Get the process name from the activity
-                            if let Ok(model) = activity_model.read()
-                                && let Some(activity) = model.get_activity(activity_id)
-                                && matches!(
-                                    activity.variant,
-                                    crate::model::ActivityVariant::Process(_)
-                                )
-                            {
-                                let _ = tx.try_send(ProcessCommand::Restart(activity.name.clone()));
-                            }
+                            let _ = tx.try_send(ProcessCommand::Restart(name));
+                            notify.notify_one();
+                        }
+                    }
+                    KeyCode::Char('y') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                        if let Some(tx) = command_tx.as_ref()
+                            && let Some((_, name)) = selected_process(&activity_model, &ui_state)
+                        {
+                            let _ = tx.try_send(ProcessCommand::Stop(name));
+                            notify.notify_one();
                         }
                     }
                     KeyCode::Char('e') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                         if let Ok(mut ui) = ui_state.write()
                             && let Some(activity_id) = ui.selected_activity
+                            && ui.fullscreen
                         {
                             ui.view_mode = ViewMode::ExpandedLogs { activity_id };
-                            should_exit.set(true);
+                            notify.notify_one();
                         }
                     }
                     KeyCode::Down | KeyCode::Up => {
@@ -633,14 +792,23 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                         selected_id,
                                     );
                                 }
+                                notify.notify_one();
                             }
                         }
                     }
                     KeyCode::Esc => {
                         if let Ok(mut ui) = ui_state.write() {
                             ui.selected_activity = None;
+                            ui.focused_activity = None;
                         }
                         scroll_handle.write().scroll_to_bottom();
+                        notify.notify_one();
+                    }
+                    _ if *scroll_view_active.read() => {
+                        if let Some(action) = main_view_scroll_action_for_key(&key_event) {
+                            apply_main_view_scroll_action(&mut scroll_handle.write(), action);
+                            notify.notify_one();
+                        }
                     }
                     _ => {}
                 }
@@ -648,52 +816,33 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
     });
 
-    // Exit cooperatively when the backend signals completion via exit_flag.
-    // This ensures the render loop completes its current frame before returning,
-    // leaving the cursor at the correct position for the final render.
-    let exit_flag = hooks.use_context::<ExitFlag>();
-    if exit_flag.is_set() {
-        system.exit();
-    }
-
-    // Exit for explicit view mode switch (user pressed 'e' to expand)
-    // Note: We do NOT exit on shutdown.is_cancelled() - we keep running until
-    // the backend is fully done so all events are processed and displayed.
-    if should_exit.get() {
-        system.exit();
-    }
-
     // Render the view - read activity model briefly, UI state separately
     let ui = ui_state.read().unwrap();
     let is_shutting_down = shutdown.is_cancelled();
+    let is_fullscreen = ui.fullscreen;
     let rendered = if let Ok(model_guard) = activity_model.read() {
         let display = model_guard.get_display_activities();
 
-        // Prune stale entries and compute total content height in a single lock
-        let total_content_height: i32 = {
-            let active_ids: std::collections::HashSet<u64> =
-                display.iter().map(|da| da.activity.id).collect();
-            let mut heights = activity_heights.write();
-            heights.retain(|id, _| active_ids.contains(id));
-            display
-                .iter()
-                .map(|da| activity_height(&heights, da.activity.id))
-                .sum()
-        };
+        let active_ids: std::collections::HashSet<u64> =
+            display.iter().map(|da| da.activity.id).collect();
+        let mut heights = activity_heights.write();
+        heights.retain(|id, _| active_ids.contains(id));
+        drop(heights);
+        *scroll_view_active.write() = true;
 
-        // Only enable ScrollView when content exceeds available terminal height.
-        let available_height = terminal_height.saturating_sub(SUMMARY_BAR_HEIGHT) as i32;
-        let scroll_handle_opt = if total_content_height > available_height {
-            Some(scroll_handle)
+        let scroll_state = if is_fullscreen {
+            Some(ScrollState {
+                handle: Some(scroll_handle),
+                display_activities: display,
+            })
         } else {
             None
         };
-        *scroll_view_active.write() = scroll_handle_opt.is_some();
 
         element! {
             ContextProvider(value: iocraft::Context::owned(activity_heights)) {
                 View(width: terminal_width) {
-                    #(vec![view(&model_guard, &ui, RenderContext::Normal, Some(ScrollState { handle: scroll_handle_opt, display_activities: display }), is_shutting_down).into()])
+                    #(vec![view(&model_guard, &ui, RenderContext::Normal, scroll_state, is_shutting_down).into()])
                 }
             }
         }
@@ -715,89 +864,33 @@ async fn run_view(
     shutdown: Arc<Shutdown>,
     config: Arc<TuiConfig>,
     command_tx: Option<mpsc::Sender<ProcessCommand>>,
-    pre_expand_height: &mut u16,
     exit_flag: ExitFlag,
+    fullscreen: bool,
 ) -> std::io::Result<()> {
-    // Copy view_mode in a block to ensure the guard is dropped before any await
-    let view_mode = {
-        let guard = ui_state.read().unwrap();
-        guard.view_mode
+    let mut element = element! {
+        ContextProvider(value: Context::owned(config.clone())) {
+            ContextProvider(value: Context::owned(shutdown.clone())) {
+                ContextProvider(value: Context::owned(notify.clone())) {
+                    ContextProvider(value: Context::owned(activity_model.clone())) {
+                        ContextProvider(value: Context::owned(ui_state.clone())) {
+                            ContextProvider(value: Context::owned(command_tx.clone())) {
+                                ContextProvider(value: Context::owned(exit_flag.clone())) {
+                                    FullscreenView
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     };
 
-    match view_mode {
-        ViewMode::Main => {
-            if *pre_expand_height > 0 {
-                let mut stderr = io::stderr();
-                let _ = execute!(
-                    stderr,
-                    cursor::MoveToPreviousLine(*pre_expand_height),
-                    terminal::Clear(terminal::ClearType::FromCursorDown)
-                );
-                *pre_expand_height = 0;
-            }
-
-            let mut element = element! {
-                ContextProvider(value: Context::owned(config.clone())) {
-                    ContextProvider(value: Context::owned(shutdown.clone())) {
-                        ContextProvider(value: Context::owned(notify.clone())) {
-                            ContextProvider(value: Context::owned(activity_model.clone())) {
-                                ContextProvider(value: Context::owned(ui_state.clone())) {
-                                    ContextProvider(value: Context::owned(command_tx.clone())) {
-                                        ContextProvider(value: Context::owned(exit_flag.clone())) {
-                                            MainView
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            };
-
-            element
-                .render_loop()
-                .output(Output::Stderr)
-                .ignore_ctrl_c()
-                .await
-        }
-        ViewMode::ExpandedLogs { activity_id } => {
-            // Calculate height before switching to expanded view
-            // Use a block to ensure guards are dropped before await
-            *pre_expand_height = {
-                let ui = ui_state.read().unwrap();
-                let model = activity_model.read().unwrap();
-                let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
-                let mut normal_view = element! {
-                    View(width: terminal_width) {
-                        #(vec![view(&model, &ui, RenderContext::Normal, None, shutdown.is_cancelled()).into()])
-                    }
-                };
-                normal_view.render(Some(terminal_width as usize)).height() as u16
-            };
-
-            let mut element = element! {
-                ContextProvider(value: Context::owned(config.clone())) {
-                    ContextProvider(value: Context::owned(shutdown.clone())) {
-                        ContextProvider(value: Context::owned(notify.clone())) {
-                            ContextProvider(value: Context::owned(activity_model.clone())) {
-                                ContextProvider(value: Context::owned(ui_state.clone())) {
-                                    ContextProvider(value: Context::owned(command_tx.clone())) {
-                                        ContextProvider(value: Context::owned(exit_flag.clone())) {
-                                            ContextProvider(value: Context::owned(activity_id)) {
-                                                ExpandedLogView
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            };
-
-            element.fullscreen().ignore_ctrl_c().await
-        }
+    let mut render_loop = element.render_loop();
+    if fullscreen {
+        render_loop = render_loop.fullscreen();
     }
+
+    render_loop.output(Output::Stderr).ignore_ctrl_c().await
 }
 
 #[cfg(test)]
@@ -833,5 +926,52 @@ mod tests {
         let quit = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'));
         assert!(handle_interrupt_prompt_key(&quit, &ui_state, &shutdown));
         assert!(shutdown.is_cancelled());
+    }
+
+    #[test]
+    fn test_user_interrupt_does_not_leave_final_snapshot() {
+        let shutdown = tokio_shutdown::Shutdown::new();
+        assert!(should_present_final_snapshot(&shutdown));
+
+        shutdown.set_last_signal(tokio_shutdown::Signal::SIGINT);
+        assert!(!should_present_final_snapshot(&shutdown));
+    }
+
+    #[test]
+    fn test_main_view_scroll_action_for_key() {
+        assert_eq!(
+            main_view_scroll_action_for_key(&KeyEvent::new(KeyEventKind::Press, KeyCode::PageUp)),
+            Some(MainViewScrollAction::UpPage)
+        );
+        assert_eq!(
+            main_view_scroll_action_for_key(&KeyEvent::new(KeyEventKind::Press, KeyCode::PageDown)),
+            Some(MainViewScrollAction::DownPage)
+        );
+        assert_eq!(
+            main_view_scroll_action_for_key(&KeyEvent::new(KeyEventKind::Press, KeyCode::Home)),
+            Some(MainViewScrollAction::Top)
+        );
+        assert_eq!(
+            main_view_scroll_action_for_key(&KeyEvent::new(KeyEventKind::Press, KeyCode::End)),
+            Some(MainViewScrollAction::Bottom)
+        );
+        assert_eq!(
+            main_view_scroll_action_for_key(&KeyEvent::new(
+                KeyEventKind::Press,
+                KeyCode::Char('j')
+            )),
+            Some(MainViewScrollAction::DownLine)
+        );
+        assert_eq!(
+            main_view_scroll_action_for_key(&KeyEvent::new(
+                KeyEventKind::Press,
+                KeyCode::Char('k')
+            )),
+            Some(MainViewScrollAction::UpLine)
+        );
+
+        let mut ctrl_j = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('j'));
+        ctrl_j.modifiers = KeyModifiers::CONTROL;
+        assert_eq!(main_view_scroll_action_for_key(&ctrl_j), None);
     }
 }

@@ -14,6 +14,7 @@ futures.workspace = true
 miette.workspace = true
 nix.workspace = true
 process-wrap.workspace = true
+regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 shell-escape.workspace = true
@@ -24,7 +25,8 @@ tempfile.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
-watchexec-supervisor.workspace = true
+avt.workspace = true
+crossterm.workspace = true
 
 portable-pty.workspace = true
 
@@ -38,3 +40,4 @@ test-file-watcher = ["devenv-event-sources/macos-kqueue"]
 
 [dev-dependencies]
 sd-notify.workspace = true
+watchexec-supervisor.workspace = true

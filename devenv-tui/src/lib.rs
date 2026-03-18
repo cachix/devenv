@@ -10,6 +10,7 @@ pub mod tracing_interface;
 pub mod app;
 pub mod components;
 pub mod expanded_view;
+pub mod input;
 pub mod model;
 pub mod view;
 
@@ -29,24 +30,18 @@ pub use devenv_shell::{
 /// Runs a loop that waits for notifications and triggers redraws at a throttled rate.
 ///
 /// Uses leading-edge throttling:
-/// - Waits for notification OR timeout (whichever comes first)
+/// - Waits for a notification
 /// - On wake: triggers redraw, then sleeps to enforce FPS cap
-/// - Subsequent notifications during throttle sleep are coalesced (model accumulates)
+/// - Subsequent notifications during throttle sleep are coalesced by `Notify`
 ///
-/// The timeout on the notification wait serves as a safety net: `Notify::notify_waiters()`
-/// only wakes tasks that are actively waiting on `notified()`. If a notification arrives
-/// while we're in the throttle sleep, it's lost. The timeout ensures we periodically
-/// check for state changes (like the final Done event) even if we missed a notification.
+/// The TUI uses `Notify::notify_one()`, which stores a permit if no task is currently
+/// waiting. That avoids the periodic idle redraws that `notify_waiters()` required as a
+/// fallback and reduces visible flicker in terminals like tmux.
 pub async fn throttled_notify_loop(notify: Arc<Notify>, mut redraw: State<u64>, max_fps: u64) {
     let throttle_duration = Duration::from_millis(1000 / max_fps);
 
     loop {
-        // Wait for notification OR timeout. The timeout ensures we don't miss the final
-        // state if a notification arrived during the previous throttle sleep.
-        tokio::select! {
-            _ = notify.notified() => {}
-            _ = tokio::time::sleep(throttle_duration) => {}
-        }
+        notify.notified().await;
         let Some(val) = redraw.try_get() else {
             break;
         };

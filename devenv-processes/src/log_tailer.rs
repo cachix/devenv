@@ -58,6 +58,7 @@ pub fn spawn_file_tailer(path: PathBuf, activity: ActivityRef, is_stderr: bool) 
                     if line.ends_with('\n') {
                         line.pop();
                     }
+                    let line = strip_destructive_ansi(&line);
                     if is_stderr {
                         activity.error(&line);
                     } else {
@@ -71,4 +72,17 @@ pub fn spawn_file_tailer(path: PathBuf, activity: ActivityRef, is_stderr: bool) 
             }
         }
     })
+}
+
+fn strip_destructive_ansi(s: &str) -> String {
+    use regex::Regex;
+    use std::sync::LazyLock;
+
+    static DESTRUCTIVE_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\x1b\[([0-9;]*[HJKS]|2J)").expect("valid regex"));
+
+    // Also remove carriage returns that would overwrite the TUI line
+    let s = s.replace('\r', "");
+
+    DESTRUCTIVE_REGEX.replace_all(&s, "").to_string()
 }

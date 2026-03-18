@@ -20,6 +20,14 @@ use tracing::{debug, info, warn};
 pub enum ProcessCommand {
     /// Restart a running process, or start a stopped process
     Restart(String),
+    /// Gracefully stop a running process
+    Stop(String),
+    /// Resize all running PTYs to match the terminal
+    Resize { cols: u16, rows: u16 },
+    /// Send input bytes to a PTY-backed activity
+    SendInput { activity_id: u64, data: Vec<u8> },
+    /// Gracefully stop all running processes
+    Shutdown,
 }
 
 /// Request sent by a client to the native manager API socket.
@@ -43,14 +51,8 @@ pub enum ApiResponse {
     Error { message: String },
 }
 
-use watchexec_supervisor::{
-    Signal,
-    job::{Job, start_job},
-};
-
 use crate::config::ProcessConfig;
 use crate::pid::{self, PidStatus};
-use crate::socket_activation::{ProcessSetupWrapper, activation_from_listen};
 use crate::{ProcessManager, StartOptions};
 use devenv_event_sources::NotifySocket;
 
@@ -71,7 +73,7 @@ pub struct ProcessState {
 /// Per-process handles shared between `JobHandle` and the supervision task.
 pub struct ProcessResources {
     pub config: ProcessConfig,
-    pub job: Arc<Job>,
+    pub pty: Arc<RwLock<Option<crate::pty::PtyProcess>>>,
     pub activity: Activity,
     pub notify_socket: Option<Arc<NotifySocket>>,
     pub status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
@@ -87,6 +89,12 @@ pub struct JobHandle {
     pub supervisor_task: JoinHandle<()>,
     /// Output reader tasks (stdout, stderr)
     pub output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StopLogMode {
+    Banner(&'static str),
+    Silent,
 }
 
 /// Lifecycle phase of a managed process.
@@ -123,9 +131,17 @@ fn active_names(processes: &HashMap<String, ProcessEntry>) -> Vec<String> {
         .iter()
         .filter_map(|(name, entry)| match entry {
             ProcessEntry::Active(_) => Some(name.clone()),
-            ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. } => None,
+            ProcessEntry::NotStarted { .. }
+            | ProcessEntry::Waiting { .. }
+            | ProcessEntry::Stopped { .. } => None,
         })
         .collect()
+}
+
+fn log_process_action_banner(activity: &Activity, name: &str, action: &str) {
+    activity.log("");
+    activity.log(format!("[devenv] {action} process '{name}'"));
+    activity.log("");
 }
 
 /// A managed process entry: not started, waiting for dependencies, or active.
@@ -137,6 +153,11 @@ enum ProcessEntry {
     },
     /// Process is waiting for dependencies before starting.
     Waiting {
+        config: ProcessConfig,
+        activity: Activity,
+    },
+    /// Process was manually stopped and can be started again.
+    Stopped {
         config: ProcessConfig,
         activity: Activity,
     },
@@ -199,6 +220,7 @@ impl NativeProcessManager {
         match processes.get(name) {
             Some(ProcessEntry::NotStarted { .. }) => Some(ProcessPhase::NotStarted),
             Some(ProcessEntry::Waiting { .. }) => Some(ProcessPhase::Waiting),
+            Some(ProcessEntry::Stopped { .. }) => Some(ProcessPhase::NotStarted),
             Some(ProcessEntry::Active(handle)) => Some(handle.status_rx.borrow().phase.into()),
             None => None,
         }
@@ -298,7 +320,10 @@ impl NativeProcessManager {
     /// Removes the `Waiting` entry, transitions the activity to `Running`
     /// status, and launches the process. The TUI elapsed time includes the
     /// waiting period since the activity was created at registration time.
-    pub async fn launch_waiting(&self, name: &str) -> Result<Option<Arc<Job>>> {
+    pub async fn launch_waiting(
+        &self,
+        name: &str,
+    ) -> Result<Option<Arc<RwLock<Option<crate::pty::PtyProcess>>>>> {
         let mut processes = self.processes.write().await;
         let (config, activity) = match processes.remove(name) {
             Some(ProcessEntry::Waiting { config, activity }) => (config, activity),
@@ -328,7 +353,7 @@ impl NativeProcessManager {
         &self,
         config: &ProcessConfig,
         parent_id: Option<u64>,
-    ) -> Result<Option<Arc<Job>>> {
+    ) -> Result<Option<Arc<RwLock<Option<crate::pty::PtyProcess>>>>> {
         debug!("Starting command '{}': {}", config.name, config.exec);
 
         let activity = self.create_process_activity(config, parent_id);
@@ -344,7 +369,7 @@ impl NativeProcessManager {
         &self,
         config: ProcessConfig,
         activity: Activity,
-    ) -> Result<Option<Arc<Job>>> {
+    ) -> Result<Option<Arc<RwLock<Option<crate::pty::PtyProcess>>>>> {
         if !config.start.enable {
             activity.set_status(ProcessStatus::NotStarted);
             info!("Registered auto start off process: {}", config.name);
@@ -359,7 +384,11 @@ impl NativeProcessManager {
     }
 
     /// Launch a process: sets up probes, sockets, supervisor, and log tailers.
-    async fn launch(&self, config: &ProcessConfig, activity: Activity) -> Result<Arc<Job>> {
+    async fn launch(
+        &self,
+        config: &ProcessConfig,
+        activity: Activity,
+    ) -> Result<Arc<RwLock<Option<crate::pty::PtyProcess>>>> {
         activity.set_status(ProcessStatus::Running);
 
         // Create notify socket if configured via ready.notify
@@ -391,42 +420,26 @@ impl NativeProcessManager {
         let _ = std::fs::write(&proc_cmd.stdout_log, "");
         let _ = std::fs::write(&proc_cmd.stderr_log, "");
 
-        let (job, _task) = start_job(proc_cmd.command);
-        let job = Arc::new(job);
+        // Spawn PTY process
+        let pty = crate::pty::PtyProcess::spawn(
+            "bash",
+            &["-c".to_string(), proc_cmd.script],
+            None,            // Wrapper script handles cwd
+            &HashMap::new(), // Wrapper script handles env
+            Some(proc_cmd.stdout_log.clone()),
+            Some(activity.ref_handle()),
+        )?;
+
+        let pty = Arc::new(RwLock::new(Some(pty)));
 
         // Setup socket activation and/or capabilities if configured
+        // TODO: Support socket activation and capabilities in PtyProcess
         let has_sockets = !config.listen.is_empty();
         let has_caps = !config.linux.capabilities.is_empty();
 
         if has_sockets || has_caps {
-            let fds = if has_sockets {
-                info!("Setting up socket activation for {}", config.name);
-                let spec = activation_from_listen(&config.listen)?;
-                let activated = spec.create_fds()?;
-                debug!(
-                    "Created {} activation sockets for {}",
-                    activated.fds().len(),
-                    config.name
-                );
-                activated.into_fds()
-            } else {
-                Vec::new()
-            };
-
-            if has_caps {
-                info!(
-                    "Setting up capabilities for {}: {:?}",
-                    config.name, config.linux.capabilities
-                );
-            }
-
-            let capabilities = config.linux.capabilities.clone();
-            job.set_spawn_hook(move |command_wrap, _ctx| {
-                command_wrap.wrap(ProcessSetupWrapper::new(fds.clone(), capabilities.clone()));
-            });
+            warn!("Socket activation and capabilities are not yet supported with portable_pty");
         }
-
-        job.start().await;
 
         // Spawn file tailers to emit output to activity
         let stderr_log = proc_cmd.stderr_log.clone();
@@ -455,7 +468,7 @@ impl NativeProcessManager {
 
         let resources = ProcessResources {
             config: config.clone(),
-            job: job.clone(),
+            pty: pty.clone(),
             activity,
             notify_socket,
             status_tx,
@@ -479,52 +492,82 @@ impl NativeProcessManager {
         );
 
         info!("Command '{}' started", config.name);
-        Ok(job)
+        Ok(pty)
     }
 
-    /// Stop a process by name
-    pub async fn stop(&self, name: &str) -> Result<()> {
-        let mut processes = self.processes.write().await;
+    async fn stop_with_log_mode(&self, name: &str, log_mode: StopLogMode) -> Result<()> {
+        let entry = self.processes.write().await.remove(name);
 
-        match processes.remove(name) {
+        match entry {
             Some(ProcessEntry::Active(handle)) => {
                 debug!("Stopping process: {}", name);
 
-                // Mark as stopped so the TUI shows the correct status
-                // before the Complete event arrives from Activity::drop.
-                handle.resources.activity.set_status(ProcessStatus::Stopped);
-                handle.resources.activity.reset();
+                // Mark as stopping immediately, then let Activity::drop emit the
+                // final completion event once the process has really exited.
+                let JobHandle {
+                    resources,
+                    supervisor_task,
+                    output_readers,
+                    ..
+                } = handle;
+
+                if let StopLogMode::Banner(action) = log_mode {
+                    log_process_action_banner(&resources.activity, name, action);
+                }
+                resources.activity.set_status(ProcessStatus::Stopping);
+                resources.activity.reset();
 
                 // Abort the supervisor task first to prevent restarts
-                handle.supervisor_task.abort();
+                supervisor_task.abort();
 
-                // Abort output reader tasks
-                if let Some((stdout_reader, stderr_reader)) = handle.output_readers {
+                // Stop the PTY process
+                let mut pty_guard = resources.pty.write().await;
+                if let Some(mut pty_proc) = pty_guard.take() {
+                    let _ = pty_proc.kill().await;
+                }
+                drop(pty_guard);
+
+                if let Some((stdout_reader, stderr_reader)) = output_readers {
                     stdout_reader.abort();
                     stderr_reader.abort();
                 }
 
-                // Send terminate signal with grace period
-                handle
-                    .resources
-                    .job
-                    .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
-                    .await;
+                resources.activity.set_status(ProcessStatus::Stopped);
+
+                self.processes.write().await.insert(
+                    name.to_string(),
+                    ProcessEntry::Stopped {
+                        config: resources.config,
+                        activity: resources.activity,
+                    },
+                );
 
                 info!("Process {} stopped", name);
                 Ok(())
             }
-            Some(entry @ (ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. })) => {
+            Some(
+                entry @ (ProcessEntry::NotStarted { .. }
+                | ProcessEntry::Waiting { .. }
+                | ProcessEntry::Stopped { .. }),
+            ) => {
                 let state = if matches!(entry, ProcessEntry::NotStarted { .. }) {
                     "auto start off"
+                } else if matches!(entry, ProcessEntry::Stopped { .. }) {
+                    "already stopped"
                 } else {
                     "waiting for dependencies"
                 };
-                processes.insert(name.to_string(), entry);
+                self.processes.write().await.insert(name.to_string(), entry);
                 bail!("Process {} is {}, cannot stop", name, state)
             }
             None => bail!("Process {} not found", name),
         }
+    }
+
+    /// Stop a process by name.
+    pub async fn stop(&self, name: &str) -> Result<()> {
+        self.stop_with_log_mode(name, StopLogMode::Banner("stopped"))
+            .await
     }
 
     /// Signal all supervisors to shut down gracefully.
@@ -536,112 +579,88 @@ impl NativeProcessManager {
 
     /// Stop all processes and clear not-started/waiting entries
     pub async fn stop_all(&self) -> Result<()> {
-        debug!("stop_all: shutting down supervisors");
-        // Signal supervisors first so they exit gracefully
-        self.shutdown_supervisors();
-
         let names = active_names(&*self.processes.read().await);
 
         debug!("stop_all: stopping {} processes: {:?}", names.len(), names);
         for name in &names {
-            let _ = self.stop(name).await; // Continue even if one fails
+            let _ = self.stop_with_log_mode(name, StopLogMode::Silent).await;
         }
 
-        // Clear not-started and waiting processes (their activities complete on drop)
-        self.processes
-            .write()
-            .await
-            .retain(|_, entry| matches!(entry, ProcessEntry::Active(_)));
+        self.shutdown_supervisors();
+        self.processes.write().await.clear();
 
         Ok(())
     }
 
-    /// Restart a process by name
-    ///
-    /// This resets the restart count and activity state, respawns the supervision
-    /// task if it exited (e.g., due to max restarts), and restarts the underlying job.
     pub async fn restart(&self, name: &str) -> Result<()> {
-        let mut processes = self.processes.write().await;
-        let handle = match processes.get_mut(name) {
-            Some(ProcessEntry::Active(h)) => h,
-            Some(_) => {
-                debug!("restart: process {} is not active, ignoring", name);
-                return Ok(());
+        enum RestartTarget {
+            NotStarted,
+            Stopped,
+            Active,
+            Missing,
+        }
+
+        let target = {
+            let processes = self.processes.read().await;
+            match processes.get(name) {
+                Some(ProcessEntry::NotStarted { .. }) => RestartTarget::NotStarted,
+                Some(ProcessEntry::Stopped { .. }) => RestartTarget::Stopped,
+                Some(ProcessEntry::Active(_)) => RestartTarget::Active,
+                Some(ProcessEntry::Waiting { .. }) => RestartTarget::Missing,
+                None => RestartTarget::Missing,
             }
-            None => bail!("Process {} not running", name),
         };
 
-        // Reset activity state (unfail it) and set status to restarting
-        handle.resources.activity.reset();
-        handle
-            .resources
-            .activity
-            .set_status(ProcessStatus::Restarting);
-
-        // Truncate log files and restart output tailers
-        let (stdout_log, stderr_log) = crate::command::log_paths(&self.state_dir, name);
-        let _ = std::fs::write(&stdout_log, "");
-        let _ = std::fs::write(&stderr_log, "");
-
-        if let Some((stdout_reader, stderr_reader)) = handle.output_readers.take() {
-            stdout_reader.abort();
-            stderr_reader.abort();
+        match target {
+            RestartTarget::NotStarted => self.start_not_started(name).await.map(|_| ()),
+            RestartTarget::Stopped => self.start_stopped(name).await.map(|_| ()),
+            RestartTarget::Active => {
+                self.stop_with_log_mode(name, StopLogMode::Banner("restarted"))
+                    .await?;
+                self.start_stopped(name).await?;
+                info!("Process {} restarted", name);
+                Ok(())
+            }
+            RestartTarget::Missing => bail!("Process {} not running", name),
         }
-        handle.output_readers = Some((
-            crate::log_tailer::spawn_file_tailer(
-                stdout_log,
-                handle.resources.activity.ref_handle(),
-                false,
-            ),
-            crate::log_tailer::spawn_file_tailer(
-                stderr_log,
-                handle.resources.activity.ref_handle(),
-                true,
-            ),
-        ));
-
-        // Check if supervisor task has exited (e.g., due to max restarts)
-        if handle.supervisor_task.is_finished() {
-            // Supervisor has exited — start fresh with new supervision.
-            // Order matters: start job first, then spawn supervisor (like start_command does).
-            // This gives the process a fresh restart quota (restart_count = 0).
-            info!(
-                "Supervisor for {} has exited, starting fresh with new supervision",
-                name
-            );
-            handle.resources.job.start().await;
-            handle.supervisor_task =
-                crate::supervisor::spawn_supervisor(&handle.resources, self.shutdown.clone());
-        } else {
-            // Supervisor is still running — just restart the job.
-            // The existing supervisor will continue monitoring with its current restart_count.
-            handle
-                .resources
-                .job
-                .restart_with_signal(Signal::Terminate, Duration::from_secs(2))
-                .await;
-        }
-
-        // The supervisor will update the status via status_tx once the
-        // process is actually ready.
-        handle.resources.activity.set_status(ProcessStatus::Running);
-
-        info!("Process {} restarted", name);
-        Ok(())
     }
 
     /// Start a previously not-started process, reusing its existing TUI activity.
-    pub async fn start_not_started(&self, name: &str) -> Result<Arc<Job>> {
+    pub async fn start_not_started(
+        &self,
+        name: &str,
+    ) -> Result<Arc<RwLock<Option<crate::pty::PtyProcess>>>> {
+        self.start_inactive(name, true).await
+    }
+
+    /// Start a previously stopped process, reusing its existing TUI activity.
+    pub async fn start_stopped(
+        &self,
+        name: &str,
+    ) -> Result<Arc<RwLock<Option<crate::pty::PtyProcess>>>> {
+        self.start_inactive(name, false).await
+    }
+
+    async fn start_inactive(
+        &self,
+        name: &str,
+        expect_not_started: bool,
+    ) -> Result<Arc<RwLock<Option<crate::pty::PtyProcess>>>> {
         let (config, activity) = {
             let mut processes = self.processes.write().await;
             match processes.get(name) {
-                Some(ProcessEntry::NotStarted { .. }) => {}
-                Some(_) => bail!("Process {} is not in not-started state", name),
+                Some(ProcessEntry::NotStarted { .. }) if expect_not_started => {}
+                Some(ProcessEntry::Stopped { .. }) if !expect_not_started => {}
+                Some(_) if expect_not_started => {
+                    bail!("Process {} is not in not-started state", name)
+                }
+                Some(_) => bail!("Process {} is not in stopped state", name),
                 None => bail!("Process {} not found", name),
             }
-            // Safe: we just checked the variant above.
+
             match processes.remove(name).unwrap() {
                 ProcessEntry::NotStarted { config, activity } => (config, activity),
+                ProcessEntry::Stopped { config, activity } => (config, activity),
                 _ => unreachable!(),
             }
         };
@@ -649,7 +668,7 @@ impl NativeProcessManager {
         // Reset the activity so it no longer shows as stopped
         activity.reset();
 
-        info!("Starting not-started process: {}", name);
+        info!("Starting inactive process: {}", name);
         // Move the activity into launch (not clone) so the original is not
         // dropped — Activity::drop sends Process::Complete which would
         // immediately mark the process as stopped in the TUI.
@@ -813,7 +832,9 @@ impl NativeProcessManager {
                             ProcessEntry::Active(handle) => {
                                 Some((name.clone(), handle.status_rx.clone()))
                             }
-                            ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. } => None,
+                            ProcessEntry::NotStarted { .. }
+                            | ProcessEntry::Waiting { .. }
+                            | ProcessEntry::Stopped { .. } => None,
                         })
                         .collect();
                     drop(procs);
@@ -936,21 +957,107 @@ impl NativeProcessManager {
     pub async fn handle_command(&self, cmd: ProcessCommand) {
         match cmd {
             ProcessCommand::Restart(name) => {
-                let is_not_started = matches!(
-                    self.processes.read().await.get(&name),
-                    Some(ProcessEntry::NotStarted { .. })
-                );
-                if is_not_started {
-                    info!("Starting not-started process: {}", name);
-                    if let Err(e) = self.start_not_started(&name).await {
-                        warn!("Failed to start process {}: {}", name, e);
+                enum RestartTarget {
+                    NotStarted,
+                    Stopped,
+                    Active,
+                    Missing,
+                }
+
+                let target = {
+                    let processes = self.processes.read().await;
+                    match processes.get(&name) {
+                        Some(ProcessEntry::NotStarted { .. }) => RestartTarget::NotStarted,
+                        Some(ProcessEntry::Stopped { .. }) => RestartTarget::Stopped,
+                        Some(_) => RestartTarget::Active,
+                        None => RestartTarget::Missing,
                     }
-                } else {
-                    info!("Restarting process: {}", name);
-                    if let Err(e) = self.restart(&name).await {
-                        warn!("Failed to restart process {}: {}", name, e);
+                };
+
+                match target {
+                    RestartTarget::NotStarted => {
+                        info!("Starting not-started process: {}", name);
+                        if let Err(e) = self.start_not_started(&name).await {
+                            warn!("Failed to start process {}: {}", name, e);
+                        }
+                    }
+                    RestartTarget::Stopped => {
+                        info!("Starting stopped process: {}", name);
+                        if let Err(e) = self.start_stopped(&name).await {
+                            warn!("Failed to start process {}: {}", name, e);
+                        }
+                    }
+                    RestartTarget::Active => {
+                        info!("Restarting process: {}", name);
+                        if let Err(e) = self.restart(&name).await {
+                            warn!("Failed to restart process {}: {}", name, e);
+                        }
+                    }
+                    RestartTarget::Missing => {
+                        warn!("Failed to restart process {}: process not found", name);
                     }
                 }
+            }
+            ProcessCommand::Stop(name) => {
+                info!("Stopping process: {}", name);
+                if let Err(e) = self.stop(&name).await {
+                    warn!("Failed to stop process {}: {}", name, e);
+                }
+            }
+            ProcessCommand::Resize { cols, rows } => {
+                self.resize_ptys(cols, rows).await;
+            }
+            ProcessCommand::SendInput { activity_id, data } => {
+                self.send_input(activity_id, &data).await;
+            }
+            ProcessCommand::Shutdown => {}
+        }
+    }
+
+    async fn send_input(&self, activity_id: u64, data: &[u8]) {
+        let pty = {
+            let processes = self.processes.read().await;
+            processes.values().find_map(|entry| match entry {
+                ProcessEntry::Active(handle) if handle.resources.activity.id() == activity_id => {
+                    Some(handle.resources.pty.clone())
+                }
+                _ => None,
+            })
+        };
+
+        let Some(pty) = pty else {
+            return;
+        };
+
+        let pty_guard = pty.read().await;
+        if let Some(pty_proc) = pty_guard.as_ref()
+            && let Err(e) = pty_proc.send_input(data)
+        {
+            warn!(
+                "Failed to send PTY input to activity {}: {}",
+                activity_id, e
+            );
+        }
+    }
+
+    async fn resize_ptys(&self, cols: u16, rows: u16) {
+        let ptys: Vec<_> = {
+            let processes = self.processes.read().await;
+            processes
+                .values()
+                .filter_map(|entry| match entry {
+                    ProcessEntry::Active(handle) => Some(handle.resources.pty.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+
+        for pty in ptys {
+            let pty_guard = pty.read().await;
+            if let Some(pty_proc) = pty_guard.as_ref()
+                && let Err(e) = pty_proc.resize(cols, rows)
+            {
+                warn!("Failed to resize PTY to {}x{}: {}", cols, rows, e);
             }
         }
     }
@@ -964,7 +1071,16 @@ impl NativeProcessManager {
         let pm = Arc::clone(self);
         tokio::spawn(async move {
             while let Some(cmd) = rx.recv().await {
-                pm.handle_command(cmd).await;
+                match cmd {
+                    ProcessCommand::Shutdown => {
+                        info!("Shutdown command received, stopping all processes");
+                        if let Err(e) = pm.stop_all().await {
+                            warn!("Failed to stop processes during shutdown: {}", e);
+                        }
+                        break;
+                    }
+                    other => pm.handle_command(other).await,
+                }
             }
         });
     }
@@ -999,7 +1115,16 @@ impl NativeProcessManager {
                         None => std::future::pending().await,
                     }
                 } => {
-                    self.handle_command(cmd).await;
+                    match cmd {
+                        ProcessCommand::Shutdown => {
+                            debug!("run_foreground: shutdown command received, calling stop_all");
+                            info!("Shutdown command received, stopping all processes");
+                            self.stop_all().await?;
+                            debug!("run_foreground: stop_all completed from shutdown command");
+                            break;
+                        }
+                        other => self.handle_command(other).await,
+                    }
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {
                     if self.processes.read().await.is_empty() {
