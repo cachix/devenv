@@ -202,7 +202,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             let (status, _) = ui.run(run_handle).await?;
 
             if shutdown.last_signal().is_some() {
-                let _ = tasks.process_manager.stop_all().await;
+                let _ = tasks.process_manager().stop_all().await;
                 shutdown.exit_process();
             }
 
