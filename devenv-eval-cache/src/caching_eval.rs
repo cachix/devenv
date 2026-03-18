@@ -57,17 +57,18 @@ pub enum CacheError {
 
 struct ObserverClearGuard {
     bridge: Arc<NixLogBridge>,
+    observer: Arc<dyn devenv_core::eval_op::OpObserver>,
 }
 
 impl ObserverClearGuard {
-    fn new(bridge: Arc<NixLogBridge>) -> Self {
-        Self { bridge }
+    fn new(bridge: Arc<NixLogBridge>, observer: Arc<dyn devenv_core::eval_op::OpObserver>) -> Self {
+        Self { bridge, observer }
     }
 }
 
 impl Drop for ObserverClearGuard {
     fn drop(&mut self) {
-        self.bridge.clear_observers();
+        self.bridge.remove_observer(&self.observer);
     }
 }
 
@@ -578,8 +579,9 @@ impl CachedEval {
 
         // Cache miss (or resource replay failed) - collect inputs during evaluation
         let collector = EvalInputCollector::start();
-        self.log_bridge.add_observer(collector.clone());
-        let _observer_guard = ObserverClearGuard::new(self.log_bridge.clone());
+        let observer: Arc<dyn devenv_core::eval_op::OpObserver> = collector.clone();
+        self.log_bridge.add_observer(observer.clone());
+        let _observer_guard = ObserverClearGuard::new(self.log_bridge.clone(), observer);
 
         let result = eval_fn().await;
         drop(_observer_guard);
@@ -672,8 +674,9 @@ impl CachedEval {
 
         // Cache miss (or resource replay failed) - collect inputs during evaluation
         let collector = EvalInputCollector::start();
-        self.log_bridge.add_observer(collector.clone());
-        let _observer_guard = ObserverClearGuard::new(self.log_bridge.clone());
+        let observer: Arc<dyn devenv_core::eval_op::OpObserver> = collector.clone();
+        self.log_bridge.add_observer(observer.clone());
+        let _observer_guard = ObserverClearGuard::new(self.log_bridge.clone(), observer);
 
         let result = eval_fn().await;
         drop(_observer_guard);
