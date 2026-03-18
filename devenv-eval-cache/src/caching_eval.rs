@@ -1340,4 +1340,43 @@ mod tests {
                 .is_some()
         );
     }
+
+    /// Regression test: dropping one ObserverClearGuard must not remove
+    /// another evaluation's observer from the shared NixLogBridge.
+    ///
+    /// Before the fix, ObserverClearGuard called clear_observers() which
+    /// wiped ALL observers, causing concurrent evaluations to lose file
+    /// dependency tracking and store cache entries with incomplete inputs.
+    #[test]
+    fn test_observer_guard_drop_does_not_clear_other_observers() {
+        use devenv_core::eval_op::EvalOp;
+
+        let bridge = NixLogBridge::new();
+
+        // Simulate two concurrent eval() calls that both register observers
+        let collector_outer = EvalInputCollector::start();
+        let observer_outer: Arc<dyn devenv_core::eval_op::OpObserver> = collector_outer.clone();
+        bridge.add_observer(observer_outer.clone());
+        let _guard_outer = ObserverClearGuard::new(bridge.clone(), observer_outer);
+
+        let collector_inner = EvalInputCollector::start();
+        let observer_inner: Arc<dyn devenv_core::eval_op::OpObserver> = collector_inner.clone();
+        bridge.add_observer(observer_inner.clone());
+        let guard_inner = ObserverClearGuard::new(bridge.clone(), observer_inner);
+
+        // Inner evaluation finishes first and its guard drops
+        drop(guard_inner);
+
+        // Ops emitted AFTER the inner guard dropped should still reach the outer observer
+        bridge.replay_ops(&[EvalOp::EvaluatedFile {
+            source: "/tmp/devenv.nix".into(),
+        }]);
+
+        let outer_ops = collector_outer.take_ops();
+        assert_eq!(
+            outer_ops.len(),
+            1,
+            "outer observer should still receive ops after inner guard is dropped"
+        );
+    }
 }
