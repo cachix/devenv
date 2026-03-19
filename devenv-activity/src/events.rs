@@ -327,6 +327,13 @@ pub enum Process {
         is_error: bool,
         timestamp: Timestamp,
     },
+    /// Raw output from the process (may contain ANSI codes and not be line-delimited)
+    RawLog {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        data: Vec<u8>,
+        timestamp: Timestamp,
+    },
     Status {
         #[serde(alias = "activity_id")]
         id: u64,
@@ -351,6 +358,8 @@ pub enum ProcessStatus {
     Ready,
     /// Stop + start cycle in progress.
     Restarting,
+    /// SIGTERM sent; waiting for the process to exit cleanly.
+    Stopping,
     /// Exited.
     Stopped,
 }
@@ -360,7 +369,12 @@ impl ProcessStatus {
     pub fn is_active(&self) -> bool {
         matches!(
             self,
-            Self::Waiting | Self::Starting | Self::Running | Self::Ready | Self::Restarting
+            Self::Waiting
+                | Self::Starting
+                | Self::Running
+                | Self::Ready
+                | Self::Restarting
+                | Self::Stopping
         )
     }
 }

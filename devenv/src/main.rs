@@ -301,6 +301,14 @@ fn run(launch: LaunchConfig) -> Result<()> {
     let (command_tx, command_rx) = tokio::sync::mpsc::channel::<ProcessCommand>(16);
     let (terminal_ready_tx, terminal_ready_rx) = tokio::sync::oneshot::channel::<u16>();
 
+    let is_process_up = matches!(
+        &launch.command,
+        Commands::Up { .. }
+            | Commands::Processes {
+                command: ProcessesCommand::Up { .. }
+            }
+    );
+
     // Backend on dedicated thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
     let backend_done_clone = backend_done.clone();
@@ -348,6 +356,7 @@ fn run(launch: LaunchConfig) -> Result<()> {
         rt.block_on(async {
             devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
                 .with_command_sender(command_tx)
+                .fullscreen(is_process_up)
                 .filter_level(filter_level)
                 // When PTY reload shell is active, don't shut down on backend_done —
                 // the shell session sends it as a handoff signal, not a completion signal

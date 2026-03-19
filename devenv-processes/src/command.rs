@@ -1,15 +1,13 @@
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use miette::{IntoDiagnostic, Result, WrapErr};
 use tracing::debug;
-use watchexec_supervisor::command::{Command, Program, Shell, SpawnOptions};
 
 use crate::config::ProcessConfig;
 
 /// The output of building a process command: the command itself and its log paths.
 pub struct BuiltCommand {
-    pub command: Arc<Command>,
+    pub script: String,
     pub stdout_log: PathBuf,
     pub stderr_log: PathBuf,
 }
@@ -45,22 +43,8 @@ pub fn build_command(
         watchdog_usec,
     );
 
-    let program = Program::Shell {
-        shell: Shell::new("bash"),
-        command: script,
-        args: vec![],
-    };
-
-    let command = Arc::new(Command {
-        program,
-        options: SpawnOptions {
-            session: true,
-            ..Default::default()
-        },
-    });
-
     Ok(BuiltCommand {
-        command,
+        script,
         stdout_log,
         stderr_log,
     })
@@ -69,8 +53,8 @@ pub fn build_command(
 /// Build a shell wrapper script that handles env vars, cwd, logging, and sudo.
 fn build_wrapper_script(
     config: &ProcessConfig,
-    stdout_log: &Path,
-    stderr_log: &Path,
+    _stdout_log: &Path,
+    _stderr_log: &Path,
     notify_socket_path: Option<&Path>,
     watchdog_usec: Option<u64>,
 ) -> String {
@@ -109,30 +93,6 @@ fn build_wrapper_script(
         writeln!(script, "export WATCHDOG_USEC={}", usec).unwrap();
     }
 
-    // Redirect all subsequent stdout/stderr to log files so that every
-    // command in the exec block (including early echo statements before
-    // an `exec` call) is captured by the log tailer.
-    // Close stdin so processes that read from it get EOF immediately
-    // instead of hanging forever or stealing terminal input.
-    writeln!(
-        script,
-        "exec </dev/null >> {} 2>> {}",
-        shell_escape::escape(stdout_log.to_string_lossy()),
-        shell_escape::escape(stderr_log.to_string_lossy())
-    )
-    .unwrap();
-
-    // Forward TERM/INT to the child process group so that services like
-    // postgres and redis (and their workers) are properly shut down when
-    // devenv exits. Without this, bash exits on signal but the child
-    // becomes orphaned.
-    writeln!(script, "_child_pid=").unwrap();
-    writeln!(
-        script,
-        "trap '[ -n \"$_child_pid\" ] && kill -TERM -- -\"$_child_pid\" 2>/dev/null; wait \"$_child_pid\"; exit' TERM INT"
-    )
-    .unwrap();
-
     let mut cmd = String::new();
 
     write!(cmd, "{}", config.exec).unwrap();
@@ -141,9 +101,7 @@ fn build_wrapper_script(
         write!(cmd, " {}", shell_escape::escape(arg.into())).unwrap();
     }
 
-    writeln!(script, "{} &", cmd).unwrap();
-    writeln!(script, "_child_pid=$!").unwrap();
-    writeln!(script, "wait $_child_pid").unwrap();
+    writeln!(script, "exec {}", cmd).unwrap();
 
     debug!("Generated wrapper script for {}: {}", config.name, script);
     script

@@ -21,6 +21,7 @@ async-trait = { workspace = true }
 
 # TUI library
 iocraft.workspace = true
+avt.workspace = true
 crossterm = { workspace = true }
 
 # Tracing integration

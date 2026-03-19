@@ -2174,8 +2174,12 @@ impl NixRustBackend {
     ) -> Result<String> {
         let mut eval_state = self.eval_session(activity)?;
 
-        // Import default.nix with primops to get the attribute set
-        let root_attrs = self.get_or_eval_devenv(&mut eval_state)?;
+        // Re-evaluate the root attrset here instead of reusing `cached_devenv_value`.
+        // The cached root Value only records the base bootstrap imports; project files
+        // such as `devenv.nix` and lazily imported modules are discovered while forcing
+        // the requested attribute. Reusing the cached Value here can therefore store an
+        // incomplete dependency set in the eval cache and return stale results later.
+        let root_attrs = self.eval_import_with_primops(&mut eval_state)?;
 
         // Navigate to the attribute using the Nix API
         let value = self.enriched(
@@ -2217,7 +2221,9 @@ impl NixRustBackend {
     fn build_shell_uncached(&self, activity: &Activity) -> Result<CachedShellPaths> {
         let mut eval_state = self.eval_session(activity)?;
 
-        let devenv = self.get_or_eval_devenv(&mut eval_state)?;
+        // Shell evaluation must collect its full project file dependencies for the eval
+        // cache, so avoid the cached root Value here for the same reason as eval/build.
+        let devenv = self.eval_import_with_primops(&mut eval_state)?;
 
         // Get the shell derivation from devenv.shell
         let shell_drv = self.enriched(
@@ -2297,7 +2303,9 @@ impl NixRustBackend {
     fn build_attr_uncached(&self, attr_path: &str, activity: &Activity) -> Result<String> {
         let mut eval_state = self.eval_session(activity)?;
 
-        let root_attrs = self.get_or_eval_devenv(&mut eval_state)?;
+        // Re-evaluate the root attrset so eval-cache input collection includes project
+        // files reached while forcing this attribute.
+        let root_attrs = self.eval_import_with_primops(&mut eval_state)?;
 
         // Navigate to the attribute and force evaluation
         let value = self.enriched(

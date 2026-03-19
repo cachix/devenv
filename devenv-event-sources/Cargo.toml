@@ -12,6 +12,7 @@ macos-kqueue = ["notify/macos_kqueue"]
 [dependencies]
 async-priority-channel.workspace = true
 miette.workspace = true
+nix = { workspace = true, features = ["process", "signal"] }
 notify = { workspace = true, optional = true }
 reqwest.workspace = true
 tokio = { workspace = true, features = ["net", "process"] }

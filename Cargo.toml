@@ -192,9 +192,9 @@ iocraft = "0.7.18"
 crossterm = "0.28.1"
 
 [patch.crates-io]
-# Patched TUI dependencies to supported rendering to stderr
+# Patched TUI dependencies to supported rendering to stderr plus local diff-rendering fixes
 # https://github.com/ccbrown/iocraft/pull/157
-iocraft = { git = "https://github.com/cachix/iocraft", branch = "cachix" }
+iocraft = { git = "https://github.com/samchouse/iocraft", branch = "cachix" }
 # https://github.com/crossterm-rs/crossterm/pull/1026
 crossterm = { git = "https://github.com/sandydoo/crossterm", branch = "0.28-cachix" }
 

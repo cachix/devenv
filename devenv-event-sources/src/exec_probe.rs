@@ -36,17 +36,28 @@ impl ExecProbe {
             }
 
             loop {
-                let result = tokio::time::timeout(
-                    timeout,
-                    tokio::process::Command::new(&bash)
-                        .arg("-c")
-                        .arg(&command)
-                        .envs(&env)
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
-                        .status(),
-                )
-                .await;
+                let mut cmd = tokio::process::Command::new(&bash);
+                cmd.arg("-c")
+                    .arg(&command)
+                    .envs(&env)
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null());
+
+                #[cfg(unix)]
+                {
+                    cmd.process_group(0);
+                }
+
+                let mut child = match cmd.spawn() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        warn!("Exec probe for {} failed to run: {}", name, e);
+                        tokio::time::sleep(period).await;
+                        continue;
+                    }
+                };
+
+                let result = tokio::time::timeout(timeout, child.wait()).await;
 
                 match result {
                     Ok(Ok(status)) if status.success() => {
@@ -58,10 +69,19 @@ impl ExecProbe {
                         debug!("Exec probe for {} exited with {}", name, status);
                     }
                     Ok(Err(e)) => {
-                        warn!("Exec probe for {} failed to run: {}", name, e);
+                        warn!("Exec probe for {} failed to wait: {}", name, e);
                     }
                     Err(_) => {
-                        debug!("Exec probe for {} timed out", name);
+                        debug!("Exec probe for {} timed out, killing process group", name);
+                        #[cfg(unix)]
+                        {
+                            if let Some(pid) = child.id() {
+                                use nix::sys::signal::{Signal, kill};
+                                use nix::unistd::Pid;
+                                let _ = kill(Pid::from_raw(-(pid as i32)), Signal::SIGKILL);
+                            }
+                        }
+                        let _ = child.kill().await;
                     }
                 }
 

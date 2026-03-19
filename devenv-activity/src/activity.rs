@@ -423,6 +423,18 @@ impl Activity {
         }
     }
 
+    /// Log raw data (for Process activities only)
+    pub fn raw_log(&self, data: Vec<u8>) {
+        let _guard = self.span.enter();
+        if matches!(self.activity_type, ActivityType::Process) {
+            send_activity_event(ActivityEvent::Process(Process::RawLog {
+                id: self.id,
+                data,
+                timestamp: Timestamp::now(),
+            }));
+        }
+    }
+
     /// Set process status (for Process activities only)
     pub fn set_status(&self, status: ProcessStatus) {
         let _guard = self.span.enter();
@@ -494,6 +506,18 @@ impl ActivityRef {
         }
         if let Some(event) = make_log_event(self.id, self.activity_type, line_str, true) {
             send_activity_event(event);
+        }
+    }
+
+    /// Log raw data (for Process activities only)
+    pub fn raw_log(&self, data: Vec<u8>) {
+        let _guard = self.span.enter();
+        if matches!(self.activity_type, ActivityType::Process) {
+            send_activity_event(ActivityEvent::Process(Process::RawLog {
+                id: self.id,
+                data,
+                timestamp: Timestamp::now(),
+            }));
         }
     }
 
