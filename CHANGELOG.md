@@ -13,6 +13,7 @@
 
 ### Improvements
 
+- Bumped iocraft to use row level diff rendering ([ccbrown/iocraft#179](https://github.com/ccbrown/iocraft/pull/179)), reducing TUI flicker.
 - Containers now report all missing inputs at once instead of one at a time ([#2598](https://github.com/cachix/devenv/issues/2598)).
 - Extracted container, search, and gc methods from `devenv.rs` into separate submodule files for better code organization.
 
