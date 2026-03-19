@@ -2,8 +2,9 @@ inputs:
   devenv:
     url: path:../../?dir=src/modules
 
-# This value is overridden in the platform-specific config below on purpose
+# This values are overridden in the platform-specific config below on purpose
 allowUnfree: false
+allowUnsupportedSystem: false
 
 nixpkgs:
   # These values are overridden in the platform-specific config below on purpose
@@ -13,21 +14,26 @@ nixpkgs:
   per-platform:
     i386-linux:
       allowUnfree: true
+      allowUnsupportedSystem: true
       cudaSupport: true
       cudaCapabilities: [ "8.0" ]
     x86_64-linux:
       allowUnfree: true
+      allowUnsupportedSystem: true
       cudaSupport: true
       cudaCapabilities: [ "8.0" ]
     aarch64-linux:
       allowUnfree: true
+      allowUnsupportedSystem: true
       cudaSupport: true
       cudaCapabilities: [ "8.0" ]
     aarch64-darwin:
       allowUnfree: true
+      allowUnsupportedSystem: true
       cudaSupport: true
       cudaCapabilities: [ "8.0" ]
     x86_64-darmin:
       allowUnfree: true
+      allowUnsupportedSystem: true
       cudaSupport: true
       cudaCapabilities: [ "8.0" ]

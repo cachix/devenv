@@ -12,6 +12,9 @@
     "allowUnfree": {
       "type": "boolean"
     },
+    "allowUnsupportedSystem": {
+      "type": "boolean"
+    },
     "allowBroken": {
       "type": "boolean"
     },
@@ -109,6 +112,9 @@
         "allowUnfree": {
           "type": "boolean"
         },
+        "allowUnsupportedSystem": {
+          "type": "boolean"
+        },
         "allowBroken": {
           "type": "boolean"
         },
@@ -145,6 +151,9 @@
       "type": "object",
       "properties": {
         "allowUnfree": {
+          "type": "boolean"
+        },
+        "allowUnsupportedSystem": {
           "type": "boolean"
         },
         "allowBroken": {
