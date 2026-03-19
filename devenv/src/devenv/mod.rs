@@ -1045,6 +1045,18 @@ impl Devenv {
         }
     }
 
+    /// Check whether a string is a valid POSIX environment variable name
+    /// (`[a-zA-Z_][a-zA-Z0-9_]*`). Used to filter bash internal entries like
+    /// `BASH_FUNC_my_func%%` that would produce invalid `export` statements.
+    fn is_valid_env_name(name: &str) -> bool {
+        let mut chars = name.chars();
+        match chars.next() {
+            Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
+            _ => return false,
+        }
+        chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    }
+
     fn parse_env_null_separated(content: &[u8]) -> Vec<(String, String)> {
         let mut envs = Vec::new();
         for entry in content.split(|&b| b == 0) {
@@ -1118,7 +1130,9 @@ impl Devenv {
         let mut envs: HashMap<String, String> = self.shell_settings.clean.kept_env_vars();
 
         for (key, value) in shell_envs {
-            envs.insert(key, value);
+            if Self::is_valid_env_name(&key) {
+                envs.insert(key, value);
+            }
         }
 
         Ok(envs)
@@ -2372,6 +2386,17 @@ mod tests {
     fn test_parse_env_null_separated_empty() {
         let result = Devenv::parse_env_null_separated(b"");
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_is_valid_env_name() {
+        assert!(Devenv::is_valid_env_name("HOME"));
+        assert!(Devenv::is_valid_env_name("_PRIVATE"));
+        assert!(Devenv::is_valid_env_name("var123"));
+        assert!(!Devenv::is_valid_env_name("BASH_FUNC_my_func%%"));
+        assert!(!Devenv::is_valid_env_name("123BAD"));
+        assert!(!Devenv::is_valid_env_name("has-dashes"));
+        assert!(!Devenv::is_valid_env_name(""));
     }
 
     #[test]
