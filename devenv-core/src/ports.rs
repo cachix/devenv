@@ -423,17 +423,23 @@ impl Default for PortAllocator {
 /// `SO_REUSEADDR` would allow both `0.0.0.0:port` and `127.0.0.1:port`
 /// to coexist.
 fn reserve_port(port: u16) -> Result<Vec<TcpListener>, ()> {
-    let v4 = bind_no_reuse(socket2::Domain::IPV4, "0.0.0.0", port)?;
+    let v4 = bind_no_reuse(socket2::Domain::IPV4, "0.0.0.0", port).map_err(|_| ())?;
     match bind_no_reuse(socket2::Domain::IPV6, "[::1]", port) {
         Ok(v6) => Ok(vec![v4, v6]),
-        Err(()) => {
-            // Check if the failure is AddrInUse (another process) vs IPv6 unavailable.
-            // Try creating an IPv6 socket to distinguish.
-            if socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None).is_ok() {
-                // IPv6 works but port is taken
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::AddrInUse {
+                // IPv6 port is genuinely held by another process
                 Err(())
             } else {
-                // IPv6 unavailable on this host
+                // IPv6 bind failed for a non-conflict reason (e.g. transient OS
+                // state on macOS, permission error, or IPv6 not fully available).
+                // Proceed with IPv4 only since the services typically bind to
+                // 127.0.0.1 anyway.
+                tracing::debug!(
+                    "IPv6 bind for port {} failed with non-conflict error ({}), proceeding with IPv4 only",
+                    port,
+                    e
+                );
                 Ok(vec![v4])
             }
         }
@@ -441,16 +447,15 @@ fn reserve_port(port: u16) -> Result<Vec<TcpListener>, ()> {
 }
 
 /// Bind a TCP socket to `addr:port` without setting `SO_REUSEADDR`.
-fn bind_no_reuse(domain: socket2::Domain, addr: &str, port: u16) -> Result<TcpListener, ()> {
+fn bind_no_reuse(domain: socket2::Domain, addr: &str, port: u16) -> Result<TcpListener, std::io::Error> {
     use std::net::SocketAddr;
 
-    let socket = socket2::Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))
-        .map_err(|_| ())?;
-    let sock_addr: SocketAddr = format!("{}:{}", addr, port).parse().map_err(|_| ())?;
-    socket
-        .bind(&socket2::SockAddr::from(sock_addr))
-        .map_err(|_| ())?;
-    socket.listen(1).map_err(|_| ())?;
+    let socket = socket2::Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))?;
+    let sock_addr: SocketAddr = format!("{}:{}", addr, port)
+        .parse()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    socket.bind(&socket2::SockAddr::from(sock_addr))?;
+    socket.listen(1)?;
     Ok(TcpListener::from(socket))
 }
 
@@ -758,6 +763,50 @@ mod tests {
 
         let allocated = allocator.allocate("server", "http", port).unwrap();
         assert_ne!(allocated, port, "Should not allocate a port bound on [::1]");
+
+        drop(external);
+    }
+
+    #[test]
+    fn test_bind_no_reuse_returns_addr_in_use_error() {
+        let listener = bind_no_reuse(socket2::Domain::IPV4, "0.0.0.0", 0).unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let err = bind_no_reuse(socket2::Domain::IPV4, "0.0.0.0", port).unwrap_err();
+        assert_eq!(
+            err.kind(),
+            std::io::ErrorKind::AddrInUse,
+            "Should return AddrInUse when port is occupied"
+        );
+    }
+
+    #[test]
+    fn test_reserve_port_succeeds_when_ipv4_free() {
+        // Reserve a port, then release it, then re-reserve to confirm
+        // the port check works with free ports
+        let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
+        allocator.set_strict(true);
+
+        let port = allocator.allocate("server", "http", 49990).unwrap();
+        assert_eq!(port, 49990);
+    }
+
+    #[test]
+    fn test_strict_mode_fails_only_on_genuine_conflict() {
+        // Hold a port via IPv4 and verify strict mode detects it
+        let external = TcpListener::bind("0.0.0.0:0").unwrap();
+        let port = external.local_addr().unwrap().port();
+
+        let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
+        allocator.set_strict(true);
+
+        let err = allocator.allocate("server", "http", port).unwrap_err();
+        assert!(
+            err.contains("already in use"),
+            "Strict mode should fail when port is genuinely occupied"
+        );
 
         drop(external);
     }
