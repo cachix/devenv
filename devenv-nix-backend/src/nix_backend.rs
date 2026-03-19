@@ -752,12 +752,9 @@ impl NixRustBackend {
                 .wrap_err("Failed to set system")?;
         }
 
-        // impure: allow impure evaluation (relaxes hermeticity)
-        if nix_settings.impure {
-            settings::set("impure", "1")
-                .to_miette()
-                .wrap_err("Failed to set impure mode")?;
-        } else {
+        // pure-eval: restrict evaluation to explicitly declared inputs
+        // When impure mode is requested, skip setting pure-eval (defaults to false)
+        if !nix_settings.impure {
             // Enable pure evaluation by default when not in impure mode
             // This restricts file system and network access during evaluation
             settings::set("pure-eval", "true")
