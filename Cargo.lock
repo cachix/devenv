@@ -2010,7 +2010,6 @@ dependencies = [
  "sd-notify",
  "serde",
  "serde_json",
- "shell-escape",
  "signal-hook 0.4.3",
  "signal-hook-tokio",
  "socket2 0.6.2",

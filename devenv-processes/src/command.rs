@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use miette::{IntoDiagnostic, Result, WrapErr};
-use tracing::debug;
+use tracing::warn;
 use watchexec_supervisor::command::{Command, Program, Shell, SpawnOptions};
 
 use crate::config::ProcessConfig;
@@ -12,6 +13,26 @@ pub struct BuiltCommand {
     pub command: Arc<Command>,
     pub stdout_log: PathBuf,
     pub stderr_log: PathBuf,
+    /// Environment variables to set on the spawned process via the spawn hook.
+    pub env: HashMap<String, String>,
+    /// Working directory for the spawned process, set via the spawn hook.
+    pub cwd: Option<PathBuf>,
+}
+
+/// Open a log file for appending, creating it if needed.
+/// Returns `None` and logs a warning on failure.
+pub fn open_log_file(path: &Path) -> Option<std::fs::File> {
+    match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        Ok(f) => Some(f),
+        Err(e) => {
+            warn!("Failed to open log file {}: {}", path.display(), e);
+            None
+        }
+    }
 }
 
 /// Compute the stdout/stderr log paths for a process.
@@ -24,6 +45,11 @@ pub fn log_paths(state_dir: &Path, name: &str) -> (PathBuf, PathBuf) {
 }
 
 /// Build a command from configuration, returning the command and log file paths.
+///
+/// Environment variables, working directory, and stdio redirection are returned
+/// separately in `BuiltCommand` so they can be applied via the spawn hook on the
+/// `TokioCommand` directly. This avoids exceeding the kernel's ARG_MAX limit
+/// with large environments.
 pub fn build_command(
     state_dir: &Path,
     config: &ProcessConfig,
@@ -37,18 +63,22 @@ pub fn build_command(
 
     let (stdout_log, stderr_log) = log_paths(state_dir, &config.name);
 
-    let script = build_wrapper_script(
-        config,
-        &stdout_log,
-        &stderr_log,
-        notify_socket_path,
-        watchdog_usec,
-    );
+    // Build the environment: start with config.env, add notify/watchdog vars
+    let mut env = config.env.clone();
+    if let Some(path) = notify_socket_path {
+        env.insert(
+            "NOTIFY_SOCKET".to_string(),
+            path.to_string_lossy().into_owned(),
+        );
+    }
+    if let Some(usec) = watchdog_usec {
+        env.insert("WATCHDOG_USEC".to_string(), usec.to_string());
+    }
 
     let program = Program::Shell {
         shell: Shell::new("bash"),
-        command: script,
-        args: vec![],
+        command: config.exec.clone(),
+        args: config.args.clone(),
     };
 
     let command = Arc::new(Command {
@@ -63,88 +93,7 @@ pub fn build_command(
         command,
         stdout_log,
         stderr_log,
+        env,
+        cwd: config.cwd.clone(),
     })
-}
-
-/// Build a shell wrapper script that handles env vars, cwd, logging, and sudo.
-fn build_wrapper_script(
-    config: &ProcessConfig,
-    stdout_log: &Path,
-    stderr_log: &Path,
-    notify_socket_path: Option<&Path>,
-    watchdog_usec: Option<u64>,
-) -> String {
-    use std::fmt::Write;
-
-    let mut script = String::new();
-    writeln!(script, "#!/bin/bash").unwrap();
-    writeln!(script, "set -e").unwrap();
-
-    if let Some(ref cwd) = config.cwd {
-        writeln!(script, "cd {}", shell_escape::escape(cwd.to_string_lossy())).unwrap();
-    }
-
-    if !config.env.is_empty() {
-        for (key, value) in &config.env {
-            writeln!(
-                script,
-                "export {}={}",
-                shell_escape::escape(key.into()),
-                shell_escape::escape(value.into())
-            )
-            .unwrap();
-        }
-    }
-
-    if let Some(path) = notify_socket_path {
-        writeln!(
-            script,
-            "export NOTIFY_SOCKET={}",
-            shell_escape::escape(path.to_string_lossy())
-        )
-        .unwrap();
-    }
-
-    if let Some(usec) = watchdog_usec {
-        writeln!(script, "export WATCHDOG_USEC={}", usec).unwrap();
-    }
-
-    // Redirect all subsequent stdout/stderr to log files so that every
-    // command in the exec block (including early echo statements before
-    // an `exec` call) is captured by the log tailer.
-    // Close stdin so processes that read from it get EOF immediately
-    // instead of hanging forever or stealing terminal input.
-    writeln!(
-        script,
-        "exec </dev/null >> {} 2>> {}",
-        shell_escape::escape(stdout_log.to_string_lossy()),
-        shell_escape::escape(stderr_log.to_string_lossy())
-    )
-    .unwrap();
-
-    // Forward TERM/INT to the child process group so that services like
-    // postgres and redis (and their workers) are properly shut down when
-    // devenv exits. Without this, bash exits on signal but the child
-    // becomes orphaned.
-    writeln!(script, "_child_pid=").unwrap();
-    writeln!(
-        script,
-        "trap '[ -n \"$_child_pid\" ] && kill -TERM -- -\"$_child_pid\" 2>/dev/null; wait \"$_child_pid\"; exit' TERM INT"
-    )
-    .unwrap();
-
-    let mut cmd = String::new();
-
-    write!(cmd, "{}", config.exec).unwrap();
-
-    for arg in &config.args {
-        write!(cmd, " {}", shell_escape::escape(arg.into())).unwrap();
-    }
-
-    writeln!(script, "{} &", cmd).unwrap();
-    writeln!(script, "_child_pid=$!").unwrap();
-    writeln!(script, "wait $_child_pid").unwrap();
-
-    debug!("Generated wrapper script for {}: {}", config.name, script);
-    script
 }
