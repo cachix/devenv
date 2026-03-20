@@ -398,7 +398,7 @@ impl NativeProcessManager {
         let has_sockets = !config.listen.is_empty();
         let has_caps = !config.linux.capabilities.is_empty();
 
-        if has_sockets || has_caps {
+        let process_setup = if has_sockets || has_caps {
             let fds = if has_sockets {
                 info!("Setting up socket activation for {}", config.name);
                 let spec = activation_from_listen(&config.listen)?;
@@ -421,10 +421,41 @@ impl NativeProcessManager {
             }
 
             let capabilities = config.linux.capabilities.clone();
-            job.set_spawn_hook(move |command_wrap, _ctx| {
+            Some((fds, capabilities))
+        } else {
+            None
+        };
+
+        // Set spawn hook to configure env, cwd, and stdio on the TokioCommand
+        // directly instead of baking them into the bash wrapper script. This
+        // avoids hitting the kernel ARG_MAX limit with large environments.
+        let spawn_env = proc_cmd.env;
+        let spawn_cwd = proc_cmd.cwd;
+        let spawn_stdout = proc_cmd.stdout_log.clone();
+        let spawn_stderr = proc_cmd.stderr_log.clone();
+
+        job.set_spawn_hook(move |command_wrap, _ctx| {
+            let cmd = command_wrap.command_mut();
+            cmd.envs(&spawn_env);
+            if let Some(ref cwd) = spawn_cwd {
+                cmd.current_dir(cwd);
+            }
+            cmd.stdin(std::process::Stdio::null());
+            cmd.stdout(
+                crate::command::open_log_file(&spawn_stdout)
+                    .map(std::process::Stdio::from)
+                    .unwrap_or_else(std::process::Stdio::null),
+            );
+            cmd.stderr(
+                crate::command::open_log_file(&spawn_stderr)
+                    .map(std::process::Stdio::from)
+                    .unwrap_or_else(std::process::Stdio::null),
+            );
+
+            if let Some((ref fds, ref capabilities)) = process_setup {
                 command_wrap.wrap(ProcessSetupWrapper::new(fds.clone(), capabilities.clone()));
-            });
-        }
+            }
+        });
 
         job.start().await;
 
