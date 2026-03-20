@@ -1282,7 +1282,7 @@ version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "980c2afde4af43d6a05c5be738f9eae595cff86dce1f38f88b95058a98c027f3"
 dependencies = [
- "crossterm",
+ "crossterm 0.29.0",
 ]
 
 [[package]]
@@ -1372,7 +1372,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04a63daf06a168535c74ab97cdba3ed4fa5d4f32cb36e437dcceb83d66854b7c"
 dependencies = [
  "crokey-proc_macros",
- "crossterm",
+ "crossterm 0.29.0",
  "once_cell",
  "serde",
  "strict",
@@ -1384,7 +1384,7 @@ version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "847f11a14855fc490bd5d059821895c53e77eeb3c2b73ee3dded7ce77c93b231"
 dependencies = [
- "crossterm",
+ "crossterm 0.29.0",
  "proc-macro2",
  "quote",
  "strict",
@@ -1449,14 +1449,30 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
 name = "crossterm"
+version = "0.28.1"
+source = "git+https://github.com/sandydoo/crossterm?branch=0.28-cachix#f1db15b52b18ad930efd4991e7a5bbdc1845fe42"
+dependencies = [
+ "bitflags 2.11.0",
+ "crossterm_winapi",
+ "futures-core",
+ "mio 1.1.1",
+ "parking_lot",
+ "rustix 0.38.44",
+ "signal-hook 0.3.18",
+ "signal-hook-mio",
+ "winapi",
+]
+
+[[package]]
+name = "crossterm"
 version = "0.29.0"
-source = "git+https://github.com/cachix/crossterm?branch=0.29-cachix#91e3df5ccee39f142acefb9e99de1bf43c2fea67"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8b9f2e4c67f833b660cdb0a3523065869fb35570177239812ed4c905aeff87b"
 dependencies = [
  "bitflags 2.11.0",
  "crossterm_winapi",
  "derive_more",
  "document-features",
- "futures-core",
  "mio 1.1.1",
  "parking_lot",
  "rustix 1.1.4",
@@ -2059,7 +2075,7 @@ name = "devenv-shell"
 version = "2.0.6"
 dependencies = [
  "avt",
- "crossterm",
+ "crossterm 0.28.1",
  "insta",
  "iocraft",
  "libc",
@@ -2132,7 +2148,7 @@ dependencies = [
  "chrono",
  "clap",
  "console 0.16.2",
- "crossterm",
+ "crossterm 0.28.1",
  "devenv-activity",
  "devenv-cache-core",
  "devenv-eval-cache",
@@ -3895,7 +3911,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6654738b8024300cf062d04a1c13c10c8e2cea598ec1c47dc9b6641159429756"
 dependencies = [
  "bitflags 2.11.0",
- "crossterm",
+ "crossterm 0.29.0",
  "dyn-clone",
  "fuzzy-matcher",
  "unicode-segmentation",
@@ -3928,10 +3944,10 @@ dependencies = [
 [[package]]
 name = "iocraft"
 version = "0.7.18"
-source = "git+https://github.com/cachix/iocraft?branch=row-level-diff#322e793aacec831a314f60f01ddb4c81d79d5011"
+source = "git+https://github.com/cachix/iocraft?branch=cachix#4cd87374e502e33a8de22901d0000046e42b4883"
 dependencies = [
  "bitflags 2.11.0",
- "crossterm",
+ "crossterm 0.28.1",
  "futures",
  "generational-box",
  "iocraft-macros",
@@ -3942,7 +3958,7 @@ dependencies = [
 [[package]]
 name = "iocraft-macros"
 version = "0.2.3"
-source = "git+https://github.com/cachix/iocraft?branch=row-level-diff#322e793aacec831a314f60f01ddb4c81d79d5011"
+source = "git+https://github.com/cachix/iocraft?branch=cachix#4cd87374e502e33a8de22901d0000046e42b4883"
 dependencies = [
  "proc-macro2",
  "quote",
