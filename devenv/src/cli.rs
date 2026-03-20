@@ -465,7 +465,7 @@ pub enum Commands {
             value_name = "ENABLE",
             default_value = "false",
             default_missing_value = "true",
-            env = "DEVENV_DIRENV_USE",
+            env = "DEVENV_DIRENV_INIT",
             help = "For use with direnv, additionally scaffold .envrc.",
             long_help = "For use with direnv, additionally scaffold .envrc.\n\nhttps://devenv.sh/integrations/direnv/",
 
