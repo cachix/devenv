@@ -7,6 +7,7 @@
 - Fixed processes failing to start when exported bash functions are present in the environment ([#2587](https://github.com/cachix/devenv/issues/2587)).
 - Fixed eval cache storing inconsistent port allocations across different cached attributes ([#2631](https://github.com/cachix/devenv/issues/2631)).
 - Fixed stale eval cache invalidation for `devenv up` process config changes caused by overlapping evaluations clearing each other's file dependency observers ([#2632](https://github.com/cachix/devenv/pull/2632)).
+- Fixed false-positive `--strict-ports` failures on macOS when IPv6 loopback binding returns a benign error after a clean shutdown and cache invalidation ([#2640](https://github.com/cachix/devenv/pull/2640)).
 - Fixed child processes being left running on shutdown when using non-native process managers like process-compose ([#2586](https://github.com/cachix/devenv/issues/2586)).
 - Fixed `devenv update` resolving stale revisions when Nix's fetcher cache contains outdated entries by setting `tarball-ttl` to 0 during update, equivalent to `nix --refresh` ([#2616](https://github.com/cachix/devenv/issues/2616)).
 - Fixed Nix backend initialization crash when `impure: true` by removing use of nonexistent `impure` Nix setting; impure mode now works by skipping `pure-eval` (which defaults to false).
