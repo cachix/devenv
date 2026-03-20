@@ -95,18 +95,15 @@ pub struct NixpkgsConfig {
         default
     )]
     pub permitted_unfree_packages: Vec<String>,
-    #[serde(
-        alias = "allowlistedLicenses",
-        skip_serializing_if = "Vec::is_empty",
-        default
-    )]
+    /// License names to allow (e.g. "mit", "gpl3Only").
+    /// Only applied in bootstrapLib.nix where lib.licenses is available;
+    /// not serialized to NIXPKGS_CONFIG since raw strings won't match license attrsets.
+    #[serde(alias = "allowlistedLicenses", skip_serializing, default)]
     #[setting(merge = schematic::merge::append_vec)]
     pub allowlisted_licenses: Vec<String>,
-    #[serde(
-        alias = "blocklistedLicenses",
-        skip_serializing_if = "Vec::is_empty",
-        default
-    )]
+    /// License names to block (e.g. "unfree", "bsl11").
+    /// Only applied in bootstrapLib.nix; not serialized to NIXPKGS_CONFIG.
+    #[serde(alias = "blocklistedLicenses", skip_serializing, default)]
     #[setting(merge = schematic::merge::append_vec)]
     pub blocklisted_licenses: Vec<String>,
     #[serde(

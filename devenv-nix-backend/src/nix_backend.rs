@@ -332,25 +332,21 @@ impl NixRustBackend {
             .map_err(|e| miette::miette!("Failed to serialize nixpkgs config: {}", e))?;
         let nixpkgs_config_nix = format!(
             r#"let
-  lib = import <nixpkgs/lib>;
   cfg = {base};
+  getName = pkg: (builtins.parseDrvName (pkg.name or pkg.pname or "")).name;
 in cfg // {{
   allowUnfreePredicate =
     if cfg.allowUnfree or false then
       (_: true)
     else if (cfg.permittedUnfreePackages or []) != [] then
-      (pkg: builtins.elem ((builtins.parseDrvName (pkg.name or pkg.pname or pkg)).name) (cfg.permittedUnfreePackages or []))
+      (pkg: builtins.elem (getName pkg) (cfg.permittedUnfreePackages or []))
     else
       (_: false);
   allowInsecurePredicate =
     if (cfg.permittedInsecurePackages or []) != [] then
-      (pkg: builtins.elem (lib.getName pkg) (cfg.permittedInsecurePackages or []))
+      (pkg: builtins.elem (getName pkg) (cfg.permittedInsecurePackages or []))
     else
       (_: false);
-}} // lib.optionalAttrs ((cfg.allowlistedLicenses or []) != []) {{
-  allowlistedLicenses = map (name: lib.licenses.${{name}}) (cfg.allowlistedLicenses or []);
-}} // lib.optionalAttrs ((cfg.blocklistedLicenses or []) != []) {{
-  blocklistedLicenses = map (name: lib.licenses.${{name}}) (cfg.blocklistedLicenses or []);
 }}"#,
             base = nixpkgs_config_base
         );
