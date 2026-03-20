@@ -326,12 +326,15 @@ impl NixRustBackend {
             .wrap_err("Failed to create fetchers settings")?;
 
         // Write pre-computed nixpkgs config to temp file for NIXPKGS_CONFIG env var
-        // Wrap in a let expression that adds allowUnfreePredicate (a Nix function)
+        // Wrap in a let expression that adds predicate functions and license references
         // Note: NIXPKGS_CONFIG expects a file path, not inline Nix content
         let nixpkgs_config_base = ser_nix::to_string(&nixpkgs_config)
             .map_err(|e| miette::miette!("Failed to serialize nixpkgs config: {}", e))?;
         let nixpkgs_config_nix = format!(
-            r#"let cfg = {base}; in cfg // {{
+            r#"let
+  lib = import <nixpkgs/lib>;
+  cfg = {base};
+in cfg // {{
   allowUnfreePredicate =
     if cfg.allowUnfree or false then
       (_: true)
@@ -339,6 +342,15 @@ impl NixRustBackend {
       (pkg: builtins.elem ((builtins.parseDrvName (pkg.name or pkg.pname or pkg)).name) (cfg.permittedUnfreePackages or []))
     else
       (_: false);
+  allowInsecurePredicate =
+    if (cfg.permittedInsecurePackages or []) != [] then
+      (pkg: builtins.elem (lib.getName pkg) (cfg.permittedInsecurePackages or []))
+    else
+      (_: false);
+}} // lib.optionalAttrs ((cfg.allowlistedLicenses or []) != []) {{
+  allowlistedLicenses = map (name: lib.licenses.${{name}}) (cfg.allowlistedLicenses or []);
+}} // lib.optionalAttrs ((cfg.blocklistedLicenses or []) != []) {{
+  blocklistedLicenses = map (name: lib.licenses.${{name}}) (cfg.blocklistedLicenses or []);
 }}"#,
             base = nixpkgs_config_base
         );

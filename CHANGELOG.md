@@ -25,6 +25,8 @@
 - Containers now report all missing inputs at once instead of one at a time ([#2598](https://github.com/cachix/devenv/issues/2598)).
 - Extracted container, search, and gc methods from `devenv.rs` into separate submodule files for better code organization.
 - Added `allowUnsupportedSystem` option for `devenv.yaml` to allow packages not supported on the current system. Can be set at the top level, under `nixpkgs`, or per platform via `nixpkgs.per-platform.<system>` ([#2639](https://github.com/cachix/devenv/pull/2639)).
+- Added new nixpkgs config options to `devenv.yaml`: `allowNonSource`, `allowlistedLicenses`, `blocklistedLicenses`, and `androidSdk.acceptLicense` ([#2634](https://github.com/cachix/devenv/issues/2634)).
+- Added `allowInsecurePredicate` generation from `permittedInsecurePackages` so insecure package allowlisting works correctly.
 
 ### Breaking Changes
 

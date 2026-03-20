@@ -66,11 +66,24 @@ See [Supported URI formats](../inputs.md#supported-uri-formats).
 
 *Type:* `string`
 
+## nixpkgs.androidSdk.acceptLicense
+
+Accept the Android SDK license.
+Can also be set via the `NIXPKGS_ACCEPT_ANDROID_SDK_LICENSE=1` environment variable.
+
+*Type:* `boolean` · *Default:* `false`
+
 ## nixpkgs.allowBroken
 
 Allow packages marked as broken.
 
 *Type:* `boolean` · *Default:* `false` · *Added in 1.7*
+
+## nixpkgs.allowNonSource
+
+Allow packages not built from source.
+
+*Type:* `boolean` · *Default:* `true` (nixpkgs default)
 
 ## nixpkgs.allowUnsupportedSystem
 
@@ -83,6 +96,22 @@ Allow packages that are not supported on the current system.
 Allow unfree packages.
 
 *Type:* `boolean` · *Default:* `false` · *Added in 1.7*
+
+## nixpkgs.allowlistedLicenses
+
+A list of license names to allow.
+Uses nixpkgs license attribute names (e.g. `gpl3Only`, `mit`, `asl20`).
+See [nixpkgs license list](https://github.com/NixOS/nixpkgs/blob/master/lib/licenses.nix).
+
+*Type:* `list of string` · *Default:* `[]`
+
+## nixpkgs.blocklistedLicenses
+
+A list of license names to block.
+Uses nixpkgs license attribute names (e.g. `unfree`, `bsl11`).
+See [nixpkgs license list](https://github.com/NixOS/nixpkgs/blob/master/lib/licenses.nix).
+
+*Type:* `list of string` · *Default:* `[]`
 
 ## nixpkgs.cudaCapabilities
 
@@ -111,7 +140,7 @@ A list of unfree packages to allow by name.
 ## nixpkgs.per-platform.\<system\>
 
 Per-platform nixpkgs configuration.
-Accepts the same options as `nixpkgs` (`allowBroken`, `allowUnfree`, `allowUnsupportedSystem`, `cudaCapabilities`, `cudaSupport`, `permittedInsecurePackages`, `permittedUnfreePackages`).
+Accepts the same options as `nixpkgs`.
 
 *Type:* `attribute set of nixpkgs config` · *Added in 1.7*
 

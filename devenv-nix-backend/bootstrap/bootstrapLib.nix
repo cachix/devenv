@@ -68,6 +68,15 @@ rec {
                 (pkg: builtins.elem (lib.getName pkg) (nixpkgs_config.permittedUnfreePackages or [ ]))
               else
                 (_: false);
+            allowInsecurePredicate =
+              if (nixpkgs_config.permittedInsecurePackages or [ ]) != [ ] then
+                (pkg: builtins.elem (lib.getName pkg) (nixpkgs_config.permittedInsecurePackages or [ ]))
+              else
+                (_: false);
+          } // lib.optionalAttrs ((nixpkgs_config.allowlistedLicenses or [ ]) != [ ]) {
+            allowlistedLicenses = map (name: lib.licenses.${name}) (nixpkgs_config.allowlistedLicenses or [ ]);
+          } // lib.optionalAttrs ((nixpkgs_config.blocklistedLicenses or [ ]) != [ ]) {
+            blocklistedLicenses = map (name: lib.licenses.${name}) (nixpkgs_config.blocklistedLicenses or [ ]);
           };
           inherit overlays;
         };

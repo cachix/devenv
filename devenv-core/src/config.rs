@@ -26,6 +26,19 @@ pub enum NixBackendType {
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[config(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
+pub struct AndroidSdkConfig {
+    #[serde(
+        rename = "accept_license",
+        skip_serializing_if = "is_false",
+        default = "false_default"
+    )]
+    #[setting(merge = schematic::merge::replace)]
+    pub accept_license: bool,
+}
+
+#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[config(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct NixpkgsConfig {
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(merge = schematic::merge::replace)]
@@ -38,6 +51,9 @@ pub struct NixpkgsConfig {
     pub allow_broken: bool,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(merge = schematic::merge::replace)]
+    pub allow_non_source: bool,
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(merge = schematic::merge::replace)]
     pub cuda_support: bool,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     #[setting(merge = schematic::merge::append_vec)]
@@ -47,6 +63,19 @@ pub struct NixpkgsConfig {
     pub permitted_insecure_packages: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub permitted_unfree_packages: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[setting(merge = schematic::merge::append_vec)]
+    pub allowlisted_licenses: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[setting(merge = schematic::merge::append_vec)]
+    pub blocklisted_licenses: Vec<String>,
+    #[serde(
+        rename = "android_sdk",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    #[setting(nested)]
+    pub android_sdk: Option<AndroidSdkConfig>,
 }
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -885,6 +914,9 @@ impl Config {
             if base.allow_broken {
                 config.allow_broken = true;
             }
+            if base.allow_non_source {
+                config.allow_non_source = true;
+            }
             if base.cuda_support {
                 config.cuda_support = true;
             }
@@ -897,6 +929,15 @@ impl Config {
             if !base.permitted_unfree_packages.is_empty() {
                 config.permitted_unfree_packages = base.permitted_unfree_packages.clone();
             }
+            if !base.allowlisted_licenses.is_empty() {
+                config.allowlisted_licenses = base.allowlisted_licenses.clone();
+            }
+            if !base.blocklisted_licenses.is_empty() {
+                config.blocklisted_licenses = base.blocklisted_licenses.clone();
+            }
+            if base.android_sdk.is_some() {
+                config.android_sdk = base.android_sdk.clone();
+            }
 
             // Apply per-platform config (highest priority)
             if let Some(platform_config) = nixpkgs.per_platform.get(system) {
@@ -908,6 +949,9 @@ impl Config {
                 }
                 if platform_config.allow_broken {
                     config.allow_broken = true;
+                }
+                if platform_config.allow_non_source {
+                    config.allow_non_source = true;
                 }
                 if platform_config.cuda_support {
                     config.cuda_support = true;
@@ -922,6 +966,15 @@ impl Config {
                 if !platform_config.permitted_unfree_packages.is_empty() {
                     config.permitted_unfree_packages =
                         platform_config.permitted_unfree_packages.clone();
+                }
+                if !platform_config.allowlisted_licenses.is_empty() {
+                    config.allowlisted_licenses = platform_config.allowlisted_licenses.clone();
+                }
+                if !platform_config.blocklisted_licenses.is_empty() {
+                    config.blocklisted_licenses = platform_config.blocklisted_licenses.clone();
+                }
+                if platform_config.android_sdk.is_some() {
+                    config.android_sdk = platform_config.android_sdk.clone();
                 }
             }
         }
