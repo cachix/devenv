@@ -183,13 +183,17 @@ impl ShellManager {
                 }
 
                 Event::FileChange(path) => {
+                    // If a build is already running, drop the event.
+                    // spawn_blocking tasks cannot actually be cancelled, so
+                    // aborting and restarting would accumulate zombie builds
+                    // that can cascade into more file changes (fork bomb).
+                    if current_build.is_some() {
+                        tracing::debug!("Build in progress, ignoring file change: {:?}", path);
+                        continue;
+                    }
+
                     // Track the file that triggered this rebuild
                     pending_changes.push(path.clone());
-
-                    // Cancel any running build
-                    if let Some(handle) = current_build.take() {
-                        handle.abort();
-                    }
 
                     let ctx = BuildContext {
                         cwd: cwd.clone(),

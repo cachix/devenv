@@ -21,6 +21,7 @@
 - Fixed `execIfModified` glob walker entering gitignored directories, causing extreme slowdowns in repos with large ignored trees ([#2588](https://github.com/cachix/devenv/issues/2588)).
 - Fixed `devenv up -d` not keeping processes running with the native process manager by spawning a daemon via re-exec instead of fork, which is unsafe in multithreaded programs ([#2630](https://github.com/cachix/devenv/issues/2630)).
 - Fixed environment variable precedence in process manager: per-process env now correctly wins over global env.
+- Fixed hot reload triggering a fork bomb by ignoring file change events while a build is already in progress, preventing cascading zombie builds.
 
 ### Improvements
 
