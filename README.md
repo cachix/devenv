@@ -17,6 +17,53 @@
 [![Version](https://img.shields.io/github/v/release/cachix/devenv?color=green&label=version&sort=semver)](https://github.com/cachix/devenv/releases)
 [![CI](https://github.com/cachix/devenv/actions/workflows/release.yml/badge.svg)](https://github.com/cachix/devenv/actions/workflows/release.yml?branch=main)
 
+## Features
+
+### Developer experience
+
+- **[Terminal UI](https://devenv.sh/blog/2025/03/05/devenv-v20-a-fresh-interface-to-nix/#terminal-ui)** with live build progress, task hierarchy, and error details
+- **[Native shell reloading](https://devenv.sh/blog/2025/03/05/devenv-v20-a-fresh-interface-to-nix/#native-shell-reloading)** that rebuilds in the background while your shell stays interactive
+- **[Instant environments](https://devenv.sh/blog/2024/10/03/devenv-13-instant-developer-environments-with-nix-caching/)** with incremental Nix evaluation caching (sub 100ms when nothing changed)
+- **[LSP for devenv.nix](https://devenv.sh/lsp/)** with autocomplete, hover docs, and go to definition via bundled nixd
+- **[Ad hoc environments](https://devenv.sh/ad-hoc-developer-environments/)** from the CLI without any config files (`--option languages.rust.enable:bool true`)
+- **[Out of tree devenvs](https://devenv.sh/ad-hoc-developer-environments/)** to use configs from other repos (`--from github:myorg/configs`)
+
+### Languages, packages, and services
+
+- **[50+ languages](https://devenv.sh/languages/)** with built in tooling: compilers, LSP servers, formatters, linters, and version selection
+- **[100,000+ packages](https://devenv.sh/packages/)** from Nixpkgs for Linux, macOS, x64, and ARM64 (including WSL2)
+- **[40+ services](https://devenv.sh/services/)** like PostgreSQL, Redis, MySQL, MongoDB, Elasticsearch, Caddy, and more
+
+### Processes and tasks
+
+- **[Native process manager](https://devenv.sh/processes/)** written in Rust with dependency ordering, restart policies, readiness probes (exec, HTTP, systemd notify), socket activation, watchdog heartbeats, and file watching
+- **[Automatic port allocation](https://devenv.sh/processes/#automatic-port-allocation)** that finds free ports so parallel environments never collide
+- **[Tasks](https://devenv.sh/tasks/)** with DAG based execution, caching, parallel runs, and namespace support
+- **[Scripts](https://devenv.sh/scripts/)** with access to all environment packages
+
+### Packaging and deployment
+
+- **[OCI containers](https://devenv.sh/containers/)** built from your environment without Docker
+- **[Outputs](https://devenv.sh/outputs/)** for packaging apps using each language's best tools (crate2nix, uv2nix, ...)
+- **[Polyrepo support](https://devenv.sh/guides/polyrepo/)** to reference outputs and options across repositories
+
+### Composition and configuration
+
+- **[Profiles](https://devenv.sh/profiles/)** for environment variants (`--profile backend --profile testing`)
+- **[Composable via imports](https://devenv.sh/composing-using-imports/)** to share and reuse environments across projects
+- **[Inputs](https://devenv.sh/inputs/)** for pinning and overriding Nix dependencies
+
+### Security and integrations
+
+- **[SecretSpec](https://devenv.sh/integrations/secretspec/)** for declarative, provider agnostic secrets management (keyring, 1Password, dotenv)
+- **[Git hooks](https://devenv.sh/git-hooks/)** via git-hooks.nix with pre configured formatters and linters
+- **[Testing](https://devenv.sh/tests/)** with `devenv test` that automatically starts and stops processes
+- **[direnv integration](https://devenv.sh/integrations/direnv/)** for automatic shell activation when entering a directory
+- **[MCP server](https://devenv.sh/mcp/)** for AI assistant integration (package and option search)
+- **[AI generation](https://devenv.new)** to scaffold environments from a natural language description
+
+## Quick start
+
 Running ``devenv init`` generates ``devenv.nix``:
 
 ```nix
