@@ -449,6 +449,19 @@ in
         '';
       }];
 
+      changelogs = [
+        {
+          date = "2026-03-19";
+          title = "Strict port checks no longer fail on benign IPv6 loopback errors";
+          when = lib.any (process: process.ports != { }) (lib.attrValues config.processes);
+          description = ''
+            Port allocation with `--strict-ports` now ignores benign IPv6 loopback bind failures while still rejecting real port conflicts.
+
+            This fixes false-positive "Port X is already in use" errors that could happen on macOS after a clean shutdown when the evaluation cache was invalidated.
+          '';
+        }
+      ];
+
       process.managers.${implementation}.enable = lib.mkDefault true;
     }
 
