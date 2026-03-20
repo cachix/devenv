@@ -448,7 +448,7 @@ impl Cli {
         if self.cli_options.verbose {
             devenv_tracing::Level::Debug
         } else if self.cli_options.quiet {
-            devenv_tracing::Level::Silent
+            devenv_tracing::Level::Warn
         } else {
             devenv_tracing::Level::default()
         }

@@ -217,7 +217,8 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
             | Commands::Init { .. } // interactive prompts (dialoguer) need direct terminal
     );
 
-    let tui = tui_requested && !tui_unsupported && !use_tracing_mode;
+    let quiet = cli.cli_options.quiet;
+    let tui = tui_requested && !tui_unsupported && !use_tracing_mode && !quiet;
 
     // Determine use_pty from resolved settings (single source of truth)
     let use_pty = shell_settings.reload

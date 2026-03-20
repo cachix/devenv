@@ -18,6 +18,7 @@
 
 ### Improvements
 
+- `--quiet` now disables the TUI and suppresses all output except warnings and errors ([#2617](https://github.com/cachix/devenv/issues/2617)).
 - Bumped Nix input to fix `devenv shell` failing with "suspicious ownership or permission" on single user Nix installations where umask causes store outputs to have incorrect permissions ([#2585](https://github.com/cachix/devenv/issues/2585)).
 - Bumped iocraft to use row level diff rendering ([ccbrown/iocraft#179](https://github.com/ccbrown/iocraft/pull/179)), reducing TUI flicker.
 - Containers now report all missing inputs at once instead of one at a time ([#2598](https://github.com/cachix/devenv/issues/2598)).
