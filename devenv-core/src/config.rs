@@ -25,10 +25,10 @@ pub enum NixBackendType {
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[config(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct AndroidSdkConfig {
     #[serde(
-        rename = "accept_license",
+        alias = "acceptLicense",
         skip_serializing_if = "is_false",
         default = "false_default"
     )]
@@ -38,35 +38,75 @@ pub struct AndroidSdkConfig {
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[config(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all(serialize = "camelCase", deserialize = "snake_case"))]
 pub struct NixpkgsConfig {
-    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[serde(
+        alias = "allowUnfree",
+        skip_serializing_if = "is_false",
+        default = "false_default"
+    )]
     #[setting(merge = schematic::merge::replace)]
     pub allow_unfree: bool,
-    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[serde(
+        alias = "allowUnsupportedSystem",
+        skip_serializing_if = "is_false",
+        default = "false_default"
+    )]
     #[setting(merge = schematic::merge::replace)]
     pub allow_unsupported_system: bool,
-    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[serde(
+        alias = "allowBroken",
+        skip_serializing_if = "is_false",
+        default = "false_default"
+    )]
     #[setting(merge = schematic::merge::replace)]
     pub allow_broken: bool,
-    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[serde(
+        alias = "allowNonSource",
+        skip_serializing_if = "is_false",
+        default = "false_default"
+    )]
     #[setting(merge = schematic::merge::replace)]
     pub allow_non_source: bool,
-    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[serde(
+        alias = "cudaSupport",
+        skip_serializing_if = "is_false",
+        default = "false_default"
+    )]
     #[setting(merge = schematic::merge::replace)]
     pub cuda_support: bool,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(
+        alias = "cudaCapabilities",
+        skip_serializing_if = "Vec::is_empty",
+        default
+    )]
     #[setting(merge = schematic::merge::append_vec)]
     pub cuda_capabilities: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(
+        alias = "permittedInsecurePackages",
+        skip_serializing_if = "Vec::is_empty",
+        default
+    )]
     #[setting(merge = schematic::merge::append_vec)]
     pub permitted_insecure_packages: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(
+        alias = "permittedUnfreePackages",
+        skip_serializing_if = "Vec::is_empty",
+        default
+    )]
     pub permitted_unfree_packages: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(
+        alias = "allowlistedLicenses",
+        skip_serializing_if = "Vec::is_empty",
+        default
+    )]
     #[setting(merge = schematic::merge::append_vec)]
     pub allowlisted_licenses: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(
+        alias = "blocklistedLicenses",
+        skip_serializing_if = "Vec::is_empty",
+        default
+    )]
     #[setting(merge = schematic::merge::append_vec)]
     pub blocklisted_licenses: Vec<String>,
     #[serde(
@@ -80,7 +120,7 @@ pub struct NixpkgsConfig {
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[config(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub url: Option<String>,
@@ -184,13 +224,13 @@ impl Clean {
 
 #[derive(schematic::Config, Clone, Serialize, Debug, JsonSchema)]
 #[config(rename_all = "camelCase", allow_unknown_fields)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct Nixpkgs {
     #[serde(flatten)]
     #[setting(nested)]
     pub config_: NixpkgsConfig,
     #[serde(
-        rename = "per-platform",
+        alias = "per-platform",
         skip_serializing_if = "BTreeMap::is_empty",
         default
     )]
@@ -200,18 +240,30 @@ pub struct Nixpkgs {
 
 #[derive(schematic::Config, Clone, Serialize, Debug, JsonSchema)]
 #[config(rename_all = "camelCase", allow_unknown_fields)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct Config {
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     #[setting(nested, merge = schematic::merge::merge_btreemap)]
     pub inputs: BTreeMap<String, Input>,
-    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[serde(
+        alias = "allowUnfree",
+        skip_serializing_if = "is_false",
+        default = "false_default"
+    )]
     #[setting(merge = schematic::merge::replace)]
     pub allow_unfree: bool,
-    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[serde(
+        alias = "allowUnsupportedSystem",
+        skip_serializing_if = "is_false",
+        default = "false_default"
+    )]
     #[setting(merge = schematic::merge::replace)]
     pub allow_unsupported_system: bool,
-    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[serde(
+        alias = "allowBroken",
+        skip_serializing_if = "is_false",
+        default = "false_default"
+    )]
     #[setting(merge = schematic::merge::replace)]
     pub allow_broken: bool,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -220,7 +272,11 @@ pub struct Config {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     #[setting(merge = schematic::merge::append_vec)]
     pub imports: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(
+        alias = "permittedInsecurePackages",
+        skip_serializing_if = "Vec::is_empty",
+        default
+    )]
     #[setting(merge = schematic::merge::append_vec)]
     pub permitted_insecure_packages: Vec<String>,
     #[setting(nested)]
@@ -241,7 +297,11 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(merge = schematic::merge::replace)]
     pub reload: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(
+        alias = "strictPorts",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
     #[setting(merge = schematic::merge::replace)]
     pub strict_ports: Option<bool>,
     /// Git repository root path (not serialized, computed during load)
@@ -1143,19 +1203,19 @@ mod tests {
     }
 
     #[test]
-    fn strict_ports_field_serializes_as_camel_case() {
+    fn strict_ports_field_serializes_as_snake_case() {
         let mut config = Config::default();
         config.strict_ports = Some(true);
 
         let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
-        assert!(yaml.contains("strictPorts: true"));
+        assert!(yaml.contains("strict_ports: true"));
     }
 
     #[test]
     fn strict_ports_field_not_serialized_when_none() {
         let config = Config::default();
         let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
-        assert!(!yaml.contains("strictPorts"));
+        assert!(!yaml.contains("strict_ports"));
     }
 
     #[test]

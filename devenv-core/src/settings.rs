@@ -69,8 +69,32 @@ pub fn default_system() -> String {
 ///
 /// The logical default lives in `.unwrap_or(default)` at the call site,
 /// not in clap's `default_value_t`.
-pub fn flag(yes: impl Into<Option<bool>>, no: bool) -> Option<bool> {
-    match (yes.into(), no) {
+/// Convert a CLI flag value into an `Option<bool>`.
+///
+/// - Bare `bool`: `false` means "not passed" → `None`, `true` → `Some(true)`.
+/// - `Option<bool>`: passed through as-is, so `Some(false)` is an explicit choice.
+pub trait IntoFlag {
+    fn into_flag(self) -> Option<bool>;
+}
+
+impl IntoFlag for bool {
+    fn into_flag(self) -> Option<bool> {
+        if self { Some(true) } else { None }
+    }
+}
+
+impl IntoFlag for Option<bool> {
+    fn into_flag(self) -> Option<bool> {
+        self
+    }
+}
+
+/// Resolve a pair of positive/negative CLI flags into an `Option<bool>`.
+///
+/// `--no-*` always wins. Otherwise the positive flag is interpreted via
+/// [`IntoFlag`]: bare `false` is "unset", `Some(false)` is "explicitly off".
+pub fn flag(yes: impl IntoFlag, no: bool) -> Option<bool> {
+    match (yes.into_flag(), no) {
         (_, true) => Some(false),
         (Some(v), _) => Some(v),
         (None, false) => None,
