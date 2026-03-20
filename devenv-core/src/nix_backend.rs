@@ -12,12 +12,6 @@ use std::path::{Path, PathBuf};
 use crate::config::Input;
 use crate::nix_args::NixArgs;
 
-/// Version suffix for eval-cache keys.
-///
-/// Bump this when the cache key or tracked inputs change in a way that should
-/// invalidate previously stored rows.
-pub const EVAL_CACHE_KEY_VERSION: &str = "v2";
-
 /// Build the shared eval-cache key input used by the FFI backend and shell
 /// watcher lookups.
 pub fn eval_cache_key_args(
@@ -25,9 +19,7 @@ pub fn eval_cache_key_args(
     port_allocation_enabled: bool,
     strict_ports: bool,
 ) -> String {
-    format!(
-        "{nix_args_str}:port_allocation={port_allocation_enabled}:strict_ports={strict_ports}:input_tracking={EVAL_CACHE_KEY_VERSION}"
-    )
+    format!("{nix_args_str}:port_allocation={port_allocation_enabled}:strict_ports={strict_ports}")
 }
 
 /// Output of dev_env evaluation.
@@ -179,10 +171,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn eval_cache_key_args_changes_with_version_and_ports() {
+    fn eval_cache_key_args_includes_port_flags() {
         let key = eval_cache_key_args("{ foo = 1; }", true, false);
         assert!(key.contains("port_allocation=true"));
         assert!(key.contains("strict_ports=false"));
-        assert!(key.contains("input_tracking=v2"));
     }
 }
