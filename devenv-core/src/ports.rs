@@ -423,34 +423,71 @@ impl Default for PortAllocator {
 /// `SO_REUSEADDR` would allow both `0.0.0.0:port` and `127.0.0.1:port`
 /// to coexist.
 fn reserve_port(port: u16) -> Result<Vec<TcpListener>, ()> {
-    let v4 = bind_no_reuse(socket2::Domain::IPV4, "0.0.0.0", port)?;
-    match bind_no_reuse(socket2::Domain::IPV6, "[::1]", port) {
+    reserve_port_with(port, bind_no_reuse, ipv6_socket_available)
+}
+
+fn reserve_port_with<Bind, Ipv6Available>(
+    port: u16,
+    mut bind: Bind,
+    ipv6_socket_available: Ipv6Available,
+) -> Result<Vec<TcpListener>, ()>
+where
+    Bind: FnMut(socket2::Domain, &str, u16) -> Result<TcpListener, std::io::Error>,
+    Ipv6Available: Fn() -> bool,
+{
+    let v4 = bind(socket2::Domain::IPV4, "0.0.0.0", port).map_err(|_| ())?;
+    match bind(socket2::Domain::IPV6, "[::1]", port) {
         Ok(v6) => Ok(vec![v4, v6]),
-        Err(()) => {
-            // Check if the failure is AddrInUse (another process) vs IPv6 unavailable.
-            // Try creating an IPv6 socket to distinguish.
-            if socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None).is_ok() {
-                // IPv6 works but port is taken
-                Err(())
-            } else {
-                // IPv6 unavailable on this host
-                Ok(vec![v4])
-            }
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+            // IPv6 port is genuinely held by another process
+            Err(())
         }
+        Err(e) if should_ignore_ipv6_bind_error(&e, &ipv6_socket_available) => {
+            tracing::debug!(
+                "IPv6 bind for port {} failed with benign error kind {:?} ({}), proceeding with IPv4 only",
+                port,
+                e.kind(),
+                e
+            );
+            Ok(vec![v4])
+        }
+        Err(_) => Err(()),
     }
 }
 
+fn should_ignore_ipv6_bind_error<Ipv6Available>(
+    err: &std::io::Error,
+    ipv6_socket_available: Ipv6Available,
+) -> bool
+where
+    Ipv6Available: Fn() -> bool,
+{
+    matches!(err.kind(), std::io::ErrorKind::AddrNotAvailable) || !ipv6_socket_available()
+}
+
+fn ipv6_socket_available() -> bool {
+    socket2::Socket::new(
+        socket2::Domain::IPV6,
+        socket2::Type::STREAM,
+        Some(socket2::Protocol::TCP),
+    )
+    .is_ok()
+}
+
 /// Bind a TCP socket to `addr:port` without setting `SO_REUSEADDR`.
-fn bind_no_reuse(domain: socket2::Domain, addr: &str, port: u16) -> Result<TcpListener, ()> {
+fn bind_no_reuse(
+    domain: socket2::Domain,
+    addr: &str,
+    port: u16,
+) -> Result<TcpListener, std::io::Error> {
     use std::net::SocketAddr;
 
-    let socket = socket2::Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))
-        .map_err(|_| ())?;
-    let sock_addr: SocketAddr = format!("{}:{}", addr, port).parse().map_err(|_| ())?;
-    socket
-        .bind(&socket2::SockAddr::from(sock_addr))
-        .map_err(|_| ())?;
-    socket.listen(1).map_err(|_| ())?;
+    let socket = socket2::Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))?;
+    let sock_addr: SocketAddr = format!("{}:{}", addr, port)
+        .parse()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    socket.bind(&socket2::SockAddr::from(sock_addr))?;
+    socket.listen(1)?;
     Ok(TcpListener::from(socket))
 }
 
@@ -758,6 +795,122 @@ mod tests {
 
         let allocated = allocator.allocate("server", "http", port).unwrap();
         assert_ne!(allocated, port, "Should not allocate a port bound on [::1]");
+
+        drop(external);
+    }
+
+    #[test]
+    fn test_bind_no_reuse_returns_addr_in_use_error() {
+        let listener = bind_no_reuse(socket2::Domain::IPV4, "0.0.0.0", 0).unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let err = bind_no_reuse(socket2::Domain::IPV4, "0.0.0.0", port).unwrap_err();
+        assert_eq!(
+            err.kind(),
+            std::io::ErrorKind::AddrInUse,
+            "Should return AddrInUse when port is occupied"
+        );
+    }
+
+    #[test]
+    fn test_reserve_port_falls_back_to_ipv4_on_addr_not_available() {
+        let mut calls = 0;
+        let listeners = reserve_port_with(
+            0,
+            |_, _, _| {
+                calls += 1;
+                if calls == 1 {
+                    TcpListener::bind("127.0.0.1:0")
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::AddrNotAvailable,
+                        "transient ipv6 loopback failure",
+                    ))
+                }
+            },
+            || true,
+        )
+        .unwrap();
+
+        assert_eq!(listeners.len(), 1, "Should keep the IPv4 reservation only");
+    }
+
+    #[test]
+    fn test_reserve_port_preserves_ipv6_unavailable_host_behavior() {
+        let mut calls = 0;
+        let listeners = reserve_port_with(
+            0,
+            |_, _, _| {
+                calls += 1;
+                if calls == 1 {
+                    TcpListener::bind("127.0.0.1:0")
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "ipv6 unsupported on host",
+                    ))
+                }
+            },
+            || false,
+        )
+        .unwrap();
+
+        assert_eq!(
+            listeners.len(),
+            1,
+            "Should fall back when IPv6 is unavailable"
+        );
+    }
+
+    #[test]
+    fn test_reserve_port_does_not_mask_unexpected_ipv6_errors() {
+        let mut calls = 0;
+        let result = reserve_port_with(
+            0,
+            |_, _, _| {
+                calls += 1;
+                if calls == 1 {
+                    TcpListener::bind("127.0.0.1:0")
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "unexpected ipv6 bind failure",
+                    ))
+                }
+            },
+            || true,
+        );
+
+        assert!(result.is_err(), "Unexpected IPv6 errors should still fail");
+    }
+
+    #[test]
+    fn test_reserve_port_succeeds_when_ipv4_free() {
+        // Reserve a port, then release it, then re-reserve to confirm
+        // the port check works with free ports
+        let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
+        allocator.set_strict(true);
+
+        let port = allocator.allocate("server", "http", 49990).unwrap();
+        assert_eq!(port, 49990);
+    }
+
+    #[test]
+    fn test_strict_mode_fails_only_on_genuine_conflict() {
+        // Hold a port via IPv4 and verify strict mode detects it
+        let external = TcpListener::bind("0.0.0.0:0").unwrap();
+        let port = external.local_addr().unwrap().port();
+
+        let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
+        allocator.set_strict(true);
+
+        let err = allocator.allocate("server", "http", port).unwrap_err();
+        assert!(
+            err.contains("already in use"),
+            "Strict mode should fail when port is genuinely occupied"
+        );
 
         drop(external);
     }
