@@ -10,6 +10,7 @@
 - Fixed eval cache storing inconsistent port allocations across different cached attributes ([#2631](https://github.com/cachix/devenv/issues/2631)).
 - Fixed stale eval cache invalidation for `devenv up` process config changes caused by overlapping evaluations clearing each other's file dependency observers ([#2632](https://github.com/cachix/devenv/pull/2632)).
 - Fixed false-positive `--strict-ports` failures on macOS when IPv6 loopback binding returns a benign error after a clean shutdown and cache invalidation ([#2640](https://github.com/cachix/devenv/pull/2640)).
+- Fixed transient `--strict-ports` failures on immediate restart when a port briefly reports `EADDRINUSE` after shutdown despite having no visible owning process.
 - Fixed child processes being left running on shutdown when using non-native process managers like process-compose ([#2586](https://github.com/cachix/devenv/issues/2586)).
 - Fixed `devenv update` resolving stale revisions when Nix's fetcher cache contains outdated entries by setting `tarball-ttl` to 0 during update, equivalent to `nix --refresh` ([#2616](https://github.com/cachix/devenv/issues/2616)).
 - Fixed Nix backend initialization crash when `impure: true` by removing use of nonexistent `impure` Nix setting; impure mode now works by skipping `pure-eval` (which defaults to false).
@@ -17,6 +18,7 @@
 
 ### Improvements
 
+- Improved native process manager shutdown visibility by reporting when `devenv` is still waiting for declared ports to be released before marking processes as stopped.
 - Bumped Nix input to fix `devenv shell` failing with "suspicious ownership or permission" on single user Nix installations where umask causes store outputs to have incorrect permissions ([#2585](https://github.com/cachix/devenv/issues/2585)).
 - Bumped iocraft to use row level diff rendering ([ccbrown/iocraft#179](https://github.com/ccbrown/iocraft/pull/179)), reducing TUI flicker.
 - Containers now report all missing inputs at once instead of one at a time ([#2598](https://github.com/cachix/devenv/issues/2598)).
