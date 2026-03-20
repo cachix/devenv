@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::net::TcpListener;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use crate::resource::{ReplayError, ReplayableResource};
 
@@ -21,6 +22,13 @@ pub const DEFAULT_HOST: &str = "127.0.0.1";
 
 /// Maximum number of ports to try before giving up.
 pub const MAX_ATTEMPTS: u16 = 100;
+/// Number of times to retry an exact port reservation when the OS reports
+/// `AddrInUse` but no owning process can be observed yet.
+const TRANSIENT_CONFLICT_MAX_RETRIES: usize = 12;
+/// Initial delay between exact-port retry attempts.
+const TRANSIENT_CONFLICT_INITIAL_DELAY: Duration = Duration::from_millis(25);
+/// Maximum delay between exact-port retry attempts.
+const TRANSIENT_CONFLICT_MAX_DELAY: Duration = Duration::from_secs(1);
 
 /// Guard holding port reservations. Releases ports when dropped.
 ///
@@ -195,7 +203,7 @@ impl PortAllocator {
                 ));
             }
 
-            match reserve_port(base) {
+            match reserve_exact_port(base) {
                 Ok(listeners) => {
                     ports.insert(
                         key,
@@ -207,7 +215,7 @@ impl PortAllocator {
                     );
                     return Ok(base);
                 }
-                Err(()) => {
+                Err(_) => {
                     let process_info = get_process_using_port(base);
                     return Err(format!(
                         "Port {} is already in use{}. \
@@ -314,7 +322,13 @@ impl PortAllocator {
         let strict = self.strict.load(Ordering::SeqCst);
         let allow_in_use = self.allow_in_use.load(Ordering::SeqCst);
 
-        match reserve_port(port) {
+        let reserve_result = if strict {
+            reserve_exact_port(port)
+        } else {
+            reserve_port(port)
+        };
+
+        match reserve_result {
             Ok(listeners) => {
                 ports.insert(
                     key,
@@ -326,7 +340,7 @@ impl PortAllocator {
                 );
                 Ok(port)
             }
-            Err(()) => {
+            Err(_) => {
                 // In strict mode, always fail if port is in use, even during replay
                 if strict {
                     let info = get_process_using_port(port);
@@ -422,25 +436,88 @@ impl Default for PortAllocator {
 /// including wildcard bindings. This is critical on macOS/BSD where
 /// `SO_REUSEADDR` would allow both `0.0.0.0:port` and `127.0.0.1:port`
 /// to coexist.
-fn reserve_port(port: u16) -> Result<Vec<TcpListener>, ()> {
+fn reserve_port(port: u16) -> Result<Vec<TcpListener>, std::io::Error> {
     reserve_port_with(port, bind_no_reuse, ipv6_socket_available)
+}
+
+fn reserve_exact_port(port: u16) -> Result<Vec<TcpListener>, std::io::Error> {
+    reserve_exact_port_with(
+        port,
+        reserve_port,
+        get_process_using_port,
+        std::thread::sleep,
+    )
+}
+
+fn reserve_exact_port_with<Reserve, ProcessInfo, Sleep>(
+    port: u16,
+    mut reserve: Reserve,
+    mut process_using_port: ProcessInfo,
+    mut sleep: Sleep,
+) -> Result<Vec<TcpListener>, std::io::Error>
+where
+    Reserve: FnMut(u16) -> Result<Vec<TcpListener>, std::io::Error>,
+    ProcessInfo: FnMut(u16) -> String,
+    Sleep: FnMut(Duration),
+{
+    let mut attempt = 0;
+    let mut delay = TRANSIENT_CONFLICT_INITIAL_DELAY;
+
+    loop {
+        match reserve(port) {
+            Ok(listeners) => return Ok(listeners),
+            Err(err) => {
+                let process_info = process_using_port(port);
+                let can_retry = err.kind() == std::io::ErrorKind::AddrInUse
+                    && process_info.is_empty()
+                    && attempt < TRANSIENT_CONFLICT_MAX_RETRIES;
+
+                if !can_retry {
+                    if err.kind() == std::io::ErrorKind::AddrInUse && !process_info.is_empty() {
+                        tracing::debug!(
+                            "Port {} conflict has visible owner{}, not retrying exact reservation",
+                            port,
+                            process_info
+                        );
+                    }
+                    return Err(err);
+                }
+
+                attempt += 1;
+                tracing::debug!(
+                    "Port {} bind failed with {:?} ({}) and no owning process was found; retrying exact reservation in {:?} (attempt {}/{})",
+                    port,
+                    err.kind(),
+                    err,
+                    delay,
+                    attempt,
+                    TRANSIENT_CONFLICT_MAX_RETRIES
+                );
+                sleep(delay);
+                delay = Duration::from_millis(
+                    (delay.as_millis() as u64 * 2)
+                        .min(TRANSIENT_CONFLICT_MAX_DELAY.as_millis() as u64),
+                );
+            }
+        }
+    }
 }
 
 fn reserve_port_with<Bind, Ipv6Available>(
     port: u16,
     mut bind: Bind,
     ipv6_socket_available: Ipv6Available,
-) -> Result<Vec<TcpListener>, ()>
+) -> Result<Vec<TcpListener>, std::io::Error>
 where
     Bind: FnMut(socket2::Domain, &str, u16) -> Result<TcpListener, std::io::Error>,
     Ipv6Available: Fn() -> bool,
 {
-    let v4 = bind(socket2::Domain::IPV4, "0.0.0.0", port).map_err(|_| ())?;
+    let v4 = bind(socket2::Domain::IPV4, "0.0.0.0", port)?;
     match bind(socket2::Domain::IPV6, "[::1]", port) {
         Ok(v6) => Ok(vec![v4, v6]),
         Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
             // IPv6 port is genuinely held by another process
-            Err(())
+            Err(e)
         }
         Err(e) if should_ignore_ipv6_bind_error(&e, &ipv6_socket_available) => {
             tracing::debug!(
@@ -451,7 +528,7 @@ where
             );
             Ok(vec![v4])
         }
-        Err(_) => Err(()),
+        Err(e) => Err(e),
     }
 }
 
@@ -882,6 +959,61 @@ mod tests {
         );
 
         assert!(result.is_err(), "Unexpected IPv6 errors should still fail");
+    }
+
+    #[test]
+    fn test_reserve_exact_port_retries_transient_conflict_without_owner() {
+        let mut attempts = 0;
+        let mut sleeps = Vec::new();
+
+        let listeners = reserve_exact_port_with(
+            6380,
+            |_| {
+                attempts += 1;
+                if attempts < 3 {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::AddrInUse,
+                        "transient teardown window",
+                    ))
+                } else {
+                    Ok(vec![TcpListener::bind("127.0.0.1:0").unwrap()])
+                }
+            },
+            |_| String::new(),
+            |delay| sleeps.push(delay),
+        )
+        .unwrap();
+
+        assert_eq!(attempts, 3, "Should retry until the reservation succeeds");
+        assert_eq!(sleeps.len(), 2, "Should sleep between retry attempts");
+        assert_eq!(listeners.len(), 1);
+    }
+
+    #[test]
+    fn test_reserve_exact_port_does_not_retry_visible_conflict() {
+        let mut attempts = 0;
+        let mut sleeps = Vec::new();
+
+        let err = reserve_exact_port_with(
+            6380,
+            |_| {
+                attempts += 1;
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::AddrInUse,
+                    "real listener still bound",
+                ))
+            },
+            |_| " (PID 123)".to_string(),
+            |delay| sleeps.push(delay),
+        )
+        .unwrap_err();
+
+        assert_eq!(attempts, 1, "Visible conflicts should fail immediately");
+        assert!(
+            sleeps.is_empty(),
+            "Should not sleep when a process owns the port"
+        );
+        assert_eq!(err.kind(), std::io::ErrorKind::AddrInUse);
     }
 
     #[test]

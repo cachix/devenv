@@ -4,7 +4,8 @@ use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix::sys::signal::{self, Signal as NixSignal};
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -171,6 +172,62 @@ fn probe_description(config: &ProcessConfig) -> Option<String> {
         return Some("notify".to_string());
     }
     None
+}
+
+const PORT_RELEASE_TIMEOUT: Duration = Duration::from_secs(15);
+const PORT_RELEASE_INITIAL_DELAY: Duration = Duration::from_millis(25);
+const PORT_RELEASE_MAX_DELAY: Duration = Duration::from_millis(250);
+
+fn declared_ports(config: &ProcessConfig) -> Vec<u16> {
+    config
+        .ports
+        .values()
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn can_bind_exact_port(port: u16) -> bool {
+    bind_no_reuse(socket2::Domain::IPV4, "0.0.0.0", port).is_ok()
+}
+
+fn bind_no_reuse(
+    domain: socket2::Domain,
+    addr: &str,
+    port: u16,
+) -> Result<TcpListener, std::io::Error> {
+    use std::net::SocketAddr;
+
+    let socket = socket2::Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))?;
+    let sock_addr: SocketAddr = format!("{}:{}", addr, port)
+        .parse()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    socket.bind(&socket2::SockAddr::from(sock_addr))?;
+    socket.listen(1)?;
+    Ok(TcpListener::from(socket))
+}
+
+async fn wait_for_port_release(ports: &[u16], timeout: Duration) -> Vec<u16> {
+    let started = std::time::Instant::now();
+    let mut delay = PORT_RELEASE_INITIAL_DELAY;
+
+    loop {
+        let busy: Vec<u16> = ports
+            .iter()
+            .copied()
+            .filter(|port| !can_bind_exact_port(*port))
+            .collect();
+
+        if busy.is_empty() || started.elapsed() >= timeout {
+            return busy;
+        }
+
+        tokio::time::sleep(delay).await;
+        delay = Duration::from_secs_f64(
+            (delay.as_secs_f64() * 2.0).min(PORT_RELEASE_MAX_DELAY.as_secs_f64()),
+        );
+    }
 }
 
 impl NativeProcessManager {
@@ -515,47 +572,108 @@ impl NativeProcessManager {
 
     /// Stop a process by name
     pub async fn stop(&self, name: &str) -> Result<()> {
-        let mut processes = self.processes.write().await;
+        let handle = {
+            let mut processes = self.processes.write().await;
 
-        match processes.remove(name) {
-            Some(ProcessEntry::Active(handle)) => {
-                debug!("Stopping process: {}", name);
-
-                // Mark as stopped so the TUI shows the correct status
-                // before the Complete event arrives from Activity::drop.
-                handle.resources.activity.set_status(ProcessStatus::Stopped);
-                handle.resources.activity.reset();
-
-                // Abort the supervisor task first to prevent restarts
-                handle.supervisor_task.abort();
-
-                // Abort output reader tasks
-                if let Some((stdout_reader, stderr_reader)) = handle.output_readers {
-                    stdout_reader.abort();
-                    stderr_reader.abort();
+            match processes.remove(name) {
+                Some(ProcessEntry::Active(handle)) => handle,
+                Some(entry @ (ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. })) => {
+                    let state = if matches!(entry, ProcessEntry::NotStarted { .. }) {
+                        "auto start off"
+                    } else {
+                        "waiting for dependencies"
+                    };
+                    processes.insert(name.to_string(), entry);
+                    bail!("Process {} is {}, cannot stop", name, state)
                 }
+                None => bail!("Process {} not found", name),
+            }
+        };
 
-                // Send terminate signal with grace period
+        let grace_period = Duration::from_secs(5);
+        let stop_started = std::time::Instant::now();
+        let ports = declared_ports(&handle.resources.config);
+
+        debug!("Stopping process: {}", name);
+        info!(
+            "Stopping process {} and waiting up to {:?} for termination",
+            name, grace_period
+        );
+
+        handle.resources.activity.log(format!(
+            "Shutdown requested; sending SIGTERM and waiting up to {:.1}s",
+            grace_period.as_secs_f32()
+        ));
+
+        // Abort the supervisor task first to prevent restarts
+        handle.supervisor_task.abort();
+
+        // Abort output reader tasks
+        if let Some((stdout_reader, stderr_reader)) = handle.output_readers {
+            stdout_reader.abort();
+            stderr_reader.abort();
+        }
+
+        // Send terminate signal with grace period
+        handle
+            .resources
+            .job
+            .stop_with_signal(Signal::Terminate, grace_period)
+            .await;
+
+        if !ports.is_empty() {
+            let initially_busy: Vec<u16> = ports
+                .iter()
+                .copied()
+                .filter(|port| !can_bind_exact_port(*port))
+                .collect();
+
+            if !initially_busy.is_empty() {
+                let port_list = initially_busy
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 handle
                     .resources
-                    .job
-                    .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
-                    .await;
+                    .activity
+                    .log(format!("Waiting for ports to be released: {}", port_list));
+            }
 
-                info!("Process {} stopped", name);
-                Ok(())
+            let busy_ports = wait_for_port_release(&ports, PORT_RELEASE_TIMEOUT).await;
+            if busy_ports.is_empty() {
+                if !initially_busy.is_empty() {
+                    handle.resources.activity.log(format!(
+                        "Ports released after {:.2}s",
+                        stop_started.elapsed().as_secs_f32()
+                    ));
+                }
+            } else {
+                let port_list = busy_ports
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let message = format!(
+                    "Ports still busy after {:.1}s: {}",
+                    PORT_RELEASE_TIMEOUT.as_secs_f32(),
+                    port_list
+                );
+                handle.resources.activity.log(&message);
+                warn!("{} for process {}", message, name);
             }
-            Some(entry @ (ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. })) => {
-                let state = if matches!(entry, ProcessEntry::NotStarted { .. }) {
-                    "auto start off"
-                } else {
-                    "waiting for dependencies"
-                };
-                processes.insert(name.to_string(), entry);
-                bail!("Process {} is {}, cannot stop", name, state)
-            }
-            None => bail!("Process {} not found", name),
         }
+
+        let stop_elapsed = stop_started.elapsed();
+        handle.resources.activity.reset();
+        handle.resources.activity.set_status(ProcessStatus::Stopped);
+        handle.resources.activity.log(format!(
+            "Process terminated after {:.2}s",
+            stop_elapsed.as_secs_f32()
+        ));
+
+        info!("Process {} stopped", name);
+        Ok(())
     }
 
     /// Signal all supervisors to shut down gracefully.
@@ -573,9 +691,31 @@ impl NativeProcessManager {
 
         let names = active_names(&*self.processes.read().await);
 
+        if let Some(activity) = self.processes_activity.read().await.as_ref() {
+            if names.is_empty() {
+                activity.log("Shutdown requested; no active processes to stop.");
+            } else {
+                activity.log(format!(
+                    "Shutdown requested; stopping {} process(es)...",
+                    names.len()
+                ));
+            }
+        }
+
         debug!("stop_all: stopping {} processes: {:?}", names.len(), names);
-        for name in &names {
-            let _ = self.stop(name).await; // Continue even if one fails
+        for (name, result) in names
+            .iter()
+            .zip(futures::future::join_all(names.iter().map(|name| self.stop(name))).await)
+        {
+            if let Err(err) = result {
+                warn!("Failed to stop process {}: {}", name, err);
+            }
+        }
+
+        if !names.is_empty()
+            && let Some(activity) = self.processes_activity.read().await.as_ref()
+        {
+            activity.log("All managed processes have stopped.");
         }
 
         // Clear not-started and waiting processes (their activities complete on drop)
@@ -1339,6 +1479,7 @@ impl Drop for NativeProcessManager {
 mod tests {
     use super::*;
     use crate::config::{RestartPolicy, StartConfig};
+    use std::net::Ipv4Addr;
 
     #[tokio::test]
     async fn test_create_manager() {
@@ -1546,5 +1687,41 @@ mod tests {
             completed.is_ok(),
             "Notification should have fired within the timeout"
         );
+    }
+
+    #[tokio::test]
+    async fn test_wait_for_port_release_waits_until_port_is_bindable() {
+        let listener = TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        assert!(
+            !can_bind_exact_port(port),
+            "test listener should hold the port before release"
+        );
+
+        let started = std::time::Instant::now();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            drop(listener);
+        });
+
+        let busy_ports = wait_for_port_release(&[port], Duration::from_secs(1)).await;
+
+        assert!(busy_ports.is_empty(), "port should have been released");
+        assert!(
+            started.elapsed() >= Duration::from_millis(150),
+            "expected to wait for the listener to close"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_wait_for_port_release_returns_busy_ports_on_timeout() {
+        let listener = TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let busy_ports = wait_for_port_release(&[port], Duration::from_millis(50)).await;
+
+        assert_eq!(busy_ports, vec![port]);
+        drop(listener);
     }
 }
