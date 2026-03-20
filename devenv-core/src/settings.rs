@@ -69,11 +69,11 @@ pub fn default_system() -> String {
 ///
 /// The logical default lives in `.unwrap_or(default)` at the call site,
 /// not in clap's `default_value_t`.
-pub fn flag(yes: bool, no: bool) -> Option<bool> {
-    match (yes, no) {
+pub fn flag(yes: impl Into<Option<bool>>, no: bool) -> Option<bool> {
+    match (yes.into(), no) {
         (_, true) => Some(false),
-        (true, _) => Some(true),
-        (false, false) => None,
+        (Some(v), _) => Some(v),
+        (None, false) => None,
     }
 }
 
@@ -314,6 +314,46 @@ pub struct InputOverrides {
 mod tests {
     use super::*;
     use crate::config::Config;
+
+    #[test]
+    fn flag_both_unset() {
+        assert_eq!(flag(false, false), None);
+    }
+
+    #[test]
+    fn flag_yes_set() {
+        assert_eq!(flag(true, false), Some(true));
+    }
+
+    #[test]
+    fn flag_no_set() {
+        assert_eq!(flag(false, true), Some(false));
+    }
+
+    #[test]
+    fn flag_no_wins_over_yes() {
+        assert_eq!(flag(true, true), Some(false));
+    }
+
+    #[test]
+    fn flag_option_none() {
+        assert_eq!(flag(None::<bool>, false), None);
+    }
+
+    #[test]
+    fn flag_option_some_true() {
+        assert_eq!(flag(Some(true), false), Some(true));
+    }
+
+    #[test]
+    fn flag_option_some_false() {
+        assert_eq!(flag(Some(false), false), Some(false));
+    }
+
+    #[test]
+    fn flag_option_no_wins_over_some_true() {
+        assert_eq!(flag(Some(true), true), Some(false));
+    }
 
     #[test]
     fn nix_settings_defaults() {
