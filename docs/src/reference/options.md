@@ -24860,6 +24860,467 @@ null or string
 
 
 
+## opencode.enable
+
+
+
+Whether to enable OpenCode configuration.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+
+
+
+## opencode.agents
+
+
+
+Custom agents (placed in .opencode/agents/).
+
+This option can either be:
+
+ - an attribute set of agents, or
+ - a path to a directory containing agent files.
+
+
+
+*Type:*
+(attribute set of (strings concatenated with “\\n” or absolute path)) or absolute path
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  "code-reviewer" = ''
+    # Code Review Agent
+    Review code for best practices and potential issues.
+  '';
+  "documentation-writer" = ./agents/doc-writer.md;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+
+
+
+## opencode.commands
+
+
+
+Custom slash commands (placed in .opencode/commands/).
+
+This option can either be:
+
+ - an attribute set of commands, or
+ - a path to a directory containing command files.
+
+
+
+*Type:*
+(attribute set of (strings concatenated with “\\n” or absolute path)) or absolute path
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  "fix-tests" = ''
+    # Fix Tests Command
+    Analyze failing tests and suggest fixes.
+  '';
+  "review-pr" = ./commands/review-pr.md;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+
+
+
+## opencode.mcp
+
+
+
+MCP servers written to ` opencode.jsonc ` under ` mcp `.
+
+This option mirrors OpenCode’s MCP configuration shape directly
+(` local `/` remote `, ` command `, ` environment `, ` url `, ` headers `,
+` oauth `, ` enabled `, ` timeout `, etc.).
+
+Values from ` opencode.settings.mcp ` take precedence over this option
+when both define the same MCP server name.
+
+
+
+*Type:*
+attribute set of anything
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  my-local = {
+    type = "local";
+    command = [ "devenv" "mcp" ];
+    environment = {
+      DEVENV_ROOT = "{env:DEVENV_ROOT}";
+    };
+  };
+
+  context7 = {
+    type = "remote";
+    url = "https://mcp.example.com";
+    headers = {
+      Authorization = "Bearer TOKEN";
+    };
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+
+
+
+## opencode.rules
+
+
+
+Global custom instructions (placed in .opencode/AGENTS.md).
+
+
+
+*Type:*
+strings concatenated with “\\n” or absolute path
+
+
+
+*Default:*
+
+```nix
+""
+```
+
+
+
+*Example:*
+
+```nix
+# Custom Development Rules
+- Always write tests
+- Use conventional commits
+- Document public APIs
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+
+
+
+## opencode.settings
+
+
+
+Attributes written to opencode.jsonc.
+
+
+
+*Type:*
+attribute set of anything
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  editor = "nvim";
+  theme = "dark";
+  features = {
+    autocomplete = true;
+    git_integration = true;
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+
+
+
+## opencode.skills
+
+
+
+Custom skills for opencode.
+
+This option can either be:
+
+ - an attribute set defining skills, or
+ - a path to a directory containing skill folders.
+
+If an attribute set is used, each value can be:
+
+ - inline content (creates ` .opencode/skills/<name>/SKILL.md `)
+ - a path to a file (creates ` .opencode/skills/<name>/SKILL.md `)
+ - a path to a directory (creates ` .opencode/skills/<name>/ `)
+
+
+
+*Type:*
+(attribute set of (strings concatenated with “\\n” or absolute path or string)) or absolute path
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  "debug-helper" = ''
+    # Debug Helper Skill
+    Helps diagnose and fix bugs systematically.
+  '';
+  "api-generator" = ./skills/api-generator.md;
+  "full-stack-skill" = ./skills/full-stack;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+
+
+
+## opencode.themes
+
+
+
+Custom themes for opencode.
+
+This option can either be:
+
+ - an attribute set defining themes, or
+ - a path to a directory containing theme files.
+
+
+
+*Type:*
+(attribute set of ((attribute set of anything) or absolute path)) or absolute path
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  my-theme = {
+    colors = {
+      background = "#0f1115";
+      foreground = "#d6d9e0";
+    };
+  };
+  custom = ./themes/custom.json;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+
+
+
+## opencode.tools
+
+
+
+Custom tools for opencode.
+
+This option can either be:
+
+ - an attribute set defining tools, or
+ - a path to a directory containing tool files.
+
+
+
+*Type:*
+(attribute set of (strings concatenated with “\\n” or absolute path)) or absolute path
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  sample = "export default { name: \"sample-tool\"; };";
+  lint = ./tools/lint.ts;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+
+
+
+## opencode.web.enable
+
+
+
+Whether to enable opencode web service.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+
+
+
+## opencode.web.extraArgs
+
+
+
+Extra arguments to pass to ` opencode web `.
+
+These arguments override web server options in the configuration file.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  "--hostname"
+  "127.0.0.1"
+  "--port"
+  "4096"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+
+
+
 ## outputs
 
 
