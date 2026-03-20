@@ -12,6 +12,16 @@ use std::path::{Path, PathBuf};
 use crate::config::Input;
 use crate::nix_args::NixArgs;
 
+/// Build the shared eval-cache key input used by the FFI backend and shell
+/// watcher lookups.
+pub fn eval_cache_key_args(
+    nix_args_str: &str,
+    port_allocation_enabled: bool,
+    strict_ports: bool,
+) -> String {
+    format!("{nix_args_str}:port_allocation={port_allocation_enabled}:strict_ports={strict_ports}")
+}
+
 /// Output of dev_env evaluation.
 #[derive(Debug, Clone, Default)]
 pub struct DevEnvOutput {
@@ -154,4 +164,16 @@ pub trait NixBackend: Send + Sync {
     /// This clears any cached evaluation state to force re-evaluation on the next operation.
     /// Used by hot-reload to ensure file changes are picked up.
     fn invalidate(&self);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn eval_cache_key_args_includes_port_flags() {
+        let key = eval_cache_key_args("{ foo = 1; }", true, false);
+        assert!(key.contains("port_allocation=true"));
+        assert!(key.contains("strict_ports=false"));
+    }
 }
