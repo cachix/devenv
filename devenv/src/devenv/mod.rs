@@ -537,13 +537,12 @@ impl Devenv {
     /// `{nix_args}:port_allocation={enabled}:strict_ports={strict}:shell`
     pub fn shell_cache_key(&self) -> Option<devenv_eval_cache::EvalCacheKey> {
         let nix_args_str = self.nix_args_string.get()?;
-        // The backend uses cache_key_args = format!("{}:port_allocation={}:strict_ports={}", args_nix, is_enabled, is_strict)
-        // We must match this format for the cache key lookup to work
-        let cache_key_args = format!(
-            "{}:port_allocation={}:strict_ports={}",
+        // The backend uses eval_cache_key_args(...) and we must match that
+        // format for shell watcher lookups to hit the same cache row.
+        let cache_key_args = devenv_core::nix_backend::eval_cache_key_args(
             nix_args_str,
             self.port_allocator.is_enabled(),
-            self.port_allocator.is_strict()
+            self.port_allocator.is_strict(),
         );
         Some(devenv_eval_cache::EvalCacheKey::from_nix_args_str(
             &cache_key_args,

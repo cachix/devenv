@@ -24,6 +24,7 @@ use devenv_core::eval_op::EvalOp;
 use devenv_core::nix_args::NixArgs;
 use devenv_core::nix_backend::{
     DevEnvOutput, DevenvPaths, NixBackend, Options, PackageSearchResult, SearchResults,
+    eval_cache_key_args,
 };
 use devenv_core::nix_log_bridge::{EvalActivityGuard, NixLogBridge};
 use devenv_core::{CacheSettings, NixSettings};
@@ -201,6 +202,20 @@ pub struct NixRustBackend {
 // 3. Consider upstreaming Send/Sync impls to nix-store and nix-expr crates with proper safety analysis
 unsafe impl Send for NixRustBackend {}
 unsafe impl Sync for NixRustBackend {}
+
+fn core_config_watch_paths(root: &Path) -> Vec<PathBuf> {
+    [
+        "devenv.nix",
+        "devenv.yaml",
+        "devenv.lock",
+        "devenv.local.nix",
+        "devenv.local.yaml",
+    ]
+    .into_iter()
+    .map(|path| root.join(path))
+    .filter(|path| path.exists())
+    .collect()
+}
 
 /// RAII guard that manages eval_state lock and evaluation activity tracking.
 ///
@@ -1121,11 +1136,10 @@ impl NixBackend for NixRustBackend {
         // Initialize caching eval state if not already set
         if self.caching_eval_state.get().is_none() {
             let args_nix = ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string());
-            let cache_key_args = format!(
-                "{}:port_allocation={}:strict_ports={}",
-                args_nix,
+            let cache_key_args = eval_cache_key_args(
+                &args_nix,
                 self.port_allocator.is_enabled(),
-                self.port_allocator.is_strict()
+                self.port_allocator.is_strict(),
             );
 
             // Unquote special Nix expressions that should be evaluated
@@ -1149,6 +1163,7 @@ impl NixBackend for NixRustBackend {
                 if let Some(pool) = pool_cell.get() {
                     let config = CachingConfig {
                         force_refresh: self.cache_settings.refresh_eval_cache,
+                        extra_watch_paths: core_config_watch_paths(&self.paths.root),
                         // NIXPKGS_CONFIG is already tracked via NixArgs.nixpkgs_config
                         excluded_envs: vec!["NIXPKGS_CONFIG".to_string()],
                         // The nixpkgs config file content is already reflected in the cache key
@@ -2404,5 +2419,27 @@ impl Drop for NixRustBackend {
         // Callers who want to wait for cleanup should call
         // shutdown.wait_for_shutdown_complete().await before dropping.
         self.shutdown.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::core_config_watch_paths;
+    use tempfile::TempDir;
+
+    #[test]
+    fn core_config_watch_paths_only_tracks_existing_project_files() {
+        let temp_dir = TempDir::new().expect("failed to create temp dir");
+        std::fs::write(temp_dir.path().join("devenv.nix"), "{ ... }: { }").unwrap();
+        std::fs::write(temp_dir.path().join("devenv.yaml"), "inputs: {}\n").unwrap();
+        std::fs::write(temp_dir.path().join("devenv.lock"), "{}\n").unwrap();
+
+        let tracked = core_config_watch_paths(temp_dir.path());
+
+        assert!(tracked.contains(&temp_dir.path().join("devenv.nix")));
+        assert!(tracked.contains(&temp_dir.path().join("devenv.yaml")));
+        assert!(tracked.contains(&temp_dir.path().join("devenv.lock")));
+        assert!(!tracked.contains(&temp_dir.path().join("devenv.local.nix")));
+        assert!(!tracked.contains(&temp_dir.path().join("devenv.local.yaml")));
     }
 }
