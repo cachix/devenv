@@ -16,6 +16,8 @@
 - Fixed `devenv update` resolving stale revisions when Nix's fetcher cache contains outdated entries by setting `tarball-ttl` to 0 during update, equivalent to `nix --refresh` ([#2616](https://github.com/cachix/devenv/issues/2616)).
 - Fixed Nix backend initialization crash when `impure: true` by removing use of nonexistent `impure` Nix setting; impure mode now works by skipping `pure-eval` (which defaults to false).
 - Fixed `execIfModified` glob walker entering gitignored directories, causing extreme slowdowns in repos with large ignored trees ([#2588](https://github.com/cachix/devenv/issues/2588)).
+- Fixed `devenv up -d` not keeping processes running with the native process manager by spawning a daemon via re-exec instead of fork, which is unsafe in multithreaded programs ([#2630](https://github.com/cachix/devenv/issues/2630)).
+- Fixed environment variable precedence in process manager: per-process env now correctly wins over global env.
 
 ### Improvements
 

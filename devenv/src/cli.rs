@@ -592,6 +592,13 @@ pub enum Commands {
         #[arg(long, help = "Print nixd configuration and exit")]
         print_config: bool,
     },
+
+    /// Internal: run native process manager as a daemon (used by `devenv up -d`)
+    #[clap(hide = true)]
+    DaemonProcesses {
+        /// Path to the serialized task config JSON file
+        config_file: PathBuf,
+    },
 }
 
 #[derive(clap::Args, Clone, Debug)]

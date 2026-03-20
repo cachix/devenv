@@ -9,7 +9,6 @@ description = "Native process management for devenv"
 async-trait.workspace = true
 devenv-activity.workspace = true
 devenv-event-sources.workspace = true
-daemonize.workspace = true
 futures.workspace = true
 miette.workspace = true
 nix.workspace = true
