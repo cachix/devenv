@@ -72,6 +72,12 @@ Allow packages marked as broken.
 
 *Type:* `boolean` · *Default:* `false` · *Added in 1.7*
 
+## nixpkgs.allowUnsupportedSystem
+
+Allow packages that are not supported on the current system.
+
+*Type:* `boolean` · *Default:* `false` · *Added in 2.0.5*
+
 ## nixpkgs.allowUnfree
 
 Allow unfree packages.
@@ -105,7 +111,7 @@ A list of unfree packages to allow by name.
 ## nixpkgs.per-platform.\<system\>
 
 Per-platform nixpkgs configuration.
-Accepts the same options as `nixpkgs` (`allowBroken`, `allowUnfree`, `cudaCapabilities`, `cudaSupport`, `permittedInsecurePackages`, `permittedUnfreePackages`).
+Accepts the same options as `nixpkgs` (`allowBroken`, `allowUnfree`, `allowUnsupportedSystem`, `cudaCapabilities`, `cudaSupport`, `permittedInsecurePackages`, `permittedUnfreePackages`).
 
 *Type:* `attribute set of nixpkgs config` · *Added in 1.7*
 
