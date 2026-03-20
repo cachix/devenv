@@ -325,9 +325,10 @@ pub struct CliOptions {
         long,
         global = true,
         env = "DEVENV_TUI",
+        value_parser = clap::builder::BoolishValueParser::new(),
         help = "Enable the interactive terminal interface (default when interactive)."
     )]
-    pub tui: bool,
+    pub tui: Option<bool>,
 
     #[arg(
         long,

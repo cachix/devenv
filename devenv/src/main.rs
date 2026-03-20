@@ -201,7 +201,10 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
 
     // Resolve TUI flag: explicit --tui/--no-tui wins, otherwise default
     // to TUI when running interactively outside CI.
-    let tui_requested = devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
+    let tui_requested = cli
+        .cli_options
+        .tui
+        .or_else(|| cli.cli_options.no_tui.then_some(false))
         .unwrap_or_else(|| {
             let is_ci = std::env::var_os("CI").is_some();
             let is_tty = std::io::stdin().is_terminal() && std::io::stderr().is_terminal();

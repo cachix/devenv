@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `DEVENV_TUI=false` and `DEVENV_TUI=0` not disabling the TUI ([#2646](https://github.com/cachix/devenv/issues/2646)).
 - Migrated `certificates` and `hosts` modules to use tasks instead of `process.manager.before`/`process.manager.after` for the native process manager ([#2569](https://github.com/cachix/devenv/issues/2569)).
 - Fixed stale shell eval cache entries causing `devenv shell` and `direnv` activation to ignore changes to `devenv.nix` config such as `languages`, `env`, `packages`, and `scripts` ([#2643](https://github.com/cachix/devenv/pull/2643)).
 - Fixed services failing to start with E2BIG when the shell environment is large by moving env/cwd/stdio setup from the bash wrapper script to the spawned process directly ([#2638](https://github.com/cachix/devenv/issues/2638)).
