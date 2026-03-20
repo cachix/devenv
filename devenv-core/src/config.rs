@@ -32,6 +32,9 @@ pub struct NixpkgsConfig {
     pub allow_unfree: bool,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(merge = schematic::merge::replace)]
+    pub allow_unsupported_system: bool,
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(merge = schematic::merge::replace)]
     pub allow_broken: bool,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(merge = schematic::merge::replace)]
@@ -176,6 +179,9 @@ pub struct Config {
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(merge = schematic::merge::replace)]
     pub allow_unfree: bool,
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(merge = schematic::merge::replace)]
+    pub allow_unsupported_system: bool,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(merge = schematic::merge::replace)]
     pub allow_broken: bool,
@@ -853,7 +859,7 @@ impl Config {
     /// Merges configuration with the following priority (highest to lowest):
     /// 1. `nixpkgs.per_platform.{system}.{field}`
     /// 2. `nixpkgs.{field}` (base nixpkgs config)
-    /// 3. Top-level `{field}` (for allow_unfree, allow_broken, permitted_insecure_packages)
+    /// 3. Top-level `{field}` (for allow_unfree, allow_unsupported_system, allow_broken, permitted_insecure_packages)
     /// 4. Default value
     ///
     /// This matches the logic in bootstrapLib.nix's getPlatformConfig helper.
@@ -861,6 +867,7 @@ impl Config {
         // Apply top-level settings (lowest priority for these fields)
         let mut config = NixpkgsConfig {
             allow_unfree: self.allow_unfree,
+            allow_unsupported_system: self.allow_unsupported_system,
             allow_broken: self.allow_broken,
             permitted_insecure_packages: self.permitted_insecure_packages.clone(),
             ..Default::default()
@@ -871,6 +878,9 @@ impl Config {
             let base = &nixpkgs.config_;
             if base.allow_unfree {
                 config.allow_unfree = true;
+            }
+            if base.allow_unsupported_system {
+                config.allow_unsupported_system = true;
             }
             if base.allow_broken {
                 config.allow_broken = true;
@@ -892,6 +902,9 @@ impl Config {
             if let Some(platform_config) = nixpkgs.per_platform.get(system) {
                 if platform_config.allow_unfree {
                     config.allow_unfree = true;
+                }
+                if platform_config.allow_unsupported_system {
+                    config.allow_unsupported_system = true;
                 }
                 if platform_config.allow_broken {
                     config.allow_broken = true;

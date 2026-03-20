@@ -1,6 +1,7 @@
 { pkgs, ... }: {
   env = {
     ALLOW_UNFREE = pkgs.lib.boolToString (pkgs.config.allowUnfree or false);
+    ALLOW_UNSUPPORTED_SYSTEM = pkgs.lib.boolToString (pkgs.config.allowUnsupportedSystem or false);
     CUDA_SUPPORT = pkgs.lib.boolToString (pkgs.config.cudaSupport or false);
     CUDA_CAPABILITIES = builtins.toString (pkgs.config.cudaCapabilities or [ ]);
   };
@@ -8,6 +9,10 @@
   enterTest = ''
     if [[ "$ALLOW_UNFREE" != "true" ]]; then
       echo "ALLOW_UNFREE ($ALLOW_UNFREE) != true"
+      exit 1
+    fi
+    if [[ "$ALLOW_UNSUPPORTED_SYSTEM" != "true" ]]; then
+      echo "ALLOW_UNSUPPORTED_SYSTEM ($ALLOW_UNSUPPORTED_SYSTEM) != true"
       exit 1
     fi
     if [[ "$CUDA_SUPPORT" != "true" ]]; then
