@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Migrated `certificates` and `hosts` modules to use tasks instead of `process.manager.before`/`process.manager.after` for the native process manager ([#2569](https://github.com/cachix/devenv/issues/2569)).
 - Fixed stale shell eval cache entries causing `devenv shell` and `direnv` activation to ignore changes to `devenv.nix` config such as `languages`, `env`, `packages`, and `scripts` ([#2643](https://github.com/cachix/devenv/pull/2643)).
 - Fixed services failing to start with E2BIG when the shell environment is large by moving env/cwd/stdio setup from the bash wrapper script to the spawned process directly ([#2638](https://github.com/cachix/devenv/issues/2638)).
 - Fixed processes failing to start when exported bash functions are present in the environment ([#2587](https://github.com/cachix/devenv/issues/2587)).
@@ -22,6 +23,10 @@
 - Containers now report all missing inputs at once instead of one at a time ([#2598](https://github.com/cachix/devenv/issues/2598)).
 - Extracted container, search, and gc methods from `devenv.rs` into separate submodule files for better code organization.
 - Added `allowUnsupportedSystem` option for `devenv.yaml` to allow packages not supported on the current system. Can be set at the top level, under `nixpkgs`, or per platform via `nixpkgs.per-platform.<system>` ([#2639](https://github.com/cachix/devenv/pull/2639)).
+
+### Breaking Changes
+
+- **`process.manager.before`/`process.manager.after`**: These options are no longer supported with the native process manager. Use tasks with `before`/`after` dependencies instead. See https://devenv.sh/tasks/
 
 ## 2.0.5 (2026-03-16)
 

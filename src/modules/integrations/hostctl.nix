@@ -14,6 +14,19 @@ let
     # ${hostHash}
     ${hostContent}
   '';
+  setupScript = ''
+    if [[ ! -f "$DEVENV_STATE/hostctl" || "$(cat "$DEVENV_STATE/hostctl")" != "${hostHash}" ]]; then
+      sudo ${pkgs.hostctl}/bin/hostctl replace ${config.hostsProfileName} --from ${file}
+      mkdir -p "$DEVENV_STATE"
+      echo "${hostHash}" > "$DEVENV_STATE/hostctl"
+    fi
+  '';
+  teardownScript = ''
+    rm -f "$DEVENV_STATE/hostctl"
+    sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostsProfileName}
+  '';
+  isNative = config.process.manager.implementation == "native";
+  processTaskNames = lib.mapAttrsToList (name: _: "devenv:processes:${name}") config.processes;
 in
 {
   options = {
@@ -36,17 +49,13 @@ in
   };
 
   config = lib.mkIf (hostContent != "") {
-    process.manager.before = ''
-      if [[ ! -f "$DEVENV_STATE/hostctl" || "$(cat "$DEVENV_STATE/hostctl")" != "${hostHash}" ]]; then
-        sudo ${pkgs.hostctl}/bin/hostctl replace ${config.hostsProfileName} --from ${file}
-        mkdir -p "$DEVENV_STATE"
-        echo "${hostHash}" > "$DEVENV_STATE/hostctl"
-      fi
-    '';
+    tasks."devenv:hostctl:setup" = lib.mkIf isNative {
+      exec = setupScript;
+      before = processTaskNames;
+      description = "Configure /etc/hosts entries with hostctl";
+    };
 
-    process.manager.after = ''
-      rm -f "$DEVENV_STATE/hostctl"
-      sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostsProfileName}
-    '';
+    process.manager.before = lib.mkIf (!isNative) setupScript;
+    process.manager.after = lib.mkIf (!isNative) teardownScript;
   };
 }
