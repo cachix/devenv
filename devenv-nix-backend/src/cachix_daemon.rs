@@ -13,7 +13,7 @@ use devenv_activity::Activity;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
-use std::process::Child;
+use std::process::{Child, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -392,7 +392,7 @@ impl DaemonProcess {
     /// Spawn a new cachix daemon process.
     ///
     /// Waits for the socket to become available before returning.
-    pub async fn spawn(config: &DaemonSpawnConfig) -> Result<Self> {
+    pub async fn spawn(config: &DaemonSpawnConfig, activity: Option<&Activity>) -> Result<Self> {
         tracing::info!(cache = %config.cache_name, "Spawning cachix daemon");
 
         // Ensure parent directory exists for socket
@@ -410,9 +410,32 @@ impl DaemonProcess {
             .arg(&config.socket_path)
             .arg(&config.cache_name);
 
-        let child = cmd
+        let mut child = cmd
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .with_context(|| format!("Failed to spawn cachix daemon at {:?}", config.binary))?;
+
+        // Drain stderr in a background thread so daemon logs don't leak into the TUI.
+        // Lines are forwarded to the push Activity (visible in TUI) and to tracing.
+        if let Some(stderr) = child.stderr.take() {
+            let activity_ref = activity.map(|a| a.ref_handle());
+            std::thread::spawn(move || {
+                use std::io::BufRead;
+                let reader = std::io::BufReader::new(stderr);
+                for line in reader.lines() {
+                    match line {
+                        Ok(line) => {
+                            if let Some(ref activity) = activity_ref {
+                                activity.log(&line);
+                            }
+                            tracing::debug!(target: "cachix_daemon", "{}", line);
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+        }
 
         let mut daemon = Self {
             child: Some(child),
@@ -518,7 +541,7 @@ impl OwnedDaemon {
         activity: Option<Activity>,
     ) -> Result<Self> {
         let socket_path = config.socket_path.clone();
-        let process = DaemonProcess::spawn(&config).await?;
+        let process = DaemonProcess::spawn(&config, activity.as_ref()).await?;
 
         let connect_config = DaemonConnectConfig {
             socket_path,
