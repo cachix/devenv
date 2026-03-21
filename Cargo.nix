@@ -6050,10 +6050,6 @@ rec {
             packageId = "axum 0.8.8";
           }
           {
-            name = "blake3";
-            packageId = "blake3";
-          }
-          {
             name = "chrono";
             packageId = "chrono";
             features = [ "serde" ];
@@ -6626,10 +6622,6 @@ rec {
         libName = "devenv_eval_cache";
         dependencies = [
           {
-            name = "blake3";
-            packageId = "blake3";
-          }
-          {
             name = "devenv-activity";
             packageId = "devenv-activity";
           }
@@ -6773,10 +6765,6 @@ rec {
           {
             name = "async-trait";
             packageId = "async-trait";
-          }
-          {
-            name = "blake3";
-            packageId = "blake3";
           }
           {
             name = "cstr";
@@ -7055,12 +7043,12 @@ rec {
             packageId = "avt";
           }
           {
-            name = "blake3";
-            packageId = "blake3";
-          }
-          {
             name = "devenv-activity";
             packageId = "devenv-activity";
+          }
+          {
+            name = "devenv-cache-core";
+            packageId = "devenv-cache-core";
           }
           {
             name = "devenv-event-sources";
@@ -37021,3 +37009,4 @@ rec {
   #
   };
 }
+
