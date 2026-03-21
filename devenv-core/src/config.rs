@@ -692,19 +692,24 @@ impl Config {
         } else if canonical_import.is_none()
             && let Some(canonical_root) = canonical_root
         {
-            // Import path doesn't exist, but root does - validate lexically
-            // First make the import path absolute, then normalize
-            let abs_import = if import_path.is_absolute() {
-                Self::normalize_path_components(import_path)
-            } else {
-                // Make relative path absolute from current directory first
-                if let Ok(cwd) = std::env::current_dir() {
-                    let absolute = cwd.join(import_path);
-                    Self::normalize_path_components(&absolute)
+            // Import path doesn't exist, but root does.
+            // Canonicalize the parent directory to resolve symlinks
+            // (e.g. /tmp -> /run/user/...), falling back to lexical
+            // normalization only when the parent doesn't exist either.
+            let abs_import = if let Some(parent) = import_path.parent() {
+                if let Ok(canonical_parent) = parent.canonicalize() {
+                    canonical_parent.join(import_path.file_name().unwrap_or_default())
+                } else if import_path.is_absolute() {
+                    Self::normalize_path_components(import_path)
+                } else if let Ok(cwd) = std::env::current_dir() {
+                    Self::normalize_path_components(&cwd.join(import_path))
                 } else {
-                    // Can't get cwd, skip validation
                     return Ok(());
                 }
+            } else if import_path.is_absolute() {
+                Self::normalize_path_components(import_path)
+            } else {
+                return Ok(());
             };
 
             if !abs_import.starts_with(&canonical_root) {
