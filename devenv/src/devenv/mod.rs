@@ -757,13 +757,15 @@ impl Devenv {
         let stdout = child.stdout.take().expect("stdout was piped");
         let stderr = child.stderr.take().expect("stderr was piped");
 
-        let mut stdout_reader = BufReader::new(stdout).lines();
-        let mut stderr_reader = BufReader::new(stderr).lines();
+        let mut stdout_reader = BufReader::new(stdout);
+        let mut stderr_reader = BufReader::new(stderr);
 
         let mut stdout_bytes: Vec<u8> = Vec::new();
         let mut stderr_bytes: Vec<u8> = Vec::new();
         let mut stdout_closed = false;
         let mut stderr_closed = false;
+        let mut stdout_line_buf: Vec<u8> = Vec::new();
+        let mut stderr_line_buf: Vec<u8> = Vec::new();
 
         loop {
             if stdout_closed && stderr_closed {
@@ -771,28 +773,32 @@ impl Devenv {
             }
 
             tokio::select! {
-                result = stdout_reader.next_line(), if !stdout_closed => {
+                result = stdout_reader.read_until(b'\n', &mut stdout_line_buf), if !stdout_closed => {
                     match result {
-                        Ok(Some(line)) => {
-                            activity.log(&line);
-                            stdout_bytes.extend(line.as_bytes());
-                            stdout_bytes.push(b'\n');
+                        Ok(0) => stdout_closed = true,
+                        Ok(_) => {
+                            let line = String::from_utf8_lossy(&stdout_line_buf);
+                            let line = line.trim_end_matches('\n');
+                            activity.log(line);
+                            stdout_bytes.extend_from_slice(&stdout_line_buf);
+                            stdout_line_buf.clear();
                         }
-                        Ok(None) => stdout_closed = true,
                         Err(e) => {
                             activity.error(format!("Error reading stdout: {e}"));
                             stdout_closed = true;
                         }
                     }
                 }
-                result = stderr_reader.next_line(), if !stderr_closed => {
+                result = stderr_reader.read_until(b'\n', &mut stderr_line_buf), if !stderr_closed => {
                     match result {
-                        Ok(Some(line)) => {
-                            activity.error(&line);
-                            stderr_bytes.extend(line.as_bytes());
-                            stderr_bytes.push(b'\n');
+                        Ok(0) => stderr_closed = true,
+                        Ok(_) => {
+                            let line = String::from_utf8_lossy(&stderr_line_buf);
+                            let line = line.trim_end_matches('\n');
+                            activity.error(line);
+                            stderr_bytes.extend_from_slice(&stderr_line_buf);
+                            stderr_line_buf.clear();
                         }
-                        Ok(None) => stderr_closed = true,
                         Err(e) => {
                             activity.error(format!("Error reading stderr: {e}"));
                             stderr_closed = true;

@@ -137,14 +137,16 @@ impl SubprocessExecutor {
             }
         };
 
-        let mut stderr_reader = BufReader::new(stderr).lines();
-        let mut stdout_reader = BufReader::new(stdout).lines();
+        let mut stderr_reader = BufReader::new(stderr);
+        let mut stdout_reader = BufReader::new(stdout);
 
         let mut stdout_lines = Vec::new();
         let mut stderr_lines = Vec::new();
 
         let mut stdout_closed = false;
         let mut stderr_closed = false;
+        let mut stdout_line_buf: Vec<u8> = Vec::new();
+        let mut stderr_line_buf: Vec<u8> = Vec::new();
         let mut exit_status: Option<std::process::ExitStatus> = None;
 
         loop {
@@ -153,14 +155,18 @@ impl SubprocessExecutor {
             }
 
             tokio::select! {
-                result = stdout_reader.next_line(), if !stdout_closed => {
+                result = stdout_reader.read_until(b'\n', &mut stdout_line_buf), if !stdout_closed => {
                     match result {
-                        Ok(Some(line)) => {
+                        Ok(0) => {
+                            stdout_closed = true;
+                        },
+                        Ok(_) => {
+                            let line = String::from_utf8_lossy(&stdout_line_buf)
+                                .trim_end_matches('\n')
+                                .to_string();
                             callback.on_stdout(&line);
                             stdout_lines.push((std::time::Instant::now(), line));
-                        },
-                        Ok(None) => {
-                            stdout_closed = true;
+                            stdout_line_buf.clear();
                         },
                         Err(e) => {
                             error!("Error reading stdout: {}", e);
@@ -169,14 +175,18 @@ impl SubprocessExecutor {
                         },
                     }
                 }
-                result = stderr_reader.next_line(), if !stderr_closed => {
+                result = stderr_reader.read_until(b'\n', &mut stderr_line_buf), if !stderr_closed => {
                     match result {
-                        Ok(Some(line)) => {
+                        Ok(0) => {
+                            stderr_closed = true;
+                        },
+                        Ok(_) => {
+                            let line = String::from_utf8_lossy(&stderr_line_buf)
+                                .trim_end_matches('\n')
+                                .to_string();
                             callback.on_stderr(&line);
                             stderr_lines.push((std::time::Instant::now(), line));
-                        },
-                        Ok(None) => {
-                            stderr_closed = true;
+                            stderr_line_buf.clear();
                         },
                         Err(e) => {
                             error!("Error reading stderr: {}", e);

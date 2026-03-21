@@ -4122,6 +4122,53 @@ async fn test_valid_suffix_combinations() -> Result<(), Error> {
     Ok(())
 }
 
+#[tokio::test]
+async fn test_non_utf8_stdout() -> Result<(), Error> {
+    // Regression test for https://github.com/cachix/devenv/issues/2590
+    // A script that outputs invalid UTF-8 bytes should still complete
+    // successfully instead of deadlocking because the pipe stops being drained.
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let script = create_script(
+        r#"#!/bin/sh
+printf 'before\xff\xfebinary\n'
+echo 'after invalid bytes'
+"#,
+    )?;
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["myapp:task_1"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "myapp:task_1",
+                    "command": script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    tasks.run(false).await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+    let task_statuses = task_statuses.as_slice();
+    assert_matches!(
+        task_statuses,
+        [(name, TaskStatus::Completed(TaskCompleted::Success(_, _)))]
+        if name == "myapp:task_1"
+    );
+
+    Ok(())
+}
+
 fn create_script(script: &str) -> std::io::Result<tempfile::TempPath> {
     let mut temp_file = tempfile::Builder::new()
         .prefix("script")
