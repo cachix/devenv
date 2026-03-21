@@ -206,13 +206,16 @@ in
         config.processes
     ));
 
-    # The actual process manager command will be invoked from devenv.rs
-    # We just need to provide the configuration via procfileScript
+    # In flake mode, the native process manager runs via devenv-tasks binary.
+    # The command backgrounds the process so procfileScript can manage it.
     process.manager.command = lib.mkDefault ''
-      # Native process manager is invoked directly from devenv up
-      # This script should not be reached
-      echo "Native process manager should be invoked from devenv up" >&2
-      exit 1
+      ${config.task.package}/bin/devenv-tasks run \
+        --task-file ${config.task.config} \
+        --mode all \
+        --cache-dir ${lib.escapeShellArg config.devenv.dotfile} \
+        --runtime-dir ${lib.escapeShellArg config.devenv.runtime} \
+        ${lib.concatMapStringsSep " " (name: "devenv:processes:${name}")
+          (lib.attrNames (lib.filterAttrs (_: p: p.start.enable) config.processes))} &
     '';
   };
 }
