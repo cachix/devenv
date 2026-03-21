@@ -645,6 +645,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 }
                 ProcessStatus::Ready => "ready".into(),
                 ProcessStatus::Restarting => "restarting".into(),
+                ProcessStatus::Stopping => "stopping".into(),
                 ProcessStatus::Stopped if *completed == Some(false) => "failed".into(),
                 ProcessStatus::Stopped => "stopped".into(),
             };

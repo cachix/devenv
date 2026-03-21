@@ -4,7 +4,8 @@ use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix::sys::signal::{self, Signal as NixSignal};
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -171,6 +172,190 @@ fn probe_description(config: &ProcessConfig) -> Option<String> {
         return Some("notify".to_string());
     }
     None
+}
+
+const PORT_RELEASE_TIMEOUT: Duration = Duration::from_secs(15);
+const PORT_RELEASE_INITIAL_DELAY: Duration = Duration::from_millis(25);
+const PORT_RELEASE_MAX_DELAY: Duration = Duration::from_millis(250);
+
+fn declared_ports(config: &ProcessConfig) -> Vec<u16> {
+    config
+        .ports
+        .values()
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+#[cfg(test)]
+fn can_bind_exact_port(port: u16) -> bool {
+    bind_no_reuse(socket2::Domain::IPV4, "0.0.0.0", port).is_ok()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PortReleaseState {
+    Free,
+    Ownerless,
+    Owned(String),
+    Unknown(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PortOwnerLookup {
+    Ownerless,
+    Owned(String),
+    Unknown(String),
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct PortReleaseStatus {
+    ownerless: Vec<u16>,
+    owned: Vec<(u16, String)>,
+    unknown: Vec<(u16, String)>,
+}
+
+impl PortReleaseStatus {
+    fn blocking_ports(&self) -> Vec<u16> {
+        self.owned
+            .iter()
+            .map(|(port, _)| *port)
+            .chain(self.unknown.iter().map(|(port, _)| *port))
+            .collect()
+    }
+
+    fn ownerless_ports(&self) -> &[u16] {
+        &self.ownerless
+    }
+
+    fn has_only_ownerless_conflicts(&self) -> bool {
+        !self.ownerless.is_empty() && self.owned.is_empty() && self.unknown.is_empty()
+    }
+}
+
+fn lookup_process_using_port(port: u16) -> PortOwnerLookup {
+    use netstat2::{AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo, get_sockets_info};
+
+    let af_flags = AddressFamilyFlags::IPV4 | AddressFamilyFlags::IPV6;
+    let proto_flags = ProtocolFlags::TCP;
+
+    let sockets = match get_sockets_info(af_flags, proto_flags) {
+        Ok(sockets) => sockets,
+        Err(err) => {
+            return PortOwnerLookup::Unknown(format!("socket inspection failed: {}", err));
+        }
+    };
+
+    for socket in sockets {
+        let local_port = match &socket.protocol_socket_info {
+            ProtocolSocketInfo::Tcp(tcp) => tcp.local_port,
+            ProtocolSocketInfo::Udp(udp) => udp.local_port,
+        };
+
+        if local_port == port
+            && let Some(&pid) = socket.associated_pids.first()
+        {
+            #[cfg(target_os = "linux")]
+            if let Ok(name) = std::fs::read_to_string(format!("/proc/{}/comm", pid)) {
+                return PortOwnerLookup::Owned(format!(" by {} (PID {})", name.trim(), pid));
+            }
+
+            return PortOwnerLookup::Owned(format!(" (PID {})", pid));
+        }
+    }
+
+    PortOwnerLookup::Ownerless
+}
+
+/// Bind a TCP socket without `SO_REUSEADDR` to reliably detect port conflicts.
+///
+/// Mirrors the implementation in `devenv-core::ports` but kept local to avoid
+/// adding a cross-crate dependency for a single helper.
+fn bind_no_reuse(
+    domain: socket2::Domain,
+    addr: &str,
+    port: u16,
+) -> Result<TcpListener, std::io::Error> {
+    use std::net::SocketAddr;
+
+    let socket = socket2::Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))?;
+    let sock_addr: SocketAddr = format!("{}:{}", addr, port)
+        .parse()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    socket.bind(&socket2::SockAddr::from(sock_addr))?;
+    socket.listen(1)?;
+    Ok(TcpListener::from(socket))
+}
+
+fn probe_port_release(port: u16) -> PortReleaseState {
+    match bind_no_reuse(socket2::Domain::IPV4, "0.0.0.0", port) {
+        Ok(listener) => {
+            drop(listener);
+            PortReleaseState::Free
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => {
+            match lookup_process_using_port(port) {
+                PortOwnerLookup::Ownerless => PortReleaseState::Ownerless,
+                PortOwnerLookup::Owned(owner) => PortReleaseState::Owned(owner),
+                PortOwnerLookup::Unknown(reason) => PortReleaseState::Unknown(reason),
+            }
+        }
+        Err(err) => PortReleaseState::Unknown(err.to_string()),
+    }
+}
+
+fn probe_port_release_status_with<Probe>(ports: &[u16], mut probe: Probe) -> PortReleaseStatus
+where
+    Probe: FnMut(u16) -> PortReleaseState,
+{
+    let mut status = PortReleaseStatus::default();
+
+    for port in ports.iter().copied() {
+        match probe(port) {
+            PortReleaseState::Free => {}
+            PortReleaseState::Ownerless => status.ownerless.push(port),
+            PortReleaseState::Owned(owner) => status.owned.push((port, owner)),
+            PortReleaseState::Unknown(reason) => status.unknown.push((port, reason)),
+        }
+    }
+
+    status
+}
+
+async fn wait_for_port_conflicts_to_settle_with<Probe, Sleep, Fut>(
+    ports: &[u16],
+    timeout: Duration,
+    mut probe: Probe,
+    mut sleep: Sleep,
+) -> PortReleaseStatus
+where
+    Probe: FnMut(u16) -> PortReleaseState,
+    Sleep: FnMut(Duration) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    let started = std::time::Instant::now();
+    let mut delay = PORT_RELEASE_INITIAL_DELAY;
+
+    loop {
+        let status = probe_port_release_status_with(ports, &mut probe);
+
+        if status.blocking_ports().is_empty()
+            || status.has_only_ownerless_conflicts()
+            || started.elapsed() >= timeout
+        {
+            return status;
+        }
+
+        sleep(delay).await;
+        delay = Duration::from_secs_f64(
+            (delay.as_secs_f64() * 2.0).min(PORT_RELEASE_MAX_DELAY.as_secs_f64()),
+        );
+    }
+}
+
+async fn wait_for_port_conflicts_to_settle(ports: &[u16], timeout: Duration) -> PortReleaseStatus {
+    wait_for_port_conflicts_to_settle_with(ports, timeout, probe_port_release, tokio::time::sleep)
+        .await
 }
 
 impl NativeProcessManager {
@@ -515,47 +700,102 @@ impl NativeProcessManager {
 
     /// Stop a process by name
     pub async fn stop(&self, name: &str) -> Result<()> {
-        let mut processes = self.processes.write().await;
+        let handle = {
+            let mut processes = self.processes.write().await;
 
-        match processes.remove(name) {
-            Some(ProcessEntry::Active(handle)) => {
-                debug!("Stopping process: {}", name);
-
-                // Mark as stopped so the TUI shows the correct status
-                // before the Complete event arrives from Activity::drop.
-                handle.resources.activity.set_status(ProcessStatus::Stopped);
-                handle.resources.activity.reset();
-
-                // Abort the supervisor task first to prevent restarts
-                handle.supervisor_task.abort();
-
-                // Abort output reader tasks
-                if let Some((stdout_reader, stderr_reader)) = handle.output_readers {
-                    stdout_reader.abort();
-                    stderr_reader.abort();
+            match processes.remove(name) {
+                Some(ProcessEntry::Active(handle)) => handle,
+                Some(entry @ (ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. })) => {
+                    let state = if matches!(entry, ProcessEntry::NotStarted { .. }) {
+                        "auto start off"
+                    } else {
+                        "waiting for dependencies"
+                    };
+                    processes.insert(name.to_string(), entry);
+                    bail!("Process {} is {}, cannot stop", name, state)
                 }
-
-                // Send terminate signal with grace period
-                handle
-                    .resources
-                    .job
-                    .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
-                    .await;
-
-                info!("Process {} stopped", name);
-                Ok(())
+                None => bail!("Process {} not found", name),
             }
-            Some(entry @ (ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. })) => {
-                let state = if matches!(entry, ProcessEntry::NotStarted { .. }) {
-                    "auto start off"
-                } else {
-                    "waiting for dependencies"
-                };
-                processes.insert(name.to_string(), entry);
-                bail!("Process {} is {}, cannot stop", name, state)
-            }
-            None => bail!("Process {} not found", name),
+        };
+
+        let grace_period = Duration::from_secs(5);
+        let ports = declared_ports(&handle.resources.config);
+
+        debug!("Stopping process: {}", name);
+        handle
+            .resources
+            .activity
+            .set_status(ProcessStatus::Stopping);
+
+        // Abort the supervisor task first to prevent restarts
+        handle.supervisor_task.abort();
+
+        // Abort output reader tasks
+        if let Some((stdout_reader, stderr_reader)) = handle.output_readers {
+            stdout_reader.abort();
+            stderr_reader.abort();
         }
+
+        // Send terminate signal with grace period
+        handle
+            .resources
+            .job
+            .stop_with_signal(Signal::Terminate, grace_period)
+            .await;
+
+        if !ports.is_empty() {
+            let release_status =
+                wait_for_port_conflicts_to_settle(&ports, PORT_RELEASE_TIMEOUT).await;
+
+            if !release_status.ownerless_ports().is_empty() {
+                let port_list = release_status
+                    .ownerless_ports()
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                debug!(
+                    "Ports still in transient ownerless teardown after stopping {}: {}",
+                    name, port_list
+                );
+            }
+
+            if !release_status.blocking_ports().is_empty() {
+                let port_list = release_status
+                    .blocking_ports()
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let details = release_status
+                    .owned
+                    .iter()
+                    .map(|(port, owner)| format!("{}{}", port, owner))
+                    .chain(
+                        release_status
+                            .unknown
+                            .iter()
+                            .map(|(port, reason)| format!("{} ({})", port, reason)),
+                    )
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                warn!(
+                    "Ports still busy after {:.1}s for process {}: {}",
+                    PORT_RELEASE_TIMEOUT.as_secs_f32(),
+                    name,
+                    port_list
+                );
+                debug!("Port release blockers for {}: {}", name, details);
+            }
+        }
+
+        // Mark as stopped so the TUI shows the correct status
+        // before the Complete event arrives from Activity::drop.
+        handle.resources.activity.set_status(ProcessStatus::Stopped);
+        handle.resources.activity.reset();
+
+        info!("Process {} stopped", name);
+        Ok(())
     }
 
     /// Signal all supervisors to shut down gracefully.
@@ -574,8 +814,13 @@ impl NativeProcessManager {
         let names = active_names(&*self.processes.read().await);
 
         debug!("stop_all: stopping {} processes: {:?}", names.len(), names);
-        for name in &names {
-            let _ = self.stop(name).await; // Continue even if one fails
+        for (name, result) in names
+            .iter()
+            .zip(futures::future::join_all(names.iter().map(|name| self.stop(name))).await)
+        {
+            if let Err(err) = result {
+                warn!("Failed to stop process {}: {}", name, err);
+            }
         }
 
         // Clear not-started and waiting processes (their activities complete on drop)
@@ -1284,6 +1529,7 @@ impl Drop for NativeProcessManager {
 mod tests {
     use super::*;
     use crate::config::{RestartPolicy, StartConfig};
+    use std::net::Ipv4Addr;
 
     #[tokio::test]
     async fn test_create_manager() {
@@ -1496,7 +1742,7 @@ mod tests {
     #[tokio::test]
     async fn test_start_processes_preserves_process_env_over_global_env() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let _manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
 
         // Process config with a per-process env var
         let mut config = ProcessConfig {
@@ -1531,5 +1777,104 @@ mod tests {
         // Both sources should be present
         assert_eq!(config.env.get("PROCESS_ONLY").unwrap(), "yes");
         assert_eq!(config.env.get("GLOBAL_ONLY").unwrap(), "yes");
+    }
+
+    #[tokio::test]
+    async fn test_wait_for_port_release_waits_until_port_is_bindable() {
+        let listener = TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        assert!(
+            !can_bind_exact_port(port),
+            "test listener should hold the port before release"
+        );
+
+        let started = std::time::Instant::now();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            drop(listener);
+        });
+
+        let status = wait_for_port_conflicts_to_settle(&[port], Duration::from_secs(1)).await;
+
+        assert!(
+            status.blocking_ports().is_empty() && status.ownerless_ports().is_empty(),
+            "port should have been released"
+        );
+        assert!(
+            started.elapsed() >= Duration::from_millis(150),
+            "expected to wait for the listener to close"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_wait_for_port_release_returns_early_for_ownerless_conflicts() {
+        let mut probes = 0;
+
+        let status = wait_for_port_conflicts_to_settle_with(
+            &[6380],
+            Duration::from_secs(1),
+            |_| {
+                probes += 1;
+                if probes < 3 {
+                    PortReleaseState::Owned(" (PID 123)".to_string())
+                } else {
+                    PortReleaseState::Ownerless
+                }
+            },
+            |_| std::future::ready(()),
+        )
+        .await;
+
+        assert_eq!(
+            probes, 3,
+            "should stop once only ownerless conflicts remain"
+        );
+        assert!(status.blocking_ports().is_empty());
+        assert_eq!(status.ownerless_ports(), &[6380]);
+    }
+
+    #[tokio::test]
+    async fn test_wait_for_port_release_times_out_for_owned_conflicts() {
+        let started = std::time::Instant::now();
+
+        let status = wait_for_port_conflicts_to_settle_with(
+            &[6380],
+            Duration::from_millis(20),
+            |_| PortReleaseState::Owned(" (PID 123)".to_string()),
+            |_| tokio::time::sleep(Duration::from_millis(2)),
+        )
+        .await;
+
+        assert!(
+            started.elapsed() >= Duration::from_millis(20),
+            "owned conflicts should keep waiting until timeout"
+        );
+        assert_eq!(status.blocking_ports(), vec![6380]);
+        assert!(status.ownerless_ports().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_wait_for_port_release_times_out_for_unknown_conflicts() {
+        let started = std::time::Instant::now();
+
+        let status = wait_for_port_conflicts_to_settle_with(
+            &[6380],
+            Duration::from_millis(20),
+            |_| PortReleaseState::Unknown("socket inspection failed".to_string()),
+            |_| tokio::time::sleep(Duration::from_millis(2)),
+        )
+        .await;
+
+        assert!(
+            started.elapsed() >= Duration::from_millis(20),
+            "unknown conflicts should keep waiting until timeout"
+        );
+        assert_eq!(status.blocking_ports(), vec![6380]);
+        assert_eq!(
+            status.unknown,
+            vec![(6380, "socket inspection failed".to_string())]
+        );
+        assert!(status.ownerless_ports().is_empty());
     }
 }

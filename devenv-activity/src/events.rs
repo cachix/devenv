@@ -351,6 +351,8 @@ pub enum ProcessStatus {
     Ready,
     /// Stop + start cycle in progress.
     Restarting,
+    /// Graceful shutdown in progress (SIGTERM sent, waiting for exit and port release).
+    Stopping,
     /// Exited.
     Stopped,
 }
@@ -360,7 +362,12 @@ impl ProcessStatus {
     pub fn is_active(&self) -> bool {
         matches!(
             self,
-            Self::Waiting | Self::Starting | Self::Running | Self::Ready | Self::Restarting
+            Self::Waiting
+                | Self::Starting
+                | Self::Running
+                | Self::Ready
+                | Self::Restarting
+                | Self::Stopping
         )
     }
 }
