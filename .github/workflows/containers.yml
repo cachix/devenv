@@ -99,7 +99,7 @@ jobs:
         uses: cachix/install-nix-action@v31
 
       - name: Setup Cachix
-        uses: cachix/cachix-action@v16
+        uses: cachix/cachix-action@v17
         with:
           name: devenv
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}

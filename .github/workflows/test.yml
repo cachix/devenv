@@ -51,7 +51,7 @@ jobs:
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure Cachix
-        uses: cachix/cachix-action@v16
+        uses: cachix/cachix-action@v17
         with:
           name: devenv
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -102,7 +102,7 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Configure Cachix
-        uses: cachix/cachix-action@v16
+        uses: cachix/cachix-action@v17
         with:
           name: devenv
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -148,7 +148,7 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Configure Cachix
-        uses: cachix/cachix-action@v16
+        uses: cachix/cachix-action@v17
         with:
           name: devenv
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
