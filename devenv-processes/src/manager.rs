@@ -722,6 +722,10 @@ impl NativeProcessManager {
         let ports = declared_ports(&handle.resources.config);
 
         debug!("Stopping process: {}", name);
+        handle
+            .resources
+            .activity
+            .set_status(ProcessStatus::Stopping);
 
         // Abort the supervisor task first to prevent restarts
         handle.supervisor_task.abort();
