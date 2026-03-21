@@ -459,7 +459,21 @@ impl Cli {
 #[derive(Subcommand, Clone)]
 pub enum Commands {
     #[command(about = "Scaffold devenv.yaml, devenv.nix, and .gitignore.")]
-    Init { target: Option<PathBuf> },
+    Init {
+        #[arg(
+            long,
+            num_args=0..=1,
+            value_name = "ENABLE",
+            default_value = "false",
+            default_missing_value = "true",
+            env = "DEVENV_DIRENV_INIT",
+            help = "For use with direnv, additionally scaffold .envrc.",
+            long_help = "For use with direnv, additionally scaffold .envrc.\n\nhttps://devenv.sh/integrations/direnv/",
+
+        )]
+        with_direnv: Option<bool>,
+        target: Option<PathBuf>,
+    },
 
     #[command(about = "Generate devenv.yaml and devenv.nix using AI")]
     Generate,
