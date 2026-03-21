@@ -407,15 +407,16 @@ async fn test_manager_drops_file_changes_during_build() {
     let temp_dir = create_temp_dir_with_files(&[("test.nix", "x")]);
     let watch_file = temp_dir.path().join("test.nix");
 
-    // Channel for builds to signal they've started
+    // Channel for builds to signal they've started (tokio async for test side)
     let (build_started_tx, mut build_started_rx) = mpsc::channel::<usize>(10);
-    // Channel to release builds
-    let (release_tx, release_rx) = mpsc::channel::<()>(10);
+    // Channel to release builds (std sync for use inside spawn_blocking)
+    let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
 
-    /// Builder that waits for release signal before completing
+    /// Builder that waits for release signal before completing.
+    /// Uses std::sync primitives for blocking inside spawn_blocking.
     struct SyncBuilder {
         build_started_tx: mpsc::Sender<usize>,
-        release_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<()>>>,
+        release_rx: Arc<std::sync::Mutex<std::sync::mpsc::Receiver<()>>>,
         build_counter: Arc<AtomicUsize>,
     }
 
@@ -436,13 +437,9 @@ async fn test_manager_drops_file_changes_during_build() {
                     // Signal that this build has started
                     let _ = self.build_started_tx.try_send(build_num);
 
-                    // Wait for release signal with timeout
-                    let release_rx = self.release_rx.clone();
-                    let rt = tokio::runtime::Handle::current();
-                    let _ = rt.block_on(async {
-                        let mut rx = release_rx.lock().await;
-                        tokio::time::timeout(Duration::from_secs(5), rx.recv()).await
-                    });
+                    // Wait for release signal with timeout (blocking, safe in spawn_blocking)
+                    let rx = self.release_rx.lock().unwrap();
+                    let _ = rx.recv_timeout(Duration::from_secs(5));
 
                     let mut cmd = CommandBuilder::new("sh");
                     cmd.arg("-c");
@@ -457,18 +454,9 @@ async fn test_manager_drops_file_changes_during_build() {
                 BuildTrigger::Initial => Ok(()),
                 BuildTrigger::FileChanged(_) => {
                     let build_num = self.build_counter.fetch_add(1, Ordering::SeqCst) + 1;
-
-                    // Signal that this build has started
                     let _ = self.build_started_tx.try_send(build_num);
-
-                    // Wait for release signal with timeout
-                    let release_rx = self.release_rx.clone();
-                    let rt = tokio::runtime::Handle::current();
-                    let _ = rt.block_on(async {
-                        let mut rx = release_rx.lock().await;
-                        tokio::time::timeout(Duration::from_secs(5), rx.recv()).await
-                    });
-
+                    let rx = self.release_rx.lock().unwrap();
+                    let _ = rx.recv_timeout(Duration::from_secs(5));
                     Ok(())
                 }
             }
@@ -478,7 +466,7 @@ async fn test_manager_drops_file_changes_during_build() {
     let build_counter = Arc::new(AtomicUsize::new(0));
     let builder = SyncBuilder {
         build_started_tx,
-        release_rx: Arc::new(tokio::sync::Mutex::new(release_rx)),
+        release_rx: Arc::new(std::sync::Mutex::new(release_rx)),
         build_counter: build_counter.clone(),
     };
 
@@ -514,7 +502,7 @@ async fn test_manager_drops_file_changes_during_build() {
     );
 
     // Release the first build so it completes
-    let _ = release_tx.send(()).await;
+    let _ = release_tx.send(());
 
     tokio::task::yield_now().await;
 
