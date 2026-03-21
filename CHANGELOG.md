@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed task cache initialization failing with "unable to open database file" when the state directory does not yet exist.
 - Fixed cachix daemon log output leaking into and corrupting the TUI display by capturing daemon stderr and forwarding it through the push activity ([#2648](https://github.com/cachix/devenv/issues/2648)).
 - Fixed `devenv test` hanging when a process outputs non-UTF-8 bytes by using lossy UTF-8 decoding instead of closing the pipe, which caused a deadlock between the parent waiting for the child to exit and the child blocking on a full stdout pipe ([#2590](https://github.com/cachix/devenv/issues/2590)).
 - Fixed hot reload sometimes picking up stale configuration or crashing due to the old Nix evaluator not being fully cleaned up before creating a new one. Errors during reload are now reported instead of silently breaking subsequent evaluations.

@@ -20,6 +20,10 @@ impl Database {
     /// * `path` - Path to the SQLite database file
     /// * `migrator` - The migrator containing database migrations to apply
     pub async fn new(path: PathBuf, migrator: &Migrator) -> CacheResult<Self> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
         let options = connection_options(&path);
 
         let pool = SqlitePoolOptions::new()
