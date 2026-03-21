@@ -86,7 +86,10 @@
             inputs.rust-overlay.overlays.default
             (final: prev: {
               inherit (inputs.cachix.packages.${system}) cachix;
-              nix = inputs.nix.packages.${system}.nix;
+              # Use nix-cli to skip building nix-manual, but keep libs for C bindings
+              nix = inputs.nix.packages.${system}.nix-cli // {
+                inherit (inputs.nix.packages.${system}.nix) libs;
+              };
               nixd = inputs.nixd.packages.${system}.nixd;
               crate2nix = inputs.crate2nix.packages.${system}.default;
             })
