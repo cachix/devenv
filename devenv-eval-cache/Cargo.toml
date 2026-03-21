@@ -5,7 +5,6 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-blake3.workspace = true
 devenv-activity.workspace = true
 devenv-cache-core.workspace = true
 devenv-core.workspace = true

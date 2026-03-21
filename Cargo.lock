@@ -1763,7 +1763,6 @@ version = "2.0.6"
 dependencies = [
  "async-trait",
  "axum 0.8.8",
- "blake3",
  "chrono",
  "clap",
  "clap_complete",
@@ -1907,7 +1906,6 @@ dependencies = [
 name = "devenv-eval-cache"
 version = "2.0.6"
 dependencies = [
- "blake3",
  "devenv-activity",
  "devenv-cache-core",
  "devenv-core",
@@ -1946,7 +1944,6 @@ version = "2.0.6"
 dependencies = [
  "anyhow",
  "async-trait",
- "blake3",
  "cstr",
  "devenv-activity",
  "devenv-cache-core",
@@ -2017,8 +2014,8 @@ version = "2.0.6"
 dependencies = [
  "anyhow",
  "avt",
- "blake3",
  "devenv-activity",
+ "devenv-cache-core",
  "devenv-event-sources",
  "devenv-shell",
  "portable-pty",

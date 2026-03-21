@@ -1,4 +1,4 @@
-use blake3;
+use devenv_cache_core::compute_string_hash;
 use devenv_core::{DevenvPaths, NixBackend, Options};
 use miette::{IntoDiagnostic, Result};
 use serde::{Deserialize, Serialize};
@@ -17,8 +17,7 @@ impl ChangelogEntry {
     /// Generate a unique hash for this changelog entry based on date and title
     pub fn hash(&self) -> String {
         let content = format!("{}:{}", self.date, self.title);
-        let hash = blake3::hash(content.as_bytes());
-        hash.to_hex().to_string()
+        compute_string_hash(&content)
     }
 }
 

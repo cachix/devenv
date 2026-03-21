@@ -8,20 +8,13 @@ use crate::config::Config;
 use devenv_activity::Activity;
 use devenv_event_sources::{FileWatcher, FileWatcherConfig};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc;
 
 // Re-export protocol types from devenv-shell
 pub use devenv_shell::{ShellCommand, ShellEvent};
-
-/// Compute blake3 hash of file contents.
-/// Returns None if the file cannot be read.
-fn hash_file(path: &Path) -> Option<blake3::Hash> {
-    let content = std::fs::read(path).ok()?;
-    Some(blake3::hash(&content))
-}
 
 #[derive(Debug, Error)]
 pub enum CoordinatorError {
@@ -146,7 +139,7 @@ impl ShellCoordinator {
         // Track files that changed and triggered rebuilds
         let mut pending_changes: Vec<PathBuf> = Vec::new();
         // Track file content hashes to detect actual changes
-        let mut file_hashes: HashMap<PathBuf, blake3::Hash> = HashMap::new();
+        let mut file_hashes: HashMap<PathBuf, String> = HashMap::new();
         // Track if reload is ready (waiting for user to apply)
         let mut reload_ready = false;
         // Track if file watching is paused
@@ -183,9 +176,9 @@ impl ShellCoordinator {
                         continue;
                     }
                     // Check if file content actually changed by comparing hashes
-                    let new_hash = match hash_file(&path) {
-                        Some(h) => h,
-                        None => {
+                    let new_hash = match devenv_cache_core::compute_file_hash(&path) {
+                        Ok(h) => h,
+                        Err(_) => {
                             tracing::debug!("Could not read file: {:?}", path);
                             continue;
                         }

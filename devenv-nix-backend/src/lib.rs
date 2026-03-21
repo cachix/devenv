@@ -268,6 +268,5 @@ pub fn compute_lock_fingerprint(lock_file: Option<&LockFile>, store: &Store) -> 
     parts.sort();
 
     let combined = parts.join(";");
-    let hash = blake3::hash(combined.as_bytes());
-    Ok(hash.to_hex().to_string())
+    Ok(devenv_cache_core::compute_string_hash(&combined))
 }

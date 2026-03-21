@@ -28,7 +28,8 @@ impl Input {
             &inputs
                 .iter()
                 .filter_map(Input::content_hash)
-                .collect::<String>(),
+                .collect::<Vec<_>>()
+                .join("\0"),
         )
     }
 

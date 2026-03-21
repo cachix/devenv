@@ -42,7 +42,7 @@ impl EvalCacheKey {
     /// assemble() and stored for later use in cache key generation).
     pub fn from_nix_args_str(nix_args_str: &str, attr_name: &str) -> Self {
         let combined = format!("{}:{}", nix_args_str, attr_name);
-        let key_hash = blake3::hash(combined.as_bytes()).to_hex().to_string();
+        let key_hash = devenv_cache_core::compute_string_hash(&combined);
         Self {
             key_hash,
             attr_name: attr_name.to_string(),

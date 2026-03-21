@@ -17,7 +17,7 @@ tokio = { workspace = true, features = ["full"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
-blake3 = { workspace = true }
+devenv-cache-core = { workspace = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
