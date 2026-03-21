@@ -248,6 +248,67 @@ async fn test_force_kill_after_timeout() {
     .expect("Test timed out");
 }
 
+/// Test that manager.stop() waits for TERM trap cleanup before returning.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_manager_stop_waits_for_term_cleanup() {
+    timeout(Duration::from_secs(15), async {
+        let ctx = TestContext::new();
+        let ready_file = ctx.temp_path().join("ready.txt");
+        let cleanup_file = ctx.temp_path().join("cleanup.txt");
+
+        let script = ctx
+            .create_script(
+                "term-cleanup.sh",
+                r#"#!/bin/sh
+cleanup_file="$1"
+ready_file="$2"
+
+trap 'sleep 0.2; echo stopped > "$cleanup_file"; exit 0' TERM
+
+echo ready > "$ready_file"
+while true; do
+  sleep 1
+done
+"#,
+            )
+            .await;
+
+        let manager = ctx.create_manager();
+        let config = ProcessConfig {
+            name: "term-cleanup".to_string(),
+            exec: format!(
+                "{} {} {}",
+                script.display(),
+                cleanup_file.display(),
+                ready_file.display()
+            ),
+            args: vec![],
+            ..Default::default()
+        };
+
+        manager
+            .start_command(&config, None)
+            .await
+            .expect("Failed to start");
+
+        assert!(
+            wait_for_file(&ready_file, Duration::from_secs(5)).await,
+            "Script should signal ready"
+        );
+
+        manager.stop("term-cleanup").await.expect("Failed to stop");
+
+        assert!(
+            cleanup_file.exists(),
+            "TERM cleanup should finish before stop() returns"
+        );
+        let cleanup = tokio::fs::read_to_string(&cleanup_file).await.unwrap();
+        assert!(cleanup.contains("stopped"));
+    })
+    .await
+    .expect("Test timed out");
+}
+
 /// Test that is_running returns false initially
 #[tokio::test(flavor = "multi_thread")]
 async fn test_is_running_initially_false() {

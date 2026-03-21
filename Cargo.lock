@@ -1994,6 +1994,7 @@ dependencies = [
  "devenv-event-sources",
  "futures",
  "miette",
+ "netstat2",
  "nix 0.31.2",
  "portable-pty",
  "process-wrap",
