@@ -18,12 +18,18 @@ boolean
 
 
 *Default:*
-` false `
+
+```nix
+false
+```
 
 
 
 *Example:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rustfs\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
@@ -44,7 +50,10 @@ package
 
 
 *Default:*
-` rustfsInput.packages.${pkgs.stdenv.system}.default `
+
+```nix
+rustfsInput.packages.${pkgs.stdenv.system}.default
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rustfs\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
@@ -63,7 +72,10 @@ string
 
 
 *Default:*
-` "rustfsadmin" `
+
+```nix
+"rustfsadmin"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rustfs\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
@@ -85,7 +97,10 @@ null or string
 
 
 *Default:*
-` "127.0.0.1" `
+
+```nix
+"127.0.0.1"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rustfs\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
@@ -106,7 +121,10 @@ boolean
 
 
 *Default:*
-` true `
+
+```nix
+true
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rustfs\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
@@ -127,7 +145,10 @@ The TCP port for the web console\.
 
 
 *Default:*
-` 9001 `
+
+```nix
+9001
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rustfs\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
@@ -150,13 +171,16 @@ attribute set of string
 
 
 *Default:*
-` { } `
+
+```nix
+{ }
+```
 
 
 
 *Example:*
 
-```
+```nix
 {
   RUSTFS_OBJECT_CACHE_ENABLE = "true";
   RUSTFS_OBS_LOGGER_LEVEL = "debug";
@@ -182,7 +206,10 @@ The TCP port for the S3 API\.
 
 
 *Default:*
-` 9000 `
+
+```nix
+9000
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rustfs\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
@@ -203,7 +230,10 @@ string
 
 
 *Default:*
-` "rustfsadmin" `
+
+```nix
+"rustfsadmin"
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rustfs\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rustfs.nix)
