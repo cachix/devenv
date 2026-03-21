@@ -15,6 +15,7 @@
 - Fixed processes failing to start when exported bash functions are present in the environment ([#2587](https://github.com/cachix/devenv/issues/2587)).
 - Fixed eval cache storing inconsistent port allocations across different cached attributes ([#2631](https://github.com/cachix/devenv/issues/2631)).
 - Fixed stale eval cache invalidation for `devenv up` process config changes caused by overlapping evaluations clearing each other's file dependency observers ([#2632](https://github.com/cachix/devenv/pull/2632)).
+- Fixed strict port restarts failing with "port already in use" when the kernel hasn't released the socket yet after process shutdown, by distinguishing ownerless transient conflicts from real ones and retrying accordingly ([#2647](https://github.com/cachix/devenv/pull/2647)).
 - Fixed false-positive `--strict-ports` failures on macOS when IPv6 loopback binding returns a benign error after a clean shutdown and cache invalidation ([#2640](https://github.com/cachix/devenv/pull/2640)).
 - Fixed child processes being left running on shutdown when using non-native process managers like process-compose ([#2586](https://github.com/cachix/devenv/issues/2586)).
 - Fixed `devenv update` resolving stale revisions when Nix's fetcher cache contains outdated entries by setting `tarball-ttl` to 0 during update, equivalent to `nix --refresh` ([#2616](https://github.com/cachix/devenv/issues/2616)).
@@ -26,6 +27,8 @@
 
 ### Improvements
 
+- The TUI now shows a "stopping" status during graceful process shutdown ([#2647](https://github.com/cachix/devenv/pull/2647)).
+- Process `stop_all()` now stops processes concurrently instead of serially ([#2647](https://github.com/cachix/devenv/pull/2647)).
 - `--quiet` now disables the TUI and suppresses all output except warnings and errors ([#2617](https://github.com/cachix/devenv/issues/2617)).
 - Bumped Nix input to fix `devenv shell` failing with "suspicious ownership or permission" on single user Nix installations where umask causes store outputs to have incorrect permissions ([#2585](https://github.com/cachix/devenv/issues/2585)).
 - Bumped iocraft to use row level diff rendering ([ccbrown/iocraft#179](https://github.com/ccbrown/iocraft/pull/179)), reducing TUI flicker.
