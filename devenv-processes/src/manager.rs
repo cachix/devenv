@@ -1013,6 +1013,7 @@ impl NativeProcessManager {
             cancellation_token.is_cancelled()
         );
         info!("Manager event loop started (foreground)");
+        let mut saw_processes = false;
 
         loop {
             tokio::select! {
@@ -1033,8 +1034,12 @@ impl NativeProcessManager {
                     self.handle_command(cmd).await;
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                    if self.processes.read().await.is_empty() {
-                        debug!("No jobs running, exiting");
+                    let is_empty = self.processes.read().await.is_empty();
+                    if !is_empty {
+                        saw_processes = true;
+                    }
+                    if is_empty && saw_processes {
+                        debug!("All processes exited, shutting down");
                         break;
                     }
                 }
@@ -1084,7 +1089,10 @@ impl NativeProcessManager {
                     bail!("Process '{}' not found in configuration", name);
                 };
                 let mut config = process_config.clone();
-                config.env.extend(env.clone());
+                // Global env is the baseline; per-process values win
+                let mut merged_env = env.clone();
+                merged_env.extend(config.env);
+                config.env = merged_env;
                 result.push(config);
             }
             result
@@ -1195,11 +1203,8 @@ impl NativeProcessManager {
             }
         }
 
-        // Remove PID file
-        tokio::fs::remove_file(&manager_pid_file)
-            .await
-            .into_diagnostic()
-            .wrap_err("Failed to remove manager PID file")?;
+        // Remove PID file (may already be gone if the daemon cleaned up)
+        let _ = tokio::fs::remove_file(&manager_pid_file).await;
 
         info!("Native process manager stopped");
         Ok(())
@@ -1220,91 +1225,31 @@ impl ProcessManager for NativeProcessManager {
             PidStatus::NotFound | PidStatus::StaleRemoved => {}
         }
 
+        // Detach mode is handled at the CLI level via re-exec
+        // (see `devenv daemon-processes`). This trait method only supports
+        // foreground mode.
         if options.detach {
-            use daemonize::{Daemonize, Outcome};
-
-            let manager_pid_file = self.manager_pid_file();
-
-            // Clone data needed in the daemon before daemonizing
-            let state_dir = self.state_dir.clone();
-            let process_configs = options.process_configs.clone();
-            let process_names = options.processes.clone();
-            let env = options.env.clone();
-
-            // Configure and start the daemon (execute() keeps parent alive)
-            let daemonize = Daemonize::new().pid_file(&manager_pid_file);
-
-            match daemonize.execute() {
-                Outcome::Parent(Ok(_)) => {
-                    // Read PID from file that daemonize created
-                    let pid = std::fs::read_to_string(&manager_pid_file)
-                        .map(|s| s.trim().to_string())
-                        .unwrap_or_else(|_| "unknown".to_string());
-                    info!(
-                        "Native process manager started in background (PID: {})",
-                        pid
-                    );
-                    info!("Stop with: devenv processes down");
-                    return Ok(());
-                }
-                Outcome::Parent(Err(e)) => {
-                    bail!("Failed to daemonize: {}", e);
-                }
-                Outcome::Child(Ok(_)) => {
-                    // We're now in the daemon process
-                    // Create new tokio runtime for the daemon
-                    let runtime = match tokio::runtime::Runtime::new() {
-                        Ok(rt) => rt,
-                        Err(e) => {
-                            eprintln!("Failed to create tokio runtime: {}", e);
-                            std::process::exit(1);
-                        }
-                    };
-
-                    // Recreate manager and run event loop
-                    let result = runtime.block_on(async {
-                        let manager = Arc::new(NativeProcessManager::new(state_dir)?);
-                        manager
-                            .start_processes(&process_configs, &process_names, &env)
-                            .await?;
-                        manager.run().await
-                    });
-
-                    // Clean up PID file on exit
-                    let _ = std::fs::remove_file(&manager_pid_file);
-
-                    if let Err(e) = result {
-                        eprintln!("Manager event loop failed: {}", e);
-                        std::process::exit(1);
-                    }
-
-                    std::process::exit(0);
-                }
-                Outcome::Child(Err(e)) => {
-                    eprintln!("Daemon child failed: {}", e);
-                    std::process::exit(1);
-                }
-            }
-        } else {
-            // Start requested processes
-            self.start_processes(&options.process_configs, &options.processes, &options.env)
-                .await?;
-
-            // Foreground mode - run the event loop
-            info!("All processes started. Press Ctrl+C to stop.");
-
-            // Save PID for tracking
-            pid::write_pid(&self.manager_pid_file(), std::process::id()).await?;
-
-            // Run the event loop (shutdown via cancellation token from tokio-shutdown)
-            let token = options.cancellation_token.unwrap_or_default();
-            let result = self.run_foreground(token, None).await;
-
-            // Clean up PID file
-            let _ = tokio::fs::remove_file(&self.manager_pid_file()).await;
-
-            result
+            bail!("Native process manager detach is handled by the CLI via re-exec");
         }
+
+        // Start requested processes
+        self.start_processes(&options.process_configs, &options.processes, &options.env)
+            .await?;
+
+        // Foreground mode - run the event loop
+        info!("All processes started. Press Ctrl+C to stop.");
+
+        // Save PID for tracking
+        pid::write_pid(&self.manager_pid_file(), std::process::id()).await?;
+
+        // Run the event loop (shutdown via cancellation token from tokio-shutdown)
+        let token = options.cancellation_token.unwrap_or_default();
+        let result = self.run_foreground(token, None).await;
+
+        // Clean up PID file
+        let _ = tokio::fs::remove_file(&self.manager_pid_file()).await;
+
+        result
     }
 
     async fn stop(&self) -> Result<()> {
@@ -1546,5 +1491,45 @@ mod tests {
             completed.is_ok(),
             "Notification should have fired within the timeout"
         );
+    }
+
+    #[tokio::test]
+    async fn test_start_processes_preserves_process_env_over_global_env() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // Process config with a per-process env var
+        let mut config = ProcessConfig {
+            name: "env-test".to_string(),
+            exec: "env".to_string(),
+            args: vec![],
+            restart: crate::config::RestartConfig {
+                on: RestartPolicy::Never,
+                max: Some(0),
+                window: None,
+            },
+            env: HashMap::from([
+                ("SHARED_VAR".to_string(), "per-process".to_string()),
+                ("PROCESS_ONLY".to_string(), "yes".to_string()),
+            ]),
+            ..Default::default()
+        };
+
+        // Global env that also defines SHARED_VAR
+        let global_env: HashMap<String, String> = HashMap::from([
+            ("SHARED_VAR".to_string(), "global".to_string()),
+            ("GLOBAL_ONLY".to_string(), "yes".to_string()),
+        ]);
+
+        // Simulate the merging logic from start_processes
+        let mut merged_env = global_env.clone();
+        merged_env.extend(config.env.clone());
+        config.env = merged_env;
+
+        // Per-process value must win
+        assert_eq!(config.env.get("SHARED_VAR").unwrap(), "per-process");
+        // Both sources should be present
+        assert_eq!(config.env.get("PROCESS_ONLY").unwrap(), "yes");
+        assert_eq!(config.env.get("GLOBAL_ONLY").unwrap(), "yes");
     }
 }

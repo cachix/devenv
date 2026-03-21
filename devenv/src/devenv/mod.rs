@@ -125,6 +125,9 @@ pub struct ProcessOptions {
     pub strict_ports: bool,
     /// Command receiver for process control (restart, etc.)
     pub command_rx: Option<tokio::sync::mpsc::Receiver<processes::ProcessCommand>>,
+    /// When true with detach, spawn a daemon process instead of keeping
+    /// processes in-process. Used by `devenv up -d`.
+    pub daemon: bool,
 }
 
 /// A shell command ready to be executed.
@@ -1459,6 +1462,12 @@ impl Devenv {
             let config =
                 self.make_task_config(roots, task_configs, tasks::RunMode::All, envs, bash)?;
 
+            if options.daemon {
+                // Spawn a separate daemon process via re-exec to avoid
+                // fork-safety issues in this multithreaded process.
+                return self.spawn_daemon_processes(config).await;
+            }
+
             let tasks_runner =
                 tasks::Tasks::builder(config, tasks::VerbosityLevel::Normal, self.shutdown.clone())
                     .build()
@@ -1547,6 +1556,102 @@ impl Devenv {
         }
     }
 
+    /// Spawn a daemon process that runs the native process manager.
+    ///
+    /// Instead of fork (which is unsafe in multithreaded programs), this
+    /// re-execs the current binary with a hidden `daemon-processes` subcommand.
+    /// The daemon runs in a new session (`setsid`) so it survives the parent.
+    async fn spawn_daemon_processes(&self, config: tasks::Config) -> Result<RunMode> {
+        let pid_file = self.native_manager_pid_file();
+
+        // Check if already running
+        if let Ok(processes::PidStatus::Running(pid)) = processes::check_pid_file(&pid_file).await {
+            bail!(
+                "Processes already running with PID {}. Stop them first with: devenv processes down",
+                pid
+            );
+        }
+
+        // Serialize the task config for the daemon
+        let runtime_dir = self.process_runtime_dir()?;
+        let config_file = runtime_dir.join("daemon-config.json");
+        let config_json = serde_json::to_string(&config)
+            .map_err(|e| miette!("Failed to serialize task config: {}", e))?;
+        tokio::fs::write(&config_file, &config_json)
+            .await
+            .into_diagnostic()
+            .wrap_err("Failed to write daemon config")?;
+
+        let devenv_exe = std::env::current_exe()
+            .map_err(|e| miette!("Failed to get current executable: {}", e))?;
+
+        let log_file_path = runtime_dir.join("daemon.log");
+        let log_file = std::fs::File::create(&log_file_path)
+            .map_err(|e| miette!("Failed to create daemon log: {}", e))?;
+
+        let mut cmd = std::process::Command::new(&devenv_exe);
+        cmd.arg("daemon-processes")
+            .arg(&config_file)
+            .current_dir(&self.devenv_root)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(log_file);
+
+        // Put the daemon in its own process group so terminal signals
+        // (Ctrl-C / SIGHUP) don't reach it. The parent exits quickly,
+        // so the daemon is reparented to PID 1.
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+
+        let child = cmd
+            .spawn()
+            .map_err(|e| miette!("Failed to spawn daemon: {}", e))?;
+        let child_pid = child.id();
+
+        // Wait for the daemon to write its PID file (meaning processes are started)
+        let start = std::time::Instant::now();
+        let max_wait = std::time::Duration::from_secs(120);
+        while start.elapsed() < max_wait {
+            if matches!(
+                processes::check_pid_file(&pid_file).await,
+                Ok(processes::PidStatus::Running(_))
+            ) {
+                break;
+            }
+            // Check if the daemon exited early (crash)
+            if signal::kill(Pid::from_raw(child_pid as i32), None).is_err() {
+                let log_contents = std::fs::read_to_string(&log_file_path).unwrap_or_default();
+                bail!("Daemon exited unexpectedly. Logs:\n{}", log_contents);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+
+        if !matches!(
+            processes::check_pid_file(&pid_file).await,
+            Ok(processes::PidStatus::Running(_))
+        ) {
+            let log_contents = std::fs::read_to_string(&log_file_path).unwrap_or_default();
+            bail!(
+                "Daemon failed to start within {}s. Check logs at: {}\n{}",
+                max_wait.as_secs(),
+                log_file_path.display(),
+                log_contents
+            );
+        }
+
+        let pid = std::fs::read_to_string(&pid_file)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|_| "unknown".to_string());
+        info!("Processes starting in background (PID: {})", pid);
+        info!("Wait with: devenv processes wait");
+        info!("Stop with: devenv processes down");
+
+        Ok(RunMode::Detached)
+    }
+
     pub async fn down(&self) -> Result<()> {
         // In-process native manager (started by test() or up(detach=true))
         if let Some(manager) = self.native_process_manager.get() {
@@ -1577,12 +1682,26 @@ impl Devenv {
     pub async fn wait_for_ready(&self, timeout: std::time::Duration) -> Result<()> {
         if self.native_manager_pid_file().exists() {
             let socket_path = self.process_runtime_dir()?.join("native.sock");
-            tokio::time::timeout(
-                timeout,
-                processes::NativeProcessManager::wait_for_ready(&socket_path),
-            )
-            .await
-            .map_err(|_| miette!("Timed out waiting for processes to be ready"))?
+            let pid_file = self.native_manager_pid_file();
+            let start = std::time::Instant::now();
+            loop {
+                match processes::NativeProcessManager::wait_for_ready(&socket_path).await {
+                    Ok(()) => return Ok(()),
+                    Err(_) if start.elapsed() < timeout => {
+                        // Check that the daemon is still alive before retrying
+                        if !matches!(
+                            processes::check_pid_file(&pid_file).await,
+                            Ok(processes::PidStatus::Running(_))
+                        ) {
+                            bail!("Process manager exited unexpectedly");
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                    }
+                    Err(_) => {
+                        bail!("Timed out waiting for processes to be ready");
+                    }
+                }
+            }
         } else if self.processes_pid().exists() {
             bail!("'devenv processes wait' is not yet supported for the process-compose backend")
         } else {

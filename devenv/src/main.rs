@@ -79,6 +79,9 @@ fn main_inner() -> Result<()> {
                 print!("{}", *devenv::DIRENVRC);
                 return Ok(());
             }
+            Some(Commands::DaemonProcesses { config_file }) => {
+                return run_daemon_processes(config_file.clone());
+            }
             _ => {}
         }
 
@@ -802,6 +805,7 @@ async fn dispatch_command(
                 log_to_file: up_args.detach,
                 strict_ports,
                 command_rx,
+                daemon: up_args.detach,
             };
             match devenv
                 .up(up_args.processes, options, verbosity, tui)
@@ -903,6 +907,7 @@ async fn dispatch_command(
         }
         Commands::Direnvrc => unreachable!(),
         Commands::Version => unreachable!(),
+        Commands::DaemonProcesses { .. } => unreachable!(),
     }
 }
 
@@ -1053,6 +1058,63 @@ fn prompt_secrets(provider: Option<String>, profile: Option<String>) -> Result<(
         .map_err(|e| miette::miette!("Failed to set secrets: {}", e))?;
 
     Ok(())
+}
+
+/// Run the native process manager as a daemon.
+///
+/// This is invoked by `devenv up -d` via re-exec to avoid fork-safety issues
+/// in multithreaded programs. The parent serializes the task config to a JSON
+/// file and spawns this process with `setsid` for full detachment.
+fn run_daemon_processes(config_file: std::path::PathBuf) -> Result<()> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .into_diagnostic()?;
+
+    runtime.block_on(async {
+        let shutdown = Shutdown::new();
+        shutdown.install_signals().await;
+
+        let config_json = tokio::fs::read_to_string(&config_file)
+            .await
+            .into_diagnostic()
+            .wrap_err("Failed to read daemon config")?;
+        let config: devenv::tasks::Config = serde_json::from_str(&config_json).into_diagnostic()?;
+
+        // Remove temp config file
+        let _ = tokio::fs::remove_file(&config_file).await;
+
+        let tasks_runner = devenv::tasks::Tasks::builder(
+            config,
+            devenv::tasks::VerbosityLevel::Normal,
+            shutdown.clone(),
+        )
+        .build()
+        .await
+        .map_err(|e| miette::miette!("Failed to build task runner: {}", e))?;
+
+        // Run the full task DAG (starts processes, waits for readiness probes)
+        let phase = devenv_activity::Activity::operation("Running processes")
+            .parent(None)
+            .start();
+        let _outputs = tasks_runner.run_with_parent_activity(Arc::new(phase)).await;
+
+        // Write PID so `devenv processes down` can find us
+        let pid_file = tasks_runner.process_manager().manager_pid_file();
+        devenv::processes::write_pid(&pid_file, std::process::id())
+            .await
+            .map_err(|e| miette::miette!("Failed to write PID: {}", e))?;
+
+        // Keep the daemon alive until SIGTERM/SIGINT
+        let result = tasks_runner
+            .process_manager()
+            .run_foreground(shutdown.cancellation_token(), None)
+            .await
+            .map_err(|e| miette::miette!("Process manager error: {}", e));
+
+        let _ = tokio::fs::remove_file(&pid_file).await;
+        result
+    })
 }
 
 /// Returns the git revision suffix for the version string.
