@@ -1,6 +1,9 @@
 { pkgs, config, ... }:
 
 {
+  # The .env file is used by secretspec's dotenv provider, not the dotenv integration
+  dotenv.disableHint = true;
+
   # Test that secrets are available in Nix
   enterShell = ''
     # Expected JSON structure based on .env values

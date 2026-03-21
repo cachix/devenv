@@ -5,6 +5,7 @@
   # as opposed to `python3.withPackages`.
   packages = [
     pkgs.python3Packages.requests
+    pkgs.zlib
   ];
 
   languages.python = {

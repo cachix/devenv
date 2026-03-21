@@ -387,9 +387,9 @@ let
         internal = true;
         default = pkgs.writeShellScript "docker-run" ''
           if [ -t 0 ]; then
-            docker run -it ${config.name}:${config.version} "$@"
+            ${pkgs.docker-client}/bin/docker run -it ${config.name}:${config.version} "$@"
           else
-            docker run -i ${config.name}:${config.version} "$@"
+            ${pkgs.docker-client}/bin/docker run -i ${config.name}:${config.version} "$@"
           fi
         '';
       };
