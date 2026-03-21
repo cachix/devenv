@@ -403,13 +403,13 @@ async fn test_manager_keeps_shell_on_spawn_failure_during_reload() {
 }
 
 #[tokio::test]
-async fn test_manager_cancels_old_build_on_new_change() {
+async fn test_manager_drops_file_changes_during_build() {
     let temp_dir = create_temp_dir_with_files(&[("test.nix", "x")]);
     let watch_file = temp_dir.path().join("test.nix");
 
     // Channel for builds to signal they've started
     let (build_started_tx, mut build_started_rx) = mpsc::channel::<usize>(10);
-    // Channel to release builds (with timeout built into receiver)
+    // Channel to release builds
     let (release_tx, release_rx) = mpsc::channel::<()>(10);
 
     /// Builder that waits for release signal before completing
@@ -436,14 +436,12 @@ async fn test_manager_cancels_old_build_on_new_change() {
                     // Signal that this build has started
                     let _ = self.build_started_tx.try_send(build_num);
 
-                    // Wait for release signal with timeout (prevents hang if aborted)
-                    // This runs inside spawn_blocking so we can use blocking operations
+                    // Wait for release signal with timeout
                     let release_rx = self.release_rx.clone();
-                    std::thread::sleep(Duration::from_millis(100)); // Small delay to allow abort to happen
                     let rt = tokio::runtime::Handle::current();
                     let _ = rt.block_on(async {
                         let mut rx = release_rx.lock().await;
-                        tokio::time::timeout(Duration::from_millis(500), rx.recv()).await
+                        tokio::time::timeout(Duration::from_secs(5), rx.recv()).await
                     });
 
                     let mut cmd = CommandBuilder::new("sh");
@@ -463,13 +461,12 @@ async fn test_manager_cancels_old_build_on_new_change() {
                     // Signal that this build has started
                     let _ = self.build_started_tx.try_send(build_num);
 
-                    // Wait for release signal with timeout (prevents hang if aborted)
+                    // Wait for release signal with timeout
                     let release_rx = self.release_rx.clone();
-                    std::thread::sleep(Duration::from_millis(100));
                     let rt = tokio::runtime::Handle::current();
                     let _ = rt.block_on(async {
                         let mut rx = release_rx.lock().await;
-                        tokio::time::timeout(Duration::from_millis(500), rx.recv()).await
+                        tokio::time::timeout(Duration::from_secs(5), rx.recv()).await
                     });
 
                     Ok(())
@@ -478,10 +475,11 @@ async fn test_manager_cancels_old_build_on_new_change() {
         }
     }
 
+    let build_counter = Arc::new(AtomicUsize::new(0));
     let builder = SyncBuilder {
         build_started_tx,
         release_rx: Arc::new(tokio::sync::Mutex::new(release_rx)),
-        build_counter: Arc::new(AtomicUsize::new(0)),
+        build_counter: build_counter.clone(),
     };
 
     let config = Config::new(vec![watch_file.clone()]);
@@ -498,18 +496,24 @@ async fn test_manager_cancels_old_build_on_new_change() {
     // Wait for first build to start
     let first_build = tokio::time::timeout(TEST_TIMEOUT, build_started_rx.recv()).await;
     assert!(first_build.is_ok(), "timeout waiting for first build");
-    let first_num = first_build.unwrap().unwrap();
 
-    // Trigger second file change while first build is still in progress
+    // Trigger second file change while first build is still in progress.
+    // The manager should drop this event instead of starting a new build.
     modify_file(&watch_file, "change 2");
 
-    // Wait for second build to start
-    let second_build = tokio::time::timeout(TEST_TIMEOUT, build_started_rx.recv()).await;
-    assert!(second_build.is_ok(), "timeout waiting for second build");
-    let second_num = second_build.unwrap().unwrap();
-    assert!(second_num > first_num, "second build should be after first");
+    // Give the event loop time to process the dropped file change event
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Release the builds (only second one matters, first was aborted)
+    // Verify no second build was started: only the initial build (1) and
+    // the first file-change build (2) should have incremented the counter.
+    let total_builds = build_counter.load(Ordering::SeqCst);
+    assert_eq!(
+        total_builds, 2,
+        "expected exactly 2 builds (initial + first file change), got {}",
+        total_builds
+    );
+
+    // Release the first build so it completes
     let _ = release_tx.send(()).await;
 
     tokio::task::yield_now().await;
