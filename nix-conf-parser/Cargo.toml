@@ -1,6 +1,6 @@
 [package]
 name = "nix-conf-parser"
-version = "2.0.7"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 
