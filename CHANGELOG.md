@@ -2,6 +2,8 @@
 
 ## X.Y.Z (unreleased)
 
+## 2.0.6 (2026-03-22)
+
 ### Bug Fixes
 
 - Fixed task cache initialization failing with "unable to open database file" when the state directory does not yet exist.
