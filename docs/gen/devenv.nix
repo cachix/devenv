@@ -16,12 +16,32 @@ let
       builtins.elemAt path 2 == "_freeformOptions"
       || builtins.elem (builtins.elemAt path 3) [
         "enable"
-        "description"
         "packageOverrides"
         "settings"
       ]
     else
       true;
+
+  # Exclude repeated module options from treefmt programs, keep enable and settings
+  filterTreefmt =
+    path: opt:
+    if lib.lists.hasPrefix [ "treefmt" "config" "programs" ] path
+      && builtins.length path > 4
+    then
+      !builtins.elem (builtins.elemAt path 4) [
+        "description"
+        "excludes"
+        "finalPackage"
+        "includes"
+        "package"
+        "priority"
+      ]
+    else
+      true;
+
+  filterDocOptions =
+    path: opt:
+    filterGitHooks path opt && filterTreefmt path opt;
 
   getStorePath =
     p:
@@ -76,7 +96,7 @@ let
     let
       optionsDoc = pkgs.nixosOptionsDoc (
         {
-          options = filterOptions filterGitHooks (builtins.removeAttrs opts [ "_module" ]);
+          options = filterOptions filterDocOptions (builtins.removeAttrs opts [ "_module" ]);
           warningsAreErrors = true;
           transformOptions = opt: (opt // { declarations = map rewriteSource opt.declarations; });
         }
