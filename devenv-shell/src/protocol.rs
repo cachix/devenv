@@ -27,7 +27,7 @@ pub enum ShellCommand {
         changed_files: Vec<PathBuf>,
         error: String,
     },
-    /// User applied the reload (pressed keybind). Clear status line.
+    /// Reload was applied at the prompt. Update status line.
     ReloadApplied,
     /// File watching paused/resumed.
     WatchingPaused { paused: bool },
