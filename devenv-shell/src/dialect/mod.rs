@@ -27,7 +27,7 @@ pub trait ShellDialect: Send + Sync {
     /// Generate environment diff helper functions (for hot-reload tracking).
     fn env_diff_helpers(&self) -> &str;
 
-    /// Generate the hot-reload hook script (keybinding + prompt hook).
+    /// Generate the hot-reload hook script (prompt hook).
     fn reload_hook(&self, reload_file: &Path) -> String;
 
     /// Path to the user's shell rc file (e.g., ~/.bashrc, ~/.zshrc).
