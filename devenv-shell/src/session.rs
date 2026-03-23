@@ -1256,7 +1256,7 @@ impl ShellSession {
             }
 
             ShellCommand::ReloadApplied => {
-                self.status_line.state_mut().clear();
+                self.status_line.state_mut().set_reloaded();
             }
 
             ShellCommand::WatchedFiles { files } => {

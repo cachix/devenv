@@ -48,7 +48,6 @@ pub const CHECKMARK: &str = "✓";
 pub const XMARK: &str = "✗";
 
 /// Keybind labels (short, long) for status line actions
-const KEYBIND_RELOAD: (&str, &str) = ("^⌥r", "Ctrl-Alt-R");
 const KEYBIND_ERROR: (&str, &str) = ("^⌥e", "Ctrl-Alt-E");
 const KEYBIND_PAUSE: (&str, &str) = ("^⌥d", "Ctrl-Alt-D");
 
@@ -59,8 +58,10 @@ pub struct StatusState {
     pub changed_files: Vec<PathBuf>,
     /// Whether a build is in progress (evaluating nix).
     pub building: bool,
-    /// Whether a reload is ready (waiting for user).
+    /// Whether a reload is ready (auto-applies at next prompt).
     pub reload_ready: bool,
+    /// Whether the environment was just reloaded.
+    pub reloaded: bool,
     /// Error message if build failed.
     pub error: Option<String>,
     /// Whether the error details are expanded (toggled by keybind).
@@ -85,6 +86,7 @@ impl StatusState {
     pub fn set_building(&mut self, changed_files: Vec<PathBuf>) {
         self.building = true;
         self.reload_ready = false;
+        self.reloaded = false;
         self.changed_files = changed_files;
         self.error = None;
         self.show_error = false;
@@ -116,10 +118,22 @@ impl StatusState {
         self.error = Some(error);
     }
 
+    /// Update state after reload was applied.
+    pub fn set_reloaded(&mut self) {
+        self.building = false;
+        self.reload_ready = false;
+        self.reloaded = true;
+        self.changed_files.clear();
+        self.error = None;
+        self.show_error = false;
+        // keep build_duration and watched_file_count
+    }
+
     /// Clear the status.
     pub fn clear(&mut self) {
         self.building = false;
         self.reload_ready = false;
+        self.reloaded = false;
         self.changed_files.clear();
         self.error = None;
         self.show_error = false;
@@ -139,6 +153,7 @@ impl StatusState {
     pub fn has_status(&self) -> bool {
         self.building
             || self.reload_ready
+            || self.reloaded
             || self.error.is_some()
             || self.paused
             || self.watched_file_count > 0
@@ -380,10 +395,9 @@ impl StatusLine {
             }
             .into_any()
         } else if self.state.reload_ready {
-            // Ready state
+            // Ready state (auto-reloads at next prompt)
             let duration = duration_elements(&self.state);
             let watching = watching_elements(self.state.watched_file_count);
-            let keybind = keybind_label(KEYBIND_RELOAD, use_short);
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
@@ -396,9 +410,24 @@ impl StatusLine {
                         #(duration)
                         #(watching)
                     }
-                    View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
-                        Text(content: keybind, color: COLOR_INTERACTIVE)
-                        Text(content: " reload")
+                }
+            }
+            .into_any()
+        } else if self.state.reloaded {
+            // Reloaded state (environment was applied)
+            let duration = duration_elements(&self.state);
+            let watching = watching_elements(self.state.watched_file_count);
+
+            element! {
+                View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
+                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                        View(margin_right: 1) {
+                            Text(content: CHECKMARK, color: COLOR_COMPLETED)
+                        }
+                        Text(content: "devenv ", color: COLOR_SECONDARY)
+                        Text(content: "reloaded", weight: Weight::Bold, color: COLOR_COMPLETED)
+                        #(duration)
+                        #(watching)
                     }
                 }
             }
