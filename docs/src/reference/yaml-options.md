@@ -125,6 +125,12 @@ Enable CUDA support for nixpkgs.
 
 *Type:* `boolean` · *Default:* `false` · *Added in 1.7*
 
+## nixpkgs.rocmSupport
+
+Enable ROCm support for nixpkgs.
+
+*Type:* `boolean` · *Default:* `false`
+
 ## nixpkgs.permittedInsecurePackages
 
 A list of insecure permitted packages.

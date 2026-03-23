@@ -83,6 +83,13 @@ pub struct NixpkgsConfig {
     #[setting(merge = schematic::merge::append_vec)]
     pub cuda_capabilities: Vec<String>,
     #[serde(
+        alias = "rocmSupport",
+        skip_serializing_if = "is_false",
+        default = "false_default"
+    )]
+    #[setting(merge = schematic::merge::replace)]
+    pub rocm_support: bool,
+    #[serde(
         alias = "permittedInsecurePackages",
         skip_serializing_if = "Vec::is_empty",
         default
@@ -985,6 +992,9 @@ impl Config {
             if !base.cuda_capabilities.is_empty() {
                 config.cuda_capabilities = base.cuda_capabilities.clone();
             }
+            if base.rocm_support {
+                config.rocm_support = true;
+            }
             if !base.permitted_insecure_packages.is_empty() {
                 config.permitted_insecure_packages = base.permitted_insecure_packages.clone();
             }
@@ -1020,6 +1030,9 @@ impl Config {
                 }
                 if !platform_config.cuda_capabilities.is_empty() {
                     config.cuda_capabilities = platform_config.cuda_capabilities.clone();
+                }
+                if platform_config.rocm_support {
+                    config.rocm_support = true;
                 }
                 if !platform_config.permitted_insecure_packages.is_empty() {
                     config.permitted_insecure_packages =

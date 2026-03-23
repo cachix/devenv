@@ -121,6 +121,9 @@
             "type": "string"
           }
         },
+        "rocmSupport": {
+          "type": "boolean"
+        },
         "permittedInsecurePackages": {
           "type": "array",
           "items": {
@@ -158,6 +161,9 @@
           "items": {
             "type": "string"
           }
+        },
+        "rocmSupport": {
+          "type": "boolean"
         },
         "permittedInsecurePackages": {
           "type": "array",
