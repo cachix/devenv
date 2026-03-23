@@ -16,10 +16,6 @@ let
   '';
 in
 {
-  imports = [
-    (lib.mkRenamedOptionModule [ "mosquitto" "enable" ] [ "services" "mosquitto" "enable" ])
-  ];
-
   options.services.mosquitto = {
     enable = lib.mkEnableOption "mosquitto MQTT broker";
 
