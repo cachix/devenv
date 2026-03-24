@@ -224,6 +224,7 @@ __devenv_restore_path() {{
 }}
 
 __devenv_reload_hook() {{
+    __devenv_reload_apply
     __devenv_restore_path
 }}
 

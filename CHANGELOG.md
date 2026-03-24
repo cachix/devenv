@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- Shell environment now auto-reloads at the next prompt when watched files change, instead of requiring a manual Ctrl-Alt-R keybind ([#2595](https://github.com/cachix/devenv/issues/2595)).
 - Added `nixpkgs.rocmSupport` option to enable ROCm support in nixpkgs configuration.
 
 ## 2.0.6 (2026-03-22)
