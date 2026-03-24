@@ -1,12 +1,12 @@
-!!! tip "devenv 2.0: direnv is no longer needed for most workflows"
-    As of devenv 2.0, `devenv shell` supports **native shell reloading**. When you save a file,
-    devenv rebuilds in the background and you press `Ctrl+Alt+R` to apply the new environment.
-    Your shell stays interactive the entire time.
+!!! tip "devenv now supports native auto activation without direnv"
+    As of devenv 2.0, `devenv shell` supports **native shell reloading** and
+    [`devenv hook`](../auto-activation.md) provides **automatic activation when switching directories**
+    with no external dependencies.
 
-    For most development workflows, `devenv shell` is now the recommended approach.
-    direnv is still useful if you want **automatic activation when switching directories**.
+    For most workflows, `devenv shell` combined with `devenv hook` is the recommended approach.
+    direnv is still useful if you prefer in place environment modification without a subshell.
 
-    See the [devenv 2.0 announcement](../blog/posts/devenv-v2.0-a-fresh-interface-to-nix.md) for details.
+    See the [auto activation guide](../auto-activation.md) for setup instructions.
 
 You can configure ``devenv`` to **seamlessly switch development environments** when navigating between project directories.
 

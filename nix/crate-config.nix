@@ -130,6 +130,8 @@ in
   devenv-core = tracingUnstable;
   devenv-eval-cache = tracingUnstable;
   devenv-tasks = tracingUnstable;
+  devenv-reload = tracingUnstable;
+  devenv-shell = tracingUnstable;
   devenv-tui = tracingUnstable;
   devenv-activity = tracingUnstable;
 
