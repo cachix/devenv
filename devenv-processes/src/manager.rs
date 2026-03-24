@@ -21,6 +21,8 @@ use tracing::{debug, info, warn};
 pub enum ProcessCommand {
     /// Restart a running process, or start a stopped process
     Restart(String),
+    /// Stop a running process but keep it visible and restartable
+    Stop(String),
 }
 
 /// Request sent by a client to the native manager API socket.
@@ -798,6 +800,124 @@ impl NativeProcessManager {
         Ok(())
     }
 
+    /// Stop a process but keep it visible in the TUI and restartable via Ctrl+R.
+    ///
+    /// Unlike `stop()` which removes the entry (used during full shutdown), this
+    /// transitions the entry back to `NotStarted` so the process remains in the TUI
+    /// with "stopped" status and can be restarted with `start_not_started()`.
+    pub async fn stop_and_keep(&self, name: &str) -> Result<()> {
+        let handle = {
+            let mut processes = self.processes.write().await;
+
+            match processes.remove(name) {
+                Some(ProcessEntry::Active(handle)) => handle,
+                Some(entry @ (ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. })) => {
+                    let state = if matches!(entry, ProcessEntry::NotStarted { .. }) {
+                        "not running"
+                    } else {
+                        "waiting for dependencies"
+                    };
+                    processes.insert(name.to_string(), entry);
+                    bail!("Process {} is {}, cannot stop", name, state)
+                }
+                None => bail!("Process {} not found", name),
+            }
+        };
+
+        let grace_period = Duration::from_secs(5);
+        let ports = declared_ports(&handle.resources.config);
+
+        debug!("Stopping process (keeping visible): {}", name);
+        handle
+            .resources
+            .activity
+            .set_status(ProcessStatus::Stopping);
+
+        handle.supervisor_task.abort();
+
+        if let Some((stdout_reader, stderr_reader)) = handle.output_readers {
+            stdout_reader.abort();
+            stderr_reader.abort();
+        }
+
+        handle
+            .resources
+            .job
+            .stop_with_signal(Signal::Terminate, grace_period)
+            .await;
+
+        if !ports.is_empty() {
+            let release_status =
+                wait_for_port_conflicts_to_settle(&ports, PORT_RELEASE_TIMEOUT).await;
+
+            if !release_status.ownerless_ports().is_empty() {
+                let port_list = release_status
+                    .ownerless_ports()
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                debug!(
+                    "Ports still in transient ownerless teardown after stopping {}: {}",
+                    name, port_list
+                );
+            }
+
+            if !release_status.blocking_ports().is_empty() {
+                let port_list = release_status
+                    .blocking_ports()
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let details = release_status
+                    .owned
+                    .iter()
+                    .map(|(port, owner)| format!("{}{}", port, owner))
+                    .chain(
+                        release_status
+                            .unknown
+                            .iter()
+                            .map(|(port, reason)| format!("{} ({})", port, reason)),
+                    )
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                warn!(
+                    "Ports still busy after {:.1}s for process {}: {}",
+                    PORT_RELEASE_TIMEOUT.as_secs_f32(),
+                    name,
+                    port_list
+                );
+                debug!("Port release blockers for {}: {}", name, details);
+            }
+        }
+
+        handle.resources.activity.set_status(ProcessStatus::Stopped);
+
+        // Destructure to move Activity out without dropping it.
+        // Activity::drop sends Process::Complete which would remove it from the TUI.
+        let ProcessResources {
+            config,
+            activity,
+            job: _,
+            notify_socket: _,
+            status_tx: _,
+            stderr_log: _,
+        } = handle.resources;
+
+        self.processes.write().await.insert(
+            name.to_string(),
+            ProcessEntry::NotStarted { config, activity },
+        );
+
+        if let Some(notify) = &self.task_notify {
+            notify.notify_waiters();
+        }
+
+        info!("Process {} stopped", name);
+        Ok(())
+    }
+
     /// Signal all supervisors to shut down gracefully.
     ///
     /// This wakes the supervisor loops so they exit before we abort their tasks.
@@ -1226,6 +1346,12 @@ impl NativeProcessManager {
                     if let Err(e) = self.restart(&name).await {
                         warn!("Failed to restart process {}: {}", name, e);
                     }
+                }
+            }
+            ProcessCommand::Stop(name) => {
+                info!("Stopping process: {}", name);
+                if let Err(e) = self.stop_and_keep(&name).await {
+                    warn!("Failed to stop process {}: {}", name, e);
                 }
             }
         }
@@ -1876,5 +2002,131 @@ mod tests {
             vec![(6380, "socket inspection failed".to_string())]
         );
         assert!(status.ownerless_ports().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_stop_and_keep_transitions_to_not_started() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let config = long_running_config("keepable");
+
+        manager.start_command(&config, None).await.unwrap();
+        assert!(manager.list().await.contains(&"keepable".to_string()));
+
+        manager.stop_and_keep("keepable").await.unwrap();
+
+        assert!(
+            manager.list().await.is_empty(),
+            "active list should not contain a stopped process"
+        );
+        assert_eq!(
+            manager.get_phase("keepable").await,
+            Some(ProcessPhase::NotStarted),
+            "stopped process should transition to NotStarted"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_stop_and_keep_rejects_not_started() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let config = auto_start_off_config("idle");
+
+        manager.register_waiting(config, None).await;
+        manager.launch_waiting("idle").await.unwrap();
+
+        let result = manager.stop_and_keep("idle").await;
+        assert!(
+            result.is_err(),
+            "should reject stopping a NotStarted process"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_stop_and_keep_rejects_waiting() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let config = test_config("waiter");
+
+        manager.register_waiting(config, None).await;
+
+        let result = manager.stop_and_keep("waiter").await;
+        assert!(result.is_err(), "should reject stopping a Waiting process");
+    }
+
+    #[tokio::test]
+    async fn test_stop_and_keep_rejects_unknown() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        let result = manager.stop_and_keep("ghost").await;
+        assert!(result.is_err(), "should reject stopping an unknown process");
+    }
+
+    #[tokio::test]
+    async fn test_stop_and_keep_notifies_task_system() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        let notify = Arc::new(Notify::new());
+        manager.set_task_notify(notify.clone());
+
+        let config = long_running_config("notifier");
+        manager.start_command(&config, None).await.unwrap();
+
+        let notified = notify.notified();
+        tokio::pin!(notified);
+
+        manager.stop_and_keep("notifier").await.unwrap();
+
+        let completed = tokio::time::timeout(Duration::from_secs(5), notified).await;
+        assert!(
+            completed.is_ok(),
+            "task_notify should fire after stop_and_keep"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_stop_and_keep_then_restart() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let config = long_running_config("restartable");
+
+        manager.start_command(&config, None).await.unwrap();
+        assert!(manager.list().await.contains(&"restartable".to_string()));
+
+        manager.stop_and_keep("restartable").await.unwrap();
+        assert_eq!(
+            manager.get_phase("restartable").await,
+            Some(ProcessPhase::NotStarted)
+        );
+
+        manager.start_not_started("restartable").await.unwrap();
+        assert!(
+            manager.list().await.contains(&"restartable".to_string()),
+            "process should be active again after restart"
+        );
+
+        let _ = manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn test_handle_command_stop() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let config = long_running_config("cmd-stop");
+
+        manager.start_command(&config, None).await.unwrap();
+        assert!(manager.list().await.contains(&"cmd-stop".to_string()));
+
+        manager
+            .handle_command(ProcessCommand::Stop("cmd-stop".to_string()))
+            .await;
+
+        assert_eq!(
+            manager.get_phase("cmd-stop").await,
+            Some(ProcessPhase::NotStarted),
+            "handle_command(Stop) should call stop_and_keep"
+        );
     }
 }

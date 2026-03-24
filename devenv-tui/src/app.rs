@@ -596,7 +596,6 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             && let Ok(ui) = ui_state.read()
                             && let Some(activity_id) = ui.selected_activity
                         {
-                            // Get the process name from the activity
                             if let Ok(model) = activity_model.read()
                                 && let Some(activity) = model.get_activity(activity_id)
                                 && matches!(
@@ -605,6 +604,22 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 )
                             {
                                 let _ = tx.try_send(ProcessCommand::Restart(activity.name.clone()));
+                            }
+                        }
+                    }
+                    KeyCode::Char('x') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                        // Stop selected process (only if active)
+                        if let Some(tx) = command_tx.as_ref()
+                            && let Ok(ui) = ui_state.read()
+                            && let Some(activity_id) = ui.selected_activity
+                        {
+                            if let Ok(model) = activity_model.read()
+                                && let Some(activity) = model.get_activity(activity_id)
+                                && let crate::model::ActivityVariant::Process(ref proc) =
+                                    activity.variant
+                                && proc.status.is_stoppable()
+                            {
+                                let _ = tx.try_send(ProcessCommand::Stop(activity.name.clone()));
                             }
                         }
                     }

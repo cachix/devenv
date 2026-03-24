@@ -370,6 +370,14 @@ impl ProcessStatus {
                 | Self::Stopping
         )
     }
+
+    /// Whether the process can be stopped by the user.
+    pub fn is_stoppable(&self) -> bool {
+        matches!(
+            self,
+            Self::Starting | Self::Running | Self::Ready | Self::Restarting
+        )
+    }
 }
 
 /// Operation activity events - generic devenv operations with log support
@@ -776,5 +784,17 @@ mod tests {
             }
             _ => panic!("Expected Operation::Complete event"),
         }
+    }
+
+    #[test]
+    fn test_is_stoppable() {
+        assert!(!ProcessStatus::NotStarted.is_stoppable());
+        assert!(!ProcessStatus::Waiting.is_stoppable());
+        assert!(ProcessStatus::Starting.is_stoppable());
+        assert!(ProcessStatus::Running.is_stoppable());
+        assert!(ProcessStatus::Ready.is_stoppable());
+        assert!(ProcessStatus::Restarting.is_stoppable());
+        assert!(!ProcessStatus::Stopping.is_stoppable());
+        assert!(!ProcessStatus::Stopped.is_stoppable());
     }
 }
