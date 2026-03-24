@@ -40,6 +40,8 @@ pub struct DevenvShellBuilder {
     shell_cache_key: Option<devenv_eval_cache::EvalCacheKey>,
     /// Environment variables exported by enterShell tasks (e.g. VIRTUAL_ENV, PATH from venv)
     task_exports: BTreeMap<String, String>,
+    /// Messages from enterShell tasks to display when entering the shell
+    task_messages: Vec<String>,
 }
 
 impl DevenvShellBuilder {
@@ -63,6 +65,7 @@ impl DevenvShellBuilder {
         eval_cache_pool: Option<sqlx::SqlitePool>,
         shell_cache_key: Option<devenv_eval_cache::EvalCacheKey>,
         task_exports: BTreeMap<String, String>,
+        task_messages: Vec<String>,
     ) -> Self {
         Self {
             handle,
@@ -76,6 +79,7 @@ impl DevenvShellBuilder {
             eval_cache_pool,
             shell_cache_key,
             task_exports,
+            task_messages,
         }
     }
 }
@@ -93,7 +97,9 @@ impl ShellBuilder for DevenvShellBuilder {
             // (e.g. VIRTUAL_ENV, PATH with venv) after the Nix shell env so they take precedence.
             let env_script_path = self.dotfile.join("shell-env.sh");
             let mut env_script = self.initial_env_script.clone();
-            env_script.push_str(&Devenv::format_task_exports_bash(&self.task_exports));
+            let dialect = BashDialect;
+            env_script.push_str(&dialect.format_task_exports(&self.task_exports));
+            env_script.push_str(&dialect.format_task_messages(&self.task_messages));
             std::fs::write(&env_script_path, &env_script)
                 .map_err(|e| BuildError::new(format!("Failed to write env script: {}", e)))?;
 

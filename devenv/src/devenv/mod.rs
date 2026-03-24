@@ -232,6 +232,10 @@ pub struct Devenv {
     // run_enter_shell_tasks(). Injected into the bash script by prepare_shell()
     // so they take effect AFTER the Nix shell env is applied.
     task_exports: std::sync::Mutex<BTreeMap<String, String>>,
+
+    // Task messages to display when entering the shell, set by
+    // run_enter_shell_tasks(). Injected as echo statements into the bash script.
+    task_messages: std::sync::Mutex<Vec<String>>,
 }
 
 /// Sanitize profile name to be filesystem-safe
@@ -415,6 +419,7 @@ impl Devenv {
             native_process_manager: Arc::new(OnceCell::new()),
             shutdown: options.shutdown,
             task_exports: std::sync::Mutex::new(BTreeMap::new()),
+            task_messages: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -665,9 +670,17 @@ impl Devenv {
 
         // Inject task-exported env vars (e.g., PATH with venv/bin, VIRTUAL_ENV)
         // after the Nix shell env is applied so they aren't overridden.
+        let dialect = BashDialect;
         {
             let exports = self.task_exports.lock().unwrap();
-            script.push_str(&Self::format_task_exports_bash(&exports));
+            script.push_str(&dialect.format_task_exports(&exports));
+        }
+
+        // Print task messages only in interactive mode to avoid corrupting stdout
+        // when running `devenv shell -- some-command` where output may be piped.
+        if cmd.is_none() {
+            let messages = self.task_messages.lock().unwrap();
+            script.push_str(&dialect.format_task_messages(&messages));
         }
 
         // Add command for non-interactive mode
@@ -699,7 +712,6 @@ impl Devenv {
                 shell_cmd.arg(&script_path);
             }
             None => {
-                let dialect = BashDialect;
                 let interactive_args = dialect.interactive_args();
                 shell_cmd.args(&interactive_args.prefix);
                 shell_cmd.arg(&script_path);
@@ -986,7 +998,7 @@ impl Devenv {
         pre_captured_envs: Option<HashMap<String, String>>,
         verbosity: tasks::VerbosityLevel,
         tui: bool,
-    ) -> Result<BTreeMap<String, String>> {
+    ) -> Result<(BTreeMap<String, String>, Vec<String>)> {
         self.assemble().await?;
 
         let envs = match pre_captured_envs {
@@ -997,7 +1009,7 @@ impl Devenv {
         let task_configs = self.load_tasks().await?;
         // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
         // Task failures are shown in the TUI/UI output, no need to bail here.
-        let (_status, exports) = self
+        let (_status, exports, messages) = self
             .run_tasks_with_roots(
                 vec!["devenv:enterShell".to_string()],
                 task_configs,
@@ -1006,7 +1018,7 @@ impl Devenv {
                 tui,
             )
             .await?;
-        Ok(exports)
+        Ok((exports, messages))
     }
 
     /// Run tasks with the given roots, storing exports on self for prepare_shell().
@@ -1017,7 +1029,7 @@ impl Devenv {
         envs: HashMap<String, String>,
         verbosity: tasks::VerbosityLevel,
         tui: bool,
-    ) -> Result<(tasks::TasksStatus, BTreeMap<String, String>)> {
+    ) -> Result<(tasks::TasksStatus, BTreeMap<String, String>, Vec<String>)> {
         let config = tasks::Config {
             roots,
             tasks: task_configs,
@@ -1037,9 +1049,13 @@ impl Devenv {
         let (status, outputs) = run_tasks_with_ui(tasks, verbosity, tui).await?;
 
         let exports = outputs.collect_env_exports();
-        // Store on self so prepare_shell() can inject them into the bash script
-        *self.task_exports.lock().unwrap() = exports.clone();
-        Ok((status, exports))
+        let messages = outputs.collect_messages();
+        // Store on self so prepare_shell() can inject them into the bash script.
+        // Clone for return value, move originals into Mutex.
+        let ret = (status, exports.clone(), messages.clone());
+        *self.task_exports.lock().unwrap() = exports;
+        *self.task_messages.lock().unwrap() = messages;
+        Ok(ret)
     }
 
     /// Get the path to bash.
@@ -1146,22 +1162,6 @@ impl Devenv {
         Ok(envs)
     }
 
-    /// Format a map of task exports as bash `export KEY=VALUE` lines.
-    ///
-    /// Keys are already sorted (BTreeMap), giving deterministic output (important for direnv diffing).
-    pub fn format_task_exports_bash(exports: &BTreeMap<String, String>) -> String {
-        use std::borrow::Cow;
-        let mut result = String::with_capacity(exports.len() * 50);
-        for (key, value) in exports {
-            result.push_str("export ");
-            result.push_str(&shell_escape::escape(Cow::Borrowed(key)));
-            result.push('=');
-            result.push_str(&shell_escape::escape(Cow::Borrowed(value)));
-            result.push('\n');
-        }
-        result
-    }
-
     /// Assemble, build dev environment, cache it, and capture shell env vars.
     async fn configure_shell(&self) -> Result<HashMap<String, String>> {
         let phase1 = Activity::operation("Configuring shell")
@@ -1194,7 +1194,7 @@ impl Devenv {
         let mut envs = envs;
         {
             let task_configs = self.load_tasks().await?;
-            let (status, exports) = self
+            let (status, exports, _messages) = self
                 .run_tasks_with_roots(
                     vec!["devenv:enterTest".to_string()],
                     task_configs,
@@ -1395,7 +1395,7 @@ impl Devenv {
 
         // ── Phase 2: Loading and running enterShell tasks ─────────────
         let task_configs = self.load_tasks().await?;
-        let (_status, exports) = self
+        let (_status, exports, _messages) = self
             .run_tasks_with_roots(
                 vec!["devenv:enterShell".to_string()],
                 task_configs,

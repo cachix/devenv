@@ -7182,6 +7182,10 @@ rec {
             packageId = "portable-pty";
           }
           {
+            name = "shell-escape";
+            packageId = "shell-escape";
+          }
+          {
             name = "thiserror";
             packageId = "thiserror 2.0.18";
           }

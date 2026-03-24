@@ -1,4 +1,6 @@
 use super::{InteractiveArgs, RcfileContext, ShellDialect};
+use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// Bash shell dialect implementation.
@@ -247,5 +249,27 @@ fi
 
     fn prompt_prefix(&self) -> &str {
         r#"PS1="(devenv) ${PS1:-}"#
+    }
+
+    fn format_task_exports(&self, exports: &BTreeMap<String, String>) -> String {
+        let mut result = String::with_capacity(exports.len() * 50);
+        for (key, value) in exports {
+            result.push_str("export ");
+            result.push_str(&shell_escape::escape(Cow::Borrowed(key)));
+            result.push('=');
+            result.push_str(&shell_escape::escape(Cow::Borrowed(value)));
+            result.push('\n');
+        }
+        result
+    }
+
+    fn format_task_messages(&self, messages: &[String]) -> String {
+        let mut result = String::with_capacity(messages.len() * 40);
+        for msg in messages {
+            result.push_str("printf '%s\\n' ");
+            result.push_str(&shell_escape::escape(Cow::Borrowed(msg)));
+            result.push('\n');
+        }
+        result
     }
 }

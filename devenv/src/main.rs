@@ -15,6 +15,7 @@ use devenv_core::{
     CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings,
     config::{self, Config, NixpkgsConfig},
 };
+use devenv_shell::dialect::ShellDialect;
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::collections::BTreeMap;
 use std::io::IsTerminal;
@@ -705,6 +706,7 @@ async fn dispatch_command(
     match command {
         Commands::Shell { cmd, ref args } => {
             // Non-PTY shell path (PTY is handled as early return in run_backend)
+            // Messages are injected into the shell script by prepare_shell() via self.task_messages.
             devenv.run_enter_shell_tasks(None, verbosity, tui).await?;
 
             let shell_config = match cmd {
@@ -864,14 +866,17 @@ async fn dispatch_command(
         }
         Commands::DirenvExport => {
             let mut output = devenv.print_dev_env(false).await?;
+            // Discard messages: direnv captures stdout as env var definitions,
+            // so echo statements would corrupt the output.
             let task_exports = match devenv.run_enter_shell_tasks(None, verbosity, tui).await {
-                Ok(exports) => exports,
+                Ok((exports, _messages)) => exports,
                 Err(e) => {
                     tracing::warn!("enterShell tasks failed, skipping exports: {e}");
                     BTreeMap::new()
                 }
             };
-            output.push_str(&Devenv::format_task_exports_bash(&task_exports));
+            let dialect = devenv_shell::dialect::BashDialect;
+            output.push_str(&dialect.format_task_exports(&task_exports));
             Ok(CommandResult::Print(output))
         }
         Commands::GenerateJSONSchema => {
@@ -959,9 +964,9 @@ async fn run_reload_shell(
     );
 
     // Run enterShell tasks with subprocess executor before spawning PTY.
-    // Task exports are stored in devenv.task_exports and injected into the
-    // shell script by prepare_shell().
-    let task_exports = devenv_guard
+    // Task exports and messages are stored in devenv.task_exports / task_messages
+    // and injected into the bash script by prepare_shell().
+    let (task_exports, task_messages) = devenv_guard
         .run_enter_shell_tasks(None, verbosity, tui)
         .await?;
 
@@ -989,6 +994,7 @@ async fn run_reload_shell(
         eval_cache_pool,
         shell_cache_key,
         task_exports,
+        task_messages,
     );
 
     // Set up communication channels between coordinator and shell runner
