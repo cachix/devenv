@@ -19,6 +19,7 @@
   services.memcached.enable = true;
   services.minio.enable = true;
   services.mongodb.enable = true;
+  services.mosquitto.enable = true;
   services.mysql.enable = true;
   services.nats.enable = true;
   services.nginx.enable = true;
