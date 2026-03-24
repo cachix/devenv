@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-When creating git commits, add entry to CHANGELOG.md (skip for src/modules/* and docs/*):
+When creating git commits, add entry to CHANGELOG.md (skip for src/modules/* and docs/* and refactorings not affecting behavior):
 
 ## Build & Development Commands
 
@@ -119,6 +119,12 @@ Environment variables `DEVENV_TRACE_OUTPUT` and `DEVENV_TRACE_FORMAT` can be use
 - **Naming**: `snake_case` for functions/variables, `CamelCase` for types
 - **Error Handling**: Use `bail!()` not `panic!()`, propagate with `?`
 - **No unsafe**: Don't use `unsafe` code
+
+## Docs
+
+When adding documentation in `docs/`, make sure to note the version the change was added in by checking `Cargo.toml`.
+
+    !!! tip "New in version X.Y.Y"
 
 ## Changelog
 
