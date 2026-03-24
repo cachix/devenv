@@ -315,14 +315,18 @@ pub fn is_process_dep_satisfied(
         // Waiting: nothing satisfied yet
         (ProcessPhase::Waiting, _) => DepSatisfaction::NotYet,
 
-        // NotStarted (auto start off): @completed is satisfied immediately,
+        // NotStarted (auto start off) or Stopped (explicitly stopped by user):
+        // @completed is satisfied immediately,
         // @started/@ready keep waiting (the process can be started manually later),
         // @succeeded is never satisfiable without actual execution.
-        (ProcessPhase::NotStarted, DependencyKind::Completed) => DepSatisfaction::Satisfied,
-        (ProcessPhase::NotStarted, DependencyKind::Started | DependencyKind::Ready) => {
-            DepSatisfaction::NotYet
+        (ProcessPhase::NotStarted | ProcessPhase::Stopped, DependencyKind::Completed) => {
+            DepSatisfaction::Satisfied
         }
-        (ProcessPhase::NotStarted, _) => DepSatisfaction::NeverSatisfiable,
+        (
+            ProcessPhase::NotStarted | ProcessPhase::Stopped,
+            DependencyKind::Started | DependencyKind::Ready,
+        ) => DepSatisfaction::NotYet,
+        (ProcessPhase::NotStarted | ProcessPhase::Stopped, _) => DepSatisfaction::NeverSatisfiable,
 
         // Starting: @started is satisfied, everything else not yet
         (ProcessPhase::Starting, DependencyKind::Started) => DepSatisfaction::Satisfied,
@@ -464,8 +468,9 @@ mod tests {
         DependencyKind::Completed,
     ];
 
-    const ALL_PHASES: [ProcessPhase; 5] = [
+    const ALL_PHASES: [ProcessPhase; 6] = [
         ProcessPhase::NotStarted,
+        ProcessPhase::Stopped,
         ProcessPhase::Waiting,
         ProcessPhase::Starting,
         ProcessPhase::Ready,
@@ -523,6 +528,11 @@ mod tests {
             (ProcessPhase::NotStarted, ready, NotYet),
             (ProcessPhase::NotStarted, succeeded, NeverSatisfiable),
             (ProcessPhase::NotStarted, completed, Satisfied),
+            // Stopped (same as NotStarted)
+            (ProcessPhase::Stopped, started, NotYet),
+            (ProcessPhase::Stopped, ready, NotYet),
+            (ProcessPhase::Stopped, succeeded, NeverSatisfiable),
+            (ProcessPhase::Stopped, completed, Satisfied),
             // Starting
             (ProcessPhase::Starting, started, Satisfied),
             (ProcessPhase::Starting, ready, NotYet),

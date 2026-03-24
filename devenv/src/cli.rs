@@ -625,13 +625,13 @@ pub struct UpArgs {
 #[derive(Subcommand, Clone)]
 #[clap(about = "Start or stop processes. https://devenv.sh/processes/")]
 pub enum ProcessesCommand {
-    #[command(alias = "start", about = "Start processes in the foreground.")]
+    #[command(about = "Start processes in the foreground.")]
     Up {
         #[command(flatten)]
         up_args: UpArgs,
     },
 
-    #[command(alias = "stop", about = "Stop processes running in the background.")]
+    #[command(about = "Stop processes running in the background.")]
     Down {},
 
     #[command(about = "Wait for all processes to be ready.")]
@@ -639,7 +639,56 @@ pub enum ProcessesCommand {
         #[arg(long, default_value = "120", help = "Timeout in seconds.")]
         timeout: u64,
     },
-    // TODO: Status/Attach
+
+    #[command(about = "List all managed processes and their status.")]
+    List {},
+
+    #[command(about = "Get the status of a process.")]
+    Status {
+        #[arg(help = "Name of the process.")]
+        name: String,
+    },
+
+    #[command(about = "Get logs for a process.")]
+    Logs {
+        #[arg(help = "Name of the process.")]
+        name: String,
+
+        #[arg(
+            short = 'n',
+            long,
+            default_value = "100",
+            help = "Number of lines to show."
+        )]
+        lines: usize,
+
+        #[arg(long, conflicts_with = "stderr", help = "Show only stdout.")]
+        stdout: bool,
+
+        #[arg(long, conflicts_with = "stdout", help = "Show only stderr.")]
+        stderr: bool,
+    },
+
+    #[command(about = "Restart a process.")]
+    Restart {
+        #[arg(help = "Name of the process.")]
+        name: String,
+    },
+
+    #[command(about = "Start a process (or all processes if no name given).")]
+    Start {
+        #[arg(help = "Name of the process. If omitted, starts all processes (same as 'up').")]
+        name: Option<String>,
+
+        #[arg(short, long, help = "Start processes in the background.")]
+        detach: bool,
+    },
+
+    #[command(about = "Stop a running process (or all processes if no name given).")]
+    Stop {
+        #[arg(help = "Name of the process. If omitted, stops all processes (same as 'down').")]
+        name: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Clone)]
