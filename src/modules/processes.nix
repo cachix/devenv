@@ -415,12 +415,6 @@ in
       description = "The command to run each process through devenv-tasks with exec prefix for proper signal handling.";
     };
 
-    process.nativeConfigJson = lib.mkOption {
-      type = types.package;
-      internal = true;
-      default = pkgs.writeText "process-config.json" (builtins.toJSON { });
-      description = "JSON configuration for native process manager";
-    };
   };
 
   config = lib.mkMerge [
@@ -491,7 +485,9 @@ in
                 restart = process.restart;
                 listen = process.listen;
                 ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
-                watch = process.watch;
+                watch = process.watch // {
+                  paths = map toString process.watch.paths;
+                };
                 watchdog = process.watchdog;
               };
             };

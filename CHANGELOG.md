@@ -2,6 +2,10 @@
 
 ## X.Y.Z (unreleased)
 
+### Bug Fixes
+
+- Fixed process `watch.paths` not triggering restarts because Nix paths were serialized as store paths instead of source directory paths ([#2657](https://github.com/cachix/devenv/issues/2657)).
+
 ### Improvements
 
 - Added `nixpkgs.rocmSupport` option to enable ROCm support in nixpkgs configuration.
