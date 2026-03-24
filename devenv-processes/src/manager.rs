@@ -32,6 +32,26 @@ pub enum ProcessCommand {
 pub enum ApiRequest {
     /// Block until every managed process is ready, then respond.
     Wait,
+    /// List all managed processes and their status.
+    List,
+    /// Get the status of a single process.
+    Status { name: String },
+    /// Get the last N lines of stdout/stderr logs for a process.
+    Logs { name: String, lines: Option<usize> },
+    /// Restart a process (or start it if not started).
+    Restart { name: String },
+    /// Start a process that has `start.enable = false`.
+    Start { name: String },
+    /// Stop a running process.
+    Stop { name: String },
+}
+
+/// Summary information about a managed process.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessInfo {
+    pub name: String,
+    pub phase: ProcessPhase,
+    pub restart_count: usize,
 }
 
 /// Response sent by the native manager API socket.
@@ -42,6 +62,14 @@ pub enum ApiResponse {
     Ready,
     /// An error occurred.
     Error { message: String },
+    /// List of all managed processes.
+    ProcessList { processes: Vec<ProcessInfo> },
+    /// Detailed info about a single process.
+    ProcessDetail { info: ProcessInfo },
+    /// Log output for a process.
+    ProcessLogs { stdout: String, stderr: String },
+    /// Operation completed successfully.
+    Ok,
 }
 
 use watchexec_supervisor::{
@@ -94,10 +122,13 @@ pub struct JobHandle {
 ///
 /// Shared between the process manager and the task system to avoid
 /// duplicate enum definitions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ProcessPhase {
     /// Process has `start.enable = false`; not yet launched.
     NotStarted,
+    /// Process was explicitly stopped by the user.
+    Stopped,
     /// Registered, waiting for dependencies before starting.
     Waiting,
     /// Launched, readiness not yet confirmed.
@@ -106,6 +137,19 @@ pub enum ProcessPhase {
     Ready,
     /// Supervisor gave up (crash loop).
     GaveUp,
+}
+
+impl std::fmt::Display for ProcessPhase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotStarted => write!(f, "not_started"),
+            Self::Stopped => write!(f, "stopped"),
+            Self::Waiting => write!(f, "waiting"),
+            Self::Starting => write!(f, "starting"),
+            Self::Ready => write!(f, "ready"),
+            Self::GaveUp => write!(f, "gave_up"),
+        }
+    }
 }
 
 impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
@@ -124,7 +168,9 @@ fn active_names(processes: &HashMap<String, ProcessEntry>) -> Vec<String> {
         .iter()
         .filter_map(|(name, entry)| match entry {
             ProcessEntry::Active(_) => Some(name.clone()),
-            ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. } => None,
+            ProcessEntry::NotStarted { .. }
+            | ProcessEntry::Stopped { .. }
+            | ProcessEntry::Waiting { .. } => None,
         })
         .collect()
 }
@@ -133,6 +179,11 @@ fn active_names(processes: &HashMap<String, ProcessEntry>) -> Vec<String> {
 enum ProcessEntry {
     /// Process has `start.enable = false`: visible in TUI but not yet launched.
     NotStarted {
+        config: ProcessConfig,
+        activity: Activity,
+    },
+    /// Process was explicitly stopped by the user; can be started again.
+    Stopped {
         config: ProcessConfig,
         activity: Activity,
     },
@@ -383,6 +434,7 @@ impl NativeProcessManager {
         let processes = self.processes.read().await;
         match processes.get(name) {
             Some(ProcessEntry::NotStarted { .. }) => Some(ProcessPhase::NotStarted),
+            Some(ProcessEntry::Stopped { .. }) => Some(ProcessPhase::Stopped),
             Some(ProcessEntry::Waiting { .. }) => Some(ProcessPhase::Waiting),
             Some(ProcessEntry::Active(handle)) => Some(handle.status_rx.borrow().phase.into()),
             None => None,
@@ -414,7 +466,7 @@ impl NativeProcessManager {
 
     /// Path to the API socket
     pub fn api_socket_path(&self) -> PathBuf {
-        self.state_dir.join("native.sock")
+        self.state_dir.join(crate::NATIVE_SOCKET_NAME)
     }
 
     /// Create a TUI activity for a process without launching it.
@@ -705,11 +757,16 @@ impl NativeProcessManager {
 
             match processes.remove(name) {
                 Some(ProcessEntry::Active(handle)) => handle,
-                Some(entry @ (ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. })) => {
-                    let state = if matches!(entry, ProcessEntry::NotStarted { .. }) {
-                        "auto start off"
-                    } else {
-                        "waiting for dependencies"
+                Some(
+                    entry @ (ProcessEntry::NotStarted { .. }
+                    | ProcessEntry::Stopped { .. }
+                    | ProcessEntry::Waiting { .. }),
+                ) => {
+                    let state = match &entry {
+                        ProcessEntry::NotStarted { .. } => "auto start off",
+                        ProcessEntry::Stopped { .. } => "already stopped",
+                        ProcessEntry::Waiting { .. } => "waiting for dependencies",
+                        ProcessEntry::Active(_) => unreachable!(),
                     };
                     processes.insert(name.to_string(), entry);
                     bail!("Process {} is {}, cannot stop", name, state)
@@ -789,10 +846,19 @@ impl NativeProcessManager {
             }
         }
 
-        // Mark as stopped so the TUI shows the correct status
-        // before the Complete event arrives from Activity::drop.
+        // Mark as stopped so the TUI shows the correct status.
         handle.resources.activity.set_status(ProcessStatus::Stopped);
-        handle.resources.activity.reset();
+
+        // Re-insert the process as Stopped so it can be started again
+        // via `start` or `restart`. Keeping the activity alive also
+        // prevents the Complete event that Activity::drop would send.
+        let ProcessResources {
+            config, activity, ..
+        } = handle.resources;
+        self.processes
+            .write()
+            .await
+            .insert(name.to_string(), ProcessEntry::Stopped { config, activity });
 
         info!("Process {} stopped", name);
         Ok(())
@@ -840,9 +906,17 @@ impl NativeProcessManager {
         let mut processes = self.processes.write().await;
         let handle = match processes.get_mut(name) {
             Some(ProcessEntry::Active(h)) => h,
-            Some(_) => {
-                debug!("restart: process {} is not active, ignoring", name);
-                return Ok(());
+            Some(ProcessEntry::NotStarted { .. }) => {
+                bail!(
+                    "Process {} has auto start disabled, use 'start' instead",
+                    name
+                )
+            }
+            Some(ProcessEntry::Stopped { .. }) => {
+                bail!("Process {} is stopped, use 'start' instead", name)
+            }
+            Some(ProcessEntry::Waiting { .. }) => {
+                bail!("Process {} is waiting for dependencies", name)
             }
             None => bail!("Process {} not running", name),
         };
@@ -906,18 +980,19 @@ impl NativeProcessManager {
         Ok(())
     }
 
-    /// Start a previously not-started process, reusing its existing TUI activity.
+    /// Start a previously not-started or stopped process, reusing its existing TUI activity.
     pub async fn start_not_started(&self, name: &str) -> Result<Arc<Job>> {
         let (config, activity) = {
             let mut processes = self.processes.write().await;
             match processes.get(name) {
-                Some(ProcessEntry::NotStarted { .. }) => {}
-                Some(_) => bail!("Process {} is not in not-started state", name),
+                Some(ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. }) => {}
+                Some(_) => bail!("Process {} is already running", name),
                 None => bail!("Process {} not found", name),
             }
             // Safe: we just checked the variant above.
             match processes.remove(name).unwrap() {
-                ProcessEntry::NotStarted { config, activity } => (config, activity),
+                ProcessEntry::NotStarted { config, activity }
+                | ProcessEntry::Stopped { config, activity } => (config, activity),
                 _ => unreachable!(),
             }
         };
@@ -998,11 +1073,9 @@ impl NativeProcessManager {
     ///
     /// Listens on `state_dir/native.sock` using newline-delimited JSON (`ApiRequest`/`ApiResponse`).
     /// Must be called after all initial processes have been registered in `jobs`.
-    pub fn start_api_server(&self) -> Result<()> {
+    pub fn start_api_server(self: &Arc<Self>) -> Result<()> {
         let sock_path = self.api_socket_path();
         let _ = std::fs::remove_file(&sock_path);
-        let processes = self.processes.clone();
-        let task_notify = self.task_notify.clone();
 
         let listener = std::os::unix::net::UnixListener::bind(&sock_path)
             .into_diagnostic()
@@ -1011,13 +1084,13 @@ impl NativeProcessManager {
         let listener = tokio::net::UnixListener::from_std(listener).into_diagnostic()?;
         info!("API server listening on {}", sock_path.display());
 
+        let manager = Arc::clone(self);
         tokio::spawn(async move {
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {
-                        let processes = processes.clone();
-                        let task_notify = task_notify.clone();
-                        tokio::spawn(Self::handle_api_client(stream, processes, task_notify));
+                        let manager = Arc::clone(&manager);
+                        tokio::spawn(Self::handle_api_client(stream, manager));
                     }
                     Err(e) => {
                         warn!("API accept error: {}", e);
@@ -1030,12 +1103,78 @@ impl NativeProcessManager {
         Ok(())
     }
 
+    /// Build a `ProcessInfo` from a process entry.
+    fn process_info(name: &str, entry: &ProcessEntry) -> ProcessInfo {
+        let (phase, restart_count) = match entry {
+            ProcessEntry::NotStarted { .. } => (ProcessPhase::NotStarted, 0),
+            ProcessEntry::Stopped { .. } => (ProcessPhase::Stopped, 0),
+            ProcessEntry::Waiting { .. } => (ProcessPhase::Waiting, 0),
+            ProcessEntry::Active(handle) => {
+                let status = handle.status_rx.borrow();
+                (ProcessPhase::from(status.phase), status.restart_count)
+            }
+        };
+        ProcessInfo {
+            name: name.to_string(),
+            phase,
+            restart_count,
+        }
+    }
+
+    fn process_not_found(name: &str) -> ApiResponse {
+        ApiResponse::Error {
+            message: format!("process '{}' not found", name),
+        }
+    }
+
+    /// Read the last N lines from a file, returning them as a single string.
+    ///
+    /// Reads at most 1 MB from the end of the file to avoid loading
+    /// arbitrarily large log files into memory.
+    fn read_tail(path: &std::path::Path, max_lines: usize) -> String {
+        use std::io::{Read, Seek, SeekFrom};
+
+        let Ok(mut file) = std::fs::File::open(path) else {
+            return String::new();
+        };
+        let Ok(metadata) = file.metadata() else {
+            return String::new();
+        };
+
+        let file_size = metadata.len();
+        let read_size = file_size.min(1024 * 1024) as usize;
+        let start_pos = file_size.saturating_sub(read_size as u64);
+
+        if file.seek(SeekFrom::Start(start_pos)).is_err() {
+            return String::new();
+        }
+
+        let mut bytes = Vec::with_capacity(read_size);
+        if file.read_to_end(&mut bytes).is_err() {
+            return String::new();
+        }
+
+        let buf = String::from_utf8_lossy(&bytes);
+
+        // Scan backwards to find the start of the last N lines
+        let mut newline_count = 0;
+        let start_byte = buf
+            .rmatch_indices('\n')
+            .find_map(|(i, _)| {
+                newline_count += 1;
+                if newline_count > max_lines {
+                    Some(i + 1)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(0);
+
+        buf[start_byte..].trim_end_matches('\n').to_string()
+    }
+
     /// Handle a single API client connection.
-    async fn handle_api_client(
-        stream: tokio::net::UnixStream,
-        processes: Arc<RwLock<HashMap<String, ProcessEntry>>>,
-        task_notify: Option<Arc<Notify>>,
-    ) {
+    async fn handle_api_client(stream: tokio::net::UnixStream, manager: Arc<Self>) {
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
         let (reader, mut writer) = stream.into_split();
@@ -1047,6 +1186,8 @@ impl NativeProcessManager {
 
         let response = match serde_json::from_str::<ApiRequest>(&line) {
             Ok(ApiRequest::Wait) => {
+                let processes = &manager.processes;
+                let task_notify = &manager.task_notify;
                 // Poll until no Waiting entries remain and all Active processes
                 // are ready. This avoids a race where the API server starts
                 // before processes transition from Waiting to Active.
@@ -1089,7 +1230,9 @@ impl NativeProcessManager {
                             ProcessEntry::Active(handle) => {
                                 Some((name.clone(), handle.status_rx.clone()))
                             }
-                            ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. } => None,
+                            ProcessEntry::NotStarted { .. }
+                            | ProcessEntry::Stopped { .. }
+                            | ProcessEntry::Waiting { .. } => None,
                         })
                         .collect();
                     drop(procs);
@@ -1115,6 +1258,94 @@ impl NativeProcessManager {
 
                 ApiResponse::Ready
             }
+            Ok(ApiRequest::List) => {
+                let procs = manager.processes.read().await;
+                let mut list: Vec<ProcessInfo> = procs
+                    .iter()
+                    .map(|(name, entry)| Self::process_info(name, entry))
+                    .collect();
+                list.sort_by(|a, b| a.name.cmp(&b.name));
+                ApiResponse::ProcessList { processes: list }
+            }
+            Ok(ApiRequest::Status { name }) => {
+                let procs = manager.processes.read().await;
+                match procs.get(&name) {
+                    Some(entry) => ApiResponse::ProcessDetail {
+                        info: Self::process_info(&name, entry),
+                    },
+                    None => Self::process_not_found(&name),
+                }
+            }
+            Ok(ApiRequest::Logs { name, lines }) => {
+                let max_lines = lines.unwrap_or(100);
+                let procs = manager.processes.read().await;
+                if !procs.contains_key(&name) {
+                    Self::process_not_found(&name)
+                } else {
+                    drop(procs);
+                    let (stdout_path, stderr_path) =
+                        crate::command::log_paths(&manager.state_dir, &name);
+                    let (stdout, stderr) = tokio::task::spawn_blocking(move || {
+                        let stdout = Self::read_tail(&stdout_path, max_lines);
+                        let stderr = Self::read_tail(&stderr_path, max_lines);
+                        (stdout, stderr)
+                    })
+                    .await
+                    .unwrap_or_default();
+                    ApiResponse::ProcessLogs { stdout, stderr }
+                }
+            }
+            Ok(ApiRequest::Restart { name }) => {
+                let procs = manager.processes.read().await;
+                match procs.get(&name) {
+                    Some(ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. }) => {
+                        drop(procs);
+                        match manager.start_not_started(&name).await {
+                            Ok(_) => ApiResponse::Ok,
+                            Err(e) => ApiResponse::Error {
+                                message: format!("failed to restart process '{}': {}", name, e),
+                            },
+                        }
+                    }
+                    Some(_) => {
+                        drop(procs);
+                        match manager.restart(&name).await {
+                            Ok(()) => ApiResponse::Ok,
+                            Err(e) => ApiResponse::Error {
+                                message: format!("failed to restart process '{}': {}", name, e),
+                            },
+                        }
+                    }
+                    None => Self::process_not_found(&name),
+                }
+            }
+            Ok(ApiRequest::Start { name }) => {
+                let procs = manager.processes.read().await;
+                match procs.get(&name) {
+                    Some(ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. }) => {
+                        drop(procs);
+                        match manager.start_not_started(&name).await {
+                            Ok(_) => ApiResponse::Ok,
+                            Err(e) => ApiResponse::Error {
+                                message: format!("failed to start process '{}': {}", name, e),
+                            },
+                        }
+                    }
+                    Some(_) => ApiResponse::Error {
+                        message: format!(
+                            "process '{}' is already running; use restart instead",
+                            name
+                        ),
+                    },
+                    None => Self::process_not_found(&name),
+                }
+            }
+            Ok(ApiRequest::Stop { name }) => match manager.stop(&name).await {
+                Ok(()) => ApiResponse::Ok,
+                Err(e) => ApiResponse::Error {
+                    message: format!("failed to stop process '{}': {}", name, e),
+                },
+            },
             Err(e) => ApiResponse::Error {
                 message: format!("invalid request: {}", e),
             },
@@ -1166,6 +1397,7 @@ impl NativeProcessManager {
         match Self::api_request(socket_path, &ApiRequest::Wait).await? {
             ApiResponse::Ready => Ok(()),
             ApiResponse::Error { message } => bail!("Native manager error: {}", message),
+            other => bail!("Unexpected response: {:?}", other),
         }
     }
 
@@ -1212,12 +1444,12 @@ impl NativeProcessManager {
     pub async fn handle_command(&self, cmd: ProcessCommand) {
         match cmd {
             ProcessCommand::Restart(name) => {
-                let is_not_started = matches!(
+                let needs_fresh_start = matches!(
                     self.processes.read().await.get(&name),
-                    Some(ProcessEntry::NotStarted { .. })
+                    Some(ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. })
                 );
-                if is_not_started {
-                    info!("Starting not-started process: {}", name);
+                if needs_fresh_start {
+                    info!("Starting inactive process: {}", name);
                     if let Err(e) = self.start_not_started(&name).await {
                         warn!("Failed to start process {}: {}", name, e);
                     }
@@ -1360,9 +1592,6 @@ impl NativeProcessManager {
                 .await
                 .wrap_err_with(|| format!("Failed to start process '{}'", config.name))?;
         }
-
-        // Start the API socket server for external queries
-        self.start_api_server()?;
 
         Ok(())
     }

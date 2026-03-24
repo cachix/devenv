@@ -8,11 +8,38 @@
 
 use async_trait::async_trait;
 use miette::Result;
+use sha2::Digest;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Subdirectory name for process manager state
 pub const PROCESSES_DIR: &str = "processes";
+
+/// Socket filename for the native process manager API.
+pub const NATIVE_SOCKET_NAME: &str = "native.sock";
+
+/// Compute the devenv runtime directory for a given dotfile path.
+///
+/// Uses XDG_RUNTIME_DIR (falling back to TMPDIR, then /tmp) joined with
+/// `devenv-<hash>` where hash is the first 7 chars of SHA-256 of the dotfile path.
+pub fn compute_runtime_dir(devenv_dotfile: &Path) -> PathBuf {
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(devenv_dotfile.to_string_lossy().as_bytes());
+    let hex = hex::encode(hasher.finalize());
+
+    let runtime_base = PathBuf::from(
+        std::env::var("XDG_RUNTIME_DIR")
+            .unwrap_or_else(|_| std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string())),
+    );
+    runtime_base.join(format!("devenv-{}", &hex[..7]))
+}
+
+/// Compute the full path to the native process manager API socket for a given dotfile path.
+pub fn native_socket_path(devenv_dotfile: &Path) -> PathBuf {
+    compute_runtime_dir(devenv_dotfile)
+        .join(PROCESSES_DIR)
+        .join(NATIVE_SOCKET_NAME)
+}
 
 /// Get the runtime directory for processes given a base runtime directory.
 /// Creates the directory if it doesn't exist.
@@ -41,8 +68,8 @@ pub use config::{
 };
 pub use devenv_event_sources::{NotifyMessage, NotifySocket};
 pub use manager::{
-    ApiRequest, ApiResponse, JobHandle, NativeProcessManager, ProcessCommand, ProcessPhase,
-    ProcessResources, ProcessState,
+    ApiRequest, ApiResponse, JobHandle, NativeProcessManager, ProcessCommand, ProcessInfo,
+    ProcessPhase, ProcessResources, ProcessState,
 };
 pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
 pub use process_compose::ProcessComposeManager;

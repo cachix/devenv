@@ -6135,10 +6135,6 @@ rec {
             packageId = "futures";
           }
           {
-            name = "hex";
-            packageId = "hex";
-          }
-          {
             name = "hostname";
             packageId = "hostname";
           }
@@ -6242,10 +6238,6 @@ rec {
           {
             name = "serde_yaml";
             packageId = "serde_yaml";
-          }
-          {
-            name = "sha2";
-            packageId = "sha2";
           }
           {
             name = "shell-escape";
@@ -6928,6 +6920,10 @@ rec {
           {
             name = "async-trait";
             packageId = "async-trait";
+          }
+          {
+            name = "blake3";
+            packageId = "blake3";
           }
           {
             name = "caps";
