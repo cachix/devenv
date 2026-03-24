@@ -5,8 +5,14 @@
 //! hooks, and launch arguments.
 
 mod bash;
+mod fish;
+mod nushell;
+mod zsh;
 
 pub use bash::BashDialect;
+pub use fish::FishDialect;
+pub use nushell::NushellDialect;
+pub use zsh::ZshDialect;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -43,6 +49,13 @@ pub trait ShellDialect: Send + Sync {
 
     /// Format task messages as shell print statements.
     fn format_task_messages(&self, messages: &[String]) -> String;
+
+    /// Write supplementary init files (e.g., zsh's ZDOTDIR .zshrc).
+    /// Default implementation is a no-op (bash doesn't need extra files).
+    fn write_init_files(&self, ctx: &RcfileContext) -> std::io::Result<()> {
+        let _ = ctx;
+        Ok(())
+    }
 }
 
 /// Arguments for launching an interactive shell with a custom init script.
@@ -53,6 +66,54 @@ pub struct InteractiveArgs {
     pub suffix: Vec<String>,
 }
 
+/// Look up a dialect by name, defaulting to bash if no match.
+pub fn create_dialect(shell_name: &str) -> Box<dyn ShellDialect> {
+    match shell_name {
+        "zsh" => Box::new(ZshDialect),
+        "fish" => Box::new(FishDialect),
+        "nu" => Box::new(NushellDialect),
+        _ => Box::new(BashDialect),
+    }
+}
+
+/// Return `$XDG_CONFIG_HOME`, falling back to `$HOME/.config`.
+pub(crate) fn xdg_config_home() -> Option<PathBuf> {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
+}
+
+/// Generate the bash subprocess script used during hot-reload.
+///
+/// This script reverses the previous env diff, sources the new devenv
+/// environment, computes a new diff, and outputs `export -p` for the
+/// calling shell to parse.
+pub(crate) fn bash_reload_subprocess_script(env_diff_helpers: &str, reload_file: &str) -> String {
+    format!(
+        r#"{env_diff_helpers}
+
+# Reverse previous diff
+__devenv_apply_reverse_diff
+
+# Capture env before sourcing new devenv
+_before=$(mktemp)
+__devenv_capture_env > "$_before"
+
+# Source new devenv environment
+source "{reload_file}"
+rm -f "{reload_file}"
+
+# Compute new diff
+__devenv_compute_diff "$_before"
+rm -f "$_before"
+
+# Output current environment for the calling shell to parse
+export -p"#,
+        env_diff_helpers = env_diff_helpers,
+        reload_file = reload_file,
+    )
+}
+
 /// Context passed to [`ShellDialect::rcfile_content`] for generating the init script.
 pub struct RcfileContext<'a> {
     /// Path to the devenv environment script to source.
@@ -61,4 +122,8 @@ pub struct RcfileContext<'a> {
     pub env_diff_helpers: &'a str,
     /// Reload hook script (empty if no reload).
     pub reload_hook: &'a str,
+    /// Path to the target shell binary (e.g., /usr/bin/zsh). None for bash (no exec needed).
+    pub target_shell_path: Option<&'a str>,
+    /// Directory for writing shell init files (e.g., .devenv/).
+    pub init_dir: &'a Path,
 }

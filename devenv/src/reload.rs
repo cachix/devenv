@@ -8,9 +8,10 @@
 //! the files from the current evaluation, not stale data from previous sessions.
 
 use crate::Devenv;
+use crate::devenv::{format_shell_exports, resolve_shell_path};
 use devenv_core::config::Clean;
 use devenv_reload::{BuildContext, BuildError, CommandBuilder, ShellBuilder};
-use devenv_shell::dialect::{BashDialect, RcfileContext, ShellDialect};
+use devenv_shell::dialect::{BashDialect, RcfileContext, ShellDialect, create_dialect};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::runtime::Handle;
@@ -42,6 +43,8 @@ pub struct DevenvShellBuilder {
     task_exports: BTreeMap<String, String>,
     /// Messages from enterShell tasks to display when entering the shell
     task_messages: Vec<String>,
+    /// Target shell name (e.g., "bash", "zsh")
+    shell: String,
 }
 
 impl DevenvShellBuilder {
@@ -66,6 +69,7 @@ impl DevenvShellBuilder {
         shell_cache_key: Option<devenv_eval_cache::EvalCacheKey>,
         task_exports: BTreeMap<String, String>,
         task_messages: Vec<String>,
+        shell: String,
     ) -> Self {
         Self {
             handle,
@@ -80,6 +84,7 @@ impl DevenvShellBuilder {
             shell_cache_key,
             task_exports,
             task_messages,
+            shell,
         }
     }
 }
@@ -97,13 +102,22 @@ impl ShellBuilder for DevenvShellBuilder {
             // (e.g. VIRTUAL_ENV, PATH with venv) after the Nix shell env so they take precedence.
             let env_script_path = self.dotfile.join("shell-env.sh");
             let mut env_script = self.initial_env_script.clone();
-            let dialect = BashDialect;
-            env_script.push_str(&dialect.format_task_exports(&self.task_exports));
-            env_script.push_str(&dialect.format_task_messages(&self.task_messages));
+            env_script.push_str(&format_shell_exports(&self.task_exports));
+            env_script.push_str(&BashDialect.format_task_messages(&self.task_messages));
             std::fs::write(&env_script_path, &env_script)
                 .map_err(|e| BuildError::new(format!("Failed to write env script: {}", e)))?;
 
-            let dialect = BashDialect;
+            // Select dialect based on configured shell
+            tracing::debug!("Shell setting: {:?}", self.shell);
+            let dialect = create_dialect(&self.shell);
+            let target_shell_path = if dialect.name() != "bash" {
+                let path = resolve_shell_path(dialect.name());
+                tracing::debug!("Resolved {} shell path: {}", dialect.name(), path);
+                Some(path)
+            } else {
+                None
+            };
+
             let env_diff_helpers = dialect.env_diff_helpers();
 
             let reload_hook = if let Some(ref reload_file) = ctx.reload_file {
@@ -112,11 +126,20 @@ impl ShellBuilder for DevenvShellBuilder {
                 String::new()
             };
 
-            let rcfile_content = dialect.rcfile_content(&RcfileContext {
+            let rcfile_ctx = RcfileContext {
                 env_script_path: &env_script_path,
                 env_diff_helpers,
                 reload_hook: &reload_hook,
-            });
+                target_shell_path: target_shell_path.as_deref(),
+                init_dir: &self.dotfile,
+            };
+
+            let rcfile_content = dialect.rcfile_content(&rcfile_ctx);
+
+            // Write supplementary init files (e.g., zsh's ZDOTDIR .zshrc)
+            dialect
+                .write_init_files(&rcfile_ctx)
+                .map_err(|e| BuildError::new(format!("Failed to write init files: {}", e)))?;
 
             let rcfile_path = self.dotfile.join("shell-rcfile.sh");
             std::fs::write(&rcfile_path, &rcfile_content)
@@ -143,8 +166,10 @@ impl ShellBuilder for DevenvShellBuilder {
                 );
             }
 
-            // Apply clean/keep env filtering and standard shell env vars
-            crate::shell_env::apply_shell_env(&mut cmd_builder, bash, &self.clean);
+            // Apply clean/keep env filtering and standard shell env vars.
+            // Use target shell path for SHELL env var when available.
+            let shell_for_env = target_shell_path.as_deref().unwrap_or(bash);
+            crate::shell_env::apply_shell_env(&mut cmd_builder, shell_for_env, &self.clean);
 
             // Add watch paths from eval cache
             self.handle.block_on(async {

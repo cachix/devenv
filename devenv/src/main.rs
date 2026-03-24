@@ -15,7 +15,6 @@ use devenv_core::{
     CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings,
     config::{self, Config, NixpkgsConfig},
 };
-use devenv_shell::dialect::ShellDialect;
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::collections::BTreeMap;
 use std::io::IsTerminal;
@@ -977,8 +976,7 @@ async fn dispatch_command(
                     BTreeMap::new()
                 }
             };
-            let dialect = devenv_shell::dialect::BashDialect;
-            output.push_str(&dialect.format_task_exports(&task_exports));
+            output.push_str(&devenv::format_shell_exports(&task_exports));
             Ok(CommandResult::Print(output))
         }
         Commands::GenerateJSONSchema => {
@@ -1055,6 +1053,7 @@ async fn run_reload_shell(
     let initial_env_script = devenv_guard.print_dev_env(false).await?;
     let bash_path = devenv_guard.get_bash_path().await?;
     let clean = devenv_guard.shell_settings.clean.clone();
+    let shell = devenv_guard.shell_settings.shell.clone();
 
     // Get eval cache info (after print_dev_env set it up)
     let eval_cache_pool = devenv_guard.eval_cache_pool().cloned();
@@ -1097,6 +1096,7 @@ async fn run_reload_shell(
         shell_cache_key,
         task_exports,
         task_messages,
+        shell,
     );
 
     // Set up communication channels between coordinator and shell runner
