@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- Added `devenv hook <shell>` for native directory based auto-activation without direnv. Supports bash, zsh, fish, and nushell. Add `eval "$(devenv hook bash)"` to your shell config to activate. Use `devenv allow` and `devenv revoke` to manage trust ([#2488](https://github.com/cachix/devenv/issues/2488)).
 - Added `nixpkgs.rocmSupport` option to enable ROCm support in nixpkgs configuration.
 
 ## 2.0.6 (2026-03-22)

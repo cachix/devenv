@@ -6,6 +6,7 @@ use devenv::{
         Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
         TraceFormat, TraceOutput,
     },
+    hook,
     processes::ProcessCommand,
     reload::DevenvShellBuilder,
     tracing as devenv_tracing,
@@ -77,6 +78,24 @@ fn main_inner() -> Result<()> {
             }
             Some(Commands::Direnvrc) => {
                 print!("{}", *devenv::DIRENVRC);
+                return Ok(());
+            }
+            Some(Commands::Hook { shell }) => {
+                hook::print_hook(shell);
+                return Ok(());
+            }
+            Some(Commands::Allow) => {
+                hook::allow(&std::env::current_dir().into_diagnostic()?)?;
+                return Ok(());
+            }
+            Some(Commands::Revoke) => {
+                hook::revoke(&std::env::current_dir().into_diagnostic()?)?;
+                return Ok(());
+            }
+            Some(Commands::HookShouldActivate { last }) => {
+                if let Some(dir) = hook::should_activate(last.as_deref())? {
+                    println!("{dir}");
+                }
                 return Ok(());
             }
             Some(Commands::DaemonProcesses { config_file }) => {
@@ -907,6 +926,10 @@ async fn dispatch_command(
         }
         Commands::Direnvrc => unreachable!(),
         Commands::Version => unreachable!(),
+        Commands::Hook { .. } => unreachable!(),
+        Commands::Allow => unreachable!(),
+        Commands::Revoke => unreachable!(),
+        Commands::HookShouldActivate { .. } => unreachable!(),
         Commands::DaemonProcesses { .. } => unreachable!(),
     }
 }
