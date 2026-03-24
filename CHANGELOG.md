@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- Added Ctrl+X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
 - Added `nixpkgs.rocmSupport` option to enable ROCm support in nixpkgs configuration.
 
 ## 2.0.6 (2026-03-22)

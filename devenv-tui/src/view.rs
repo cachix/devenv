@@ -963,6 +963,10 @@ fn build_summary_view_impl(
     let has_selection = selected.is_some();
     let is_process =
         matches!(selected, Some(a) if matches!(a.variant, ActivityVariant::Process(_)));
+    let is_stoppable = matches!(
+        selected,
+        Some(a) if matches!(&a.variant, ActivityVariant::Process(p) if p.status.is_stoppable())
+    );
 
     // Determine display mode based on terminal width
     let use_symbols = terminal_width < 60; // Use unicode symbols for very narrow terminals
@@ -1181,11 +1185,20 @@ fn build_summary_view_impl(
             help_children.push(element!(Text(content: " expand logs • ")).into_any());
         }
         if is_process {
+            if is_stoppable {
+                help_children
+                    .push(element!(Text(content: "^x", color: COLOR_INTERACTIVE)).into_any());
+                if use_short_text {
+                    help_children.push(element!(Text(content: " stop • ")).into_any());
+                } else {
+                    help_children.push(element!(Text(content: " stop process • ")).into_any());
+                }
+            }
             help_children.push(element!(Text(content: "^r", color: COLOR_INTERACTIVE)).into_any());
             if use_short_text {
-                help_children.push(element!(Text(content: " restart • ")).into_any());
+                help_children.push(element!(Text(content: " (re)start • ")).into_any());
             } else {
-                help_children.push(element!(Text(content: " restart process • ")).into_any());
+                help_children.push(element!(Text(content: " (re)start process • ")).into_any());
             }
         }
         help_children.push(element!(Text(content: "Esc", color: COLOR_INTERACTIVE)).into_any());
