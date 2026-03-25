@@ -29,7 +29,7 @@ jobs:
           echo '{ git-hooks.default_stages = ["manual"]; }' > devenv.local.nix
 
       - name: Generate missing module docs
-        run: devenv shell devenv-verify-module-docs
+        run: devenv shell devenv-generate-docs
 
       - uses: EndBug/add-and-commit@v9
         if: ${{ github.event_name == 'push' }}

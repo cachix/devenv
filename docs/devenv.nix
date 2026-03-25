@@ -130,51 +130,57 @@ let
   docs = [
     {
       options = options.languages;
-      outDir = "$out/languages";
+      outDir = "languages";
     }
     {
       options = options.services;
-      outDir = "$out/services";
+      outDir = "services";
     }
     {
       options = options.process.managers;
-      outDir = "$out/supported-process-managers";
+      outDir = "supported-process-managers";
     }
   ];
 
-  # Generate standalone option docs (one file per module)
-  generateOptionDocs = pkgs.stdenv.mkDerivation {
-    name = "generate-option-docs";
-    allowSubstitutes = false;
-    dontUnpack = true;
-    buildPhase = ''
-      ${lib.concatStringsSep "\n" (
-        lib.map (
-          { options, outDir }:
-          ''
-            mkdir -p ${outDir}
+  # Generate all doc content into a single derivation
+  generatedDocs = pkgs.runCommand "devenv-generated-docs" { allowSubstitutes = false; } ''
+    mkdir -p $out/reference
 
-            ${lib.concatStringsSep "\n" (
-              lib.mapAttrsToList (name: opts:
-                let optDoc = mkModuleOptionDocs opts; in
-                ''
-                  {
-                    echo "## Options"
-                    echo
-                    sed 's/^## /### /g' "${optDoc.optionsCommonMark}"
-                  } > ${outDir}/${name}-options.md
-                ''
-              ) options
-            )}
-          ''
-        ) docs
-      )}
-    '';
-    installPhase = ''
-      mkdir -p $out
-      cp -r . $out/
-    '';
-  };
+    # Generate the full options reference
+    {
+      echo "# devenv.nix"
+      echo
+      cat "${allOptions.optionsCommonMark}"
+    } > $out/reference/options.md
+
+    # https://github.com/NixOS/nixpkgs/issues/224661
+    sed -i 's/\\\././g' $out/reference/options.md
+
+    # Generate per-module option docs
+    ${lib.concatStringsSep "\n" (
+      lib.map (
+        { options, outDir }:
+        ''
+          mkdir -p $out/${outDir} $out/stubs/${outDir}
+
+          ${lib.concatStringsSep "\n" (
+            lib.mapAttrsToList (name: opts:
+              let optDoc = mkModuleOptionDocs opts; in
+              ''
+                {
+                  echo "## Options"
+                  echo
+                  sed 's/^## /### /g' "${optDoc.optionsCommonMark}"
+                } > $out/${outDir}/${name}-options.md
+
+                echo '--8<-- "_generated/${outDir}/${name}-options.md"' > $out/stubs/${outDir}/${name}.md
+              ''
+            ) options
+          )}
+        ''
+      ) docs
+    )}
+  '';
 
 in
 {
@@ -185,9 +191,8 @@ in
 
   # Expose the outputs for the flake and scripts to use
   outputs = {
-    devenv-docs-options = allOptions.optionsCommonMark;
     devenv-docs-options-json = allOptions.optionsJSON;
-    devenv-generate-option-docs = generateOptionDocs;
+    devenv-generated-docs = generatedDocs;
   };
 
   git-hooks.hooks = {
@@ -227,10 +232,7 @@ in
       # Serve the mkdocs documentation website with live reload
       exec = "mkdocs serve";
       cwd = config.git.root + "/docs";
-      after = [
-        "docs:generate-doc-options"
-        "docs:generate-option-docs"
-      ];
+      after = [];
     };
   };
 
@@ -244,10 +246,11 @@ in
     exec = ./scripts/devenv-build.sh;
   };
 
-  scripts."devenv-verify-module-docs" = {
-    description = "Generate missing module doc files";
-    exec = ./scripts/verify-module-docs.sh;
+  scripts."devenv-generate-docs" = {
+    description = "Generate all option docs";
+    exec = ./scripts/generate-docs.sh;
   };
+
 
   tasks = {
     "devenv:compile-requirements" = {
@@ -261,11 +264,14 @@ in
     "docs:generate-badge" = {
       exec = "node ${config.git.root}/docs/src/assets/generate-badge.mjs";
     };
-    "docs:generate-doc-options" = {
-      exec = ./scripts/generate-doc-options.sh;
+    "docs:generate-options" = {
+      exec = "devenv-generate-docs";
+      before = [ "devenv:processes:docs" ];
     };
-    "docs:generate-option-docs" = {
-      exec = ./scripts/generate-option-docs.sh;
+    "docs:build" = {
+      exec = "mkdocs build";
+      cwd = config.git.root + "/docs";
+      after = [ "docs:generate-options" "devenv:python:virtualenv" ];
     };
   };
 }

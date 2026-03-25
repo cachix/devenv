@@ -1,1 +1,0 @@
---8<-- "_generated/services/opencode-options.md"

@@ -41,10 +41,7 @@ jobs:
           echo '{ git-hooks.default_stages = ["manual"]; }' > devenv.local.nix
 
       - name: Generate and build docs
-        run: |
-          devenv tasks run docs:generate-doc-options
-          devenv tasks run docs:generate-option-docs
-          devenv shell -- bash -c 'cd docs && mkdocs build'
+        run: devenv tasks run docs:build --mode before
 
       - name: Deploy to Cloudflare Pages
         id: deploy
