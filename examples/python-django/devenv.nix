@@ -23,8 +23,9 @@ in
 
   services.postgres = {
     enable = true;
-    initialScript = "CREATE USER ${db_user} SUPERUSER;";
-    initialDatabases = [{ name = db_name; }];
+    initialDatabases = [{ name = db_name; user = db_user; }];
+    # Django's test runner needs CREATEDB to create a test database
+    initialScript = "ALTER ROLE ${db_user} CREATEDB;";
   };
 
   processes.runserver = {

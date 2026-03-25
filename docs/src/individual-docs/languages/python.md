@@ -109,9 +109,6 @@ The path can be absolute or relative to the root of the devenv project.
 
 devenv integrates with Python package managers to automatically install dependencies when you enter the shell.
 
-!!! warning "Poetry and uv are mutually exclusive"
-    You cannot enable both `poetry.install` and `uv.sync` at the same time.
-
 ### uv
 
 [uv](https://docs.astral.sh/uv/) is a fast Python package manager that uses `pyproject.toml` to manage dependencies.
@@ -334,6 +331,8 @@ in
   services.postgres = {
     enable = true;
     initialDatabases = [{ name = db_name; user = db_user; }];
+    # Django's test runner needs CREATEDB to create a test database
+    initialScript = "ALTER ROLE ${db_user} CREATEDB;";
   };
 
   processes.runserver = {
