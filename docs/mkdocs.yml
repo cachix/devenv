@@ -71,10 +71,10 @@ theme:
     - tabs
     - toc.follow
 
-# Exclude doc templates
+# Exclude generated and template files
 exclude_docs: |
   /snippets/
-  /individual-docs/**/*.md
+  /_generated/**/*.md
 
 plugins:
   search: {}
@@ -135,7 +135,9 @@ markdown_extensions:
       anchor_linenums: true
       use_pygments: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      base_path: ["src"]
+      check_paths: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid

@@ -2,3 +2,6 @@
 /site/
 /.cache/
 
+# Generated option docs
+/src/_generated/
+

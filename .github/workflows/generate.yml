@@ -43,15 +43,14 @@ jobs:
         working-directory: docs/gen
         run: |
           devenv shell devenv-generate-docs
-          devenv shell devenv-verify-individual-docs
-          devenv shell devenv-generate-individual-docs
+          devenv shell devenv-verify-module-docs
 
       - uses: EndBug/add-and-commit@v9
         if: ${{ github.event_name == 'push' }}
         with:
           default_author: github_actions
           add: docs
-          message: "Auto generate missing individual markdowns"
+          message: "Auto generate missing module docs"
 
       - name: Generate supported-languages example
         run: devenv shell devenv-generate-languages-example

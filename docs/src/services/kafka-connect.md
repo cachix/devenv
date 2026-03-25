@@ -1,0 +1,1 @@
+--8<-- "_generated/services/kafka-connect-options.md"
