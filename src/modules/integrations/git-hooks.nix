@@ -70,16 +70,17 @@ let
   # Tracking: https://github.com/NixOS/nixpkgs/issues/302376
   package =
     if cfg.package ? dontWrapPythonPrograms then
-      cfg.package.overrideAttrs {
-        dontWrapPythonPrograms = true;
-        postFixup = ''
-          buildPythonPath "$out $pythonPath"
-          wrapProgramShell $out/bin/${cfg.package.meta.mainProgram} \
-            --set PYTHONPATH "$program_PYTHONPATH" \
-            --set PYTHONNOUSERSITE true \
-            --suffix PATH : ${lib.makeBinPath [ cfg.gitPackage ]}
-        '';
-      }
+      cfg.package.overrideAttrs
+        {
+          dontWrapPythonPrograms = true;
+          postFixup = ''
+            buildPythonPath "$out $pythonPath"
+            wrapProgramShell $out/bin/${cfg.package.meta.mainProgram} \
+              --set PYTHONPATH "$program_PYTHONPATH" \
+              --set PYTHONNOUSERSITE true \
+              --suffix PATH : ${lib.makeBinPath [ cfg.gitPackage ]}
+          '';
+        }
     else
       cfg.package;
 
