@@ -31268,6 +31268,153 @@ string
 
 
 
+## services.mosquitto.enable
+
+
+
+Whether to enable mosquitto MQTT broker.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mosquitto.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mosquitto.nix)
+
+
+
+## services.mosquitto.package
+
+
+
+Which package of mosquitto to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.mosquitto
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mosquitto.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mosquitto.nix)
+
+
+
+## services.mosquitto.bind
+
+
+
+The IP interface to bind to.
+` null ` means “all interfaces”.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+"127.0.0.1"
+```
+
+
+
+*Example:*
+
+```nix
+"127.0.0.1"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mosquitto.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mosquitto.nix)
+
+
+
+## services.mosquitto.extraConfig
+
+
+
+Additional text to append to ` mosquitto.conf `.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+
+```nix
+""
+```
+
+
+
+*Example:*
+
+```nix
+''
+  max_queued_messages 1000
+''
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mosquitto.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mosquitto.nix)
+
+
+
+## services.mosquitto.port
+
+
+
+The TCP port to accept MQTT connections.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+
+```nix
+1883
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mosquitto.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mosquitto.nix)
+
+
+
 ## services.mysql.enable
 
 
