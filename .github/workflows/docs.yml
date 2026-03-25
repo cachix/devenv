@@ -1,0 +1,85 @@
+name: Deploy Docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/**
+      - src/modules/**
+  pull_request:
+    paths:
+      - docs/**
+      - src/modules/**
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+
+      - uses: cachix/cachix-action@v17
+        with:
+          name: devenv
+
+      - name: Install devenv
+        # TODO(sander): go back to latest once 2.0.3 is released
+        run: nix profile add github:cachix/devenv/v1.11.2 -L --accept-flake-config
+
+      - name: Disable git-hooks
+        run: |
+          echo '{ git-hooks.default_stages = ["manual"]; }' > devenv.local.nix
+
+      - name: Generate and build docs
+        run: |
+          devenv tasks run docs:generate-doc-options
+          devenv tasks run docs:generate-option-docs
+          devenv shell -- bash -c 'cd docs && mkdocs build'
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy docs/site --project-name=devenv --branch=${{ github.head_ref || github.ref_name }}
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `📄 Docs preview: ${process.env.DEPLOYMENT_URL}`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.startsWith('📄 Docs preview:'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment-url }}

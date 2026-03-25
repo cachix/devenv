@@ -34,6 +34,6 @@ process_directory() {
   fi
 }
 
-process_directory "../../src/modules/languages" "../src/languages" "languages" "language"
-process_directory "../../src/modules/services" "../src/services" "services" "service"
-process_directory "../../src/modules/process-managers" "../src/supported-process-managers" "supported-process-managers" "process manager"
+process_directory "$DEVENV_ROOT/src/modules/languages" "$DEVENV_ROOT/docs/src/languages" "languages" "language"
+process_directory "$DEVENV_ROOT/src/modules/services" "$DEVENV_ROOT/docs/src/services" "services" "service"
+process_directory "$DEVENV_ROOT/src/modules/process-managers" "$DEVENV_ROOT/docs/src/supported-process-managers" "supported-process-managers" "process manager"

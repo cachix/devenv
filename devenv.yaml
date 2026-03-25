@@ -28,6 +28,12 @@ inputs:
   crate2nix:
     url: github:nix-community/crate2nix
 
+  treefmt-nix:
+    url: github:numtide/treefmt-nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+
   devenv-claude-agents:
     url: github:cachix/devenv-claude-agents
     flake: false

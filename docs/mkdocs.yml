@@ -71,9 +71,8 @@ theme:
     - tabs
     - toc.follow
 
-# Exclude generated and template files
+# Exclude generated files from being treated as pages
 exclude_docs: |
-  /snippets/
   /_generated/**/*.md
 
 plugins:
