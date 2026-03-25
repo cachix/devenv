@@ -722,8 +722,9 @@ in
         UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
         # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
         UV_PYTHON_DOWNLOADS = "never";
-        # Configure uv to use the python interpreter from the profile
-        UV_PYTHON = toString cfg.package.interpreter;
+        # Do not set UV_PYTHON here. It overrides VIRTUAL_ENV resolution
+        # and causes `uv pip install` to target the immutable Nix store
+        # prefix instead of the venv. See https://github.com/cachix/devenv/issues/2663
       })
       // (lib.optionalAttrs cfg.poetry.enable {
         # Make poetry use DEVENV_ROOT/.venv
