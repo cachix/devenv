@@ -23232,7 +23232,7 @@ true
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix)
 
 
 
@@ -23276,7 +23276,7 @@ This option can either be:
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix)
 
 
 
@@ -23320,7 +23320,7 @@ This option can either be:
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix)
 
 
 
@@ -23376,7 +23376,7 @@ attribute set of anything
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix)
 
 
 
@@ -23412,7 +23412,7 @@ strings concatenated with “\\n” or absolute path
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix)
 
 
 
@@ -23452,7 +23452,7 @@ attribute set of anything
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix)
 
 
 
@@ -23503,7 +23503,7 @@ If an attribute set is used, each value can be:
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix)
 
 
 
@@ -23549,7 +23549,7 @@ This option can either be:
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix)
 
 
 
@@ -23590,7 +23590,7 @@ This option can either be:
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix)
 
 
 
@@ -23622,7 +23622,7 @@ true
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix)
 
 
 
@@ -23661,7 +23661,7 @@ list of string
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opencode.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/opencode.nix)
 
 
 
