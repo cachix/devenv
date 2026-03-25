@@ -218,7 +218,7 @@ let
 
     if [ ! -f "pyproject.toml" ]
     then
-      echo "No pyproject.toml found. Make sure you have a pyproject.toml file in your project." >&2
+      echo "No pyproject.toml found in ${cfg.directory}. Set languages.python.directory to the path containing your pyproject.toml." >&2
       exit 1
     else
       _devenv_uv_sync
@@ -273,7 +273,8 @@ let
 
     if [ ! -f "pyproject.toml" ]
     then
-      echo "No pyproject.toml found. Run 'poetry init' to create one." >&2
+      echo "No pyproject.toml found in ${cfg.directory}. Set languages.python.directory to the path containing your pyproject.toml." >&2
+      echo "Run 'poetry init' to create one." >&2
       exit 1
     else
       _devenv_init_poetry_venv
