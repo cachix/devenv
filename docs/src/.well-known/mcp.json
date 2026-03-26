@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "devenv": {
+      "url": "https://mcp.devenv.sh",
+      "name": "devenv",
+      "description": "Search devenv packages and configuration options. Provides search_packages (search nixpkgs) and search_options (search devenv module options) tools.",
+      "transport": "streamable-http"
+    }
+  }
+}
