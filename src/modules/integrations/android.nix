@@ -48,7 +48,6 @@ let
   };
 
   androidSdk = androidComposition.androidsdk;
-  platformTools = androidComposition.platform-tools;
 in
 {
   options.android = {
@@ -270,7 +269,6 @@ in
   config = lib.mkIf cfg.enable {
     packages = [
       androidSdk
-      platformTools
       androidEmulator
     ]
     ++ lib.optional cfg.flutter.enable cfg.flutter.package
