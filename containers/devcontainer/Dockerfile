@@ -50,7 +50,7 @@ USER vscode
 
 # Configure direnv
 RUN mkdir -p ~/.config/direnv
-RUN <<EOF > ~/.config/direnv/config.toml
+RUN cat <<EOF > ~/.config/direnv/config.toml
 [whitelist]
 prefix = [ "/workspaces" ]
 EOF
