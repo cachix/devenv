@@ -123,6 +123,7 @@ struct LaunchConfig {
     use_pty: bool,
     nix_debugger: bool,
     is_testing: bool,
+    needs_terminal_handoff: bool,
     log_level: devenv_tracing::Level,
     tracing_format: TraceFormat,
     tracing_output: Option<TraceOutput>,
@@ -231,6 +232,9 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
 
     let is_testing = matches!(&command, Commands::Test { .. });
 
+    // Commands that do eval with TUI active, then take over the terminal
+    let needs_terminal_handoff = use_pty || matches!(&command, Commands::Repl {});
+
     Ok(LaunchConfig {
         command,
         config,
@@ -246,6 +250,7 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
         use_pty,
         nix_debugger,
         is_testing,
+        needs_terminal_handoff,
         log_level,
         tracing_format,
         tracing_output,
@@ -278,7 +283,7 @@ fn run(launch: LaunchConfig) -> Result<()> {
 
     let tui = launch.tui;
     let use_pty = launch.use_pty;
-    let is_repl = matches!(&launch.command, Commands::Repl {});
+    let needs_terminal_handoff = launch.needs_terminal_handoff;
     let verbosity = launch.verbosity;
 
     // Shutdown coordination (shared between main thread and backend thread)
@@ -354,9 +359,9 @@ fn run(launch: LaunchConfig) -> Result<()> {
             devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
                 .with_command_sender(command_tx)
                 .filter_level(filter_level)
-                // When PTY shell or REPL is active, don't shut down on backend_done —
+                // When a command needs terminal handoff, don't shut down on backend_done —
                 // it's used as a handoff signal (eval done), not a completion signal
-                .shutdown_on_backend_done(!use_pty && !is_repl)
+                .shutdown_on_backend_done(!needs_terminal_handoff)
                 .run(backend_done.clone())
                 .await
                 .unwrap_or(0)
@@ -481,6 +486,7 @@ async fn run_backend(
         nix_debugger,
         is_testing,
         // Consumed by run() before run_backend is called
+        needs_terminal_handoff: _,
         log_level: _,
         tracing_format: _,
         tracing_output: _,
