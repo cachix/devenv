@@ -140,7 +140,7 @@ in
   git-hooks.package = pkgs.prek;
   git-hooks.excludes = [ "Cargo.nix" ];
   git-hooks.hooks = {
-    nixpkgs-fmt.enable = true;
+    nixfmt.enable = true;
     rustfmt.enable = true;
     markdownlint = {
       settings.configuration = {
