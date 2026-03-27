@@ -193,7 +193,7 @@ impl Tasks {
                 TaskStatus::Pending => status.pending += 1,
                 TaskStatus::Oneshot(OneshotStatus::Running(_)) => status.running += 1,
                 TaskStatus::Process(ps) => match ps.phase {
-                    ProcessPhase::NotStarted => status.skipped += 1,
+                    ProcessPhase::NotStarted | ProcessPhase::Stopped => status.skipped += 1,
                     ProcessPhase::GaveUp => status.failed += 1,
                     ProcessPhase::Waiting | ProcessPhase::Starting | ProcessPhase::Ready => {
                         status.running += 1
@@ -1226,6 +1226,7 @@ async fn process_status_watcher(
 
             if let Some(phase) = manager.get_phase(&name).await
                 && phase != ProcessPhase::NotStarted
+                && phase != ProcessPhase::Stopped
                 && phase != ProcessPhase::Waiting
             {
                 // Process was started externally, begin tracking

@@ -23,7 +23,6 @@ use nix::unistd::Pid;
 use once_cell::sync::{Lazy, OnceCell as SyncOnceCell};
 use processes::ProcessManager as _;
 use secrecy::ExposeSecret;
-use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -106,6 +105,39 @@ impl DevenvOptions {
             shutdown,
             is_testing: false,
         }
+    }
+
+    /// Resolve the canonical devenv dotfile path from options.
+    ///
+    /// Applies canonicalization (to resolve symlinks) and profile suffix
+    /// for state isolation. This must match the path used by `Devenv::new()`
+    /// so that socket paths are consistent.
+    pub fn resolve_dotfile(&self) -> Option<PathBuf> {
+        let devenv_root = self
+            .devenv_root
+            .as_ref()
+            .cloned()
+            .or_else(|| std::env::current_dir().ok());
+        let devenv_root = devenv_root.map(|r| std::fs::canonicalize(&r).unwrap_or(r))?;
+
+        let base_dotfile = self
+            .devenv_dotfile
+            .as_ref()
+            .map(|p| {
+                p.parent()
+                    .and_then(|parent| std::fs::canonicalize(parent).ok())
+                    .map(|parent| parent.join(p.file_name().expect("dotfile must have a filename")))
+                    .unwrap_or_else(|| p.clone())
+            })
+            .unwrap_or_else(|| devenv_root.join(".devenv"));
+
+        Some(
+            if let Some(suffix) = compute_profile_dir_suffix(&self.shell_settings.profiles) {
+                base_dotfile.join(suffix)
+            } else {
+                base_dotfile
+            },
+        )
     }
 }
 
@@ -264,12 +296,14 @@ impl Devenv {
         let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
         let devenv_home_gc = devenv_home.join("gc");
 
+        let devenv_dotfile = options
+            .resolve_dotfile()
+            .expect("Failed to resolve devenv dotfile path");
+
         let devenv_root = {
             let root = options.devenv_root.unwrap_or_else(|| {
                 std::env::current_dir().expect("Failed to get current directory")
             });
-            // Canonicalize to resolve symlinks (e.g. /var -> /private/var on macOS),
-            // ensuring consistent runtime directory hashes across processes.
             std::fs::canonicalize(&root).unwrap_or(root)
         };
 
@@ -277,27 +311,6 @@ impl Devenv {
         let shell_settings = options.shell_settings;
         let cache_settings = options.cache_settings;
         let secret_settings = options.secret_settings;
-
-        // Compute profile-aware dotfile path for state isolation.
-        // Canonicalize the parent to resolve symlinks (e.g. /var -> /private/var on macOS),
-        // ensuring consistent runtime directory hashes across processes.
-        // The default path (devenv_root.join(".devenv")) is already canonical since
-        // devenv_root was canonicalized above; this handles custom --dotfile paths.
-        let base_devenv_dotfile = options
-            .devenv_dotfile
-            .map(|p| {
-                p.parent()
-                    .and_then(|parent| std::fs::canonicalize(parent).ok())
-                    .map(|parent| parent.join(p.file_name().expect("dotfile must have a filename")))
-                    .unwrap_or(p)
-            })
-            .unwrap_or_else(|| devenv_root.join(".devenv"));
-        let devenv_dotfile =
-            if let Some(suffix) = compute_profile_dir_suffix(&shell_settings.profiles) {
-                base_devenv_dotfile.join(suffix)
-            } else {
-                base_devenv_dotfile
-            };
         let devenv_dot_gc = devenv_dotfile.join("gc");
 
         // TMPDIR for build artifacts - should NOT use XDG_RUNTIME_DIR as that's
@@ -305,21 +318,9 @@ impl Devenv {
         let devenv_tmp =
             PathBuf::from(std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string()));
 
-        // first 7 chars of sha256 hash of devenv_state
-        let devenv_state_hash = {
-            let mut hasher = sha2::Sha256::new();
-            hasher.update(devenv_dotfile.to_string_lossy().as_bytes());
-            hex::encode(hasher.finalize())
-        };
-
         // Runtime directory for sockets - XDG_RUNTIME_DIR is the correct location
         // per the XDG Base Directory Specification
-        let devenv_runtime_base =
-            PathBuf::from(std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
-                std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string())
-            }));
-        let devenv_runtime =
-            devenv_runtime_base.join(format!("devenv-{}", &devenv_state_hash[..7]));
+        let devenv_runtime = processes::compute_runtime_dir(&devenv_dotfile);
 
         xdg_dirs
             .create_data_directory(Path::new("devenv"))
@@ -1687,7 +1688,7 @@ impl Devenv {
 
     pub async fn wait_for_ready(&self, timeout: std::time::Duration) -> Result<()> {
         if self.native_manager_pid_file().exists() {
-            let socket_path = self.process_runtime_dir()?.join("native.sock");
+            let socket_path = self.native_socket_path();
             let pid_file = self.native_manager_pid_file();
             let start = std::time::Instant::now();
             loop {
@@ -1713,6 +1714,134 @@ impl Devenv {
         } else {
             bail!("No processes running")
         }
+    }
+
+    /// Compute the native process manager socket path.
+    fn native_socket_path(&self) -> std::path::PathBuf {
+        processes::native_socket_path(&self.devenv_dotfile)
+    }
+
+    /// Send an API request to the running native process manager and return the response.
+    async fn native_api_request(
+        &self,
+        request: &processes::ApiRequest,
+    ) -> Result<processes::ApiResponse> {
+        if self.native_manager_pid_file().exists() {
+            let socket_path = self.native_socket_path();
+            processes::NativeProcessManager::api_request(&socket_path, request).await
+        } else if self.processes_pid().exists() {
+            bail!("This subcommand is only supported with the native process manager")
+        } else {
+            bail!("No processes running")
+        }
+    }
+
+    pub async fn processes_list(&self) -> Result<String> {
+        match self
+            .native_api_request(&processes::ApiRequest::List)
+            .await?
+        {
+            processes::ApiResponse::ProcessList { processes } => {
+                let mut output = String::new();
+                for p in &processes {
+                    output.push_str(&format!(
+                        "{:<30} {:<15} restarts: {}\n",
+                        p.name, p.phase, p.restart_count
+                    ));
+                }
+                if processes.is_empty() {
+                    output.push_str("No processes found.\n");
+                }
+                Ok(output)
+            }
+            processes::ApiResponse::Error { message } => bail!("{}", message),
+            other => bail!("Unexpected response: {:?}", other),
+        }
+    }
+
+    pub async fn processes_status(&self, name: &str) -> Result<String> {
+        match self
+            .native_api_request(&processes::ApiRequest::Status {
+                name: name.to_string(),
+            })
+            .await?
+        {
+            processes::ApiResponse::ProcessDetail { info } => Ok(format!(
+                "Name:           {}\nPhase:          {}\nRestart count:  {}\n",
+                info.name, info.phase, info.restart_count
+            )),
+            processes::ApiResponse::Error { message } => bail!("{}", message),
+            other => bail!("Unexpected response: {:?}", other),
+        }
+    }
+
+    pub async fn processes_logs(
+        &self,
+        name: &str,
+        lines: usize,
+        stdout_only: bool,
+        stderr_only: bool,
+    ) -> Result<String> {
+        match self
+            .native_api_request(&processes::ApiRequest::Logs {
+                name: name.to_string(),
+                lines: Some(lines),
+            })
+            .await?
+        {
+            processes::ApiResponse::ProcessLogs { stdout, stderr } => {
+                let mut output = String::new();
+                if !stderr_only && !stdout.is_empty() {
+                    if !stdout_only {
+                        output.push_str("==> stdout <==\n");
+                    }
+                    output.push_str(&stdout);
+                    output.push('\n');
+                }
+                if !stdout_only && !stderr.is_empty() {
+                    if !stderr_only {
+                        output.push_str("==> stderr <==\n");
+                    }
+                    output.push_str(&stderr);
+                    output.push('\n');
+                }
+                if output.is_empty() {
+                    output.push_str("No logs available.\n");
+                }
+                Ok(output)
+            }
+            processes::ApiResponse::Error { message } => bail!("{}", message),
+            other => bail!("Unexpected response: {:?}", other),
+        }
+    }
+
+    async fn expect_ok_response(&self, request: &processes::ApiRequest) -> Result<()> {
+        match self.native_api_request(request).await? {
+            processes::ApiResponse::Ok => Ok(()),
+            processes::ApiResponse::Error { message } => bail!("{}", message),
+            other => bail!("Unexpected response: {:?}", other),
+        }
+    }
+
+    pub async fn processes_restart(&self, name: &str) -> Result<()> {
+        self.expect_ok_response(&processes::ApiRequest::Restart {
+            name: name.to_string(),
+        })
+        .await
+    }
+
+    pub async fn processes_start(&self, name: &str) -> Result<()> {
+        self.expect_ok_response(&processes::ApiRequest::Start {
+            name: name.to_string(),
+        })
+        .await
+    }
+
+    pub async fn processes_stop(&self, name: &str) -> Result<()> {
+        self.expect_ok_response(&processes::ApiRequest::Stop {
+            name: name.to_string(),
+        })
+        .await
     }
 
     /// Assemble the devenv environment and return the serialized NixArgs string.

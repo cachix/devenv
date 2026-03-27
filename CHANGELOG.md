@@ -2,11 +2,15 @@
 
 ## X.Y.Z (unreleased)
 
+### Bug Fixes
+
+- Fixed `devenv processes stop` removing the process from the manager state, making it impossible to start or restart afterwards.
+
 ### Improvements
 
 - Added Ctrl+X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
 - Added `nixpkgs.rocmSupport` option to enable ROCm support in nixpkgs configuration.
-
+- Added process management subcommands and MCP tools: `devenv processes list`, `status`, `logs`, `restart`, `start`, `stop` for interacting with running native processes ([#2621](https://github.com/cachix/devenv/issues/2621)).
 ## 2.0.6 (2026-03-22)
 
 ### Bug Fixes
