@@ -2,6 +2,10 @@
 
 ## X.Y.Z (unreleased)
 
+### Bug Fixes
+
+- Fixed process `watch.paths` not triggering restarts because Nix paths were serialized as store paths instead of source directory paths ([#2657](https://github.com/cachix/devenv/issues/2657)).
+
 ### Improvements
 
 - Added Ctrl+X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
