@@ -278,6 +278,7 @@ fn run(launch: LaunchConfig) -> Result<()> {
 
     let tui = launch.tui;
     let use_pty = launch.use_pty;
+    let is_repl = matches!(&launch.command, Commands::Repl {});
     let verbosity = launch.verbosity;
 
     // Shutdown coordination (shared between main thread and backend thread)
@@ -353,9 +354,9 @@ fn run(launch: LaunchConfig) -> Result<()> {
             devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
                 .with_command_sender(command_tx)
                 .filter_level(filter_level)
-                // When PTY reload shell is active, don't shut down on backend_done —
-                // the shell session sends it as a handoff signal, not a completion signal
-                .shutdown_on_backend_done(!use_pty)
+                // When PTY shell or REPL is active, don't shut down on backend_done —
+                // it's used as a handoff signal (eval done), not a completion signal
+                .shutdown_on_backend_done(!use_pty && !is_repl)
                 .run(backend_done.clone())
                 .await
                 .unwrap_or(0)
@@ -402,7 +403,12 @@ impl DevenvOutput {
             // Run the REPL on a new thread with its own GC-registered runtime
             let repl_result = std::thread::Builder::new()
                 .stack_size(NIX_STACK_SIZE)
-                .spawn(move || build_gc_runtime().block_on(async { devenv.repl().await }))
+                .spawn(move || {
+                    // Skip prepare_repl() — the debugger already has eval context from
+                    // the failed command, and re-evaluating would likely fail again,
+                    // preventing debugger_is_pending() from being checked in launch_repl().
+                    build_gc_runtime().block_on(async { devenv.launch_repl().await })
+                })
                 .map_err(|_| miette::miette!("Failed to spawn REPL thread"))
                 .and_then(|handle| {
                     handle
@@ -631,6 +637,18 @@ async fn run_backend(
         };
     }
 
+    // REPL: run assembly with TUI active, then hand off terminal for interactive REPL
+    if let Commands::Repl {} = command {
+        let result = run_repl(&devenv, &mut backend_done_guard, terminal_ready_rx).await;
+        return match result {
+            Err(e) if nix_debugger => DevenvOutput {
+                result: Err(e),
+                devenv_for_debugger: Some(devenv),
+            },
+            _ => output(result),
+        };
+    }
+
     // All other commands
     let result = dispatch_command(
         &devenv,
@@ -772,8 +790,7 @@ async fn dispatch_command(
             Ok(CommandResult::Print(format!("{output}\n")))
         }
         Commands::Repl {} => {
-            devenv.repl().await?;
-            Ok(CommandResult::Done)
+            unreachable!("Repl is handled in run_backend before dispatch_command is called")
         }
         Commands::Build { attributes } => {
             let results = devenv.build(&attributes).await?;
@@ -1022,6 +1039,32 @@ async fn run_reload_shell(
     let _ = coordinator_handle.await;
 
     Ok(exit_code)
+}
+
+/// Run the REPL with TUI handoff.
+///
+/// Performs assembly and Nix evaluation while TUI is active (showing progress),
+/// then signals the TUI to release the terminal before launching the interactive REPL.
+async fn run_repl(
+    devenv: &Devenv,
+    backend_done_guard: &mut BackendDoneGuard,
+    terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
+) -> Result<CommandResult> {
+    // Phase 1: Assemble and evaluate with TUI active (shows progress)
+    devenv.prepare_repl().await?;
+
+    // Phase 2: TUI handoff — signal TUI to exit and wait for terminal release
+    let backend_done = backend_done_guard.take();
+    backend_done.notify_one();
+
+    if let Some(rx) = terminal_ready_rx {
+        let _ = rx.await;
+    }
+
+    // Phase 3: Terminal is ours — launch the interactive REPL
+    devenv.launch_repl().await?;
+
+    Ok(CommandResult::Done)
 }
 
 /// Create a tokio runtime with worker threads registered with Boehm GC.

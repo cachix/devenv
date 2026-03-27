@@ -1405,12 +1405,37 @@ impl NixBackend for NixRustBackend {
         })
     }
 
-    async fn repl(&self) -> Result<()> {
+    async fn prepare_repl(&self) -> Result<()> {
         // Initialize the Nix command library (REPL support)
         nix_cmd::init()
             .to_miette()
             .wrap_err("Failed to initialize Nix command library")?;
 
+        // Evaluate the devenv configuration (the slow part).
+        // Result is cached in cached_devenv_value for launch_repl().
+        let activity = Activity::evaluate("Evaluating Nix")
+            .level(ActivityLevel::Info)
+            .start();
+        let mut eval_state = self.eval_session(&activity)?;
+        let devenv_attrs = self.get_or_eval_devenv(&mut eval_state)?;
+
+        // Force evaluation so the module system runs now (with TUI active)
+        // rather than lazily during launch_repl().
+        eval_state
+            .force(&devenv_attrs)
+            .to_miette()
+            .wrap_err("Failed to evaluate devenv configuration")?;
+
+        // Also force pkgs since launch_repl() will access it
+        eval_state
+            .require_attrs_select(&devenv_attrs, "pkgs")
+            .to_miette()
+            .wrap_err("Failed to evaluate pkgs attribute")?;
+
+        Ok(())
+    }
+
+    async fn launch_repl(&self) -> Result<()> {
         // Reset the logger to restore normal stderr output for the REPL
         self.activity_logger.reset();
 
@@ -1419,20 +1444,18 @@ impl NixBackend for NixRustBackend {
             eprintln!("{}", error);
         }
 
-        // Lock the eval_state for REPL access
-        let activity = Activity::evaluate("Evaluating Nix")
+        let activity = Activity::evaluate("Launching REPL")
             .level(ActivityLevel::Info)
             .start();
         let mut eval_state = self.eval_session(&activity)?;
 
         // Check if there's a pending debugger session from a previous error
-        // If so, run the debugger REPL which has the error context
         let status = if nix_cmd::debugger_is_pending() {
             nix_cmd::debugger_run_pending(&mut eval_state)
                 .to_miette()
                 .wrap_err("Debugger REPL failed")?
         } else {
-            // Load default.nix with primops into the REPL scope
+            // get_or_eval_devenv uses the cached result from prepare_repl()
             let devenv_attrs = self.get_or_eval_devenv(&mut eval_state)?;
 
             // Create a ValMap to inject variables into the REPL scope

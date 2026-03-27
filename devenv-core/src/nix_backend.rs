@@ -115,8 +115,17 @@ pub trait NixBackend: Send + Sync {
     /// Get the development environment
     async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<DevEnvOutput>;
 
-    /// Open a Nix REPL
-    async fn repl(&self) -> Result<()>;
+    /// Evaluate the devenv configuration in preparation for the REPL.
+    ///
+    /// This performs the heavy Nix evaluation with full activity/TUI support.
+    /// Must be called before `launch_repl()`.
+    async fn prepare_repl(&self) -> Result<()>;
+
+    /// Launch the interactive Nix REPL.
+    ///
+    /// Assumes `prepare_repl()` was called first to evaluate the configuration.
+    /// This takes over the terminal for interactive use.
+    async fn launch_repl(&self) -> Result<()>;
 
     /// Build the specified attributes
     async fn build(

@@ -140,8 +140,11 @@ impl NixBackend for SnixBackend {
         )
     }
 
-    async fn repl(&self) -> Result<()> {
-        // TODO: Implement REPL functionality
+    async fn prepare_repl(&self) -> Result<()> {
+        bail!("REPL is not yet implemented for Snix backend")
+    }
+
+    async fn launch_repl(&self) -> Result<()> {
         bail!("REPL is not yet implemented for Snix backend")
     }
 

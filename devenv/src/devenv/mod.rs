@@ -859,9 +859,14 @@ impl Devenv {
         }
     }
 
-    pub async fn repl(&self) -> Result<()> {
+    pub async fn prepare_repl(&self) -> Result<()> {
         self.assemble().await?;
-        self.nix.repl().await?;
+        self.nix.prepare_repl().await?;
+        Ok(())
+    }
+
+    pub async fn launch_repl(&self) -> Result<()> {
+        self.nix.launch_repl().await?;
         Ok(())
     }
 

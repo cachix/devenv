@@ -2,6 +2,10 @@
 
 ## X.Y.Z (unreleased)
 
+### Bug Fixes
+
+- Fixed `devenv repl` broken TUI output and hanging evaluation by adding proper TUI handoff support, showing evaluation progress in the TUI before handing the terminal to the interactive REPL.
+
 ### Improvements
 
 - Added Ctrl+X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
