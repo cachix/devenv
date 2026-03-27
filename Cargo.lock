@@ -2052,6 +2052,7 @@ dependencies = [
  "iocraft",
  "libc",
  "portable-pty",
+ "shell-escape",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

@@ -121,14 +121,28 @@ impl TasksStatus {
 /// Output data from tasks
 pub type TaskOutputs = serde_json::Value;
 
+/// Navigate to `value["devenv"][field]`.
+fn get_devenv_field<'a>(
+    value: &'a serde_json::Value,
+    field: &str,
+) -> Option<&'a serde_json::Value> {
+    value.get("devenv").and_then(|d| d.get(field))
+}
+
 /// Read the `devenv.env` object from a task output JSON value.
 pub fn get_devenv_env(
     value: &serde_json::Value,
 ) -> Option<&serde_json::Map<String, serde_json::Value>> {
-    value
-        .get("devenv")
-        .and_then(|d| d.get("env"))
-        .and_then(|e| e.as_object())
+    get_devenv_field(value, "env").and_then(|e| e.as_object())
+}
+
+/// Iterate over the `devenv.messages` strings in a task output JSON value.
+fn iter_devenv_messages(value: &serde_json::Value) -> impl Iterator<Item = &str> {
+    get_devenv_field(value, "messages")
+        .and_then(|m| m.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str())
 }
 
 /// Get or create the mutable `devenv.env` object in a task output JSON value.
@@ -209,6 +223,19 @@ impl Outputs {
             }
         }
         envs
+    }
+
+    /// Extract all `devenv.messages` strings from task outputs.
+    ///
+    /// Each task's JSON output may contain `{"devenv": {"messages": ["msg1", "msg2"]}}`.
+    /// Messages are collected in task name order (BTreeMap iteration), preserving
+    /// array order within each task.
+    pub fn collect_messages(&self) -> Vec<String> {
+        self.0
+            .values()
+            .flat_map(|v| iter_devenv_messages(v))
+            .map(String::from)
+            .collect()
     }
 }
 

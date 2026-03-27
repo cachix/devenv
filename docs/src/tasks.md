@@ -177,6 +177,29 @@ Tasks support passing inputs and produce outputs, both as JSON objects:
 }
 ```
 
+### Shell messages
+
+!!! tip "New in version 2.1"
+
+Tasks can display messages to the user when entering the shell by writing a `devenv.messages` array to `$DEVENV_TASK_OUTPUT_FILE`. This is useful for showing informational output like trace URLs or setup status after initialization.
+
+```nix title="devenv.nix"
+{ pkgs, lib, config, ... }:
+
+{
+  tasks = {
+    "myapp:info" = {
+      exec = ''
+        echo '{"devenv":{"messages":["Setup complete. Dashboard: http://localhost:3000"]}}' > "$DEVENV_TASK_OUTPUT_FILE"
+      '';
+      before = [ "devenv:enterShell" ];
+    };
+  };
+}
+```
+
+Messages are printed after the shell environment is loaded, so they remain visible in the interactive session.
+
 ### Passing inputs from the CLI
 
 !!! tip "New in version 2.0"

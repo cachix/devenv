@@ -171,5 +171,19 @@ if ! echo "$INPUT" | grep -q '"added":true'; then
 fi
 echo "✓ --input-json flag works"
 
+# Test: Task messages displayed when entering the shell
+OUTPUT=$(echo "exit" | devenv shell 2>&1)
+if ! echo "$OUTPUT" | grep -q "msg-one"; then
+  echo "FAIL: msg-one not displayed when entering shell"
+  echo "Got: $OUTPUT"
+  exit 1
+fi
+if ! echo "$OUTPUT" | grep -q "msg-two"; then
+  echo "FAIL: msg-two not displayed when entering shell"
+  echo "Got: $OUTPUT"
+  exit 1
+fi
+echo "✓ Task messages work"
+
 echo ""
 echo "All task tests passed!"

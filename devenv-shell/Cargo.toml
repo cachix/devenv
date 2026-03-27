@@ -21,6 +21,9 @@ avt = { workspace = true }
 # Async runtime
 tokio = { workspace = true, features = ["sync", "rt", "signal", "io-util"] }
 
+# Shell escaping
+shell-escape = { workspace = true }
+
 # Error handling
 thiserror = { workspace = true }
 

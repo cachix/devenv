@@ -120,5 +120,13 @@
       '';
       showOutput = false;
     };
+
+    # Test: Task messages displayed when entering the shell
+    "test:messages" = {
+      exec = ''
+        echo '{"devenv":{"messages":["msg-one","msg-two"]}}' > "$DEVENV_TASK_OUTPUT_FILE"
+      '';
+      before = [ "devenv:enterShell" ];
+    };
   };
 }
