@@ -13,7 +13,7 @@ cargo nextest run --features test-all  # Run all tests (including PTY tests)
 
 ## Architecture
 
-This is a Rust library for shell session management with hot-reload capability. When watched files change, it spawns a new shell in the background and seamlessly swaps to it, preserving terminal state using AVT (Abstract Virtual Terminal).
+This is a Rust library for shell session management with hot-reload capability. When watched files change, it spawns a new shell in the background and seamlessly swaps to it, preserving terminal state using libghostty-rs (Ghostty VT terminal emulator).
 
 ### Module Overview
 

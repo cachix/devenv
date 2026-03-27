@@ -13,7 +13,10 @@ use crate::terminal_commands::{
     ResetScrollRegion, SetKeypadMode, SetScrollRegion,
 };
 use crate::utf8_accumulator::Utf8Accumulator;
-use avt::Vt;
+use crate::vt_utils::{
+    CursorState, DEFAULT_MAX_SCROLLBACK, active_point, cells_in_row, point_with_x, push_cell_text,
+    screen_point,
+};
 use crossterm::{
     Command, cursor,
     event::PopKeyboardEnhancementFlags,
@@ -21,6 +24,9 @@ use crossterm::{
     style::ResetColor,
     terminal::{self, Clear, ClearType},
 };
+use libghostty_vt::screen::{Cell, CellWide};
+use libghostty_vt::style::{Style, StyleColor, Underline};
+use libghostty_vt::terminal::{Options as TerminalOptions, Point, PointCoordinate, Terminal};
 use portable_pty::PtySize;
 use std::collections::BTreeSet;
 use std::fmt::Write as FmtWrite;
@@ -28,7 +34,7 @@ use std::io::{self, IsTerminal, Read, Write};
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::{Notify, mpsc, oneshot};
+use tokio::sync::{Notify, mpsc as tokio_mpsc, oneshot};
 
 /// Keybind byte sequences (ESC + Ctrl key).
 const KEYBIND_TOGGLE_PAUSE: [u8; 2] = [0x1b, 0x04]; // Ctrl-Alt-D
@@ -137,85 +143,104 @@ impl EscapeState {
     }
 }
 
-/// Render a VT line as a string with SGR escape sequences.
+/// Render a VT row as a string with SGR escape sequences.
 ///
-/// Equivalent to the `Line::dump()` method that was public in avt 0.14
-/// but made `pub(crate)` in 0.17.
-fn dump_line(buf: &mut String, line: &avt::Line) {
-    for cells in line.chunks(|c1, c2| c1.pen() != c2.pen()) {
-        dump_pen(buf, cells[0].pen());
-        for cell in &cells {
-            buf.push(cell.char());
+/// Uses pre-fetched cells for text/style-id and only calls into the terminal
+/// for style details and grapheme clusters, avoiding a second full cell iteration.
+fn dump_row_from_cells(buf: &mut String, vt: &Terminal<'_, '_>, point: Point, cells: &[Cell]) {
+    let mut prev_style_id: Option<libghostty_vt::style::Id> = None;
+    for (x, cell) in cells.iter().enumerate() {
+        if cell.wide().ok() == Some(CellWide::SpacerTail) {
+            continue;
         }
+        let Ok(cell_ref) = vt.grid_ref(point_with_x(point, x as u16)) else {
+            continue;
+        };
+        let style_id = cell.style_id().ok();
+        if prev_style_id != style_id {
+            if let Ok(style) = cell_ref.style() {
+                dump_style(buf, &style);
+            }
+            prev_style_id = style_id;
+        }
+        push_cell_text(buf, cell, &cell_ref);
     }
 }
 
-fn dump_pen(s: &mut String, pen: &avt::Pen) {
+/// Render a VT row as a string with SGR escape sequences (fetches cells internally).
+fn dump_row(buf: &mut String, vt: &Terminal<'_, '_>, point: Point) {
+    let cells = cells_in_row(vt, point);
+    dump_row_from_cells(buf, vt, point, &cells);
+}
+
+fn dump_style(s: &mut String, style: &Style) {
     s.push_str("\x1b[0");
-    if let Some(c) = pen.foreground() {
+    if style.fg_color != StyleColor::None {
         s.push(';');
-        dump_color(s, c, 30);
+        dump_color(s, &style.fg_color, 30);
     }
-    if let Some(c) = pen.background() {
+    if style.bg_color != StyleColor::None {
         s.push(';');
-        dump_color(s, c, 40);
+        dump_color(s, &style.bg_color, 40);
     }
-    if pen.is_bold() {
+    if style.bold {
         s.push_str(";1");
     }
-    if pen.is_faint() {
+    if style.faint {
         s.push_str(";2");
     }
-    if pen.is_italic() {
+    if style.italic {
         s.push_str(";3");
     }
-    if pen.is_underline() {
-        s.push_str(";4");
+    match style.underline {
+        Underline::None => {}
+        Underline::Single => s.push_str(";4"),
+        Underline::Double => s.push_str(";4:2"),
+        Underline::Curly => s.push_str(";4:3"),
+        Underline::Dotted => s.push_str(";4:4"),
+        Underline::Dashed => s.push_str(";4:5"),
+        _ => {}
     }
-    if pen.is_blink() {
+    if style.blink {
         s.push_str(";5");
     }
-    if pen.is_inverse() {
+    if style.inverse {
         s.push_str(";7");
     }
-    if pen.is_strikethrough() {
+    if style.strikethrough {
         s.push_str(";9");
     }
     s.push('m');
 }
 
-fn dump_color(s: &mut String, color: avt::Color, base: u8) {
+fn dump_color(s: &mut String, color: &StyleColor, base: u8) {
     match color {
-        avt::Color::Indexed(c) if c < 8 => {
-            let _ = write!(s, "{}", base + c);
+        StyleColor::Palette(p) if p.0 < 8 => {
+            let _ = write!(s, "{}", base + p.0);
         }
-        avt::Color::Indexed(c) if c < 16 => {
-            let _ = write!(s, "{}", base + 52 + c);
+        StyleColor::Palette(p) if p.0 < 16 => {
+            let _ = write!(s, "{}", base + 52 + p.0);
         }
-        avt::Color::Indexed(c) => {
-            let _ = write!(s, "{}:5:{}", base + 8, c);
+        StyleColor::Palette(p) => {
+            let _ = write!(s, "{}:5:{}", base + 8, p.0);
         }
-        avt::Color::RGB(rgb) => {
+        StyleColor::Rgb(rgb) => {
             let _ = write!(s, "{}:2:{}:{}:{}", base + 8, rgb.r, rgb.g, rgb.b);
         }
+        StyleColor::None => {}
     }
 }
 
-/// Feed text into VT and return `(scroll_count, gc_count)`.
-///
-/// `scroll_count` is the number of lines that scrolled off the viewport
-/// (including lines retained in scrollback and lines trimmed by GC).
-/// `gc_count` is the number of lines trimmed by GC beyond the scrollback
-/// limit — needed to keep `Renderer::scrollback_flushed` accurate.
-fn feed_vt(vt: &mut Vt, text: &str) -> (usize, usize) {
-    let lines_before = vt.lines().count();
-    let gc_count = {
-        let changes = vt.feed_str(text);
-        changes.scrollback.count()
-    };
-    let lines_after = vt.lines().count();
-    let scroll_count = (lines_after + gc_count).saturating_sub(lines_before);
-    (scroll_count, gc_count)
+/// Feed text into VT and return the scroll count (lines that scrolled off the viewport).
+fn feed_vt(vt: &mut Terminal<'_, '_>, text: &str) -> usize {
+    let total_before = vt.total_rows().unwrap_or(0);
+    vt.vt_write(text.as_bytes());
+    let total_after = vt.total_rows().unwrap_or(0);
+    // When scrollback is at the limit, GC trims old lines and total_rows
+    // stays constant (delta = 0). This underestimates scroll_count in that
+    // case. The render_with_scroll method detects this via a fingerprint
+    // check on the last flushed scrollback line and corrects accordingly.
+    total_after.saturating_sub(total_before)
 }
 
 /// Filters OSC responses from stdin to prevent garbled text.
@@ -360,9 +385,9 @@ impl StdinFilter {
 /// the VT state machine — similar to how tmux works.
 struct Renderer {
     /// Previous frame for diffing — one line of cells per row.
-    prev_lines: Vec<Vec<avt::Cell>>,
-    /// Previous cursor position and visibility.
-    prev_cursor: (usize, usize, bool),
+    prev_lines: Vec<Vec<Cell>>,
+    /// Previous cursor state.
+    prev_cursor: CursorState,
     /// Row offset for the initial phase after TUI handoff.
     /// When > 0, VT row N maps to real terminal row (N + 1 + row_offset)
     /// instead of (N + 1). Gradually consumed as VT content scrolls,
@@ -374,6 +399,9 @@ struct Renderer {
     /// Number of VT scrollback lines already pushed to native terminal scrollback.
     /// Used to flush only new (unflushed) scrollback lines in `render_with_scroll`.
     scrollback_flushed: usize,
+    /// Fingerprint of the last flushed scrollback line, used to detect when
+    /// scrollback GC shifts screen coordinates (making scrollback_flushed stale).
+    last_flushed_fingerprint: Option<[u32; 4]>,
     /// Reusable buffer for SGR line rendering (avoids per-line allocation).
     line_buf: String,
 }
@@ -382,25 +410,43 @@ impl Renderer {
     fn new(content_rows: u16) -> Self {
         Self {
             prev_lines: Vec::new(),
-            prev_cursor: (0, 0, true),
+            prev_cursor: CursorState {
+                col: 0,
+                row: 0,
+                visible: true,
+            },
             row_offset: 0,
             content_rows,
             scrollback_flushed: 0,
+            last_flushed_fingerprint: None,
             line_buf: String::new(),
         }
     }
 
-    /// Feed text into VT and adjust the scrollback watermark for GC.
-    /// Returns the scroll count (lines that scrolled off the viewport).
-    fn feed_vt(&mut self, vt: &mut Vt, text: &str) -> usize {
-        let (scroll, gc) = feed_vt(vt, text);
-        self.scrollback_flushed = self.scrollback_flushed.saturating_sub(gc);
-        scroll
+    /// Mark all current VT scrollback as already flushed (e.g., after resize).
+    fn mark_scrollback_flushed(&mut self, vt: &Terminal<'_, '_>) {
+        self.scrollback_flushed = vt.scrollback_rows().unwrap_or(0);
+        self.last_flushed_fingerprint = self.scrollback_fingerprint(vt);
     }
 
-    /// Mark all current VT scrollback as already flushed (e.g., after resize).
-    fn mark_scrollback_flushed(&mut self, vt: &Vt) {
-        self.scrollback_flushed = vt.lines().count().saturating_sub(vt.size().1);
+    /// Sample codepoints from the last flushed scrollback line for GC detection.
+    fn scrollback_fingerprint(&self, vt: &Terminal<'_, '_>) -> Option<[u32; 4]> {
+        if self.scrollback_flushed == 0 {
+            return None;
+        }
+        let cols = vt.cols().unwrap_or(0);
+        let y = (self.scrollback_flushed - 1) as u32;
+        let sample_xs = [0, cols / 4, cols / 2, 3 * cols / 4];
+        let mut fp = [0u32; 4];
+        for (i, &x) in sample_xs.iter().enumerate() {
+            fp[i] = vt
+                .grid_ref(Point::Screen(PointCoordinate { x, y }))
+                .ok()
+                .and_then(|gr| gr.cell().ok())
+                .and_then(|c| c.codepoint().ok())
+                .unwrap_or(0);
+        }
+        Some(fp)
     }
 
     /// Number of VT rows that fit on-screen given the current offset.
@@ -429,25 +475,43 @@ impl Renderer {
         queue!(stdout, ResetScrollRegion)
     }
 
-    /// Write a single VT line's content (SGR-formatted text + reset) to stdout.
-    fn write_line_content(&mut self, stdout: &mut impl Write, line: &avt::Line) -> io::Result<()> {
+    /// Write a single VT row's content (SGR-formatted text + reset) to stdout.
+    fn write_row_content(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'_, '_>,
+        point: Point,
+    ) -> io::Result<()> {
         self.line_buf.clear();
-        dump_line(&mut self.line_buf, line);
+        dump_row(&mut self.line_buf, vt, point);
+        stdout.write_all(self.line_buf.as_bytes())?;
+        queue!(stdout, ResetColor)
+    }
+
+    /// Write a row using pre-fetched cells (avoids re-iterating cells via FFI).
+    fn write_row_from_cells(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'_, '_>,
+        point: Point,
+        cells: &[Cell],
+    ) -> io::Result<()> {
+        self.line_buf.clear();
+        dump_row_from_cells(&mut self.line_buf, vt, point, cells);
         stdout.write_all(self.line_buf.as_bytes())?;
         queue!(stdout, ResetColor)
     }
 
     /// Render changed VT lines to stdout. Skips lines that haven't changed
     /// and clips rows that would fall outside the visible area.
-    fn render(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+    fn render(&mut self, stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
         let offset = self.row_offset as usize;
         let max_row = self.visible_rows();
-        for (row_idx, line) in vt.view().enumerate() {
-            if row_idx >= max_row {
-                break;
-            }
-            let cells = line.cells();
-            if row_idx < self.prev_lines.len() && cells == &self.prev_lines[row_idx][..] {
+        let rows = vt.rows().unwrap_or(0) as usize;
+        for row_idx in 0..rows.min(max_row) {
+            let point = active_point(row_idx as u32);
+            let cells = cells_in_row(vt, point);
+            if row_idx < self.prev_lines.len() && cells == self.prev_lines[row_idx] {
                 continue;
             }
             queue!(
@@ -455,13 +519,11 @@ impl Renderer {
                 cursor::MoveTo(0, (row_idx + offset) as u16),
                 Clear(ClearType::CurrentLine)
             )?;
-            self.write_line_content(stdout, line)?;
+            self.write_row_from_cells(stdout, vt, point, &cells)?;
             if row_idx >= self.prev_lines.len() {
                 self.prev_lines.resize_with(row_idx + 1, Vec::new);
             }
-            let prev = &mut self.prev_lines[row_idx];
-            prev.clear();
-            prev.extend_from_slice(cells);
+            self.prev_lines[row_idx] = cells;
         }
         self.update_cursor(stdout, vt)
     }
@@ -473,9 +535,30 @@ impl Renderer {
     /// the actual scrolled-off text), this draws VT scrollback lines onto the
     /// real terminal and then scrolls them off via newlines inside a DECSTBM
     /// region that protects the status line.
-    fn render_with_scroll(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
-        let vt_scrollback = vt.lines().count().saturating_sub(vt.size().1);
-        let unflushed = vt_scrollback.saturating_sub(self.scrollback_flushed);
+    fn render_with_scroll(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'_, '_>,
+    ) -> io::Result<()> {
+        let vt_scrollback = vt.scrollback_rows().unwrap_or(0);
+        let mut unflushed = vt_scrollback.saturating_sub(self.scrollback_flushed);
+
+        // Detect scrollback GC: when scrollback is at capacity, old lines are
+        // trimmed and new ones added, but scrollback_rows() stays constant.
+        // This makes unflushed = 0 even though new lines exist. Detect this
+        // by checking whether the content at the last flushed position changed
+        // (indicating screen coordinates shifted due to GC).
+        if unflushed == 0 && self.scrollback_flushed > 0 {
+            let current_fp = self.scrollback_fingerprint(vt);
+            if current_fp != self.last_flushed_fingerprint {
+                // GC shifted coordinates. Re-flush the last content_rows worth
+                // of scrollback. This may duplicate some lines in native
+                // scrollback but ensures new content is not lost.
+                let correction = (self.content_rows as usize).min(self.scrollback_flushed);
+                self.scrollback_flushed -= correction;
+                unflushed = correction;
+            }
+        }
 
         if unflushed > 0 && self.content_rows > 0 {
             let batch_size = self.content_rows as usize;
@@ -490,8 +573,8 @@ impl Renderer {
             )?;
 
             // Iterate scrollback lines starting from the first unflushed one.
-            // vt.line(n) is viewport-relative, so we must use lines() iterator.
-            let mut lines_iter = vt.lines().skip(self.scrollback_flushed);
+            // Uses Screen coordinates where y=0 is the oldest scrollback line.
+            let mut screen_y = self.scrollback_flushed;
             let mut remaining = unflushed;
 
             while remaining > 0 {
@@ -499,15 +582,16 @@ impl Renderer {
                 let mut drawn = 0;
 
                 for i in 0..count {
-                    let Some(line) = lines_iter.next() else {
+                    if screen_y >= vt_scrollback {
                         break;
-                    };
+                    }
                     queue!(
                         stdout,
                         cursor::MoveTo(0, i as u16),
                         Clear(ClearType::CurrentLine)
                     )?;
-                    self.write_line_content(stdout, line)?;
+                    self.write_row_content(stdout, vt, screen_point(screen_y as u32))?;
+                    screen_y += 1;
                     drawn += 1;
                 }
 
@@ -527,33 +611,33 @@ impl Renderer {
 
             queue!(stdout, ResetScrollRegion)?;
             self.scrollback_flushed = vt_scrollback;
+            self.last_flushed_fingerprint = self.scrollback_fingerprint(vt);
             self.prev_lines.clear();
         }
         self.render(stdout, vt)
     }
 
     /// Full redraw of all VT lines (after resize or initialization).
-    fn render_full(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+    fn render_full(&mut self, stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
         self.invalidate();
         self.render(stdout, vt)
     }
 
     /// Position the real terminal cursor to match the VT cursor.
-    fn update_cursor(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+    fn update_cursor(&mut self, stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
         let offset = self.row_offset as usize;
-        let cursor = vt.cursor();
-        let new_cursor = (cursor.col, cursor.row, cursor.visible);
-        if new_cursor != self.prev_cursor {
-            if cursor.visible && !self.prev_cursor.2 {
+        let cur = CursorState::from_terminal(vt);
+        if cur != self.prev_cursor {
+            if cur.visible && !self.prev_cursor.visible {
                 queue!(stdout, cursor::Show)?;
-            } else if !cursor.visible && self.prev_cursor.2 {
+            } else if !cur.visible && self.prev_cursor.visible {
                 queue!(stdout, cursor::Hide)?;
             }
             queue!(
                 stdout,
-                cursor::MoveTo(cursor.col as u16, (cursor.row + offset) as u16)
+                cursor::MoveTo(cur.col, (cur.row as usize + offset) as u16)
             )?;
-            self.prev_cursor = new_cursor;
+            self.prev_cursor = cur;
         }
         Ok(())
     }
@@ -562,12 +646,12 @@ impl Renderer {
     ///
     /// Used to restore the real terminal cursor after status line draws
     /// or other operations that move it away from the VT position.
-    fn write_cursor(&self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
-        let c = vt.cursor();
+    fn write_cursor(&self, stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
+        let cur = CursorState::from_terminal(vt);
         let offset = self.row_offset as usize;
         queue!(
             stdout,
-            cursor::MoveTo(c.col as u16, (c.row + offset) as u16)
+            cursor::MoveTo(cur.col, (cur.row as usize + offset) as u16)
         )
     }
 
@@ -579,13 +663,14 @@ impl Renderer {
     /// Snapshot VT state into prev_lines without writing anything to stdout.
     /// Used after TUI handoff to establish a baseline for diff rendering
     /// while preserving existing terminal content.
-    fn sync(&mut self, vt: &Vt) {
+    fn sync(&mut self, vt: &Terminal<'_, '_>) {
         self.prev_lines.clear();
-        for line in vt.view() {
-            self.prev_lines.push(line.cells().to_vec());
+        let rows = vt.rows().unwrap_or(0);
+        for y in 0..rows {
+            let cells = cells_in_row(vt, active_point(y as u32));
+            self.prev_lines.push(cells);
         }
-        let cursor = vt.cursor();
-        self.prev_cursor = (cursor.col, cursor.row, cursor.visible);
+        self.prev_cursor = CursorState::from_terminal(vt);
     }
 }
 
@@ -595,6 +680,8 @@ pub enum SessionError {
     Pty(#[from] PtyError),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
+    #[error("terminal error: {0}")]
+    Terminal(#[from] libghostty_vt::Error),
     #[error("channel closed")]
     ChannelClosed,
     #[error("unexpected command: expected Spawn, got {0}")]
@@ -706,8 +793,8 @@ impl ShellSession {
     /// * `handoff` - Optional TUI handoff configuration
     pub async fn run(
         mut self,
-        mut command_rx: mpsc::Receiver<ShellCommand>,
-        event_tx: mpsc::Sender<ShellEvent>,
+        mut command_rx: tokio_mpsc::Receiver<ShellCommand>,
+        event_tx: tokio_mpsc::Sender<ShellEvent>,
         handoff: Option<TuiHandoff>,
         io: SessionIo,
     ) -> Result<Option<u32>, SessionError> {
@@ -741,10 +828,6 @@ impl ShellSession {
         let pty_size = self.pty_size();
 
         let pty = Arc::new(Pty::spawn(initial_cmd, pty_size)?);
-        let mut vt = Vt::builder()
-            .size(pty_size.cols as usize, pty_size.rows as usize)
-            .scrollback_limit(10_000)
-            .build();
 
         // Handle TUI handoff if present
         if let Some(handoff) = handoff {
@@ -822,30 +905,8 @@ impl ShellSession {
         let pty_size = self.pty_size();
         let _ = pty.resize(pty_size);
 
-        // Reset the VT after resize so any stale PTY output (the shell's
-        // PROMPT_COMMAND after task execution, SIGWINCH redraw from the
-        // resize above) starts on a clean slate. The event loop will
-        // process any pending PTY output normally.
-        vt.resize(pty_size.cols as usize, pty_size.rows as usize);
-        vt.feed_str("\x1b[2J\x1b[H");
-
-        // Initialize the renderer and do a full initial draw
-        let mut renderer = Renderer::new(pty_size.rows);
-        if row_offset > 0 {
-            renderer.row_offset = row_offset;
-            renderer.sync(&vt);
-        } else {
-            renderer.render_full(&mut stdout, &vt)?;
-        }
-        if self.config.show_status_line {
-            self.status_line
-                .draw(&mut stdout, self.size.cols, self.size.rows)?;
-        }
-        renderer.write_cursor(&mut stdout, &vt)?;
-        stdout.flush()?;
-
         // Set up event channel
-        let (event_tx_internal, mut event_rx_internal) = mpsc::channel::<Event>(100);
+        let (event_tx_internal, event_rx_internal) = std::sync::mpsc::channel::<Event>();
 
         // Spawn stdin reader thread
         let stdin_tx = event_tx_internal.clone();
@@ -858,10 +919,7 @@ impl ShellSession {
                     match stdin.read(&mut buf) {
                         Ok(0) => break,
                         Ok(n) => {
-                            if stdin_tx
-                                .blocking_send(Event::Stdin(buf[..n].to_vec()))
-                                .is_err()
-                            {
+                            if stdin_tx.send(Event::Stdin(buf[..n].to_vec())).is_err() {
                                 break;
                             }
                         }
@@ -886,14 +944,11 @@ impl ShellSession {
                         Ok(0) => {
                             let exit_code =
                                 pty_reader.try_wait().ok().flatten().map(|s| s.exit_code());
-                            let _ = pty_tx.blocking_send(Event::PtyExit(exit_code));
+                            let _ = pty_tx.send(Event::PtyExit(exit_code));
                             break;
                         }
                         Ok(n) => {
-                            if pty_tx
-                                .blocking_send(Event::PtyOutput(buf[..n].to_vec()))
-                                .is_err()
-                            {
+                            if pty_tx.send(Event::PtyOutput(buf[..n].to_vec())).is_err() {
                                 break;
                             }
                         }
@@ -901,7 +956,7 @@ impl ShellSession {
                             tracing::warn!("session: PTY read error: {}", e);
                             let exit_code =
                                 pty_reader.try_wait().ok().flatten().map(|s| s.exit_code());
-                            let _ = pty_tx.blocking_send(Event::PtyExit(exit_code));
+                            let _ = pty_tx.send(Event::PtyExit(exit_code));
                             break;
                         }
                     }
@@ -913,7 +968,7 @@ impl ShellSession {
         let cmd_tx = event_tx_internal.clone();
         tokio::spawn(async move {
             while let Some(cmd) = command_rx.recv().await {
-                if cmd_tx.send(Event::Command(cmd)).await.is_err() {
+                if cmd_tx.send(Event::Command(cmd)).is_err() {
                     break;
                 }
             }
@@ -929,45 +984,85 @@ impl ShellSession {
                         .expect("failed to register SIGWINCH handler");
                 loop {
                     sigwinch.recv().await;
-                    if resize_tx.send(Event::Resize).await.is_err() {
+                    if resize_tx.send(Event::Resize).is_err() {
                         break;
                     }
                 }
             });
         }
 
-        // Main event loop
-        tracing::trace!("session: starting event loop");
-        let exit_code = self
-            .event_loop(
-                &pty,
+        // Move VT processing and rendering to a dedicated thread.
+        // Terminal is !Send, so all VT access must stay on one thread.
+        let coordinator_tx = event_tx.clone();
+        let pty_for_thread = Arc::clone(&pty);
+        let vt_handle = std::thread::spawn(move || -> Result<Option<u32>, SessionError> {
+            // Create the VT on this thread (Terminal is !Send)
+            let mut vt = Terminal::new(TerminalOptions {
+                cols: pty_size.cols,
+                rows: pty_size.rows,
+                max_scrollback: DEFAULT_MAX_SCROLLBACK,
+            })?;
+
+            // Reset the VT after resize so any stale PTY output (the shell's
+            // PROMPT_COMMAND after task execution, SIGWINCH redraw from the
+            // resize above) starts on a clean slate. The event loop will
+            // process any pending PTY output normally.
+            if let Err(e) = vt.resize(pty_size.cols, pty_size.rows, 0, 0) {
+                tracing::warn!("failed to resize terminal: {e}");
+            }
+            vt.vt_write(b"\x1b[2J\x1b[H");
+
+            // Initialize the renderer and do a full initial draw
+            let mut renderer = Renderer::new(pty_size.rows);
+            if row_offset > 0 {
+                renderer.row_offset = row_offset;
+                renderer.sync(&vt);
+            } else {
+                renderer.render_full(&mut stdout, &vt)?;
+            }
+            if self.config.show_status_line {
+                self.status_line
+                    .draw(&mut stdout, self.size.cols, self.size.rows)?;
+            }
+            renderer.write_cursor(&mut stdout, &vt)?;
+            stdout.flush()?;
+
+            self.event_loop(
+                &pty_for_thread,
                 &mut vt,
                 &mut renderer,
-                &mut event_rx_internal,
-                &event_tx,
+                event_rx_internal,
+                &coordinator_tx,
                 &mut stdout,
             )
-            .await;
+        });
+
+        // Wait for VT thread without blocking the tokio runtime
+        let exit_code = tokio::task::spawn_blocking(move || {
+            vt_handle.join().unwrap_or(Err(SessionError::ChannelClosed))
+        })
+        .await
+        .map_err(|_| SessionError::ChannelClosed)??;
 
         let _ = pty.kill();
 
-        let exit_code = exit_code?;
-
         // Notify coordinator that shell exited
-        let _ = event_tx.send(ShellEvent::Exited { exit_code }).await;
+        if let Err(e) = event_tx.try_send(ShellEvent::Exited { exit_code }) {
+            tracing::debug!("failed to send Exited event: {e}");
+        }
 
         Ok(exit_code)
     }
 
     /// Main event loop handling stdin, PTY output, and coordinator commands.
     /// Returns the exit code from the PTY child process, if available.
-    async fn event_loop(
+    fn event_loop(
         &mut self,
         pty: &Arc<Pty>,
-        vt: &mut Vt,
+        vt: &mut Terminal<'_, '_>,
         renderer: &mut Renderer,
-        event_rx: &mut mpsc::Receiver<Event>,
-        coordinator_tx: &mpsc::Sender<ShellEvent>,
+        event_rx: std::sync::mpsc::Receiver<Event>,
+        coordinator_tx: &tokio_mpsc::Sender<ShellEvent>,
         stdout: &mut Box<dyn Write + Send>,
     ) -> Result<Option<u32>, SessionError> {
         let spinner_interval = Duration::from_millis(SPINNER_INTERVAL_MS);
@@ -984,21 +1079,23 @@ impl ShellSession {
                 resize_pending = false;
                 Some(Event::Resize)
             } else if self.status_line.state().building {
-                tokio::select! {
-                    event = event_rx.recv() => event,
-                    _ = tokio::time::sleep(spinner_interval) => {
+                match event_rx.recv_timeout(spinner_interval) {
+                    Ok(event) => Some(event),
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         if self.config.show_status_line {
                             queue!(stdout, terminal::BeginSynchronizedUpdate)?;
-                            self.status_line.draw(stdout, self.size.cols, self.size.rows)?;
+                            self.status_line
+                                .draw(stdout, self.size.cols, self.size.rows)?;
                             renderer.write_cursor(stdout, vt)?;
                             queue!(stdout, terminal::EndSynchronizedUpdate)?;
                             stdout.flush()?;
                         }
                         continue;
                     }
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => None,
                 }
             } else {
-                event_rx.recv().await
+                event_rx.recv().ok()
             };
 
             let Some(event) = event else {
@@ -1008,11 +1105,15 @@ impl ShellSession {
             match event {
                 Event::Stdin(data) => {
                     if data.as_slice() == KEYBIND_TOGGLE_PAUSE {
-                        let _ = coordinator_tx.send(ShellEvent::TogglePause).await;
+                        if let Err(e) = coordinator_tx.try_send(ShellEvent::TogglePause) {
+                            tracing::debug!("failed to send TogglePause event: {e}");
+                        }
                         continue;
                     }
                     if data.as_slice() == KEYBIND_LIST_WATCHED {
-                        let _ = coordinator_tx.send(ShellEvent::ListWatchedFiles).await;
+                        if let Err(e) = coordinator_tx.try_send(ShellEvent::ListWatchedFiles) {
+                            tracing::debug!("failed to send ListWatchedFiles event: {e}");
+                        }
                         continue;
                     }
                     if data.as_slice() == KEYBIND_TOGGLE_ERROR {
@@ -1027,7 +1128,7 @@ impl ShellSession {
                                     error_text.push_str(&format!("  {}\r\n", line));
                                 }
                                 error_text.push_str("\r\n");
-                                renderer.feed_vt(vt, &error_text);
+                                feed_vt(vt, &error_text);
                                 if renderer.row_offset > 0 {
                                     renderer.render(stdout, vt)?;
                                 } else {
@@ -1059,14 +1160,14 @@ impl ShellSession {
                         &data,
                         &mut esc,
                         stdout,
-                        &pty,
+                        pty,
                         self.pty_size(),
                         &mut esc_events,
                     )?;
 
                     // Feed output into VT and track how many lines scrolled off
                     let text = utf8_acc.accumulate(&data);
-                    let mut total_scroll = renderer.feed_vt(vt, &text);
+                    let mut total_scroll = feed_vt(vt, &text);
 
                     // Batch: drain any additional pending PtyOutput events
                     while let Ok(event) = event_rx.try_recv() {
@@ -1077,12 +1178,12 @@ impl ShellSession {
                                     &more,
                                     &mut esc,
                                     stdout,
-                                    &pty,
+                                    pty,
                                     self.pty_size(),
                                     &mut esc_events,
                                 )?;
                                 let text = utf8_acc.accumulate(&more);
-                                total_scroll += renderer.feed_vt(vt, &text);
+                                total_scroll += feed_vt(vt, &text);
                             }
                             Event::PtyExit(exit_code) => {
                                 Self::cleanup_forwarded_modes(&esc, stdout)?;
@@ -1097,7 +1198,7 @@ impl ShellSession {
                                 }
                             }
                             Event::Command(cmd) => {
-                                total_scroll += self.handle_command(cmd, vt, renderer)?;
+                                total_scroll += self.handle_command(cmd, vt)?;
                             }
                             Event::Resize => {
                                 resize_pending = true;
@@ -1121,7 +1222,8 @@ impl ShellSession {
                     if renderer.row_offset > 0 {
                         let content_rows = renderer.content_rows;
                         let visible_rows = renderer.visible_rows();
-                        let cursor_excess = (vt.cursor().row + 1).saturating_sub(visible_rows);
+                        let cursor_row = vt.cursor_y().map(|r| r as usize).unwrap_or(0);
+                        let cursor_excess = (cursor_row + 1).saturating_sub(visible_rows);
                         let need = total_scroll.max(cursor_excess);
 
                         let consumed = if esc.in_alternate_screen || esc.erase_display {
@@ -1168,7 +1270,7 @@ impl ShellSession {
                 }
 
                 Event::Command(cmd) => {
-                    self.handle_command(cmd, vt, renderer)?;
+                    self.handle_command(cmd, vt)?;
                     queue!(stdout, terminal::BeginSynchronizedUpdate)?;
                     if renderer.row_offset > 0 {
                         renderer.render(stdout, vt)?;
@@ -1209,7 +1311,9 @@ impl ShellSession {
                             cmd.write_ansi(&mut buf).unwrap();
                             let _ = pty.write_all(buf.as_bytes());
                         }
-                        vt.resize(pty_size.cols as usize, pty_size.rows as usize);
+                        if let Err(e) = vt.resize(pty_size.cols, pty_size.rows, 0, 0) {
+                            tracing::warn!("failed to resize terminal: {e}");
+                        }
                         renderer.mark_scrollback_flushed(vt);
                         renderer.render_full(stdout, vt)?;
                         if self.config.show_status_line && !esc.in_alternate_screen {
@@ -1217,12 +1321,12 @@ impl ShellSession {
                         }
                         renderer.write_cursor(stdout, vt)?;
                         stdout.flush()?;
-                        let _ = coordinator_tx
-                            .send(ShellEvent::Resize {
-                                cols: pty_size.cols,
-                                rows: pty_size.rows,
-                            })
-                            .await;
+                        if let Err(e) = coordinator_tx.try_send(ShellEvent::Resize {
+                            cols: pty_size.cols,
+                            rows: pty_size.rows,
+                        }) {
+                            tracing::debug!("failed to send Resize event: {e}");
+                        }
                     }
                 }
             }
@@ -1242,8 +1346,7 @@ impl ShellSession {
     fn handle_command(
         &mut self,
         cmd: ShellCommand,
-        vt: &mut Vt,
-        renderer: &mut Renderer,
+        vt: &mut Terminal<'_, '_>,
     ) -> Result<usize, SessionError> {
         match cmd {
             ShellCommand::ReloadReady { changed_files } => {
@@ -1282,7 +1385,7 @@ impl ShellSession {
                 for file in &files {
                     text.push_str(&format!("  {}\r\n", file.display()));
                 }
-                return Ok(renderer.feed_vt(vt, &text));
+                return Ok(feed_vt(vt, &text));
             }
 
             ShellCommand::Shutdown => {
@@ -1413,7 +1516,7 @@ impl ShellSession {
     fn draw_status_and_cursor(
         &mut self,
         stdout: &mut impl Write,
-        vt: &Vt,
+        vt: &Terminal<'_, '_>,
         renderer: &Renderer,
     ) -> Result<(), SessionError> {
         if self.config.show_status_line {

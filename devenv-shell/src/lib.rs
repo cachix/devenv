@@ -12,6 +12,7 @@ mod status_line;
 mod terminal;
 mod terminal_commands;
 mod utf8_accumulator;
+pub mod vt_utils;
 
 // Protocol types
 pub use protocol::{ShellCommand, ShellEvent};

@@ -1,4 +1,6 @@
 {
+  "git+https://github.com/Uzaaft/libghostty-rs.git#libghostty-vt-sys@0.1.1": "012jdfxdwlp3r3qrhrjsf5aj5rhcvpzz34pllqb62j5fs46g3dpv",
+  "git+https://github.com/Uzaaft/libghostty-rs.git#libghostty-vt@0.1.1": "012jdfxdwlp3r3qrhrjsf5aj5rhcvpzz34pllqb62j5fs46g3dpv",
   "git+https://github.com/cachix/crossterm?branch=0.29-cachix#0.29.0": "0wn6n3znzv1jxw9ghl6qgsancd2myafs7kxpvn3lm3wsxhpvv76l",
   "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#nix-bindings-bindgen-raw@0.1.0": "0z1rsh60bd7q5i1mj81q0jyq28ppbmbxlasn8brxlagg4yd0p9sr",
   "git+https://github.com/cachix/nix-bindings-rust.git?branch=for-upstream#nix-bindings-expr@0.1.0": "0z1rsh60bd7q5i1mj81q0jyq28ppbmbxlasn8brxlagg4yd0p9sr",
@@ -17,7 +19,5 @@
   "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-glue@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
   "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-store@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
   "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-tracing@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
-  "git+https://github.com/ccbrown/iocraft?branch=main#0.7.18": "09ldvmxmhdjfb6dsxpy2gxwh1mc3kgkwn35rfy91rjyh2444cfi3",
-  "git+https://github.com/ccbrown/iocraft?branch=main#iocraft-macros@0.2.3": "09ldvmxmhdjfb6dsxpy2gxwh1mc3kgkwn35rfy91rjyh2444cfi3",
   "git+https://github.com/tvlfyi/wu-manber.git#wu-manber@0.1.0": "1zhk83lbq99xzyjwphv2qrb8f8qgfqwa5bbbvyzm0z0bljsjv0pd"
 }

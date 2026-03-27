@@ -58,7 +58,7 @@ nix-bindings-fetchers = { git = "https://github.com/cachix/nix-bindings-rust.git
 nix-cmd = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
 nix-bindings-bindgen-raw = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
 
-avt = "0.17"
+libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs.git" }
 base64 = "0.22"
 anyhow = "1.0.92"
 ansiterm = "0.12.2"
@@ -187,7 +187,7 @@ nix-compat = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a75
 nix-compat-derive = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
 
 # Ensure crossterm versions match between these
-iocraft = { version = "0.7.18", features = ["unstable-output-streams"] }
+iocraft = { version = "0.8.0", features = ["unstable-output-streams"] }
 crossterm = "0.29.0"
 
 [patch.crates-io]
