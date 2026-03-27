@@ -12,7 +12,7 @@ devenv-activity = { workspace = true }
 devenv-event-sources = { workspace = true }
 devenv-shell = { workspace = true }
 portable-pty = { workspace = true }
-avt = { workspace = true }
+libghostty-vt = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }

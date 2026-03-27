@@ -16,7 +16,7 @@ crossterm = { workspace = true }
 iocraft = { workspace = true }
 
 # Terminal state tracking
-avt = { workspace = true }
+libghostty-vt = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true, features = ["sync", "rt", "signal", "io-util"] }

@@ -41,8 +41,11 @@ let
     inherit rustc cargo;
   };
 
+  # Pre-built libghostty-vt shared library for the crate2nix build
+  libghostty-vt = callPackage ./libghostty-vt.nix { };
+
   # Import crate2nix generated file with overrides
-  crateConfig = callPackage ./crate-config.nix { inherit gitRev isRelease; };
+  crateConfig = callPackage ./crate-config.nix { inherit gitRev isRelease libghostty-vt; };
 
   cargoNix = import ../Cargo.nix {
     inherit pkgs lib stdenv;
@@ -81,10 +84,12 @@ let
 
         wrapProgram $out/bin/devenv \
           --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
+          --prefix LD_LIBRARY_PATH ":" "${libghostty-vt}/lib" \
           ${setDefaultLocaleArchive}
 
         wrapProgram $out/bin/devenv-run-tests \
           --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
+          --prefix LD_LIBRARY_PATH ":" "${libghostty-vt}/lib" \
           ${setDefaultLocaleArchive}
 
         # Generate manpages
