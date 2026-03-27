@@ -99,6 +99,9 @@ impl TasksBuilder {
             if task.status.is_some() && task.command.is_none() {
                 return Err(Error::MissingCommand(name));
             }
+            if task.status_after.is_some() && task.command.is_none() {
+                return Err(Error::MissingCommand(name));
+            }
             let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(
                 task,
                 self.verbosity,
@@ -875,7 +878,9 @@ impl Tasks {
                                 .await
                                 .insert(ts.task.name.clone(), output.clone());
 
-                            if (ts.task.status.is_some() || !ts.task.exec_if_modified.is_empty())
+                            if (ts.task.status.is_some()
+                                || ts.task.status_after.is_some()
+                                || !ts.task.exec_if_modified.is_empty())
                                 && let Some(output_value) = output.as_object()
                             {
                                 let task_name = &ts.task.name;
@@ -896,7 +901,10 @@ impl Tasks {
                             }
                         }
                         TaskCompleted::Skipped(Skipped::Cached(Output(None))) => {
-                            if ts.task.status.is_some() || !ts.task.exec_if_modified.is_empty() {
+                            if ts.task.status.is_some()
+                                || ts.task.status_after.is_some()
+                                || !ts.task.exec_if_modified.is_empty()
+                            {
                                 tracing::debug!(
                                     "Skipped task {} has no cached output to store",
                                     ts.task.name
@@ -1166,6 +1174,7 @@ impl Tasks {
             let orchestration_activity_clone = Arc::clone(&orchestration_activity);
             let completed_tasks_clone = Arc::clone(&completed_tasks);
             let shell_env = self.env.clone();
+            let refresh_task_cache = self.refresh_task_cache;
 
             running_tasks.spawn(move || {
                 // Clone for use inside the async block; the original is borrowed by in_activity
@@ -1186,6 +1195,7 @@ impl Tasks {
                                 shutdown_clone.cancellation_token(),
                                 task_activity_id,
                                 &SubprocessExecutor,
+                                refresh_task_cache,
                                 &shell_env,
                             )
                             .await
@@ -1239,8 +1249,9 @@ impl Tasks {
                                     // TODO: fix clone
                                     .insert(task_state.task.name.clone(), output.clone());
 
-                                // Store task output if we're having status or exec_if_modified
+                                // Store task output if we're having status, status_after, or exec_if_modified
                                 if (task_state.task.status.is_some()
+                                    || task_state.task.status_after.is_some()
                                     || !task_state.task.exec_if_modified.is_empty())
                                     && let Some(output_value) = output.as_object()
                                 {

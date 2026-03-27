@@ -2236,6 +2236,326 @@ exit 0
 }
 
 #[tokio::test]
+async fn test_status_after_skip() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+    let counter_path = temp_dir.path().join("main_invocations");
+    let counter = counter_path.to_str().unwrap();
+
+    let dep_script = create_script(
+        r#"#!/bin/sh
+echo '{"result": "from_dep"}' > $DEVENV_TASK_OUTPUT_FILE
+"#,
+    )?;
+    let main_script = create_script(&format!(
+        r#"#!/bin/sh
+printf 'x\n' >> "{}"
+"#,
+        counter
+    ))?;
+    let sa_script = create_script("#!/bin/sh\nexit 0")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:dep",
+                "command": dep_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:child",
+                "after": ["myapp:dep"],
+                "command": main_script.to_str().unwrap(),
+                "status_after": sa_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:child"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let lines = fs::read_to_string(&counter_path).await.unwrap_or_default();
+    assert_eq!(
+        lines.lines().filter(|l| !l.is_empty()).count(),
+        0,
+        "main exec should be skipped when status_after exits 0"
+    );
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+    assert_matches!(
+        statuses.remove("myapp:child"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+    assert!(statuses.contains_key("myapp:dep"));
+    assert!(statuses.contains_key("myapp:root"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_status_after_run() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+    let counter_path = temp_dir.path().join("main_invocations_sa_run");
+    let counter = counter_path.to_str().unwrap();
+
+    let dep_script = create_script(
+        r#"#!/bin/sh
+echo '{"result": "from_dep"}' > $DEVENV_TASK_OUTPUT_FILE
+"#,
+    )?;
+    let main_script = create_script(&format!(
+        r#"#!/bin/sh
+printf 'x\n' >> "{}"
+"#,
+        counter
+    ))?;
+    let sa_script = create_script("#!/bin/sh\nexit 1")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:dep",
+                "command": dep_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:child",
+                "after": ["myapp:dep"],
+                "command": main_script.to_str().unwrap(),
+                "status_after": sa_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:child"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let lines = fs::read_to_string(&counter_path).await.unwrap_or_default();
+    assert_eq!(
+        lines.lines().filter(|l| !l.is_empty()).count(),
+        1,
+        "main exec should run when status_after exits non-zero"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_status_after_receives_outputs() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let dep_script = create_script(
+        r#"#!/bin/sh
+echo '{"k":1}' > $DEVENV_TASK_OUTPUT_FILE
+"#,
+    )?;
+    // Exit 0 only if DEVENV_TASKS_OUTPUTS mentions the dependency task name
+    let sa_script = create_script(
+        r#"#!/bin/sh
+case ${DEVENV_TASKS_OUTPUTS+x} in
+  '') exit 1 ;;
+esac
+echo "$DEVENV_TASKS_OUTPUTS" | grep -q 'myapp:dep' || exit 1
+exit 0
+"#,
+    )?;
+    let main_script = create_script("#!/bin/sh\necho should-not-run")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:dep",
+                "command": dep_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:child",
+                "after": ["myapp:dep"],
+                "command": main_script.to_str().unwrap(),
+                "status_after": sa_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:child"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+    assert_matches!(
+        statuses.remove("myapp:child"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_status_after_with_status() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+    let counter_path = temp_dir.path().join("status_after_invocations");
+    let counter = counter_path.to_str().unwrap();
+
+    let status_preflight = create_script("#!/bin/sh\nexit 0")?;
+    let sa_script = create_script(&format!(
+        r#"#!/bin/sh
+printf 'x\n' >> "{}"
+exit 0
+"#,
+        counter
+    ))?;
+    let main_script = create_script("#!/bin/sh\necho main")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:task",
+                "command": main_script.to_str().unwrap(),
+                "status": status_preflight.to_str().unwrap(),
+                "status_after": sa_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:task"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let lines = fs::read_to_string(&counter_path).await.unwrap_or_default();
+    assert_eq!(
+        lines.lines().filter(|l| !l.is_empty()).count(),
+        0,
+        "status_after must not run when pre-flight status already skipped the task"
+    );
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+    assert_matches!(
+        statuses.remove("myapp:task"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_status_after_disabled_by_refresh() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+    let counter_path = temp_dir.path().join("main_invocations_refresh");
+    let counter = counter_path.to_str().unwrap();
+
+    let dep_script = create_script(
+        r#"#!/bin/sh
+echo '{"result": "from_dep"}' > $DEVENV_TASK_OUTPUT_FILE
+"#,
+    )?;
+    let main_script = create_script(&format!(
+        r#"#!/bin/sh
+printf 'x\n' >> "{}"
+"#,
+        counter
+    ))?;
+    let sa_script = create_script("#!/bin/sh\nexit 0")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:dep",
+                "command": dep_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:child",
+                "after": ["myapp:dep"],
+                "command": main_script.to_str().unwrap(),
+                "status_after": sa_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:child"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .with_refresh_task_cache(true)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let lines = fs::read_to_string(&counter_path).await.unwrap_or_default();
+    assert_eq!(
+        lines.lines().filter(|l| !l.is_empty()).count(),
+        1,
+        "refresh_task_cache should bypass status_after so main exec runs"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_skip_short_circuits_status_check() -> Result<(), Error> {
     let temp_dir = TempDir::new().unwrap();
     let db_path = temp_dir.path().join("tasks.db");

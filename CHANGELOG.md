@@ -4,7 +4,7 @@
 
 ### Breaking Changes
 
-- **Tasks**: `status` commands no longer receive `DEVENV_TASKS_OUTPUTS` (they may run before dependency tasks). Use the main `exec` for logic that needs upstream outputs.
+- **Tasks**: `status` commands execute before dependency tasks complete execution. `status` commands no longer receive `DEVENV_TASKS_OUTPUTS`. Use `statusAfter` to restore the previous behavior of `status`.
 
 ### Improvements
 
