@@ -1,14 +1,17 @@
 use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
-use avt::Vt;
 use devenv_event_sources::{FileWatcher, FileWatcherConfig};
+use devenv_shell::vt_utils::DEFAULT_MAX_SCROLLBACK;
 use devenv_shell::{Pty, PtyError, RawModeGuard, get_terminal_size};
+use libghostty_vt::fmt::{Format, Formatter, FormatterOptions};
+use libghostty_vt::terminal::{Options as TerminalOptions, Terminal};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc as tokio_mpsc;
+use tracing::warn;
 
 /// Messages sent by the shell manager to notify consumers of events.
 #[derive(Debug, Clone)]
@@ -29,6 +32,8 @@ pub enum ManagerError {
     Build(#[source] crate::builder::BuildError),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
+    #[error("terminal error: {0}")]
+    Terminal(#[from] libghostty_vt::Error),
 }
 
 enum Event {
@@ -49,7 +54,7 @@ impl ShellManager {
     pub async fn run<B: ShellBuilder + 'static>(
         config: Config,
         builder: B,
-        messages: mpsc::Sender<ManagerMessage>,
+        messages: tokio_mpsc::Sender<ManagerMessage>,
     ) -> Result<(), ManagerError> {
         let builder = Arc::new(builder);
         let cwd = std::env::current_dir()?;
@@ -81,15 +86,11 @@ impl ShellManager {
         let size = get_terminal_size();
         let initial_pty = Arc::new(Pty::spawn(cmd, size).map_err(ManagerError::Spawn)?);
         let pty = Arc::new(RwLock::new(initial_pty.clone()));
-        let mut pty_generation: u64 = 0;
-
-        // Set up terminal state tracking
-        let mut vt = Vt::new(size.cols as usize, size.rows as usize);
 
         // Set up raw mode for stdin
         let _raw_guard = RawModeGuard::new()?;
 
-        let (event_tx, mut event_rx) = mpsc::channel::<Event>(100);
+        let (event_tx, event_rx) = std::sync::mpsc::channel::<Event>();
 
         // Spawn stdin reader thread
         let stdin_tx = event_tx.clone();
@@ -102,10 +103,7 @@ impl ShellManager {
                     match stdin.read(&mut buf) {
                         Ok(0) => break,
                         Ok(n) => {
-                            if stdin_tx
-                                .blocking_send(Event::Stdin(buf[..n].to_vec()))
-                                .is_err()
-                            {
+                            if stdin_tx.send(Event::Stdin(buf[..n].to_vec())).is_err() {
                                 break;
                             }
                         }
@@ -116,173 +114,217 @@ impl ShellManager {
             .expect("failed to spawn reload-stdin thread");
 
         // Spawn PTY reader thread
-        let pty_tx = event_tx.clone();
-        let spawn_pty_reader = |pty: Arc<Pty>, generation: u64, pty_tx: mpsc::Sender<Event>| {
-            std::thread::Builder::new()
-                .name("reload-pty".into())
-                .spawn(move || {
-                    let mut buf = [0u8; 4096];
-                    loop {
-                        let result = pty.read(&mut buf);
-                        match result {
-                            Ok(0) => {
-                                let _ = pty_tx.blocking_send(Event::PtyExit(generation));
-                                break;
-                            }
-                            Ok(n) => {
-                                if pty_tx
-                                    .blocking_send(Event::PtyOutput(generation, buf[..n].to_vec()))
-                                    .is_err()
-                                {
+        let spawn_pty_reader =
+            |pty: Arc<Pty>, generation: u64, pty_tx: std::sync::mpsc::Sender<Event>| {
+                std::thread::Builder::new()
+                    .name("reload-pty".into())
+                    .spawn(move || {
+                        let mut buf = [0u8; 4096];
+                        loop {
+                            let result = pty.read(&mut buf);
+                            match result {
+                                Ok(0) => {
+                                    let _ = pty_tx.send(Event::PtyExit(generation));
+                                    break;
+                                }
+                                Ok(n) => {
+                                    if pty_tx
+                                        .send(Event::PtyOutput(generation, buf[..n].to_vec()))
+                                        .is_err()
+                                    {
+                                        break;
+                                    }
+                                }
+                                Err(_) => {
+                                    let _ = pty_tx.send(Event::PtyExit(generation));
                                     break;
                                 }
                             }
-                            Err(_) => {
-                                let _ = pty_tx.blocking_send(Event::PtyExit(generation));
-                                break;
-                            }
                         }
-                    }
-                })
-                .expect("failed to spawn reload-pty thread");
-        };
-        spawn_pty_reader(initial_pty.clone(), pty_generation, pty_tx);
+                    })
+                    .expect("failed to spawn reload-pty thread");
+            };
+        spawn_pty_reader(initial_pty.clone(), 0, event_tx.clone());
 
         // Spawn file watcher forwarder
         let watch_tx = event_tx.clone();
         tokio::spawn(async move {
             while let Some(event) = watcher.recv().await {
-                if watch_tx.send(Event::FileChange(event.path)).await.is_err() {
+                if watch_tx.send(Event::FileChange(event.path)).is_err() {
                     break;
                 }
             }
         });
 
-        let mut stdout = io::stdout();
+        // Move VT processing to a dedicated thread.
+        // Terminal is !Send, so all VT access must stay on one thread.
+        let vt_event_tx = event_tx.clone();
+        let vt_handle = std::thread::spawn(move || -> Result<(), ManagerError> {
+            let mut vt = Terminal::new(TerminalOptions {
+                cols: size.cols,
+                rows: size.rows,
+                max_scrollback: DEFAULT_MAX_SCROLLBACK,
+            })?;
+            let mut stdout = io::stdout();
+            let mut pty_generation: u64 = 0;
+            let mut building = false;
+            let mut pending_changes: Vec<std::path::PathBuf> = Vec::new();
 
-        // Track the currently running build task for cancellation
-        let mut current_build: Option<tokio::task::AbortHandle> = None;
-        // Track files that changed and triggered rebuilds
-        let mut pending_changes: Vec<std::path::PathBuf> = Vec::new();
-
-        while let Some(event) = event_rx.recv().await {
-            match event {
-                Event::Stdin(data) => {
-                    let current_pty = pty.read().unwrap().clone();
-                    let _ = current_pty.write_all(&data);
-                    let _ = current_pty.flush();
-                }
-
-                Event::PtyOutput(generation, data) => {
-                    if generation != pty_generation {
-                        continue;
-                    }
-                    vt.feed_str(&String::from_utf8_lossy(&data));
-                    stdout.write_all(&data)?;
-                    stdout.flush()?;
-                }
-
-                Event::PtyExit(generation) => {
-                    if generation == pty_generation {
-                        break;
-                    }
-                }
-
-                Event::FileChange(path) => {
-                    // If a build is already running, drop the event.
-                    // spawn_blocking tasks cannot actually be cancelled, so
-                    // aborting and restarting would accumulate zombie builds
-                    // that can cascade into more file changes (fork bomb).
-                    if current_build.is_some() {
-                        tracing::debug!("Build in progress, ignoring file change: {:?}", path);
-                        continue;
+            while let Ok(event) = event_rx.recv() {
+                match event {
+                    Event::Stdin(data) => {
+                        let current_pty = pty.read().unwrap().clone();
+                        let _ = current_pty.write_all(&data);
+                        let _ = current_pty.flush();
                     }
 
-                    // Track the file that triggered this rebuild
-                    pending_changes.push(path.clone());
+                    Event::PtyOutput(generation, data) => {
+                        if generation != pty_generation {
+                            continue;
+                        }
+                        vt.vt_write(&data);
+                        stdout.write_all(&data)?;
+                        stdout.flush()?;
+                    }
 
-                    let ctx = BuildContext {
-                        cwd: cwd.clone(),
-                        env: std::env::vars().collect(),
-                        trigger: BuildTrigger::FileChanged(path),
-                        watcher: watcher_handle.clone(),
-                        reload_file: Some(reload_file.clone()),
-                    };
+                    Event::PtyExit(generation) => {
+                        if generation == pty_generation {
+                            break;
+                        }
+                    }
 
-                    // Spawn build in background task
-                    let builder = builder.clone();
-                    let build_tx = event_tx.clone();
-                    let handle = tokio::spawn(async move {
-                        let result = tokio::task::spawn_blocking(move || builder.build(&ctx))
-                            .await
-                            .unwrap_or_else(|e| {
-                                Err(crate::builder::BuildError::new(format!(
-                                    "build task panicked: {}",
-                                    e
-                                )))
-                            });
-                        let _ = build_tx.send(Event::BuildComplete(result)).await;
-                    });
-                    current_build = Some(handle.abort_handle());
-                }
+                    Event::FileChange(path) => {
+                        if building {
+                            tracing::debug!("Build in progress, ignoring file change: {:?}", path);
+                            continue;
+                        }
 
-                Event::BuildComplete(result) => {
-                    current_build = None;
+                        pending_changes.push(path.clone());
 
-                    // Collect changed files as relative paths
-                    let files: Vec<PathBuf> = pending_changes
-                        .drain(..)
-                        .map(|p| p.strip_prefix(&cwd).map(|p| p.to_path_buf()).unwrap_or(p))
-                        .collect();
+                        let ctx = BuildContext {
+                            cwd: cwd.clone(),
+                            env: std::env::vars().collect(),
+                            trigger: BuildTrigger::FileChanged(path),
+                            watcher: watcher_handle.clone(),
+                            reload_file: Some(reload_file.clone()),
+                        };
 
-                    match result {
-                        Ok(cmd) => {
-                            let state = vt.dump();
-                            let new_size = get_terminal_size();
+                        // Spawn build in background thread
+                        building = true;
+                        let builder = builder.clone();
+                        let build_tx = vt_event_tx.clone();
+                        std::thread::spawn(move || {
+                            let result = builder.build(&ctx);
+                            let _ = build_tx.send(Event::BuildComplete(result));
+                        });
+                    }
 
-                            match Pty::spawn(cmd, new_size) {
-                                Ok(new_pty) => {
-                                    let new_pty = Arc::new(new_pty);
-                                    let old_pty = {
-                                        let mut pty_guard = pty.write().unwrap();
-                                        let old = pty_guard.clone();
-                                        *pty_guard = new_pty.clone();
-                                        old
-                                    };
-                                    let _ = old_pty.kill();
+                    Event::BuildComplete(result) => {
+                        building = false;
 
-                                    pty_generation = pty_generation.wrapping_add(1);
-                                    spawn_pty_reader(
-                                        new_pty.clone(),
-                                        pty_generation,
-                                        event_tx.clone(),
-                                    );
+                        let files: Vec<PathBuf> = pending_changes
+                            .drain(..)
+                            .map(|p| p.strip_prefix(&cwd).map(|p| p.to_path_buf()).unwrap_or(p))
+                            .collect();
 
-                                    vt = Vt::new(new_size.cols as usize, new_size.rows as usize);
+                        match result {
+                            Ok(cmd) => {
+                                let state = match Formatter::new(
+                                    &vt,
+                                    FormatterOptions {
+                                        format: Format::Vt,
+                                        trim: false,
+                                        unwrap: false,
+                                    },
+                                )
+                                .and_then(|mut f| f.format_alloc::<()>(None))
+                                .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+                                {
+                                    Ok(s) => s,
+                                    Err(e) => {
+                                        warn!("failed to dump terminal state: {e}");
+                                        String::new()
+                                    }
+                                };
+                                let new_size = get_terminal_size();
 
-                                    let _ = new_pty.write_all(state.as_bytes());
-                                    let _ = new_pty.flush();
+                                match Pty::spawn(cmd, new_size) {
+                                    Ok(new_pty) => {
+                                        let new_pty = Arc::new(new_pty);
+                                        let old_pty = {
+                                            let mut pty_guard = pty.write().unwrap();
+                                            let old = pty_guard.clone();
+                                            *pty_guard = new_pty.clone();
+                                            old
+                                        };
+                                        let _ = old_pty.kill();
 
-                                    let _ = messages.try_send(ManagerMessage::Reloaded { files });
-                                }
-                                Err(e) => {
-                                    let _ = messages.try_send(ManagerMessage::ReloadFailed {
-                                        files,
-                                        error: e.to_string(),
-                                    });
+                                        pty_generation = pty_generation.wrapping_add(1);
+                                        spawn_pty_reader(
+                                            new_pty.clone(),
+                                            pty_generation,
+                                            vt_event_tx.clone(),
+                                        );
+
+                                        vt = Terminal::new(TerminalOptions {
+                                            cols: new_size.cols,
+                                            rows: new_size.rows,
+                                            max_scrollback: DEFAULT_MAX_SCROLLBACK,
+                                        })?;
+
+                                        let _ = new_pty.write_all(state.as_bytes());
+                                        let _ = new_pty.flush();
+
+                                        if let Err(e) =
+                                            messages.try_send(ManagerMessage::Reloaded { files })
+                                        {
+                                            tracing::debug!("failed to send Reloaded message: {e}");
+                                        }
+                                    }
+                                    Err(e) => {
+                                        if let Err(send_err) =
+                                            messages.try_send(ManagerMessage::ReloadFailed {
+                                                files,
+                                                error: e.to_string(),
+                                            })
+                                        {
+                                            tracing::debug!(
+                                                "failed to send ReloadFailed message: {send_err}"
+                                            );
+                                        }
+                                    }
                                 }
                             }
-                        }
-                        Err(e) => {
-                            let _ = messages.try_send(ManagerMessage::BuildFailed {
-                                files,
-                                error: e.to_string(),
-                            });
+                            Err(e) => {
+                                if let Err(send_err) =
+                                    messages.try_send(ManagerMessage::BuildFailed {
+                                        files,
+                                        error: e.to_string(),
+                                    })
+                                {
+                                    tracing::debug!(
+                                        "failed to send BuildFailed message: {send_err}"
+                                    );
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
+
+            Ok(())
+        });
+
+        // Wait for VT thread without blocking the tokio runtime
+        tokio::task::spawn_blocking(move || {
+            vt_handle
+                .join()
+                .unwrap_or(Err(ManagerError::Io(io::Error::other(
+                    "VT thread panicked",
+                ))))
+        })
+        .await
+        .map_err(|_| ManagerError::Io(io::Error::other("join task failed")))??;
 
         Ok(())
     }

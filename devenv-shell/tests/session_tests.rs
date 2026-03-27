@@ -1,9 +1,10 @@
 #![cfg(feature = "test-pty")]
 
-use avt::Vt;
+use devenv_shell::vt_utils::{DEFAULT_MAX_SCROLLBACK, active_point, row_plain_text, screen_point};
 use devenv_shell::{
     CommandBuilder, PtySize, SessionConfig, SessionIo, ShellCommand, ShellEvent, ShellSession,
 };
+use libghostty_vt::terminal::{Options as TerminalOptions, Terminal};
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -229,23 +230,39 @@ fn status_line_session() -> ShellSession {
 
 /// Render captured stdout through a virtual terminal and return visible viewport row texts.
 fn render(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String> {
-    let mut vt = Vt::new(cols, rows);
-    vt.feed_str(&String::from_utf8_lossy(stdout_bytes));
-    vt.view()
-        .map(|line| line.text().trim_end().to_owned())
+    let mut vt = Terminal::new(TerminalOptions {
+        cols: cols as u16,
+        rows: rows as u16,
+        max_scrollback: 0,
+    })
+    .unwrap();
+    vt.vt_write(stdout_bytes);
+    (0..rows)
+        .map(|y| {
+            row_plain_text(&vt, active_point(y as u32))
+                .trim_end()
+                .to_owned()
+        })
         .collect()
 }
 
 /// Render captured stdout and return ALL lines (scrollback + viewport).
 /// Tests that scrolled-off content was correctly pushed into native scrollback.
 fn render_all_lines(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String> {
-    let mut vt = Vt::builder()
-        .size(cols, rows)
-        .scrollback_limit(10000)
-        .build();
-    vt.feed_str(&String::from_utf8_lossy(stdout_bytes));
-    vt.lines()
-        .map(|line| line.text().trim_end().to_owned())
+    let mut vt = Terminal::new(TerminalOptions {
+        cols: cols as u16,
+        rows: rows as u16,
+        max_scrollback: DEFAULT_MAX_SCROLLBACK,
+    })
+    .unwrap();
+    vt.vt_write(stdout_bytes);
+    let total = vt.total_rows().unwrap_or(0);
+    (0..total)
+        .map(|y| {
+            row_plain_text(&vt, screen_point(y as u32))
+                .trim_end()
+                .to_owned()
+        })
         .collect()
 }
 

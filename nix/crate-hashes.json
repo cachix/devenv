@@ -1,4 +1,6 @@
 {
+  "git+https://github.com/Uzaaft/libghostty-rs.git?rev=811cbdd85a99b40a63424a9d247c4f3653c11924#libghostty-vt-sys@0.1.1": "012jdfxdwlp3r3qrhrjsf5aj5rhcvpzz34pllqb62j5fs46g3dpv",
+  "git+https://github.com/Uzaaft/libghostty-rs.git?rev=811cbdd85a99b40a63424a9d247c4f3653c11924#libghostty-vt@0.1.1": "012jdfxdwlp3r3qrhrjsf5aj5rhcvpzz34pllqb62j5fs46g3dpv",
   "git+https://github.com/cachix/crossterm?rev=91e3df5ccee39f142acefb9e99de1bf43c2fea67#crossterm@0.29.0": "0wn6n3znzv1jxw9ghl6qgsancd2myafs7kxpvn3lm3wsxhpvv76l",
   "git+https://github.com/cachix/iocraft?rev=ca24572778a0ba617f0d9c5e7bc4faa3b6024d61#iocraft-macros@0.2.3": "15dds82xy7z0dmbiqxnzb1205nqmv1yfiy5hpl4skcqrna9lb9iz",
   "git+https://github.com/cachix/iocraft?rev=ca24572778a0ba617f0d9c5e7bc4faa3b6024d61#iocraft@0.7.18": "15dds82xy7z0dmbiqxnzb1205nqmv1yfiy5hpl4skcqrna9lb9iz",
