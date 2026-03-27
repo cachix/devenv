@@ -56,6 +56,15 @@ fi
 export PATH="$_DEVENV_PATH"
 # Note: _DEVENV_PATH is kept set for the reload hook to restore PATH after direnv
 
+# Source terminal shell integration that was bypassed by --noprofile --rcfile.
+# Ghostty injects via --posix + ENV which our launch flags override, so
+# re-source its integration here. GHOSTTY_BASH_INJECT is already unset,
+# so the script only defines hooks and PROMPT_COMMAND without re-sourcing
+# profile/bashrc.
+if [[ -n "${{GHOSTTY_RESOURCES_DIR:-}}" && -r "${{GHOSTTY_RESOURCES_DIR}}/shell-integration/bash/ghostty.bash" ]]; then
+    source "${{GHOSTTY_RESOURCES_DIR}}/shell-integration/bash/ghostty.bash"
+fi
+
 # Hot-reload hook (keybinding and PROMPT_COMMAND integration)
 {reload_hook}
 
