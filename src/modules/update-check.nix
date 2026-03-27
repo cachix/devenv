@@ -12,7 +12,7 @@ in
     flakesIntegration = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      defaultText = lib.literalMD ''`true` when devenv is invoked via the flake integration; `false` otherwise.'';
+      defaultText = lib.literalMD "`true` when devenv is invoked via the flake integration; `false` otherwise.";
       description = ''
         Tells if devenv is being imported by a flake.nix file
       '';
@@ -60,22 +60,26 @@ in
     enterShell =
       let
         versionWarning =
-          if cfg.cli.version == null then ""
+          if cfg.cli.version == null then
+            ""
           else
             let
               action = {
                 "0" = "";
                 "1" =
-                  if cfg.cli.isDevelopment then ""
-                  else ''
-                    echo "✨ devenv ${cfg.cli.version} is newer than devenv input (${cfg.latestVersion}) in devenv.lock. Run 'devenv update' to sync." >&2
-                  '';
+                  if cfg.cli.isDevelopment then
+                    ""
+                  else
+                    ''
+                      echo "✨ devenv ${cfg.cli.version} is newer than devenv input (${cfg.latestVersion}) in devenv.lock. Run 'devenv update' to sync." >&2
+                    '';
                 "-1" = ''
                   echo "✨ devenv ${cfg.cli.version} is out of date. Please update to ${cfg.latestVersion}: https://devenv.sh/getting-started/#installation" >&2
                 '';
               };
               # Normalize versions by stripping trailing .0 to make X.x.0 equivalent to X.X
-              normalizeVersion = v:
+              normalizeVersion =
+                v:
                 let
                   stripped = builtins.replaceStrings [ ".0" ] [ "" ] v;
                 in

@@ -1,4 +1,10 @@
-{ pkgs, lib, config, ... }: {
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
+{
   options = {
     myapp.package = pkgs.lib.mkOption {
       type = config.lib.types.outputOf lib.types.package;

@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.r;
@@ -23,7 +28,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "R Language Server" // { default = true; };
+      enable = lib.mkEnableOption "R Language Server" // {
+        default = true;
+      };
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -37,7 +44,8 @@ in
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-    ] ++ lib.optional cfg.radian.enable cfg.radian.package
+    ]
+    ++ lib.optional cfg.radian.enable cfg.radian.package
     ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

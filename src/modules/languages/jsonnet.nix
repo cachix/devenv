@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.jsonnet;
@@ -8,7 +13,9 @@ in
     enable = lib.mkEnableOption "tools for jsonnet development";
 
     lsp = {
-      enable = lib.mkEnableOption "Jsonnet Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Jsonnet Language Server" // {
+        default = true;
+      };
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -22,6 +29,7 @@ in
   config = lib.mkIf cfg.enable {
     packages = [
       pkgs.go-jsonnet
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    ]
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

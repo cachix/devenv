@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.terraform;
@@ -31,7 +36,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Terraform Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Terraform Language Server" // {
+        default = true;
+      };
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -52,13 +59,14 @@ in
       let
         terraform-pkgs = nixpkgs-terraform.packages.${pkgs.stdenv.system};
       in
-        terraform-pkgs."terraform-${cfg.version}" or terraform-pkgs.${cfg.version}
-          or (throw "Unsupported Terraform version, update the nixpkgs-terraform input or go to https://github.com/stackbuilders/nixpkgs-terraform/blob/main/versions.json for the full list of supported versions.")
+      terraform-pkgs."terraform-${cfg.version}" or terraform-pkgs.${cfg.version}
+        or (throw "Unsupported Terraform version, update the nixpkgs-terraform input or go to https://github.com/stackbuilders/nixpkgs-terraform/blob/main/versions.json for the full list of supported versions.")
     );
 
     packages = [
       cfg.package
       pkgs.tfsec
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    ]
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

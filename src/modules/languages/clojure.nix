@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.clojure;
@@ -8,7 +13,9 @@ in
     enable = lib.mkEnableOption "tools for Clojure development";
 
     lsp = {
-      enable = lib.mkEnableOption "Clojure Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Clojure Language Server" // {
+        default = true;
+      };
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -24,7 +31,8 @@ in
       (pkgs.clojure.override {
         jdk = config.languages.java.jdk.package;
       })
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    ]
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
     languages.java.enable = true;
   };
 }

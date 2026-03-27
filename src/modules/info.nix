@@ -13,13 +13,15 @@ in
     infoSections = lib.mkOption {
       type = lib.types.attrsOf (lib.types.listOf lib.types.str);
       default = { };
-      description =
-        "Information about the environment";
+      description = "Information about the environment";
     };
   };
 
-
   config = {
-    info = lib.concatStringsSep "\n\n" (lib.mapAttrsToList (name: section: if (section != [ ]) then "# ${name}\n${renderSection section}" else "") config.infoSections);
+    info = lib.concatStringsSep "\n\n" (
+      lib.mapAttrsToList (
+        name: section: if (section != [ ]) then "# ${name}\n${renderSection section}" else ""
+      ) config.infoSections
+    );
   };
 }

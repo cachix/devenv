@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   cfg = config.services.cassandra;
@@ -9,27 +14,25 @@ let
     ++ lib.optionals (lib.versionAtLeast cfg.package.version "4") [
       "-Xlog:gc=warning,heap*=warning,age*=warning,safepoint=warning,promotion*=warning"
     ];
-  cassandraConfig = lib.flip lib.recursiveUpdate cfg.extraConfig (
-    {
-      start_native_transport = cfg.allowClients;
-      listen_address = cfg.listenAddress;
-      commitlog_sync = "batch";
-      commitlog_sync_batch_window_in_ms = 2;
-      cluster_name = cfg.clusterName;
-      partitioner = "org.apache.cassandra.dht.Murmur3Partitioner";
-      endpoint_snitch = "SimpleSnitch";
-      data_file_directories = [ "${baseDir}/data" ];
-      commitlog_directory = "${baseDir}/commitlog";
-      saved_caches_directory = "${baseDir}/saved_caches";
-      hints_directory = "${baseDir}/hints";
-      seed_provider = [
-        {
-          class_name = "org.apache.cassandra.locator.SimpleSeedProvider";
-          parameters = [{ seeds = lib.concatStringsSep "," cfg.seedAddresses; }];
-        }
-      ];
-    }
-  );
+  cassandraConfig = lib.flip lib.recursiveUpdate cfg.extraConfig ({
+    start_native_transport = cfg.allowClients;
+    listen_address = cfg.listenAddress;
+    commitlog_sync = "batch";
+    commitlog_sync_batch_window_in_ms = 2;
+    cluster_name = cfg.clusterName;
+    partitioner = "org.apache.cassandra.dht.Murmur3Partitioner";
+    endpoint_snitch = "SimpleSnitch";
+    data_file_directories = [ "${baseDir}/data" ];
+    commitlog_directory = "${baseDir}/commitlog";
+    saved_caches_directory = "${baseDir}/saved_caches";
+    hints_directory = "${baseDir}/hints";
+    seed_provider = [
+      {
+        class_name = "org.apache.cassandra.locator.SimpleSeedProvider";
+        parameters = [ { seeds = lib.concatStringsSep "," cfg.seedAddresses; } ];
+      }
+    ];
+  });
   cassandraConfigFile = pkgs.writeText "cassandra.yaml" (builtins.toJSON cassandraConfig);
   startScript = pkgs.writeShellScriptBin "start-cassandra" ''
     set -euo pipefail
@@ -43,11 +46,14 @@ let
 in
 {
   imports = [
-    (lib.mkRenamedOptionModule [ "cassandra" "enable" ] [
-      "services"
-      "cassandra"
-      "enable"
-    ])
+    (lib.mkRenamedOptionModule
+      [ "cassandra" "enable" ]
+      [
+        "services"
+        "cassandra"
+        "enable"
+      ]
+    )
   ];
 
   options.services.cassandra = {
@@ -91,10 +97,9 @@ in
     extraConfig = lib.mkOption {
       type = types.attrs;
       default = { };
-      example =
-        {
-          commitlog_sync_batch_window_in_ms = 3;
-        };
+      example = {
+        commitlog_sync_batch_window_in_ms = 3;
+      };
       description = ''
         Extra options to be merged into `cassandra.yaml` as nix attribute set.
       '';
@@ -108,7 +113,10 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [ cfg.package startScript ];
+    packages = [
+      cfg.package
+      startScript
+    ];
 
     processes.cassandra.exec = "${startScript}/bin/start-cassandra";
   };

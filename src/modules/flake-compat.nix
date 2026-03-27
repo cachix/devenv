@@ -1,7 +1,8 @@
-{ config
-, pkgs
-, lib
-, ...
+{
+  config,
+  pkgs,
+  lib,
+  ...
 }:
 
 let
@@ -73,39 +74,36 @@ let
   '';
 
   # `devenv up` helper command
-  devenv-flake-up =
-    pkgs.writeShellScriptBin "devenv-flake-up" ''
-      ${lib.optionalString (config.processes == { }) ''
-        echo "No 'processes' option defined: https://devenv.sh/processes/" >&2
-        exit 1
-      ''}
-      exec ${config.procfileScript} "$@"
-    '';
+  devenv-flake-up = pkgs.writeShellScriptBin "devenv-flake-up" ''
+    ${lib.optionalString (config.processes == { }) ''
+      echo "No 'processes' option defined: https://devenv.sh/processes/" >&2
+      exit 1
+    ''}
+    exec ${config.procfileScript} "$@"
+  '';
 
   # `devenv test` helper command
-  devenv-flake-test =
-    pkgs.writeShellScriptBin "devenv-flake-test" ''
-      echo "• Testing ..." >&2
-      exec ${config.test} "$@"
-    '';
+  devenv-flake-test = pkgs.writeShellScriptBin "devenv-flake-test" ''
+    echo "• Testing ..." >&2
+    exec ${config.test} "$@"
+  '';
 
   # `devenv tasks` helper command
-  devenv-flake-tasks =
-    pkgs.writeShellScriptBin "devenv-flake-tasks" ''
-      subcommand=$1
-      shift
-      case "$subcommand" in
-        run)
-          exec ${config.task.package}/bin/devenv-tasks run \
-            --cache-dir ${lib.escapeShellArg config.devenv.dotfile} \
-            --runtime-dir ${lib.escapeShellArg config.devenv.runtime} \
-            "$@"
-          ;;
-        *)
-          exec ${config.task.package}/bin/devenv-tasks "$subcommand" "$@"
-          ;;
-      esac
-    '';
+  devenv-flake-tasks = pkgs.writeShellScriptBin "devenv-flake-tasks" ''
+    subcommand=$1
+    shift
+    case "$subcommand" in
+      run)
+        exec ${config.task.package}/bin/devenv-tasks run \
+          --cache-dir ${lib.escapeShellArg config.devenv.dotfile} \
+          --runtime-dir ${lib.escapeShellArg config.devenv.runtime} \
+          "$@"
+        ;;
+      *)
+        exec ${config.task.package}/bin/devenv-tasks "$subcommand" "$@"
+        ;;
+    esac
+  '';
 
   devenvFlakeCompat = pkgs.symlinkJoin {
     name = "devenv-flake-compat";

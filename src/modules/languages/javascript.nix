@@ -1,7 +1,8 @@
-{ pkgs
-, config
-, lib
-, ...
+{
+  pkgs,
+  config,
+  lib,
+  ...
 }:
 
 let
@@ -262,12 +263,13 @@ in
         type = lib.types.package;
         default =
           # nixpkgs 26.05+: nodejs-slim has an npm output
-          if builtins.elem "npm" (cfg.package.outputs or [ ])
-          then lib.getOutput "npm" cfg.package
+          if builtins.elem "npm" (cfg.package.outputs or [ ]) then
+            lib.getOutput "npm" cfg.package
           # older nixpkgs: enableNpm override
-          else if cfg.package ? override && lib.functionArgs cfg.package.override ? enableNpm
-          then cfg.package.override { enableNpm = true; }
-          else cfg.package;
+          else if cfg.package ? override && lib.functionArgs cfg.package.override ? enableNpm then
+            cfg.package.override { enableNpm = true; }
+          else
+            cfg.package;
         defaultText = lib.literalExpression "languages.javascript.package";
         description = "The npm package to use. Defaults to the npm output of the javascript package.";
       };
@@ -312,7 +314,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "TypeScript Language Server for JavaScript" // { default = true; };
+      enable = lib.mkEnableOption "TypeScript Language Server for JavaScript" // {
+        default = true;
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.typescript-language-server;

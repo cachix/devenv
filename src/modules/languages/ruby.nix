@@ -1,7 +1,8 @@
-{ pkgs
-, config
-, lib
-, ...
+{
+  pkgs,
+  config,
+  lib,
+  ...
 }:
 
 let
@@ -13,12 +14,14 @@ let
   # Wrap a Ruby gem package to only expose binaries, without propagating
   # gem dependencies to the environment. The gem's own wrapper script
   # handles its dependencies, so propagation just causes conflicts.
-  wrapGemBin = pkg: pkgs.runCommand "${pkg.name}-bin" { } ''
-    mkdir -p $out/bin
-    for f in ${pkg}/bin/*; do
-      ln -s "$f" "$out/bin/$(basename "$f")"
-    done
-  '';
+  wrapGemBin =
+    pkg:
+    pkgs.runCommand "${pkg.name}-bin" { } ''
+      mkdir -p $out/bin
+      for f in ${pkg}/bin/*; do
+        ln -s "$f" "$out/bin/$(basename "$f")"
+      done
+    '';
 
   # Build solargraph LSP with the user's Ruby using bundlerEnv.
   # This ensures native extensions are compiled against the correct Ruby.
@@ -29,13 +32,16 @@ let
   };
 
   lspPackage =
-    if usingCustomRuby
+    if
+      usingCustomRuby
     # Use bundlerEnv to build solargraph with the user's Ruby,
     # ensuring native extensions are compiled against the correct Ruby.
-    then lspEnv
+    then
+      lspEnv
     # Use pre-built solargraph, wrapped to prevent its gem dependencies
     # from polluting the user's GEM_PATH (avoiding version conflicts).
-    else wrapGemBin cfg.lsp.package;
+    else
+      wrapGemBin cfg.lsp.package;
 
   nixpkgs-ruby = config.lib.getInput {
     name = "nixpkgs-ruby";
@@ -97,7 +103,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Ruby Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Ruby Language Server" // {
+        default = true;
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.solargraph.override { ruby = cfg.package; };
@@ -145,9 +153,12 @@ in
         packageFromVersionFile
       ];
 
-    packages = lib.optional cfg.bundler.enable cfg.bundler.package ++ [
-      cfg.package
-    ] ++ lib.optional cfg.lsp.enable lspPackage;
+    packages =
+      lib.optional cfg.bundler.enable cfg.bundler.package
+      ++ [
+        cfg.package
+      ]
+      ++ lib.optional cfg.lsp.enable lspPackage;
 
     env.BUNDLE_PATH = config.env.DEVENV_STATE + "/.bundle";
 

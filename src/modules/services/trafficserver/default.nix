@@ -1,38 +1,52 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.services.trafficserver;
 
-  getManualUrl = name:
-    "https://docs.trafficserver.apache.org/en/latest/admin-guide/files/${name}.en.html";
+  getManualUrl =
+    name: "https://docs.trafficserver.apache.org/en/latest/admin-guide/files/${name}.en.html";
 
   yaml = pkgs.formats.yaml { };
 
-  writeYAML = name: cfg:
-    if cfg == null
-    then pkgs.emptyFile.overrideAttrs (_: { inherit name; })
-    else yaml.generate name cfg;
+  writeYAML =
+    name: cfg:
+    if cfg == null then
+      pkgs.emptyFile.overrideAttrs (_: {
+        inherit name;
+      })
+    else
+      yaml.generate name cfg;
 
-  writeLines = name: lines:
+  writeLines =
+    name: lines:
     let
       allLines = lines ++ lib.optional (lines != [ ]) "";
       text = lib.concatStringsSep "\n" allLines;
     in
     pkgs.writeText name text;
 
-  mkRecordLine = setting: type: value:
+  mkRecordLine =
+    setting: type: value:
     let
       key =
-        if lib.last setting == "_"
-        then lib.concatStringsSep "." (lib.init setting)
-        else lib.concatStringsSep "." setting;
+        if lib.last setting == "_" then
+          lib.concatStringsSep "." (lib.init setting)
+        else
+          lib.concatStringsSep "." setting;
     in
     "CONFIG ${key} ${type} ${toString value}";
 
-  toRecords = setting: value:
+  toRecords =
+    setting: value:
     if lib.isAttrs value then
       let
-        toLines = lines: n: v:
+        toLines =
+          lines: n: v:
           assert !lib.hasInfix "." n;
           lines ++ (toRecords (setting ++ [ n ]) v);
       in
@@ -46,11 +60,9 @@ let
     else
       [ (mkRecordLine setting "STRING" value) ];
 
-  writeRecords = name: cfg:
-    writeLines name (toRecords [ ] cfg);
+  writeRecords = name: cfg: writeLines name (toRecords [ ] cfg);
 
-  writePluginConfig = name: cfg:
-    writeLines name (map (p: "${p.path} ${p.arg}") cfg);
+  writePluginConfig = name: cfg: writeLines name (map (p: "${p.path} ${p.arg}") cfg);
 
   confdir = pkgs.linkFarmFromDrvs "trafficserver-config" [
     (pkgs.writeText "cache.config" cfg.cache)
@@ -189,7 +201,8 @@ in
         for more details.
       '';
 
-      type = with types;
+      type =
+        with types;
         listOf (submodule {
           options.path = lib.mkOption {
             type = str;
@@ -209,15 +222,25 @@ in
     };
 
     records = lib.mkOption {
-      type = with types;
+      type =
+        with types;
         let
-          valueType = (attrsOf (oneOf [ int float str valueType ])) // {
-            description = "Traffic Server records value";
-          };
+          valueType =
+            (attrsOf (oneOf [
+              int
+              float
+              str
+              valueType
+            ]))
+            // {
+              description = "Traffic Server records value";
+            };
         in
         valueType;
       default = { };
-      example = { proxy.config.proxy_name = "my_server"; };
+      example = {
+        proxy.config.proxy_name = "my_server";
+      };
       description = ''
         List of configurable variables used by Traffic Server.
 
@@ -347,8 +370,18 @@ in
       ''
         set -euxo pipefail
 
-        mkdir -p ${qs (with runroot; [
-          datadir localstatedir runtimedir logdir cachedir ])}
+        mkdir -p ${
+          qs (
+            with runroot;
+            [
+              datadir
+              localstatedir
+              runtimedir
+              logdir
+              cachedir
+            ]
+          )
+        }
         cd ${q runroot.prefix}
 
         rm ${q "${statedir}/config"} ||:

@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.nim;
@@ -15,7 +20,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Nim Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Nim Language Server" // {
+        default = true;
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.nimlangserver;
@@ -28,6 +35,7 @@ in
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    ]
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

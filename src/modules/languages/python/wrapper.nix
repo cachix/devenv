@@ -1,21 +1,21 @@
-{ lib
-, stdenv
-, buildEnv
-, runCommand
-, makeBinaryWrapper
-, callPackage
-, # manually passed
-  python
-, requiredPythonModules
-, # extra opts
-  extraLibs ? [ ]
-, extraOutputsToInstall ? [ ]
-, postBuild ? ""
-, ignoreCollisions ? false
-, permitUserSite ? false
-, # Wrap executables with the given argument.
-  makeWrapperArgs ? [ ]
-,
+{
+  lib,
+  stdenv,
+  buildEnv,
+  runCommand,
+  makeBinaryWrapper,
+  callPackage,
+  # manually passed
+  python,
+  requiredPythonModules,
+  # extra opts
+  extraLibs ? [ ],
+  extraOutputsToInstall ? [ ],
+  postBuild ? "",
+  ignoreCollisions ? false,
+  permitUserSite ? false,
+  # Wrap executables with the given argument.
+  makeWrapperArgs ? [ ],
 }:
 
 # Create a python executable that knows about additional packages.
@@ -40,14 +40,13 @@ let
       nativeBuildInputs = [ makeBinaryWrapper ];
 
       postBuild =
-        makePostBuildWrapper
-          {
-            inherit
-              python
-              permitUserSite
-              makeWrapperArgs
-              ;
-          }
+        makePostBuildWrapper {
+          inherit
+            python
+            permitUserSite
+            makeWrapperArgs
+            ;
+        }
         + postBuild;
 
       inherit (python) meta;

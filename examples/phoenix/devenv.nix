@@ -11,7 +11,8 @@
 {
   packages = [
     pkgs.git
-  ] ++ lib.optionals pkgs.stdenv.isLinux [ pkgs.inotify-tools ];
+  ]
+  ++ lib.optionals pkgs.stdenv.isLinux [ pkgs.inotify-tools ];
 
   languages.elixir.enable = true;
 
@@ -20,7 +21,7 @@
     initialScript = ''
       CREATE ROLE postgres WITH LOGIN PASSWORD 'postgres' SUPERUSER;
     '';
-    initialDatabases = [{ name = "hello_dev"; }];
+    initialDatabases = [ { name = "hello_dev"; } ];
   };
 
   processes.phoenix.exec = "cd hello && exec mix phx.server";

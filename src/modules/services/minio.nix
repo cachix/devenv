@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   cfg = config.services.minio;
@@ -35,19 +40,25 @@ let
     for bucket in ${lib.escapeShellArgs cfg.buckets}; do
       mkdir -p "$MINIO_DATA_DIR/$bucket"
     done
-  '' + (if cfg.afterStart != "" then ''
-    ${serverCommand} &
+  ''
+  + (
+    if cfg.afterStart != "" then
+      ''
+        ${serverCommand} &
 
-    while ! mc admin info local >& /dev/null; do
-      sleep 1
-    done
+        while ! mc admin info local >& /dev/null; do
+          sleep 1
+        done
 
-    ${cfg.afterStart}
+        ${cfg.afterStart}
 
-    wait
-  '' else ''
-    exec ${serverCommand}
-  '');
+        wait
+      ''
+    else
+      ''
+        exec ${serverCommand}
+      ''
+  );
 
   clientWrapper = pkgs.writeShellScriptBin "mc" ''
     mkdir -p "$MINIO_CLIENT_CONFIG_DIR"

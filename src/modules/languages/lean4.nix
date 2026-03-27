@@ -1,7 +1,14 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
-let cfg = config.languages.lean4;
-in {
+let
+  cfg = config.languages.lean4;
+in
+{
   options.languages.lean4 = {
     enable = lib.mkEnableOption "tools for lean4 development";
 

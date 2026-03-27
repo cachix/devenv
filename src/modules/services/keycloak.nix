@@ -1,7 +1,8 @@
-{ config
-, lib
-, pkgs
-, ...
+{
+  config,
+  lib,
+  pkgs,
+  ...
 }:
 
 let
@@ -322,15 +323,13 @@ in
       };
 
       # Filters empty values out.
-      filteredConfig = lib.converge
-        (lib.filterAttrsRecursive (
-          _: v:
-            !builtins.elem v [
-              { }
-              null
-            ]
-        ))
-        cfg.settings;
+      filteredConfig = lib.converge (lib.filterAttrsRecursive (
+        _: v:
+        !builtins.elem v [
+          { }
+          null
+        ]
+      )) cfg.settings;
 
       # Overlay allocated ports to avoid infinite recursion (#2490).
       finalConfig = filteredConfig // {
@@ -370,22 +369,20 @@ in
       providedSSLCerts = cfg.sslCertificate != null && cfg.sslCertificateKey != null;
 
       # Generate the command to import realms.
-      realmImport = lib.mapAttrsToList
-        (
-          realm: e:
-            let
-              f = config.env.DEVENV_ROOT + "/" + e.path;
-            in
-            ''
-              echo "Symlinking realm file '${f}' to import path '$KC_HOME_DIR/data/import'."
-              if [ ! -f "${f}" ]; then
-                echo "Realm file '${f}' does not exist!" >&2
-                exit 1
-              fi
-              ln -fs "${f}" "$KC_HOME_DIR/data/import/"
-            ''
-        )
-        (lib.filterAttrs (_: v: v.import && v.path != null) cfg.realms);
+      realmImport = lib.mapAttrsToList (
+        realm: e:
+        let
+          f = config.env.DEVENV_ROOT + "/" + e.path;
+        in
+        ''
+          echo "Symlinking realm file '${f}' to import path '$KC_HOME_DIR/data/import'."
+          if [ ! -f "${f}" ]; then
+            echo "Realm file '${f}' does not exist!" >&2
+            exit 1
+          fi
+          ln -fs "${f}" "$KC_HOME_DIR/data/import/"
+        ''
+      ) (lib.filterAttrs (_: v: v.import && v.path != null) cfg.realms);
 
       # Generate the commands to export realms.
       assertKeycloakStopped = [
@@ -420,28 +417,26 @@ in
           [ ]
         else
           assertKeycloakStopped
-          ++ lib.mapAttrsToList
-            (
-              realm: e:
-                let
-                  file =
-                    if e.path == null then
-                      (config.env.DEVENV_STATE + "/keycloak/realm-export/${realm}.json")
-                    else
-                      e.path;
-                in
-                ''
-                  echo "Exporting realm '${realm}' to '${file}'."
-                  mkdir -p "$(dirname "${file}")"
-                  ${keycloakBuild}/bin/kc.sh export --optimized --realm "${realm}" --file "${file}"
+          ++ lib.mapAttrsToList (
+            realm: e:
+            let
+              file =
+                if e.path == null then
+                  (config.env.DEVENV_STATE + "/keycloak/realm-export/${realm}.json")
+                else
+                  e.path;
+            in
+            ''
+              echo "Exporting realm '${realm}' to '${file}'."
+              mkdir -p "$(dirname "${file}")"
+              ${keycloakBuild}/bin/kc.sh export --optimized --realm "${realm}" --file "${file}"
 
-                  echo "Beautifying realm export '${file}' for diffing."
-                  temp_file=$(${pkgs.coreutils}/bin/mktemp)
-                  ${pkgs.jq}/bin/jq --sort-keys . "${file}" > "$temp_file"
-                  ${pkgs.coreutils}/bin/mv "$temp_file" "${file}"
-                ''
-            )
-            realmsToExport;
+              echo "Beautifying realm export '${file}' for diffing."
+              temp_file=$(${pkgs.coreutils}/bin/mktemp)
+              ${pkgs.jq}/bin/jq --sort-keys . "${file}" > "$temp_file"
+              ${pkgs.coreutils}/bin/mv "$temp_file" "${file}"
+            ''
+          ) realmsToExport;
 
       keycloak-realm-export-all = pkgs.writeShellScriptBin "keycloak-realm-export-all" (
         lib.concatStringsSep "\n" realmsExport

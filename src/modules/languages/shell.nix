@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.shell;
@@ -8,7 +13,9 @@ in
     enable = lib.mkEnableOption "tools for shell development";
 
     lsp = {
-      enable = lib.mkEnableOption "Shell Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Shell Language Server" // {
+        default = true;
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.bash-language-server;
@@ -19,10 +26,17 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
-      (pkgs.bats.withLibraries (p: [ p.bats-assert p.bats-file p.bats-support ]))
-      shellcheck
-      shfmt
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    packages =
+      with pkgs;
+      [
+        (pkgs.bats.withLibraries (p: [
+          p.bats-assert
+          p.bats-file
+          p.bats-support
+        ]))
+        shellcheck
+        shfmt
+      ]
+      ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

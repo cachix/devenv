@@ -1,4 +1,9 @@
-{ config, lib, self, ... }:
+{
+  config,
+  lib,
+  self,
+  ...
+}:
 
 let
   cfg = config.dotenv;
@@ -7,19 +12,34 @@ let
   dotenvFiles = normalizeFilenames cfg.filename;
   dotenvPaths = map (filename: (self + ("/" + filename))) dotenvFiles;
 
-  parseLine = line:
+  parseLine =
+    line:
     let
       parts = builtins.match "([[:space:]]*export[[:space:]]+)?([^[:space:]=#]+)[[:space:]]*=[[:space:]]*(.*)" line;
     in
-    if parts != null && builtins.length parts == 3
-    then { name = builtins.elemAt parts 1; value = builtins.elemAt parts 2; }
-    else null;
+    if parts != null && builtins.length parts == 3 then
+      {
+        name = builtins.elemAt parts 1;
+        value = builtins.elemAt parts 2;
+      }
+    else
+      null;
 
-  parseEnvFile = content: builtins.listToAttrs (lib.filter (x: !builtins.isNull x) (map parseLine (lib.splitString "\n" content)));
+  parseEnvFile =
+    content:
+    builtins.listToAttrs (
+      lib.filter (x: !builtins.isNull x) (map parseLine (lib.splitString "\n" content))
+    );
 
-  mergeEnvFiles = files: lib.foldl' (acc: file: lib.recursiveUpdate acc (if lib.pathExists file then parseEnvFile (builtins.readFile file) else { })) { } files;
+  mergeEnvFiles =
+    files:
+    lib.foldl' (
+      acc: file:
+      lib.recursiveUpdate acc (if lib.pathExists file then parseEnvFile (builtins.readFile file) else { })
+    ) { } files;
 
-  createMissingFileMessage = file:
+  createMissingFileMessage =
+    file:
     let
       exampleExists = lib.pathExists (file + ".example");
       filename = builtins.baseNameOf (toString file);
@@ -62,10 +82,12 @@ in
       env = lib.mapAttrs (name: value: lib.mkDefault value) config.dotenv.resolved;
       enterShell = lib.concatStringsSep "\n" (map createMissingFileMessage dotenvPaths);
       dotenv.resolved = mergeEnvFiles dotenvPaths;
-      assertions = [{
-        assertion = builtins.all (lib.hasPrefix ".env") dotenvFiles;
-        message = "The dotenv filename must start with '.env'.";
-      }];
+      assertions = [
+        {
+          assertion = builtins.all (lib.hasPrefix ".env") dotenvFiles;
+          message = "The dotenv filename must start with '.env'.";
+        }
+      ];
     })
     (lib.mkIf (!cfg.enable && !cfg.disableHint) {
       enterShell =

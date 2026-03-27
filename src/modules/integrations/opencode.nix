@@ -1,7 +1,8 @@
-{ lib
-, config
-, pkgs
-, ...
+{
+  lib,
+  config,
+  pkgs,
+  ...
 }:
 
 let
@@ -293,49 +294,45 @@ in
       ))
 
       (lib.listToAttrs (
-        lib.mapAttrsToList
-          (
-            name: content:
-              if
-                (lib.isPath content && lib.pathIsDirectory content)
-                || (builtins.isString content && lib.hasInfix "/nix/store/" content)
-              then
-                {
-                  name = ".opencode/skills/${name}";
-                  value = {
-                    source = content;
-                  };
-                }
-              else
-                {
-                  name = ".opencode/skills/${name}/SKILL.md";
-                  value = mkFile name content;
-                }
-          )
-          (if builtins.isAttrs cfg.skills then cfg.skills else { })
+        lib.mapAttrsToList (
+          name: content:
+          if
+            (lib.isPath content && lib.pathIsDirectory content)
+            || (builtins.isString content && lib.hasInfix "/nix/store/" content)
+          then
+            {
+              name = ".opencode/skills/${name}";
+              value = {
+                source = content;
+              };
+            }
+          else
+            {
+              name = ".opencode/skills/${name}/SKILL.md";
+              value = mkFile name content;
+            }
+        ) (if builtins.isAttrs cfg.skills then cfg.skills else { })
       ))
 
       (lib.optionalAttrs (builtins.isAttrs cfg.themes) (
-        lib.mapAttrs'
-          (
-            name: content:
-              lib.nameValuePair ".opencode/themes/${name}.json" (
-                if lib.isPath content then
+        lib.mapAttrs' (
+          name: content:
+          lib.nameValuePair ".opencode/themes/${name}.json" (
+            if lib.isPath content then
+              {
+                source = content;
+              }
+            else
+              {
+                source = jsonFormat.generate "opencode-theme-${name}.json" (
                   {
-                    source = content;
+                    "$schema" = "https://opencode.ai/theme.json";
                   }
-                else
-                  {
-                    source = jsonFormat.generate "opencode-theme-${name}.json" (
-                      {
-                        "$schema" = "https://opencode.ai/theme.json";
-                      }
-                      // content
-                    );
-                  }
-              )
+                  // content
+                );
+              }
           )
-          cfg.themes
+        ) cfg.themes
       ))
     ];
 

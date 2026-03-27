@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 with lib;
 
@@ -250,14 +255,13 @@ in
       })
 
       # Authorization settings (if enabled)
-      (mkIf cfg.authorization.enable (
-        {
-          authorization = { } //
-            (optionalAttrs (cfg.authorization.user != "") { user = cfg.authorization.user; }) //
-            (optionalAttrs (cfg.authorization.password != "") { password = cfg.authorization.password; }) //
-            (optionalAttrs (cfg.authorization.token != "") { token = cfg.authorization.token; });
-        }
-      ))
+      (mkIf cfg.authorization.enable ({
+        authorization =
+          { }
+          // (optionalAttrs (cfg.authorization.user != "") { user = cfg.authorization.user; })
+          // (optionalAttrs (cfg.authorization.password != "") { password = cfg.authorization.password; })
+          // (optionalAttrs (cfg.authorization.token != "") { token = cfg.authorization.token; });
+      }))
     ];
 
     env.NATS_PORT = allocatedPort;

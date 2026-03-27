@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }@inputs:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}@inputs:
 let
   types = lib.types;
   listenType = import ./lib/listen.nix { inherit lib; };
@@ -18,11 +23,10 @@ let
       # Fetch rust-overlay if it's in the lock file
       rustOverlaySource =
         if lockedRustOverlay != null && lockedRustOverlay.type == "github" then
-          pkgs.fetchFromGitHub
-            {
-              inherit (lockedRustOverlay) owner repo rev;
-              hash = lockedRustOverlay.narHash;
-            }
+          pkgs.fetchFromGitHub {
+            inherit (lockedRustOverlay) owner repo rev;
+            hash = lockedRustOverlay.narHash;
+          }
         else
           null;
       devenvPkgs =
@@ -36,14 +40,15 @@ let
             rustOverlay = if rustOverlaySource != null then import rustOverlaySource else null;
             overlays = lib.optional (rustOverlay != null) rustOverlay;
           in
-          import source { inherit overlays; system = pkgs.stdenv.system; }
+          import source {
+            inherit overlays;
+            system = pkgs.stdenv.system;
+          }
         else
           pkgs;
       # Use rust-overlay's stable Rust for buildRustCrate
       rustToolchain =
-        if devenvPkgs ? rust-bin
-        then devenvPkgs.rust-bin.stable.latest.default
-        else devenvPkgs.rustc;
+        if devenvPkgs ? rust-bin then devenvPkgs.rust-bin.stable.latest.default else devenvPkgs.rustc;
       workspace = devenvPkgs.callPackage ./../../nix/workspace.nix {
         pkgs = devenvPkgs;
         rustc = rustToolchain;
@@ -52,263 +57,276 @@ let
     in
     workspace.crates.devenv-tasks;
 
-  taskType = types.submodule
-    ({ name, config, ... }:
-      let
-        mkCommand = command: isStatus:
-          if builtins.isNull command
-          then null
-          else
-            let
-              binary =
-                if config.binary != null
-                then "${pkgs.lib.getBin config.package}/bin/${config.binary}"
-                else pkgs.lib.getExe config.package;
-              isBash =
-                if config.binary != null
-                then config.binary == "bash"
-                else config.package.meta.mainProgram or null == "bash";
-              # Export env vars from tasks.
-              # CLI 2.0.4+: write name\0base64(value)\0 pairs to $DEVENV_TASK_EXPORTS_FILE
-              # Older: echo DEVENV_EXPORT:<base64-key>=<base64-value> to stdout
-              useFileExports = inputs.config.devenv.cli.version != null
-                && lib.versionAtLeast inputs.config.devenv.cli.version "2.0.4";
-              varLoop = body: vars: ''
-                for _var in ${lib.concatStringsSep " " vars}; do
-                  if [ -n "''${!_var+x}" ]; then
-                    ${body}
-                  fi
-                done
-              '';
-              exportVars =
-                if useFileExports then
-                  varLoop ''
-                    _val_b64=$(printf '%s' "''${!_var}" | base64 -w0)
-                    printf '%s\0%s\0' "$_var" "$_val_b64" >> "$DEVENV_TASK_EXPORTS_FILE"
-                  '' else
-                  varLoop ''
-                    _var_b64=$(printf '%s' "$_var" | base64 -w0)
-                    _val_b64=$(printf '%s' "''${!_var}" | base64 -w0)
-                    echo "DEVENV_EXPORT:$_var_b64=$_val_b64"
-                  '';
-            in
-            pkgs.writeScript name ''
-              #!${binary}
-              ${lib.optionalString (!isStatus && isBash) "set -e"}
-              ${command}
-              ${lib.optionalString (config.exports != []) (exportVars config.exports)}
+  taskType = types.submodule (
+    { name, config, ... }:
+    let
+      mkCommand =
+        command: isStatus:
+        if builtins.isNull command then
+          null
+        else
+          let
+            binary =
+              if config.binary != null then
+                "${pkgs.lib.getBin config.package}/bin/${config.binary}"
+              else
+                pkgs.lib.getExe config.package;
+            isBash =
+              if config.binary != null then
+                config.binary == "bash"
+              else
+                config.package.meta.mainProgram or null == "bash";
+            # Export env vars from tasks.
+            # CLI 2.0.4+: write name\0base64(value)\0 pairs to $DEVENV_TASK_EXPORTS_FILE
+            # Older: echo DEVENV_EXPORT:<base64-key>=<base64-value> to stdout
+            useFileExports =
+              inputs.config.devenv.cli.version != null
+              && lib.versionAtLeast inputs.config.devenv.cli.version "2.0.4";
+            varLoop = body: vars: ''
+              for _var in ${lib.concatStringsSep " " vars}; do
+                if [ -n "''${!_var+x}" ]; then
+                  ${body}
+                fi
+              done
             '';
-      in
-      {
-        options = {
-          type = lib.mkOption {
-            type = types.enum [ "oneshot" "process" ];
-            default = "oneshot";
-            description = ''
-              Type of task:
-              - oneshot: Task runs once and completes (default)
-              - process: Task is a long-running process
-            '';
+            exportVars =
+              if useFileExports then
+                varLoop ''
+                  _val_b64=$(printf '%s' "''${!_var}" | base64 -w0)
+                  printf '%s\0%s\0' "$_var" "$_val_b64" >> "$DEVENV_TASK_EXPORTS_FILE"
+                ''
+              else
+                varLoop ''
+                  _var_b64=$(printf '%s' "$_var" | base64 -w0)
+                  _val_b64=$(printf '%s' "''${!_var}" | base64 -w0)
+                  echo "DEVENV_EXPORT:$_var_b64=$_val_b64"
+                '';
+          in
+          pkgs.writeScript name ''
+            #!${binary}
+            ${lib.optionalString (!isStatus && isBash) "set -e"}
+            ${command}
+            ${lib.optionalString (config.exports != [ ]) (exportVars config.exports)}
+          '';
+    in
+    {
+      options = {
+        type = lib.mkOption {
+          type = types.enum [
+            "oneshot"
+            "process"
+          ];
+          default = "oneshot";
+          description = ''
+            Type of task:
+            - oneshot: Task runs once and completes (default)
+            - process: Task is a long-running process
+          '';
+        };
+        exec = lib.mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Command to execute the task.";
+        };
+        binary = lib.mkOption {
+          type = types.nullOr types.str;
+          description = "Override the binary name from the default `package.meta.mainProgram`.";
+          default = null;
+        };
+        package = lib.mkOption {
+          type = types.package;
+          default = pkgs.bash;
+          defaultText = lib.literalExpression "pkgs.bash";
+          description = "Package to install for this task.";
+        };
+        command = lib.mkOption {
+          type = types.nullOr types.package;
+          internal = true;
+          default = mkCommand config.exec false;
+          description = "Path to the script to run.";
+        };
+        status = lib.mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Check if the command should be ran";
+        };
+        statusCommand = lib.mkOption {
+          type = types.nullOr types.package;
+          internal = true;
+          default = mkCommand config.status true;
+          description = "Path to the script to run.";
+        };
+        execIfModified = lib.mkOption {
+          type = types.listOf types.str;
+          default = [ ];
+          description = "Paths to files that should trigger a task execution if modified.";
+        };
+        config = lib.mkOption {
+          type = types.attrsOf types.anything;
+          internal = true;
+          default = {
+            name = name;
+            type = config.type;
+            description = config.description;
+            status = config.statusCommand;
+            after = config.after;
+            before = config.before;
+            command = config.command;
+            input = config.input;
+            exec_if_modified = config.execIfModified;
+            env = config.env;
+            cwd = config.cwd;
+            show_output = config.showOutput;
+            inherit (config) process;
           };
-          exec = lib.mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = "Command to execute the task.";
-          };
-          binary = lib.mkOption {
-            type = types.nullOr types.str;
-            description = "Override the binary name from the default `package.meta.mainProgram`.";
-            default = null;
-          };
-          package = lib.mkOption {
-            type = types.package;
-            default = pkgs.bash;
-            defaultText = lib.literalExpression "pkgs.bash";
-            description = "Package to install for this task.";
-          };
-          command = lib.mkOption {
-            type = types.nullOr types.package;
-            internal = true;
-            default = mkCommand config.exec false;
-            description = "Path to the script to run.";
-          };
-          status = lib.mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = "Check if the command should be ran";
-          };
-          statusCommand = lib.mkOption {
-            type = types.nullOr types.package;
-            internal = true;
-            default = mkCommand config.status true;
-            description = "Path to the script to run.";
-          };
-          execIfModified = lib.mkOption {
-            type = types.listOf types.str;
-            default = [ ];
-            description = "Paths to files that should trigger a task execution if modified.";
-          };
-          config = lib.mkOption {
-            type = types.attrsOf types.anything;
-            internal = true;
-            default = {
-              name = name;
-              type = config.type;
-              description = config.description;
-              status = config.statusCommand;
-              after = config.after;
-              before = config.before;
-              command = config.command;
-              input = config.input;
-              exec_if_modified = config.execIfModified;
-              env = config.env;
-              cwd = config.cwd;
-              show_output = config.showOutput;
-              inherit (config) process;
-            };
-            description = "Internal configuration for the task.";
-          };
-          env = lib.mkOption {
-            type = types.attrsOf types.str;
-            default = { };
-            description = "Environment variables to set for this task.";
-          };
-          exports = lib.mkOption {
-            type = types.listOf types.str;
-            default = [ ];
-            description = "List of environment variables to export.";
-          };
-          description = lib.mkOption {
-            type = types.str;
-            default = "";
-            description = "Description of the task.";
-          };
-          showOutput = lib.mkOption {
-            type = types.bool;
-            default = false;
-            description = "Always show task output (stdout and stderr), regardless of whether the task succeeds or fails.";
-          };
-          after = lib.mkOption {
-            type = types.listOf types.str;
-            description = ''
-              List of tasks that must complete before this task runs.
+          description = "Internal configuration for the task.";
+        };
+        env = lib.mkOption {
+          type = types.attrsOf types.str;
+          default = { };
+          description = "Environment variables to set for this task.";
+        };
+        exports = lib.mkOption {
+          type = types.listOf types.str;
+          default = [ ];
+          description = "List of environment variables to export.";
+        };
+        description = lib.mkOption {
+          type = types.str;
+          default = "";
+          description = "Description of the task.";
+        };
+        showOutput = lib.mkOption {
+          type = types.bool;
+          default = false;
+          description = "Always show task output (stdout and stderr), regardless of whether the task succeeds or fails.";
+        };
+        after = lib.mkOption {
+          type = types.listOf types.str;
+          description = ''
+            List of tasks that must complete before this task runs.
 
-              Here's a helpful mnemonic to remember: This task runs *after* these tasks.
+            Here's a helpful mnemonic to remember: This task runs *after* these tasks.
 
-              You can append a suffix to control dependency behavior:
-              - `task@started` - wait for task to begin execution
-              - `task` or `task@ready` - wait for task to be ready/healthy (default for processes, processes only)
-              - `task@succeeded` - wait for task to exit successfully (default for tasks, tasks only)
-              - `task@completed` - wait for task to finish, regardless of exit code (soft dependency)
+            You can append a suffix to control dependency behavior:
+            - `task@started` - wait for task to begin execution
+            - `task` or `task@ready` - wait for task to be ready/healthy (default for processes, processes only)
+            - `task@succeeded` - wait for task to exit successfully (default for tasks, tasks only)
+            - `task@completed` - wait for task to finish, regardless of exit code (soft dependency)
 
-              Example: `after = [ "pnpm:install@completed" ];` allows this task to run
-              even if pnpm:install fails.
-            '';
-            default = [ ];
-          };
-          before = lib.mkOption {
-            type = types.listOf types.str;
-            description = ''
-              List of tasks that depend on this task completing first.
+            Example: `after = [ "pnpm:install@completed" ];` allows this task to run
+            even if pnpm:install fails.
+          '';
+          default = [ ];
+        };
+        before = lib.mkOption {
+          type = types.listOf types.str;
+          description = ''
+            List of tasks that depend on this task completing first.
 
-              Here's a helpful mnemonic to remember: This task runs *before* these tasks.
+            Here's a helpful mnemonic to remember: This task runs *before* these tasks.
 
-              You can append a suffix to control dependency behavior:
-              - `task@started` - the dependent waits for this task to begin execution
-              - `task` or `task@ready` - the dependent waits for this task to be ready/healthy (default for processes, processes only)
-              - `task@succeeded` - the dependent waits for this task to exit successfully (default for tasks, tasks only)
-              - `task@completed` - the dependent waits for this task to finish (soft dependency)
-            '';
-            default = [ ];
-          };
-          input = lib.mkOption {
-            type = types.attrsOf types.anything;
-            default = { };
-            description = "Input values for the task, encoded as JSON.";
-          };
-          cwd = lib.mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = "Working directory to run the task in. If not specified, the current working directory will be used.";
-          };
+            You can append a suffix to control dependency behavior:
+            - `task@started` - the dependent waits for this task to begin execution
+            - `task` or `task@ready` - the dependent waits for this task to be ready/healthy (default for processes, processes only)
+            - `task@succeeded` - the dependent waits for this task to exit successfully (default for tasks, tasks only)
+            - `task@completed` - the dependent waits for this task to finish (soft dependency)
+          '';
+          default = [ ];
+        };
+        input = lib.mkOption {
+          type = types.attrsOf types.anything;
+          default = { };
+          description = "Input values for the task, encoded as JSON.";
+        };
+        cwd = lib.mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Working directory to run the task in. If not specified, the current working directory will be used.";
+        };
 
-          process = lib.mkOption {
-            type = types.submodule {
-              options = {
-                start = lib.mkOption {
-                  type = types.submodule {
-                    options = {
-                      enable = lib.mkOption {
-                        type = types.bool;
-                        default = true;
-                        description = "Whether to start this process automatically.";
-                      };
+        process = lib.mkOption {
+          type = types.submodule {
+            options = {
+              start = lib.mkOption {
+                type = types.submodule {
+                  options = {
+                    enable = lib.mkOption {
+                      type = types.bool;
+                      default = true;
+                      description = "Whether to start this process automatically.";
                     };
                   };
-                  default = { };
-                  description = "Auto-start configuration for this process.";
                 };
+                default = { };
+                description = "Auto-start configuration for this process.";
+              };
 
-                ready = lib.mkOption {
-                  type = types.nullOr readyType;
-                  default = null;
-                  description = "How to determine if this process task is ready to serve.";
-                };
+              ready = lib.mkOption {
+                type = types.nullOr readyType;
+                default = null;
+                description = "How to determine if this process task is ready to serve.";
+              };
 
-                restart = lib.mkOption {
-                  type = types.submodule {
-                    options = {
-                      on = lib.mkOption {
-                        type = types.enum [ "never" "always" "on_failure" ];
-                        default = "on_failure";
-                        description = "When to restart: never, always, or on_failure.";
-                      };
-                      max = lib.mkOption {
-                        type = types.nullOr types.int;
-                        default = 5;
-                        description = "Maximum restart attempts. null = unlimited.";
-                      };
-                      window = lib.mkOption {
-                        type = types.nullOr types.ints.unsigned;
-                        default = null;
-                        description = "Sliding window in seconds for restart rate limiting. null = lifetime limit.";
-                      };
+              restart = lib.mkOption {
+                type = types.submodule {
+                  options = {
+                    on = lib.mkOption {
+                      type = types.enum [
+                        "never"
+                        "always"
+                        "on_failure"
+                      ];
+                      default = "on_failure";
+                      description = "When to restart: never, always, or on_failure.";
+                    };
+                    max = lib.mkOption {
+                      type = types.nullOr types.int;
+                      default = 5;
+                      description = "Maximum restart attempts. null = unlimited.";
+                    };
+                    window = lib.mkOption {
+                      type = types.nullOr types.ints.unsigned;
+                      default = null;
+                      description = "Sliding window in seconds for restart rate limiting. null = lifetime limit.";
                     };
                   };
-                  default = { };
-                  description = "Process restart policy.";
                 };
+                default = { };
+                description = "Process restart policy.";
+              };
 
-                ports = lib.mkOption {
-                  type = types.attrsOf types.port;
-                  default = { };
-                  description = ''
-                    Allocated ports for this process (name -> port number).
-                    Populated automatically from process port allocation.
-                  '';
-                };
+              ports = lib.mkOption {
+                type = types.attrsOf types.port;
+                default = { };
+                description = ''
+                  Allocated ports for this process (name -> port number).
+                  Populated automatically from process port allocation.
+                '';
+              };
 
-                listen = lib.mkOption {
-                  type = types.listOf listenType;
-                  default = [ ];
-                  description = "Socket activation configuration for systemd-style socket passing.";
-                  example = [
-                    {
-                      name = "http";
-                      kind = "tcp";
-                      address = "127.0.0.1:8080";
-                    }
-                    {
-                      name = "admin";
-                      kind = "unix_stream";
-                      path = "$DEVENV_STATE/admin.sock";
-                      mode = 384; # 0o600
-                    }
-                  ];
-                };
+              listen = lib.mkOption {
+                type = types.listOf listenType;
+                default = [ ];
+                description = "Socket activation configuration for systemd-style socket passing.";
+                example = [
+                  {
+                    name = "http";
+                    kind = "tcp";
+                    address = "127.0.0.1:8080";
+                  }
+                  {
+                    name = "admin";
+                    kind = "unix_stream";
+                    path = "$DEVENV_STATE/admin.sock";
+                    mode = 384; # 0o600
+                  }
+                ];
+              };
 
-                watchdog = lib.mkOption {
-                  type = types.nullOr (types.submodule {
+              watchdog = lib.mkOption {
+                type = types.nullOr (
+                  types.submodule {
                     options = {
                       usec = lib.mkOption {
                         type = types.int;
@@ -321,58 +339,60 @@ let
                         description = "Require READY=1 notification before enforcing watchdog";
                       };
                     };
-                  });
-                  default = null;
-                  description = "Systemd watchdog configuration.";
-                  example = lib.literalExpression ''
-                    {
-                      usec = 30000000; # 30 seconds
-                      require_ready = true;
-                    }
-                  '';
-                };
+                  }
+                );
+                default = null;
+                description = "Systemd watchdog configuration.";
+                example = lib.literalExpression ''
+                  {
+                    usec = 30000000; # 30 seconds
+                    require_ready = true;
+                  }
+                '';
+              };
 
-                watch = lib.mkOption {
-                  type = types.submodule {
-                    options = {
-                      paths = lib.mkOption {
-                        type = types.listOf types.path;
-                        default = [ ];
-                        description = ''
-                          Paths to watch for changes (files or directories).
-                          When files in these paths change, the process will be restarted.
-                        '';
-                      };
+              watch = lib.mkOption {
+                type = types.submodule {
+                  options = {
+                    paths = lib.mkOption {
+                      type = types.listOf types.path;
+                      default = [ ];
+                      description = ''
+                        Paths to watch for changes (files or directories).
+                        When files in these paths change, the process will be restarted.
+                      '';
+                    };
 
-                      extensions = lib.mkOption {
-                        type = types.listOf types.str;
-                        default = [ ];
-                        description = ''
-                          File extensions to watch (e.g., "rs", "js", "py").
-                          If empty, all file extensions are watched.
-                        '';
-                      };
+                    extensions = lib.mkOption {
+                      type = types.listOf types.str;
+                      default = [ ];
+                      description = ''
+                        File extensions to watch (e.g., "rs", "js", "py").
+                        If empty, all file extensions are watched.
+                      '';
+                    };
 
-                      ignore = lib.mkOption {
-                        type = types.listOf types.str;
-                        default = [ ];
-                        description = ''
-                          Glob patterns to ignore (e.g., ".git", "target", "*.log").
-                        '';
-                      };
+                    ignore = lib.mkOption {
+                      type = types.listOf types.str;
+                      default = [ ];
+                      description = ''
+                        Glob patterns to ignore (e.g., ".git", "target", "*.log").
+                      '';
                     };
                   };
-                  default = { };
-                  description = "File watching configuration for automatic process restarts.";
                 };
+                default = { };
+                description = "File watching configuration for automatic process restarts.";
               };
             };
-            default = { };
-            description = "Process-specific configuration. Only used when type = \"process\".";
           };
-
+          default = { };
+          description = "Process-specific configuration. Only used when type = \"process\".";
         };
-      });
+
+      };
+    }
+  );
   tasksJSON = (lib.mapAttrsToList (name: value: { inherit name; } // value.config) config.tasks);
 in
 {
@@ -394,20 +414,29 @@ in
       # However, processes still need the binary for task-based process management.
       # When cli.version is null (flakes integration), always use the binary.
       default =
-        if config.devenv.cli.version != null && lib.versionAtLeast config.devenv.cli.version "2.0" && config.processes == { }
-        then null
-        else lib.getBin devenv-tasks;
+        if
+          config.devenv.cli.version != null
+          && lib.versionAtLeast config.devenv.cli.version "2.0"
+          && config.processes == { }
+        then
+          null
+        else
+          lib.getBin devenv-tasks;
     };
   };
 
   config = {
     assertions = [
       {
-        assertion = lib.all (task: task.package.meta.mainProgram == "bash" || task.binary == "bash" || task.exports == [ ]) (lib.attrValues config.tasks);
+        assertion = lib.all (
+          task: task.package.meta.mainProgram == "bash" || task.binary == "bash" || task.exports == [ ]
+        ) (lib.attrValues config.tasks);
         message = "The 'exports' option for a task can only be set when 'package' is a bash package.";
       }
       {
-        assertion = lib.all (task: task.status == null || task.execIfModified == [ ]) (lib.attrValues config.tasks);
+        assertion = lib.all (task: task.status == null || task.execIfModified == [ ]) (
+          lib.attrValues config.tasks
+        );
         message = "The 'status' and 'execIfModified' options cannot be used together. Use only one of them to determine whether a task should run.";
       }
     ];
@@ -416,7 +445,8 @@ in
     # where DEVENV_TASK_FILE is sufficient and avoids bloating the environment.
     env.DEVENV_TASKS =
       let
-        isNativeWith2Plus = config.process.manager.implementation == "native"
+        isNativeWith2Plus =
+          config.process.manager.implementation == "native"
           && config.devenv.cli.version != null
           && lib.versionAtLeast config.devenv.cli.version "2.0";
       in
@@ -424,10 +454,10 @@ in
     env.DEVENV_TASK_FILE = config.task.config;
     task.config = (pkgs.formats.json { }).generate "tasks.json" tasksJSON;
 
-    infoSections."tasks" =
-      lib.mapAttrsToList
-        (name: task: "${name}: ${task.description} (${if task.command == null then "no command" else task.command})")
-        config.tasks;
+    infoSections."tasks" = lib.mapAttrsToList (
+      name: task:
+      "${name}: ${task.description} (${if task.command == null then "no command" else task.command})"
+    ) config.tasks;
 
     tasks = {
       "devenv:enterShell" = {
@@ -447,21 +477,27 @@ in
     };
     # In devenv 2.0+, Rust runs enterShell tasks before shell spawns (with TUI progress).
     # When cli.version is null (flakes integration) or pre-2.0, run tasks via bash hook.
-    enterShell = lib.mkIf (config.devenv.cli.version == null || lib.versionOlder config.devenv.cli.version "2.0") ''
-      if [ -z "''${DEVENV_SKIP_TASKS:-}" ]; then
-        ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} || exit $?
-        if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
-          source "$DEVENV_DOTFILE/load-exports"
-        fi
-      fi
-    '';
+    enterShell =
+      lib.mkIf (config.devenv.cli.version == null || lib.versionOlder config.devenv.cli.version "2.0")
+        ''
+          if [ -z "''${DEVENV_SKIP_TASKS:-}" ]; then
+            ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} || exit $?
+            if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
+              source "$DEVENV_DOTFILE/load-exports"
+            fi
+          fi
+        '';
     # In devenv 2.0+, Rust runs enterTest tasks (with TUI progress).
     # When cli.version is null (flakes integration) or pre-2.0, run tasks via bash hook.
-    enterTest = lib.mkIf (config.devenv.cli.version == null || lib.versionOlder config.devenv.cli.version "2.0") (lib.mkBefore ''
-      ${config.task.package}/bin/devenv-tasks run devenv:enterTest --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} || exit $?
-      if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
-        source "$DEVENV_DOTFILE/load-exports"
-      fi
-    '');
+    enterTest =
+      lib.mkIf (config.devenv.cli.version == null || lib.versionOlder config.devenv.cli.version "2.0")
+        (
+          lib.mkBefore ''
+            ${config.task.package}/bin/devenv-tasks run devenv:enterTest --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} || exit $?
+            if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
+              source "$DEVENV_DOTFILE/load-exports"
+            fi
+          ''
+        );
   };
 }

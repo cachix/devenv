@@ -1,7 +1,8 @@
-{ pkgs
-, config
-, lib
-, ...
+{
+  pkgs,
+  config,
+  lib,
+  ...
 }:
 let
   cfg = config.languages.scala;
@@ -38,7 +39,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Scala Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Scala Language Server" // {
+        default = true;
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.metals;

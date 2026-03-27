@@ -122,7 +122,10 @@
     version = "2.8.9";
   };
   nokogiri = {
-    dependencies = [ "mini_portile2" "racc" ];
+    dependencies = [
+      "mini_portile2"
+      "racc"
+    ];
     groups = [ "default" ];
     platforms = [ ];
     source = {
@@ -173,7 +176,10 @@
     version = "1.27.0";
   };
   parser = {
-    dependencies = [ "ast" "racc" ];
+    dependencies = [
+      "ast"
+      "racc"
+    ];
     groups = [ "default" ];
     platforms = [ ];
     source = {
@@ -256,7 +262,18 @@
     version = "3.4.4";
   };
   rubocop = {
-    dependencies = [ "json" "language_server-protocol" "lint_roller" "parallel" "parser" "rainbow" "regexp_parser" "rubocop-ast" "ruby-progressbar" "unicode-display_width" ];
+    dependencies = [
+      "json"
+      "language_server-protocol"
+      "lint_roller"
+      "parallel"
+      "parser"
+      "rainbow"
+      "regexp_parser"
+      "rubocop-ast"
+      "ruby-progressbar"
+      "unicode-display_width"
+    ];
     groups = [ "default" ];
     platforms = [ ];
     source = {
@@ -267,7 +284,10 @@
     version = "1.82.1";
   };
   rubocop-ast = {
-    dependencies = [ "parser" "prism" ];
+    dependencies = [
+      "parser"
+      "prism"
+    ];
     groups = [ "default" ];
     platforms = [ ];
     source = {
@@ -288,7 +308,29 @@
     version = "1.13.0";
   };
   solargraph = {
-    dependencies = [ "ast" "backport" "benchmark" "diff-lcs" "jaro_winkler" "kramdown" "kramdown-parser-gfm" "logger" "observer" "open3" "ostruct" "parser" "prism" "rbs" "reverse_markdown" "rubocop" "thor" "tilt" "yard" "yard-activesupport-concern" "yard-solargraph" ];
+    dependencies = [
+      "ast"
+      "backport"
+      "benchmark"
+      "diff-lcs"
+      "jaro_winkler"
+      "kramdown"
+      "kramdown-parser-gfm"
+      "logger"
+      "observer"
+      "open3"
+      "ostruct"
+      "parser"
+      "prism"
+      "rbs"
+      "reverse_markdown"
+      "rubocop"
+      "thor"
+      "tilt"
+      "yard"
+      "yard-activesupport-concern"
+      "yard-solargraph"
+    ];
     groups = [ "default" ];
     platforms = [ ];
     source = {

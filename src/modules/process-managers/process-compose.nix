@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 let
   cfg = config.process.managers.process-compose;
   settingsFormat = pkgs.formats.yaml { };
@@ -10,32 +15,32 @@ let
   beforeDepsMap =
     let
       allProcesses = config.processes;
-      contributions = lib.concatLists (lib.mapAttrsToList
-        (name: process:
+      contributions = lib.concatLists (
+        lib.mapAttrsToList (
+          name: process:
           let
             beforeProcessDeps = lib.filter (x: x != null) (map parseProcessDep process.before);
           in
-          map
-            (dep: {
-              target = dep.name;
-              source = name;
-              condition = dep.pcCondition;
-            })
-            beforeProcessDeps
-        )
-        allProcesses);
+          map (dep: {
+            target = dep.name;
+            source = name;
+            condition = dep.pcCondition;
+          }) beforeProcessDeps
+        ) allProcesses
+      );
     in
     # Group by target process name
-    lib.foldl'
-      (acc: entry:
-        acc // {
-          ${entry.target} = (acc.${entry.target} or { }) // {
-            ${entry.source} = { condition = entry.condition; };
+    lib.foldl' (
+      acc: entry:
+      acc
+      // {
+        ${entry.target} = (acc.${entry.target} or { }) // {
+          ${entry.source} = {
+            condition = entry.condition;
           };
-        }
-      )
-      { }
-      contributions;
+        };
+      }
+    ) { } contributions;
 in
 {
   options.process.managers.process-compose = {
@@ -61,9 +66,11 @@ in
     };
 
     unixSocket = {
-      enable = lib.mkEnableOption "running the process-compose server over unix domain sockets instead of tcp" // {
-        default = true;
-      };
+      enable =
+        lib.mkEnableOption "running the process-compose server over unix domain sockets instead of tcp"
+        // {
+          default = true;
+        };
 
       path = lib.mkOption {
         type = lib.types.str;
@@ -101,8 +108,7 @@ in
           backoff_seconds = 2;
           max_restarts = 5; # default: 0 (unlimited)
         };
-        depends_on.some-other-process.condition =
-          "process_completed_successfully";
+        depends_on.some-other-process.condition = "process_completed_successfully";
       };
     };
   };
@@ -123,10 +129,7 @@ in
         # Prevent the TUI from immediately closing if all processes fail.
         # Improves the UX by letting users inspect the logs.
         "keep-project" = cfg.tui.enable;
-        "unix-socket" =
-          if cfg.unixSocket.enable
-          then cfg.unixSocket.path
-          else null;
+        "unix-socket" = if cfg.unixSocket.enable then cfg.unixSocket.path else null;
         # TODO: move -t (for tui) here. We need a newer nixpkgs for optionValueSeparator = "=".
       };
 
@@ -135,20 +138,22 @@ in
         mkdir -p "${config.devenv.state}/process-compose"
 
         ${lib.optionalString cfg.unixSocket.enable ''
-        # Attach to an existing process-compose instance if:
-        # - The unix socket is enabled
-        # - The socket file exists
-        # - The file is a unix socket
-        # - There's an active process listening on the socket
-        if ${pkgs.coreutils}/bin/timeout 1 ${lib.getExe pkgs.socat} - "UNIX-CONNECT:$PC_SOCKET_PATH" </dev/null >/dev/null 2>&1; then
-          echo "Attaching to existing process-compose server at $PC_SOCKET_PATH" >&2
-          exec ${lib.getExe cfg.package} --unix-socket "$PC_SOCKET_PATH" attach "$@"
-        fi
+          # Attach to an existing process-compose instance if:
+          # - The unix socket is enabled
+          # - The socket file exists
+          # - The file is a unix socket
+          # - There's an active process listening on the socket
+          if ${pkgs.coreutils}/bin/timeout 1 ${lib.getExe pkgs.socat} - "UNIX-CONNECT:$PC_SOCKET_PATH" </dev/null >/dev/null 2>&1; then
+            echo "Attaching to existing process-compose server at $PC_SOCKET_PATH" >&2
+            exec ${lib.getExe cfg.package} --unix-socket "$PC_SOCKET_PATH" attach "$@"
+          fi
         ''}
 
         # Start a new process-compose server
         ${lib.getExe cfg.package} \
-          ${(lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell) { } config.process.manager.args} \
+          ${
+            (lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell) { } config.process.manager.args
+          } \
           -t="''${PC_TUI_ENABLED:-${lib.boolToString cfg.tui.enable}}" \
           up "$@" &
       '';
@@ -166,29 +171,37 @@ in
             shell_argument = lib.mkDefault "-c";
             elevated_shell_command = lib.mkDefault "sudo";
             # Pass-through environment variables required by devenv-tasks when using elevated processes.
-            elevated_shell_argument = lib.mkDefault (lib.concatStringsSep " " [
-              "DEVENV_DOTFILE='${config.devenv.dotfile}'"
-              "DEVENV_CMDLINE=\"$DEVENV_CMDLINE\""
-              "DEVENV_TASK_FILE='${config.task.config}'"
-              "-S"
-            ]);
+            elevated_shell_argument = lib.mkDefault (
+              lib.concatStringsSep " " [
+                "DEVENV_DOTFILE='${config.devenv.dotfile}'"
+                "DEVENV_CMDLINE=\"$DEVENV_CMDLINE\""
+                "DEVENV_TASK_FILE='${config.task.config}'"
+                "-S"
+              ]
+            );
           };
-          processes = lib.mapAttrs
-            (name: value:
-              let
-                command =
-                  if !value.start.enable then value.exec
-                  else if value.process-compose.is_elevated or false
-                  then config.process.taskCommandsBase.${name}
-                  else config.process.taskCommands.${name};
-                envList = lib.mapAttrsToList (k: v: "${k}=${v}") value.env;
-                pcEnv = value.process-compose.environment or [ ];
+          processes = lib.mapAttrs (
+            name: value:
+            let
+              command =
+                if !value.start.enable then
+                  value.exec
+                else if value.process-compose.is_elevated or false then
+                  config.process.taskCommandsBase.${name}
+                else
+                  config.process.taskCommands.${name};
+              envList = lib.mapAttrsToList (k: v: "${k}=${v}") value.env;
+              pcEnv = value.process-compose.environment or [ ];
 
-                # Translate ready -> readiness_probe
-                typedProbe = lib.optionalAttrs
+              # Translate ready -> readiness_probe
+              typedProbe =
+                lib.optionalAttrs
                   (value.ready != null && (value.ready.exec != null || value.ready.http.get != null))
                   (
-                    let r = value.ready; in {
+                    let
+                      r = value.ready;
+                    in
+                    {
                       readiness_probe =
                         (lib.optionalAttrs (r.exec != null) { exec.command = r.exec; })
                         // (lib.optionalAttrs (r.http.get != null) { http_get = r.http.get; })
@@ -201,36 +214,42 @@ in
                     }
                   );
 
-                # Translate restart -> availability
-                typedAvailability = {
-                  availability = {
-                    restart = value.restart.on;
-                  } // lib.optionalAttrs (value.restart.max != null) {
-                    max_restarts = value.restart.max;
-                  };
+              # Translate restart -> availability
+              typedAvailability = {
+                availability = {
+                  restart = value.restart.on;
+                }
+                // lib.optionalAttrs (value.restart.max != null) {
+                  max_restarts = value.restart.max;
                 };
+              };
 
-                # Escape hatch (environment handled separately)
-                pcAttrs = removeAttrs value.process-compose [ "environment" ];
+              # Escape hatch (environment handled separately)
+              pcAttrs = removeAttrs value.process-compose [ "environment" ];
 
-                # Merge depends_on from `before` lists of other processes.
-                # after-derived deps (existingDepsOn) take precedence over before-derived deps
-                # when the same source process appears in both.
-                beforeDeps = beforeDepsMap.${name} or { };
-                existingDepsOn = pcAttrs.depends_on or { };
-                mergedDepsOn = beforeDeps // existingDepsOn;
-                pcAttrsWithBefore = pcAttrs // lib.optionalAttrs (mergedDepsOn != { }) {
+              # Merge depends_on from `before` lists of other processes.
+              # after-derived deps (existingDepsOn) take precedence over before-derived deps
+              # when the same source process appears in both.
+              beforeDeps = beforeDepsMap.${name} or { };
+              existingDepsOn = pcAttrs.depends_on or { };
+              mergedDepsOn = beforeDeps // existingDepsOn;
+              pcAttrsWithBefore =
+                pcAttrs
+                // lib.optionalAttrs (mergedDepsOn != { }) {
                   depends_on = mergedDepsOn;
                 };
-              in
-              { inherit command; }
-              // typedAvailability
-              // typedProbe
-              // pcAttrsWithBefore
-              // { environment = envList ++ pcEnv; }
-              // lib.optionalAttrs (!value.start.enable) { disabled = true; }
-            )
-            config.processes;
+            in
+            {
+              inherit command;
+            }
+            // typedAvailability
+            // typedProbe
+            // pcAttrsWithBefore
+            // {
+              environment = envList ++ pcEnv;
+            }
+            // lib.optionalAttrs (!value.start.enable) { disabled = true; }
+          ) config.processes;
         };
       };
     })

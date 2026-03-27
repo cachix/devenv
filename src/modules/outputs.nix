@@ -1,4 +1,5 @@
-{ lib, config, ... }: {
+{ lib, config, ... }:
+{
   options = {
     outputs = lib.mkOption {
       type = config.lib.types.outputOf lib.types.attrs;
@@ -24,12 +25,23 @@
       descriptionClass = "output";
     };
 
-    outputOf = t: lib.types.mkOptionType {
-      name = "outputOf";
-      description = "outputOf ${lib.types.optionDescriptionPhrase (class: class == "noun" || class == "conjunction") t}";
-      descriptionClass = "outputOf";
-      inherit (t) check merge emptyValue getSubOptions getSubModules substSubModules;
-      nestedTypes.elemType = t;
-    };
+    outputOf =
+      t:
+      lib.types.mkOptionType {
+        name = "outputOf";
+        description = "outputOf ${
+          lib.types.optionDescriptionPhrase (class: class == "noun" || class == "conjunction") t
+        }";
+        descriptionClass = "outputOf";
+        inherit (t)
+          check
+          merge
+          emptyValue
+          getSubOptions
+          getSubModules
+          substSubModules
+          ;
+        nestedTypes.elemType = t;
+      };
   };
 }

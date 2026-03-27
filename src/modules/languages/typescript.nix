@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.typescript;
@@ -8,7 +13,9 @@ in
     enable = lib.mkEnableOption "tools for TypeScript development";
 
     lsp = {
-      enable = lib.mkEnableOption "TypeScript Language Server" // { default = true; };
+      enable = lib.mkEnableOption "TypeScript Language Server" // {
+        default = true;
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.typescript-language-server;
@@ -21,6 +28,7 @@ in
   config = lib.mkIf cfg.enable {
     packages = [
       pkgs.typescript
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    ]
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

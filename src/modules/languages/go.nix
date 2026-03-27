@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.go;
@@ -17,7 +22,8 @@ let
   # A helper function to rebuild a package with the specific Go version.
   # It expects the package to have a `buildGo*Module` argument in its override function.
   # This will override multiple buildGo*Module arguments if they exist.
-  buildWithSpecificGo = pkg:
+  buildWithSpecificGo =
+    pkg:
     let
       overrideArgs = lib.functionArgs pkg.override;
       goModuleArgs = lib.filterAttrs (name: _: lib.match "buildGo.*Module" name != null) overrideArgs;
@@ -61,7 +67,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Go Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Go Language Server" // {
+        default = true;
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.gopls;
@@ -92,7 +100,8 @@ in
 
       # Required by vim-go
       (buildWithSpecificGo pkgs.iferr)
-    ] ++ lib.optional cfg.lsp.enable (buildWithSpecificGo cfg.lsp.package);
+    ]
+    ++ lib.optional cfg.lsp.enable (buildWithSpecificGo cfg.lsp.package);
 
     hardeningDisable = lib.optional (cfg.enableHardeningWorkaround) "fortify";
 

@@ -1,7 +1,7 @@
 # A non-root container image with devenv and Nix pre-installed.
-{ pkgs
-, devenv
-,
+{
+  pkgs,
+  devenv,
 }:
 
 let

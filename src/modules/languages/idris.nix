@@ -1,7 +1,14 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
-let cfg = config.languages.idris;
-in {
+let
+  cfg = config.languages.idris;
+in
+{
   options.languages.idris = {
     enable = lib.mkEnableOption "tools for Idris development";
 
@@ -16,7 +23,9 @@ in {
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Idris Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Idris Language Server" // {
+        default = true;
+      };
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -30,6 +39,7 @@ in {
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    ]
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

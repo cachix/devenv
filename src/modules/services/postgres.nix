@@ -1,7 +1,8 @@
-{ pkgs
-, lib
-, config
-, ...
+{
+  pkgs,
+  lib,
+  config,
+  ...
 }:
 let
   cfg = config.services.postgres;
@@ -15,12 +16,17 @@ let
 
   runtimeDir = "${config.env.DEVENV_RUNTIME}/postgres";
 
-  parseListenAddresses = input:
+  parseListenAddresses =
+    input:
     let
-      convertSpecialValue = value:
-        if value == "*" || value == "0.0.0.0" then "127.0.0.1"
-        else if value == "::" then "::1"
-        else value;
+      convertSpecialValue =
+        value:
+        if value == "*" || value == "0.0.0.0" then
+          "127.0.0.1"
+        else if value == "::" then
+          "::1"
+        else
+          value;
     in
     lib.pipe input [
       (lib.splitString ",")
@@ -30,64 +36,61 @@ let
     ];
 
   # Fetch the first element of a list or return null if the list is empty.
-  headWithDefault = default: input:
-    if input == [ ]
-    then default
-    else builtins.head input;
+  headWithDefault = default: input: if input == [ ] then default else builtins.head input;
 
   postgresPkg =
-    if cfg.extensions != null
-    then
-      if builtins.hasAttr "withPackages" cfg.package
-      then cfg.package.withPackages cfg.extensions
+    if cfg.extensions != null then
+      if builtins.hasAttr "withPackages" cfg.package then
+        cfg.package.withPackages cfg.extensions
       else
         builtins.throw ''
           Cannot add extensions to the PostgreSQL package.
           `services.postgres.package` is missing the `withPackages` attribute. Did you already add extensions to the package?
         ''
-    else cfg.package;
+    else
+      cfg.package;
 
   # TODO: we can probably clean this up a lot by delegating more "if exists" stuff to psql (à la `DO $$...$$` below)
   setupInitialDatabases =
-    if cfg.initialDatabases != [ ]
-    then
-      (lib.concatMapStrings
-        (database:
-          let
-            psqlUserFlags =
-              if (database.user != null)
-              then "--user ${database.user}"
-              else "";
-          in
-          ''
-            echo "Checking presence of database: ${database.name}"
-            # Create initial databases
-            dbAlreadyExists="$(
-              echo "SELECT 1 AS exists FROM pg_database WHERE datname = '${database.name}';" | \
-              psql --dbname postgres | \
-              ${pkgs.gnugrep}/bin/grep -c 'exists = "1"' || true
-            )"
-            echo $dbAlreadyExists
-            if [ 1 -ne "$dbAlreadyExists" ]; then
-              ${lib.optionalString (database.user != null) ''
+    if cfg.initialDatabases != [ ] then
+      (lib.concatMapStrings (
+        database:
+        let
+          psqlUserFlags = if (database.user != null) then "--user ${database.user}" else "";
+        in
+        ''
+          echo "Checking presence of database: ${database.name}"
+          # Create initial databases
+          dbAlreadyExists="$(
+            echo "SELECT 1 AS exists FROM pg_database WHERE datname = '${database.name}';" | \
+            psql --dbname postgres | \
+            ${pkgs.gnugrep}/bin/grep -c 'exists = "1"' || true
+          )"
+          echo $dbAlreadyExists
+          if [ 1 -ne "$dbAlreadyExists" ]; then
+            ${lib.optionalString (database.user != null) ''
               echo "Creating role ${database.user}..."
               psql --dbname postgres <<'EOF'
               DO $$
                   BEGIN
-                      CREATE ROLE "${database.user}" WITH LOGIN${lib.optionalString (database.pass != null) " PASSWORD '${database.pass}'"};
+                      CREATE ROLE "${database.user}" WITH LOGIN${
+                        lib.optionalString (database.pass != null) " PASSWORD '${database.pass}'"
+                      };
                       EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
                   END
               $$;
               EOF
             ''}
-              echo "Creating database: ${database.name}"
-              echo 'CREATE DATABASE "${database.name}"${lib.optionalString (database.user != null) " OWNER \"${database.user}\""};' | psql --dbname postgres
-              if [ ${q database.initialSQL} != null ]
-              then
-                echo "Running initial SQL on database ${database.name}"
-                echo ${q database.initialSQL} | psql --dbname ${database.name}
-              fi
-              ${lib.optionalString (database.schema != null) ''
+            echo "Creating database: ${database.name}"
+            echo 'CREATE DATABASE "${database.name}"${
+              lib.optionalString (database.user != null) " OWNER \"${database.user}\""
+            };' | psql --dbname postgres
+            if [ ${q database.initialSQL} != null ]
+            then
+              echo "Running initial SQL on database ${database.name}"
+              echo ${q database.initialSQL} | psql --dbname ${database.name}
+            fi
+            ${lib.optionalString (database.schema != null) ''
               echo "Applying database schema on ${database.name}"
               if [ -f "${database.schema}" ]
               then
@@ -107,9 +110,9 @@ let
                 exit 1
               fi
             ''}
-            fi
-          '')
-        cfg.initialDatabases)
+          fi
+        ''
+      ) cfg.initialDatabases)
     else
       lib.optionalString cfg.createDatabase ''
         psql --dbname postgres << EOF
@@ -118,32 +121,35 @@ let
       '';
 
   runInitialScript =
-    if cfg.initialScript != null
-    then ''
-      echo ${q cfg.initialScript} | psql --dbname postgres
-    ''
-    else "";
+    if cfg.initialScript != null then
+      ''
+        echo ${q cfg.initialScript} | psql --dbname postgres
+      ''
+    else
+      "";
 
-  toStr = value:
-    if true == value
-    then "yes"
-    else if false == value
-    then "no"
-    else if lib.isString value
-    then "'${lib.replaceStrings ["'"] ["''"] value}'"
-    else toString value;
+  toStr =
+    value:
+    if true == value then
+      "yes"
+    else if false == value then
+      "no"
+    else if lib.isString value then
+      "'${lib.replaceStrings [ "'" ] [ "''" ] value}'"
+    else
+      toString value;
 
-  configFile =
-    pkgs.writeText "postgresql.conf" (lib.concatStringsSep "\n"
-      (lib.mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.settings));
+  configFile = pkgs.writeText "postgresql.conf" (
+    lib.concatStringsSep "\n" (lib.mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.settings)
+  );
   setupPgHbaFileScript =
-    if cfg.hbaConf != null
-    then
+    if cfg.hbaConf != null then
       let
         file = pkgs.writeText "pg_hba.conf" cfg.hbaConf;
       in
       ''cp ${file} "$PGDATA/pg_hba.conf"''
-    else "";
+    else
+      "";
   setupScript = pkgs.writeShellScriptBin "setup-postgres" ''
     set -euo pipefail
     export PATH=${postgresPkg}/bin:${pkgs.coreutils}/bin
@@ -196,11 +202,14 @@ let
 in
 {
   imports = [
-    (lib.mkRenamedOptionModule [ "postgres" "enable" ] [
-      "services"
-      "postgres"
-      "enable"
-    ])
+    (lib.mkRenamedOptionModule
+      [ "postgres" "enable" ]
+      [
+        "services"
+        "postgres"
+        "enable"
+      ]
+    )
   ];
 
   options.services.postgres = {
@@ -277,8 +286,14 @@ in
 
     initdbArgs = lib.mkOption {
       type = types.listOf types.lines;
-      default = [ "--locale=C" "--encoding=UTF8" ];
-      example = [ "--data-checksums" "--allow-group-access" ];
+      default = [
+        "--locale=C"
+        "--encoding=UTF8"
+      ];
+      example = [
+        "--data-checksums"
+        "--allow-group-access"
+      ];
       description = ''
         Additional arguments passed to `initdb` during data dir
         initialisation.
@@ -286,7 +301,14 @@ in
     };
 
     settings = lib.mkOption {
-      type = with types; attrsOf (oneOf [ bool float int str ]);
+      type =
+        with types;
+        attrsOf (oneOf [
+          bool
+          float
+          int
+          str
+        ]);
       default = { };
       description = ''
         PostgreSQL configuration. Refer to
@@ -308,51 +330,53 @@ in
     };
 
     initialDatabases = lib.mkOption {
-      type = types.listOf (types.submodule {
-        options = {
-          name = lib.mkOption {
-            type = types.str;
-            description = ''
-              The name of the database to create.
-            '';
+      type = types.listOf (
+        types.submodule {
+          options = {
+            name = lib.mkOption {
+              type = types.str;
+              description = ''
+                The name of the database to create.
+              '';
+            };
+            schema = lib.mkOption {
+              type = types.nullOr types.path;
+              default = null;
+              description = ''
+                The initial schema of the database; if null (the default),
+                an empty database is created.
+              '';
+            };
+            user = lib.mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = ''
+                Username of owner of the database. If set, a role with this name is created and the database is owned by it. If null, the default $USER is used.
+              '';
+            };
+            pass = lib.mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = ''
+                Password of the database owner role. Requires `user` to be set.
+              '';
+            };
+            initialSQL = lib.mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = ''
+                SQL commands to run on this specific database during it's initialization.
+                Multiple SQL expressions can be separated by semicolons.
+              '';
+              example = lib.literalExpression ''
+                CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT);
+                INSERT INTO users (name) VALUES ('admin');
+                CREATE EXTENSION IF NOT EXISTS pg_uuidv7;
+              '';
+            };
           };
-          schema = lib.mkOption {
-            type = types.nullOr types.path;
-            default = null;
-            description = ''
-              The initial schema of the database; if null (the default),
-              an empty database is created.
-            '';
-          };
-          user = lib.mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = ''
-              Username of owner of the database. If set, a role with this name is created and the database is owned by it. If null, the default $USER is used.
-            '';
-          };
-          pass = lib.mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = ''
-              Password of the database owner role. Requires `user` to be set.
-            '';
-          };
-          initialSQL = lib.mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = ''
-              SQL commands to run on this specific database during it's initialization.
-              Multiple SQL expressions can be separated by semicolons.
-            '';
-            example = lib.literalExpression ''
-              CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT);
-              INSERT INTO users (name) VALUES ('admin');
-              CREATE EXTENSION IF NOT EXISTS pg_uuidv7;
-            '';
-          };
-        };
-      });
+        }
+      );
       default = [ ];
       description = ''
         List of database names and their initial schemas that should be used to create databases on the first startup
@@ -417,25 +441,23 @@ in
       ];
     }
     (lib.mkIf cfg.enable {
-      assertions = lib.concatMap
-        (database: [
-          {
-            assertion = database.pass != null -> database.user != null;
-            message = "services.postgres.initialDatabases: database '${database.name}' has `pass` set but not `user`. Setting `pass` requires `user`.";
-          }
-        ])
-        cfg.initialDatabases;
+      assertions = lib.concatMap (database: [
+        {
+          assertion = database.pass != null -> database.user != null;
+          message = "services.postgres.initialDatabases: database '${database.name}' has `pass` set but not `user`. Setting `pass` requires `user`.";
+        }
+      ]) cfg.initialDatabases;
 
-      packages = [ postgresPkg startScript ];
+      packages = [
+        postgresPkg
+        startScript
+      ];
 
       env.PGDATA = config.env.DEVENV_STATE + "/postgres";
       env.PGHOST =
         let
           parsedAddress = headWithDefault null (parseListenAddresses cfg.listen_addresses);
-          host =
-            if cfg.listen_addresses != ""
-            then parsedAddress
-            else runtimeDir;
+          host = if cfg.listen_addresses != "" then parsedAddress else runtimeDir;
         in
         lib.mkDefault host;
       # Required for init scripts.

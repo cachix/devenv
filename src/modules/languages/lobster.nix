@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.lobster;
@@ -15,10 +20,9 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable
-    {
-      packages = [
-        cfg.package
-      ];
-    };
+  config = lib.mkIf cfg.enable {
+    packages = [
+      cfg.package
+    ];
+  };
 }

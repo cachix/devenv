@@ -1,7 +1,8 @@
-{ pkgs
-, lib
-, config
-, ...
+{
+  pkgs,
+  lib,
+  config,
+  ...
 }:
 let
   cfg = config.treefmt;
@@ -20,10 +21,9 @@ let
 
   treefmtSubmodule =
     if treefmt-nix != null then
-      treefmt-nix.lib.submoduleWith lib
-        {
-          specialArgs = { inherit pkgs; };
-        }
+      treefmt-nix.lib.submoduleWith lib {
+        specialArgs = { inherit pkgs; };
+      }
     else
       lib.types.attrs;
 

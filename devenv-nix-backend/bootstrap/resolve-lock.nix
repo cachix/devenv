@@ -1,7 +1,7 @@
 # Adapted from https://git.lix.systems/lix-project/flake-compat/src/branch/main/default.nix
-{ src
-, system ? builtins.currentSystem or "unknown-system"
-,
+{
+  src,
+  system ? builtins.currentSystem or "unknown-system",
 }:
 
 let
@@ -44,102 +44,108 @@ let
     in
     "${toString y'}${pad (toString m)}${pad (toString d)}${pad (toString hours)}${pad (toString minutes)}${pad (toString seconds)}";
 
-  allNodes = builtins.mapAttrs
-    (
-      key: node:
-        let
-          sourceInfo =
-            if key == lockFile.root then
-              rootSrc
-            # Path inputs pointing to project root (path = ".") should use rootSrc
-            # to avoid fetchTree hashing the entire project directory
-            else if node.locked.type or null == "path" && node.locked.path or null == "." then
-              rootSrc
-            else
-              let
-                locked = node.locked;
-                isRelativePath = p: p != null && (builtins.substring 0 2 p == "./" || builtins.substring 0 3 p == "../");
-                # Resolve relative paths against src
-                resolvedLocked = locked
-                  // (if locked.type or null == "path" && isRelativePath (locked.path or null)
-                then { path = toString src + "/${locked.path}"; }
-                else { })
-                  // (if locked.type or null == "git" && isRelativePath (locked.url or null)
-                then { url = toString src + "/${locked.url}"; }
-                else { });
-              in
-              builtins.fetchTree (node.info or { } // removeAttrs resolvedLocked [ "dir" ]);
-
-          subdir = if key == lockFile.root then "" else node.locked.dir or "";
-
-          outPath = sourceInfo + ((if subdir == "" then "" else "/") + subdir);
-
-          # Resolve a input spec into a node name. An input spec is
-          # either a node name, or a 'follows' path from the root
-          # node.
-          resolveInput =
-            inputSpec: if builtins.isList inputSpec then getInputByPath lockFile.root inputSpec else inputSpec;
-
-          # Follow an input path (e.g. ["dwarffs" "nixpkgs"]) from the
-          # root node, returning the final node.
-          getInputByPath =
-            nodeName: path:
-            if path == [ ] then
-              nodeName
-            else
-              getInputByPath
-                # Since this could be a 'follows' input, call resolveInput.
-                (resolveInput lockFile.nodes.${nodeName}.inputs.${builtins.head path})
-                (builtins.tail path);
-
-          inputs = builtins.mapAttrs (inputName: inputSpec: allNodes.${resolveInput inputSpec}) (
-            node.inputs or { }
-          );
-
-          # Only import flake.nix for non-root nodes (root doesn't need it)
-          flake = if key == lockFile.root then null else import (outPath + "/flake.nix");
-
-          outputs = if key == lockFile.root then { } else flake.outputs (inputs // { self = result; });
-
-          # Lazy devenv evaluation for this input
-          devenvEval =
-            let
-              bootstrapLib = import ./bootstrapLib.nix { inputs = inputs; };
-            in
-            bootstrapLib.mkDevenvForInput {
-              input = { inherit outPath sourceInfo; };
-              allInputs = inputs;
-              inherit system;
-            };
-
-          result =
-            outputs
-            // sourceInfo
-            // {
-              inherit outPath;
-              inherit inputs;
-              inherit outputs;
-              inherit sourceInfo;
-              _type = "flake";
-              devenv = devenvEval;
-            };
-
-          nonFlakeResult = sourceInfo // {
-            inherit outPath;
-            inherit inputs;
-            inherit sourceInfo;
-            _type = "flake";
-            devenv = devenvEval;
-          };
-
-        in
-        if node.flake or true && key != lockFile.root then
-          assert builtins.isFunction flake.outputs;
-          result
+  allNodes = builtins.mapAttrs (
+    key: node:
+    let
+      sourceInfo =
+        if key == lockFile.root then
+          rootSrc
+        # Path inputs pointing to project root (path = ".") should use rootSrc
+        # to avoid fetchTree hashing the entire project directory
+        else if node.locked.type or null == "path" && node.locked.path or null == "." then
+          rootSrc
         else
-          nonFlakeResult
-    )
-    lockFile.nodes;
+          let
+            locked = node.locked;
+            isRelativePath =
+              p: p != null && (builtins.substring 0 2 p == "./" || builtins.substring 0 3 p == "../");
+            # Resolve relative paths against src
+            resolvedLocked =
+              locked
+              // (
+                if locked.type or null == "path" && isRelativePath (locked.path or null) then
+                  { path = toString src + "/${locked.path}"; }
+                else
+                  { }
+              )
+              // (
+                if locked.type or null == "git" && isRelativePath (locked.url or null) then
+                  { url = toString src + "/${locked.url}"; }
+                else
+                  { }
+              );
+          in
+          builtins.fetchTree (node.info or { } // removeAttrs resolvedLocked [ "dir" ]);
+
+      subdir = if key == lockFile.root then "" else node.locked.dir or "";
+
+      outPath = sourceInfo + ((if subdir == "" then "" else "/") + subdir);
+
+      # Resolve a input spec into a node name. An input spec is
+      # either a node name, or a 'follows' path from the root
+      # node.
+      resolveInput =
+        inputSpec: if builtins.isList inputSpec then getInputByPath lockFile.root inputSpec else inputSpec;
+
+      # Follow an input path (e.g. ["dwarffs" "nixpkgs"]) from the
+      # root node, returning the final node.
+      getInputByPath =
+        nodeName: path:
+        if path == [ ] then
+          nodeName
+        else
+          getInputByPath
+            # Since this could be a 'follows' input, call resolveInput.
+            (resolveInput lockFile.nodes.${nodeName}.inputs.${builtins.head path})
+            (builtins.tail path);
+
+      inputs = builtins.mapAttrs (inputName: inputSpec: allNodes.${resolveInput inputSpec}) (
+        node.inputs or { }
+      );
+
+      # Only import flake.nix for non-root nodes (root doesn't need it)
+      flake = if key == lockFile.root then null else import (outPath + "/flake.nix");
+
+      outputs = if key == lockFile.root then { } else flake.outputs (inputs // { self = result; });
+
+      # Lazy devenv evaluation for this input
+      devenvEval =
+        let
+          bootstrapLib = import ./bootstrapLib.nix { inputs = inputs; };
+        in
+        bootstrapLib.mkDevenvForInput {
+          input = { inherit outPath sourceInfo; };
+          allInputs = inputs;
+          inherit system;
+        };
+
+      result =
+        outputs
+        // sourceInfo
+        // {
+          inherit outPath;
+          inherit inputs;
+          inherit outputs;
+          inherit sourceInfo;
+          _type = "flake";
+          devenv = devenvEval;
+        };
+
+      nonFlakeResult = sourceInfo // {
+        inherit outPath;
+        inherit inputs;
+        inherit sourceInfo;
+        _type = "flake";
+        devenv = devenvEval;
+      };
+
+    in
+    if node.flake or true && key != lockFile.root then
+      assert builtins.isFunction flake.outputs;
+      result
+    else
+      nonFlakeResult
+  ) lockFile.nodes;
 
   result =
     if !(builtins.pathExists lockFilePath) then

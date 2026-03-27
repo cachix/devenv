@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.cplusplus;
@@ -8,7 +13,9 @@ in
     enable = lib.mkEnableOption "tools for C++ development";
 
     lsp = {
-      enable = lib.mkEnableOption "C++ Language Server" // { default = true; };
+      enable = lib.mkEnableOption "C++ Language Server" // {
+        default = true;
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.ccls;
@@ -19,10 +26,13 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
-      clang-tools
-      cmake
-      clang
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    packages =
+      with pkgs;
+      [
+        clang-tools
+        cmake
+        clang
+      ]
+      ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

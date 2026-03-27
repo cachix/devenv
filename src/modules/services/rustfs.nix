@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   cfg = config.services.rustfs;
@@ -108,7 +113,8 @@ in
       RUSTFS_ACCESS_KEY = cfg.accessKey;
       RUSTFS_SECRET_KEY = cfg.secretKey;
       RUSTFS_DATA_DIR = config.env.DEVENV_STATE + "/rustfs/data";
-    } // cfg.extraEnvironment;
+    }
+    // cfg.extraEnvironment;
 
     tasks."devenv:rustfs:setup" = {
       exec = ''

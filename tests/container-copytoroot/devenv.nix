@@ -1,4 +1,5 @@
-{ pkgs, ... }: {
+{ pkgs, ... }:
+{
   name = "copytoroot-test";
 
   # Create test files and directories
@@ -26,7 +27,10 @@
     # Test copying multiple paths (list)
     test-multiple = {
       name = "test-multiple";
-      copyToRoot = [ ./test-file.txt ./test-dir ];
+      copyToRoot = [
+        ./test-file.txt
+        ./test-dir
+      ];
       startupCommand = "ls -laR /env";
     };
   };

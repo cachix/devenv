@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 let
   types = lib.types;
 
@@ -43,11 +48,9 @@ in
 
   config = {
     changelog.json = (pkgs.formats.json { }).generate "changelog.json" (
-      map
-        (entry: {
-          inherit (entry) date title description;
-        })
-        (lib.filter (entry: entry.when) config.changelogs)
+      map (entry: {
+        inherit (entry) date title description;
+      }) (lib.filter (entry: entry.when) config.changelogs)
     );
   };
 }

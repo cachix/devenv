@@ -1,7 +1,8 @@
-{ pkgs
-, config
-, lib
-, ...
+{
+  pkgs,
+  config,
+  lib,
+  ...
 }:
 
 let
@@ -9,14 +10,14 @@ let
 
   # Convert version like "0.15.1" to "0.15.0" for zls
   zlsVersion =
-    if cfg.version != null
-    then
+    if cfg.version != null then
       let
         versionParts = lib.splitString "." cfg.version;
         majorMinor = lib.init versionParts;
       in
       lib.concatStringsSep "." (majorMinor ++ [ "0" ])
-    else null;
+    else
+      null;
 
   zig-overlay = config.lib.getInput {
     name = "zig-overlay";
@@ -29,12 +30,18 @@ let
     name = "zls";
     url = "github:zigtools/zls/${zlsVersion}";
     attribute = "languages.zig.version";
-    follows = [ "nixpkgs" "zig-overlay" ];
+    follows = [
+      "nixpkgs"
+      "zig-overlay"
+    ];
   };
 in
 {
   imports = [
-    (lib.mkRenamedOptionModule [ "languages" "zig" "zls" "package" ] [ "languages" "zig" "lsp" "package" ])
+    (lib.mkRenamedOptionModule
+      [ "languages" "zig" "zls" "package" ]
+      [ "languages" "zig" "lsp" "package" ]
+    )
   ];
 
   options.languages.zig = {
@@ -58,7 +65,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Zig Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Zig Language Server" // {
+        default = true;
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.zls;
@@ -73,19 +82,19 @@ in
       zig-overlay.packages.${pkgs.stdenv.system}.${cfg.version}
     );
 
-    languages.zig.lsp.package = lib.mkIf (cfg.version != null) (
-      zls.packages.${pkgs.stdenv.system}.zls
-    );
+    languages.zig.lsp.package = lib.mkIf (cfg.version != null) (zls.packages.${pkgs.stdenv.system}.zls);
 
     packages = [
       cfg.package
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    ]
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
     # The zig setup hook sets ZIG_GLOBAL_CACHE_DIR to a build sandbox path
     # via addEnvHooks, which overwrites env values. Restore env if set, else unset.
     enterShell =
-      if config.env ? ZIG_GLOBAL_CACHE_DIR
-      then ''export ZIG_GLOBAL_CACHE_DIR="${config.env.ZIG_GLOBAL_CACHE_DIR}"''
-      else ''unset ZIG_GLOBAL_CACHE_DIR'';
+      if config.env ? ZIG_GLOBAL_CACHE_DIR then
+        ''export ZIG_GLOBAL_CACHE_DIR="${config.env.ZIG_GLOBAL_CACHE_DIR}"''
+      else
+        "unset ZIG_GLOBAL_CACHE_DIR";
   };
 }

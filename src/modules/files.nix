@@ -1,8 +1,25 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   inherit (builtins) dirOf mapAttrs;
-  inherit (lib) types optionalAttrs optionalString mkOption attrNames filter length mapAttrsToList concatStringsSep head assertMsg;
+  inherit (lib)
+    types
+    optionalAttrs
+    optionalString
+    mkOption
+    attrNames
+    filter
+    length
+    mapAttrsToList
+    concatStringsSep
+    head
+    assertMsg
+    ;
   inherit (types) attrsOf submodule;
 
   formats = {
@@ -24,68 +41,75 @@ let
   filesStateFile = "${config.devenv.state}/files.json";
   currentManagedFiles = attrNames config.files;
 
+  fileType = types.submodule (
+    { name, config, ... }:
+    {
+      options = {
+        format = mkOption {
+          type = types.anything;
+          default = null;
+          internal = true;
+          description = "Format of the file";
+        };
 
-  fileType = types.submodule ({ name, config, ... }: {
-    options = {
-      format = mkOption {
-        type = types.anything;
-        default = null;
-        internal = true;
-        description = "Format of the file";
-      };
+        data = mkOption {
+          type = types.anything;
+          default = null;
+          internal = true;
+          description = "Data of the file";
+        };
 
-      data = mkOption {
-        type = types.anything;
-        default = null;
-        internal = true;
-        description = "Data of the file";
-      };
+        file = mkOption {
+          type = types.path;
+          default = null;
+          internal = true;
+          description = "Path of the file";
+        };
 
-      file = mkOption {
-        type = types.path;
-        default = null;
-        internal = true;
-        description = "Path of the file";
-      };
+        executable = mkOption {
+          type = types.bool;
+          default = false;
+          description = "Make the file executable";
+        };
+      }
+      // (mapAttrs (
+        name: format:
+        mkOption {
+          type = types.nullOr format.type;
+          default = null;
+          description = "${name} contents";
+        }
+      ) formats);
 
-      executable = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Make the file executable";
-      };
-    } // (mapAttrs
-      (name: format: mkOption {
-        type = types.nullOr format.type;
-        default = null;
-        description = "${name} contents";
-      })
-      formats);
-
-    config =
-      let
-        formatNames = attrNames formats;
-        activeFormatNames = filter (name: config.${name} != null) formatNames;
-        activeFormatCount = length activeFormatNames;
-        activeFormatName =
-          if activeFormatCount == 1 then head activeFormatNames
-          else if activeFormatCount > 1 then throw "Multiple formats specified for 'files.${name}'"
-          else throw "No contents specified for 'files.${name}'";
-        activeFormat = formats.${activeFormatName};
-        generated = config.format.generate name config.data;
-      in
-      {
-        format = activeFormat;
-        data = config.${activeFormatName};
-        file =
-          if config.executable then
-            pkgs.runCommand name { } ''
-              cp --no-preserve=mode ${generated} $out
-              chmod +x $out
-            ''
-          else
-            generated;
-      };
-  });
+      config =
+        let
+          formatNames = attrNames formats;
+          activeFormatNames = filter (name: config.${name} != null) formatNames;
+          activeFormatCount = length activeFormatNames;
+          activeFormatName =
+            if activeFormatCount == 1 then
+              head activeFormatNames
+            else if activeFormatCount > 1 then
+              throw "Multiple formats specified for 'files.${name}'"
+            else
+              throw "No contents specified for 'files.${name}'";
+          activeFormat = formats.${activeFormatName};
+          generated = config.format.generate name config.data;
+        in
+        {
+          format = activeFormat;
+          data = config.${activeFormatName};
+          file =
+            if config.executable then
+              pkgs.runCommand name { } ''
+                cp --no-preserve=mode ${generated} $out
+                chmod +x $out
+              ''
+            else
+              generated;
+        };
+    }
+  );
   # Track successfully created files for partial state saving
   createFileScript = filename: fileOption: ''
     if [ -L "${filename}" ]; then
@@ -146,7 +170,7 @@ let
       fi
     done
 
-    ${optionalString (config.files == {}) ''
+    ${optionalString (config.files == { }) ''
       # No files configured, save empty state
       echo '{"managedFiles":[]}' > '${filesStateFile}'
     ''}
@@ -174,7 +198,10 @@ in
     tasks."devenv:files:cleanup" = {
       description = "Cleanup orphaned files";
       exec = cleanupScript;
-      before = [ "devenv:files" "devenv:enterShell" ];
+      before = [
+        "devenv:files"
+        "devenv:enterShell"
+      ];
     };
 
     tasks."devenv:files" = optionalAttrs (config.files != { }) {

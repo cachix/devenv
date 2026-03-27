@@ -1,7 +1,8 @@
-{ pkgs
-, config
-, lib
-, ...
+{
+  pkgs,
+  config,
+  lib,
+  ...
 }:
 
 let
@@ -75,7 +76,7 @@ let
     devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
     venv_python="$(${readlink} "$devenv_interpreter_path")"
 
-    requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
+    requirements="${lib.optionalString (cfg.venv.requirements != null) "${requirements}"}"
 
     # recreate venv if necessary
     if [ -z $venv_python ] || [ $profile_python != $venv_python ]
@@ -364,7 +365,9 @@ in
           # Add extra libraries to the Python `buildEnv`.
           appendLibraries =
             drv:
-            (if isBuildEnv drv then drv else drv.buildEnv).override (args: { inherit makeWrapperArgs; });
+            (if isBuildEnv drv then drv else drv.buildEnv).override (args: {
+              inherit makeWrapperArgs;
+            });
         in
         if cfg.patches.buildEnv.enable then
           lib.pipe drv [
@@ -504,7 +507,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Python Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Python Language Server" // {
+        default = true;
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.pyright;
@@ -619,7 +624,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    languages.python.import = path: args:
+    languages.python.import =
+      path: args:
       let
         # Load workspace using uv2nix
         workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = path; };
@@ -630,40 +636,46 @@ in
         };
 
         # Try to infer package name from pyproject.toml or use directory name as fallback
-        packageName = args.packageName or (
-          let
-            pyprojectToml =
-              if builtins.pathExists (path + "/pyproject.toml")
-              then builtins.fromTOML (builtins.readFile (path + "/pyproject.toml"))
-              else { };
-          in
+        packageName =
+          args.packageName or (
+            let
+              pyprojectToml =
+                if builtins.pathExists (path + "/pyproject.toml") then
+                  builtins.fromTOML (builtins.readFile (path + "/pyproject.toml"))
+                else
+                  { };
+            in
             pyprojectToml.project.name or (builtins.baseNameOf (builtins.toString path))
-        );
+          );
 
         # Use base Python package (not the wrapped buildEnv) for pyproject-nix
         # pyproject-nix expects a Python with `version` attribute
         basePython =
-          if cfg.version != null
-          then nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version}
-          else pkgs.python3;
+          if cfg.version != null then
+            nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version}
+          else
+            pkgs.python3;
 
         # Construct package set using pyproject-nix and apply overlays
-        pythonSet = (pkgs.callPackage pyproject-nix.build.packages {
-          python = basePython;
-        }).overrideScope (lib.composeManyExtensions [
-          pyproject-build-systems.overlays.default
-          overlay
-        ]);
+        pythonSet =
+          (pkgs.callPackage pyproject-nix.build.packages {
+            python = basePython;
+          }).overrideScope
+            (
+              lib.composeManyExtensions [
+                pyproject-build-systems.overlays.default
+                overlay
+              ]
+            );
       in
       pythonSet.mkVirtualEnv "${packageName}-env" workspace.deps.default;
 
     languages.python.poetry.install.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
     languages.python.poetry.install.arguments =
       lib.optional cfg.poetry.install.onlyInstallRootPackage "--only-root"
-      ++ lib.optional
-        (
-          !cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage
-        ) "--no-root"
+      ++ lib.optional (
+        !cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage
+      ) "--no-root"
       ++ lib.optional cfg.poetry.install.compile "--compile"
       ++ lib.optional cfg.poetry.install.quiet "--quiet"
       ++ lib.optionals (cfg.poetry.install.groups != [ ]) [
@@ -706,35 +718,34 @@ in
     ++ (lib.optional cfg.uv.enable cfg.uv.package)
     ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
-    env =
-      {
-        # Prevent nixpkgs setup hooks from adding individual package store
-        # paths to PYTHONPATH. PYTHONPATH is prepended to sys.path before
-        # site-packages, breaking venv package priority. Nix-provided
-        # packages are made available via NIX_PYTHONPATH instead.
-        dontAddPythonPath = "1";
-        # Make profile packages (including transitive deps from packages added
-        # via `packages = [ pkgs.python3Packages.foo ]`) importable. Nix's
-        # sitecustomize.py processes this using site.addsitedir(), which appends
-        # paths after venv site-packages, preserving venv package priority.
-        NIX_PYTHONPATH = "${config.devenv.profile}/${cfg.package.sitePackages}";
-      }
-      // (lib.optionalAttrs cfg.uv.enable {
-        UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
-        # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
-        UV_PYTHON_DOWNLOADS = "never";
-        # Do not set UV_PYTHON here. It overrides VIRTUAL_ENV resolution
-        # and causes `uv pip install` to target the immutable Nix store
-        # prefix instead of the venv. See https://github.com/cachix/devenv/issues/2663
-      })
-      // (lib.optionalAttrs cfg.poetry.enable {
-        # Make poetry use DEVENV_ROOT/.venv
-        POETRY_VIRTUALENVS_IN_PROJECT = "true";
-        # Make poetry create the local virtualenv when it does not exist.
-        POETRY_VIRTUALENVS_CREATE = "true";
-        # Make poetry stop accessing any other virtualenvs in $HOME.
-        POETRY_VIRTUALENVS_PATH = "/var/empty";
-      });
+    env = {
+      # Prevent nixpkgs setup hooks from adding individual package store
+      # paths to PYTHONPATH. PYTHONPATH is prepended to sys.path before
+      # site-packages, breaking venv package priority. Nix-provided
+      # packages are made available via NIX_PYTHONPATH instead.
+      dontAddPythonPath = "1";
+      # Make profile packages (including transitive deps from packages added
+      # via `packages = [ pkgs.python3Packages.foo ]`) importable. Nix's
+      # sitecustomize.py processes this using site.addsitedir(), which appends
+      # paths after venv site-packages, preserving venv package priority.
+      NIX_PYTHONPATH = "${config.devenv.profile}/${cfg.package.sitePackages}";
+    }
+    // (lib.optionalAttrs cfg.uv.enable {
+      UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
+      # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
+      UV_PYTHON_DOWNLOADS = "never";
+      # Do not set UV_PYTHON here. It overrides VIRTUAL_ENV resolution
+      # and causes `uv pip install` to target the immutable Nix store
+      # prefix instead of the venv. See https://github.com/cachix/devenv/issues/2663
+    })
+    // (lib.optionalAttrs cfg.poetry.enable {
+      # Make poetry use DEVENV_ROOT/.venv
+      POETRY_VIRTUALENVS_IN_PROJECT = "true";
+      # Make poetry create the local virtualenv when it does not exist.
+      POETRY_VIRTUALENVS_CREATE = "true";
+      # Make poetry stop accessing any other virtualenvs in $HOME.
+      POETRY_VIRTUALENVS_PATH = "/var/empty";
+    });
 
     assertions = [
       {

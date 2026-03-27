@@ -1,8 +1,9 @@
-{ pkgs
-, lib
-, config
-, options
-, ...
+{
+  pkgs,
+  lib,
+  config,
+  options,
+  ...
 }:
 let
   cfg = config.services.couchdb;

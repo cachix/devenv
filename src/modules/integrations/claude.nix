@@ -1,7 +1,8 @@
-{ pkgs
-, lib
-, config
-, ...
+{
+  pkgs,
+  lib,
+  config,
+  ...
 }:
 
 let
@@ -29,7 +30,12 @@ let
   };
 
   # Reserved keys that are not tool names (for backward compat detection)
-  reservedPermissionKeys = [ "defaultMode" "disableBypassPermissionsMode" "additionalDirectories" "rules" ];
+  reservedPermissionKeys = [
+    "defaultMode"
+    "disableBypassPermissionsMode"
+    "additionalDirectories"
+    "rules"
+  ];
 
   # Hook submodule type (reused for both freeform hooks and named integrations)
   hookSubmodule = lib.types.submodule {
@@ -104,35 +110,27 @@ let
     if hooks == [ ] then
       null
     else
-      map
-        (hook: {
-          matcher = hook.matcher or "";
-          hooks = [
-            {
-              type = "command";
-              command = hook.command;
-            }
-          ];
-        })
-        hooks;
+      map (hook: {
+        matcher = hook.matcher or "";
+        hooks = [
+          {
+            type = "command";
+            command = hook.command;
+          }
+        ];
+      }) hooks;
 
   # Collect all hooks by type
-  allHooks = lib.mapAttrsToList
-    (
-      name: hook: {
-        type = hook.hookType;
-        hook = {
-          matcher = hook.matcher;
-          command = hook.command;
-        };
-      }
-    )
-    (lib.filterAttrs (name: hook: hook.enable) cfg.hooks);
+  allHooks = lib.mapAttrsToList (name: hook: {
+    type = hook.hookType;
+    hook = {
+      matcher = hook.matcher;
+      command = hook.command;
+    };
+  }) (lib.filterAttrs (name: hook: hook.enable) cfg.hooks);
 
   # Group hooks by type
-  groupedHooks = lib.mapAttrs (k: v: map (h: h.hook) v) (
-    lib.groupBy (h: h.type) allHooks
-  );
+  groupedHooks = lib.mapAttrs (k: v: map (h: h.hook) v) (lib.groupBy (h: h.type) allHooks);
 
   # Build permissions configuration
   # Transforms per-tool permissions to Claude Code's flat format: Tool(pattern)
@@ -140,59 +138,71 @@ let
     let
       perms = cfg.permissions;
       # Get direct tool attrs (backward compat: permissions.Bash instead of permissions.rules.Bash)
-      directToolAttrs = lib.filterAttrs (n: v: !builtins.elem n reservedPermissionKeys && builtins.isAttrs v) perms;
+      directToolAttrs = lib.filterAttrs (
+        n: v: !builtins.elem n reservedPermissionKeys && builtins.isAttrs v
+      ) perms;
       # Merge rules with direct tool attrs (rules take precedence)
       toolPerms = directToolAttrs // perms.rules;
-      flattenTier = tier:
+      flattenTier =
+        tier:
         lib.flatten (
-          lib.mapAttrsToList
-            (tool: toolPerms:
-              map (pattern: "${tool}(${pattern})") (toolPerms.${tier} or [ ])
-            )
-            toolPerms
+          lib.mapAttrsToList (
+            tool: toolPerms: map (pattern: "${tool}(${pattern})") (toolPerms.${tier} or [ ])
+          ) toolPerms
         );
       allowList = flattenTier "allow";
       askList = flattenTier "ask";
       denyList = flattenTier "deny";
     in
-    if toolPerms == { } && perms.defaultMode == null && perms.disableBypassPermissionsMode == null && perms.additionalDirectories == [ ] then
+    if
+      toolPerms == { }
+      && perms.defaultMode == null
+      && perms.disableBypassPermissionsMode == null
+      && perms.additionalDirectories == [ ]
+    then
       null
     else
       lib.filterAttrs (n: v: v != null && v != [ ]) {
         defaultMode = perms.defaultMode;
         disableBypassPermissionsMode = perms.disableBypassPermissionsMode;
-        additionalDirectories = if perms.additionalDirectories == [ ] then null else perms.additionalDirectories;
+        additionalDirectories =
+          if perms.additionalDirectories == [ ] then null else perms.additionalDirectories;
         allow = if allowList == [ ] then null else allowList;
         ask = if askList == [ ] then null else askList;
         deny = if denyList == [ ] then null else denyList;
       };
 
   # Build MCP servers configuration
-  mcpServers = lib.mapAttrs
-    (name: server:
-      if server.type == "stdio" then
-        if server.command == null then
-          throw "MCP server '${name}' of type 'stdio' requires a command"
-        else {
+  mcpServers = lib.mapAttrs (
+    name: server:
+    if server.type == "stdio" then
+      if server.command == null then
+        throw "MCP server '${name}' of type 'stdio' requires a command"
+      else
+        {
           type = "stdio";
           command = server.command;
-        } // lib.optionalAttrs (server.args != [ ]) {
+        }
+        // lib.optionalAttrs (server.args != [ ]) {
           args = server.args;
-        } // lib.optionalAttrs (server.env != { }) {
+        }
+        // lib.optionalAttrs (server.env != { }) {
           env = server.env;
         }
-      else if server.type == "http" then
-        if server.url == null then
-          throw "MCP server '${name}' of type 'http' requires a url"
-        else {
+    else if server.type == "http" then
+      if server.url == null then
+        throw "MCP server '${name}' of type 'http' requires a url"
+      else
+        {
           type = "http";
           url = server.url;
-        } // lib.optionalAttrs (server.headers != { }) {
+        }
+        // lib.optionalAttrs (server.headers != { }) {
           headers = server.headers;
         }
-      else throw "Invalid MCP server type: ${server.type}"
-    )
-    cfg.mcpServers;
+    else
+      throw "Invalid MCP server type: ${server.type}"
+  ) cfg.mcpServers;
 
   # Generate the settings content
   settingsContent = lib.filterAttrs (n: v: v != null) {
@@ -226,9 +236,13 @@ let
   };
 
   # Generate the MCP configuration content
-  mcpContent = if cfg.mcpServers == { } then null else {
-    mcpServers = mcpServers;
-  };
+  mcpContent =
+    if cfg.mcpServers == { } then
+      null
+    else
+      {
+        mcpServers = mcpServers;
+      };
 in
 {
   options.claude.code = {
@@ -346,7 +360,13 @@ in
               description = "List of allowed tools for this sub-agent";
             };
             model = lib.mkOption {
-              type = lib.types.nullOr (lib.types.enum [ "opus" "sonnet" "haiku" ]);
+              type = lib.types.nullOr (
+                lib.types.enum [
+                  "opus"
+                  "sonnet"
+                  "haiku"
+                ]
+              );
               default = null;
               description = "Override the model for this agent.";
             };
@@ -503,7 +523,10 @@ in
             description = ''
               Allow Claude Code to access directories outside the project root.
             '';
-            example = [ "/shared/libs" "/common/configs" ];
+            example = [
+              "/shared/libs"
+              "/common/configs"
+            ];
           };
           rules = lib.mkOption {
             type = lib.types.attrsOf toolPermissionsSubmodule;
@@ -544,7 +567,10 @@ in
         lib.types.submodule {
           options = {
             type = lib.mkOption {
-              type = lib.types.enum [ "stdio" "http" ];
+              type = lib.types.enum [
+                "stdio"
+                "http"
+              ];
               description = "Type of MCP server connection.";
             };
             command = lib.mkOption {
@@ -650,35 +676,33 @@ in
         })
 
         # Command files
-        (lib.mapAttrs'
-          (name: content: {
-            name = ".claude/commands/${name}.md";
-            value = {
-              text = content;
-            };
-          })
-          cfg.commands)
+        (lib.mapAttrs' (name: content: {
+          name = ".claude/commands/${name}.md";
+          value = {
+            text = content;
+          };
+        }) cfg.commands)
 
         # Sub-agent files
-        (lib.mapAttrs'
-          (name: agent: {
-            name = ".claude/agents/${name}.md";
-            value = {
-              text = ''
-                ---
-                name: ${name}
-                description: ${agent.description}
-                proactive: ${lib.boolToString agent.proactive}
-                ${lib.optionalString (agent.tools != []) "tools:\n${lib.concatMapStringsSep "\n" (tool: "  - ${tool}") agent.tools}"}
-                ${lib.optionalString (agent.model != null) "model: ${agent.model}"}
-                ${lib.optionalString (agent.permissionMode != null) "permissionMode: ${agent.permissionMode}"}
-                ---
+        (lib.mapAttrs' (name: agent: {
+          name = ".claude/agents/${name}.md";
+          value = {
+            text = ''
+              ---
+              name: ${name}
+              description: ${agent.description}
+              proactive: ${lib.boolToString agent.proactive}
+              ${lib.optionalString (agent.tools != [ ])
+                "tools:\n${lib.concatMapStringsSep "\n" (tool: "  - ${tool}") agent.tools}"
+              }
+              ${lib.optionalString (agent.model != null) "model: ${agent.model}"}
+              ${lib.optionalString (agent.permissionMode != null) "permissionMode: ${agent.permissionMode}"}
+              ---
 
-                ${agent.prompt}
-              '';
-            };
-          })
-          cfg.agents)
+              ${agent.prompt}
+            '';
+          };
+        }) cfg.agents)
       ];
 
       # Add a message about the integration
@@ -692,15 +716,11 @@ in
               lib.concatStringsSep ", " (map (cmd: "/${cmd}") (lib.attrNames cfg.commands))
             }"
           }
-          ${lib.optionalString (cfg.agents != { })
-            "- Sub-agents: ${
-              lib.concatStringsSep ", " (lib.attrNames cfg.agents)
-            }"
-          }
+          ${lib.optionalString (
+            cfg.agents != { }
+          ) "- Sub-agents: ${lib.concatStringsSep ", " (lib.attrNames cfg.agents)}"}
           ${lib.optionalString (cfg.mcpServers != { })
-            "- MCP servers: ${
-              lib.concatStringsSep ", " (lib.attrNames cfg.mcpServers)
-            } (configured at ${config.devenv.root}/.mcp.json)"
+            "- MCP servers: ${lib.concatStringsSep ", " (lib.attrNames cfg.mcpServers)} (configured at ${config.devenv.root}/.mcp.json)"
           }
         ''
       ];

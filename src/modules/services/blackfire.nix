@@ -1,16 +1,23 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   cfg = config.services.blackfire;
 
   # Port allocation: extract port from socket address (format: tcp://host:port)
-  parseSocketPort = socket:
+  parseSocketPort =
+    socket:
     let
       withoutProtocol = lib.removePrefix "tcp://" socket;
     in
     lib.toInt (lib.last (lib.splitString ":" withoutProtocol));
 
-  parseSocketHost = socket:
+  parseSocketHost =
+    socket:
     let
       withoutProtocol = lib.removePrefix "tcp://" socket;
     in

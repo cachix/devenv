@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 let
   cfg = config.process.managers.hivemind;
 in
@@ -23,7 +28,9 @@ in
 
     process.manager.command = lib.mkDefault ''
       ${lib.getExe cfg.package} \
-        ${(lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell) {} config.process.manager.args} \
+        ${
+          (lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell) { } config.process.manager.args
+        } \
         "$@" ${config.procfile} &
     '';
 

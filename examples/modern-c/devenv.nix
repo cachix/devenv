@@ -1,7 +1,11 @@
-{ pkgs, ... }: {
+{ pkgs, ... }:
+{
   languages.c.enable = true;
 
-  packages = [ pkgs.cmake pkgs.ceedling ];
+  packages = [
+    pkgs.cmake
+    pkgs.ceedling
+  ];
 
   enterShell = ''
     cmake --version

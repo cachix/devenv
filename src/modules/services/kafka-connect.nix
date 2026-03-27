@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   kafkaCfg = config.services.kafka;
@@ -9,7 +14,8 @@ let
 
   # Port allocation helpers
   # Parse listener string like "http://localhost:8083" to extract port
-  parseListenerPort = listener:
+  parseListenerPort =
+    listener:
     let
       # Remove protocol prefix (e.g., "http://")
       withoutProtocol = lib.last (lib.splitString "://" listener);
@@ -19,18 +25,19 @@ let
     lib.toInt (lib.last parts);
 
   # Parse listener to get host and protocol
-  parseListenerHost = listener:
+  parseListenerHost =
+    listener:
     let
       withoutProtocol = lib.last (lib.splitString "://" listener);
       parts = lib.splitString ":" withoutProtocol;
     in
     lib.head parts;
 
-  parseListenerProtocol = listener:
-    lib.head (lib.splitString "://" listener);
+  parseListenerProtocol = listener: lib.head (lib.splitString "://" listener);
 
   # Rebuild listener with new port
-  rebuildListener = listener: newPort:
+  rebuildListener =
+    listener: newPort:
     let
       protocol = parseListenerProtocol listener;
       host = parseListenerHost listener;
@@ -39,9 +46,10 @@ let
 
   # Base port: from listeners if configured, otherwise default 8083
   basePort =
-    if cfg.settings."listeners" != null && cfg.settings."listeners" != [ ]
-    then parseListenerPort (lib.head cfg.settings."listeners")
-    else 8083;
+    if cfg.settings."listeners" != null && cfg.settings."listeners" != [ ] then
+      parseListenerPort (lib.head cfg.settings."listeners")
+    else
+      8083;
 
   # Allocated port
   allocatedPort = config.processes.kafka-connect.ports.main.value;
@@ -57,9 +65,8 @@ let
     in
     v: render.${builtins.typeOf v} v;
 
-  stringlyGeneric = (attrs:
-    lib.mapAttrs (_: mkPropertyString)
-      (lib.filterAttrs (_: v: v != null) attrs)
+  stringlyGeneric = (
+    attrs: lib.mapAttrs (_: mkPropertyString) (lib.filterAttrs (_: v: v != null) attrs)
   );
 
   stringlySettings = stringlyGeneric cfg.settings;
@@ -71,27 +78,35 @@ in
     enable = lib.mkEnableOption "Kafka Connect";
 
     initialConnectors = lib.mkOption {
-      type = types.listOf (types.submodule {
-        freeformType = with lib.types; let
-          primitive = oneOf [ bool int str ];
-        in
-        lazyAttrsOf (nullOr (either primitive (listOf primitive)));
+      type = types.listOf (
+        types.submodule {
+          freeformType =
+            with lib.types;
+            let
+              primitive = oneOf [
+                bool
+                int
+                str
+              ];
+            in
+            lazyAttrsOf (nullOr (either primitive (listOf primitive)));
 
-        options = {
-          name = lib.mkOption {
-            type = types.str;
-            description = ''
-              Name of the connector
-            '';
+          options = {
+            name = lib.mkOption {
+              type = types.str;
+              description = ''
+                Name of the connector
+              '';
+            };
+            config = lib.mkOption {
+              type = types.attrs;
+              description = ''
+                Initial configuration for the connector
+              '';
+            };
           };
-          config = lib.mkOption {
-            type = types.attrs;
-            description = ''
-              Initial configuration for the connector
-            '';
-          };
-        };
-      });
+        }
+      );
       default = [ ];
       description = ''
         List of Kafka Connect connectors to set up initially
@@ -109,10 +124,16 @@ in
       '';
       default = { };
       type = lib.types.submodule {
-        freeformType = with lib.types; let
-          primitive = oneOf [ bool int str ];
-        in
-        lazyAttrsOf (nullOr (either primitive (listOf primitive)));
+        freeformType =
+          with lib.types;
+          let
+            primitive = oneOf [
+              bool
+              int
+              str
+            ];
+          in
+          lazyAttrsOf (nullOr (either primitive (listOf primitive)));
 
         options = {
           "listeners" = lib.mkOption {
@@ -148,7 +169,7 @@ in
           "offset.storage.file.filename" = lib.mkOption {
             type = types.str;
             default = stateDir + "/connect.offsets";
-            defaultText = lib.literalExpression ''''${config.env.DEVENV_STATE}/kafka/connect/connect.offsets'';
+            defaultText = lib.literalExpression "\${config.env.DEVENV_STATE}/kafka/connect/connect.offsets";
             description = ''
               The file to store connector offsets in. By storing offsets on disk, a standalone process can be stopped and started on a single node and resume where it previously left off.
             '';
@@ -207,9 +228,10 @@ in
       # because basePort reads from the same attrs.
       portOverrides = {
         "listeners" = mkPropertyString (
-          if cfg.settings."listeners" != null && cfg.settings."listeners" != [ ]
-          then map (l: rebuildListener l allocatedPort) cfg.settings."listeners"
-          else [ "http://localhost:${toString allocatedPort}" ]
+          if cfg.settings."listeners" != null && cfg.settings."listeners" != [ ] then
+            map (l: rebuildListener l allocatedPort) cfg.settings."listeners"
+          else
+            [ "http://localhost:${toString allocatedPort}" ]
         );
       };
 
@@ -217,7 +239,9 @@ in
 
       # TODO: make it work with .properties files?
       # connectorFiles = lib.lists.map (c: generator "connector-${c.name}.properties" (stringlyGeneric c)) cfg.initialConnectors;
-      connectorFiles = lib.lists.map (c: pkgs.writeText "connector.json" (builtins.toJSON c)) cfg.initialConnectors;
+      connectorFiles = lib.lists.map (
+        c: pkgs.writeText "connector.json" (builtins.toJSON c)
+      ) cfg.initialConnectors;
       connectorFilesConcatted = lib.concatStringsSep " " connectorFiles;
 
       startKafkaConnect = pkgs.writeShellScriptBin "start-kafka-connect" ''
@@ -225,20 +249,22 @@ in
         exec ${pkg}/bin/connect-standalone.sh ${configFile} ${connectorFilesConcatted}
       '';
     in
-    (lib.mkIf cfg.enable (lib.mkIf kafkaCfg.enable {
-      processes.kafka-connect = {
-        ports.main.allocate = basePort;
-        after = [ "devenv:processes:kafka" ];
-        exec = "${startKafkaConnect}/bin/start-kafka-connect";
+    (lib.mkIf cfg.enable (
+      lib.mkIf kafkaCfg.enable {
+        processes.kafka-connect = {
+          ports.main.allocate = basePort;
+          after = [ "devenv:processes:kafka" ];
+          exec = "${startKafkaConnect}/bin/start-kafka-connect";
 
-        ready = {
-          http.get = {
-            path = "/connectors";
-            port = allocatedPort;
+          ready = {
+            http.get = {
+              path = "/connectors";
+              port = allocatedPort;
+            };
+            initial_delay = 2;
           };
-          initial_delay = 2;
         };
-      };
 
-    }));
+      }
+    ));
 }

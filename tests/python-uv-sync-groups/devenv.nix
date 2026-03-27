@@ -1,4 +1,10 @@
-{ pkgs, config, inputs, ... }: {
+{
+  pkgs,
+  config,
+  inputs,
+  ...
+}:
+{
   languages.python = {
     enable = true;
     venv.enable = true;
@@ -6,7 +12,10 @@
       enable = true;
       sync = {
         enable = true;
-        groups = [ "test" "docs" ];
+        groups = [
+          "test"
+          "docs"
+        ];
       };
     };
   };

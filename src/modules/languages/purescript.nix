@@ -1,7 +1,8 @@
-{ pkgs
-, config
-, lib
-, ...
+{
+  pkgs,
+  config,
+  lib,
+  ...
 }:
 
 let
@@ -15,11 +16,13 @@ let
   };
 
   # supported via rosetta
-  supportAarch64Darwin = package: package.overrideAttrs (attrs: {
-    meta = attrs.meta // {
-      platforms = lib.platforms.linux ++ lib.platforms.darwin;
-    };
-  });
+  supportAarch64Darwin =
+    package:
+    package.overrideAttrs (attrs: {
+      meta = attrs.meta // {
+        platforms = lib.platforms.linux ++ lib.platforms.darwin;
+      };
+    });
 in
 {
   options.languages.purescript = {
@@ -36,7 +39,9 @@ in
     };
 
     spago = {
-      enable = lib.mkEnableOption "Spago package manager" // { default = true; };
+      enable = lib.mkEnableOption "Spago package manager" // {
+        default = true;
+      };
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -50,7 +55,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "PureScript Language Server" // { default = true; };
+      enable = lib.mkEnableOption "PureScript Language Server" // {
+        default = true;
+      };
 
       package = lib.mkOption {
         type = lib.types.package;

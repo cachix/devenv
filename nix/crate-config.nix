@@ -1,15 +1,16 @@
 # Crate overrides for crate2nix build
-{ lib
-, stdenv
-, nix
-, openssl
-, dbus
-, protobuf
-, pkg-config
-, llvmPackages
-, rustPlatform
-, gitRev ? ""
-, isRelease ? false
+{
+  lib,
+  stdenv,
+  nix,
+  openssl,
+  dbus,
+  protobuf,
+  pkg-config,
+  llvmPackages,
+  rustPlatform,
+  gitRev ? "",
+  isRelease ? false,
 }:
 
 let
@@ -41,7 +42,10 @@ let
   '';
 
   tracingUnstable = attrs: {
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
+    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
+      "--cfg"
+      "tracing_unstable"
+    ];
   };
 
   # Override for crates needing nix C libraries
@@ -64,32 +68,35 @@ let
 
   # Override for crates needing dbus (Linux only)
   dbusOverride = attrs: {
-    buildInputs = (attrs.buildInputs or [ ])
-      ++ lib.optional stdenv.isLinux dbus;
+    buildInputs = (attrs.buildInputs or [ ]) ++ lib.optional stdenv.isLinux dbus;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
   };
 
   # Shared override for crates linking against nix, openssl, protobuf, dbus, and bindgen
   devenvBase = attrs: {
-    buildInputs = (attrs.buildInputs or [ ])
-      ++ [ openssl ]
-      ++ nixLibs
-      ++ lib.optional stdenv.isLinux dbus;
+    buildInputs =
+      (attrs.buildInputs or [ ]) ++ [ openssl ] ++ nixLibs ++ lib.optional stdenv.isLinux dbus;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
       pkg-config
       protobuf
       rustPlatform.bindgenHook
     ];
     preConfigure = (attrs.preConfigure or "") + protoSetup;
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
+    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
+      "--cfg"
+      "tracing_unstable"
+    ];
   };
 in
 {
   # Main devenv crate
-  devenv = attrs: devenvBase attrs // {
-    DEVENV_GIT_REV = gitRev;
-    DEVENV_IS_RELEASE = if isRelease then "true" else "";
-  };
+  devenv =
+    attrs:
+    devenvBase attrs
+    // {
+      DEVENV_GIT_REV = gitRev;
+      DEVENV_IS_RELEASE = if isRelease then "true" else "";
+    };
 
   # devenv-run-tests needs the same deps as devenv
   devenv-run-tests = devenvBase;
@@ -104,14 +111,20 @@ in
       pkg-config
       rustPlatform.bindgenHook
     ];
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
+    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
+      "--cfg"
+      "tracing_unstable"
+    ];
   };
 
   # devenv-snix-backend needs protobuf
   devenv-snix-backend = attrs: {
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ protobuf ];
     preConfigure = (attrs.preConfigure or "") + protoSetup;
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
+    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
+      "--cfg"
+      "tracing_unstable"
+    ];
   };
 
   # snix crates need protobuf

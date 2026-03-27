@@ -1,7 +1,8 @@
-{ pkgs
-, lib
-, config
-, ...
+{
+  pkgs,
+  lib,
+  config,
+  ...
 }:
 
 let
@@ -83,12 +84,10 @@ in
           "--cache-dir"
           cfg.cache.directory
         ]
-        ++ (lib.lists.concatMap
-          (s: [
-            "--substituter"
-            s
-          ])
-          cfg.substituters);
+        ++ (lib.lists.concatMap (s: [
+          "--substituter"
+          s
+        ]) cfg.substituters);
       in
       ''
         exec ${lib.getExe cfg.package} ${lib.escapeShellArgs args}

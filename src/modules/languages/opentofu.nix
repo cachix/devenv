@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.opentofu;
@@ -15,7 +20,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "OpenTofu Language Server" // { default = true; };
+      enable = lib.mkEnableOption "OpenTofu Language Server" // {
+        default = true;
+      };
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -34,6 +41,7 @@ in
 
     packages = [
       cfg.package
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    ]
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

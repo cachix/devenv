@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.fortran;
@@ -15,7 +20,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Fortran Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Fortran Language Server" // {
+        default = true;
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.fortls;
@@ -26,9 +33,12 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
-      cfg.package
-      fortran-fpm
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    packages =
+      with pkgs;
+      [
+        cfg.package
+        fortran-fpm
+      ]
+      ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

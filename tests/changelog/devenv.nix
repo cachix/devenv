@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 {
   # Add some test changelog entries
   changelogs = [
@@ -14,7 +19,10 @@
     }
     {
       date = "2025-01-10";
-      affects = [ "languages.rust.enable" "languages.rust.version" ];
+      affects = [
+        "languages.rust.enable"
+        "languages.rust.version"
+      ];
       description = ''
         **Breaking Change**: Updated Rust language module options
 

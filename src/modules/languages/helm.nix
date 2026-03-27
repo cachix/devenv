@@ -1,15 +1,17 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.helm;
 
   # Resolve plugin names to packages
-  resolvedPlugins = builtins.map
-    (name:
-      pkgs.kubernetes-helmPlugins.${name} or
-        (throw "Unknown Helm plugin: ${name}")
-    )
-    cfg.plugins;
+  resolvedPlugins = builtins.map (
+    name: pkgs.kubernetes-helmPlugins.${name} or (throw "Unknown Helm plugin: ${name}")
+  ) cfg.plugins;
 
   # https://github.com/NixOS/nixpkgs/issues/217768
   helm-plugins-dir = pkgs.symlinkJoin {
@@ -19,8 +21,14 @@ let
 in
 {
   imports = [
-    (lib.mkRenamedOptionModule [ "languages" "helm" "languageServer" "enable" ] [ "languages" "helm" "lsp" "enable" ])
-    (lib.mkRenamedOptionModule [ "languages" "helm" "languageServer" "package" ] [ "languages" "helm" "lsp" "package" ])
+    (lib.mkRenamedOptionModule
+      [ "languages" "helm" "languageServer" "enable" ]
+      [ "languages" "helm" "lsp" "enable" ]
+    )
+    (lib.mkRenamedOptionModule
+      [ "languages" "helm" "languageServer" "package" ]
+      [ "languages" "helm" "lsp" "package" ]
+    )
   ];
 
   options.languages.helm = {
@@ -36,7 +44,11 @@ in
     plugins = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
-      example = [ "helm-secrets" "helm-diff" "helm-unittest" ];
+      example = [
+        "helm-secrets"
+        "helm-diff"
+        "helm-unittest"
+      ];
       description = ''
         List of Helm plugin names to include from pkgs.kubernetes-helmPlugins.
 
@@ -45,7 +57,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Helm Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Helm Language Server" // {
+        default = true;
+      };
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -57,11 +71,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages =
-      [ cfg.package ]
-      ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    packages = [ cfg.package ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
     env.HELM_PLUGINS = "${helm-plugins-dir}";
   };
 }
-

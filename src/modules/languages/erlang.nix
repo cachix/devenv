@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.erlang;
@@ -19,7 +24,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Erlang Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Erlang Language Server" // {
+        default = true;
+      };
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -34,6 +41,7 @@ in
     packages = [
       cfg.package
       rebar3
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    ]
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

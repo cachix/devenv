@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.services.opentelemetry-collector;
@@ -18,9 +23,10 @@ let
   };
 
   otelConfig =
-    if cfg.configFile == null
-    then settingsFormat.generate "otel-config.yaml" cfg.settings
-    else cfg.configFile;
+    if cfg.configFile == null then
+      settingsFormat.generate "otel-config.yaml" cfg.settings
+    else
+      cfg.configFile;
 in
 {
   options.services.opentelemetry-collector = {

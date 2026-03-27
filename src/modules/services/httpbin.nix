@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   cfg = config.services.httpbin;
@@ -17,8 +22,17 @@ let
   # Rebuild bind addresses with allocated port for first address
   allocatedBinds = [ "${host}:${toString allocatedPort}" ] ++ (lib.tail cfg.bind);
 
-  python = pkgs.python3.withPackages (ps: with ps; [ httpbin gunicorn gevent ]);
-  binds = lib.concatMap (addr: [ "-b" addr ]) allocatedBinds;
+  python = pkgs.python3.withPackages (
+    ps: with ps; [
+      httpbin
+      gunicorn
+      gevent
+    ]
+  );
+  binds = lib.concatMap (addr: [
+    "-b"
+    addr
+  ]) allocatedBinds;
 in
 {
   options.services.httpbin = {
@@ -42,4 +56,3 @@ in
     processes.httpbin.exec = "exec ${python}/bin/gunicorn httpbin:app -k gevent ${qs binds} ${qs cfg.extraArgs}";
   };
 }
-

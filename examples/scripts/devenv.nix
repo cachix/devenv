@@ -1,7 +1,8 @@
-{ config
-, lib
-, pkgs
-, ...
+{
+  config,
+  lib,
+  pkgs,
+  ...
 }:
 
 {
@@ -17,7 +18,7 @@
   # Scripts can declare their own private `packages`
   scripts.serious-example.exec = ''cowsay "$*"'';
   scripts.serious-example.packages = [ pkgs.cowsay ];
-  scripts.serious-example.description = ''echoes args in a very serious manner'';
+  scripts.serious-example.description = "echoes args in a very serious manner";
 
   # Write scripts using your favourite language.
   scripts.python-hello.exec = ''print("Hello, world!")'';

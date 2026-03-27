@@ -3,7 +3,7 @@
 {
   enterTest = ''
     echo "Git root: ${toString config.git.root}"
-    
+
     # Test that git.root is set to a valid path
     if [ "${toString config.git.root}" != "null" ]; then
       echo "Git root is set to: ${toString config.git.root}"

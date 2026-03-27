@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 with lib;
 
@@ -10,8 +15,9 @@ let
       ${vhostAttrs.extraConfig}
     }
   '';
-  configFile = pkgs.writeText "Caddyfile" (builtins.concatStringsSep "\n"
-    ([ cfg.config ] ++ (mapAttrsToList vhostToConfig cfg.virtualHosts)));
+  configFile = pkgs.writeText "Caddyfile" (
+    builtins.concatStringsSep "\n" ([ cfg.config ] ++ (mapAttrsToList vhostToConfig cfg.virtualHosts))
+  );
 
   formattedConfig = pkgs.runCommand "formattedCaddyFile" { } ''
     cp --no-preserve=mode,ownership ${configFile} $out
@@ -19,12 +25,16 @@ let
   '';
 
   tlsConfig = {
-    apps.tls.automation.policies = [{
-      issuers = [{
-        inherit (cfg) ca email;
-        module = "acme";
-      }];
-    }];
+    apps.tls.automation.policies = [
+      {
+        issuers = [
+          {
+            inherit (cfg) ca email;
+            module = "acme";
+          }
+        ];
+      }
+    ];
   };
 
   adaptedConfig = pkgs.runCommand "caddy-config-adapted.json" { } ''
@@ -62,7 +72,10 @@ let
       serverAliases = mkOption {
         type = types.listOf types.str;
         default = [ ];
-        example = [ "www.example.org" "example.org" ];
+        example = [
+          "www.example.org"
+          "example.org"
+        ];
         description = ''
           Additional names of virtual hosts served by this virtual host configuration.
         '';

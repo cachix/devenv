@@ -1,7 +1,8 @@
-{ pkgs
-, config
-, lib
-, ...
+{
+  pkgs,
+  config,
+  lib,
+  ...
 }:
 
 let
@@ -27,7 +28,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Typst Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Typst Language Server" // {
+        default = true;
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.tinymist;
@@ -41,8 +44,10 @@ in
     packages = [
       cfg.package
       pkgs.typstyle # formatter
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    ]
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
-    env.TYPST_FONT_PATHS = if cfg.fontPaths != [ ] then (lib.concatStringsSep ":" cfg.fontPaths) else null;
+    env.TYPST_FONT_PATHS =
+      if cfg.fontPaths != [ ] then (lib.concatStringsSep ":" cfg.fontPaths) else null;
   };
 }

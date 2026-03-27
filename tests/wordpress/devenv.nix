@@ -36,12 +36,16 @@
   services.mysql = {
     enable = true;
     package = pkgs.mariadb;
-    initialDatabases = [{ name = "wordpress"; }];
-    ensureUsers = [{
-      name = "wordpress";
-      password = "wordpress";
-      ensurePermissions = { "wordpress.*" = "ALL PRIVILEGES"; };
-    }];
+    initialDatabases = [ { name = "wordpress"; } ];
+    ensureUsers = [
+      {
+        name = "wordpress";
+        password = "wordpress";
+        ensurePermissions = {
+          "wordpress.*" = "ALL PRIVILEGES";
+        };
+      }
+    ];
   };
 
   services.caddy = {

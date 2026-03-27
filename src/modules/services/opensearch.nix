@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 with lib;
 
@@ -25,7 +30,6 @@ let
     name = loggingConfigFilename;
     text = cfg.logging;
   };
-
 
   startScript = pkgs.writeShellScript "opensearch-startup" ''
     set -e
@@ -156,8 +160,7 @@ in
     };
 
     extraCmdLineOptions = mkOption {
-      description =
-        "Extra command line options for the OpenSearch launcher.";
+      description = "Extra command line options for the OpenSearch launcher.";
       default = [ ];
       type = types.listOf types.str;
     };

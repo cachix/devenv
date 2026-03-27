@@ -1,7 +1,8 @@
-args@{ system
-, # The project root (location of devenv.nix)
-  devenv_root
-, ...
+args@{
+  system,
+  # The project root (location of devenv.nix)
+  devenv_root,
+  ...
 }:
 
 let

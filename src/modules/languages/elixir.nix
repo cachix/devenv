@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.elixir;
@@ -15,7 +20,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Elixir Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Elixir Language Server" // {
+        default = true;
+      };
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -26,17 +33,17 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable
-    {
-      git-hooks.hooks = {
-        credo.package = cfg.package;
-        dialyzer.package = cfg.package;
-        mix-format.package = cfg.package;
-        mix-test.package = cfg.package;
-      };
-
-      packages = [
-        cfg.package
-      ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+  config = lib.mkIf cfg.enable {
+    git-hooks.hooks = {
+      credo.package = cfg.package;
+      dialyzer.package = cfg.package;
+      mix-format.package = cfg.package;
+      mix-test.package = cfg.package;
     };
+
+    packages = [
+      cfg.package
+    ]
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+  };
 }

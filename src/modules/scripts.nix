@@ -1,7 +1,8 @@
-{ lib
-, config
-, pkgs
-, ...
+{
+  lib,
+  config,
+  pkgs,
+  ...
 }:
 
 let
@@ -11,7 +12,10 @@ let
     {
       options = {
         exec = lib.mkOption {
-          type = types.oneOf [ types.str types.path ];
+          type = types.oneOf [
+            types.str
+            types.path
+          ];
           description = "Shell code to execute when the script is run, or path to a script file.";
         };
         package = lib.mkOption {
@@ -45,14 +49,13 @@ let
       config.scriptPackage =
         let
           binary =
-            if config.binary != null
-            then "${pkgs.lib.getBin config.package}/bin/${config.binary}"
-            else pkgs.lib.getExe config.package;
+            if config.binary != null then
+              "${pkgs.lib.getBin config.package}/bin/${config.binary}"
+            else
+              pkgs.lib.getExe config.package;
 
           execScript =
-            if builtins.isPath config.exec
-            then config.exec
-            else pkgs.writeScript "${name}-script" config.exec;
+            if builtins.isPath config.exec then config.exec else pkgs.writeScript "${name}-script" config.exec;
 
           # Prepare PATH with any additional packages
           setupPath = lib.optionalString (config.packages != [ ]) ''
@@ -69,8 +72,11 @@ let
     }
   );
 
-  renderInfoSection = name: script:
-    "${name}${lib.optionalString (script.description != "") ": ${script.description}"} ${script.scriptPackage}";
+  renderInfoSection =
+    name: script:
+    "${name}${
+      lib.optionalString (script.description != "") ": ${script.description}"
+    } ${script.scriptPackage}";
 in
 {
   options = {

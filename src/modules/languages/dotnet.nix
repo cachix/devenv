@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.dotnet;
@@ -33,12 +38,11 @@ in
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    ]
+    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
     env.DOTNET_ROOT = "${
-        if lib.hasAttr "unwrapped" cfg.package
-        then cfg.package.unwrapped
-        else cfg.package
+      if lib.hasAttr "unwrapped" cfg.package then cfg.package.unwrapped else cfg.package
     }/share/dotnet";
     env.LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${lib.makeLibraryPath [ pkgs.icu ]}";
   };

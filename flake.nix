@@ -62,11 +62,12 @@
   };
 
   outputs =
-    { self
-    , nixpkgs
-    , git-hooks
-    , nix
-    , ...
+    {
+      self,
+      nixpkgs,
+      git-hooks,
+      nix,
+      ...
     }@inputs:
     let
       systems = [
@@ -183,11 +184,11 @@
         mkConfig = args: (self.lib.mkEval args).config;
 
         mkEval =
-          args@{ pkgs
-          , inputs
-          , modules
-          , lib ? pkgs.lib
-          ,
+          args@{
+            pkgs,
+            inputs,
+            modules,
+            lib ? pkgs.lib,
           }:
           let
             # TODO: deprecate default git-hooks input

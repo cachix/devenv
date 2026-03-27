@@ -15,29 +15,31 @@ types.submodule {
     http = lib.mkOption {
       type = types.submodule {
         options.get = lib.mkOption {
-          type = types.nullOr (types.submodule {
-            options = {
-              host = lib.mkOption {
-                type = types.str;
-                default = "127.0.0.1";
-                description = "Host to connect to.";
+          type = types.nullOr (
+            types.submodule {
+              options = {
+                host = lib.mkOption {
+                  type = types.str;
+                  default = "127.0.0.1";
+                  description = "Host to connect to.";
+                };
+                port = lib.mkOption {
+                  type = types.port;
+                  description = "Port to connect to.";
+                };
+                path = lib.mkOption {
+                  type = types.str;
+                  default = "/";
+                  description = "HTTP path to request.";
+                };
+                scheme = lib.mkOption {
+                  type = types.str;
+                  default = "http";
+                  description = "URL scheme (http or https).";
+                };
               };
-              port = lib.mkOption {
-                type = types.port;
-                description = "Port to connect to.";
-              };
-              path = lib.mkOption {
-                type = types.str;
-                default = "/";
-                description = "HTTP path to request.";
-              };
-              scheme = lib.mkOption {
-                type = types.str;
-                default = "http";
-                description = "URL scheme (http or https).";
-              };
-            };
-          });
+            }
+          );
           default = null;
           description = "HTTP GET readiness check.";
         };

@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.elm;
@@ -8,7 +13,9 @@ in
     enable = lib.mkEnableOption "tools for Elm development";
 
     lsp = {
-      enable = lib.mkEnableOption "Elm Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Elm Language Server" // {
+        default = true;
+      };
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -20,11 +27,14 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
-      elmPackages.elm
-      elmPackages.elm-format
-      elmPackages.elm-test
-      elm2nix
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    packages =
+      with pkgs;
+      [
+        elmPackages.elm
+        elmPackages.elm-format
+        elmPackages.elm-test
+        elm2nix
+      ]
+      ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

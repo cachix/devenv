@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.nix;
@@ -16,7 +21,9 @@ in
     enable = lib.mkEnableOption "tools for Nix development";
 
     lsp = {
-      enable = lib.mkEnableOption "Nix Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Nix Language Server" // {
+        default = true;
+      };
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -28,11 +35,14 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
-      statix
-      deadnix
-      vulnix
-    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package
-    ++ lib.optional config.cachix.enable cachix;
+    packages =
+      with pkgs;
+      [
+        statix
+        deadnix
+        vulnix
+      ]
+      ++ lib.optional cfg.lsp.enable cfg.lsp.package
+      ++ lib.optional config.cachix.enable cachix;
   };
 }

@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Use secretspec from _module.args if available,
@@ -13,10 +18,7 @@ let
       let
         envVar = builtins.getEnv "SECRETSPEC_SECRETS";
       in
-      if envVar != "" then
-        builtins.fromJSON envVar
-      else
-        null;
+      if envVar != "" then builtins.fromJSON envVar else null;
 in
 {
   options.secretspec = {

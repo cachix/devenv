@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 with lib;
 
@@ -8,12 +13,13 @@ let
   setupScript =
     let
       replication =
-        if cfg.replication.enable
-        then ''
-          # Set up replication (requires a keyfile)
-          ${pkgs.openssl}/bin/openssl rand -base64 765 > "$MONGODBDATA/keyfile"
-          chmod 400 "$MONGODBDATA/keyfile"''
-        else "";
+        if cfg.replication.enable then
+          ''
+            # Set up replication (requires a keyfile)
+            ${pkgs.openssl}/bin/openssl rand -base64 765 > "$MONGODBDATA/keyfile"
+            chmod 400 "$MONGODBDATA/keyfile"''
+        else
+          "";
     in
     pkgs.writeShellScriptBin "setup-mongodb" ''
       set -euo pipefail
@@ -27,9 +33,15 @@ let
   startScript =
     let
       replication =
-        if cfg.replication.enable
-        then [ "--keyFile" "$MONGODBDATA/keyfile" "--replSet" cfg.replication.replSet ]
-        else [ ];
+        if cfg.replication.enable then
+          [
+            "--keyFile"
+            "$MONGODBDATA/keyfile"
+            "--replSet"
+            cfg.replication.replSet
+          ]
+        else
+          [ ];
     in
     pkgs.writeShellScriptBin "start-mongodb" ''
       set -euo pipefail
@@ -85,11 +97,14 @@ let
 in
 {
   imports = [
-    (lib.mkRenamedOptionModule [ "mongodb" "enable" ] [
-      "services"
-      "mongodb"
-      "enable"
-    ])
+    (lib.mkRenamedOptionModule
+      [ "mongodb" "enable" ]
+      [
+        "services"
+        "mongodb"
+        "enable"
+      ]
+    )
   ];
 
   options.services.mongodb = {
@@ -105,7 +120,11 @@ in
     additionalArgs = lib.mkOption {
       type = types.listOf types.lines;
       default = [ "--noauth" ];
-      example = [ "--port" "27017" "--noauth" ];
+      example = [
+        "--port"
+        "27017"
+        "--noauth"
+      ];
       description = ''
         Additional arguments passed to `mongod`.
       '';
@@ -141,12 +160,15 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [ cfg.package pkgs.mongodb-tools pkgs.mongosh ];
+    packages = [
+      cfg.package
+      pkgs.mongodb-tools
+      pkgs.mongosh
+    ];
 
     env.MONGODBDATA = config.env.DEVENV_STATE + "/mongodb";
 
     processes.mongodb.exec = "${startScript}/bin/start-mongodb";
-    processes.mongodb-configure.exec =
-      "${configureScript}/bin/configure-mongodb";
+    processes.mongodb-configure.exec = "${configureScript}/bin/configure-mongodb";
   };
 }

@@ -24,7 +24,7 @@ in
   services.postgres = {
     enable = true;
     initialScript = "CREATE USER ${db_user} SUPERUSER;";
-    initialDatabases = [{ name = db_name; }];
+    initialDatabases = [ { name = db_name; } ];
   };
 
   processes.runserver = {

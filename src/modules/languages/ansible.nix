@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.ansible;
@@ -34,7 +39,7 @@ in
     packages = [
       pkgs.ansible-lint
       cfg.package
-    ] ++ lib.optional (cfg.lsp.enable && cfg.lsp.package != null) cfg.lsp.package;
+    ]
+    ++ lib.optional (cfg.lsp.enable && cfg.lsp.package != null) cfg.lsp.package;
   };
 }
-

@@ -1,4 +1,5 @@
-{ pkgs, ... }: {
+{ pkgs, ... }:
+{
   env = {
     ALLOW_UNFREE = pkgs.lib.boolToString (pkgs.config.allowUnfree or false);
     ALLOW_UNSUPPORTED_SYSTEM = pkgs.lib.boolToString (pkgs.config.allowUnsupportedSystem or false);

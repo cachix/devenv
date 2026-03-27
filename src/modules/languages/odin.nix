@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.odin;
@@ -16,10 +21,7 @@ in
 
     debugger = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
-      default =
-        if lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.gdb
-        then pkgs.gdb
-        else null;
+      default = if lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.gdb then pkgs.gdb else null;
       defaultText = lib.literalExpression "pkgs.gdb";
       description = ''
         An optional debugger package to use with odin.
@@ -28,7 +30,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Odin Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Odin Language Server" // {
+        default = true;
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.ols;
@@ -39,12 +43,15 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
-      nasm
-      clang
-      gnumake
-      cfg.package
-    ] ++ lib.optional (cfg.debugger != null) cfg.debugger
-    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    packages =
+      with pkgs;
+      [
+        nasm
+        clang
+        gnumake
+        cfg.package
+      ]
+      ++ lib.optional (cfg.debugger != null) cfg.debugger
+      ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

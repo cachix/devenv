@@ -10,7 +10,10 @@ types.submodule {
       description = "Name of the socket (e.g., 'http', 'admin')";
     };
     kind = lib.mkOption {
-      type = types.enum [ "tcp" "unix_stream" ];
+      type = types.enum [
+        "tcp"
+        "unix_stream"
+      ];
       description = "Type of socket (tcp or unix_stream)";
     };
     address = lib.mkOption {

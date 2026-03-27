@@ -2,37 +2,36 @@
 # https://github.com/NixOS/nix/blob/5b15544bdd13c31688d6f243c80d1751bd8f0de2/docker.nix
 {
   # Core dependencies
-  pkgs ? import <nixpkgs> { }
-, lib ? pkgs.lib
-, dockerTools ? pkgs.dockerTools
-, runCommand ? pkgs.runCommand
-, buildPackages ? pkgs.buildPackages
-, # Image configuration
-  name ? "devenv"
-, tag ? "latest"
-, bundleNixpkgs ? true
-, channelName ? "nixpkgs"
-, channelURL ? "https://nixos.org/channels/nixpkgs-unstable"
-, extraPkgs ? [ ]
-, maxLayers ? 70
-, nixConf ? { }
-, flake-registry ? null
-, uid ? 0
-, gid ? 0
-, uname ? "root"
-, gname ? "root"
-, Labels ? { }
-, Cmd ? [ (lib.getExe bashInteractive) ]
-, # Default Packages
-  nix ? pkgs.nix
-, bashInteractive ? pkgs.bashInteractive
-, coreutils-full ? pkgs.coreutils-full
-, cacert ? pkgs.cacert
-, iana-etc ? pkgs.iana-etc
-, gitMinimal ? pkgs.gitMinimal
-, # Other dependencies
-  shadow ? pkgs.shadow
-,
+  pkgs ? import <nixpkgs> { },
+  lib ? pkgs.lib,
+  dockerTools ? pkgs.dockerTools,
+  runCommand ? pkgs.runCommand,
+  buildPackages ? pkgs.buildPackages,
+  # Image configuration
+  name ? "devenv",
+  tag ? "latest",
+  bundleNixpkgs ? true,
+  channelName ? "nixpkgs",
+  channelURL ? "https://nixos.org/channels/nixpkgs-unstable",
+  extraPkgs ? [ ],
+  maxLayers ? 70,
+  nixConf ? { },
+  flake-registry ? null,
+  uid ? 0,
+  gid ? 0,
+  uname ? "root",
+  gname ? "root",
+  Labels ? { },
+  Cmd ? [ (lib.getExe bashInteractive) ],
+  # Default Packages
+  nix ? pkgs.nix,
+  bashInteractive ? pkgs.bashInteractive,
+  coreutils-full ? pkgs.coreutils-full,
+  cacert ? pkgs.cacert,
+  iana-etc ? pkgs.iana-etc,
+  gitMinimal ? pkgs.gitMinimal,
+  # Other dependencies
+  shadow ? pkgs.shadow,
 }:
 let
   defaultPkgs = [
@@ -77,17 +76,15 @@ let
     };
   }
   // lib.listToAttrs (
-    map
-      (n: {
-        name = "nixbld${toString n}";
-        value = {
-          uid = 30000 + n;
-          gid = 30000;
-          groups = [ "nixbld" ];
-          description = "Nix build user ${toString n}";
-        };
-      })
-      (lib.lists.range 1 32)
+    map (n: {
+      name = "nixbld${toString n}";
+      value = {
+        uid = 30000 + n;
+        gid = 30000;
+        groups = [ "nixbld" ];
+        description = "Nix build user ${toString n}";
+      };
+    }) (lib.lists.range 1 32)
   );
 
   groups = {
@@ -101,13 +98,13 @@ let
 
   userToPasswd =
     k:
-    { uid
-    , gid ? 65534
-    , home ? "/var/empty"
-    , description ? ""
-    , shell ? "/bin/false"
-    , groups ? [ ]
-    ,
+    {
+      uid,
+      gid ? 65534,
+      home ? "/var/empty",
+      description ? "",
+      shell ? "/bin/false",
+      groups ? [ ],
     }:
     "${k}:x:${toString uid}:${toString gid}:${description}:${home}:${shell}";
   passwdContents = lib.concatStringsSep "\n" (lib.attrValues (lib.mapAttrs userToPasswd users));
@@ -122,31 +119,24 @@ let
   groupMemberMap =
     let
       # Create a flat list of user/group mappings
-      mappings = builtins.foldl'
-        (
-          acc: user:
-            let
-              groups = users.${user}.groups or [ ];
-            in
-            acc
-            ++ map
-              (group: {
-                inherit user group;
-              })
-              groups
-        ) [ ]
-        (lib.attrNames users);
+      mappings = builtins.foldl' (
+        acc: user:
+        let
+          groups = users.${user}.groups or [ ];
+        in
+        acc
+        ++ map (group: {
+          inherit user group;
+        }) groups
+      ) [ ] (lib.attrNames users);
     in
-    builtins.foldl'
-      (
-        acc: v:
-          acc
-          // {
-            ${v.group} = acc.${v.group} or [ ] ++ [ v.user ];
-          }
-      )
-      { }
-      mappings;
+    builtins.foldl' (
+      acc: v:
+      acc
+      // {
+        ${v.group} = acc.${v.group} or [ ] ++ [ v.user ];
+      }
+    ) { } mappings;
 
   groupToGroup =
     k:
@@ -160,10 +150,9 @@ let
   toConf =
     with pkgs.lib.generators;
     toKeyValue {
-      mkKeyValue = mkKeyValueDefault
-        {
-          mkValueString = v: if lib.isList v then lib.concatStringsSep " " v else mkValueStringDefault { } v;
-        } " = ";
+      mkKeyValue = mkKeyValueDefault {
+        mkValueString = v: if lib.isList v then lib.concatStringsSep " " v else mkValueStringDefault { } v;
+      } " = ";
     };
 
   nixConfContents = toConf (

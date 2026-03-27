@@ -1,7 +1,16 @@
-{ pkgs, lib, config, inputs, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  inputs,
+  ...
+}:
 
 {
-  packages = [ pkgs.git pkgs.gomod2nix ];
+  packages = [
+    pkgs.git
+    pkgs.gomod2nix
+  ];
 
   languages.go.enable = true;
   languages.go.version = "1.25.4";
@@ -23,7 +32,9 @@
       name = "my-app";
       version = "1.0.0";
     in
-    { app = import ./default.nix { inherit pkgs name version; }; };
+    {
+      app = import ./default.nix { inherit pkgs name version; };
+    };
 
   # See full reference at https://devenv.sh/reference/options/
 }

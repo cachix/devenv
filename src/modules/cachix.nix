@@ -1,7 +1,8 @@
-{ pkgs
-, lib
-, config
-, ...
+{
+  pkgs,
+  lib,
+  config,
+  ...
 }:
 let
   cfg = config.cachix;
@@ -43,7 +44,12 @@ in
     cachix.pull = [ "devenv" ] ++ (lib.optional (cfg.push != null) config.cachix.push);
 
     warnings =
-      lib.optionals (!config.devenv.flakesIntegration && config.devenv.cli.version != null && lib.versionOlder config.devenv.cli.version "1.0")
+      lib.optionals
+        (
+          !config.devenv.flakesIntegration
+          && config.devenv.cli.version != null
+          && lib.versionOlder config.devenv.cli.version "1.0"
+        )
         [
           ''
             For cachix.push and cachix.pull attributes to have an effect,

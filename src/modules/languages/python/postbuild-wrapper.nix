@@ -10,11 +10,10 @@
 #   This correctly points to the wrapped env when the executable is a symlink, e.g. in a devenv profile.
 {
   # Python derivation info
-  python
-, # Wrapper configuration
-  permitUserSite ? false
-, makeWrapperArgs ? [ ]
-,
+  python,
+  # Wrapper configuration
+  permitUserSite ? false,
+  makeWrapperArgs ? [ ],
 }:
 
 let

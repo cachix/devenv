@@ -4,7 +4,7 @@
   starship.enable = true;
 
   # You can change `enableConfig` to true to override Starship default values.
-  # By default, it looks for a configuration file next to your `devenv.yaml`. 
+  # By default, it looks for a configuration file next to your `devenv.yaml`.
   #starship.config.enable = true;
   # If you don't want to place your configuration file next to your `devenv.yaml`,
   # change `config.path` to point to the Starship configuration file you want to use.

@@ -1,4 +1,9 @@
-{ pkgs, config, inputs, ... }:
+{
+  pkgs,
+  config,
+  inputs,
+  ...
+}:
 let
   # Test the uv2nix import functionality
   myapp = config.languages.python.import ./directory { };
