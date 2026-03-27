@@ -38244,7 +38244,31 @@ false
 
 
 
-Check if the command should be ran
+Check if the command should be ran, evaluated before dependency tasks complete execution.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.statusAfter
+
+
+
+Check if the command should be run, evaluated after dependency tasks have completed.
 
 
 
