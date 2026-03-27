@@ -2,8 +2,13 @@
 
 ## X.Y.Z (unreleased)
 
+### Breaking Changes
+
+- **Tasks**: `status` commands execute before dependency tasks complete execution. `status` commands no longer receive `DEVENV_TASKS_OUTPUTS`. Use `statusAfter` to restore the previous behavior of `status`.
+
 ### Improvements
 
+- Tasks are automatically skipped when all of their dependents are skipped.
 - Added Ctrl+X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
 - Added `nixpkgs.rocmSupport` option to enable ROCm support in nixpkgs configuration.
 

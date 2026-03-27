@@ -119,6 +119,16 @@ If you define a `status` command, it will be executed first and if it returns `0
 
 Tasks using the `status` attribute will also cache their outputs. When a task is skipped because its status command returns success, the output from the most recent successful run will be restored and passed to dependent tasks.
 
+!!! tip "New in version 2.0"
+
+    **Dependency pruning:** If **every** task that depends on a given task is skipped (for example, their own `status` skipped them), that task is skipped too without running its `status` or `execIfModified` checks.
+
+    **Breaking change:** `status` commands execute before dependency tasks complete execution without receiving `$DEVENV_TASKS_OUTPUTS`. Use [`statusAfter`](#post-dependency-check-with-statusafter) to restore the previous behavior of `status`.
+
+### Post-dependency check with `statusAfter`
+
+If you need the same skip semantics as `status` but **after** your `after` dependencies have finished, use `statusAfter`. The `statusAfter` script runs immediately before `exec` and can read **`$DEVENV_TASKS_OUTPUTS`**. If both are set, `status` is evaluated first; when it skips the task, `statusAfter` is not run.
+
 ## Executing tasks only when files have been modified
 
 You can specify a list of files to monitor with `execIfModified`. The task will only run if any of these files have been modified since the last successful run. This attribute supports glob patterns, allowing you to monitor multiple files matching specific patterns.
@@ -154,7 +164,7 @@ When a task is skipped due to no file changes, any previous outputs from that ta
 Tasks support passing inputs and produce outputs, both as JSON objects:
 
 - `$DEVENV_TASK_INPUT`: JSON object of `tasks."myapp:mytask".input`.
-- `$DEVENV_TASKS_OUTPUTS`: JSON object with dependent tasks as keys and their outputs as values.
+- `$DEVENV_TASKS_OUTPUTS`: JSON object with dependent tasks as keys and their outputs as values. Not set for `status` commands; set for `exec` and `statusAfter` commands.
 - `$DEVENV_TASK_OUTPUT_FILE`: a writable file with tasks' outputs in JSON.
 - `$DEVENV_TASK_EXPORTS_FILE`: a writable file where tasks can export environment variables. Write `name\0base64(value)\0` pairs to this file and they will be set in the environment of dependent tasks.
 

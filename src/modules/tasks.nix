@@ -135,12 +135,23 @@ let
           status = lib.mkOption {
             type = types.nullOr types.str;
             default = null;
-            description = "Check if the command should be ran";
+            description = "Check if the command should be ran, evaluated before dependency tasks complete execution.";
           };
           statusCommand = lib.mkOption {
             type = types.nullOr types.package;
             internal = true;
             default = mkCommand config.status true;
+            description = "Path to the script to run.";
+          };
+          statusAfter = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Check if the command should be run, evaluated after dependency tasks have completed.";
+          };
+          statusAfterCommand = lib.mkOption {
+            type = types.nullOr types.package;
+            internal = true;
+            default = mkCommand config.statusAfter true;
             description = "Path to the script to run.";
           };
           execIfModified = lib.mkOption {
@@ -156,6 +167,7 @@ let
               type = config.type;
               description = config.description;
               status = config.statusCommand;
+              status_after = config.statusAfterCommand;
               after = config.after;
               before = config.before;
               command = config.command;

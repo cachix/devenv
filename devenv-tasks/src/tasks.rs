@@ -99,6 +99,9 @@ impl TasksBuilder {
             if task.status.is_some() && task.command.is_none() {
                 return Err(Error::MissingCommand(name));
             }
+            if task.status_after.is_some() && task.command.is_none() {
+                return Err(Error::MissingCommand(name));
+            }
             let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(
                 task,
                 self.verbosity,
@@ -660,6 +663,42 @@ impl Tasks {
             .collect()
     }
 
+    /// Single reverse-topological pass: prune tasks whose dependents all skip, then run at most
+    /// one status/exec_if_modified check per remaining oneshot task.
+    async fn compute_skip_sets(&self) -> (HashMap<NodeIndex, TaskCompleted>, HashSet<NodeIndex>) {
+        let root_set: HashSet<NodeIndex> = self.roots.iter().cloned().collect();
+        let cache = &self.cache;
+        let shell_env = &self.env;
+
+        let mut will_skip: HashMap<NodeIndex, TaskCompleted> = HashMap::new();
+        let mut pruned: HashSet<NodeIndex> = HashSet::new();
+
+        for &index in self.tasks_order.iter().rev() {
+            if !root_set.contains(&index) {
+                let dependents: Vec<NodeIndex> = self
+                    .graph
+                    .neighbors_directed(index, petgraph::Direction::Outgoing)
+                    .collect();
+                if !dependents.is_empty() {
+                    let all_dependents_skip = dependents
+                        .iter()
+                        .all(|d| will_skip.contains_key(d) || pruned.contains(d));
+                    if all_dependents_skip {
+                        pruned.insert(index);
+                        continue;
+                    }
+                }
+            }
+
+            let ts = self.graph[index].read().await;
+            if let Some(completed) = ts.check_will_skip(cache, shell_env).await {
+                will_skip.insert(index, completed);
+            }
+        }
+
+        (will_skip, pruned)
+    }
+
     /// Wait for task dependencies to be satisfied in the background.
     /// Returns `(cancelled, dependency_failed)`.
     async fn wait_for_task_deps(
@@ -748,6 +787,12 @@ impl Tasks {
         let outputs = Arc::new(Mutex::new(Outputs::new()));
         let mut running_tasks = self.shutdown.join_set();
 
+        let (mut will_skip, pruned) = if self.refresh_task_cache {
+            (HashMap::new(), HashSet::new())
+        } else {
+            self.compute_skip_sets().await
+        };
+
         // Pre-register all process tasks with the process manager so they
         // appear in the TUI immediately, regardless of topological sort order.
         // Also register dependency edges so that when an auto start off process is
@@ -756,6 +801,9 @@ impl Tasks {
         for &index in &self.tasks_order {
             if self.shutdown.is_cancelled() {
                 break;
+            }
+            if pruned.contains(&index) || will_skip.contains_key(&index) {
+                continue;
             }
             let ts = self.graph[index].read().await;
             if ts.task.r#type != TaskType::Process || ts.task.command.is_none() {
@@ -798,6 +846,84 @@ impl Tasks {
         for index in &self.tasks_order {
             let task_state = &self.graph[*index];
             let task_activity_id = task_ids[index];
+
+            if pruned.contains(index) {
+                let skip_activity = Activity::task_with_id(task_activity_id);
+                skip_activity.skipped();
+                {
+                    let mut ts = task_state.write().await;
+                    ts.status = TaskStatus::Completed(TaskCompleted::Skipped(
+                        Skipped::AllDependentsSkipped,
+                    ));
+                }
+                Self::signal_task_done(
+                    &completed_tasks,
+                    total_tasks,
+                    &orchestration_activity,
+                    &self.notify_finished,
+                    &self.notify_ui,
+                );
+                continue;
+            }
+
+            if let Some(completed) = will_skip.remove(index) {
+                let skip_activity = Activity::task_with_id(task_activity_id);
+                skip_activity.cached();
+                {
+                    let mut ts = task_state.write().await;
+                    match &completed {
+                        TaskCompleted::Skipped(Skipped::Cached(Output(Some(output)))) => {
+                            outputs
+                                .lock()
+                                .await
+                                .insert(ts.task.name.clone(), output.clone());
+
+                            if (ts.task.status.is_some()
+                                || ts.task.status_after.is_some()
+                                || !ts.task.exec_if_modified.is_empty())
+                                && let Some(output_value) = output.as_object()
+                            {
+                                let task_name = &ts.task.name;
+                                if let Err(e) = self
+                                    .cache
+                                    .store_task_output(
+                                        task_name,
+                                        &serde_json::Value::Object(output_value.clone()),
+                                    )
+                                    .await
+                                {
+                                    tracing::warn!(
+                                        "Failed to store task output for {}: {}",
+                                        task_name,
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                        TaskCompleted::Skipped(Skipped::Cached(Output(None))) => {
+                            if ts.task.status.is_some()
+                                || ts.task.status_after.is_some()
+                                || !ts.task.exec_if_modified.is_empty()
+                            {
+                                tracing::debug!(
+                                    "Skipped task {} has no cached output to store",
+                                    ts.task.name
+                                );
+                            }
+                        }
+                        _ => {}
+                    }
+                    ts.status = TaskStatus::Completed(completed);
+                }
+                Self::signal_task_done(
+                    &completed_tasks,
+                    total_tasks,
+                    &orchestration_activity,
+                    &self.notify_finished,
+                    &self.notify_ui,
+                );
+                continue;
+            }
 
             // Check if this is a process task early so we can handle it differently.
             // Process tasks are pre-registered and spawned with background dep checking
@@ -1047,8 +1173,8 @@ impl Tasks {
             let shutdown_clone = Arc::clone(&self.shutdown);
             let orchestration_activity_clone = Arc::clone(&orchestration_activity);
             let completed_tasks_clone = Arc::clone(&completed_tasks);
-            let refresh_task_cache = self.refresh_task_cache;
             let shell_env = self.env.clone();
+            let refresh_task_cache = self.refresh_task_cache;
 
             running_tasks.spawn(move || {
                 // Clone for use inside the async block; the original is borrowed by in_activity
@@ -1123,8 +1249,9 @@ impl Tasks {
                                     // TODO: fix clone
                                     .insert(task_state.task.name.clone(), output.clone());
 
-                                // Store task output if we're having status or exec_if_modified
+                                // Store task output if we're having status, status_after, or exec_if_modified
                                 if (task_state.task.status.is_some()
+                                    || task_state.task.status_after.is_some()
                                     || !task_state.task.exec_if_modified.is_empty())
                                     && let Some(output_value) = output.as_object()
                                 {

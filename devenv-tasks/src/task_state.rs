@@ -10,7 +10,7 @@ use base64::Engine;
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
 use devenv_processes::{NativeProcessManager, ProcessConfig};
 use miette::{IntoDiagnostic, Result, WrapErr};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
@@ -239,6 +239,31 @@ impl TaskState {
         Ok(env)
     }
 
+    /// Environment for `status` commands only: no dependency outputs (`DEVENV_TASKS_OUTPUTS`),
+    /// so status can run before upstream tasks complete.
+    fn prepare_status_env(
+        &self,
+        shell_env: &std::collections::HashMap<String, String>,
+    ) -> Result<BTreeMap<String, String>> {
+        let mut env: BTreeMap<String, String> = shell_env
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        if let Some(input) = &self.task.input {
+            let input_json = serde_json::to_string(input)
+                .into_diagnostic()
+                .wrap_err("Failed to serialize task input to JSON")?;
+            env.insert("DEVENV_TASK_INPUT".to_string(), input_json);
+        }
+
+        for (key, value) in &self.task.env {
+            env.insert(key.clone(), value.clone());
+        }
+
+        Ok(env)
+    }
+
     /// Create a temporary file for task I/O.
     fn create_tempfile(prefix: &str, suffix: &str) -> Result<tempfile::NamedTempFile> {
         tempfile::Builder::new()
@@ -421,6 +446,91 @@ impl TaskState {
         })
     }
 
+    /// If this oneshot task should skip its main command based on `status` /
+    /// `exec_if_modified`, returns [`TaskCompleted::Skipped`] with merged cached output.
+    ///
+    /// Status runs with [`Self::prepare_status_env`] (no `DEVENV_TASKS_OUTPUTS`).
+    /// On errors or when the task should run, returns `None` (conservative).
+    pub async fn check_will_skip(
+        &self,
+        cache: &TaskCache,
+        shell_env: &HashMap<String, String>,
+    ) -> Option<TaskCompleted> {
+        if self.task.r#type != TaskType::Oneshot {
+            return None;
+        }
+
+        if let Some(cmd) = &self.task.status {
+            if self.validate_cwd().is_err() {
+                return None;
+            }
+            let cached_output = self.get_cached_output(cache).await;
+            let env = match self.prepare_status_env(shell_env) {
+                Ok(e) => e,
+                Err(e) => {
+                    tracing::warn!(
+                        "Pre-flight status check: failed to prepare env for task {}: {e}",
+                        self.task.name
+                    );
+                    return None;
+                }
+            };
+            let exports_file = match Self::create_tempfile("devenv_task_exports", "") {
+                Ok(f) => f,
+                Err(e) => {
+                    tracing::warn!(
+                        "Pre-flight status check: failed to create tempfile for task {}: {e}",
+                        self.task.name
+                    );
+                    return None;
+                }
+            };
+            let ctx = ExecutionContext {
+                command: cmd,
+                cwd: self.task.cwd.as_deref(),
+                env,
+                use_sudo: self.sudo_context.is_some(),
+                output_file_path: std::path::Path::new("/dev/null"),
+                exports_file_path: exports_file.path(),
+            };
+            let mut command = ctx.build_command();
+            match command.output().await {
+                Ok(output) if output.status.success() => {
+                    let mut result = cached_output.unwrap_or_else(|| serde_json::json!({}));
+                    if let Ok(data) = tokio::fs::read(exports_file.path()).await {
+                        let exports = Self::parse_exports(&data);
+                        if let (false, Some(env_obj)) = (
+                            exports.is_empty(),
+                            get_or_create_devenv_env_mut(&mut result),
+                        ) {
+                            for (k, v) in exports {
+                                env_obj.insert(k, serde_json::Value::String(v));
+                            }
+                        }
+                    }
+                    let output = Output(Some(result));
+                    Some(TaskCompleted::Skipped(Skipped::Cached(output)))
+                }
+                Ok(_) => None,
+                Err(e) => {
+                    tracing::warn!(
+                        "Pre-flight status check: command failed for task {}: {e}",
+                        self.task.name
+                    );
+                    None
+                }
+            }
+        } else if !self.task.exec_if_modified.is_empty() {
+            if self.check_modified_files(cache).await {
+                return None;
+            }
+            let task_output = self.get_cached_output(cache).await;
+            Some(TaskCompleted::Skipped(Skipped::Cached(Output(task_output))))
+        } else {
+            None
+        }
+    }
+
     /// Run this task with a pre-assigned activity ID.
     /// The Task::Hierarchy event has already been emitted; this emits Task::Start.
     pub async fn run(
@@ -464,49 +574,52 @@ impl TaskState {
         shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<TaskCompleted> {
         tracing::debug!(
-            "Running task '{}' with exec_if_modified: {:?}, status: {}",
+            "Running task '{}' with exec_if_modified: {:?}, status: {}, status_after: {}",
             self.task.name,
             self.task.exec_if_modified,
-            self.task.status.is_some()
+            self.task.status.is_some(),
+            self.task.status_after.is_some()
         );
 
-        // Check if we should skip based on cache (status command or exec_if_modified)
-        if !refresh_task_cache {
-            if let Some(cmd) = &self.task.status {
-                // First check if we have cached output from a previous run
-                let cached_output = self.get_cached_output(cache).await;
+        let Some(cmd) = &self.task.command else {
+            task_activity.skipped();
+            return Ok(TaskCompleted::Skipped(Skipped::NoCommand));
+        };
 
-                self.validate_cwd()?;
-                let env = self
-                    .prepare_env(outputs, shell_env)
-                    .wrap_err("Failed to prepare status command")?;
-                let exports_file = Self::create_tempfile("devenv_task_exports", "")?;
-                let ctx = ExecutionContext {
-                    command: cmd,
+        self.validate_cwd()?;
+
+        // Prepare environment (includes DEVENV_TASKS_OUTPUTS from completed dependencies)
+        let env = self
+            .prepare_env(outputs, shell_env)
+            .wrap_err("Failed to prepare task environment")?;
+
+        if !refresh_task_cache {
+            if let Some(sa_cmd) = &self.task.status_after {
+                let cached_output = self.get_cached_output(cache).await;
+                let sa_exports_file = Self::create_tempfile("devenv_task_exports", "")?;
+                let sa_ctx = ExecutionContext {
+                    command: sa_cmd,
                     cwd: self.task.cwd.as_deref(),
-                    env,
+                    env: env.clone(),
                     use_sudo: self.sudo_context.is_some(),
                     output_file_path: std::path::Path::new("/dev/null"),
-                    exports_file_path: exports_file.path(),
+                    exports_file_path: sa_exports_file.path(),
                 };
-                let mut command = ctx.build_command();
-
-                // Create a Command activity for the status check (automatically parented to task_activity)
-                let status_activity = Activity::command(&self.task.name)
-                    .command(cmd)
+                let mut sa_command = sa_ctx.build_command();
+                let status_after_activity = Activity::command(&self.task.name)
+                    .command(sa_cmd)
                     .level(ActivityLevel::Debug)
                     .start();
 
-                match command.output().await {
+                match sa_command.output().await {
                     Ok(output) => {
                         if !output.status.success() {
-                            status_activity.fail();
+                            status_after_activity.fail();
                         }
 
                         if output.status.success() {
-                            // Start with cached output, merge in any exports from the status command
                             let mut result = cached_output.unwrap_or_else(|| serde_json::json!({}));
-                            if let Ok(data) = tokio::fs::read(exports_file.path()).await {
+                            if let Ok(data) = tokio::fs::read(sa_exports_file.path()).await {
                                 let exports = Self::parse_exports(&data);
                                 if let (false, Some(env_obj)) = (
                                     exports.is_empty(),
@@ -519,7 +632,7 @@ impl TaskState {
                             }
                             let output = Output(Some(result));
                             tracing::debug!(
-                                "Task {} skipped with output: {:?}",
+                                "Task {} skipped after deps via status_after with output: {:?}",
                                 self.task.name,
                                 output
                             );
@@ -528,7 +641,7 @@ impl TaskState {
                         }
                     }
                     Err(e) => {
-                        status_activity.fail();
+                        status_after_activity.fail();
                         return Ok(TaskCompleted::Failed(
                             now.elapsed(),
                             TaskFailure {
@@ -539,56 +652,14 @@ impl TaskState {
                         ));
                     }
                 }
-            } else if !self.task.exec_if_modified.is_empty() {
-                tracing::debug!(
-                    "Task '{}' has exec_if_modified files: {:?}",
-                    self.task.name,
-                    self.task.exec_if_modified
-                );
-
-                let files_modified = self.check_modified_files(cache).await;
-                tracing::debug!(
-                    "Task '{}' files modified check result: {}",
-                    self.task.name,
-                    files_modified
-                );
-
-                if !files_modified {
-                    // First check if we have outputs in the current run's outputs map,
-                    // then fall back to the cache
-                    let task_output = match outputs.get(&self.task.name).cloned() {
-                        Some(output) => Some(output),
-                        None => self.get_cached_output(cache).await,
-                    };
-
-                    tracing::debug!(
-                        "Skipping task {} due to unmodified files, output: {:?}",
-                        self.task.name,
-                        task_output
-                    );
-                    task_activity.cached();
-                    return Ok(TaskCompleted::Skipped(Skipped::Cached(Output(task_output))));
-                }
             }
         }
-
-        let Some(cmd) = &self.task.command else {
-            task_activity.skipped();
-            return Ok(TaskCompleted::Skipped(Skipped::NoCommand));
-        };
 
         // Create a Command activity for the main execution (automatically parented to task_activity)
         let cmd_activity = Activity::command(&self.task.name)
             .command(cmd)
             .level(ActivityLevel::Debug)
             .start();
-
-        self.validate_cwd()?;
-
-        // Prepare environment
-        let env = self
-            .prepare_env(outputs, shell_env)
-            .wrap_err("Failed to prepare task environment")?;
 
         // Create temporary files for task output and exports
         let outputs_file = Self::create_tempfile("devenv_task_output", ".json")?;
