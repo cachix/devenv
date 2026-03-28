@@ -55,6 +55,14 @@ pub trait ShellBuilder: Send + Sync {
     /// Writes the new environment to $DEVENV_STATE/pending-env.sh
     /// which will be picked up by the shell's PROMPT_COMMAND hook.
     fn build_reload_env(&self, ctx: &BuildContext) -> Result<(), BuildError>;
+
+    /// Interrupt all outstanding builder operations.
+    ///
+    /// Called by the coordinator when the shell exits while a reload build is
+    /// still running. The `spawn_blocking` thread driving the build cannot be
+    /// cancelled by aborting the tokio task, so this method gives the builder
+    /// a chance to interrupt the underlying work (e.g. Nix evaluation).
+    fn interrupt(&self) {}
 }
 
 #[cfg(test)]

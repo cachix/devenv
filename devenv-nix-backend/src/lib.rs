@@ -23,6 +23,17 @@ thread_local! {
     static GC_REGISTRATION: RefCell<Option<nix_bindings_expr::eval_state::ThreadRegistrationGuard>> = const { RefCell::new(None) };
 }
 
+/// Trigger the Nix interrupt flag to abort any in-progress Nix evaluation.
+///
+/// This sets a process-global flag that the Nix evaluator checks periodically.
+/// When set, the evaluator throws an error and aborts the current operation.
+///
+/// Safe to call even when no Nix operation is running — the flag is simply set
+/// and will be checked when the next evaluation starts.
+pub fn trigger_interrupt() {
+    nix_bindings_util::trigger_interrupt();
+}
+
 /// Initialize the Nix expression library and Boehm GC.
 ///
 /// This is safe to call multiple times - initialization only happens once.

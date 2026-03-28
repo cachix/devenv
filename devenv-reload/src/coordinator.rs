@@ -340,6 +340,7 @@ impl ShellCoordinator {
         // Abort any running build task
         if let Some(handle) = current_build.take() {
             handle.abort();
+            builder.interrupt();
         }
 
         // Abort forwarder tasks to prevent panics during runtime shutdown

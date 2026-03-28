@@ -282,6 +282,10 @@ impl ShellBuilder for DevenvShellBuilder {
             Ok(())
         })
     }
+
+    fn interrupt(&self) {
+        devenv_nix_backend::trigger_interrupt();
+    }
 }
 
 impl DevenvShellBuilder {

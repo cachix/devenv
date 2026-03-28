@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv shell` hanging indefinitely when exiting the shell during a hot-reload build by interrupting the lingering Nix evaluation on shutdown.
 - Fixed `devenv repl` broken TUI output and hanging evaluation by adding proper TUI handoff support, showing evaluation progress in the TUI before handing the terminal to the interactive REPL.
 - Fixed Ghostty shell integration not working in `devenv shell` by sourcing `ghostty.bash` from the rcfile when `GHOSTTY_RESOURCES_DIR` is set.
 
