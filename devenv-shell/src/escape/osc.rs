@@ -3,13 +3,13 @@
 //! Handles parsing after the router has consumed `ESC ]`.
 //! Accumulates payload bytes until BEL (0x07) terminates.
 //! ST (ESC \) termination is handled by the router.
-//! Only produces events for query sequences (payload ends with `?`).
+//! Produces events for any well-formed OSC sequence so terminal features like
+//! hyperlinks and title updates survive the PTY renderer.
 
 const MAX_PAYLOAD: usize = 256;
 
 pub enum OscResult {
     Pending,
-    /// Payload is a query (ends with `?`).
     Complete,
     Reject,
 }
@@ -40,13 +40,8 @@ impl OscParser {
         }
     }
 
-    /// Check if the accumulated payload is a query (ends with `?`).
     pub fn finish(&self) -> OscResult {
-        if self.payload.last() == Some(&b'?') {
-            OscResult::Complete
-        } else {
-            OscResult::Reject
-        }
+        OscResult::Complete
     }
 
     pub fn reset(&mut self) {
@@ -68,12 +63,12 @@ mod tests {
     }
 
     #[test]
-    fn non_query_rejected() {
+    fn non_query_completes() {
         let mut p = OscParser::new();
         for &b in b"0;title" {
             assert!(matches!(p.feed(b), OscResult::Pending));
         }
-        assert!(matches!(p.feed(0x07), OscResult::Reject));
+        assert!(matches!(p.feed(0x07), OscResult::Complete));
     }
 
     #[test]
@@ -116,11 +111,11 @@ mod tests {
     }
 
     #[test]
-    fn finish_rejects_non_query() {
+    fn finish_completes_non_query() {
         let mut p = OscParser::new();
         for &b in b"0;title" {
             p.feed(b);
         }
-        assert!(matches!(p.finish(), OscResult::Reject));
+        assert!(matches!(p.finish(), OscResult::Complete));
     }
 }
