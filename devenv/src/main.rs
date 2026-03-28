@@ -316,6 +316,7 @@ fn run(launch: LaunchConfig) -> Result<()> {
     let shutdown_clone = shutdown.clone();
     let backend_done_clone = backend_done.clone();
     let devenv_thread = std::thread::Builder::new()
+        .name("devenv".into())
         .stack_size(NIX_STACK_SIZE)
         .spawn(move || {
             build_gc_runtime().block_on(async {
@@ -408,6 +409,7 @@ impl DevenvOutput {
             }
             // Run the REPL on a new thread with its own GC-registered runtime
             let repl_result = std::thread::Builder::new()
+                .name("repl".into())
                 .stack_size(NIX_STACK_SIZE)
                 .spawn(move || {
                     // Skip prepare_repl() — the debugger already has eval context from
@@ -1088,6 +1090,7 @@ fn build_gc_runtime() -> tokio::runtime::Runtime {
     devenv_nix_backend::nix_init();
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
+        .thread_name("devenv-worker")
         .thread_stack_size(NIX_STACK_SIZE)
         .on_thread_start(|| {
             let _ = devenv_nix_backend::gc_register_current_thread();

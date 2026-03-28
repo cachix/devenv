@@ -849,7 +849,9 @@ impl ShellSession {
 
         // Spawn stdin reader thread
         let stdin_tx = event_tx_internal.clone();
-        std::thread::spawn(move || {
+        std::thread::Builder::new()
+            .name("session-stdin".into())
+            .spawn(move || {
             let mut stdin = stdin_source;
             let mut buf = [0u8; 1024];
             loop {
@@ -869,12 +871,15 @@ impl ShellSession {
                     }
                 }
             }
-        });
+        })
+        .expect("failed to spawn session-stdin thread");
 
         // Spawn PTY reader thread
         let pty_tx = event_tx_internal.clone();
         let pty_reader = Arc::clone(&pty);
-        std::thread::spawn(move || {
+        std::thread::Builder::new()
+            .name("session-pty".into())
+            .spawn(move || {
             let mut buf = [0u8; 4096];
             loop {
                 match pty_reader.read(&mut buf) {
@@ -899,7 +904,8 @@ impl ShellSession {
                     }
                 }
             }
-        });
+        })
+        .expect("failed to spawn session-pty thread");
 
         // Forward coordinator commands to internal event channel
         let cmd_tx = event_tx_internal.clone();

@@ -68,7 +68,9 @@ impl PtyProcess {
         let running = Arc::new(Mutex::new(true));
         let running_clone = Arc::clone(&running);
 
-        let reader_thread = thread::spawn(move || {
+        let reader_thread = thread::Builder::new()
+            .name("pty-reader".into())
+            .spawn(move || {
             let mut buffer = [0u8; 8192];
             loop {
                 // Check if we should stop
@@ -100,7 +102,8 @@ impl PtyProcess {
                 }
             }
             debug!("PTY reader thread exiting");
-        });
+        })
+        .expect("failed to spawn pty-reader thread");
 
         Ok(Self {
             child,

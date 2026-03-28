@@ -93,7 +93,9 @@ impl ShellManager {
 
         // Spawn stdin reader thread
         let stdin_tx = event_tx.clone();
-        std::thread::spawn(move || {
+        std::thread::Builder::new()
+            .name("reload-stdin".into())
+            .spawn(move || {
             let mut stdin = io::stdin();
             let mut buf = [0u8; 1024];
             loop {
@@ -110,12 +112,15 @@ impl ShellManager {
                     Err(_) => break,
                 }
             }
-        });
+        })
+        .expect("failed to spawn reload-stdin thread");
 
         // Spawn PTY reader thread
         let pty_tx = event_tx.clone();
         let spawn_pty_reader = |pty: Arc<Pty>, generation: u64, pty_tx: mpsc::Sender<Event>| {
-            std::thread::spawn(move || {
+            std::thread::Builder::new()
+                .name("reload-pty".into())
+                .spawn(move || {
                 let mut buf = [0u8; 4096];
                 loop {
                     let result = pty.read(&mut buf);
@@ -138,7 +143,8 @@ impl ShellManager {
                         }
                     }
                 }
-            });
+            })
+            .expect("failed to spawn reload-pty thread");
         };
         spawn_pty_reader(initial_pty.clone(), pty_generation, pty_tx);
 

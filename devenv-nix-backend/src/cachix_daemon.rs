@@ -420,7 +420,9 @@ impl DaemonProcess {
         // Lines are forwarded to the push Activity (visible in TUI) and to tracing.
         if let Some(stderr) = child.stderr.take() {
             let activity_ref = activity.map(|a| a.ref_handle());
-            std::thread::spawn(move || {
+            std::thread::Builder::new()
+                .name("cachix-stderr".into())
+                .spawn(move || {
                 use std::io::BufRead;
                 let reader = std::io::BufReader::new(stderr);
                 for line in reader.lines() {
@@ -434,7 +436,8 @@ impl DaemonProcess {
                         Err(_) => break,
                     }
                 }
-            });
+            })
+            .expect("failed to spawn cachix-stderr thread");
         }
 
         let mut daemon = Self {
