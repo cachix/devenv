@@ -852,27 +852,27 @@ impl ShellSession {
         std::thread::Builder::new()
             .name("session-stdin".into())
             .spawn(move || {
-            let mut stdin = stdin_source;
-            let mut buf = [0u8; 1024];
-            loop {
-                match stdin.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        if stdin_tx
-                            .blocking_send(Event::Stdin(buf[..n].to_vec()))
-                            .is_err()
-                        {
+                let mut stdin = stdin_source;
+                let mut buf = [0u8; 1024];
+                loop {
+                    match stdin.read(&mut buf) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            if stdin_tx
+                                .blocking_send(Event::Stdin(buf[..n].to_vec()))
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("session: stdin read error: {}", e);
                             break;
                         }
                     }
-                    Err(e) => {
-                        tracing::warn!("session: stdin read error: {}", e);
-                        break;
-                    }
                 }
-            }
-        })
-        .expect("failed to spawn session-stdin thread");
+            })
+            .expect("failed to spawn session-stdin thread");
 
         // Spawn PTY reader thread
         let pty_tx = event_tx_internal.clone();
@@ -880,32 +880,34 @@ impl ShellSession {
         std::thread::Builder::new()
             .name("session-pty".into())
             .spawn(move || {
-            let mut buf = [0u8; 4096];
-            loop {
-                match pty_reader.read(&mut buf) {
-                    Ok(0) => {
-                        let exit_code = pty_reader.try_wait().ok().flatten().map(|s| s.exit_code());
-                        let _ = pty_tx.blocking_send(Event::PtyExit(exit_code));
-                        break;
-                    }
-                    Ok(n) => {
-                        if pty_tx
-                            .blocking_send(Event::PtyOutput(buf[..n].to_vec()))
-                            .is_err()
-                        {
+                let mut buf = [0u8; 4096];
+                loop {
+                    match pty_reader.read(&mut buf) {
+                        Ok(0) => {
+                            let exit_code =
+                                pty_reader.try_wait().ok().flatten().map(|s| s.exit_code());
+                            let _ = pty_tx.blocking_send(Event::PtyExit(exit_code));
+                            break;
+                        }
+                        Ok(n) => {
+                            if pty_tx
+                                .blocking_send(Event::PtyOutput(buf[..n].to_vec()))
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("session: PTY read error: {}", e);
+                            let exit_code =
+                                pty_reader.try_wait().ok().flatten().map(|s| s.exit_code());
+                            let _ = pty_tx.blocking_send(Event::PtyExit(exit_code));
                             break;
                         }
                     }
-                    Err(e) => {
-                        tracing::warn!("session: PTY read error: {}", e);
-                        let exit_code = pty_reader.try_wait().ok().flatten().map(|s| s.exit_code());
-                        let _ = pty_tx.blocking_send(Event::PtyExit(exit_code));
-                        break;
-                    }
                 }
-            }
-        })
-        .expect("failed to spawn session-pty thread");
+            })
+            .expect("failed to spawn session-pty thread");
 
         // Forward coordinator commands to internal event channel
         let cmd_tx = event_tx_internal.clone();

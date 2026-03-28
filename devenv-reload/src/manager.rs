@@ -96,24 +96,24 @@ impl ShellManager {
         std::thread::Builder::new()
             .name("reload-stdin".into())
             .spawn(move || {
-            let mut stdin = io::stdin();
-            let mut buf = [0u8; 1024];
-            loop {
-                match stdin.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        if stdin_tx
-                            .blocking_send(Event::Stdin(buf[..n].to_vec()))
-                            .is_err()
-                        {
-                            break;
+                let mut stdin = io::stdin();
+                let mut buf = [0u8; 1024];
+                loop {
+                    match stdin.read(&mut buf) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            if stdin_tx
+                                .blocking_send(Event::Stdin(buf[..n].to_vec()))
+                                .is_err()
+                            {
+                                break;
+                            }
                         }
+                        Err(_) => break,
                     }
-                    Err(_) => break,
                 }
-            }
-        })
-        .expect("failed to spawn reload-stdin thread");
+            })
+            .expect("failed to spawn reload-stdin thread");
 
         // Spawn PTY reader thread
         let pty_tx = event_tx.clone();
@@ -121,30 +121,30 @@ impl ShellManager {
             std::thread::Builder::new()
                 .name("reload-pty".into())
                 .spawn(move || {
-                let mut buf = [0u8; 4096];
-                loop {
-                    let result = pty.read(&mut buf);
-                    match result {
-                        Ok(0) => {
-                            let _ = pty_tx.blocking_send(Event::PtyExit(generation));
-                            break;
-                        }
-                        Ok(n) => {
-                            if pty_tx
-                                .blocking_send(Event::PtyOutput(generation, buf[..n].to_vec()))
-                                .is_err()
-                            {
+                    let mut buf = [0u8; 4096];
+                    loop {
+                        let result = pty.read(&mut buf);
+                        match result {
+                            Ok(0) => {
+                                let _ = pty_tx.blocking_send(Event::PtyExit(generation));
+                                break;
+                            }
+                            Ok(n) => {
+                                if pty_tx
+                                    .blocking_send(Event::PtyOutput(generation, buf[..n].to_vec()))
+                                    .is_err()
+                                {
+                                    break;
+                                }
+                            }
+                            Err(_) => {
+                                let _ = pty_tx.blocking_send(Event::PtyExit(generation));
                                 break;
                             }
                         }
-                        Err(_) => {
-                            let _ = pty_tx.blocking_send(Event::PtyExit(generation));
-                            break;
-                        }
                     }
-                }
-            })
-            .expect("failed to spawn reload-pty thread");
+                })
+                .expect("failed to spawn reload-pty thread");
         };
         spawn_pty_reader(initial_pty.clone(), pty_generation, pty_tx);
 

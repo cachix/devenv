@@ -423,21 +423,21 @@ impl DaemonProcess {
             std::thread::Builder::new()
                 .name("cachix-stderr".into())
                 .spawn(move || {
-                use std::io::BufRead;
-                let reader = std::io::BufReader::new(stderr);
-                for line in reader.lines() {
-                    match line {
-                        Ok(line) => {
-                            if let Some(ref activity) = activity_ref {
-                                activity.log(&line);
+                    use std::io::BufRead;
+                    let reader = std::io::BufReader::new(stderr);
+                    for line in reader.lines() {
+                        match line {
+                            Ok(line) => {
+                                if let Some(ref activity) = activity_ref {
+                                    activity.log(&line);
+                                }
+                                tracing::debug!(target: "cachix_daemon", "{}", line);
                             }
-                            tracing::debug!(target: "cachix_daemon", "{}", line);
+                            Err(_) => break,
                         }
-                        Err(_) => break,
                     }
-                }
-            })
-            .expect("failed to spawn cachix-stderr thread");
+                })
+                .expect("failed to spawn cachix-stderr thread");
         }
 
         let mut daemon = Self {
