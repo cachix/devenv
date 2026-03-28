@@ -327,6 +327,12 @@ pub enum Process {
         is_error: bool,
         timestamp: Timestamp,
     },
+    RawLog {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        data: Vec<u8>,
+        timestamp: Timestamp,
+    },
     Status {
         #[serde(alias = "activity_id")]
         id: u64,

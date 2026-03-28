@@ -231,6 +231,8 @@ pub struct ProcessConfig {
     pub exec: String,
     #[serde(default)]
     pub args: Vec<String>,
+    #[serde(default = "default_true")]
+    pub is_pty: bool,
     #[serde(default)]
     pub cwd: Option<PathBuf>,
     #[serde(default)]
@@ -274,6 +276,7 @@ impl Default for ProcessConfig {
             process_type: ProcessType::default(),
             exec: String::new(),
             args: Vec::new(),
+            is_pty: true,
             cwd: None,
             env: HashMap::new(),
             listen: Vec::new(),

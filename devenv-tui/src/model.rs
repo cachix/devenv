@@ -8,6 +8,20 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+const EXPANDED_LOG_GUTTER_WIDTH: u16 = 8;
+
+fn current_vt_size() -> (usize, usize) {
+    let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
+    vt_size_for_terminal(width, height)
+}
+
+fn vt_size_for_terminal(width: u16, height: u16) -> (usize, usize) {
+    (
+        width.saturating_sub(EXPANDED_LOG_GUTTER_WIDTH).max(1) as usize,
+        height.max(1) as usize,
+    )
+}
+
 /// Configuration for limiting displayed child activities
 #[derive(Debug, Clone)]
 pub struct ChildActivityLimit {
@@ -45,6 +59,7 @@ pub struct ActivityModel {
     expected_downloads: Option<u64>,
     /// Additional parents for activities (for displaying under multiple parents in TUI)
     additional_parents: HashMap<u64, Vec<u64>>,
+    last_vt_size: Option<(usize, usize)>,
 }
 
 impl Default for ActivityModel {
@@ -162,6 +177,8 @@ pub struct Activity {
     pub details: Vec<ActivityDetail>,
     /// Activity level for filtering (defaults to Info)
     pub level: ActivityLevel,
+    /// Virtual terminal state for processes and tasks
+    pub vt: Option<Arc<std::sync::Mutex<avt::Vt>>>,
 }
 
 /// UI state - lives outside the RwLock, managed by the UI thread.
@@ -169,11 +186,13 @@ pub struct Activity {
 pub struct UiState {
     pub viewport: ViewportConfig,
     pub selected_activity: Option<u64>,
+    pub focused_activity: Option<u64>,
     pub scroll: ScrollState,
     pub view_options: ViewOptions,
     pub terminal_size: TerminalSize,
     pub interrupt_prompt_active: bool,
     pub view_mode: ViewMode,
+    pub fullscreen: bool,
 }
 
 impl UiState {
@@ -188,6 +207,7 @@ impl UiState {
                 activities_visible: 5,
             },
             selected_activity: None,
+            focused_activity: None,
             scroll: ScrollState {
                 log_offset: 0,
                 activity_position: 0,
@@ -198,6 +218,7 @@ impl UiState {
             terminal_size: TerminalSize { width, height },
             interrupt_prompt_active: false,
             view_mode: ViewMode::Main,
+            fullscreen: false,
         }
     }
 
@@ -342,6 +363,33 @@ impl ActivityModel {
             expected_builds: None,
             expected_downloads: None,
             additional_parents: HashMap::new(),
+            last_vt_size: None,
+        }
+    }
+
+    pub fn resize_vts(&mut self, width: u16, height: u16) {
+        let (cols, rows) = vt_size_for_terminal(width, height);
+        if self.last_vt_size == Some((cols, rows)) {
+            return;
+        }
+        for activity in self.activities.values_mut() {
+            if let Some(vt) = &activity.vt {
+                vt.lock().unwrap().resize(cols, rows);
+            }
+        }
+        self.last_vt_size = Some((cols, rows));
+    }
+
+    pub fn resize_vt(&mut self, activity_id: u64, width: u16, height: u16) {
+        let (cols, rows) = vt_size_for_terminal(width, height);
+        if self.last_vt_size == Some((cols, rows)) {
+            return;
+        }
+        if let Some(activity) = self.activities.get_mut(&activity_id)
+            && let Some(vt) = &activity.vt
+        {
+            vt.lock().unwrap().resize(cols, rows);
+            self.last_vt_size = Some((cols, rows));
         }
     }
 
@@ -657,9 +705,27 @@ impl ActivityModel {
                 self.handle_activity_complete(id, outcome);
             }
             Process::Log {
-                id, line, is_error, ..
+                id,
+                line,
+                is_error: _,
+                ..
             } => {
-                self.handle_activity_log(id, line, is_error);
+                if is_process_status_log(&line)
+                    && let Some(activity) = self.activities.get_mut(&id)
+                    && let Some(vt) = &activity.vt
+                {
+                    let mut vt = vt.lock().unwrap();
+                    vt.feed_str(&process_status_vt_block(&line));
+                }
+                self.log_to_activity(id, line.clone());
+            }
+            Process::RawLog { id, data, .. } => {
+                if let Some(activity) = self.activities.get_mut(&id)
+                    && let Some(vt) = &activity.vt
+                {
+                    let mut vt = vt.lock().unwrap();
+                    vt.feed_str(&String::from_utf8_lossy(&data));
+                }
             }
             Process::Status { id, status, .. } => {
                 if let Some(activity) = self.activities.get_mut(&id) {
@@ -789,6 +855,20 @@ impl ActivityModel {
 
         let is_root = parent.is_none() || variant.is_always_top_level();
 
+        let vt = if matches!(
+            variant,
+            ActivityVariant::Process(_)
+                | ActivityVariant::Task(_)
+                | ActivityVariant::Build(_)
+                | ActivityVariant::Evaluating(_)
+                | ActivityVariant::Devenv
+        ) {
+            let (cols, rows) = current_vt_size();
+            Some(Arc::new(std::sync::Mutex::new(avt::Vt::new(cols, rows))))
+        } else {
+            None
+        };
+
         let activity = Activity {
             id,
             name: name.clone(),
@@ -802,6 +882,7 @@ impl ActivityModel {
             progress: None,
             details: Vec::new(),
             level: effective_level,
+            vt,
         };
 
         if is_root {
@@ -946,6 +1027,14 @@ impl ActivityModel {
     }
 
     fn handle_activity_log(&mut self, id: u64, line: String, is_error: bool) {
+        if let Some(activity) = self.activities.get_mut(&id) {
+            if let Some(vt) = &activity.vt {
+                let mut vt = vt.lock().unwrap();
+                vt.feed_str(&line);
+                vt.feed_str("\n");
+            }
+        }
+
         let logs = self
             .build_logs
             .entry(id)
@@ -1435,6 +1524,16 @@ impl ActivityModel {
             })
             .count()
     }
+}
+
+const PROCESS_STATUS_LOG_PREFIX: &str = "[devenv] ";
+
+fn is_process_status_log(line: &str) -> bool {
+    line.starts_with(PROCESS_STATUS_LOG_PREFIX)
+}
+
+fn process_status_vt_block(line: &str) -> String {
+    format!("\n\x1b[38;5;245m{line}\x1b[0m\n\n")
 }
 
 /// State of a Nix activity
