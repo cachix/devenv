@@ -228,7 +228,6 @@ in
       root = lib.mkOption {
         type = types.str;
         internal = true;
-        default = builtins.getEnv "PWD";
       };
 
       dotfile = lib.mkOption {
@@ -265,13 +264,6 @@ in
       tmpdir = lib.mkOption {
         type = types.str;
         internal = true;
-        # Used for TMPDIR override - should NOT use XDG_RUNTIME_DIR as that's
-        # a small tmpfs meant for runtime files (sockets), not build artifacts
-        default =
-          let
-            tmp = builtins.getEnv "TMPDIR";
-          in
-          if tmp != "" then tmp else "/tmp";
       };
 
       profile = lib.mkOption {
@@ -308,14 +300,6 @@ in
 
   config = {
     assertions = [
-      {
-        assertion = config.devenv.root != "";
-        message = ''
-          devenv was not able to determine the current directory.
-
-          See https://devenv.sh/guides/using-with-flakes/ how to use it with flakes.
-        '';
-      }
       {
         assertion = config.devenv.flakesIntegration || config.overlays == [ ] || (config.devenv.cli.version != null && lib.versionAtLeast config.devenv.cli.version "1.4.2");
         message = ''
