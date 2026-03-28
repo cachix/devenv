@@ -1374,6 +1374,10 @@ impl ShellSession {
     }
 
     /// Reset any forwarded DEC modes on exit so the terminal is left clean.
+    ///
+    /// XTSHIFTESCAPE and DECSCUSR are forwarded without explicit cleanup:
+    /// mouse tracking modes (cleaned up above) make XTSHIFTESCAPE inert,
+    /// and most terminals reset cursor shape on their own.
     fn cleanup_forwarded_modes(esc: &EscapeState, stdout: &mut impl Write) -> io::Result<()> {
         let mut needs_flush = false;
         if esc.in_alternate_screen {

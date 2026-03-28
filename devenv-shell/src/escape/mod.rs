@@ -221,6 +221,11 @@ fn classify_csi(
         // neovim can change cursor shape between modes.
         ([b' '], b'q') => CsiClass::Forward,
 
+        // XTSHIFTESCAPE — configure whether shift modifier is reported
+        // in mouse events. Must be forwarded alongside mouse tracking
+        // DEC modes (1000, 1002, etc.).
+        ([b'>'], b's') => CsiClass::Forward,
+
         _ => CsiClass::Ignore,
     }
 }
@@ -1597,5 +1602,28 @@ mod tests {
         assert_eq!(events.len(), 2);
         assert!(matches!(events[0], SequenceEvent::DecMode(_)));
         assert!(matches!(events[1], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    // -- XTSHIFTESCAPE tests --
+
+    #[test]
+    fn forwards_xtshiftescape() {
+        let mut scanner = EscapeScanner::new();
+
+        // CSI > 1 s — enable shift reporting
+        let events = scanner.scan(b"\x1b[>1s");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::ForwardCsi { ref raw_bytes } = events[0] else {
+            panic!("expected ForwardCsi, got {:?}", events[0]);
+        };
+        assert_eq!(raw_bytes, b"\x1b[>1s");
+
+        // CSI > 0 s — disable shift reporting
+        let events = scanner.scan(b"\x1b[>0s");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::ForwardCsi { ref raw_bytes } = events[0] else {
+            panic!("expected ForwardCsi, got {:?}", events[0]);
+        };
+        assert_eq!(raw_bytes, b"\x1b[>0s");
     }
 }
