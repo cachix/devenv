@@ -3,7 +3,10 @@
 use crate::model::{Activity, ActivityVariant, NixActivityState};
 use human_repr::{HumanCount, HumanThroughput};
 use iocraft::prelude::*;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use std::collections::VecDeque;
+use std::sync::Arc;
 use std::time::Duration;
 
 // Import shared UI constants from devenv-shell
@@ -84,6 +87,98 @@ pub const LOG_VIEWPORT_COLLAPSED: usize = 10;
 pub const LOG_VIEWPORT_FAILED: usize = 20;
 /// Reduced viewport height for tasks with showOutput=true (expands to full when selected)
 pub const LOG_VIEWPORT_SHOW_OUTPUT: usize = 3;
+
+fn preview_panel_width(terminal_width: u16, indent: usize) -> u32 {
+    terminal_width.saturating_sub(indent as u16).max(1) as u32
+}
+
+fn truncate_preview_line(text: &str, max_width: usize) -> String {
+    if text.chars().count() > max_width {
+        let mut s: String = text.chars().take(max_width.saturating_sub(1)).collect();
+        s.push('…');
+        s
+    } else {
+        text.to_string()
+    }
+}
+
+// Broad ANSI matcher covering CSI, OSC, DCS, and single-byte ESC sequences.
+// Collapsed previews are plain-text summaries, so strip escape sequences before width math.
+static PREVIEW_ANSI_ESCAPE_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"\x1B(?:\[[0-?]*[ -/]*[@-~]|[PX^_][^\x1B]*\x1B\\|\][^\x07\x1B]*(?:\x07|\x1B\\)|[@-Z\\-_])",
+    )
+    .expect("valid ANSI escape regex")
+});
+
+// Strip remaining control bytes except tab/newline/carriage return.
+static PREVIEW_CONTROL_BYTE_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"[\x00-\x08\x0B-\x1A\x1C-\x1F\x7F]").expect("valid control-byte regex")
+});
+
+fn sanitize_preview_text(text: &str) -> String {
+    let no_escapes = PREVIEW_ANSI_ESCAPE_REGEX.replace_all(text, "");
+    PREVIEW_CONTROL_BYTE_REGEX
+        .replace_all(no_escapes.as_ref(), "")
+        .to_string()
+}
+
+#[derive(Clone)]
+struct PreviewStyledCell {
+    ch: char,
+    pen: avt::Pen,
+}
+
+enum PreviewLine {
+    Plain(String),
+    Styled(Vec<PreviewStyledCell>),
+}
+
+fn preview_pen_color(color: avt::Color) -> Color {
+    match color {
+        avt::Color::Indexed(c) => Color::AnsiValue(c),
+        avt::Color::RGB(rgb) => Color::Rgb {
+            r: rgb.r,
+            g: rgb.g,
+            b: rgb.b,
+        },
+    }
+}
+
+fn build_preview_styled_segment(text: String, pen: &avt::Pen) -> AnyElement<'static> {
+    let fg = pen.foreground().map(preview_pen_color);
+    let bg = pen.background().map(preview_pen_color);
+
+    let text = element! {
+        Text(
+            content: text,
+            color: fg,
+            weight: if pen.is_bold() { Weight::Bold } else { Weight::Normal },
+            italic: pen.is_italic(),
+            decoration: if pen.is_underline() { TextDecoration::Underline } else { TextDecoration::None },
+            wrap: TextWrap::NoWrap,
+        )
+    }
+    .into_any();
+
+    if let Some(background_color) = bg {
+        element!(View(background_color: background_color) { #(vec![text]) }).into_any()
+    } else {
+        text
+    }
+}
+
+fn is_blank_vt_row(row: &[avt::Cell]) -> bool {
+    row.iter().all(|cell| cell.char() == ' ')
+}
+
+fn trim_trailing_blank_vt_rows<'a>(rows: &'a [&'a [avt::Cell]]) -> &'a [&'a [avt::Cell]] {
+    let Some(last_content_idx) = rows.iter().rposition(|row| !is_blank_vt_row(row)) else {
+        return &[];
+    };
+
+    &rows[..=last_content_idx]
+}
 
 /// Format elapsed time for display: ms -> s -> m s -> h m
 /// When `high_resolution` is true, shows ms for sub-second durations.
@@ -256,7 +351,7 @@ impl ActivityTextComponent {
 
         if let Some(bg) = bg_color {
             element! {
-                View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1, background_color: bg) {
+                View(height: 1, width: 100pct, flex_direction: FlexDirection::Row, padding_right: 1, background_color: bg) {
                     // Fixed left column - never truncates
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
                         #(final_prefix)
@@ -291,7 +386,7 @@ impl ActivityTextComponent {
             .into()
         } else {
             element! {
-                View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
+                View(height: 1, width: 100pct, flex_direction: FlexDirection::Row, padding_right: 1) {
                     // Fixed left column - never truncates
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
                         #(final_prefix)
@@ -707,6 +802,7 @@ fn shorten_store_path_aggressive(path: &str) -> String {
 /// Press 'e' to expand to fullscreen view with scrolling.
 pub struct ExpandedContentComponent<'a> {
     pub lines: Option<&'a VecDeque<String>>,
+    pub vt: Option<&'a Arc<std::sync::Mutex<avt::Vt>>>,
     pub empty_message: &'a str,
     pub max_lines: usize,
     pub depth: usize,
@@ -716,10 +812,16 @@ impl<'a> ExpandedContentComponent<'a> {
     pub fn new(lines: Option<&'a VecDeque<String>>) -> Self {
         Self {
             lines,
+            vt: None,
             empty_message: "  → no content",
             max_lines: LOG_VIEWPORT_COLLAPSED,
             depth: 0,
         }
+    }
+
+    pub fn with_vt(mut self, vt: Option<&'a Arc<std::sync::Mutex<avt::Vt>>>) -> Self {
+        self.vt = vt;
+        self
     }
 
     pub fn with_max_lines(mut self, max_lines: usize) -> Self {
@@ -737,62 +839,28 @@ impl<'a> ExpandedContentComponent<'a> {
         self
     }
 
-    pub fn render(&self) -> Vec<AnyElement<'static>> {
-        // Calculate indentation based on depth (2 base + 2 per depth level)
-        let indent = 2 + (self.depth * 2);
-
-        if let Some(lines) = &self.lines
-            && !lines.is_empty()
-        {
-            // Take the last N lines that fit in collapsed viewport
-            let visible_lines: Vec<_> = lines.iter().rev().take(self.max_lines).rev().collect();
-
-            if !visible_lines.is_empty() {
-                let actual_height = visible_lines.len();
-
-                let mut line_elements = vec![];
-                for line in visible_lines {
-                    line_elements.push(
-                        element! {
-                            View(height: 1, flex_direction: FlexDirection::Row) {
-                                Text(content: format!(" {line}"), color: Color::AnsiValue(245))
-                            }
-                        }
-                        .into_any(),
-                    );
-                }
-
-                return vec![
-                    element! {
-                        View(
-                            height: actual_height as u32,
-                            flex_direction: FlexDirection::Column,
-                            overflow: Overflow::Hidden,
-                            margin_left: indent as u32,
-                            margin_right: 1,
-                            border_style: BorderStyle::Single,
-                            border_edges: Edges::Left,
-                            border_color: Color::AnsiValue(245),
-                        ) {
-                            #(line_elements)
-                        }
-                    }
-                    .into_any(),
-                ];
-            }
+    pub fn render(&self, terminal_width: u16) -> Vec<AnyElement<'static>> {
+        let preview_lines = self.preview_lines();
+        if preview_lines.is_empty() {
+            return vec![self.render_preview_block(
+                vec![PreviewLine::Plain(self.empty_message.to_string())],
+                terminal_width,
+            )];
         }
 
-        // Fallback: show empty message with minimal height
-        vec![element! {
-            View(height: 1, flex_direction: FlexDirection::Column, padding_left: indent as u32, padding_right: 1) {
-                Text(content: self.empty_message.to_string(), color: Color::AnsiValue(245))
-            }
-        }
-        .into_any()]
+        vec![self.render_preview_block(preview_lines, terminal_width)]
     }
 
     /// Calculate the height this component will take
     pub fn calculate_height(&self) -> usize {
+        if let Some(vt) = self.vt {
+            let vt = vt.lock().unwrap();
+            let rows: Vec<&[avt::Cell]> = vt.lines().map(|row| row.cells()).collect();
+            let count = trim_trailing_blank_vt_rows(&rows).len();
+            if count > 0 {
+                return count.min(self.max_lines);
+            }
+        }
         if let Some(lines) = &self.lines
             && !lines.is_empty()
         {
@@ -806,15 +874,172 @@ impl<'a> ExpandedContentComponent<'a> {
 
     /// Render the component with a main activity line, returning a single element
     /// with proper height calculation for the combined content.
-    pub fn render_with_main_line(&self, main_line: AnyElement<'static>) -> AnyElement<'static> {
+    pub fn render_with_main_line(
+        &self,
+        main_line: AnyElement<'static>,
+        terminal_width: u16,
+    ) -> AnyElement<'static> {
         let mut elements = vec![main_line];
-        elements.extend(self.render());
+        elements.extend(self.render(terminal_width));
 
         let total_height = (1 + self.calculate_height()) as u32;
 
         element! {
-            View(height: total_height, flex_direction: FlexDirection::Column) {
+            View(height: total_height, width: 100pct, flex_direction: FlexDirection::Column) {
                 #(elements)
+            }
+        }
+        .into_any()
+    }
+
+    fn preview_lines(&self) -> Vec<PreviewLine> {
+        if let Some(vt) = self.vt {
+            let vt = vt.lock().unwrap();
+            let rows: Vec<&[avt::Cell]> = vt.lines().map(|row| row.cells()).collect();
+            let rows = trim_trailing_blank_vt_rows(&rows);
+            let mut lines = Vec::new();
+            for row in rows.iter().rev().take(self.max_lines).rev() {
+                lines.push(PreviewLine::Styled(
+                    row.iter()
+                        .map(|cell| PreviewStyledCell {
+                            ch: cell.char(),
+                            pen: cell.pen().clone(),
+                        })
+                        .collect(),
+                ));
+            }
+            if !lines.is_empty() {
+                return lines;
+            }
+        }
+
+        if let Some(lines) = &self.lines {
+            return lines
+                .iter()
+                .rev()
+                .take(self.max_lines)
+                .rev()
+                .cloned()
+                .map(PreviewLine::Plain)
+                .collect();
+        }
+
+        Vec::new()
+    }
+
+    fn render_preview_block(
+        &self,
+        lines: Vec<PreviewLine>,
+        terminal_width: u16,
+    ) -> AnyElement<'static> {
+        let indent = 2 + (self.depth * 2);
+        let panel_width = preview_panel_width(terminal_width, indent);
+        let text_width = (panel_width as usize).saturating_sub(2);
+
+        let rows: Vec<_> = lines
+            .into_iter()
+            .map(|line| {
+                let content = match line {
+                    PreviewLine::Plain(line) => {
+                        let line = sanitize_preview_text(&line);
+                        let display_text = truncate_preview_line(&line, text_width);
+                        element! {
+                            View(
+                                width: text_width as u32,
+                                flex_shrink: 0.0,
+                                flex_direction: FlexDirection::Row,
+                                overflow: Overflow::Hidden,
+                            ) {
+                                View(flex_shrink: 0.0, overflow: Overflow::Hidden) {
+                                    Text(content: display_text, color: Color::AnsiValue(245), wrap: TextWrap::NoWrap)
+                                }
+                            }
+                        }
+                        .into_any()
+                    }
+                    PreviewLine::Styled(cells) => {
+                        self.build_styled_preview_content(cells, text_width)
+                    }
+                };
+                element! {
+                    View(
+                        height: 1,
+                        width: 100pct,
+                        flex_direction: FlexDirection::Row,
+                        overflow: Overflow::Hidden,
+                    ) {
+                        View(
+                            width: 1,
+                            flex_shrink: 0.0,
+                        ) {
+                            Text(content: "│", color: Color::AnsiValue(245), wrap: TextWrap::NoWrap)
+                        }
+                        View(
+                            width: 1,
+                            flex_shrink: 0.0,
+                        ) {}
+                        #(vec![content])
+                    }
+                }
+                .into_any()
+            })
+            .collect();
+
+        let row_count = rows.len() as u32;
+
+        element! {
+            View(height: row_count, width: 100pct, flex_direction: FlexDirection::Column, overflow: Overflow::Hidden) {
+                View(width: 100pct, padding_left: indent as u32, flex_direction: FlexDirection::Column, overflow: Overflow::Hidden) {
+                    #(rows)
+                }
+            }
+        }
+        .into_any()
+    }
+
+    fn build_styled_preview_content(
+        &self,
+        cells: Vec<PreviewStyledCell>,
+        text_width: usize,
+    ) -> AnyElement<'static> {
+        let mut clipped = cells;
+        if clipped.len() > text_width {
+            clipped.truncate(text_width);
+            if let Some(last) = clipped.last_mut() {
+                last.ch = '…';
+            }
+        }
+        while clipped.len() < text_width {
+            clipped.push(PreviewStyledCell {
+                ch: ' ',
+                pen: avt::Pen::default(),
+            });
+        }
+
+        let mut runs: Vec<(String, avt::Pen)> = Vec::new();
+        for cell in clipped {
+            if let Some((text, pen)) = runs.last_mut()
+                && *pen == cell.pen
+            {
+                text.push(cell.ch);
+            } else {
+                runs.push((cell.ch.to_string(), cell.pen));
+            }
+        }
+
+        let run_elements: Vec<_> = runs
+            .into_iter()
+            .map(|(text, pen)| build_preview_styled_segment(text, &pen))
+            .collect();
+
+        element! {
+            View(
+                width: text_width as u32,
+                flex_shrink: 0.0,
+                flex_direction: FlexDirection::Row,
+                overflow: Overflow::Hidden,
+            ) {
+                #(run_elements)
             }
         }
         .into_any()
@@ -1009,5 +1234,78 @@ mod tests {
         let (name, _suffix) =
             calculate_display_info("pkg", 80, "building", Some(suffix), "1.0s", 0);
         assert_eq!(name, "pkg");
+    }
+
+    #[test]
+    fn expanded_preview_lines_do_not_render_trailing_border() {
+        let lines = VecDeque::from(["short".to_string(), "tiny".to_string()]);
+        let component = ExpandedContentComponent::new(Some(&lines));
+        let mut elements = component.render(20);
+        let output = elements.remove(0).render(Some(20)).to_string();
+
+        for line in output.lines() {
+            assert_ne!(
+                line.chars().last(),
+                Some('│'),
+                "line should not render a trailing preview border: {line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn nested_expanded_preview_does_not_render_trailing_border() {
+        let lines = VecDeque::from(["nested".to_string()]);
+        let component = ExpandedContentComponent::new(Some(&lines)).with_depth(2);
+        let mut elements = component.render(24);
+        let output = elements.remove(0).render(Some(24)).to_string();
+
+        for line in output.lines() {
+            assert_ne!(
+                line.chars().last(),
+                Some('│'),
+                "line should not render a trailing preview border: {line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn sanitize_preview_text_removes_terminal_sequences() {
+        let input = "\x1b[32mgreen\x1b[0m \x1b]8;;https://example.com\x07link\x1b]8;;\x07\x07";
+        assert_eq!(sanitize_preview_text(input), "green link");
+    }
+
+    #[test]
+    fn sanitize_preview_text_removes_non_printable_controls() {
+        let input = "ab\x00\x1f\x7fcd\t";
+        assert_eq!(sanitize_preview_text(input), "abcd\t");
+    }
+
+    #[test]
+    fn preview_render_strips_ansi_before_layout() {
+        let lines = VecDeque::from(["\x1b[32mgreen\x1b[0m tail".to_string()]);
+        let component = ExpandedContentComponent::new(Some(&lines));
+        let mut elements = component.render(20);
+        let output = elements.remove(0).render(Some(20)).to_string();
+
+        assert!(output.contains("green tail"));
+        assert!(!output.contains("\x1b"));
+    }
+
+    #[test]
+    fn vt_preview_preserves_styled_text_layout() {
+        let vt = Arc::new(std::sync::Mutex::new(avt::Vt::new(20, 4)));
+        {
+            let mut vt = vt.lock().unwrap();
+            vt.feed_str("\x1b[32mgreen\x1b[0m tail\n");
+        }
+
+        let component = ExpandedContentComponent::new(None).with_vt(Some(&vt));
+        let mut elements = component.render(20);
+        let output = elements.remove(0).render(Some(20)).to_string();
+
+        assert!(output.contains("green tail"));
+        for line in output.lines() {
+            assert_ne!(line.chars().last(), Some('│'));
+        }
     }
 }

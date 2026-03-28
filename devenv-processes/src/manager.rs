@@ -23,6 +23,10 @@ pub enum ProcessCommand {
     Restart(String),
     /// Stop a running process but keep it visible and restartable
     Stop(String),
+    /// Resize all PTY-backed processes to match the terminal
+    Resize { cols: u16, rows: u16 },
+    /// Send raw input bytes to a PTY-backed process activity
+    SendInput { activity_id: u64, data: Vec<u8> },
 }
 
 /// Request sent by a client to the native manager API socket.
@@ -53,6 +57,7 @@ use watchexec_supervisor::{
 
 use crate::config::ProcessConfig;
 use crate::pid::{self, PidStatus};
+use crate::pty::PtyProcess;
 use crate::socket_activation::{ProcessSetupWrapper, activation_from_listen};
 use crate::{ProcessManager, StartOptions};
 use devenv_event_sources::NotifySocket;
@@ -74,11 +79,20 @@ pub struct ProcessState {
 /// Per-process handles shared between `JobHandle` and the supervision task.
 pub struct ProcessResources {
     pub config: ProcessConfig,
-    pub job: Arc<Job>,
+    pub backend: ProcessBackend,
     pub activity: Activity,
     pub notify_socket: Option<Arc<NotifySocket>>,
     pub status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
+    pub spawn_env: HashMap<String, String>,
+    pub cwd: Option<PathBuf>,
+    pub stdout_log: PathBuf,
     pub stderr_log: PathBuf,
+}
+
+#[derive(Clone)]
+pub enum ProcessBackend {
+    Job(Arc<Job>),
+    Pty(Arc<RwLock<Option<PtyProcess>>>),
 }
 
 /// Handle to a managed process job
@@ -485,7 +499,7 @@ impl NativeProcessManager {
     /// Removes the `Waiting` entry, transitions the activity to `Running`
     /// status, and launches the process. The TUI elapsed time includes the
     /// waiting period since the activity was created at registration time.
-    pub async fn launch_waiting(&self, name: &str) -> Result<Option<Arc<Job>>> {
+    pub async fn launch_waiting(&self, name: &str) -> Result<bool> {
         let mut processes = self.processes.write().await;
         let (config, activity) = match processes.remove(name) {
             Some(ProcessEntry::Waiting { config, activity }) => (config, activity),
@@ -515,7 +529,7 @@ impl NativeProcessManager {
         &self,
         config: &ProcessConfig,
         parent_id: Option<u64>,
-    ) -> Result<Option<Arc<Job>>> {
+    ) -> Result<bool> {
         debug!("Starting command '{}': {}", config.name, config.exec);
 
         let activity = self.create_process_activity(config, parent_id);
@@ -526,12 +540,12 @@ impl NativeProcessManager {
 
     /// Launch a process if enabled, or register as not started if auto start is off.
     ///
-    /// Returns `Ok(None)` for auto start off processes, `Ok(Some(job))` for launched ones.
+    /// Returns `Ok(false)` for auto start off processes, `Ok(true)` for launched ones.
     async fn launch_or_register_not_started(
         &self,
         config: ProcessConfig,
         activity: Activity,
-    ) -> Result<Option<Arc<Job>>> {
+    ) -> Result<bool> {
         if !config.start.enable {
             activity.set_status(ProcessStatus::NotStarted);
             info!("Registered auto start off process: {}", config.name);
@@ -539,14 +553,15 @@ impl NativeProcessManager {
                 config.name.clone(),
                 ProcessEntry::NotStarted { config, activity },
             );
-            return Ok(None);
+            return Ok(false);
         }
 
-        self.launch(&config, activity).await.map(Some)
+        self.launch(&config, activity).await?;
+        Ok(true)
     }
 
     /// Launch a process: sets up probes, sockets, supervisor, and log tailers.
-    async fn launch(&self, config: &ProcessConfig, activity: Activity) -> Result<Arc<Job>> {
+    async fn launch(&self, config: &ProcessConfig, activity: Activity) -> Result<()> {
         activity.set_status(ProcessStatus::Running);
 
         // Create notify socket if configured via ready.notify
@@ -578,10 +593,6 @@ impl NativeProcessManager {
         let _ = std::fs::write(&proc_cmd.stdout_log, "");
         let _ = std::fs::write(&proc_cmd.stderr_log, "");
 
-        let (job, _task) = start_job(proc_cmd.command);
-        let job = Arc::new(job);
-
-        // Setup socket activation and/or capabilities if configured
         let has_sockets = !config.listen.is_empty();
         let has_caps = !config.linux.capabilities.is_empty();
 
@@ -613,45 +624,71 @@ impl NativeProcessManager {
             None
         };
 
-        // Set spawn hook to configure env, cwd, and stdio on the TokioCommand
-        // directly instead of baking them into the bash wrapper script. This
-        // avoids hitting the kernel ARG_MAX limit with large environments.
-        let spawn_env = proc_cmd.env;
-        let spawn_cwd = proc_cmd.cwd;
-        let spawn_stdout = proc_cmd.stdout_log.clone();
-        let spawn_stderr = proc_cmd.stderr_log.clone();
-
-        job.set_spawn_hook(move |command_wrap, _ctx| {
-            let cmd = command_wrap.command_mut();
-            cmd.envs(&spawn_env);
-            if let Some(ref cwd) = spawn_cwd {
-                cmd.current_dir(cwd);
+        let backend = if config.is_pty {
+            if has_sockets || has_caps {
+                warn!(
+                    "Socket activation and Linux capabilities are not supported with is_pty for {}",
+                    config.name
+                );
             }
-            cmd.stdin(std::process::Stdio::null());
-            cmd.stdout(
-                crate::command::open_log_file(&spawn_stdout)
-                    .map(std::process::Stdio::from)
-                    .unwrap_or_else(std::process::Stdio::null),
-            );
-            cmd.stderr(
-                crate::command::open_log_file(&spawn_stderr)
-                    .map(std::process::Stdio::from)
-                    .unwrap_or_else(std::process::Stdio::null),
-            );
 
-            if let Some((ref fds, ref capabilities)) = process_setup {
-                command_wrap.wrap(ProcessSetupWrapper::new(fds.clone(), capabilities.clone()));
-            }
-        });
+            let pty = PtyProcess::spawn(
+                &config.bash,
+                &config.exec,
+                &config.args,
+                proc_cmd.cwd.as_ref(),
+                &proc_cmd.env,
+                &proc_cmd.stdout_log,
+                Some(activity.ref_handle()),
+            )?;
+            ProcessBackend::Pty(Arc::new(RwLock::new(Some(pty))))
+        } else {
+            let (job, _task) = start_job(proc_cmd.command);
+            let job = Arc::new(job);
 
-        job.start().await;
+            // Set spawn hook to configure env, cwd, and stdio on the TokioCommand
+            // directly instead of baking them into the bash wrapper script. This
+            // avoids hitting the kernel ARG_MAX limit with large environments.
+            let spawn_env = proc_cmd.env.clone();
+            let spawn_cwd = proc_cmd.cwd.clone();
+            let spawn_stdout = proc_cmd.stdout_log.clone();
+            let spawn_stderr = proc_cmd.stderr_log.clone();
+            let process_setup = process_setup.clone();
+
+            job.set_spawn_hook(move |command_wrap, _ctx| {
+                let cmd = command_wrap.command_mut();
+                cmd.envs(&spawn_env);
+                if let Some(ref cwd) = spawn_cwd {
+                    cmd.current_dir(cwd);
+                }
+                cmd.stdin(std::process::Stdio::null());
+                cmd.stdout(
+                    crate::command::open_log_file(&spawn_stdout)
+                        .map(std::process::Stdio::from)
+                        .unwrap_or_else(std::process::Stdio::null),
+                );
+                cmd.stderr(
+                    crate::command::open_log_file(&spawn_stderr)
+                        .map(std::process::Stdio::from)
+                        .unwrap_or_else(std::process::Stdio::null),
+                );
+
+                if let Some((ref fds, ref capabilities)) = process_setup {
+                    command_wrap.wrap(ProcessSetupWrapper::new(fds.clone(), capabilities.clone()));
+                }
+            });
+
+            job.start().await;
+            ProcessBackend::Job(job)
+        };
 
         // Spawn file tailers to emit output to activity
+        let stdout_log = proc_cmd.stdout_log.clone();
         let stderr_log = proc_cmd.stderr_log.clone();
         let stdout_tailer =
-            crate::log_tailer::spawn_file_tailer(proc_cmd.stdout_log, activity.ref_handle(), false);
+            crate::log_tailer::spawn_file_tailer(stdout_log.clone(), activity.ref_handle(), false);
         let stderr_tailer =
-            crate::log_tailer::spawn_file_tailer(proc_cmd.stderr_log, activity.ref_handle(), true);
+            crate::log_tailer::spawn_file_tailer(stderr_log.clone(), activity.ref_handle(), true);
 
         // Create status channel for supervisor state observation
         let initial_status = crate::supervisor_state::JobStatus {
@@ -673,10 +710,13 @@ impl NativeProcessManager {
 
         let resources = ProcessResources {
             config: config.clone(),
-            job: job.clone(),
+            backend,
             activity,
             notify_socket,
             status_tx,
+            spawn_env: proc_cmd.env.clone(),
+            cwd: proc_cmd.cwd.clone(),
+            stdout_log,
             stderr_log,
         };
 
@@ -697,7 +737,7 @@ impl NativeProcessManager {
         );
 
         info!("Command '{}' started", config.name);
-        Ok(job)
+        Ok(())
     }
 
     /// Stop a process by name
@@ -739,11 +779,20 @@ impl NativeProcessManager {
         }
 
         // Send terminate signal with grace period
-        handle
-            .resources
-            .job
-            .stop_with_signal(Signal::Terminate, grace_period)
-            .await;
+        match &handle.resources.backend {
+            ProcessBackend::Job(job) => {
+                job.stop_with_signal(Signal::Terminate, grace_period).await;
+            }
+            ProcessBackend::Pty(pty) => {
+                let pty = {
+                    let mut guard = pty.write().await;
+                    guard.take()
+                };
+                if let Some(mut pty) = pty {
+                    pty.kill().await?;
+                }
+            }
+        }
 
         if !ports.is_empty() {
             let release_status =
@@ -840,11 +889,20 @@ impl NativeProcessManager {
             stderr_reader.abort();
         }
 
-        handle
-            .resources
-            .job
-            .stop_with_signal(Signal::Terminate, grace_period)
-            .await;
+        match &handle.resources.backend {
+            ProcessBackend::Job(job) => {
+                job.stop_with_signal(Signal::Terminate, grace_period).await;
+            }
+            ProcessBackend::Pty(pty) => {
+                let pty = {
+                    let mut guard = pty.write().await;
+                    guard.take()
+                };
+                if let Some(mut pty) = pty {
+                    pty.kill().await?;
+                }
+            }
+        }
 
         if !ports.is_empty() {
             let release_status =
@@ -899,9 +957,12 @@ impl NativeProcessManager {
         let ProcessResources {
             config,
             activity,
-            job: _,
+            backend: _,
             notify_socket: _,
             status_tx: _,
+            spawn_env: _,
+            cwd: _,
+            stdout_log: _,
             stderr_log: _,
         } = handle.resources;
 
@@ -957,77 +1018,25 @@ impl NativeProcessManager {
     /// This resets the restart count and activity state, respawns the supervision
     /// task if it exited (e.g., due to max restarts), and restarts the underlying job.
     pub async fn restart(&self, name: &str) -> Result<()> {
-        let mut processes = self.processes.write().await;
-        let handle = match processes.get_mut(name) {
-            Some(ProcessEntry::Active(h)) => h,
-            Some(_) => {
-                debug!("restart: process {} is not active, ignoring", name);
-                return Ok(());
-            }
-            None => bail!("Process {} not running", name),
+        let is_active = {
+            let processes = self.processes.read().await;
+            matches!(processes.get(name), Some(ProcessEntry::Active(_)))
         };
 
-        // Reset activity state (unfail it) and set status to restarting
-        handle.resources.activity.reset();
-        handle
-            .resources
-            .activity
-            .set_status(ProcessStatus::Restarting);
-
-        // Truncate log files and restart output tailers
-        let (stdout_log, stderr_log) = crate::command::log_paths(&self.state_dir, name);
-        let _ = std::fs::write(&stdout_log, "");
-        let _ = std::fs::write(&stderr_log, "");
-
-        if let Some((stdout_reader, stderr_reader)) = handle.output_readers.take() {
-            stdout_reader.abort();
-            stderr_reader.abort();
-        }
-        handle.output_readers = Some((
-            crate::log_tailer::spawn_file_tailer(
-                stdout_log,
-                handle.resources.activity.ref_handle(),
-                false,
-            ),
-            crate::log_tailer::spawn_file_tailer(
-                stderr_log,
-                handle.resources.activity.ref_handle(),
-                true,
-            ),
-        ));
-
-        // Check if supervisor task has exited (e.g., due to max restarts)
-        if handle.supervisor_task.is_finished() {
-            // Supervisor has exited — start fresh with new supervision.
-            // Order matters: start job first, then spawn supervisor (like start_command does).
-            // This gives the process a fresh restart quota (restart_count = 0).
-            info!(
-                "Supervisor for {} has exited, starting fresh with new supervision",
-                name
-            );
-            handle.resources.job.start().await;
-            handle.supervisor_task =
-                crate::supervisor::spawn_supervisor(&handle.resources, self.shutdown.clone());
-        } else {
-            // Supervisor is still running — just restart the job.
-            // The existing supervisor will continue monitoring with its current restart_count.
-            handle
-                .resources
-                .job
-                .restart_with_signal(Signal::Terminate, Duration::from_secs(2))
-                .await;
+        if !is_active {
+            debug!("restart: process {} is not active, ignoring", name);
+            return Ok(());
         }
 
-        // The supervisor will update the status via status_tx once the
-        // process is actually ready.
-        handle.resources.activity.set_status(ProcessStatus::Running);
+        self.stop_and_keep(name).await?;
+        self.start_not_started(name).await?;
 
         info!("Process {} restarted", name);
         Ok(())
     }
 
     /// Start a previously not-started process, reusing its existing TUI activity.
-    pub async fn start_not_started(&self, name: &str) -> Result<Arc<Job>> {
+    pub async fn start_not_started(&self, name: &str) -> Result<()> {
         let (config, activity) = {
             let mut processes = self.processes.write().await;
             match processes.get(name) {
@@ -1049,7 +1058,7 @@ impl NativeProcessManager {
         // Move the activity into launch (not clone) so the original is not
         // dropped — Activity::drop sends Process::Complete which would
         // immediately mark the process as stopped in the TUI.
-        let job = self.launch(&config, activity).await?;
+        self.launch(&config, activity).await?;
 
         // Notify the task system so it re-checks dependencies.
         // Dependent processes will be launched by the task scheduler once
@@ -1058,7 +1067,7 @@ impl NativeProcessManager {
             notify.notify_waiters();
         }
 
-        Ok(job)
+        Ok(())
     }
 
     /// Get list of running processes
@@ -1352,6 +1361,44 @@ impl NativeProcessManager {
                 info!("Stopping process: {}", name);
                 if let Err(e) = self.stop_and_keep(&name).await {
                     warn!("Failed to stop process {}: {}", name, e);
+                }
+            }
+            ProcessCommand::Resize { cols, rows } => {
+                let processes = self.processes.read().await;
+                for entry in processes.values() {
+                    let ProcessEntry::Active(handle) = entry else {
+                        continue;
+                    };
+                    let ProcessBackend::Pty(pty) = &handle.resources.backend else {
+                        continue;
+                    };
+                    let guard = pty.read().await;
+                    if let Some(pty) = guard.as_ref()
+                        && let Err(e) = pty.resize(cols, rows)
+                    {
+                        warn!("Failed to resize PTY: {}", e);
+                    }
+                }
+            }
+            ProcessCommand::SendInput { activity_id, data } => {
+                let processes = self.processes.read().await;
+                for entry in processes.values() {
+                    let ProcessEntry::Active(handle) = entry else {
+                        continue;
+                    };
+                    if handle.resources.activity.id() != activity_id {
+                        continue;
+                    }
+                    let ProcessBackend::Pty(pty) = &handle.resources.backend else {
+                        continue;
+                    };
+                    let guard = pty.read().await;
+                    if let Some(pty) = guard.as_ref()
+                        && let Err(e) = pty.send_input(&data)
+                    {
+                        warn!("Failed to send PTY input: {}", e);
+                    }
+                    break;
                 }
             }
         }
@@ -1783,7 +1830,7 @@ mod tests {
         let result = manager.launch_waiting("auto-start-off-proc").await;
 
         assert!(result.is_ok());
-        assert!(result.unwrap().is_none());
+        assert!(!result.unwrap());
         assert_eq!(
             manager.get_phase("auto-start-off-proc").await,
             Some(ProcessPhase::NotStarted)
@@ -1830,8 +1877,8 @@ mod tests {
         let result = manager.launch_waiting("long-runner").await;
 
         assert!(result.is_ok());
-        let job = result.unwrap();
-        assert!(job.is_some(), "Expected Some(job) for an enabled process");
+        let started = result.unwrap();
+        assert!(started, "Expected launched=true for an enabled process");
 
         let phase = manager.get_phase("long-runner").await;
         assert_ne!(phase, Some(ProcessPhase::Waiting));
