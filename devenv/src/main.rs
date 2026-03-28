@@ -768,8 +768,11 @@ async fn dispatch_command(
                 Ok(CommandResult::Exec(shell_config.command))
             }
         },
-        Commands::Init { target } => {
-            devenv.init(&target)?;
+        Commands::Init {
+            target,
+            with_direnv,
+        } => {
+            devenv.init(&target, &with_direnv)?;
             Ok(CommandResult::Done)
         }
         Commands::Generate => {
