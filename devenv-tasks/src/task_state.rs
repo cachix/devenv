@@ -135,6 +135,45 @@ impl TaskState {
 
     /// Handle file modification checking with centralized error handling.
     /// Returns a Result with a boolean indicating if files were modified.
+    fn resolve_path_for_cwd(&self, path: &str) -> String {
+        let path_buf = std::path::PathBuf::from(path);
+        if path_buf.is_absolute() {
+            return path.to_string();
+        }
+
+        self.task
+            .cwd
+            .as_ref()
+            .map(|cwd| {
+                std::path::Path::new(cwd)
+                    .join(&path_buf)
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .unwrap_or_else(|| path.to_string())
+    }
+
+    fn resolve_exec_if_modified_patterns(&self) -> Vec<String> {
+        self.task
+            .exec_if_modified
+            .iter()
+            .map(|pattern| {
+                if let Some(rest) = pattern.strip_prefix('!') {
+                    format!("!{}", self.resolve_path_for_cwd(rest))
+                } else {
+                    self.resolve_path_for_cwd(pattern)
+                }
+            })
+            .collect()
+    }
+
+    fn resolved_command_path(&self) -> Option<String> {
+        self.task
+            .command
+            .as_ref()
+            .map(|cmd| self.resolve_path_for_cwd(cmd))
+    }
+
     async fn check_files_modified_result(
         &self,
         cache: &TaskCache,
@@ -143,8 +182,10 @@ impl TaskState {
             return Ok(false);
         }
 
+        let resolved_patterns = self.resolve_exec_if_modified_patterns();
+
         let patterns_modified = cache
-            .check_modified_files(&self.task.name, &self.task.exec_if_modified)
+            .check_modified_files(&self.task.name, &resolved_patterns)
             .await?;
         if patterns_modified {
             return Ok(true);
@@ -152,9 +193,9 @@ impl TaskState {
 
         // Track command path changes separately so negation patterns in exec_if_modified
         // don't suppress cache invalidation for the task script itself.
-        if let Some(cmd) = &self.task.command {
+        if let Some(cmd) = self.resolved_command_path() {
             let cmd_modified = cache
-                .check_modified_files(&self.task.name, std::slice::from_ref(cmd))
+                .check_modified_files(&self.task.name, std::slice::from_ref(&cmd))
                 .await?;
             if cmd_modified {
                 return Ok(true);
@@ -164,9 +205,9 @@ impl TaskState {
         // Check for files previously tracked in the DB that no longer match the globs
         // (deleted, renamed, or moved outside the pattern). Build the full set of
         // currently expected paths so we don't false-positive on command paths.
-        let mut all_current_paths = expand_glob_patterns(&self.task.exec_if_modified);
-        if let Some(cmd) = &self.task.command {
-            all_current_paths.push(cmd.clone());
+        let mut all_current_paths = expand_glob_patterns(&resolved_patterns);
+        if let Some(cmd) = self.resolved_command_path() {
+            all_current_paths.push(cmd);
         }
         cache
             .has_removed_files(&self.task.name, &all_current_paths)
@@ -409,7 +450,7 @@ impl TaskState {
         // Launch the pre-registered waiting process.
         let started = manager.launch_waiting(&config.name).await?;
 
-        let auto_start_off = started.is_none();
+        let auto_start_off = !started;
         if auto_start_off {
             tracing::info!("Process task {} has auto start off", self.task.name);
         }
@@ -610,7 +651,8 @@ impl TaskState {
 
         // Only update file states on success - failed tasks should not be cached
         if result.success {
-            let expanded_paths = expand_glob_patterns(&self.task.exec_if_modified);
+            let resolved_patterns = self.resolve_exec_if_modified_patterns();
+            let expanded_paths = expand_glob_patterns(&resolved_patterns);
             for path in &expanded_paths {
                 cache.update_file_state(&self.task.name, path).await?;
             }
@@ -618,8 +660,8 @@ impl TaskState {
                 .cleanup_stale_files(&self.task.name, &expanded_paths)
                 .await?;
 
-            if let Some(cmd) = &self.task.command {
-                cache.update_file_state(&self.task.name, cmd).await?;
+            if let Some(cmd) = self.resolved_command_path() {
+                cache.update_file_state(&self.task.name, &cmd).await?;
             }
         }
 

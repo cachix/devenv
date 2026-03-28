@@ -145,6 +145,8 @@ pub fn view(
             can_go_up,
             can_go_down,
             interrupt_prompt_active: ui_state.interrupt_prompt_active(),
+            shutting_down,
+            scrollable: scroll_handle.is_some(),
         })) {
             SummaryView
         }
@@ -164,11 +166,18 @@ pub fn view(
     // Activity list: wrap in ScrollView for Normal render with scroll_handle,
     // use plain layout for Final render
     if let Some(handle) = scroll_handle {
-        let scroll_height = terminal_size.height.saturating_sub(SUMMARY_BAR_HEIGHT) as u32;
+        let scroll_height = terminal_size.height.saturating_sub(SUMMARY_BAR_HEIGHT + 1) as u32;
+        let view_width = terminal_size.width as u32;
         children.push(
             element! {
-                View(height: scroll_height) {
-                    ScrollView(auto_scroll: true, keyboard_scroll: false, handle: handle) {
+                View(height: scroll_height, width: view_width, overflow: Overflow::Hidden) {
+                        ScrollView(
+                            auto_scroll: false,
+                            keyboard_scroll: false,
+                            handle: handle,
+                            scrollbar_thumb_color: Some(COLOR_INTERACTIVE),
+                            scrollbar_track_color: Some(Color::AnsiValue(238))
+                        ) {
                         #(activity_list)
                     }
                 }
@@ -204,14 +213,21 @@ pub fn view(
         );
     }
 
+    let (root_height, padding_top) = if ui_state.fullscreen {
+        (Size::Length(terminal_size.height as u32), 1)
+    } else {
+        (Size::Auto, 0)
+    };
+
     element! {
         ContextProvider(value: Context::owned(terminal_size)) {
             View(
                 flex_direction: FlexDirection::Column,
-                max_height: terminal_size.height as u32,
-                width: 100pct,
+                height: root_height,
+                width: terminal_size.width as u32,
                 overflow: Overflow::Hidden,
-                justify_content: JustifyContent::FlexEnd,
+                justify_content: JustifyContent::FlexStart,
+                padding_top: padding_top,
             ) {
                 #(children)
             }
@@ -330,8 +346,9 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .render(terminal_width, *depth, prefix);
 
                 return ExpandedContentComponent::new(logs.as_deref())
+                    .with_vt(activity.vt.as_ref())
                     .with_empty_message("  → no build logs yet (press '^e' to expand)")
-                    .render_with_main_line(main_line);
+                    .render_with_main_line(main_line, terminal_width);
             }
 
             // Non-selected build activities use normal rendering
@@ -400,20 +417,21 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             // Show logs inline for tasks with show_output=true or failed tasks
             let task_failed = *completed == Some(false);
-            if (task_data.show_output || task_failed) && logs.is_some() {
+            if (task_data.show_output || task_failed) && (logs.is_some() || activity.vt.is_some()) {
                 let empty_message = if completed.is_some() {
                     "  → no output"
                 } else {
                     "  → waiting for output..."
                 };
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_vt(activity.vt.as_ref())
                     .with_empty_message(empty_message);
                 if task_failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
                 } else if task_data.show_output && !is_selected {
                     component = component.with_max_lines(LOG_VIEWPORT_SHOW_OUTPUT);
                 }
-                return component.render_with_main_line(main_line);
+                return component.render_with_main_line(main_line, terminal_width);
             }
 
             return main_line;
@@ -532,7 +550,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             };
 
             // For selected evaluation activities, show expandable file list
-            if *is_selected && logs.is_some() {
+            if *is_selected && (logs.is_some() || activity.vt.is_some()) {
                 let prefix = build_activity_prefix(*depth, *completed, true);
 
                 let main_line = ActivityTextComponent::name_only(
@@ -546,8 +564,9 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .render(terminal_width, *depth, prefix);
 
                 return ExpandedContentComponent::new(logs.as_deref())
+                    .with_vt(activity.vt.as_ref())
                     .with_empty_message("  → no files evaluated yet (press '^e' to expand)")
-                    .render_with_main_line(main_line);
+                    .render_with_main_line(main_line, terminal_width);
             }
 
             let prefix = build_activity_prefix(*depth, *completed, true);
@@ -616,13 +635,14 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             // Show logs when selected or when failed
             let failed = *completed == Some(false);
-            if (failed || *is_selected) && logs.is_some() {
+            if (failed || *is_selected) && (logs.is_some() || activity.vt.is_some()) {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_vt(activity.vt.as_ref())
                     .with_empty_message("  → no output yet");
                 if failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
                 }
-                return component.render_with_main_line(main_line);
+                return component.render_with_main_line(main_line, terminal_width);
             }
 
             return main_line;
@@ -645,7 +665,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 }
                 ProcessStatus::Ready => "ready".into(),
                 ProcessStatus::Restarting => "restarting".into(),
-                ProcessStatus::Stopping => "stopping".into(),
+                ProcessStatus::Stopping => "stopping...".into(),
                 ProcessStatus::Stopped if *completed == Some(false) => "failed".into(),
                 ProcessStatus::Stopped => "stopped".into(),
             };
@@ -699,8 +719,9 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             // Show logs: always show LOG_VIEWPORT_SHOW_OUTPUT lines,
             // expand when selected, show more when failed
             let process_failed = *completed == Some(false);
-            if logs.is_some() {
+            if logs.is_some() || activity.vt.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_vt(activity.vt.as_ref())
                     .with_depth(*depth)
                     .with_empty_message("→ no output yet (press 'e' to expand)");
                 if process_failed && *render_context == RenderContext::Final {
@@ -710,13 +731,13 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 }
 
                 let mut elements = vec![main_line];
-                let log_elements = component.render();
+                let log_elements = component.render(terminal_width);
                 elements.extend(log_elements);
 
                 let log_viewport_height = component.calculate_height();
                 let total_height = (1 + log_viewport_height).min(50) as u32;
                 return element! {
-                    View(height: total_height, flex_direction: FlexDirection::Column) {
+                    View(height: total_height, width: 100pct, flex_direction: FlexDirection::Column) {
                         #(elements)
                     }
                 }
@@ -769,9 +790,20 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         .collect();
 
                     for line in visible_lines {
+                        let prefix_len = prefix_str.chars().count() + 1;
+                        let max_text_width =
+                            (terminal_width as usize).saturating_sub(prefix_len + 4);
+                        let display_text = if line.chars().count() > max_text_width {
+                            let mut s: String = line.chars().take(max_text_width - 1).collect();
+                            s.push('…');
+                            s
+                        } else {
+                            line.clone()
+                        };
+
                         all_lines.push(
                             element! {
-                                View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
+                                View(height: 1, width: 100pct, flex_direction: FlexDirection::Row, padding_right: 1) {
                                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
                                         Text(content: prefix_str.clone())
                                         View(margin_right: 1) {
@@ -779,7 +811,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                         }
                                     }
                                     View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
-                                        Text(content: line.clone(), color: COLOR_HIERARCHY)
+                                        Text(content: display_text, color: COLOR_HIERARCHY, wrap: TextWrap::NoWrap)
                                     }
                                 }
                             }
@@ -791,8 +823,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 // Last line: icon + error summary (with inverse highlight if selected)
                 if let Some(bg) = bg_color {
                     all_lines.push(
-                        element! {
-                            View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1, background_color: bg) {
+                            element! {
+                                View(height: 1, width: 100pct, flex_direction: FlexDirection::Row, padding_right: 1, background_color: bg) {
                                 View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
                                     Text(content: prefix_str.clone())
                                     View(margin_right: 1) {
@@ -808,8 +840,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     );
                 } else {
                     all_lines.push(
-                        element! {
-                            View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
+                            element! {
+                                View(height: 1, width: 100pct, flex_direction: FlexDirection::Row, padding_right: 1) {
                                 View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
                                     Text(content: prefix_str.clone())
                                     View(margin_right: 1) {
@@ -827,7 +859,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
                 let total_height = all_lines.len() as u32;
                 return element! {
-                    View(height: total_height, flex_direction: FlexDirection::Column) {
+                    View(height: total_height, width: 100pct, flex_direction: FlexDirection::Column) {
                         #(all_lines)
                     }
                 }
@@ -837,7 +869,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             // Simple single-line message (no details)
             if let Some(bg) = bg_color {
                 return element! {
-                    View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1, background_color: bg) {
+                    View(height: 1, width: 100pct, flex_direction: FlexDirection::Row, padding_right: 1, background_color: bg) {
                         View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
                             Text(content: prefix_str)
                             View(margin_right: 1) {
@@ -852,7 +884,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .into_any();
             } else {
                 return element! {
-                    View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
+                    View(height: 1, width: 100pct, flex_direction: FlexDirection::Row, padding_right: 1) {
                         View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
                             Text(content: prefix_str)
                             View(margin_right: 1) {
@@ -892,6 +924,8 @@ struct SummaryViewContext {
     can_go_up: bool,
     can_go_down: bool,
     interrupt_prompt_active: bool,
+    shutting_down: bool,
+    scrollable: bool,
 }
 
 /// Summary view component that adapts to terminal width
@@ -906,6 +940,8 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         can_go_up,
         can_go_down,
         interrupt_prompt_active,
+        shutting_down,
+        scrollable,
     } = &*ctx;
 
     build_summary_view_impl(
@@ -915,6 +951,8 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         *can_go_up,
         *can_go_down,
         *interrupt_prompt_active,
+        *shutting_down,
+        *scrollable,
         terminal_width,
     )
 }
@@ -927,6 +965,8 @@ fn build_summary_view_impl(
     can_go_up: bool,
     can_go_down: bool,
     interrupt_prompt_active: bool,
+    shutting_down: bool,
+    scrollable: bool,
     terminal_width: u16,
 ) -> AnyElement<'static> {
     if interrupt_prompt_active {
@@ -963,10 +1003,6 @@ fn build_summary_view_impl(
     let has_selection = selected.is_some();
     let is_process =
         matches!(selected, Some(a) if matches!(a.variant, ActivityVariant::Process(_)));
-    let is_stoppable = matches!(
-        selected,
-        Some(a) if matches!(&a.variant, ActivityVariant::Process(p) if p.status.is_stoppable())
-    );
 
     // Determine display mode based on terminal width
     let use_symbols = terminal_width < 60; // Use unicode symbols for very narrow terminals
@@ -1092,8 +1128,10 @@ fn build_summary_view_impl(
         has_content = true;
     }
 
-    // Tasks - show if there are any tasks
-    if summary.running_tasks > 0 || summary.completed_tasks > 0 || summary.failed_tasks > 0 {
+    // Tasks - keep the counter visible while work is still in progress or if any task failed.
+    // Once all tasks succeed, the task rows themselves already show the final status, so the
+    // aggregate line becomes redundant and visually duplicates that information.
+    if summary.running_tasks > 0 || summary.failed_tasks > 0 {
         if has_content {
             children.push(element!(View(margin_left: if use_symbols { 1 } else { 2 }, margin_right: if use_symbols { 1 } else { 2 }, flex_shrink: 0.0) {
                 Text(content: "│", color: COLOR_HIERARCHY)
@@ -1184,15 +1222,12 @@ fn build_summary_view_impl(
         } else {
             help_children.push(element!(Text(content: " expand logs • ")).into_any());
         }
-        if is_process {
-            if is_stoppable {
-                help_children
-                    .push(element!(Text(content: "^x", color: COLOR_INTERACTIVE)).into_any());
-                if use_short_text {
-                    help_children.push(element!(Text(content: " stop • ")).into_any());
-                } else {
-                    help_children.push(element!(Text(content: " stop process • ")).into_any());
-                }
+        if is_process && !shutting_down {
+            help_children.push(element!(Text(content: "^x", color: COLOR_INTERACTIVE)).into_any());
+            if use_short_text {
+                help_children.push(element!(Text(content: " stop • ")).into_any());
+            } else {
+                help_children.push(element!(Text(content: " stop process • ")).into_any());
             }
             help_children.push(element!(Text(content: "^r", color: COLOR_INTERACTIVE)).into_any());
             if use_short_text {
@@ -1224,6 +1259,22 @@ fn build_summary_view_impl(
             } else {
                 help_children.push(element!(Text(content: " navigate")).into_any());
             }
+        }
+    }
+
+    if scrollable {
+        if !help_children.is_empty() {
+            help_children.push(element!(Text(content: " • ")).into_any());
+        }
+        help_children
+            .push(element!(Text(content: "PgUp/PgDn", color: COLOR_INTERACTIVE)).into_any());
+        if use_short_text {
+            help_children.push(element!(Text(content: " scroll")).into_any());
+        } else {
+            help_children.push(element!(Text(content: " scroll • ")).into_any());
+            help_children
+                .push(element!(Text(content: "Home/End", color: COLOR_INTERACTIVE)).into_any());
+            help_children.push(element!(Text(content: " jump")).into_any());
         }
     }
 
@@ -1259,6 +1310,8 @@ mod tests {
             false,
             false,
             true,
+            false,
+            false,
             100,
         );
         let output = element.render(Some(100)).to_string();
@@ -1267,5 +1320,38 @@ mod tests {
         assert!(output.contains("stopped"));
         assert!(output.contains("keep running"));
         assert!(output.contains("quit"));
+    }
+
+    #[test]
+    fn test_summary_hides_task_counter_after_successful_completion() {
+        let summary = ActivitySummary {
+            completed_tasks: 3,
+            ..ActivitySummary::default()
+        };
+
+        let mut element = build_summary_view_impl(
+            &summary, None, false, false, false, false, false, false, 100,
+        );
+        let output = element.render(Some(100)).to_string();
+
+        assert!(!output.contains("tasks"));
+        assert!(!output.contains("3 of 3"));
+    }
+
+    #[test]
+    fn test_summary_keeps_task_counter_while_tasks_are_running() {
+        let summary = ActivitySummary {
+            running_tasks: 1,
+            completed_tasks: 2,
+            ..ActivitySummary::default()
+        };
+
+        let mut element = build_summary_view_impl(
+            &summary, None, false, false, false, false, false, false, 100,
+        );
+        let output = element.render(Some(100)).to_string();
+
+        assert!(output.contains("2"));
+        assert!(output.contains("of 3") || output.contains("/3"));
     }
 }

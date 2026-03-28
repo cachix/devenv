@@ -175,6 +175,7 @@ in
           listen = pc.listen or [ ];
           watchdog = pc.watchdog or null;
           ready = process.ready;
+          use_pty = process.use_pty;
           inherit (process) watch;
         }
       )
@@ -190,6 +191,7 @@ in
           removeAttrs process [ "process-compose" "ports" "notify" "ready" "restart" "enable" "after" "before" ] // {
             inherit name;
             inherit (native) watchdog;
+            inherit (native) use_pty;
             ready = native.ready;
             restart = process.restart;
             listen = map

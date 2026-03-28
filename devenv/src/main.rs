@@ -283,7 +283,13 @@ fn run(launch: LaunchConfig) -> Result<()> {
     );
 
     let tui = launch.tui;
-    let use_pty = launch.use_pty;
+    let tui_fullscreen = matches!(
+        &launch.command,
+        Commands::Up { .. }
+            | Commands::Processes {
+                command: ProcessesCommand::Up { .. },
+            }
+    );
     let needs_terminal_handoff = launch.needs_terminal_handoff;
     let verbosity = launch.verbosity;
 
@@ -359,6 +365,7 @@ fn run(launch: LaunchConfig) -> Result<()> {
 
         rt.block_on(async {
             devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
+                .fullscreen(tui_fullscreen)
                 .with_command_sender(command_tx)
                 .filter_level(filter_level)
                 // When a command needs terminal handoff, don't shut down on backend_done —

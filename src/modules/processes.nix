@@ -55,6 +55,14 @@ let
         description = "Auto-start configuration for this process.";
       };
 
+      use_pty = lib.mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Whether to run this long-running process in a pseudo-terminal when using the native process manager.
+        '';
+      };
+
       exec = lib.mkOption {
         type = types.str;
         description = "Bash code to run the process.";

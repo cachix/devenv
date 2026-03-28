@@ -10,6 +10,7 @@ async-trait.workspace = true
 devenv-activity.workspace = true
 devenv-event-sources.workspace = true
 futures.workspace = true
+crossterm.workspace = true
 miette.workspace = true
 netstat2.workspace = true
 nix.workspace = true

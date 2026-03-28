@@ -6710,6 +6710,11 @@ rec {
             features = [ "fancy" ];
           }
           {
+            name = "nix";
+            packageId = "nix 0.31.2";
+            features = [ "fs" "process" "signal" ];
+          }
+          {
             name = "notify";
             packageId = "notify";
             optional = true;
@@ -6933,6 +6938,10 @@ rec {
             name = "caps";
             packageId = "caps";
             target = { target, features }: ("linux" == target."os" or null);
+          }
+          {
+            name = "crossterm";
+            packageId = "crossterm";
           }
           {
             name = "devenv-activity";
@@ -7445,6 +7454,10 @@ rec {
           {
             name = "async-trait";
             packageId = "async-trait";
+          }
+          {
+            name = "avt";
+            packageId = "avt";
           }
           {
             name = "base64";
