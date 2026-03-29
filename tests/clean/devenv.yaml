@@ -4,6 +4,6 @@ inputs:
 clean:
   enabled: true
   keep:
-    - RUST_LOG
+    - CLEAN_TEST_VAR
     - PATH
     - HOME
