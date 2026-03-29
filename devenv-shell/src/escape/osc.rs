@@ -3,13 +3,11 @@
 //! Handles parsing after the router has consumed `ESC ]`.
 //! Accumulates payload bytes until BEL (0x07) terminates.
 //! ST (ESC \) termination is handled by the router.
-//! Only produces events for query sequences (payload ends with `?`).
-
-const MAX_PAYLOAD: usize = 256;
+//! Produces events for any well-formed OSC sequence so terminal features like
+//! hyperlinks and title updates survive the PTY renderer.
 
 pub enum OscResult {
     Pending,
-    /// Payload is a query (ends with `?`).
     Complete,
     Reject,
 }
@@ -21,7 +19,7 @@ pub struct OscParser {
 impl OscParser {
     pub fn new() -> Self {
         Self {
-            payload: Vec::new(),
+            payload: Vec::with_capacity(128),
         }
     }
 
@@ -30,23 +28,14 @@ impl OscParser {
             0x07 => self.finish(),
             0x00..=0x06 | 0x08..=0x1f | 0x7f => OscResult::Reject,
             _ => {
-                if self.payload.len() >= MAX_PAYLOAD {
-                    OscResult::Reject
-                } else {
-                    self.payload.push(byte);
-                    OscResult::Pending
-                }
+                self.payload.push(byte);
+                OscResult::Pending
             }
         }
     }
 
-    /// Check if the accumulated payload is a query (ends with `?`).
     pub fn finish(&self) -> OscResult {
-        if self.payload.last() == Some(&b'?') {
-            OscResult::Complete
-        } else {
-            OscResult::Reject
-        }
+        OscResult::Complete
     }
 
     pub fn reset(&mut self) {
@@ -68,12 +57,12 @@ mod tests {
     }
 
     #[test]
-    fn non_query_rejected() {
+    fn non_query_completes() {
         let mut p = OscParser::new();
         for &b in b"0;title" {
             assert!(matches!(p.feed(b), OscResult::Pending));
         }
-        assert!(matches!(p.feed(0x07), OscResult::Reject));
+        assert!(matches!(p.feed(0x07), OscResult::Complete));
     }
 
     #[test]
@@ -88,15 +77,6 @@ mod tests {
         let mut p = OscParser::new();
         p.feed(b'1');
         assert!(matches!(p.feed(0x7f), OscResult::Reject));
-    }
-
-    #[test]
-    fn max_payload_rejects() {
-        let mut p = OscParser::new();
-        for _ in 0..MAX_PAYLOAD {
-            assert!(matches!(p.feed(b'x'), OscResult::Pending));
-        }
-        assert!(matches!(p.feed(b'x'), OscResult::Reject));
     }
 
     #[test]
@@ -116,11 +96,11 @@ mod tests {
     }
 
     #[test]
-    fn finish_rejects_non_query() {
+    fn finish_completes_non_query() {
         let mut p = OscParser::new();
         for &b in b"0;title" {
             p.feed(b);
         }
-        assert!(matches!(p.finish(), OscResult::Reject));
+        assert!(matches!(p.finish(), OscResult::Complete));
     }
 }
