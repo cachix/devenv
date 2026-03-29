@@ -156,7 +156,7 @@ let
         return 1
       fi
 
-      local UV_SYNC_COMMAND=(${cfg.uv.package}/bin/uv sync ${lib.escapeShellArgs cfg.uv.sync.arguments})
+      local UV_SYNC_COMMAND=(${cfg.uv.package}/bin/uv sync -p ${cfg.package.interpreter} ${lib.escapeShellArgs cfg.uv.sync.arguments})
 
       # Add extras if specified
       ${lib.concatMapStrings (extra: ''
@@ -721,8 +721,9 @@ in
       }
       // (lib.optionalAttrs cfg.uv.enable {
         UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
-        # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
+        # Force uv to use the Nix-provided Python and never download its own
         UV_PYTHON_DOWNLOADS = "never";
+        UV_PYTHON_PREFERENCE = "only-system";
         # Do not set UV_PYTHON here. It overrides VIRTUAL_ENV resolution
         # and causes `uv pip install` to target the immutable Nix store
         # prefix instead of the venv. See https://github.com/cachix/devenv/issues/2663
