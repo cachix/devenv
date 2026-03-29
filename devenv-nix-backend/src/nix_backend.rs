@@ -1141,9 +1141,30 @@ impl NixBackend for NixRustBackend {
     }
 
     async fn assemble(&self, args: &NixArgs<'_>) -> Result<()> {
+        // Validate lock file FIRST so the lock fingerprint is stable for cache key computation.
+        // On first run, the lock file doesn't exist yet, so lock_fingerprint (computed before
+        // this call) returns the hash of "". validate_lock_file creates it, and we re-compute
+        // the fingerprint below so the cache key matches what subsequent runs will produce.
+        self.validate_lock_file(args.devenv_inputs).await?;
+
         // Initialize caching eval state if not already set
         if self.caching_eval_state.get().is_none() {
-            let args_nix = ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string());
+            // Re-compute the lock fingerprint now that validate_lock_file has ensured
+            // the lock file exists. This corrects the cache key on first run.
+            let lock_fingerprint = self.lock_fingerprint().await?;
+            let args_nix = if lock_fingerprint != args.lock_fingerprint {
+                tracing::debug!(
+                    old = %args.lock_fingerprint,
+                    new = %lock_fingerprint,
+                    "Lock fingerprint changed after validation, using corrected value for cache key"
+                );
+                // Replace the stale fingerprint in the serialized NixArgs
+                let nix = ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string());
+                nix.replace(args.lock_fingerprint, &lock_fingerprint)
+            } else {
+                ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string())
+            };
+
             let cache_key_args = eval_cache_key_args(
                 &args_nix,
                 self.port_allocator.is_enabled(),
@@ -1200,10 +1221,6 @@ impl NixBackend for NixRustBackend {
                 CachingEvalState::new(self.eval_state.clone(), cached_eval, cache_key_args);
             self.caching_eval_state.set(caching_eval_state).ok();
         }
-
-        // Validate lock file once during assembly
-        // This ensures all subsequent evaluations have a valid lock to work with
-        self.validate_lock_file(args.devenv_inputs).await?;
 
         // Configure cachix substituters and start daemon if push is configured
         if let Some(cachix_config) = self.get_cachix_config().await? {
