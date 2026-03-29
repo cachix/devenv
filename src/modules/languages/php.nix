@@ -46,10 +46,7 @@ let
   startScript = pool: poolOpts: ''
     set -euo pipefail
 
-    if [[ ! -d "$PHPFPMDIR" ]]; then
-      mkdir -p "$PHPFPMDIR"
-    fi
-    mkdir -p "${logDir}"
+    mkdir -p "${runtimeDir}" "${logDir}"
 
     exec ${poolOpts.phpPackage}/bin/php-fpm -F -y ${fpmCfgFile pool poolOpts} -c ${phpIni poolOpts}
   '';
