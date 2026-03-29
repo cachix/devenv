@@ -6,8 +6,6 @@
 //! Produces events for any well-formed OSC sequence so terminal features like
 //! hyperlinks and title updates survive the PTY renderer.
 
-const MAX_PAYLOAD: usize = 256;
-
 pub enum OscResult {
     Pending,
     Complete,
@@ -21,7 +19,7 @@ pub struct OscParser {
 impl OscParser {
     pub fn new() -> Self {
         Self {
-            payload: Vec::new(),
+            payload: Vec::with_capacity(128),
         }
     }
 
@@ -30,12 +28,8 @@ impl OscParser {
             0x07 => self.finish(),
             0x00..=0x06 | 0x08..=0x1f | 0x7f => OscResult::Reject,
             _ => {
-                if self.payload.len() >= MAX_PAYLOAD {
-                    OscResult::Reject
-                } else {
-                    self.payload.push(byte);
-                    OscResult::Pending
-                }
+                self.payload.push(byte);
+                OscResult::Pending
             }
         }
     }
@@ -83,15 +77,6 @@ mod tests {
         let mut p = OscParser::new();
         p.feed(b'1');
         assert!(matches!(p.feed(0x7f), OscResult::Reject));
-    }
-
-    #[test]
-    fn max_payload_rejects() {
-        let mut p = OscParser::new();
-        for _ in 0..MAX_PAYLOAD {
-            assert!(matches!(p.feed(b'x'), OscResult::Pending));
-        }
-        assert!(matches!(p.feed(b'x'), OscResult::Reject));
     }
 
     #[test]
