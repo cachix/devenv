@@ -43,13 +43,14 @@ in
            - Follow the naming convention: devenv-vX.Y-short-description.md
            - Use existing blog posts as reference for format and style
         6. Commit the changes
-        7. Push the commit(s) to GitHub
-        8. Create a GitHub release with `gh release create v$ARGUMENTS --title "v$ARGUMENTS" --latest --notes  "<changelog for this release>"`
-        9. Bump version to next patch with `cargo set-version --bump patch`
-        10. Run `devenv tasks run devenv:crate2nix` to regenerate Cargo.nix
-        11. Commit with message "Next release is <new version>"
-        12. Push to GitHub
-        13. At the end, tell the user that the package still needs to be bumped in nixpkgs:
+        7. Capture the release commit SHA with `git rev-parse HEAD`
+        8. Push the commit(s) to GitHub
+        9. Create a GitHub release with `gh release create v$ARGUMENTS --target <release-commit-sha> --title "v$ARGUMENTS" --latest --notes  "<changelog for this release>"`
+        10. Bump version to next patch with `cargo set-version --bump patch`
+        11. Run `devenv tasks run devenv:crate2nix` to regenerate Cargo.nix
+        12. Commit with message "Next release is <new version>"
+        13. Push to GitHub
+        14. At the end, tell the user that the package still needs to be bumped in nixpkgs:
             - The package is at pkgs/by-name/de/devenv/package.nix
       '';
     };
