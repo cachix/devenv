@@ -7,7 +7,7 @@
 let
   cfg = config.services.nixseparatedebuginfod;
   fs = lib.fileset;
-  inherit (pkgs.stdenv) hostPlatform mkDerivation;
+  inherit (pkgs.stdenv) mkDerivation;
 
   # Use a locally built derivation so that the test wouldn't rely on cache.nixos.org
   cbin = mkDerivation {
@@ -25,7 +25,7 @@ let
     meta.mainProgram = "example";
   };
 in
-lib.mkIf (lib.meta.availableOn hostPlatform cfg.package) {
+{
   services.nixseparatedebuginfod.enable = true;
 
   enterTest = ''
