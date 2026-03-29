@@ -22,7 +22,7 @@ pub use devenv_tasks as tasks;
 // Re-export core types from devenv-core for convenience
 pub use devenv_core::{
     CachixCacheInfo, CachixManager, CachixPaths, Config, DevenvPaths, NixArgs, NixBackend,
-    NixSettings, Options, SecretspecData, default_system,
+    NixSettings, Options, SecretOptions, SecretSettings, SecretspecData, default_system,
 };
 
 /// Returns true if this binary was NOT built from a release.
