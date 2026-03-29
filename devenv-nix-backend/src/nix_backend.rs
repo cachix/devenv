@@ -838,7 +838,7 @@ in cfg // {{
             caching_state
                 .cached_eval()
                 .eval(&cache_key, &activity, || async {
-                    self.eval_attr_uncached("config.cachix", "config.cachix", &activity)
+                    self.eval_cachix_attrs(&activity)
                 })
                 .await
         }
@@ -874,6 +874,54 @@ in cfg // {{
             known_keys,
             binary: cachix_config.binary,
         }))
+    }
+
+    /// Evaluate only the cachix attributes we need, avoiding `config.cachix.package`.
+    ///
+    /// Instead of `value_to_json` on the full `config.cachix` attrset (which forces
+    /// `package = pkgs.cachix` and triggers expensive nixpkgs evaluation), we select
+    /// individual leaf attributes and serialize only those.
+    fn eval_cachix_attrs(&self, activity: &Activity) -> Result<String> {
+        let mut eval_state = self.eval_session(activity)?;
+        let root = self.get_or_eval_devenv(&mut eval_state)?;
+
+        let cachix = self.enriched(
+            eval_state.require_attrs_select(&root, "config.cachix"),
+            "Failed to get config.cachix",
+        )?;
+
+        let mut select = |name: &str| -> Result<serde_json::Value> {
+            let val = self.enriched(
+                eval_state.require_attrs_select(&cachix, name),
+                format!("Failed to get config.cachix.{name}"),
+            )?;
+            self.enriched(
+                eval_state.force(&val),
+                format!("Failed to force config.cachix.{name}"),
+            )?;
+            value_to_json(&mut eval_state, &val)
+                .map_err(|e| miette!("Failed to serialize config.cachix.{}: {}", name, e))
+        };
+
+        let enable = select("enable")?;
+        let pull = select("pull")?;
+        let push = select("push")?;
+
+        // Only evaluate binary when push is configured — lib.getExe forces pkgs.cachix
+        let binary = if push.as_str() == Some("null") || push.is_null() {
+            serde_json::Value::String(String::new())
+        } else {
+            select("binary")?
+        };
+
+        serde_json::to_string(&serde_json::json!({
+            "enable": enable,
+            "pull": pull,
+            "push": push,
+            "binary": binary,
+        }))
+        .into_diagnostic()
+        .wrap_err("Failed to serialize cachix config")
     }
 
     /// Apply cachix substituters and trusted keys to the Nix store.
