@@ -24,7 +24,7 @@ let
 
   version = builtins.replaceStrings [ "." ] [ "" ] cfg.version;
 
-  runtimeDir = config.env.DEVENV_STATE + "/php-fpm";
+  runtimeDir = config.env.DEVENV_RUNTIME + "/php-fpm";
 
   toStr = value:
     if true == value then "yes"
@@ -41,12 +41,15 @@ let
     ${optionalString (poolOpts.extraConfig != null) poolOpts.extraConfig}
   '';
 
+  logDir = config.env.DEVENV_STATE + "/php-fpm";
+
   startScript = pool: poolOpts: ''
     set -euo pipefail
 
     if [[ ! -d "$PHPFPMDIR" ]]; then
       mkdir -p "$PHPFPMDIR"
     fi
+    mkdir -p "${logDir}"
 
     exec ${poolOpts.phpPackage}/bin/php-fpm -F -y ${fpmCfgFile pool poolOpts} -c ${phpIni poolOpts}
   '';
