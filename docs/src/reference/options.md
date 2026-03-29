@@ -3553,7 +3553,7 @@ string
 *Default:*
 
 ```nix
-"2.0.4"
+"2.0.5"
 ```
 
 *Declared by:*
