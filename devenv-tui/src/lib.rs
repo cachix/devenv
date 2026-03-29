@@ -10,6 +10,7 @@ pub mod tracing_interface;
 pub mod app;
 pub mod components;
 pub mod expanded_view;
+pub mod input;
 pub mod model;
 pub mod view;
 

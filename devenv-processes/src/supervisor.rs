@@ -13,7 +13,8 @@ use watchexec_supervisor::job::CommandState;
 use watchexec_supervisor::{ProcessEnd, Signal};
 
 use crate::config::ListenKind;
-use crate::manager::ProcessResources;
+use crate::manager::{ProcessBackend, ProcessResources};
+use crate::pty::PtyProcess;
 use crate::supervisor_state::{
     Action, Event, ExitStatus, JobStatus, SupervisorPhase, SupervisorState,
 };
@@ -31,6 +32,63 @@ fn handle_probe_success(
     let _ = status_tx.send(state.status());
 }
 
+fn pty_exit_status(code: i32) -> ExitStatus {
+    if code == 0 {
+        ExitStatus::Success
+    } else {
+        ExitStatus::Failure
+    }
+}
+
+async fn restart_pty(
+    pty: &tokio::sync::RwLock<Option<PtyProcess>>,
+    config: &crate::config::ProcessConfig,
+    spawn_env: &std::collections::HashMap<String, String>,
+    cwd: Option<&std::path::PathBuf>,
+    stdout_log: &std::path::Path,
+    activity: &devenv_activity::ActivityRef,
+) -> miette::Result<()> {
+    let old = {
+        let mut guard = pty.write().await;
+        guard.take()
+    };
+
+    if let Some(mut old) = old {
+        old.kill().await?;
+    }
+
+    let new_pty = PtyProcess::spawn(
+        &config.bash,
+        &config.exec,
+        &config.args,
+        cwd,
+        spawn_env,
+        stdout_log,
+        Some(activity.clone()),
+    )?;
+
+    let mut guard = pty.write().await;
+    *guard = Some(new_pty);
+    Ok(())
+}
+
+async fn wait_for_pty_exit(pty: &tokio::sync::RwLock<Option<PtyProcess>>) -> Option<ExitStatus> {
+    let mut exit_rx = {
+        let guard = pty.read().await;
+        guard.as_ref()?.exit_status()
+    };
+
+    loop {
+        if let Some(code) = *exit_rx.borrow() {
+            return Some(pty_exit_status(code));
+        }
+
+        if exit_rx.changed().await.is_err() {
+            return None;
+        }
+    }
+}
+
 /// Spawn a supervision task that monitors a job and handles restarts.
 ///
 /// Uses `SupervisorState` for all restart/watchdog decisions.
@@ -40,10 +98,13 @@ pub fn spawn_supervisor(
     shutdown: CancellationToken,
 ) -> JoinHandle<()> {
     let config = resources.config.clone();
-    let job = resources.job.clone();
+    let backend = resources.backend.clone();
     let activity = resources.activity.ref_handle();
     let notify_socket = resources.notify_socket.clone();
     let status_tx = resources.status_tx.clone();
+    let spawn_env = resources.spawn_env.clone();
+    let cwd = resources.cwd.clone();
+    let stdout_log = resources.stdout_log.clone();
     let name = config.name.clone();
 
     // Probe timing from ready config
@@ -239,13 +300,30 @@ pub fn spawn_supervisor(
                     // The biased select catches it next iteration, but we skip
                     // expensive restart work below.
                     if shutdown.is_cancelled() { break 'supervisor; }
-                    info!("File change detected for {}, restarting", name);
-                    activity.log("File change detected, restarting");
-                    match state.on_event(Event::FileChange, Instant::now()) {
-                        Action::Restart => {
-                            job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                            job.start().await;
+                        info!("File change detected for {}, restarting", name);
+                        activity.log("File change detected, restarting");
+                        match state.on_event(Event::FileChange, Instant::now()) {
+                            Action::Restart => {
+                            let restart_result = match &backend {
+                                ProcessBackend::Job(job) => {
+                                    job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                                    tokio::time::sleep(Duration::from_millis(100)).await;
+                                    job.start().await;
+                                    Ok(())
+                                }
+                                ProcessBackend::Pty(pty) => {
+                                    restart_pty(pty, &config, &spawn_env, cwd.as_ref(), &stdout_log, &activity).await
+                                }
+                                ,
+                            };
+                            if let Err(err) = restart_result {
+                                let reason = format!("Failed to restart process {}: {}", name, err);
+                                warn!("{}", reason);
+                                activity.error(&reason);
+                                activity.fail();
+                                let _ = status_tx.send(state.status());
+                                break;
+                            }
                             state.on_restart_complete(Instant::now());
                             let count = state.restart_count();
                             activity.log(format!("Restarted (attempt {})", count));
@@ -290,7 +368,24 @@ pub fn spawn_supervisor(
                                     match state.on_event(Event::WatchdogTrigger, Instant::now()) {
                                         Action::Restart => {
                                             activity.error("Watchdog trigger - process signaled failure");
-                                            job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                                            let restart_result = match &backend {
+                                                ProcessBackend::Job(job) => {
+                                                    job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                                                    Ok(())
+                                                }
+                                                ProcessBackend::Pty(pty) => {
+                                                    restart_pty(pty, &config, &spawn_env, cwd.as_ref(), &stdout_log, &activity).await
+                                                }
+                                                ,
+                                            };
+                                            if let Err(err) = restart_result {
+                                                let reason = format!("Failed to restart process {}: {}", name, err);
+                                                warn!("{}", reason);
+                                                activity.error(&reason);
+                                                activity.fail();
+                                                let _ = status_tx.send(state.status());
+                                                break 'supervisor;
+                                            }
                                             state.on_restart_complete(Instant::now());
                                             let count = state.restart_count();
                                             let msg = format!("Restarted (attempt {count})");
@@ -354,7 +449,24 @@ pub fn spawn_supervisor(
                         now,
                     ) {
                         Action::Restart => {
-                            job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                            let restart_result = match &backend {
+                                ProcessBackend::Job(job) => {
+                                    job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                                    Ok(())
+                                }
+                                ProcessBackend::Pty(pty) => {
+                                    restart_pty(pty, &config, &spawn_env, cwd.as_ref(), &stdout_log, &activity).await
+                                }
+                                ,
+                            };
+                            if let Err(err) = restart_result {
+                                let reason = format!("Failed to restart process {}: {}", name, err);
+                                warn!("{}", reason);
+                                activity.error(&reason);
+                                activity.fail();
+                                let _ = status_tx.send(state.status());
+                                break;
+                            }
                             state.on_restart_complete(Instant::now());
                             let count = state.restart_count();
                             let msg = format!("Restarted (attempt {count})");
@@ -374,28 +486,39 @@ pub fn spawn_supervisor(
                     let _ = status_tx.send(state.status());
                 }
 
-                _ = job.to_wait() => {
-                    if shutdown.is_cancelled() { break 'supervisor; }
-                    // Extract exit status from the job
-                    let (tx, rx) = tokio::sync::oneshot::channel();
-                    job.run_async(move |ctx| {
-                        let status = if let CommandState::Finished { status, .. } = ctx.current {
-                            Some(if matches!(status, ProcessEnd::Success) {
-                                ExitStatus::Success
-                            } else {
-                                ExitStatus::Failure
-                            })
-                        } else {
-                            None
-                        };
-                        Box::new(async move {
-                            let _ = tx.send(status);
-                        })
-                    }).await;
+                result = async {
+                    match &backend {
+                        ProcessBackend::Job(job) => {
+                            job.to_wait().await;
 
-                    let exit_status = match rx.await {
-                        Ok(Some(status)) => status,
-                        _ => {
+                            let (tx, rx) = tokio::sync::oneshot::channel();
+                            job.run_async(move |ctx| {
+                                let status = if let CommandState::Finished { status, .. } = ctx.current {
+                                    Some(if matches!(status, ProcessEnd::Success) {
+                                        ExitStatus::Success
+                                    } else {
+                                        ExitStatus::Failure
+                                    })
+                                } else {
+                                    None
+                                };
+                                Box::new(async move {
+                                    let _ = tx.send(status);
+                                })
+                            }).await;
+
+                            match rx.await {
+                                Ok(Some(status)) => Some(status),
+                                _ => None,
+                            }
+                        }
+                        ProcessBackend::Pty(pty) => wait_for_pty_exit(pty).await,
+                    }
+                } => {
+                    if shutdown.is_cancelled() { break 'supervisor; }
+                    let exit_status = match result {
+                        Some(status) => status,
+                        None => {
                             debug!("Process {} exited (unknown status)", name);
                             break;
                         }
@@ -404,7 +527,24 @@ pub fn spawn_supervisor(
                     match state.on_event(Event::ProcessExit { status: exit_status }, Instant::now()) {
                         Action::Restart => {
                             activity.log(format!("Process exited ({exit_status:?}), restarting"));
-                            job.start().await;
+                            let restart_result = match &backend {
+                                ProcessBackend::Job(job) => {
+                                    job.start().await;
+                                    Ok(())
+                                }
+                                ProcessBackend::Pty(pty) => {
+                                    restart_pty(pty, &config, &spawn_env, cwd.as_ref(), &stdout_log, &activity).await
+                                }
+                                ,
+                            };
+                            if let Err(err) = restart_result {
+                                let reason = format!("Failed to restart process {}: {}", name, err);
+                                warn!("{}", reason);
+                                activity.error(&reason);
+                                activity.fail();
+                                let _ = status_tx.send(state.status());
+                                break;
+                            }
                             state.on_restart_complete(Instant::now());
                             let count = state.restart_count();
                             let msg = format!("Restarted (attempt {count})");

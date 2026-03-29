@@ -121,7 +121,7 @@ struct LaunchConfig {
     from_external: bool,
     verbosity: devenv::tasks::VerbosityLevel,
     tui: bool,
-    use_pty: bool,
+    is_pty: bool,
     nix_debugger: bool,
     is_testing: bool,
     needs_terminal_handoff: bool,
@@ -225,8 +225,8 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
     let quiet = cli.cli_options.quiet;
     let tui = tui_requested && !tui_unsupported && !use_tracing_mode && !quiet;
 
-    // Determine use_pty from resolved settings (single source of truth)
-    let use_pty = shell_settings.reload
+    // Determine is_pty from resolved settings (single source of truth)
+    let is_pty = shell_settings.reload
         && matches!(&command, Commands::Shell { cmd: None, .. })
         && std::io::stdin().is_terminal()
         && std::io::stdout().is_terminal();
@@ -234,7 +234,7 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
     let is_testing = matches!(&command, Commands::Test { .. });
 
     // Commands that do eval with TUI active, then take over the terminal
-    let needs_terminal_handoff = use_pty || matches!(&command, Commands::Repl {});
+    let needs_terminal_handoff = is_pty || matches!(&command, Commands::Repl {});
 
     Ok(LaunchConfig {
         command,
@@ -248,7 +248,7 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
         from_external,
         verbosity,
         tui,
-        use_pty,
+        is_pty,
         nix_debugger,
         is_testing,
         needs_terminal_handoff,
@@ -283,7 +283,13 @@ fn run(launch: LaunchConfig) -> Result<()> {
     );
 
     let tui = launch.tui;
-    let use_pty = launch.use_pty;
+    let tui_fullscreen = matches!(
+        &launch.command,
+        Commands::Up { .. }
+            | Commands::Processes {
+                command: ProcessesCommand::Up { .. },
+            }
+    );
     let needs_terminal_handoff = launch.needs_terminal_handoff;
     let verbosity = launch.verbosity;
 
@@ -359,6 +365,7 @@ fn run(launch: LaunchConfig) -> Result<()> {
 
         rt.block_on(async {
             devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
+                .fullscreen(tui_fullscreen)
                 .with_command_sender(command_tx)
                 .filter_level(filter_level)
                 // When a command needs terminal handoff, don't shut down on backend_done —
@@ -485,7 +492,7 @@ async fn run_backend(
         from_external,
         verbosity,
         tui,
-        use_pty,
+        is_pty,
         nix_debugger,
         is_testing,
         // Consumed by run() before run_backend is called
@@ -615,7 +622,7 @@ async fn run_backend(
     let devenv = Devenv::new(options).await;
 
     // PTY shell needs shared ownership for the reload coordinator
-    if use_pty && let Commands::Shell { cmd, args } = command {
+    if is_pty && let Commands::Shell { cmd, args } = command {
         let devenv = Arc::new(Mutex::new(devenv));
         let result = run_reload_shell(
             devenv.clone(),
