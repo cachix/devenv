@@ -1152,18 +1152,23 @@ impl NixBackend for NixRustBackend {
             // Re-compute the lock fingerprint now that validate_lock_file has ensured
             // the lock file exists. This corrects the cache key on first run.
             let lock_fingerprint = self.lock_fingerprint().await?;
-            let args_nix = if lock_fingerprint != args.lock_fingerprint {
+            let corrected_args;
+            let args_to_serialize = if lock_fingerprint != args.lock_fingerprint {
                 tracing::debug!(
                     old = %args.lock_fingerprint,
                     new = %lock_fingerprint,
                     "Lock fingerprint changed after validation, using corrected value for cache key"
                 );
-                // Replace the stale fingerprint in the serialized NixArgs
-                let nix = ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string());
-                nix.replace(args.lock_fingerprint, &lock_fingerprint)
+                corrected_args = NixArgs {
+                    lock_fingerprint: &lock_fingerprint,
+                    ..args.clone()
+                };
+                &corrected_args
             } else {
-                ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string())
+                args
             };
+            let args_nix =
+                ser_nix::to_string(args_to_serialize).unwrap_or_else(|_| "{}".to_string());
 
             let cache_key_args = eval_cache_key_args(
                 &args_nix,
