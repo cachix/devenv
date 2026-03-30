@@ -1235,7 +1235,7 @@ impl Devenv {
                 detach: true,
                 ..Default::default()
             };
-            self.start_processes(vec![], envs, options).await?;
+            self.start_processes(vec![], envs, options, None).await?;
         }
 
         // ── Phase 5: Running tests ──────────────────────────────────
@@ -1403,7 +1403,7 @@ impl Devenv {
         let (_status, exports, _messages) = self
             .run_tasks_with_roots(
                 vec!["devenv:enterShell".to_string()],
-                task_configs,
+                task_configs.clone(),
                 envs.clone(),
                 verbosity,
                 tui,
@@ -1412,7 +1412,8 @@ impl Devenv {
         envs.extend(exports);
 
         // ── Phase 3: Running processes ──────────────────────────────
-        self.start_processes(processes, envs, options).await
+        self.start_processes(processes, envs, options, Some(task_configs))
+            .await
     }
 
     /// Start processes after shell environment and tasks are already configured.
@@ -1421,6 +1422,7 @@ impl Devenv {
         processes: Vec<String>,
         envs: HashMap<String, String>,
         mut options: ProcessOptions,
+        preloaded_tasks: Option<Vec<tasks::TaskConfig>>,
     ) -> Result<RunMode> {
         // Release port reservations so processes can bind their allocated ports.
         // The port allocator holds TcpListeners during Nix evaluation to prevent
@@ -1445,7 +1447,10 @@ impl Devenv {
         if impl_result == "native" {
             info!("Using native process manager with task-based dependency ordering");
 
-            let task_configs = self.load_tasks().await?;
+            let task_configs = match preloaded_tasks {
+                Some(t) => t,
+                None => self.load_tasks().await?,
+            };
             let roots: Vec<String> = if processes.is_empty() {
                 task_configs
                     .iter()
