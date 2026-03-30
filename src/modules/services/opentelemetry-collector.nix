@@ -17,9 +17,11 @@ let
     };
   };
 
+  mergedSettings = lib.recursiveUpdate defaultSettings cfg.settings;
+
   otelConfig =
     if cfg.configFile == null
-    then settingsFormat.generate "otel-config.yaml" cfg.settings
+    then settingsFormat.generate "otel-config.yaml" mergedSettings
     else cfg.configFile;
 in
 {
