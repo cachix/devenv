@@ -34,6 +34,17 @@ use tracing::info;
 /// stack that the Nix CLI itself uses.
 const NIX_STACK_SIZE: usize = 64 * 1024 * 1024;
 
+/// Extract a human readable message from a thread panic payload.
+fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        s.to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        format!("{payload:?}")
+    }
+}
+
 fn main() -> Result<()> {
     // Handle shell completion requests (COMPLETE=bash devenv)
     // Use "devenv" as completer so scripts work after installation (not absolute path)
@@ -52,7 +63,7 @@ fn main() -> Result<()> {
         .spawn(main_inner)
         .expect("Failed to spawn main thread")
         .join()
-        .map_err(|_| miette::miette!("main thread panicked"))?
+        .map_err(|e| miette::miette!("main thread panicked: {}", panic_message(e)))?
 }
 
 fn main_inner() -> Result<()> {
@@ -379,7 +390,7 @@ fn run(launch: LaunchConfig) -> Result<()> {
     // Wait for backend thread
     let devenv_output = devenv_thread
         .join()
-        .map_err(|_| miette::miette!("devenv thread panicked"))?;
+        .map_err(|e| miette::miette!("devenv thread panicked: {}", panic_message(e)))?;
 
     devenv_output.finish()
 }
@@ -421,7 +432,7 @@ impl DevenvOutput {
                 .and_then(|handle| {
                     handle
                         .join()
-                        .map_err(|_| miette::miette!("REPL thread panicked"))
+                        .map_err(|e| miette::miette!("REPL thread panicked: {}", panic_message(e)))
                         .and_then(|r| r)
                 });
             DebuggerResult::Launched(repl_result)
