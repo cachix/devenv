@@ -607,8 +607,9 @@ fn build_line_elements(
         let log_line_idx = offset + i;
 
         // Truncate long lines to fit terminal width
-        let display_line = if line.len() > content_width {
-            format!("{}…", &line[..content_width.saturating_sub(1)])
+        let display_line = if line.chars().count() > content_width {
+            let truncated: String = line.chars().take(content_width.saturating_sub(1)).collect();
+            format!("{truncated}…")
         } else {
             (*line).clone()
         };
