@@ -204,7 +204,7 @@ in
                 # Translate restart -> availability
                 typedAvailability = {
                   availability = {
-                    restart = value.restart.on;
+                    restart = if value.restart.on == "never" then "no" else value.restart.on;
                   } // lib.optionalAttrs (value.restart.max != null) {
                     max_restarts = value.restart.max;
                   };
