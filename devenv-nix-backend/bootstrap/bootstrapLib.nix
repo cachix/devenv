@@ -61,16 +61,19 @@ rec {
         import nixpkgs {
           system = evalSystem;
           config = nixpkgs_config // {
+            # nixpkgs' check-meta.nix natively handles permittedInsecurePackages
+            # via allowInsecureDefaultPredicate using the full derivation name.
+            # We must NOT override allowInsecurePredicate here, as lib.getName
+            # strips the version, causing mismatches with user-provided entries
+            # like "openssl-1.1.1w".
+            #
+            # For unfree packages, nixpkgs does not natively support
+            # permittedUnfreePackages, so we provide a custom predicate.
             allowUnfreePredicate =
               if nixpkgs_config.allowUnfree or false then
                 (_: true)
               else if (nixpkgs_config.permittedUnfreePackages or [ ]) != [ ] then
                 (pkg: builtins.elem (lib.getName pkg) (nixpkgs_config.permittedUnfreePackages or [ ]))
-              else
-                (_: false);
-            allowInsecurePredicate =
-              if (nixpkgs_config.permittedInsecurePackages or [ ]) != [ ] then
-                (pkg: builtins.elem (lib.getName pkg) (nixpkgs_config.permittedInsecurePackages or [ ]))
               else
                 (_: false);
           } // lib.optionalAttrs ((nixpkgs_config.allowlistedLicenses or [ ]) != [ ]) {
