@@ -294,7 +294,6 @@ fn run(launch: LaunchConfig) -> Result<()> {
     );
 
     let tui = launch.tui;
-    let use_pty = launch.use_pty;
     let needs_terminal_handoff = launch.needs_terminal_handoff;
     let verbosity = launch.verbosity;
 
@@ -1026,7 +1025,7 @@ async fn dispatch_command(
 /// - ShellCoordinator handles file watching and build coordination
 /// - ShellSession owns the PTY and handles terminal I/O
 ///
-/// Tasks are executed before the PTY starts via SubprocessExecutor,
+/// Tasks are executed before the PTY starts as subprocesses,
 /// allowing parallel execution through the DAG task system.
 ///
 /// Terminal handoff:

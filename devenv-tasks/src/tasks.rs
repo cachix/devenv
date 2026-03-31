@@ -1,6 +1,5 @@
 use crate::config::{Config, RunMode, parse_dependency};
 use crate::error::Error;
-use crate::executor::SubprocessExecutor;
 use crate::task_cache::TaskCache;
 use crate::task_state::TaskState;
 use crate::types::{
@@ -79,11 +78,8 @@ impl TasksBuilder {
 
         let mut graph = DiGraph::new();
         let mut task_indices = HashMap::new();
-        let mut longest_task_name = 0;
-
         for task in self.config.tasks {
             let name = task.name.clone();
-            longest_task_name = longest_task_name.max(name.len());
             if !task.name.contains(':')
                 || task.name.split(':').count() < 2
                 || task.name.starts_with(':')
@@ -111,7 +107,6 @@ impl TasksBuilder {
         let mut tasks = Tasks {
             roots,
             root_names: self.config.roots,
-            longest_task_name,
             graph,
             notify_finished,
             notify_ui: Arc::new(Notify::new()),
@@ -122,7 +117,6 @@ impl TasksBuilder {
             process_manager,
             env: self.config.env,
             bash: self.config.bash,
-            executor: SubprocessExecutor::new(),
             refresh_task_cache: self.refresh_task_cache,
             ignore_process_deps: self.config.ignore_process_deps,
         };
@@ -147,7 +141,6 @@ pub struct Tasks {
     pub(crate) roots: Vec<NodeIndex>,
     // Stored for reporting
     pub(crate) root_names: Vec<String>,
-    pub(crate) longest_task_name: usize,
     pub(crate) graph: DiGraph<Arc<RwLock<TaskState>>, DependencyKind>,
     pub(crate) tasks_order: Vec<NodeIndex>,
     pub(crate) notify_finished: Arc<Notify>,
@@ -161,7 +154,6 @@ pub struct Tasks {
     pub(crate) env: HashMap<String, String>,
     /// Path to the bash binary to use for probe commands
     pub(crate) bash: String,
-    pub(crate) executor: SubprocessExecutor,
     /// Force a refresh of the task cache, skipping cache reads
     pub(crate) refresh_task_cache: bool,
     /// When true, exclude non-root process-type tasks from the scheduled subgraph
@@ -1066,7 +1058,6 @@ impl Tasks {
                                 &cache,
                                 shutdown_clone.cancellation_token(),
                                 task_activity_id,
-                                &SubprocessExecutor,
                                 refresh_task_cache,
                                 &shell_env,
                             )
