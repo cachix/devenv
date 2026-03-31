@@ -81,6 +81,27 @@ in
       '';
     };
 
+    lld.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Use [lld](https://lld.llvm.org/) as the linker.
+
+        lld is LLVM's linker and is the recommended fast linker for Darwin.
+        Works on both Linux and macOS.
+      '';
+    };
+
+    wild.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Use [wild](https://github.com/wild-linker/wild) as the linker.
+
+        wild is a very fast linker for Linux.
+      '';
+    };
+
     lsp = {
       enable = lib.mkEnableOption "Rust Language Server" // { default = true; };
       package = lib.mkOption {
@@ -220,6 +241,21 @@ in
       {
         assertions = [
           {
+            assertion = lib.count lib.id [ cfg.mold.enable cfg.lld.enable cfg.wild.enable ] <= 1;
+            message = ''
+              Only one linker can be enabled at a time.
+
+              You have enabled multiple linkers among mold, lld, and wild.
+              Please enable at most one.
+            '';
+          }
+          {
+            assertion = cfg.wild.enable -> pkgs.stdenv.isLinux;
+            message = ''
+              `languages.rust.wild.enable` is only supported on Linux.
+            '';
+          }
+          {
             assertion = cfg.channel == "nixpkgs" -> (cfg.targets == [ ]);
             message = ''
               Cannot use `languages.rust.channel = "nixpkgs"` with `languages.rust.targets`.
@@ -279,6 +315,8 @@ in
 
         packages =
           lib.optional cfg.mold.enable pkgs.mold-wrapped
+          ++ lib.optional cfg.lld.enable pkgs.llvmPackages.bintools
+          ++ lib.optional cfg.wild.enable pkgs.wild
           ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv
           ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
@@ -288,6 +326,9 @@ in
         env =
           let
             moldFlags = lib.optionalString cfg.mold.enable "-C link-arg=-fuse-ld=mold";
+            lldFlags = lib.optionalString cfg.lld.enable "-C link-arg=-fuse-ld=lld";
+            wildFlags = lib.optionalString cfg.wild.enable "-C link-arg=-fuse-ld=wild";
+            linkerFlags = lib.concatStringsSep " " (lib.filter (x: x != "") [ moldFlags lldFlags wildFlags ]);
             optionalEnv = cond: str: if cond then str else null;
           in
           {
@@ -297,8 +338,8 @@ in
               if cfg.toolchain ? rust-src
               then "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library"
               else pkgs.rustPlatform.rustLibSrc;
-            RUSTFLAGS = optionalEnv (moldFlags != "" || cfg.rustflags != "") (lib.concatStringsSep " " (lib.filter (x: x != "") [ moldFlags cfg.rustflags ]));
-            RUSTDOCFLAGS = optionalEnv (moldFlags != "") moldFlags;
+            RUSTFLAGS = optionalEnv (linkerFlags != "" || cfg.rustflags != "") (lib.concatStringsSep " " (lib.filter (x: x != "") [ linkerFlags cfg.rustflags ]));
+            RUSTDOCFLAGS = optionalEnv (linkerFlags != "") linkerFlags;
           };
 
         git-hooks.tools = {
