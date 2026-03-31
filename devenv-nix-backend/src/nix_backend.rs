@@ -924,7 +924,7 @@ in cfg // {{
     ///
     /// This matches the behavior of flakes - locks are automatically created/updated as needed.
     async fn validate_lock_file(&self, inputs: &BTreeMap<String, Input>) -> Result<()> {
-        use crate::{create_flake_inputs, load_lock_file};
+        use crate::{create_flake_inputs, load_lock_file, write_lock_file};
 
         let fetch_settings = &self.fetchers_settings;
         let flake_settings = &self.flake_settings;
@@ -983,8 +983,14 @@ in cfg // {{
         match lock_result {
             Ok(new_lock) => {
                 if new_lock.has_changes(&old_lock).to_miette()? {
-                    tracing::debug!("Lock validation found changes, updating lock");
-                    return self.update(&None, inputs, &[]).await;
+                    tracing::debug!("Lock validation found changes, writing updated lock");
+                    // Write the new lock directly instead of calling update(), which
+                    // would call update_all() and re-fetch every input. The new_lock
+                    // was computed with the old lock as a base, so unchanged inputs
+                    // are preserved and only new/changed inputs are resolved.
+                    write_lock_file(&new_lock, &lock_file_path)
+                        .to_miette()
+                        .wrap_err("Failed to write lock file")?;
                 }
             }
             Err(e) => {
