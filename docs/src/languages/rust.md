@@ -251,6 +251,33 @@ function that evaluates to a(n) function that evaluates to a(n) package
 
 
 
+### languages\.rust\.lld\.enable
+
+
+
+Use [lld](https://lld\.llvm\.org/) as the linker\.
+
+lld is LLVM’s linker and is the recommended fast linker for Darwin\.
+Works on both Linux and macOS\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ### languages\.rust\.lsp\.enable
 
 
@@ -609,6 +636,32 @@ string
 
 ```nix
 "latest"
+```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages\.rust\.wild\.enable
+
+
+
+Use [wild](https://github\.com/wild-linker/wild) as the linker\.
+
+wild is a very fast linker for Linux\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
 ```
 
 *Declared by:*
