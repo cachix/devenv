@@ -81,6 +81,41 @@ in
       '';
     };
 
+    cranelift = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Use [Cranelift](https://cranelift.dev/) as the codegen backend for dev builds.
+
+          Cranelift compiles significantly faster than LLVM at the cost of less optimized output.
+          Requires the nightly channel.
+        '';
+      };
+
+      forceBuildScriptsLlvm = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Force build scripts and proc macros to use the LLVM backend.
+
+          Some build scripts may not work with Cranelift. Enable this to fall back to
+          LLVM for build scripts while keeping Cranelift for regular code.
+        '';
+      };
+
+      excludePackages = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = ''
+          List of crate names that should use the LLVM backend instead of Cranelift.
+
+          Generates per-package overrides in `.cargo/config.toml`.
+        '';
+        example = [ "aws-lc-sys" "aws-lc-rs" "rustls" ];
+      };
+    };
+
     lsp = {
       enable = lib.mkEnableOption "Rust Language Server" // { default = true; };
       package = lib.mkOption {
@@ -220,6 +255,14 @@ in
       {
         assertions = [
           {
+            assertion = cfg.cranelift.enable -> cfg.channel == "nightly";
+            message = ''
+              `languages.rust.cranelift.enable` requires `languages.rust.channel = "nightly"`.
+
+              Cranelift is an unstable codegen backend that is only available on the nightly channel.
+            '';
+          }
+          {
             assertion = cfg.channel == "nixpkgs" -> (cfg.targets == [ ]);
             message = ''
               Cannot use `languages.rust.channel = "nixpkgs"` with `languages.rust.targets`.
@@ -299,6 +342,9 @@ in
               else pkgs.rustPlatform.rustLibSrc;
             RUSTFLAGS = optionalEnv (moldFlags != "" || cfg.rustflags != "") (lib.concatStringsSep " " (lib.filter (x: x != "") [ moldFlags cfg.rustflags ]));
             RUSTDOCFLAGS = optionalEnv (moldFlags != "") moldFlags;
+            CARGO_UNSTABLE_CODEGEN_BACKEND = optionalEnv cfg.cranelift.enable "true";
+            CARGO_PROFILE_DEV_CODEGEN_BACKEND = optionalEnv cfg.cranelift.enable "cranelift";
+            CARGO_PROFILE_DEV_BUILD_OVERRIDE_CODEGEN_BACKEND = optionalEnv cfg.cranelift.forceBuildScriptsLlvm "llvm";
           };
 
         git-hooks.tools = {
@@ -309,8 +355,21 @@ in
 
         # Allow clippy to access the internet to fetch dependencies.
         git-hooks.hooks.clippy.settings.offline = lib.mkDefault false;
+
+        languages.rust.components = lib.mkIf cfg.cranelift.enable (lib.mkAfter [ "rustc-codegen-cranelift-preview" ]);
       }
     )
+
+    (lib.mkIf (cfg.cranelift.excludePackages != [ ]) {
+      files.".cargo/config.toml".toml = {
+        profile.dev.package = lib.listToAttrs (map
+          (pkg: {
+            name = pkg;
+            value = { codegen-backend = "llvm"; };
+          })
+          cfg.cranelift.excludePackages);
+      };
+    })
 
     (lib.mkIf (cfg.toolchainFile != null) (
       let
