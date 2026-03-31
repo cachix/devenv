@@ -1241,14 +1241,19 @@ impl Devenv {
 
         // ── Phase 5: Running tests ──────────────────────────────────
         // prepare_shell will use cached dev_env, avoiding redundant activity wrapping.
+        // Don't propagate errors yet so that Phase 6 always runs
+        // and detached processes don't become orphans on test failure.
         let result = self
             .run_in_shell(test_script, &[], Some("Running tests"))
-            .await?;
+            .await;
 
         // ── Phase 6: Stopping processes ─────────────────────────────
         if has_processes {
             self.down().await?;
         }
+
+        // Now propagate any error from run_in_shell.
+        let result = result?;
 
         if !result.status.success() {
             message(ActivityLevel::Error, "Tests failed :(");
