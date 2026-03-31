@@ -19208,6 +19208,118 @@ string
 
 
 
+## languages.pkl.enable
+
+
+
+Whether to enable tools for Pkl development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pkl.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pkl.nix)
+
+
+
+## languages.pkl.package
+
+
+
+The Pkl package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.pkl
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pkl.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pkl.nix)
+
+
+
+## languages.pkl.lsp.enable
+
+
+
+Whether to enable Pkl Language Server.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+true
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pkl.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pkl.nix)
+
+
+
+## languages.pkl.lsp.package
+
+
+
+The Pkl language server package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.pkl-lsp
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pkl.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pkl.nix)
+
+
+
 ## languages.purescript.enable
 
 
@@ -21082,6 +21194,33 @@ function that evaluates to a(n) function that evaluates to a(n) package
 
 
 
+## languages.rust.lld.enable
+
+
+
+Use [lld](https://lld.llvm.org/) as the linker.
+
+lld is LLVM’s linker and is the recommended fast linker for Darwin.
+Works on both Linux and macOS.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ## languages.rust.lsp.enable
 
 
@@ -21440,6 +21579,32 @@ string
 
 ```nix
 "latest"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+## languages.rust.wild.enable
+
+
+
+Use [wild](https://github.com/wild-linker/wild) as the linker.
+
+wild is a very fast linker for Linux.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
 ```
 
 *Declared by:*

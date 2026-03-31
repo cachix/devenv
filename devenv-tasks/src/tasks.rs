@@ -1,6 +1,5 @@
 use crate::config::{Config, RunMode, parse_dependency};
 use crate::error::Error;
-use crate::executor::SubprocessExecutor;
 use crate::task_cache::TaskCache;
 use crate::task_state::TaskState;
 use crate::types::{
@@ -79,11 +78,8 @@ impl TasksBuilder {
 
         let mut graph = DiGraph::new();
         let mut task_indices = HashMap::new();
-        let mut longest_task_name = 0;
-
         for task in self.config.tasks {
             let name = task.name.clone();
-            longest_task_name = longest_task_name.max(name.len());
             if !task.name.contains(':')
                 || task.name.split(':').count() < 2
                 || task.name.starts_with(':')
@@ -111,7 +107,6 @@ impl TasksBuilder {
         let mut tasks = Tasks {
             roots,
             root_names: self.config.roots,
-            longest_task_name,
             graph,
             notify_finished,
             notify_ui: Arc::new(Notify::new()),
@@ -122,7 +117,6 @@ impl TasksBuilder {
             process_manager,
             env: self.config.env,
             bash: self.config.bash,
-            executor: SubprocessExecutor::new(),
             refresh_task_cache: self.refresh_task_cache,
             ignore_process_deps: self.config.ignore_process_deps,
         };
@@ -147,7 +141,6 @@ pub struct Tasks {
     pub(crate) roots: Vec<NodeIndex>,
     // Stored for reporting
     pub(crate) root_names: Vec<String>,
-    pub(crate) longest_task_name: usize,
     pub(crate) graph: DiGraph<Arc<RwLock<TaskState>>, DependencyKind>,
     pub(crate) tasks_order: Vec<NodeIndex>,
     pub(crate) notify_finished: Arc<Notify>,
@@ -161,7 +154,6 @@ pub struct Tasks {
     pub(crate) env: HashMap<String, String>,
     /// Path to the bash binary to use for probe commands
     pub(crate) bash: String,
-    pub(crate) executor: SubprocessExecutor,
     /// Force a refresh of the task cache, skipping cache reads
     pub(crate) refresh_task_cache: bool,
     /// When true, exclude non-root process-type tasks from the scheduled subgraph
@@ -193,7 +185,7 @@ impl Tasks {
                 TaskStatus::Pending => status.pending += 1,
                 TaskStatus::Oneshot(OneshotStatus::Running(_)) => status.running += 1,
                 TaskStatus::Process(ps) => match ps.phase {
-                    ProcessPhase::NotStarted => status.skipped += 1,
+                    ProcessPhase::NotStarted | ProcessPhase::Stopped => status.skipped += 1,
                     ProcessPhase::GaveUp => status.failed += 1,
                     ProcessPhase::Waiting | ProcessPhase::Starting | ProcessPhase::Ready => {
                         status.running += 1
@@ -966,7 +958,7 @@ impl Tasks {
                                 if let Some(status_rx) =
                                     process_manager_clone.subscribe_status(&process_name).await
                                 {
-                                    watch_status_until(
+                                    let _ = watch_status_until(
                                         &task_state_clone,
                                         &notify_finished_clone,
                                         &shutdown_clone,
@@ -1005,7 +997,6 @@ impl Tasks {
                         let watcher_pm = Arc::clone(&process_manager_clone);
                         let watcher_shutdown = Arc::clone(&shutdown_clone);
                         let watcher_name = process_name;
-                        let is_auto_start_off = launch_info.auto_start_off;
 
                         tokio::spawn(async move {
                             process_status_watcher(
@@ -1014,7 +1005,6 @@ impl Tasks {
                                 watcher_pm,
                                 watcher_shutdown,
                                 watcher_name,
-                                is_auto_start_off,
                             )
                             .await;
                         });
@@ -1068,7 +1058,6 @@ impl Tasks {
                                 &cache,
                                 shutdown_clone.cancellation_token(),
                                 task_activity_id,
-                                &SubprocessExecutor,
                                 refresh_task_cache,
                                 &shell_env,
                             )
@@ -1212,66 +1201,56 @@ async fn process_status_watcher(
     manager: Arc<NativeProcessManager>,
     shutdown: Arc<tokio_shutdown::Shutdown>,
     name: String,
-    initially_auto_start_off: bool,
 ) {
-    if initially_auto_start_off {
-        // For auto start off processes, wait for manual start (Ctrl-R).
-        // Use the enable() pattern to prevent missed wakeups: register the
-        // Notified future before checking phase so a notification that fires
-        // between the check and the await is not lost.
-        loop {
-            let notified = notify_finished.notified();
-            tokio::pin!(notified);
-            notified.as_mut().enable();
+    // Wait for the process to become active, subscribe to its status channel,
+    // and watch indefinitely until the channel closes (process stopped) or
+    // shutdown is requested. When the channel closes we set Stopped and loop
+    // back so a subsequent start/restart re-subscribes automatically.
+    loop {
+        let notified = notify_finished.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
 
-            if let Some(phase) = manager.get_phase(&name).await
-                && phase != ProcessPhase::NotStarted
-                && phase != ProcessPhase::Waiting
-            {
-                // Process was started externally, begin tracking
-                set_process_phase(&task_state, &notify_finished, ProcessPhase::Starting).await;
-                if let Some(status_rx) = manager.subscribe_status(&name).await {
-                    watch_status_until(
-                        &task_state,
-                        &notify_finished,
-                        &shutdown,
-                        status_rx,
-                        &[ProcessPhase::GaveUp],
-                    )
-                    .await;
+        match manager.get_phase(&name).await {
+            Some(ProcessPhase::NotStarted | ProcessPhase::Stopped | ProcessPhase::Waiting)
+            | None => {
+                // Process is not active yet (auto start off, stopped, or waiting).
+                // Wait for a lifecycle notification before re-checking.
+                tokio::select! {
+                    _ = notified => { continue; }
+                    _ = shutdown.wait_for_shutdown() => { return; }
                 }
-                return;
             }
-
-            tokio::select! {
-                _ = notified => {}
-                _ = shutdown.wait_for_shutdown() => { return; }
+            Some(ProcessPhase::Starting | ProcessPhase::Ready | ProcessPhase::GaveUp) => {
+                if let Some(status_rx) = manager.subscribe_status(&name).await {
+                    set_process_phase(&task_state, &notify_finished, ProcessPhase::Starting).await;
+                    // Watch indefinitely (no terminal phases). GaveUp is not terminal
+                    // because the process can be restarted (e.g. via explicit restart).
+                    // The watcher stays alive so it tracks the new lifecycle.
+                    watch_status_until(&task_state, &notify_finished, &shutdown, status_rx, &[])
+                        .await;
+                }
+                // Channel closed (process was stopped) or could not subscribe.
+                // Update phase to Stopped and loop back to wait for restart.
+                set_process_phase(&task_state, &notify_finished, ProcessPhase::Stopped).await;
+                tokio::task::yield_now().await;
             }
-        }
-    } else {
-        // Already active, watch for ongoing status changes (crash -> restart -> ready)
-        if let Some(status_rx) = manager.subscribe_status(&name).await {
-            watch_status_until(
-                &task_state,
-                &notify_finished,
-                &shutdown,
-                status_rx,
-                &[ProcessPhase::GaveUp],
-            )
-            .await;
         }
     }
 }
 
 /// Watch a process's status channel and update the task phase on each transition.
 /// Stops when the phase matches one of the `terminal_phases` or the channel/shutdown closes.
+///
+/// Returns `true` if a terminal phase was reached, `false` if the channel was closed
+/// (e.g. the process was stopped) or shutdown was requested.
 async fn watch_status_until(
     task_state: &Arc<RwLock<TaskState>>,
     notify: &Arc<tokio::sync::Notify>,
     shutdown: &Arc<tokio_shutdown::Shutdown>,
     mut status_rx: tokio::sync::watch::Receiver<devenv_processes::JobStatus>,
     terminal_phases: &[ProcessPhase],
-) {
+) -> bool {
     // Check the current value first to avoid missing a transition that
     // already happened before we subscribed. `borrow_and_update` marks
     // the current value as seen so the subsequent `changed()` call only
@@ -1280,19 +1259,19 @@ async fn watch_status_until(
         let phase: ProcessPhase = status_rx.borrow_and_update().phase.into();
         set_process_phase(task_state, notify, phase).await;
         if terminal_phases.contains(&phase) {
-            return;
+            return true;
         }
     }
 
     loop {
         tokio::select! {
             changed = status_rx.changed() => {
-                if changed.is_err() { break; }
-                let phase: ProcessPhase = status_rx.borrow().phase.into();
+                if changed.is_err() { return false; }
+                let phase: ProcessPhase = status_rx.borrow_and_update().phase.into();
                 set_process_phase(task_state, notify, phase).await;
-                if terminal_phases.contains(&phase) { break; }
+                if terminal_phases.contains(&phase) { return true; }
             }
-            _ = shutdown.wait_for_shutdown() => { break; }
+            _ = shutdown.wait_for_shutdown() => { return false; }
         }
     }
 }

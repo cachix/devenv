@@ -35,6 +35,7 @@
   languages.pascal.enable = true;
   languages.perl.enable = true;
   languages.php.enable = true;
+  languages.pkl.enable = true;
   languages.purescript.enable = true;
   languages.python.enable = true;
   languages.r.enable = true;

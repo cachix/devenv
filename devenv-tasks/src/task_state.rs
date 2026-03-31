@@ -1,6 +1,6 @@
 use crate::SudoContext;
 use crate::config::TaskConfig;
-use crate::executor::{ExecutionContext, OutputCallback, SubprocessExecutor};
+use crate::executor::{ExecutionContext, OutputCallback};
 use crate::task_cache::{TaskCache, expand_glob_patterns};
 use crate::types::{
     Output, Outputs, ProcessPhase, ProcessTaskStatus, Skipped, TaskCompleted, TaskFailure,
@@ -430,7 +430,6 @@ impl TaskState {
         cache: &TaskCache,
         cancellation: CancellationToken,
         activity_id: u64,
-        executor: &SubprocessExecutor,
         refresh_task_cache: bool,
         shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<TaskCompleted> {
@@ -444,7 +443,6 @@ impl TaskState {
             cache,
             cancellation,
             &task_activity,
-            executor,
             refresh_task_cache,
             shell_env,
         )
@@ -459,7 +457,6 @@ impl TaskState {
         cache: &TaskCache,
         cancellation: CancellationToken,
         task_activity: &Activity,
-        executor: &SubprocessExecutor,
         refresh_task_cache: bool,
         shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<TaskCompleted> {
@@ -606,7 +603,7 @@ impl TaskState {
 
         // Execute using the provided executor
         let callback = ActivityCallback::new(task_activity);
-        let result = executor.execute(ctx, &callback, cancellation).await;
+        let result = crate::executor::execute(ctx, &callback, cancellation).await;
 
         // Only update file states on success - failed tasks should not be cached
         if result.success {

@@ -26,6 +26,8 @@ struct DevenvMcpServer {
     options: DevenvOptions,
     cache: Arc<RwLock<McpCache>>,
     tool_router: ToolRouter<Self>,
+    /// Path to the native process manager API socket, if available.
+    process_socket_path: Option<std::path::PathBuf>,
 }
 
 #[derive(Default)]
@@ -36,10 +38,63 @@ struct McpCache {
 
 impl DevenvMcpServer {
     fn new(options: DevenvOptions) -> Self {
+        let process_socket_path = Self::compute_socket_path(&options);
         Self {
             options,
             cache: Arc::new(RwLock::new(McpCache::default())),
             tool_router: Self::tool_router(),
+            process_socket_path,
+        }
+    }
+
+    /// Compute the native process manager socket path from options.
+    fn compute_socket_path(options: &DevenvOptions) -> Option<std::path::PathBuf> {
+        let devenv_dotfile = options.resolve_dotfile()?;
+        Some(devenv_processes::native_socket_path(&devenv_dotfile))
+    }
+
+    /// Send an API request to the native process manager.
+    async fn process_api_request(
+        &self,
+        request: &devenv_processes::ApiRequest,
+    ) -> Result<devenv_processes::ApiResponse, String> {
+        let socket_path = self
+            .process_socket_path
+            .as_ref()
+            .ok_or_else(|| "Could not determine process socket path".to_string())?;
+
+        devenv_processes::NativeProcessManager::api_request(socket_path, request)
+            .await
+            .map_err(|e| {
+                if socket_path.exists() {
+                    format!("Failed to communicate with process manager: {}", e)
+                } else {
+                    "No native process manager running. Start processes with 'devenv up -d' first."
+                        .to_string()
+                }
+            })
+    }
+
+    /// Send a process API request and format the response as JSON.
+    /// The `on_success` closure extracts the value from a successful (non-error) response.
+    async fn process_request_json<F>(
+        &self,
+        request: &devenv_processes::ApiRequest,
+        on_success: F,
+    ) -> String
+    where
+        F: FnOnce(devenv_processes::ApiResponse) -> Option<Value>,
+    {
+        match self.process_api_request(request).await {
+            Ok(devenv_processes::ApiResponse::Error { message }) => {
+                serde_json::to_string(&serde_json::json!({"error": message})).unwrap_or_default()
+            }
+            Ok(resp) => match on_success(resp) {
+                Some(value) => serde_json::to_string(&value).unwrap_or_default(),
+                None => serde_json::to_string(&serde_json::json!({"error": "unexpected response"}))
+                    .unwrap_or_default(),
+            },
+            Err(e) => serde_json::to_string(&serde_json::json!({"error": e})).unwrap_or_default(),
         }
     }
 
@@ -235,6 +290,20 @@ struct SearchPackagesRequest {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct ProcessNameRequest {
+    #[schemars(description = "Name of the process")]
+    name: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct ProcessLogsRequest {
+    #[schemars(description = "Name of the process")]
+    name: String,
+    #[schemars(description = "Number of lines to return (default 100)")]
+    lines: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct SearchOptionsRequest {
     #[schemars(
         description = "Search string to filter options by name or description (e.g., 'python' or 'languages.python')"
@@ -322,6 +391,93 @@ impl DevenvMcpServer {
             .collect();
 
         serde_json::to_string(&filtered_options).unwrap_or_default()
+    }
+
+    #[tool(description = "List all managed processes and their status")]
+    async fn list_processes(&self) -> String {
+        use devenv_processes::{ApiRequest, ApiResponse};
+        self.process_request_json(&ApiRequest::List, |resp| match resp {
+            ApiResponse::ProcessList { processes } => serde_json::to_value(&processes).ok(),
+            _ => None,
+        })
+        .await
+    }
+
+    #[tool(description = "Get the status of a specific process")]
+    async fn get_process_status(&self, params: Parameters<ProcessNameRequest>) -> String {
+        use devenv_processes::{ApiRequest, ApiResponse};
+        self.process_request_json(
+            &ApiRequest::Status {
+                name: params.0.name,
+            },
+            |resp| match resp {
+                ApiResponse::ProcessDetail { info } => serde_json::to_value(&info).ok(),
+                _ => None,
+            },
+        )
+        .await
+    }
+
+    #[tool(description = "Get stdout and stderr logs for a process")]
+    async fn get_process_logs(&self, params: Parameters<ProcessLogsRequest>) -> String {
+        use devenv_processes::{ApiRequest, ApiResponse};
+        self.process_request_json(
+            &ApiRequest::Logs {
+                name: params.0.name,
+                lines: params.0.lines,
+            },
+            |resp| match resp {
+                ApiResponse::ProcessLogs { stdout, stderr } => {
+                    Some(serde_json::json!({"stdout": stdout, "stderr": stderr}))
+                }
+                _ => None,
+            },
+        )
+        .await
+    }
+
+    #[tool(description = "Restart a running process")]
+    async fn restart_process(&self, params: Parameters<ProcessNameRequest>) -> String {
+        use devenv_processes::ApiRequest;
+        self.process_request_json(
+            &ApiRequest::Restart {
+                name: params.0.name,
+            },
+            ok_response,
+        )
+        .await
+    }
+
+    #[tool(description = "Start a process that has auto start disabled")]
+    async fn start_process(&self, params: Parameters<ProcessNameRequest>) -> String {
+        use devenv_processes::ApiRequest;
+        self.process_request_json(
+            &ApiRequest::Start {
+                name: params.0.name,
+            },
+            ok_response,
+        )
+        .await
+    }
+
+    #[tool(description = "Stop a running process")]
+    async fn stop_process(&self, params: Parameters<ProcessNameRequest>) -> String {
+        use devenv_processes::ApiRequest;
+        self.process_request_json(
+            &ApiRequest::Stop {
+                name: params.0.name,
+            },
+            ok_response,
+        )
+        .await
+    }
+}
+
+/// Shared success extractor for process action responses (restart, start, stop).
+fn ok_response(resp: devenv_processes::ApiResponse) -> Option<Value> {
+    match resp {
+        devenv_processes::ApiResponse::Ok => Some(serde_json::json!({"status": "ok"})),
+        _ => None,
     }
 }
 

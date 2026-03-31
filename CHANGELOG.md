@@ -4,19 +4,22 @@
 
 ### Bug Fixes
 
+- Fixed `devenv test` leaving orphaned processes after test failures by ensuring processes are always stopped before propagating errors.
+- Fixed adding a new input to `devenv.yaml` causing all existing inputs to be re-fetched instead of only resolving the new one ([#2688](https://github.com/cachix/devenv/issues/2688)).
 - Fixed cursor shape escape sequences (DECSCUSR) not being forwarded to the terminal in `devenv shell`, which caused programs like neovim to not change cursor shape between modes (e.g. block in normal mode, bar in insert mode).
 - Fixed shift+mouse configuration (XTSHIFTESCAPE) not being forwarded to the terminal in `devenv shell`.
 - Fixed `devenv shell` hanging indefinitely when exiting the shell during a hot-reload build by interrupting the lingering Nix evaluation on shutdown.
 - Fixed `devenv repl` broken TUI output and hanging evaluation by adding proper TUI handoff support, showing evaluation progress in the TUI before handing the terminal to the interactive REPL.
 - Fixed Ghostty shell integration not working in `devenv shell` by sourcing `ghostty.bash` from the rcfile when `GHOSTTY_RESOURCES_DIR` is set.
 - Fixed TUI panic when expanding error details containing multi-byte UTF-8 characters (e.g. miette underlines) by using character-based truncation instead of byte-based slicing.
+- Fixed `devenv processes stop` removing the process from the manager state, making it impossible to start or restart afterwards.
 
 ### Improvements
 
 - Added Ctrl+X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
 - Tasks can now display messages when entering the shell by writing `{"devenv":{"messages":["..."]}}` to `$DEVENV_TASK_OUTPUT_FILE` ([#2500](https://github.com/cachix/devenv/issues/2500)).
 - Added `nixpkgs.rocmSupport` option to enable ROCm support in nixpkgs configuration.
-
+- Added process management subcommands and MCP tools: `devenv processes list`, `status`, `logs`, `restart`, `start`, `stop` for interacting with running native processes ([#2621](https://github.com/cachix/devenv/issues/2621)).
 ## 2.0.6 (2026-03-22)
 
 ### Bug Fixes

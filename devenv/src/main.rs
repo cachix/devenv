@@ -294,7 +294,6 @@ fn run(launch: LaunchConfig) -> Result<()> {
     );
 
     let tui = launch.tui;
-    let use_pty = launch.use_pty;
     let needs_terminal_handoff = launch.needs_terminal_handoff;
     let verbosity = launch.verbosity;
 
@@ -867,6 +866,73 @@ async fn dispatch_command(
             devenv.wait_for_ready(Duration::from_secs(timeout)).await?;
             Ok(CommandResult::Done)
         }
+        Commands::Processes {
+            command: ProcessesCommand::List {},
+        } => {
+            let output = devenv.processes_list().await?;
+            Ok(CommandResult::Print(output))
+        }
+        Commands::Processes {
+            command: ProcessesCommand::Status { name },
+        } => {
+            let output = devenv.processes_status(&name).await?;
+            Ok(CommandResult::Print(output))
+        }
+        Commands::Processes {
+            command:
+                ProcessesCommand::Logs {
+                    name,
+                    lines,
+                    stdout,
+                    stderr,
+                },
+        } => {
+            let output = devenv.processes_logs(&name, lines, stdout, stderr).await?;
+            Ok(CommandResult::Print(output))
+        }
+        Commands::Processes {
+            command: ProcessesCommand::Restart { name },
+        } => {
+            devenv.processes_restart(&name).await?;
+            Ok(CommandResult::Done)
+        }
+        Commands::Processes {
+            command: ProcessesCommand::Start {
+                name: Some(name), ..
+            },
+        } => {
+            devenv.processes_start(&name).await?;
+            Ok(CommandResult::Done)
+        }
+        Commands::Processes {
+            command: ProcessesCommand::Start { name: None, detach },
+        } => {
+            let options = devenv::ProcessOptions {
+                detach,
+                log_to_file: detach,
+                strict_ports: config_strict_ports,
+                command_rx,
+                daemon: detach,
+            };
+            match devenv.up(vec![], options, verbosity, tui).await? {
+                RunMode::Detached => Ok(CommandResult::Done),
+                RunMode::Foreground(shell_command) => {
+                    Ok(CommandResult::Exec(shell_command.command))
+                }
+            }
+        }
+        Commands::Processes {
+            command: ProcessesCommand::Stop { name: Some(name) },
+        } => {
+            devenv.processes_stop(&name).await?;
+            Ok(CommandResult::Done)
+        }
+        Commands::Processes {
+            command: ProcessesCommand::Stop { name: None },
+        } => {
+            devenv.down().await?;
+            Ok(CommandResult::Done)
+        }
         Commands::Tasks { command } => match command {
             TasksCommand::Run {
                 tasks,
@@ -959,7 +1025,7 @@ async fn dispatch_command(
 /// - ShellCoordinator handles file watching and build coordination
 /// - ShellSession owns the PTY and handles terminal I/O
 ///
-/// Tasks are executed before the PTY starts via SubprocessExecutor,
+/// Tasks are executed before the PTY starts as subprocesses,
 /// allowing parallel execution through the DAG task system.
 ///
 /// Terminal handoff:
