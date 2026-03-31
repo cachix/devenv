@@ -813,6 +813,54 @@ mod tests {
     }
 
     #[test]
+    fn test_replay_invalidates_when_base_port_becomes_available() {
+        // Regression test for https://github.com/cachix/devenv/issues/2684
+        //
+        // When a configured port (e.g. 5432) was occupied, the allocator
+        // picked the next free port (5433) and cached that. On subsequent
+        // runs, even after 5432 becomes free, replay should invalidate so
+        // a fresh evaluation allocates the preferred port.
+
+        let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
+
+        // Occupy a port to force a different allocation
+        let base_port = allocator.allocate("blocker", "default", 49500).unwrap();
+
+        // Allocate for postgres starting at the same base; it picks base_port+1
+        let fallback = allocator
+            .allocate("postgres", "default", base_port)
+            .unwrap();
+        assert_ne!(fallback, base_port);
+
+        // Snapshot, then tear everything down (simulates end of session)
+        let spec = allocator.snapshot();
+        drop(allocator.take_reservations());
+        allocator.clear();
+
+        let pg_alloc = spec
+            .allocations
+            .iter()
+            .find(|a| a.process_name == "postgres")
+            .unwrap();
+        assert_eq!(pg_alloc.base_port, base_port);
+        assert_eq!(pg_alloc.allocated_port, fallback);
+        assert_ne!(pg_alloc.base_port, pg_alloc.allocated_port);
+
+        // New session: the blocker is gone, base port is now free.
+        let fresh_allocator = PortAllocator::new();
+        fresh_allocator.set_enabled(true);
+
+        let pg_only_spec = PortSpec {
+            allocations: vec![pg_alloc.clone()],
+        };
+
+        // Currently replays the stale fallback port. After the fix this
+        // should return Err to force cache invalidation and re-evaluation.
+        fresh_allocator.replay(&pg_only_spec).unwrap();
+    }
+
+    #[test]
     fn test_allocate_exact_accepts_in_use_when_allowed() {
         let external = TcpListener::bind(format!("{}:0", DEFAULT_HOST)).unwrap();
         let port = external.local_addr().unwrap().port();
