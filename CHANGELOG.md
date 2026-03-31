@@ -10,13 +10,14 @@
 - Fixed `devenv repl` broken TUI output and hanging evaluation by adding proper TUI handoff support, showing evaluation progress in the TUI before handing the terminal to the interactive REPL.
 - Fixed Ghostty shell integration not working in `devenv shell` by sourcing `ghostty.bash` from the rcfile when `GHOSTTY_RESOURCES_DIR` is set.
 - Fixed TUI panic when expanding error details containing multi-byte UTF-8 characters (e.g. miette underlines) by using character-based truncation instead of byte-based slicing.
+- Fixed `devenv processes stop` removing the process from the manager state, making it impossible to start or restart afterwards.
 
 ### Improvements
 
 - Added Ctrl+X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
 - Tasks can now display messages when entering the shell by writing `{"devenv":{"messages":["..."]}}` to `$DEVENV_TASK_OUTPUT_FILE` ([#2500](https://github.com/cachix/devenv/issues/2500)).
 - Added `nixpkgs.rocmSupport` option to enable ROCm support in nixpkgs configuration.
-
+- Added process management subcommands and MCP tools: `devenv processes list`, `status`, `logs`, `restart`, `start`, `stop` for interacting with running native processes ([#2621](https://github.com/cachix/devenv/issues/2621)).
 ## 2.0.6 (2026-03-22)
 
 ### Bug Fixes
