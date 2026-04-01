@@ -269,6 +269,13 @@ impl ShellCoordinator {
                 Event::ReloadBuildComplete { result, activity } => {
                     current_build = None;
 
+                    // Refresh all inotify watches. Editors using atomic save
+                    // (write temp + rename) replace the file inode, which
+                    // silently invalidates the kernel-level inotify watch.
+                    // The watchexec diff logic won't re-watch paths it thinks
+                    // are already watched, so we force a full refresh.
+                    watcher_handle.rewatch_all().await;
+
                     // Collect changed files as relative paths
                     let files: Vec<PathBuf> = pending_changes
                         .drain(..)
