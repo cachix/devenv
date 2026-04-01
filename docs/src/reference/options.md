@@ -21164,6 +21164,98 @@ list of string
 
 
 
+## languages.rust.cranelift.enable
+
+
+
+Use [Cranelift](https://cranelift.dev/) as the codegen backend for dev builds.
+
+Cranelift compiles significantly faster than LLVM at the cost of less optimized output.
+Requires the nightly channel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+## languages.rust.cranelift.excludePackages
+
+
+
+List of crate names that should use the LLVM backend instead of Cranelift.
+
+Generates per-package overrides in ` .cargo/config.toml `.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  "aws-lc-sys"
+  "aws-lc-rs"
+  "rustls"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+## languages.rust.cranelift.forceBuildScriptsLlvm
+
+
+
+Force build scripts and proc macros to use the LLVM backend.
+
+Some build scripts may not work with Cranelift. Enable this to fall back to
+LLVM for build scripts while keeping Cranelift for regular code.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ## languages.rust.import
 
 
