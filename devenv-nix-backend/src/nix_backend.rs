@@ -323,8 +323,14 @@ impl NixRustBackend {
             .wrap_err("Failed to create fetchers settings")?;
 
         // Write pre-computed nixpkgs config to temp file for NIXPKGS_CONFIG env var
-        // Wrap in a let expression that adds predicate functions and license references
-        // Note: NIXPKGS_CONFIG expects a file path, not inline Nix content
+        // Wrap in a let expression that adds predicate functions.
+        // Note: NIXPKGS_CONFIG expects a file path, not inline Nix content.
+        // We do NOT override allowInsecurePredicate: nixpkgs' check-meta.nix
+        // natively creates it from permittedInsecurePackages using the full
+        // derivation name (with version). Our old getName via parseDrvName
+        // stripped the version, causing mismatches.
+        // For unfree packages, nixpkgs does not natively support
+        // permittedUnfreePackages, so we provide a custom predicate.
         let nixpkgs_config_base = ser_nix::to_string(&nixpkgs_config)
             .map_err(|e| miette::miette!("Failed to serialize nixpkgs config: {}", e))?;
         let nixpkgs_config_nix = format!(
@@ -337,11 +343,6 @@ in cfg // {{
       (_: true)
     else if (cfg.permittedUnfreePackages or []) != [] then
       (pkg: builtins.elem (getName pkg) (cfg.permittedUnfreePackages or []))
-    else
-      (_: false);
-  allowInsecurePredicate =
-    if (cfg.permittedInsecurePackages or []) != [] then
-      (pkg: builtins.elem (getName pkg) (cfg.permittedInsecurePackages or []))
     else
       (_: false);
 }}"#,
