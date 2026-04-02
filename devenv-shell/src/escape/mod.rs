@@ -1,7 +1,7 @@
 //! Stateful byte-level scanner for escape sequences in raw PTY output.
 //!
 //! Detects DEC private mode sequences, CSI queries, DCS sequences, and
-//! OSC queries so they can be forwarded to the real terminal (avt consumes
+//! OSC sequences so they can be forwarded to the real terminal (avt consumes
 //! them internally).
 
 mod dec_mode;
@@ -882,10 +882,31 @@ mod tests {
     }
 
     #[test]
-    fn osc_non_query_ignored() {
+    fn osc_non_query_forwarded() {
         let mut scanner = EscapeScanner::new();
         let events = scanner.scan(b"\x1b]0;my title\x07");
-        assert!(events.is_empty());
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::Osc(ref ev) = events[0] else {
+            panic!("expected Osc");
+        };
+        assert_eq!(ev.raw_bytes, b"\x1b]0;my title\x07");
+    }
+
+    #[test]
+    fn osc_hyperlink_forwarded() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b]8;;https://example.com\x07link\x1b]8;;\x07");
+        assert_eq!(events.len(), 2);
+
+        let SequenceEvent::Osc(ref open) = events[0] else {
+            panic!("expected opening Osc");
+        };
+        assert_eq!(open.raw_bytes, b"\x1b]8;;https://example.com\x07");
+
+        let SequenceEvent::Osc(ref close) = events[1] else {
+            panic!("expected closing Osc");
+        };
+        assert_eq!(close.raw_bytes, b"\x1b]8;;\x07");
     }
 
     #[test]
