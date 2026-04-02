@@ -76,6 +76,9 @@ exclude_docs: |
   /snippets/
   /individual-docs/**/*.md
 
+hooks:
+  - hooks/well_known.py
+
 plugins:
   search: {}
   include-markdown: {}
