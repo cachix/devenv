@@ -78,7 +78,7 @@ in
   packages = [
     inputs.nix.packages.${system}.nix # Required for integration tests
     pkgs.git
-    pkgs.xorg.libxcb
+    pkgs.libxcb
     pkgs.yaml2json
     pkgs.tesh
     pkgs.watchexec
