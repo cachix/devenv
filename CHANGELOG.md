@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed warning messages from Nix not being forwarded and displayed during evaluation.
 - Fixed `devenv test` leaving orphaned processes after test failures by ensuring processes are always stopped before propagating errors.
 - Fixed adding a new input to `devenv.yaml` causing all existing inputs to be re-fetched instead of only resolving the new one ([#2688](https://github.com/cachix/devenv/issues/2688)).
 - Fixed cursor shape escape sequences (DECSCUSR) not being forwarded to the terminal in `devenv shell`, which caused programs like neovim to not change cursor shape between modes (e.g. block in normal mode, bar in insert mode).
