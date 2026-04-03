@@ -147,10 +147,19 @@ in
                 exit 0
               fi
 
-              # git-hooks installation sets core.hooksPath to .git/hooks
-              # which doesn't work with prek (https://github.com/j178/prek/pull/1692), so unset it
-              if [ "$(${git} config --get core.hooksPath 2>/dev/null)" = ".git/hooks" ]; then
-                ${git} config --unset core.hooksPath
+              # Unset core.hooksPath when it points to the default hooks directory.
+              # This covers two cases where prek refuses to install:
+              # 1. Previous git-hooks installation set it to ".git/hooks"
+              #    (https://github.com/j178/prek/pull/1692)
+              # 2. Git submodules where git sets it to "<parent>/.git/modules/<name>/hooks"
+              HOOKS_PATH=$(${git} config --get core.hooksPath 2>/dev/null || true)
+              if [ -n "$HOOKS_PATH" ]; then
+                GIT_DIR=$(${git} rev-parse --git-dir 2>/dev/null)
+                HOOKS_ABS=$(realpath "$HOOKS_PATH" 2>/dev/null || echo "$HOOKS_PATH")
+                DEFAULT_ABS=$(realpath "$GIT_DIR/hooks" 2>/dev/null || echo "$GIT_DIR/hooks")
+                if [ "$HOOKS_ABS" = "$DEFAULT_ABS" ]; then
+                  ${git} config --unset core.hooksPath
+                fi
               fi
 
               # Install hooks for configured stages
