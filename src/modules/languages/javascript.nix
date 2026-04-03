@@ -328,18 +328,21 @@ in
         # On newer nixpkgs, nodejs has a separate npm output that doesn't
         # include the node binary. Add the base package to keep node on PATH.
         npmIsSeparateOutput = builtins.elem "npm" (cfg.package.outputs or [ ]);
+        # On nixpkgs 26.05+, nodejs-slim has a corepack output.
+        corepack = cfg.package.corepack or cfg.package;
       in
       lib.optional (!cfg.npm.enable || npmIsSeparateOutput) cfg.package
       ++ lib.optional cfg.npm.enable cfg.npm.package
       ++ lib.optional cfg.pnpm.enable (cfg.pnpm.package)
       ++ lib.optional cfg.yarn.enable (cfg.yarn.package.override { nodejs = cfg.package; })
       ++ lib.optional cfg.bun.enable (cfg.bun.package)
-      ++ lib.optional cfg.corepack.enable (
-        pkgs.runCommand "corepack-enable" { } ''
+      ++ lib.optionals cfg.corepack.enable [
+        corepack
+        (pkgs.runCommand "corepack-enable" { } ''
           mkdir -p $out/bin
-          ${cfg.package}/bin/corepack enable --install-directory $out/bin
-        ''
-      )
+          ${corepack}/bin/corepack enable --install-directory $out/bin
+        '')
+      ]
       ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
     enterShell = lib.concatStringsSep "\n" (
