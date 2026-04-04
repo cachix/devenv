@@ -278,10 +278,10 @@ in
       enable = lib.mkEnableOption "install pnpm";
       package = lib.mkOption {
         type = lib.types.package;
-        default = pkgs.nodePackages.pnpm.override {
+        default = pkgs.pnpm.override {
           nodejs = cfg.package;
         };
-        defaultText = lib.literalExpression "pkgs.nodePackages.pnpm";
+        defaultText = lib.literalExpression "pkgs.pnpm";
         description = "The pnpm package to use.";
       };
       install.enable = lib.mkEnableOption "pnpm install during devenv initialisation";

@@ -404,7 +404,7 @@ package
 *Default:*
 
 ```nix
-pkgs.nodePackages.pnpm
+pkgs.pnpm
 ```
 
 *Declared by:*
