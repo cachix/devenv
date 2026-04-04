@@ -19,6 +19,7 @@
 
 - Added Ctrl+X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
 - Tasks can now display messages when entering the shell by writing `{"devenv":{"messages":["..."]}}` to `$DEVENV_TASK_OUTPUT_FILE` ([#2500](https://github.com/cachix/devenv/issues/2500)).
+- Shell environment now auto-reloads at the next prompt when watched files change, instead of requiring a manual Ctrl-Alt-R keybind ([#2595](https://github.com/cachix/devenv/issues/2595)).
 - Added `nixpkgs.rocmSupport` option to enable ROCm support in nixpkgs configuration.
 - Added process management subcommands and MCP tools: `devenv processes list`, `status`, `logs`, `restart`, `start`, `stop` for interacting with running native processes ([#2621](https://github.com/cachix/devenv/issues/2621)).
 ## 2.0.6 (2026-03-22)
