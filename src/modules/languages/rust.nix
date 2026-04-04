@@ -370,7 +370,10 @@ in
           let
             moldFlags = lib.optionalString cfg.mold.enable "-C link-arg=-fuse-ld=mold";
             lldFlags = lib.optionalString cfg.lld.enable "-C link-arg=-fuse-ld=lld";
-            wildFlags = lib.optionalString cfg.wild.enable "-C link-arg=-fuse-ld=wild";
+            # TODO: Work around rustc's default lld selection and missing native GCC Wild support;
+            # use `-C linker-features=-lld -C link-arg=-B${pkgs.wild}/bin` for now, then switch to
+            # `-C link-arg=-fuse-ld=wild` once a released GCC supports it.
+            wildFlags = lib.optionalString cfg.wild.enable "-C linker-features=-lld -C link-arg=-B${pkgs.wild}/bin";
             linkerFlags = lib.concatStringsSep " " (lib.filter (x: x != "") [ moldFlags lldFlags wildFlags ]);
             optionalEnv = cond: str: if cond then str else null;
           in
