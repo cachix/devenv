@@ -49,6 +49,7 @@ const REQUIRED_FILES: [(&str, &str); 3] = [
     ("devenv.yaml", "devenv.yaml"),
     ("gitignore", ".gitignore"), // source name -> target name
 ];
+const OPTIONAL_DIRENV_REQUIRED_FILES: [(&str, &str); 1] = [(".envrc", ".envrc")];
 const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
 pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
@@ -559,7 +560,7 @@ impl Devenv {
         ))
     }
 
-    pub fn init(&self, target: &Option<PathBuf>) -> Result<()> {
+    pub fn init(&self, target: &Option<PathBuf>, with_direnv: &Option<bool>) -> Result<()> {
         let target = target.clone().unwrap_or_else(|| {
             std::fs::canonicalize(".").expect("Failed to get current directory")
         });
@@ -569,7 +570,14 @@ impl Devenv {
             std::fs::create_dir_all(&target).expect("Failed to create target directory");
         }
 
-        for (source_name, target_name) in REQUIRED_FILES {
+        for (source_name, target_name) in
+            REQUIRED_FILES
+                .iter()
+                .chain(match with_direnv.is_some_and(|x| x) {
+                    true => OPTIONAL_DIRENV_REQUIRED_FILES.iter(),
+                    false => [].iter(),
+                })
+        {
             info!(devenv.is_user_message = true, "Creating {}", target_name);
 
             let path = PROJECT_DIR
