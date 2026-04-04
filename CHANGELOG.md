@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv:git-hooks:install` failing with "Cowardly refusing to install hooks with `core.hooksPath` set" when `core.hooksPath` already points at devenv-managed hook directories, including repeated installs in linked worktrees and absolute default hooks paths in submodules.
 - Fixed warning messages from Nix not being forwarded and displayed during evaluation.
 - Fixed `devenv test` leaving orphaned processes after test failures by ensuring processes are always stopped before propagating errors.
 - Fixed adding a new input to `devenv.yaml` causing all existing inputs to be re-fetched instead of only resolving the new one ([#2688](https://github.com/cachix/devenv/issues/2688)).
