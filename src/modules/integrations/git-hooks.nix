@@ -54,7 +54,7 @@ let
             {
               rootSrc = self;
               package = lib.mkDefault pkgs.prek;
-              tools = import (git-hooks + "/nix/call-tools.nix") pkgs;
+              tools = lib.mapAttrs (_: lib.mkOptionDefault) (import (git-hooks + "/nix/call-tools.nix") pkgs);
             }
           ];
           specialArgs = { inherit pkgs; };
