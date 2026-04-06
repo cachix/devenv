@@ -181,6 +181,7 @@ impl Activity {
     }
 
     /// Create and start a Task activity with a pre-assigned ID.
+    #[track_caller]
     pub fn task_with_id(id: u64) -> Activity {
         Activity::task().id(id).start()
     }

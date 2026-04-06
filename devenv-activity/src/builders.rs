@@ -1,5 +1,6 @@
 //! Builder types for creating activities.
 
+use std::panic::Location;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use tracing::{Level, Span, span};
@@ -20,27 +21,84 @@ pub fn next_id() -> u64 {
     ID_COUNTER.fetch_add(1, Ordering::Relaxed) | (1 << 63)
 }
 
+/// Convert a human-readable name to snake_case for use as an OTEL span name.
+fn to_snake_case(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+        .split('_')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
 /// Helper to create a span at the given level.
 ///
-/// The `otel.name` field is recognized by `tracing-opentelemetry` to set
-/// the OpenTelemetry span name (since tracing span names must be `&'static str`).
+/// `otel.name` is set to a snake_case version of the name (recognized by
+/// `tracing-opentelemetry` to override the OTEL span name).
+/// `devenv.user_message` carries the original human-readable name.
+///
+/// Uses `#[track_caller]` to record the actual call site location instead of
+/// this file, so OTEL traces point to where the activity was created.
+#[track_caller]
 fn create_span(id: u64, name: &str, level: ActivityLevel) -> Span {
+    let otel_name = to_snake_case(name);
+    let otel_name = otel_name.as_str();
+    let caller = Location::caller();
+    let caller_file = caller.file();
+    let caller_line = caller.line() as i64;
     match level {
-        ActivityLevel::Error => {
-            span!(Level::ERROR, "activity", activity_id = id, otel.name = name)
-        }
-        ActivityLevel::Warn => {
-            span!(Level::WARN, "activity", activity_id = id, otel.name = name)
-        }
-        ActivityLevel::Info => {
-            span!(Level::INFO, "activity", activity_id = id, otel.name = name)
-        }
-        ActivityLevel::Debug => {
-            span!(Level::DEBUG, "activity", activity_id = id, otel.name = name)
-        }
-        ActivityLevel::Trace => {
-            span!(Level::TRACE, "activity", activity_id = id, otel.name = name)
-        }
+        ActivityLevel::Error => span!(
+            Level::ERROR,
+            "activity",
+            activity_id = id,
+            otel.name = otel_name,
+            devenv.user_message = name,
+            code.filepath = caller_file,
+            code.lineno = caller_line,
+        ),
+        ActivityLevel::Warn => span!(
+            Level::WARN,
+            "activity",
+            activity_id = id,
+            otel.name = otel_name,
+            devenv.user_message = name,
+            code.filepath = caller_file,
+            code.lineno = caller_line,
+        ),
+        ActivityLevel::Info => span!(
+            Level::INFO,
+            "activity",
+            activity_id = id,
+            otel.name = otel_name,
+            devenv.user_message = name,
+            code.filepath = caller_file,
+            code.lineno = caller_line,
+        ),
+        ActivityLevel::Debug => span!(
+            Level::DEBUG,
+            "activity",
+            activity_id = id,
+            otel.name = otel_name,
+            devenv.user_message = name,
+            code.filepath = caller_file,
+            code.lineno = caller_line,
+        ),
+        ActivityLevel::Trace => span!(
+            Level::TRACE,
+            "activity",
+            activity_id = id,
+            otel.name = otel_name,
+            devenv.user_message = name,
+            code.filepath = caller_file,
+            code.lineno = caller_line,
+        ),
     }
 }
 
@@ -84,6 +142,7 @@ impl BuildBuilder {
         self
     }
 
+    #[track_caller]
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
@@ -108,6 +167,7 @@ impl BuildBuilder {
 
     /// Queue a build (waiting for a build slot).
     /// Use this for builds that are waiting to start, not actively running.
+    #[track_caller]
     pub fn queue(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
@@ -173,6 +233,7 @@ impl FetchBuilder {
         self
     }
 
+    #[track_caller]
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
@@ -230,6 +291,7 @@ impl EvaluateBuilder {
         self
     }
 
+    #[track_caller]
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
@@ -277,6 +339,7 @@ impl TaskBuilder {
         self
     }
 
+    #[track_caller]
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         // Inherit level from parent if not explicitly set
@@ -336,6 +399,7 @@ impl CommandBuilder {
         self
     }
 
+    #[track_caller]
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
@@ -413,6 +477,7 @@ impl ProcessBuilder {
         self
     }
 
+    #[track_caller]
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
@@ -474,6 +539,7 @@ impl OperationBuilder {
         self
     }
 
+    #[track_caller]
     pub fn start(self) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
@@ -486,44 +552,7 @@ impl OperationBuilder {
         // NOTE: Include devenv.user_message for the legacy devenv CLI
         //
         // span! requires compile-time constant levels, so we match on each variant
-        let name = self.name.as_str();
-        let span = match level {
-            ActivityLevel::Error => span!(
-                Level::ERROR,
-                "activity",
-                activity_id = id,
-                otel.name = name,
-                devenv.user_message = name
-            ),
-            ActivityLevel::Warn => span!(
-                Level::WARN,
-                "activity",
-                activity_id = id,
-                otel.name = name,
-                devenv.user_message = name
-            ),
-            ActivityLevel::Info => span!(
-                Level::INFO,
-                "activity",
-                activity_id = id,
-                otel.name = name,
-                devenv.user_message = name
-            ),
-            ActivityLevel::Debug => span!(
-                Level::DEBUG,
-                "activity",
-                activity_id = id,
-                otel.name = name,
-                devenv.user_message = name
-            ),
-            ActivityLevel::Trace => span!(
-                Level::TRACE,
-                "activity",
-                activity_id = id,
-                otel.name = name,
-                devenv.user_message = name
-            ),
-        };
+        let span = create_span(id, &self.name, level);
 
         send_activity_event(ActivityEvent::Operation(Operation::Start {
             id,
