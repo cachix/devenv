@@ -569,7 +569,7 @@ impl Tasks {
         } else {
             ("Running tasks", "tasks")
         };
-        let orchestration_activity = Arc::new(
+        let orchestration_activity = Arc::new(devenv_activity::start!(
             Activity::operation(label)
                 .detail(format!(
                     "{} {}, roots: {:?}",
@@ -578,8 +578,7 @@ impl Tasks {
                     self.root_names
                 ))
                 .parent(None)
-                .start(),
-        );
+        ));
 
         self.run_internal(orchestration_activity).await
     }
@@ -624,7 +623,9 @@ impl Tasks {
             TaskCompleted::DependencyFailed
         };
 
-        let skip_activity = Activity::task_with_id(task_activity_id);
+        let task_name = task_state.read().await.task.name.clone();
+        let skip_activity =
+            devenv_activity::start!(Activity::task(&task_name).id(task_activity_id));
         if cancelled {
             skip_activity.cancel();
         } else {

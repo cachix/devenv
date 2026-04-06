@@ -58,10 +58,10 @@ pub use events::{
 };
 pub use timestamp::Timestamp;
 
-// Builders
+// Builders and trait
 pub use builders::{
-    BuildBuilder, CommandBuilder, EvaluateBuilder, FetchBuilder, OperationBuilder, ProcessBuilder,
-    TaskBuilder, next_id,
+    ActivityStart, BuildBuilder, CommandBuilder, EvaluateBuilder, FetchBuilder, OperationBuilder,
+    ProcessBuilder, TaskBuilder, next_id,
 };
 
 // Functions
@@ -72,5 +72,5 @@ pub use stack::{
     message, message_with_details, op_to_evaluate, set_expected,
 };
 
-// Trait
+// Traits
 pub use instrument::ActivityInstrument;

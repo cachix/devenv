@@ -176,14 +176,8 @@ impl Activity {
     }
 
     /// Create a builder for a Task activity
-    pub fn task() -> TaskBuilder {
-        TaskBuilder::new()
-    }
-
-    /// Create and start a Task activity with a pre-assigned ID.
-    #[track_caller]
-    pub fn task_with_id(id: u64) -> Activity {
-        Activity::task().id(id).start()
+    pub fn task(name: impl Into<String>) -> TaskBuilder {
+        TaskBuilder::new(name)
     }
 
     /// Create a builder for a Command activity

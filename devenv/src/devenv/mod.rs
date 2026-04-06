@@ -763,7 +763,9 @@ impl Devenv {
         shell_cmd.stdout(Stdio::piped());
         shell_cmd.stderr(Stdio::piped());
 
-        let activity = Activity::operation(activity_name.unwrap_or("Running in shell")).start();
+        let activity = devenv_activity::start!(Activity::operation(
+            activity_name.unwrap_or("Running in shell")
+        ));
 
         let mut child = shell_cmd.spawn().into_diagnostic()?;
 
@@ -840,7 +842,7 @@ impl Devenv {
             None => "Updating devenv.lock".to_string(),
         };
 
-        let activity = Activity::operation(&msg).start();
+        let activity = devenv_activity::start!(Activity::operation(&msg));
         self.nix
             .update(
                 input_name,
@@ -1171,9 +1173,7 @@ impl Devenv {
 
     /// Assemble, build dev environment, cache it, and capture shell env vars.
     async fn configure_shell(&self) -> Result<HashMap<String, String>> {
-        let phase1 = Activity::operation("Configuring shell")
-            .parent(None)
-            .start();
+        let phase1 = devenv_activity::start!(Activity::operation("Configuring shell").parent(None));
         async {
             self.assemble().await?;
             let dev_env = self.get_dev_environment_inner(false).await?;
@@ -1218,7 +1218,8 @@ impl Devenv {
 
         // ── Phase 3: Building tests ─────────────────────────────────
         let test_script = {
-            let phase3 = Activity::operation("Building tests").parent(None).start();
+            let phase3 =
+                devenv_activity::start!(Activity::operation("Building tests").parent(None));
             async {
                 let gc_root = self.devenv_dot_gc.join("test");
                 let test_script = self
@@ -1272,7 +1273,7 @@ impl Devenv {
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<Vec<(String, PathBuf)>> {
-        let activity = Activity::operation("Building").start();
+        let activity = devenv_activity::start!(Activity::operation("Building"));
         async move {
             self.assemble().await?;
 
@@ -1360,7 +1361,7 @@ impl Devenv {
     }
 
     pub async fn eval(&self, attributes: &[String]) -> Result<String> {
-        let activity = Activity::operation("Evaluating").start();
+        let activity = devenv_activity::start!(Activity::operation("Evaluating"));
         async move {
             self.assemble().await?;
 
@@ -1439,9 +1440,7 @@ impl Devenv {
         // race conditions; dropping them here makes the ports available.
         drop(self.port_allocator.take_reservations());
 
-        let phase4 = Activity::operation("Running processes")
-            .parent(None)
-            .start();
+        let phase4 = devenv_activity::start!(Activity::operation("Running processes").parent(None));
         let impl_result = async {
             self.nix
                 .eval(&["devenv.config.process.manager.implementation"])
@@ -2252,7 +2251,8 @@ async fn run_tasks_with_ui(
         let tasks = Arc::new(tasks);
         let tasks_clone = Arc::clone(&tasks);
 
-        let run_handle = tokio::spawn(async move { tasks_clone.run(false).await });
+        let run_handle =
+            tokio::spawn(async move { tasks_clone.run(false).await }.in_current_span());
 
         let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
         Ok(ui.run(run_handle, stop_processes).await?)

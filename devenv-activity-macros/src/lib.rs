@@ -199,58 +199,48 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
     let is_async = fn_sig.asyncness.is_some();
 
     // Generate the level enum value (default to INFO)
-    let level_enum = match level {
-        Some(ref l) => {
-            let level_str = l.to_string().to_lowercase();
-            match level_str.as_str() {
-                "trace" => quote! { devenv_activity::ActivityLevel::Trace },
-                "debug" => quote! { devenv_activity::ActivityLevel::Debug },
-                "info" => quote! { devenv_activity::ActivityLevel::Info },
-                "warn" => quote! { devenv_activity::ActivityLevel::Warn },
-                "error" => quote! { devenv_activity::ActivityLevel::Error },
-                _ => {
-                    return Err(syn::Error::new(
-                        l.span(),
-                        format!(
-                            "unknown level '{}', expected one of: trace, debug, info, warn, error",
-                            level_str
-                        ),
-                    ));
-                }
-            }
+    let level_str = level
+        .as_ref()
+        .map(|l| l.to_string().to_lowercase())
+        .unwrap_or_else(|| "info".to_string());
+
+    let level_enum = match level_str.as_str() {
+        "trace" => quote! { devenv_activity::ActivityLevel::Trace },
+        "debug" => quote! { devenv_activity::ActivityLevel::Debug },
+        "info" => quote! { devenv_activity::ActivityLevel::Info },
+        "warn" => quote! { devenv_activity::ActivityLevel::Warn },
+        "error" => quote! { devenv_activity::ActivityLevel::Error },
+        _ => {
+            return Err(syn::Error::new(
+                level.as_ref().unwrap().span(),
+                format!(
+                    "unknown level '{}', expected one of: trace, debug, info, warn, error",
+                    level_str
+                ),
+            ));
         }
-        None => quote! { devenv_activity::ActivityLevel::Info },
     };
 
-    // Generate the activity creation call using type-specific builders
-    let activity_create = match kind {
+    // Generate the builder expression. The start!() macro handles span creation
+    // at the expansion site so tracing metadata points to the annotated function.
+    let activity_builder = match kind {
         Some(ref k) => {
             let kind_str = k.to_string();
             match kind_str.as_str() {
                 "build" => quote! {
-                    devenv_activity::Activity::build(#name)
-                        .level(#level_enum)
-                        .start()
+                    devenv_activity::Activity::build(#name).level(#level_enum)
                 },
                 "evaluate" => quote! {
-                    devenv_activity::Activity::evaluate()
-                        .level(#level_enum)
-                        .start()
+                    devenv_activity::Activity::evaluate(#name).level(#level_enum)
                 },
                 "task" => quote! {
-                    devenv_activity::Activity::task()
-                        .level(#level_enum)
-                        .start()
+                    devenv_activity::Activity::task(#name).level(#level_enum)
                 },
                 "command" => quote! {
-                    devenv_activity::Activity::command(#name)
-                        .level(#level_enum)
-                        .start()
+                    devenv_activity::Activity::command(#name).level(#level_enum)
                 },
                 "operation" => quote! {
-                    devenv_activity::Activity::operation(#name)
-                        .level(#level_enum)
-                        .start()
+                    devenv_activity::Activity::operation(#name).level(#level_enum)
                 },
                 _ => {
                     return Err(syn::Error::new(
@@ -264,10 +254,12 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
             }
         }
         None => quote! {
-            devenv_activity::Activity::operation(#name)
-                .level(#level_enum)
-                .start()
+            devenv_activity::Activity::operation(#name).level(#level_enum)
         },
+    };
+
+    let activity_create = quote! {
+        devenv_activity::start!(#activity_builder)
     };
 
     // Collect argument names that aren't skipped (for potential future use)

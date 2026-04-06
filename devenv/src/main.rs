@@ -1287,9 +1287,9 @@ fn run_daemon_processes(config_file: std::path::PathBuf) -> Result<()> {
         .map_err(|e| miette::miette!("Failed to build task runner: {}", e))?;
 
         // Run the full task DAG (starts processes, waits for readiness probes)
-        let phase = devenv_activity::Activity::operation("Running processes")
-            .parent(None)
-            .start();
+        let phase = devenv_activity::start!(
+            devenv_activity::Activity::operation("Running processes").parent(None)
+        );
         let _outputs = tasks_runner.run_with_parent_activity(Arc::new(phase)).await;
 
         // Write PID so `devenv processes down` can find us

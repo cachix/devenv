@@ -517,7 +517,7 @@ impl NativeProcessManager {
         if let Some(pid) = parent_id {
             builder = builder.parent(Some(pid));
         }
-        builder.start()
+        devenv_activity::start!(builder)
     }
 
     /// Register a process as waiting for dependencies.
@@ -1749,7 +1749,7 @@ impl NativeProcessManager {
         };
 
         // Create parent activity for grouping all processes
-        let parent_activity = Activity::operation("Running processes").start();
+        let parent_activity = devenv_activity::start!(Activity::operation("Running processes"));
         let parent_id = parent_activity.id();
 
         // Store the parent activity to keep it alive

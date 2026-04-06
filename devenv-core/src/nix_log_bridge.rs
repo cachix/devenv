@@ -388,11 +388,12 @@ impl NixLogBridge {
 
                 let derivation_name = extract_derivation_name(&derivation_path);
 
-                let activity = Activity::build(derivation_name)
-                    .id(activity_id)
-                    .derivation_path(derivation_path)
-                    .parent(parent_id)
-                    .start();
+                let activity = devenv_activity::start!(
+                    Activity::build(derivation_name)
+                        .id(activity_id)
+                        .derivation_path(derivation_path)
+                        .parent(parent_id)
+                );
 
                 self.insert_activity(activity_id, activity_type, activity);
             }
@@ -405,11 +406,12 @@ impl NixLogBridge {
 
                 let derivation_name = extract_derivation_name(&derivation_path);
 
-                let activity = Activity::build(derivation_name)
-                    .id(activity_id)
-                    .derivation_path(derivation_path)
-                    .parent(parent_id)
-                    .queue();
+                let activity = devenv_activity::start_queue!(
+                    Activity::build(derivation_name)
+                        .id(activity_id)
+                        .derivation_path(derivation_path)
+                        .parent(parent_id)
+                );
 
                 self.insert_activity(activity_id, activity_type, activity);
             }
@@ -424,7 +426,7 @@ impl NixLogBridge {
                     if let Some(url) = substituter {
                         builder = builder.url(url);
                     }
-                    let activity = builder.start();
+                    let activity = devenv_activity::start!(builder);
 
                     self.insert_activity(activity_id, activity_type, activity);
                 }
@@ -443,25 +445,28 @@ impl NixLogBridge {
                     let activity = if is_local_copy {
                         // Local copy to the store - use the full source path as the name
                         let source_path = source_uri.as_ref().unwrap();
-                        Activity::fetch(FetchKind::Copy, source_path)
-                            .id(activity_id)
-                            .parent(parent_id)
-                            .start()
+                        devenv_activity::start!(
+                            Activity::fetch(FetchKind::Copy, source_path)
+                                .id(activity_id)
+                                .parent(parent_id)
+                        )
                     } else if let Some(url) = source_uri {
                         // Remote download from substituter
                         let package_name = extract_package_name(&store_path);
-                        Activity::fetch(FetchKind::Download, package_name)
-                            .id(activity_id)
-                            .parent(parent_id)
-                            .url(url)
-                            .start()
+                        devenv_activity::start!(
+                            Activity::fetch(FetchKind::Download, package_name)
+                                .id(activity_id)
+                                .parent(parent_id)
+                                .url(url)
+                        )
                     } else {
                         // No source URI - treat as local copy with store path name
                         let package_name = extract_package_name(&store_path);
-                        Activity::fetch(FetchKind::Copy, package_name)
-                            .id(activity_id)
-                            .parent(parent_id)
-                            .start()
+                        devenv_activity::start!(
+                            Activity::fetch(FetchKind::Copy, package_name)
+                                .id(activity_id)
+                                .parent(parent_id)
+                        )
                     };
 
                     self.insert_activity(activity_id, activity_type, activity);
@@ -479,16 +484,17 @@ impl NixLogBridge {
                     if let Some(url) = substituter {
                         builder = builder.url(url);
                     }
-                    let activity = builder.start();
+                    let activity = devenv_activity::start!(builder);
 
                     self.insert_activity(activity_id, activity_type, activity);
                 }
             }
             ActivityType::FetchTree => {
-                let activity = Activity::fetch(FetchKind::Tree, text)
-                    .id(activity_id)
-                    .parent(parent_id)
-                    .start();
+                let activity = devenv_activity::start!(
+                    Activity::fetch(FetchKind::Tree, text)
+                        .id(activity_id)
+                        .parent(parent_id)
+                );
 
                 self.insert_activity(activity_id, activity_type, activity);
             }
@@ -502,7 +508,7 @@ impl NixLogBridge {
                 if let Some(url) = url {
                     builder = builder.url(url);
                 }
-                let activity = builder.start();
+                let activity = devenv_activity::start!(builder);
 
                 self.insert_activity(activity_id, activity_type, activity);
             }

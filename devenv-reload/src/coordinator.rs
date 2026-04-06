@@ -234,9 +234,9 @@ impl ShellCoordinator {
                         .iter()
                         .map(|p| p.display().to_string())
                         .collect();
-                    let activity = Activity::operation("Reloading shell")
-                        .detail(files_display.join(", "))
-                        .start();
+                    let activity = devenv_activity::start!(
+                        Activity::operation("Reloading shell").detail(files_display.join(", "))
+                    );
 
                     let ctx = BuildContext {
                         cwd: cwd.clone(),

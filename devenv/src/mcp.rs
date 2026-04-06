@@ -108,7 +108,7 @@ impl DevenvMcpServer {
 
         // Fetch and cache packages
         {
-            let _activity = Activity::operation("Caching packages").start();
+            let _activity = devenv_activity::start!(Activity::operation("Caching packages"));
             match self.fetch_packages_with_devenv(&devenv).await {
                 Ok(packages) => {
                     let mut cache = self.cache.write().await;
@@ -123,7 +123,7 @@ impl DevenvMcpServer {
 
         // Fetch and cache options
         {
-            let _activity = Activity::operation("Caching options").start();
+            let _activity = devenv_activity::start!(Activity::operation("Caching options"));
             match self.fetch_options_with_devenv(&devenv).await {
                 Ok(options) => {
                     let mut cache = self.cache.write().await;
@@ -522,9 +522,10 @@ pub async fn run_mcp_server(options: DevenvOptions, http_port: Option<u16>) -> R
             info!("MCP server ready at http://{}/", addr);
 
             // Show TUI progress for HTTP server
-            let _activity = Activity::operation("Running MCP server")
-                .detail(format!("http://0.0.0.0:{}/", port))
-                .start();
+            let _activity = devenv_activity::start!(
+                Activity::operation("Running MCP server")
+                    .detail(format!("http://0.0.0.0:{}/", port))
+            );
 
             axum::serve(tcp_listener, router)
                 .with_graceful_shutdown(async {
