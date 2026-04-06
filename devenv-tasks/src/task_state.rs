@@ -135,6 +135,17 @@ impl TaskState {
 
     /// Handle file modification checking with centralized error handling.
     /// Returns a Result with a boolean indicating if files were modified.
+    #[tracing::instrument(
+        skip(self, cache),
+        fields(
+            task.name = %self.task.name,
+            task.cached,
+            exec_if_modified.pattern_count,
+            exec_if_modified.include_pattern_count,
+            exec_if_modified.exclude_pattern_count,
+            exec_if_modified.matched_file_count,
+        )
+    )]
     async fn check_files_modified_result(
         &self,
         cache: &TaskCache,
@@ -143,10 +154,22 @@ impl TaskState {
             return Ok(false);
         }
 
+        let patterns = &self.task.exec_if_modified;
+        let include_count = patterns.iter().filter(|p| !p.starts_with('!')).count();
+        let exclude_count = patterns.len() - include_count;
+        let matched_files = expand_glob_patterns(patterns);
+
+        let span = tracing::Span::current();
+        span.record("exec_if_modified.pattern_count", patterns.len());
+        span.record("exec_if_modified.include_pattern_count", include_count);
+        span.record("exec_if_modified.exclude_pattern_count", exclude_count);
+        span.record("exec_if_modified.matched_file_count", matched_files.len());
+
         let patterns_modified = cache
             .check_modified_files(&self.task.name, &self.task.exec_if_modified)
             .await?;
         if patterns_modified {
+            span.record("task.cached", false);
             return Ok(true);
         }
 
@@ -157,6 +180,7 @@ impl TaskState {
                 .check_modified_files(&self.task.name, std::slice::from_ref(cmd))
                 .await?;
             if cmd_modified {
+                span.record("task.cached", false);
                 return Ok(true);
             }
         }
@@ -168,10 +192,12 @@ impl TaskState {
         if let Some(cmd) = &self.task.command {
             all_current_paths.push(cmd.clone());
         }
-        cache
+        let removed = cache
             .has_removed_files(&self.task.name, &all_current_paths)
-            .await
-            .map_err(Into::into)
+            .await?;
+
+        span.record("task.cached", !removed);
+        Ok(removed)
     }
 
     /// Check if any files specified in exec_if_modified have been modified.
