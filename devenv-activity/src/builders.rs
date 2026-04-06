@@ -20,14 +20,27 @@ pub fn next_id() -> u64 {
     ID_COUNTER.fetch_add(1, Ordering::Relaxed) | (1 << 63)
 }
 
-/// Helper to create a span at the given level
-fn create_span(id: u64, level: ActivityLevel) -> Span {
+/// Helper to create a span at the given level.
+///
+/// The `otel.name` field is recognized by `tracing-opentelemetry` to set
+/// the OpenTelemetry span name (since tracing span names must be `&'static str`).
+fn create_span(id: u64, name: &str, level: ActivityLevel) -> Span {
     match level {
-        ActivityLevel::Error => span!(Level::ERROR, "activity", activity_id = id),
-        ActivityLevel::Warn => span!(Level::WARN, "activity", activity_id = id),
-        ActivityLevel::Info => span!(Level::INFO, "activity", activity_id = id),
-        ActivityLevel::Debug => span!(Level::DEBUG, "activity", activity_id = id),
-        ActivityLevel::Trace => span!(Level::TRACE, "activity", activity_id = id),
+        ActivityLevel::Error => {
+            span!(Level::ERROR, "activity", activity_id = id, otel.name = name)
+        }
+        ActivityLevel::Warn => {
+            span!(Level::WARN, "activity", activity_id = id, otel.name = name)
+        }
+        ActivityLevel::Info => {
+            span!(Level::INFO, "activity", activity_id = id, otel.name = name)
+        }
+        ActivityLevel::Debug => {
+            span!(Level::DEBUG, "activity", activity_id = id, otel.name = name)
+        }
+        ActivityLevel::Trace => {
+            span!(Level::TRACE, "activity", activity_id = id, otel.name = name)
+        }
     }
 }
 
@@ -80,7 +93,7 @@ impl BuildBuilder {
             .or_else(current_activity_level)
             .unwrap_or_default();
 
-        let span = create_span(id, level);
+        let span = create_span(id, &self.name, level);
 
         send_activity_event(ActivityEvent::Build(Build::Start {
             id,
@@ -104,7 +117,7 @@ impl BuildBuilder {
             .or_else(current_activity_level)
             .unwrap_or_default();
 
-        let span = create_span(id, level);
+        let span = create_span(id, &self.name, level);
 
         send_activity_event(ActivityEvent::Build(Build::Queued {
             id,
@@ -169,7 +182,7 @@ impl FetchBuilder {
             .or_else(current_activity_level)
             .unwrap_or_default();
 
-        let span = create_span(id, level);
+        let span = create_span(id, &self.name, level);
 
         send_activity_event(ActivityEvent::Fetch(Fetch::Start {
             id,
@@ -226,7 +239,7 @@ impl EvaluateBuilder {
             .or_else(current_activity_level)
             .unwrap_or_default();
 
-        let span = create_span(id, level);
+        let span = create_span(id, &self.name, level);
 
         send_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
             id,
@@ -272,7 +285,7 @@ impl TaskBuilder {
             .or_else(current_activity_level)
             .unwrap_or_default();
 
-        let span = create_span(id, level);
+        let span = create_span(id, "task", level);
 
         send_activity_event(ActivityEvent::Task(Task::Start {
             id,
@@ -332,7 +345,7 @@ impl CommandBuilder {
             .or_else(current_activity_level)
             .unwrap_or(ActivityLevel::Debug);
 
-        let span = create_span(id, level);
+        let span = create_span(id, &self.name, level);
 
         send_activity_event(ActivityEvent::Command(Command::Start {
             id,
@@ -404,7 +417,7 @@ impl ProcessBuilder {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
 
-        let span = create_span(id, self.level);
+        let span = create_span(id, &self.name, self.level);
 
         send_activity_event(ActivityEvent::Process(Process::Start {
             id,
@@ -479,30 +492,35 @@ impl OperationBuilder {
                 Level::ERROR,
                 "activity",
                 activity_id = id,
+                otel.name = name,
                 devenv.user_message = name
             ),
             ActivityLevel::Warn => span!(
                 Level::WARN,
                 "activity",
                 activity_id = id,
+                otel.name = name,
                 devenv.user_message = name
             ),
             ActivityLevel::Info => span!(
                 Level::INFO,
                 "activity",
                 activity_id = id,
+                otel.name = name,
                 devenv.user_message = name
             ),
             ActivityLevel::Debug => span!(
                 Level::DEBUG,
                 "activity",
                 activity_id = id,
+                otel.name = name,
                 devenv.user_message = name
             ),
             ActivityLevel::Trace => span!(
                 Level::TRACE,
                 "activity",
                 activity_id = id,
+                otel.name = name,
                 devenv.user_message = name
             ),
         };
