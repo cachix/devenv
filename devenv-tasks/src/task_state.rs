@@ -133,8 +133,7 @@ impl TaskState {
         }
     }
 
-    /// Handle file modification checking with centralized error handling.
-    /// Returns a Result with a boolean indicating if files were modified.
+    /// Check if any files specified in exec_if_modified have been modified.
     #[tracing::instrument(
         name = "exec_if_modified",
         skip(self, cache),
@@ -147,7 +146,7 @@ impl TaskState {
             exec_if_modified.matched_file_count,
         )
     )]
-    async fn check_files_modified_result(
+    async fn check_files_modified(
         &self,
         cache: &TaskCache,
     ) -> Result<bool, devenv_cache_core::error::CacheError> {
@@ -158,7 +157,7 @@ impl TaskState {
         let patterns = &self.task.exec_if_modified;
         let include_count = patterns.iter().filter(|p| !p.starts_with('!')).count();
         let exclude_count = patterns.len() - include_count;
-        let matched_files = expand_glob_patterns(patterns);
+        let mut matched_files = expand_glob_patterns(patterns);
 
         let span = tracing::Span::current();
         span.record("exec_if_modified.pattern_count", patterns.len());
@@ -189,33 +188,15 @@ impl TaskState {
         // Check for files previously tracked in the DB that no longer match the globs
         // (deleted, renamed, or moved outside the pattern). Build the full set of
         // currently expected paths so we don't false-positive on command paths.
-        let mut all_current_paths = expand_glob_patterns(&self.task.exec_if_modified);
         if let Some(cmd) = &self.task.command {
-            all_current_paths.push(cmd.clone());
+            matched_files.push(cmd.clone());
         }
         let removed = cache
-            .has_removed_files(&self.task.name, &all_current_paths)
+            .has_removed_files(&self.task.name, &matched_files)
             .await?;
 
         span.record("task.cached", !removed);
         Ok(removed)
-    }
-
-    /// Check if any files specified in exec_if_modified have been modified.
-    /// Returns true if any files have been modified or if there was an error checking.
-    async fn check_modified_files(&self, cache: &TaskCache) -> bool {
-        match self.check_files_modified_result(cache).await {
-            Ok(modified) => modified,
-            Err(e) => {
-                // Log the error and default to running the task if there's an error
-                tracing::warn!(
-                    "Failed to check modified files for task {}: {}",
-                    self.task.name,
-                    e
-                );
-                true
-            }
-        }
     }
 
     /// Prepare environment variables for task execution.
@@ -564,18 +545,17 @@ impl TaskState {
                     }
                 }
             } else if !self.task.exec_if_modified.is_empty() {
-                tracing::debug!(
-                    "Task '{}' has exec_if_modified files: {:?}",
-                    self.task.name,
-                    self.task.exec_if_modified
-                );
-
-                let files_modified = self.check_modified_files(cache).await;
-                tracing::debug!(
-                    "Task '{}' files modified check result: {}",
-                    self.task.name,
-                    files_modified
-                );
+                let files_modified = match self.check_files_modified(cache).await {
+                    Ok(modified) => modified,
+                    Err(e) => {
+                        tracing::warn!(
+                            task.name = %self.task.name,
+                            error = %e,
+                            "Failed to check modified files, assuming modified",
+                        );
+                        true
+                    }
+                };
 
                 if !files_modified {
                     // First check if we have outputs in the current run's outputs map,
