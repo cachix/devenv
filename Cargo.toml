@@ -183,6 +183,12 @@ rmcp = { version = "1.1", features = [
 rmcp-macros = "1.1"
 sd-notify = "0.4"
 
+# Optional OpenTelemetry dependencies
+opentelemetry = "0.31"
+opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.31", default-features = false, features = ["trace"] }
+tracing-opentelemetry = "0.32"
+
 # Optional snix dependencies
 snix-eval = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
 snix-glue = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }

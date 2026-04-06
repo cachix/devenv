@@ -1,5 +1,5 @@
 use crate::tracing as devenv_tracing;
-use clap::{Parser, Subcommand, crate_version};
+use clap::{Parser, Subcommand, ValueEnum, crate_version};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use devenv_core::config::NixBackendType;
 use devenv_core::settings::{
@@ -9,6 +9,7 @@ use devenv_tasks::RunMode;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::str::FromStr;
+use url::Url;
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -20,6 +21,15 @@ pub enum TraceFormat {
     Json,
     /// A pretty human-readable log format used for debugging.
     Pretty,
+    /// OpenTelemetry OTLP export over gRPC.
+    #[value(name = "otlp-grpc")]
+    OtlpGrpc,
+    /// OpenTelemetry OTLP export over HTTP with Protocol Buffers.
+    #[value(name = "otlp-http-protobuf")]
+    OtlpHttpProtobuf,
+    /// OpenTelemetry OTLP export over HTTP with JSON.
+    #[value(name = "otlp-http-json")]
+    OtlpHttpJson,
 }
 
 /// Specifies where trace output should be written.
@@ -28,12 +38,14 @@ pub enum TraceFormat {
 /// - `stdout` - write to standard output
 /// - `stderr` - write to standard error
 /// - `file:/path/to/file` - write to the specified file path
+/// - `http://host:port` or `https://host:port` - send to an OTLP collector (for otlp-* formats)
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum TraceOutput {
     #[default]
     Stderr,
     Stdout,
     File(PathBuf),
+    Url(Url),
 }
 
 impl FromStr for TraceOutput {
@@ -44,15 +56,44 @@ impl FromStr for TraceOutput {
             "stderr" => Ok(TraceOutput::Stderr),
             "stdout" => Ok(TraceOutput::Stdout),
             s if s.starts_with("file:") => Ok(TraceOutput::File(PathBuf::from(&s[5..]))),
+            s if s.starts_with("http://") || s.starts_with("https://") => s
+                .parse::<Url>()
+                .map(TraceOutput::Url)
+                .map_err(|e| ParseTraceOutputError::InvalidUrl(e.to_string())),
             _ => Err(ParseTraceOutputError::UnsupportedFormat(s.to_string())),
+        }
+    }
+}
+
+impl TraceFormat {
+    /// Returns true if this format is an OTLP export format.
+    pub fn is_otlp(&self) -> bool {
+        matches!(
+            self,
+            TraceFormat::OtlpGrpc | TraceFormat::OtlpHttpProtobuf | TraceFormat::OtlpHttpJson
+        )
+    }
+
+    /// Returns the default OTLP endpoint for this format, if applicable.
+    pub fn default_otlp_endpoint(&self) -> Option<&'static str> {
+        match self {
+            TraceFormat::OtlpGrpc => Some("http://localhost:4317"),
+            TraceFormat::OtlpHttpProtobuf | TraceFormat::OtlpHttpJson => {
+                Some("http://localhost:4318")
+            }
+            _ => None,
         }
     }
 }
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ParseTraceOutputError {
-    #[error("unsupported trace output format '{0}', expected 'stdout', 'stderr', or 'file:<path>'")]
+    #[error(
+        "unsupported trace output format '{0}', expected 'stdout', 'stderr', 'file:<path>', or 'http(s)://<host>:<port>'"
+    )]
     UnsupportedFormat(String),
+    #[error("invalid URL: {0}")]
+    InvalidUrl(String),
 }
 
 // --- Domain CLI args (clap-derived, converted to *Options for resolve()) ---
@@ -291,7 +332,13 @@ pub struct TracingCliArgs {
         long,
         global = true,
         env = "DEVENV_TRACE_OUTPUT",
-        help = "Enable tracing and set the output destination: stdout, stderr, or file:<path>. Tracing is disabled by default."
+        help = "Enable tracing and set the output destination.",
+        long_help = "Enable tracing and set the output destination.\n\n\
+            For local formats (json, pretty, full): stdout, stderr, or file:<path>.\n\
+            For OTLP formats: http(s)://<host>:<port> endpoint URL.\n\n\
+            When using an otlp-* format without --trace-output, the OTEL spec default \
+            endpoint is used (localhost:4317 for gRPC, localhost:4318 for HTTP).\n\n\
+            Tracing is disabled by default."
     )]
     pub trace_output: Option<TraceOutput>,
 
@@ -300,6 +347,17 @@ pub struct TracingCliArgs {
         global = true,
         env = "DEVENV_TRACE_FORMAT",
         help = "Set the trace output format. Only takes effect when tracing is enabled via --trace-output.",
+        long_help = "Set the trace output format.\n\n\
+            Local formats (require stdout/stderr/file output):\n  \
+            json    - JSON log format for machine consumption (default)\n  \
+            pretty  - Pretty human-readable format\n  \
+            full    - Verbose structured format\n\n\
+            OTLP formats (send to a collector endpoint):\n  \
+            otlp-grpc          - OTLP over gRPC (default endpoint: localhost:4317)\n  \
+            otlp-http-protobuf - OTLP over HTTP with Protocol Buffers (default endpoint: localhost:4318)\n  \
+            otlp-http-json     - OTLP over HTTP with JSON (default endpoint: localhost:4318)\n\n\
+            OTLP formats respect standard OTEL_* environment variables (e.g. \
+            OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_SERVICE_NAME).",
         default_value_t,
         value_enum
     )]
@@ -351,12 +409,38 @@ pub struct CliOptions {
 }
 
 impl TracingCliArgs {
-    /// Returns true if tracing-only mode should be used.
+    /// Returns true if tracing-only mode should be used (disables TUI).
     pub fn use_tracing_mode(&self) -> bool {
         matches!(
             self.trace_output,
             Some(TraceOutput::Stdout) | Some(TraceOutput::Stderr)
         )
+    }
+
+    /// Validate that the trace format and output combination is valid.
+    pub fn validate(&self) -> Result<(), String> {
+        let is_otlp = self.trace_format.is_otlp();
+
+        if let Some(ref output) = self.trace_output {
+            match (is_otlp, output) {
+                // OTLP format with local output destination
+                (true, TraceOutput::Stdout | TraceOutput::Stderr | TraceOutput::File(_)) => {
+                    Err(format!(
+                        "OTLP format '{}' requires an http(s):// endpoint URL as --trace-output, \
+                         or omit --trace-output to use the default endpoint",
+                        self.trace_format.to_possible_value().unwrap().get_name()
+                    ))
+                }
+                // Local format with URL output
+                (false, TraceOutput::Url(_)) => Err(format!(
+                    "Local format '{}' requires stdout, stderr, or file:<path> as --trace-output",
+                    self.trace_format.to_possible_value().unwrap().get_name()
+                )),
+                _ => Ok(()),
+            }
+        } else {
+            Ok(())
+        }
     }
 }
 

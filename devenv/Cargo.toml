@@ -71,7 +71,14 @@ async-trait.workspace = true
 chrono.workspace = true
 secretspec.workspace = true
 secrecy.workspace = true
+url.workspace = true
 valuable.workspace = true
+
+# Optional OpenTelemetry dependencies
+opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+tracing-opentelemetry = { workspace = true, optional = true }
 
 # Optional snix dependencies
 snix-eval = { workspace = true, optional = true }
@@ -89,7 +96,28 @@ vergen-gitcl.workspace = true
 devenv-nix-backend-macros.workspace = true
 
 [features]
-default = []
+default = ["otlp-grpc"]
+otlp-grpc = [
+  "dep:opentelemetry",
+  "dep:opentelemetry_sdk",
+  "dep:tracing-opentelemetry",
+  "dep:opentelemetry-otlp",
+  "opentelemetry-otlp/grpc-tonic",
+]
+otlp-http-protobuf = [
+  "dep:opentelemetry",
+  "dep:opentelemetry_sdk",
+  "dep:tracing-opentelemetry",
+  "dep:opentelemetry-otlp",
+  "opentelemetry-otlp/http-proto",
+]
+otlp-http-json = [
+  "dep:opentelemetry",
+  "dep:opentelemetry_sdk",
+  "dep:tracing-opentelemetry",
+  "dep:opentelemetry-otlp",
+  "opentelemetry-otlp/http-json",
+]
 test-all = [
   "test-mcp",
   "devenv-processes/test-all",

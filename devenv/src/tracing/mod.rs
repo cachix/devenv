@@ -1,5 +1,11 @@
 mod devenv_layer;
 mod human_duration;
+#[cfg(any(
+    feature = "otlp-grpc",
+    feature = "otlp-http-protobuf",
+    feature = "otlp-http-json"
+))]
+mod otel;
 mod span_ids;
 mod span_timings;
 
@@ -9,6 +15,12 @@ use span_ids::{SpanContext, SpanIdLayer};
 pub use crate::cli::{TraceFormat, TraceOutput};
 pub use human_duration::HumanReadableDuration;
 
+#[cfg(not(any(
+    feature = "otlp-grpc",
+    feature = "otlp-http-protobuf",
+    feature = "otlp-http-json"
+)))]
+use clap::ValueEnum;
 use json_subscriber::JsonLayer;
 use std::fs::File;
 use std::io::{self, IsTerminal, LineWriter, Write};
@@ -73,6 +85,7 @@ fn create_trace_writer(output: &TraceOutput) -> Option<Mutex<TraceWriter>> {
         TraceOutput::File(path) => File::create(path)
             .ok()
             .map(|f| Mutex::new(TraceWriter::File(LineWriter::new(f)))),
+        TraceOutput::Url(_) => None,
     }
 }
 
@@ -108,8 +121,21 @@ fn create_filter(level: Level) -> EnvFilter {
     }
 }
 
-pub fn init_tracing_default() {
-    init_tracing(Level::default(), TraceFormat::Json, None, true);
+/// Opaque guard that flushes tracing resources on drop.
+///
+/// Hold this in `main` until the program exits.
+pub struct TracingGuard {
+    _inner: Vec<Box<dyn Send>>,
+}
+
+impl TracingGuard {
+    fn empty() -> Self {
+        Self { _inner: vec![] }
+    }
+}
+
+pub fn init_tracing_default() -> TracingGuard {
+    init_tracing(Level::default(), TraceFormat::Json, None, true)
 }
 
 /// Initialize tracing.
@@ -118,13 +144,21 @@ pub fn init_tracing_default() {
 /// direct terminal output (used when no TUI is active).
 ///
 /// `trace_format` and `trace_output` control an optional export layer for
-/// structured trace output to stdout, stderr, or a file.
+/// structured trace output to stdout, stderr, a file, or an OTLP collector.
+///
+/// Returns a [`TracingGuard`] that must be held until program exit to ensure
+/// proper flushing of trace data.
 pub fn init_tracing(
     level: Level,
     trace_format: TraceFormat,
     trace_output: Option<&TraceOutput>,
     cli_output: bool,
-) {
+) -> TracingGuard {
+    // OTLP formats use a separate initialization path
+    if trace_format.is_otlp() {
+        return init_tracing_otlp(level, trace_format, trace_output, cli_output);
+    }
+
     let base = Registry::default()
         .with(create_filter(level))
         .with(SpanIdLayer);
@@ -147,7 +181,7 @@ pub fn init_tracing(
     let ansi = match trace_output {
         Some(TraceOutput::Stdout) => io::stdout().is_terminal(),
         Some(TraceOutput::Stderr) => io::stderr().is_terminal(),
-        Some(TraceOutput::File(_)) | None => false,
+        Some(TraceOutput::File(_)) | Some(TraceOutput::Url(_)) | None => false,
     };
     let writer = trace_output.and_then(create_trace_writer);
 
@@ -185,5 +219,45 @@ pub fn init_tracing(
                 .with(DevenvLayer::new())
                 .try_init()
         }
+        // OTLP variants are handled above
+        TraceFormat::OtlpGrpc | TraceFormat::OtlpHttpProtobuf | TraceFormat::OtlpHttpJson => {
+            unreachable!()
+        }
     };
+
+    TracingGuard::empty()
+}
+
+fn init_tracing_otlp(
+    level: Level,
+    trace_format: TraceFormat,
+    trace_output: Option<&TraceOutput>,
+    cli_output: bool,
+) -> TracingGuard {
+    #[cfg(any(
+        feature = "otlp-grpc",
+        feature = "otlp-http-protobuf",
+        feature = "otlp-http-json"
+    ))]
+    {
+        otel::init_tracing_otlp(level, trace_format, trace_output, cli_output)
+    }
+
+    #[cfg(not(any(
+        feature = "otlp-grpc",
+        feature = "otlp-http-protobuf",
+        feature = "otlp-http-json"
+    )))]
+    {
+        let _ = (level, trace_output, cli_output);
+        let format_name = trace_format
+            .to_possible_value()
+            .map(|v| v.get_name().to_string())
+            .unwrap_or_else(|| format!("{trace_format:?}"));
+        eprintln!(
+            "error: trace format '{format_name}' requires the corresponding cargo feature \
+             (otlp-grpc, otlp-http-protobuf, or otlp-http-json)"
+        );
+        std::process::exit(1);
+    }
 }

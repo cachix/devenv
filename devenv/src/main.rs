@@ -199,6 +199,9 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
     } else {
         devenv::tasks::VerbosityLevel::Normal
     };
+    if let Err(e) = cli.tracing_args.validate() {
+        miette::bail!("{e}");
+    }
     let use_tracing_mode = cli.tracing_args.use_tracing_mode();
     let tracing_format = cli.tracing_args.trace_format;
     let tracing_output = cli.tracing_args.trace_output;
@@ -328,7 +331,7 @@ fn run(launch: LaunchConfig) -> Result<()> {
             launch.tracing_output,
             Some(TraceOutput::Stdout) | Some(TraceOutput::Stderr)
         );
-    devenv_tracing::init_tracing(
+    let _tracing_guard = devenv_tracing::init_tracing(
         launch.log_level,
         launch.tracing_format,
         launch.tracing_output.as_ref(),
@@ -432,6 +435,10 @@ fn run(launch: LaunchConfig) -> Result<()> {
     let devenv_output = devenv_thread
         .join()
         .map_err(|e| miette::miette!("devenv thread panicked: {}", panic_message(e)))?;
+
+    // Flush tracing before finish() — CommandResult::Exec replaces the
+    // process via exec(), so destructors after that point never run.
+    drop(_tracing_guard);
 
     devenv_output.finish()
 }
