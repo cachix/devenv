@@ -26,7 +26,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio_shutdown::Shutdown;
-use tracing::info;
+use tracing::{info, instrument};
 
 /// Stack size for threads that run Nix evaluation.
 ///
@@ -525,6 +525,7 @@ impl Drop for BackendDoneGuard {
 
 /// Run the backend: construct Devenv and dispatch the command.
 /// All config loading and settings resolution has already happened in prepare_launch_config.
+#[instrument(name = "devenv", skip_all)]
 async fn run_backend(
     launch: LaunchConfig,
     shutdown: Arc<Shutdown>,
@@ -780,6 +781,7 @@ impl CommandResult {
 }
 
 /// Dispatch a CLI command to the appropriate Devenv method.
+#[instrument(skip_all)]
 async fn dispatch_command(
     devenv: &Devenv,
     command: Commands,
