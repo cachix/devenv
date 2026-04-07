@@ -1,4 +1,4 @@
-{ lib, config, inputs, ... }:
+{ pkgs, lib, config, inputs, ... }:
 
 {
   # freestyle
@@ -75,6 +75,10 @@
           value = if r.value != null then r.value else builtins.seq check null;
         })
         results);
+
+    # Generate a shell expression that checksums a file for change detection.
+    # Returns only the checksum value (no filename).
+    _fileChecksum = path: "$(${pkgs.coreutils}/bin/cksum ${lib.escapeShellArg path} | ${pkgs.coreutils}/bin/cut -f1 -d' ')";
 
     mkTests = folder:
       let
