@@ -2716,6 +2716,30 @@ list of anything
 
 
 
+## containers.\<name>.fromImage
+
+
+
+An existing OCI base image to build on top of, built with nix2container’s pullImage.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
 ## containers.\<name>.isBuilding
 
 
@@ -2742,8 +2766,6 @@ false
 
 ## containers.\<name>.layers
 
-
-
 The layers to create.
 
 
@@ -2765,6 +2787,8 @@ list of (submodule)
 
 
 ## containers.\<name>.layers.\*.copyToRoot
+
+
 
 A list of derivations copied to the image root directory.
 
@@ -6007,8 +6031,6 @@ null or string or absolute path
 
 ## git-hooks.hooks.biome.settings.configPath
 
-
-
 Path to the configuration JSON file
 
 
@@ -6030,6 +6052,8 @@ string
 
 
 ## git-hooks.hooks.biome.settings.write
+
+
 
 Whether to edit files inplace.
 
@@ -8268,8 +8292,6 @@ one of “”, “black”, “django”, “pycharm”, “google”, “open_s
 
 ## git-hooks.hooks.lacheck
 
-
-
 lacheck hook
 
 
@@ -8283,6 +8305,8 @@ submodule
 
 
 ## git-hooks.hooks.lacheck.enable
+
+
 
 Whether to enable this pre-commit hook.
 
