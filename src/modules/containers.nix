@@ -99,6 +99,7 @@ let
   mkDerivation = cfg: nix2container.nix2container.buildImage {
     name = cfg.name;
     tag = cfg.version;
+    fromImage = cfg.fromImage;
     initializeNixDatabase = true;
     nixUid = lib.toInt uid;
     nixGid = lib.toInt gid;
@@ -198,6 +199,12 @@ let
         description = "Name of the container.";
         defaultText = "top-level name or containers.mycontainer.name";
         default = "${projectName name}-${name}";
+      };
+
+      fromImage = lib.mkOption {
+        type = types.nullOr types.package;
+        description = "An existing OCI base image to build on top of, built with nix2container's pullImage.";
+        default = null;
       };
 
       version = lib.mkOption {
