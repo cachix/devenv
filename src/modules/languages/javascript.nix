@@ -11,15 +11,15 @@ let
     lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''
   }node_modules";
 
+  dirPrefix = lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"'';
+
   initNpmScript = pkgs.writeShellScript "init-npm.sh" ''
     function _devenv-npm-install()
     {
       # Avoid running "npm install" for every shell.
       # Only run it when the "package-lock.json" file or nodejs version has changed.
       # We do this by storing the nodejs version and a hash of "package-lock.json" in node_modules.
-      local ACTUAL_NPM_CHECKSUM="${cfg.npm.package.version}:$(${pkgs.nix}/bin/nix-hash --type sha256 ${
-        lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''
-      }package-lock.json)"
+      local ACTUAL_NPM_CHECKSUM="${cfg.npm.package.version}:${config.lib._fileChecksum "${dirPrefix}package-lock.json"}"
       local NPM_CHECKSUM_FILE="${nodeModulesPath}/package-lock.json.checksum"
       if [ -f "$NPM_CHECKSUM_FILE" ]
         then
@@ -61,9 +61,7 @@ let
       # Avoid running "pnpm install" for every shell.
       # Only run it when the "package-lock.json" file or nodejs version has changed.
       # We do this by storing the nodejs version and a hash of "package-lock.json" in node_modules.
-      local ACTUAL_PNPM_CHECKSUM="${cfg.pnpm.package.version}:$(${pkgs.nix}/bin/nix-hash --type sha256 ${
-        lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''
-      }pnpm-lock.yaml)"
+      local ACTUAL_PNPM_CHECKSUM="${cfg.pnpm.package.version}:${config.lib._fileChecksum "${dirPrefix}pnpm-lock.yaml"}"
       local PNPM_CHECKSUM_FILE="${nodeModulesPath}/pnpm-lock.yaml.checksum"
       if [ -f "$PNPM_CHECKSUM_FILE" ]
         then
@@ -105,9 +103,7 @@ let
       # Avoid running "yarn install" for every shell.
       # Only run it when the "yarn.lock" file or nodejs version has changed.
       # We do this by storing the nodejs version and a hash of "yarn.lock" in node_modules.
-      local ACTUAL_YARN_CHECKSUM="${cfg.yarn.package.version}:$(${pkgs.nix}/bin/nix-hash --type sha256 ${
-        lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''
-      }yarn.lock)"
+      local ACTUAL_YARN_CHECKSUM="${cfg.yarn.package.version}:${config.lib._fileChecksum "${dirPrefix}yarn.lock"}"
       local YARN_CHECKSUM_FILE="${nodeModulesPath}/yarn.lock.checksum"
       if [ -f "$YARN_CHECKSUM_FILE" ]
         then
@@ -150,9 +146,7 @@ let
       # Avoid running "bun install" for every shell.
       # Only run it when the "bun.lock" file or nodejs version has changed.
       # We do this by storing the nodejs version and a hash of "bun.lock" in node_modules.
-      local ACTUAL_BUN_CHECKSUM="${cfg.bun.package.version}:$(${pkgs.nix}/bin/nix-hash --type sha256 ${
-        lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''
-      }bun.lock)"
+      local ACTUAL_BUN_CHECKSUM="${cfg.bun.package.version}:${config.lib._fileChecksum "${dirPrefix}bun.lock"}"
       local BUN_CHECKSUM_FILE="${nodeModulesPath}/bun.lock.checksum"
       if [ -f "$BUN_CHECKSUM_FILE" ]
         then
@@ -187,9 +181,7 @@ let
       # Avoid running "bun install --yarn" for every shell.
       # Only run it when the "yarn.lock" file or nodejs version has changed.
       # We do this by storing the nodejs version and a hash of "yarn.lock" in node_modules.
-      local ACTUAL_BUN_CHECKSUM="${cfg.bun.package.version}:$(${pkgs.nix}/bin/nix-hash --type sha256 ${
-        lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''
-      }yarn.lock)"
+      local ACTUAL_BUN_CHECKSUM="${cfg.bun.package.version}:${config.lib._fileChecksum "${dirPrefix}yarn.lock"}"
       local BUN_CHECKSUM_FILE="${nodeModulesPath}/yarn.lock.checksum"
       if [ -f "$BUN_CHECKSUM_FILE" ]
         then
