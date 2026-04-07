@@ -18,7 +18,7 @@ use tokio_shutdown::Shutdown;
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
 use devenv_cache_core::compute_string_hash;
 use devenv_core::PortAllocator;
-use devenv_core::cachix::{CachixCacheInfo, CachixConfig, CachixManager};
+use devenv_core::cachix::{Cachix, CachixCacheInfo, CachixManager};
 use devenv_core::config::{Input, NixpkgsConfig};
 use devenv_core::eval_op::EvalOp;
 use devenv_core::nix_args::NixArgs;
@@ -817,29 +817,27 @@ in cfg // {{
         Ok(())
     }
 
-    /// Get cachix configuration from devenv.nix via eval cache.
+    /// Evaluate a single cachix config field via the eval cache.
     ///
-    /// Returns the cachix configuration if enabled, None otherwise.
-    async fn get_cachix_config(&self) -> Result<Option<CachixCacheInfo>> {
-        if self.nix_settings.offline {
-            return Ok(None);
-        }
-
+    /// Evaluating individual fields avoids forcing expensive fields like `binary`
+    /// (which requires evaluating the cachix derivation) when they are not needed.
+    async fn eval_cachix_field<T: serde::de::DeserializeOwned>(&self, field: &str) -> Result<T> {
         let caching_state = self
             .caching_eval_state
             .get()
             .expect("assemble() must be called first");
 
-        let cache_key = caching_state.cache_key("config.cachix");
-        let activity = Activity::evaluate("Checking cachix config")
+        let attr_path = format!("config.cachix.{}", field);
+        let cache_key = caching_state.cache_key(&attr_path);
+        let activity = Activity::evaluate(format!("Checking cachix.{}", field))
             .level(ActivityLevel::Debug)
             .start();
 
-        let (json_str, _cache_hit) = async {
+        let (json_str, _) = async {
             caching_state
                 .cached_eval()
                 .eval(&cache_key, &activity, || async {
-                    self.eval_attr_uncached("config.cachix", "config.cachix", &activity)
+                    self.eval_attr_uncached(&attr_path, &attr_path, &activity)
                 })
                 .await
         }
@@ -847,17 +845,28 @@ in cfg // {{
         .await
         .map_err(cache_error_to_miette)?;
 
-        let cachix_config: CachixConfig = match serde_json::from_str(&json_str) {
-            Ok(config) => config,
-            Err(e) => {
-                tracing::warn!("Failed to parse cachix config: {}", e);
-                return Ok(None);
-            }
-        };
+        serde_json::from_str(&json_str)
+            .into_diagnostic()
+            .wrap_err(format!("Failed to parse cachix.{}", field))
+    }
 
-        if !cachix_config.enable {
+    /// Get cachix configuration from devenv.nix via eval cache.
+    ///
+    /// Only evaluates lightweight fields (enable, pull, push). The expensive
+    /// `binary` field (which forces the cachix derivation) is evaluated
+    /// separately via `eval_cachix_field` only when needed.
+    async fn get_cachix_config(&self) -> Result<Option<CachixCacheInfo>> {
+        if self.nix_settings.offline {
             return Ok(None);
         }
+
+        let enable: bool = self.eval_cachix_field("enable").await?;
+        if !enable {
+            return Ok(None);
+        }
+
+        let pull: Vec<String> = self.eval_cachix_field("pull").await?;
+        let push: Option<String> = self.eval_cachix_field("push").await?;
 
         // Load known keys from trusted keys file
         let trusted_keys_path = &self.cachix_manager.paths.trusted_keys;
@@ -871,9 +880,8 @@ in cfg // {{
         };
 
         Ok(Some(CachixCacheInfo {
-            caches: cachix_config.caches,
+            caches: Cachix { pull, push },
             known_keys,
-            binary: cachix_config.binary,
         }))
     }
 
@@ -1238,8 +1246,20 @@ impl NixBackend for NixRustBackend {
         if let Some(cachix_config) = self.get_cachix_config().await? {
             self.apply_cachix_substituters(&cachix_config).await?;
             if let Some(ref push_cache) = cachix_config.caches.push {
-                self.init_cachix_daemon(push_cache, &cachix_config.binary)
-                    .await?;
+                // Prefer "cachix" from PATH (bundled via the devenv wrapper).
+                // Only evaluate config.cachix.binary (which forces the cachix
+                // derivation) as a fallback when cachix is not on PATH.
+                let binary = match which::which("cachix") {
+                    Ok(path) => path,
+                    Err(_) => {
+                        // Evaluate the binary path, then build the package so
+                        // the store path is actually realized on disk.
+                        let binary_path: PathBuf = self.eval_cachix_field("binary").await?;
+                        self.build(&["config.cachix.package"], None, None).await?;
+                        binary_path
+                    }
+                };
+                self.init_cachix_daemon(push_cache, &binary).await?;
             }
         }
 

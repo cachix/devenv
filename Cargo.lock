@@ -1968,6 +1968,7 @@ dependencies = [
  "tokio-shutdown",
  "tracing",
  "uuid",
+ "which 8.0.0",
 ]
 
 [[package]]

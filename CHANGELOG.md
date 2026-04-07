@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed cachix daemon failing to start because the evaluated store path for the cachix binary was never realized. Now uses the cachix bundled with devenv via PATH, falling back to evaluating `cachix.binary` only when needed.
 - Fixed warning messages from Nix not being forwarded and displayed during evaluation.
 - Fixed `devenv test` leaving orphaned processes after test failures by ensuring processes are always stopped before propagating errors.
 - Fixed adding a new input to `devenv.yaml` causing all existing inputs to be re-fetched instead of only resolving the new one ([#2688](https://github.com/cachix/devenv/issues/2688)).
