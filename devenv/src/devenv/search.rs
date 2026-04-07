@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use cli_table::{Table, WithTitle};
-use devenv_activity::activity;
+use devenv_activity::instrument_activity;
 use devenv_core::nix_backend::Options;
 use miette::Result;
 use serde::Deserialize;
@@ -43,7 +43,7 @@ struct DevenvPackageResult {
 }
 
 impl Devenv {
-    #[activity("Searching options and packages")]
+    #[instrument_activity("Searching options and packages")]
     pub async fn search(&self, name: &str) -> Result<String> {
         self.assemble().await?;
 

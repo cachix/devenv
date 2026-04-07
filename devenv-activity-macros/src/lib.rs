@@ -1,14 +1,14 @@
 //! Proc-macros for devenv activity instrumentation.
 //!
-//! This crate provides the `#[activity]` attribute macro for automatically
+//! This crate provides the `#[instrument_activity]` attribute macro for automatically
 //! wrapping functions with Activity tracking.
 //!
 //! # Example
 //!
 //! ```ignore
-//! use devenv_activity_macros::activity;
+//! use devenv_activity_macros::instrument_activity;
 //!
-//! #[activity("Building shell")]
+//! #[instrument_activity("Building shell")]
 //! async fn build_shell() -> Result<()> {
 //!     // Function body is automatically instrumented with an Activity
 //!     Ok(())
@@ -29,10 +29,10 @@ use syn::{
 /// Arguments for the `#[activity]` attribute.
 ///
 /// Supports:
-/// - `#[activity("name")]` - Simple operation activity
-/// - `#[activity("name", kind = build)]` - Specify activity type (build, evaluate, task, command, operation)
-/// - `#[activity("name", level = debug)]` - Specify tracing Level (trace, debug, info, warn, error)
-/// - `#[activity("name", skip(arg1, arg2))]` - Skip certain arguments
+/// - `#[instrument_activity("name")]` - Simple operation activity
+/// - `#[instrument_activity("name", kind = build)]` - Specify activity type (build, evaluate, task, command, operation)
+/// - `#[instrument_activity("name", level = debug)]` - Specify tracing Level (trace, debug, info, warn, error)
+/// - `#[instrument_activity("name", skip(arg1, arg2))]` - Skip certain arguments
 ///
 /// Note: `fetch` is not available as a kind since it requires a FetchKind parameter.
 struct ActivityArgs {
@@ -139,23 +139,23 @@ impl Parse for ActivityArgs {
 ///
 /// ```ignore
 /// // Simple operation activity
-/// #[activity("Building shell")]
+/// #[instrument_activity("Building shell")]
 /// async fn build_shell() -> Result<()> { ... }
 ///
 /// // With specific kind (view adds "Building" prefix for build kind)
-/// #[activity("container", kind = build)]
+/// #[instrument_activity("container", kind = build)]
 /// async fn build_container() -> Result<()> { ... }
 ///
 /// // With specific level (trace, debug, info, warn, error)
-/// #[activity("Running command", level = debug)]
+/// #[instrument_activity("Running command", level = debug)]
 /// async fn run_cmd() -> Result<()> { ... }
 ///
 /// // Skip certain arguments (useful for &self)
-/// #[activity("Running tests", skip(self))]
+/// #[instrument_activity("Running tests", skip(self))]
 /// async fn run_tests(&self) -> Result<()> { ... }
 ///
 /// // Dynamic name using format! (for build kind, omit verb - view adds it)
-/// #[activity(format!("{} container", name), kind = build)]
+/// #[instrument_activity(format!("{} container", name), kind = build)]
 /// async fn build_named(&self, name: &str) -> Result<()> { ... }
 /// ```
 ///
@@ -166,14 +166,14 @@ impl Parse for ActivityArgs {
 /// ```ignore
 /// async fn build_shell() -> Result<()> {
 ///     use devenv_activity::ActivityInstrument;
-///     let __activity = devenv_activity::Activity::operation("Building shell");
+///     let __activity = devenv_activity::activity!(devenv_activity::Activity::operation("Building shell"));
 ///     (async move {
 ///         // original function body
 ///     }).in_activity(&__activity).await
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn activity(args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn instrument_activity(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as ActivityArgs);
     let input_fn = parse_macro_input!(input as ItemFn);
 
@@ -221,7 +221,7 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
         }
     };
 
-    // Generate the builder expression. The start!() macro handles span creation
+    // Generate the builder expression. The activity!() macro handles span creation
     // at the expansion site so tracing metadata points to the annotated function.
     let activity_builder = match kind {
         Some(ref k) => {
@@ -259,7 +259,7 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
     };
 
     let activity_create = quote! {
-        devenv_activity::start!(#activity_builder)
+        devenv_activity::activity!(#activity_builder)
     };
 
     // Collect argument names that aren't skipped (for potential future use)

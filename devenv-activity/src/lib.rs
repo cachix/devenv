@@ -20,14 +20,14 @@
 //! .await;
 //! ```
 //!
-//! ## Using the `#[activity]` macro
+//! ## Using the `#[instrument_activity]` macro
 //!
-//! For cleaner instrumentation, use the `#[activity]` attribute macro:
+//! For cleaner instrumentation, use the `#[instrument_activity]` attribute macro:
 //!
 //! ```ignore
-//! use devenv_activity::activity;
+//! use devenv_activity::instrument_activity;
 //!
-//! #[activity("Building shell")]
+//! #[instrument_activity("Building shell")]
 //! async fn build_shell() -> Result<()> {
 //!     // Function body is automatically instrumented
 //!     Ok(())
@@ -43,8 +43,8 @@ mod serde_valuable;
 mod stack;
 mod timestamp;
 
-// Re-export the activity macro
-pub use devenv_activity_macros::activity;
+// Re-export the instrument_activity proc macro
+pub use devenv_activity_macros::instrument_activity;
 
 // Re-export for convenience
 pub use tracing_subscriber::Registry;

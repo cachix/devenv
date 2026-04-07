@@ -7,7 +7,7 @@ use crate::types::{
     TaskStatus, TaskType, VerbosityLevel, get_or_create_devenv_env_mut, process_name,
 };
 use base64::Engine;
-use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
+use devenv_activity::{Activity, ActivityInstrument, ActivityLevel, activity};
 use devenv_processes::{NativeProcessManager, ProcessConfig};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::collections::BTreeMap;
@@ -442,8 +442,7 @@ impl TaskState {
         shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<TaskCompleted> {
         // Create the Activity with the pre-assigned ID - this emits Task::Start
-        let task_activity =
-            devenv_activity::start!(Activity::task(&self.task.name).id(activity_id));
+        let task_activity = activity!(Activity::task(&self.task.name).id(activity_id));
 
         // Run the entire task within the activity's scope for proper parent-child nesting
         self.run_inner(
@@ -498,7 +497,7 @@ impl TaskState {
                 let mut command = ctx.build_command();
 
                 // Create a Command activity for the status check (automatically parented to task_activity)
-                let status_activity = devenv_activity::start!(
+                let status_activity = activity!(
                     Activity::command("check status")
                         .command(cmd)
                         .level(ActivityLevel::Debug)
@@ -584,7 +583,7 @@ impl TaskState {
         };
 
         // Create a Command activity for the main execution (automatically parented to task_activity)
-        let cmd_activity = devenv_activity::start!(
+        let cmd_activity = activity!(
             Activity::command("execute command")
                 .command(cmd)
                 .level(ActivityLevel::Debug)

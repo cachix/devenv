@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::devenv::{Devenv, DevenvOptions};
-use devenv_activity::Activity;
+use devenv_activity::{Activity, activity};
 use devenv_core::Options;
 use miette::Result;
 use rmcp::handler::server::tool::{ToolCallContext, ToolRouter};
@@ -108,7 +108,7 @@ impl DevenvMcpServer {
 
         // Fetch and cache packages
         {
-            let _activity = devenv_activity::start!(Activity::operation("Caching packages"));
+            let _activity = activity!(Activity::operation("Caching packages"));
             match self.fetch_packages_with_devenv(&devenv).await {
                 Ok(packages) => {
                     let mut cache = self.cache.write().await;
@@ -123,7 +123,7 @@ impl DevenvMcpServer {
 
         // Fetch and cache options
         {
-            let _activity = devenv_activity::start!(Activity::operation("Caching options"));
+            let _activity = activity!(Activity::operation("Caching options"));
             match self.fetch_options_with_devenv(&devenv).await {
                 Ok(options) => {
                     let mut cache = self.cache.write().await;
@@ -522,7 +522,7 @@ pub async fn run_mcp_server(options: DevenvOptions, http_port: Option<u16>) -> R
             info!("MCP server ready at http://{}/", addr);
 
             // Show TUI progress for HTTP server
-            let _activity = devenv_activity::start!(
+            let _activity = activity!(
                 Activity::operation("Running MCP server")
                     .detail(format!("http://0.0.0.0:{}/", port))
             );

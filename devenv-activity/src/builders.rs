@@ -1,6 +1,6 @@
 //! Builder types for creating activities.
 //!
-//! All activity creation goes through the [`start!`] macro, which emits
+//! All activity creation goes through the [`activity!`] macro, which emits
 //! `tracing::span!()` at the call site so that tracing metadata (file, line)
 //! points to where the activity was created, not to this module.
 
@@ -26,7 +26,7 @@ pub fn next_id() -> u64 {
 
 /// Trait implemented by all activity builders.
 ///
-/// Used by the [`start!`] macro to extract name/level from a builder and
+/// Used by the [`activity!`] macro to extract name/level from a builder and
 /// finalize the activity with an externally-created span.
 pub trait ActivityStart: Sized {
     /// The human-readable activity name (used for `otel.name` and `devenv.user_message`).
@@ -51,15 +51,15 @@ pub trait ActivityStart: Sized {
 /// # Examples
 ///
 /// ```ignore
-/// use devenv_activity::{Activity, start};
+/// use devenv_activity::{Activity, activity};
 ///
-/// let act = start!(Activity::operation("Configuring shell"));
-/// let act = start!(Activity::evaluate("Evaluating Nix"));
-/// let act = start!(Activity::build("container").derivation_path(&path));
-/// let act = start!(Activity::task("devenv:enterShell").id(42));
+/// let act = activity!(Activity::operation("Configuring shell"));
+/// let act = activity!(Activity::evaluate("Evaluating Nix"));
+/// let act = activity!(Activity::build("container").derivation_path(&path));
+/// let act = activity!(Activity::task("devenv:enterShell").id(42));
 /// ```
 #[macro_export]
-macro_rules! start {
+macro_rules! activity {
     ($builder:expr) => {{
         let __builder = $builder;
         let __name = $crate::ActivityStart::activity_name(&__builder);
@@ -76,7 +76,7 @@ macro_rules! start {
 
 /// Create and queue a build activity with correct source location metadata.
 ///
-/// Same as [`start!`] but for build activities that are waiting for a build slot.
+/// Same as [`activity!`] but for build activities that are waiting for a build slot.
 #[macro_export]
 macro_rules! start_queue {
     ($builder:expr) => {{
@@ -94,7 +94,7 @@ macro_rules! start_queue {
 ///
 /// Each `tracing::span!()` requires a compile-time level constant, so we
 /// match on the runtime level and expand a separate `span!()` for each variant.
-/// Since this macro is called from [`start!`]/[`queue!`], all `span!()` calls
+/// Since this macro is called from [`activity!`]/[`start_queue!`], all `span!()` calls
 /// expand at the user's call site — giving correct `file!()`/`line!()`.
 #[doc(hidden)]
 #[macro_export]

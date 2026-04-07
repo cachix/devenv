@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use devenv_activity::{Activity, ProcessStatus};
+use devenv_activity::{Activity, ProcessStatus, activity};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix::sys::signal::{self, Signal as NixSignal};
 use nix::unistd::Pid;
@@ -517,7 +517,7 @@ impl NativeProcessManager {
         if let Some(pid) = parent_id {
             builder = builder.parent(Some(pid));
         }
-        devenv_activity::start!(builder)
+        activity!(builder)
     }
 
     /// Register a process as waiting for dependencies.
@@ -1749,7 +1749,7 @@ impl NativeProcessManager {
         };
 
         // Create parent activity for grouping all processes
-        let parent_activity = devenv_activity::start!(Activity::operation("Running processes"));
+        let parent_activity = activity!(Activity::operation("Running processes"));
         let parent_id = parent_activity.id();
 
         // Store the parent activity to keep it alive

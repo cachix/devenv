@@ -39,7 +39,7 @@ devenv is a Rust CLI tool that creates fast, declarative, reproducible developer
 
 - **devenv-tasks/** - DAG-based task execution system with caching, parallel execution, and privilege escalation support.
 
-- **devenv-activity/** - Tracing-based activity system that powers the TUI progress display. Use `#[activity("description")]` macro for TUI-visible operations.
+- **devenv-activity/** - Tracing-based activity system that powers the TUI progress display. Use `#[instrument_activity("description")]` macro for TUI-visible operations.
 
 - **devenv-tui/** - Terminal UI for displaying build progress and activities.
 
@@ -73,7 +73,7 @@ Nix modules in `src/modules/` define the devenv configuration schema:
 ### Key Patterns
 
 - **Dual Backend Architecture**: The `NixBackend` trait allows swapping between the FFI-based backend (default) and Snix backend.
-- **Activity Tracing**: Use `#[activity("description")]` macro or `Activity::operation()` for TUI-visible operations.
+- **Activity Tracing**: Use `#[instrument_activity("description")]` macro or `activity!(Activity::operation("..."))` for TUI-visible operations.
 - **Error Handling**: Use `miette` for errors with `bail!()` and `?`. Custom error types use `thiserror`.
 - **SQLite Migrations**: Both `devenv-eval-cache` and `devenv-tasks` use sqlx with migrations in `migrations/` directories.
 

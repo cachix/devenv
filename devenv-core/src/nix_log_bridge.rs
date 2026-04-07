@@ -22,8 +22,8 @@
 //! This guard-based API ensures eval scopes are always properly closed.
 
 use devenv_activity::{
-    Activity, ActivityLevel, ExpectedCategory, FetchKind, message, message_with_details,
-    op_to_evaluate, set_expected,
+    Activity, ActivityLevel, ExpectedCategory, FetchKind, activity, message, message_with_details,
+    op_to_evaluate, set_expected, start_queue,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -388,7 +388,7 @@ impl NixLogBridge {
 
                 let derivation_name = extract_derivation_name(&derivation_path);
 
-                let activity = devenv_activity::start!(
+                let activity = activity!(
                     Activity::build(derivation_name)
                         .id(activity_id)
                         .derivation_path(derivation_path)
@@ -406,7 +406,7 @@ impl NixLogBridge {
 
                 let derivation_name = extract_derivation_name(&derivation_path);
 
-                let activity = devenv_activity::start_queue!(
+                let activity = start_queue!(
                     Activity::build(derivation_name)
                         .id(activity_id)
                         .derivation_path(derivation_path)
@@ -426,7 +426,7 @@ impl NixLogBridge {
                     if let Some(url) = substituter {
                         builder = builder.url(url);
                     }
-                    let activity = devenv_activity::start!(builder);
+                    let activity = activity!(builder);
 
                     self.insert_activity(activity_id, activity_type, activity);
                 }
@@ -445,7 +445,7 @@ impl NixLogBridge {
                     let activity = if is_local_copy {
                         // Local copy to the store - use the full source path as the name
                         let source_path = source_uri.as_ref().unwrap();
-                        devenv_activity::start!(
+                        activity!(
                             Activity::fetch(FetchKind::Copy, source_path)
                                 .id(activity_id)
                                 .parent(parent_id)
@@ -453,7 +453,7 @@ impl NixLogBridge {
                     } else if let Some(url) = source_uri {
                         // Remote download from substituter
                         let package_name = extract_package_name(&store_path);
-                        devenv_activity::start!(
+                        activity!(
                             Activity::fetch(FetchKind::Download, package_name)
                                 .id(activity_id)
                                 .parent(parent_id)
@@ -462,7 +462,7 @@ impl NixLogBridge {
                     } else {
                         // No source URI - treat as local copy with store path name
                         let package_name = extract_package_name(&store_path);
-                        devenv_activity::start!(
+                        activity!(
                             Activity::fetch(FetchKind::Copy, package_name)
                                 .id(activity_id)
                                 .parent(parent_id)
@@ -484,13 +484,13 @@ impl NixLogBridge {
                     if let Some(url) = substituter {
                         builder = builder.url(url);
                     }
-                    let activity = devenv_activity::start!(builder);
+                    let activity = activity!(builder);
 
                     self.insert_activity(activity_id, activity_type, activity);
                 }
             }
             ActivityType::FetchTree => {
-                let activity = devenv_activity::start!(
+                let activity = activity!(
                     Activity::fetch(FetchKind::Tree, text)
                         .id(activity_id)
                         .parent(parent_id)
@@ -508,7 +508,7 @@ impl NixLogBridge {
                 if let Some(url) = url {
                     builder = builder.url(url);
                 }
-                let activity = devenv_activity::start!(builder);
+                let activity = activity!(builder);
 
                 self.insert_activity(activity_id, activity_type, activity);
             }

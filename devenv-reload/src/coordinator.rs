@@ -5,7 +5,7 @@
 
 use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
-use devenv_activity::Activity;
+use devenv_activity::{Activity, activity};
 use devenv_event_sources::{FileWatcher, FileWatcherConfig};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -234,7 +234,7 @@ impl ShellCoordinator {
                         .iter()
                         .map(|p| p.display().to_string())
                         .collect();
-                    let activity = devenv_activity::start!(
+                    let activity = activity!(
                         Activity::operation("Reloading shell").detail(files_display.join(", "))
                     );
 
