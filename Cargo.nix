@@ -6865,6 +6865,10 @@ rec {
             packageId = "uuid";
             features = [ "v4" ];
           }
+          {
+            name = "which";
+            packageId = "which 8.0.0";
+          }
         ];
         devDependencies = [
           {

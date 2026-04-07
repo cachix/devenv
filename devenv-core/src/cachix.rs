@@ -200,8 +200,6 @@ pub struct Cachix {
 pub struct CachixCacheInfo {
     pub caches: Cachix,
     pub known_keys: BTreeMap<String, String>,
-    /// Path to the cachix binary
-    pub binary: PathBuf,
 }
 
 /// Cachix API response containing cache metadata
