@@ -136,7 +136,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-    runs-on: {{ '${{ matrix.os }}' }}
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v5
