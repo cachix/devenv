@@ -174,6 +174,8 @@ pub struct UiState {
     pub terminal_size: TerminalSize,
     pub interrupt_prompt_active: bool,
     pub view_mode: ViewMode,
+    /// Activity IDs currently being drag-selected (for copy on release)
+    pub drag_selected: Vec<u64>,
 }
 
 impl UiState {
@@ -198,6 +200,7 @@ impl UiState {
             terminal_size: TerminalSize { width, height },
             interrupt_prompt_active: false,
             view_mode: ViewMode::Main,
+            drag_selected: Vec::new(),
         }
     }
 

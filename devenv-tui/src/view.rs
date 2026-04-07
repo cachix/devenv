@@ -57,9 +57,12 @@ pub fn view(
     // Create owned activity elements, including hidden children indicators
     let mut activity_elements: Vec<AnyElement<'static>> = Vec::new();
 
+    let drag_selected = &ui_state.drag_selected;
+
     for display_activity in activities_to_show.iter() {
         let activity = &display_activity.activity;
         let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
+        let is_drag_selected = drag_selected.contains(&activity.id);
 
         // Pass logs for activities that should display them:
         // - Tasks with show_output=true or failed: show logs inline
@@ -102,20 +105,27 @@ pub fn view(
             } => (Some(*success), *cached),
         };
 
+        let bg = if is_drag_selected {
+            Some(iocraft::Color::DarkGrey)
+        } else {
+            None
+        };
         activity_elements.push(
             element! {
-                ContextProvider(value: Context::owned(ActivityRenderContext {
-                    activity: activity.clone(),
-                    depth: display_activity.depth,
-                    is_selected,
-                    logs: activity_logs,
-                    log_line_count: model.get_log_line_count(activity.id),
-                    completed,
-                    cached,
-                    render_context,
-                    shutting_down,
-                })) {
-                    ActivityItem
+                View(background_color: bg, width: 100pct) {
+                    ContextProvider(value: Context::owned(ActivityRenderContext {
+                        activity: activity.clone(),
+                        depth: display_activity.depth,
+                        is_selected,
+                        logs: activity_logs,
+                        log_line_count: model.get_log_line_count(activity.id),
+                        completed,
+                        cached,
+                        render_context,
+                        shutting_down,
+                    })) {
+                        ActivityItem
+                    }
                 }
             }
             .into_any(),

@@ -296,6 +296,13 @@ fn run(launch: LaunchConfig) -> Result<()> {
     let tui = launch.tui;
     let needs_terminal_handoff = launch.needs_terminal_handoff;
     let verbosity = launch.verbosity;
+    let is_process_view = matches!(
+        launch.command,
+        Commands::Up { .. }
+            | Commands::Processes {
+                command: ProcessesCommand::Up { .. },
+            }
+    );
 
     // Shutdown coordination (shared between main thread and backend thread)
     let shutdown = Shutdown::new();
@@ -368,15 +375,16 @@ fn run(launch: LaunchConfig) -> Result<()> {
             .wrap_err("Failed to create TUI runtime")?;
 
         rt.block_on(async {
-            devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
+            let mut app = devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
                 .with_command_sender(command_tx)
                 .filter_level(filter_level)
                 // When a command needs terminal handoff, don't shut down on backend_done —
                 // it's used as a handoff signal (eval done), not a completion signal
-                .shutdown_on_backend_done(!needs_terminal_handoff)
-                .run(backend_done.clone())
-                .await
-                .unwrap_or(0)
+                .shutdown_on_backend_done(!needs_terminal_handoff);
+            if is_process_view {
+                app = app.with_mouse_capture();
+            }
+            app.run(backend_done.clone()).await.unwrap_or(0)
         })
     } else {
         drop(activity_rx);

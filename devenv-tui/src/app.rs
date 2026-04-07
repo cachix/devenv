@@ -3,6 +3,8 @@ use crate::{
     model::{ActivityModel, RenderContext, UiState, ViewMode},
     view::{ActivityHeights, SUMMARY_BAR_HEIGHT, ScrollState, view},
 };
+use base64::Engine;
+use crossterm::event::MouseButton;
 use crossterm::{
     cursor, event, execute,
     style::{Color, ResetColor, SetForegroundColor},
@@ -10,10 +12,12 @@ use crossterm::{
 };
 use devenv_activity::{ActivityEvent, ActivityLevel};
 use devenv_processes::ProcessCommand;
+use iocraft::MouseEventKind;
 use iocraft::prelude::*;
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
+use std::time::Instant;
 use tokio::sync::{Notify, mpsc};
 use tokio_shutdown::Shutdown;
 use tracing::debug;
@@ -86,6 +90,7 @@ pub struct TuiApp {
     shutdown: Arc<Shutdown>,
     command_tx: Option<mpsc::Sender<ProcessCommand>>,
     shutdown_on_backend_done: bool,
+    mouse_capture: bool,
 }
 
 impl TuiApp {
@@ -100,6 +105,7 @@ impl TuiApp {
             shutdown,
             command_tx: None,
             shutdown_on_backend_done: true,
+            mouse_capture: false,
         }
     }
 
@@ -147,6 +153,12 @@ impl TuiApp {
         self
     }
 
+    /// Enable mouse capture for click to select and double click to expand.
+    pub fn with_mouse_capture(mut self) -> Self {
+        self.mouse_capture = true;
+        self
+    }
+
     /// Run the TUI application until the backend completes.
     ///
     /// The `backend_done` notify signals when the backend has completed its
@@ -160,6 +172,7 @@ impl TuiApp {
         let shutdown = self.shutdown;
         let command_tx = self.command_tx;
         let shutdown_on_backend_done = self.shutdown_on_backend_done;
+        let mouse_capture = self.mouse_capture;
 
         let exit_flag = ExitFlag::new();
 
@@ -260,6 +273,7 @@ impl TuiApp {
                 command_tx.clone(),
                 &mut pre_expand_height,
                 exit_flag.clone(),
+                mouse_capture,
             )
             .await;
 
@@ -473,6 +487,9 @@ pub fn restore_terminal() {
         unsafe { libc::tcsetattr(fd, libc::TCSANOW, original) };
     }
 
+    // Disable mouse capture if it was enabled (harmless if not active)
+    let _ = execute!(stderr, event::DisableMouseCapture);
+
     // Pop keyboard enhancement flags if iocraft pushed them.
     // iocraft enables the Kitty keyboard protocol (PushKeyboardEnhancementFlags)
     // when entering raw mode on supported terminals. If the process exits without
@@ -491,6 +508,51 @@ pub fn restore_terminal() {
 
 fn activity_height(heights: &std::collections::HashMap<u64, i32>, id: u64) -> i32 {
     heights.get(&id).copied().unwrap_or(1)
+}
+
+/// Collect activity IDs whose rows overlap [row_start, row_end] (inclusive, in content space).
+fn collect_activity_ids(
+    display_activities: &[crate::model::DisplayActivity],
+    heights: &std::collections::HashMap<u64, i32>,
+    row_start: i32,
+    row_end: i32,
+) -> Vec<u64> {
+    let mut ids = Vec::new();
+    let mut accumulated = 0i32;
+    for da in display_activities {
+        let h = activity_height(heights, da.activity.id);
+        let top = accumulated;
+        let bottom = accumulated + h - 1;
+        if bottom >= row_start && top <= row_end {
+            ids.push(da.activity.id);
+        }
+        accumulated += h;
+    }
+    ids
+}
+
+/// Copy text to clipboard using OSC 52 escape sequence.
+fn copy_to_clipboard(text: &str) {
+    let encoded = base64::engine::general_purpose::STANDARD.encode(text);
+    let _ = write!(io::stderr(), "\x1b]52;c;{}\x07", encoded);
+    let _ = io::stderr().flush();
+}
+
+/// Find which activity was clicked given a row within the content area.
+fn hit_test_activity(
+    display_activities: &[crate::model::DisplayActivity],
+    heights: &std::collections::HashMap<u64, i32>,
+    content_row: i32,
+) -> Option<u64> {
+    let mut accumulated = 0i32;
+    for da in display_activities {
+        let h = activity_height(heights, da.activity.id);
+        if content_row >= accumulated && content_row < accumulated + h {
+            return Some(da.activity.id);
+        }
+        accumulated += h;
+    }
+    None
 }
 
 /// Scroll the viewport so the selected activity is visible.
@@ -565,9 +627,15 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
     // Get optional command sender for process control
     let command_tx = hooks.use_context::<Option<mpsc::Sender<ProcessCommand>>>();
+    let mouse_capture = *hooks.use_context::<bool>();
+    // Mouse state for click/drag tracking
+    let mut last_click: Ref<Option<(u64, Instant)>> = hooks.use_ref_default();
+    let mut mouse_down_row: Ref<Option<u16>> = hooks.use_ref_default();
+    let mut mouse_dragged: Ref<bool> = hooks.use_ref_default();
+    let mut mouse_drag_end_row: Ref<Option<u16>> = hooks.use_ref_default();
 
-    // Handle keyboard events - only UI state updates, no activity model writes
-    hooks.use_terminal_events({
+    // Handle keyboard and mouse events - only UI state updates, no activity model writes
+    hooks.use_local_terminal_events({
         let activity_model = activity_model.clone();
         let ui_state = ui_state.clone();
         let shutdown = shutdown.clone();
@@ -576,89 +644,248 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         let scroll_view_active = scroll_view_active;
 
         move |event| {
-            if let TerminalEvent::Key(key_event) = event
-                && key_event.kind != KeyEventKind::Release
-            {
-                debug!("Key event: {:?}", key_event);
-                if handle_interrupt_prompt_key(&key_event, &ui_state, &shutdown) {
-                    return;
-                }
-
-                match key_event.code {
-                    KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        if !request_interrupt_prompt(command_tx.as_ref(), &ui_state) {
-                            shutdown.handle_interrupt();
-                        }
-                    }
-                    KeyCode::Char('r') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        // Restart selected process
-                        if let Some(tx) = command_tx.as_ref()
-                            && let Ok(ui) = ui_state.read()
-                            && let Some(activity_id) = ui.selected_activity
-                        {
-                            if let Ok(model) = activity_model.read()
-                                && let Some(activity) = model.get_activity(activity_id)
-                                && matches!(
-                                    activity.variant,
-                                    crate::model::ActivityVariant::Process(_)
-                                )
-                            {
-                                let _ = tx.try_send(ProcessCommand::Restart(activity.name.clone()));
-                            }
-                        }
-                    }
-                    KeyCode::Char('x') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        // Stop selected process (only if active)
-                        if let Some(tx) = command_tx.as_ref()
-                            && let Ok(ui) = ui_state.read()
-                            && let Some(activity_id) = ui.selected_activity
-                        {
-                            if let Ok(model) = activity_model.read()
-                                && let Some(activity) = model.get_activity(activity_id)
-                                && let crate::model::ActivityVariant::Process(ref proc) =
-                                    activity.variant
-                                && proc.status.is_stoppable()
-                            {
-                                let _ = tx.try_send(ProcessCommand::Stop(activity.name.clone()));
-                            }
-                        }
-                    }
-                    KeyCode::Char('e') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        if let Ok(mut ui) = ui_state.write()
-                            && let Some(activity_id) = ui.selected_activity
-                        {
-                            ui.view_mode = ViewMode::ExpandedLogs { activity_id };
-                            should_exit.set(true);
-                        }
-                    }
-                    KeyCode::Down | KeyCode::Up => {
-                        if let Ok(model) = activity_model.read() {
-                            let selectable = model.get_selectable_activity_ids();
+            match event {
+                TerminalEvent::FullscreenMouse(mouse_event) if mouse_capture => {
+                    debug!(
+                        "Mouse event: {:?} at row={} col={}",
+                        mouse_event.kind, mouse_event.row, mouse_event.column
+                    );
+                    match mouse_event.kind {
+                        MouseEventKind::Down(MouseButton::Left) => {
+                            *mouse_down_row.write() = Some(mouse_event.row);
+                            *mouse_dragged.write() = false;
+                            *mouse_drag_end_row.write() = None;
                             if let Ok(mut ui) = ui_state.write() {
-                                ui.select_activity(&selectable, key_event.code == KeyCode::Down);
-                                if let Some(selected_id) = ui.selected_activity
-                                    && *scroll_view_active.read()
-                                {
-                                    let display = model.get_display_activities();
-                                    let heights = activity_heights.read();
-                                    scroll_selected_into_view(
-                                        &mut scroll_handle.write(),
-                                        &heights,
-                                        &display,
-                                        selected_id,
-                                    );
+                                ui.drag_selected.clear();
+                            }
+                        }
+                        MouseEventKind::Drag(MouseButton::Left) => {
+                            *mouse_dragged.write() = true;
+                            *mouse_drag_end_row.write() = Some(mouse_event.row);
+
+                            // Update drag selection highlight
+                            if let Some(start) = *mouse_down_row.read() {
+                                let end = mouse_event.row;
+                                let Ok(model) = activity_model.read() else {
+                                    return;
+                                };
+                                let display = model.get_display_activities();
+                                let heights = activity_heights.read();
+                                let is_scrolling = *scroll_view_active.read();
+                                let scroll_offset = if is_scrolling {
+                                    scroll_handle.read().scroll_offset()
+                                } else {
+                                    0
+                                };
+                                let activity_area_height = if is_scrolling {
+                                    terminal_height.saturating_sub(SUMMARY_BAR_HEIGHT) as i32
+                                } else {
+                                    display
+                                        .iter()
+                                        .map(|da| activity_height(&heights, da.activity.id))
+                                        .sum()
+                                };
+                                let r1 = start.min(end) as i32;
+                                let r2 = start.max(end) as i32;
+                                if r2 >= 0 && r1 < activity_area_height {
+                                    let r1 = r1.max(0) + scroll_offset;
+                                    let r2 = r2.min(activity_area_height - 1) + scroll_offset;
+                                    let ids = collect_activity_ids(&display, &heights, r1, r2);
+                                    if let Ok(mut ui) = ui_state.write() {
+                                        ui.drag_selected = ids;
+                                    }
                                 }
                             }
                         }
-                    }
-                    KeyCode::Esc => {
-                        if let Ok(mut ui) = ui_state.write() {
-                            ui.selected_activity = None;
+                        MouseEventKind::Up(MouseButton::Left) => {
+                            let dragged = *mouse_dragged.read();
+                            let down_row = *mouse_down_row.read();
+
+                            *mouse_down_row.write() = None;
+                            *mouse_dragged.write() = false;
+                            *mouse_drag_end_row.write() = None;
+
+                            if dragged {
+                                // Copy drag-selected activity names
+                                if let Ok(mut ui) = ui_state.write() {
+                                    if !ui.drag_selected.is_empty() {
+                                        if let Ok(model) = activity_model.read() {
+                                            let names: Vec<String> = ui
+                                                .drag_selected
+                                                .iter()
+                                                .filter_map(|id| {
+                                                    model.get_activity(*id).map(|a| a.name.clone())
+                                                })
+                                                .collect();
+                                            if !names.is_empty() {
+                                                copy_to_clipboard(&names.join("\n"));
+                                            }
+                                        }
+                                    }
+                                    ui.drag_selected.clear();
+                                }
+                            } else if let Some(start) = down_row {
+                                // Click (no drag): double-click detection
+                                let Ok(model) = activity_model.read() else {
+                                    return;
+                                };
+                                let display = model.get_display_activities();
+                                let heights = activity_heights.read();
+                                let is_scrolling = *scroll_view_active.read();
+                                let scroll_offset = if is_scrolling {
+                                    scroll_handle.read().scroll_offset()
+                                } else {
+                                    0
+                                };
+                                let activity_area_height = if is_scrolling {
+                                    terminal_height.saturating_sub(SUMMARY_BAR_HEIGHT) as i32
+                                } else {
+                                    display
+                                        .iter()
+                                        .map(|da| activity_height(&heights, da.activity.id))
+                                        .sum()
+                                };
+
+                                let row = start as i32;
+                                if row >= 0 && row < activity_area_height {
+                                    let content_row = row + scroll_offset;
+                                    if let Some(activity_id) =
+                                        hit_test_activity(&display, &heights, content_row)
+                                    {
+                                        let is_double_click = last_click
+                                            .read()
+                                            .as_ref()
+                                            .is_some_and(|(prev_id, prev_time)| {
+                                                *prev_id == activity_id
+                                                    && prev_time.elapsed().as_millis() < 400
+                                            });
+
+                                        if is_double_click {
+                                            *last_click.write() = None;
+                                            if let Ok(mut ui) = ui_state.write() {
+                                                ui.selected_activity = Some(activity_id);
+                                                ui.view_mode =
+                                                    ViewMode::ExpandedLogs { activity_id };
+                                            }
+                                            should_exit.set(true);
+                                        } else {
+                                            *last_click.write() =
+                                                Some((activity_id, Instant::now()));
+                                            if let Ok(mut ui) = ui_state.write() {
+                                                ui.selected_activity = Some(activity_id);
+                                            }
+                                            if *scroll_view_active.read() {
+                                                scroll_selected_into_view(
+                                                    &mut scroll_handle.write(),
+                                                    &heights,
+                                                    &display,
+                                                    activity_id,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        scroll_handle.write().scroll_to_bottom();
+                        _ => {}
                     }
-                    _ => {}
                 }
+                TerminalEvent::Key(key_event) if key_event.kind != KeyEventKind::Release => {
+                    debug!("Key event: {:?}", key_event);
+                    if handle_interrupt_prompt_key(&key_event, &ui_state, &shutdown) {
+                        return;
+                    }
+
+                    match key_event.code {
+                        KeyCode::Char('c')
+                            if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            if !request_interrupt_prompt(command_tx.as_ref(), &ui_state) {
+                                shutdown.handle_interrupt();
+                            }
+                        }
+                        KeyCode::Char('r')
+                            if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            // Restart selected process
+                            if let Some(tx) = command_tx.as_ref()
+                                && let Ok(ui) = ui_state.read()
+                                && let Some(activity_id) = ui.selected_activity
+                            {
+                                if let Ok(model) = activity_model.read()
+                                    && let Some(activity) = model.get_activity(activity_id)
+                                    && matches!(
+                                        activity.variant,
+                                        crate::model::ActivityVariant::Process(_)
+                                    )
+                                {
+                                    let _ =
+                                        tx.try_send(ProcessCommand::Restart(activity.name.clone()));
+                                }
+                            }
+                        }
+                        KeyCode::Char('x')
+                            if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            // Stop selected process (only if active)
+                            if let Some(tx) = command_tx.as_ref()
+                                && let Ok(ui) = ui_state.read()
+                                && let Some(activity_id) = ui.selected_activity
+                            {
+                                if let Ok(model) = activity_model.read()
+                                    && let Some(activity) = model.get_activity(activity_id)
+                                    && let crate::model::ActivityVariant::Process(ref proc) =
+                                        activity.variant
+                                    && proc.status.is_stoppable()
+                                {
+                                    let _ =
+                                        tx.try_send(ProcessCommand::Stop(activity.name.clone()));
+                                }
+                            }
+                        }
+                        KeyCode::Char('e')
+                            if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            if let Ok(mut ui) = ui_state.write()
+                                && let Some(activity_id) = ui.selected_activity
+                            {
+                                ui.view_mode = ViewMode::ExpandedLogs { activity_id };
+                                should_exit.set(true);
+                            }
+                        }
+                        KeyCode::Down | KeyCode::Up => {
+                            if let Ok(model) = activity_model.read() {
+                                let selectable = model.get_selectable_activity_ids();
+                                if let Ok(mut ui) = ui_state.write() {
+                                    ui.select_activity(
+                                        &selectable,
+                                        key_event.code == KeyCode::Down,
+                                    );
+                                    if let Some(selected_id) = ui.selected_activity
+                                        && *scroll_view_active.read()
+                                    {
+                                        let display = model.get_display_activities();
+                                        let heights = activity_heights.read();
+                                        scroll_selected_into_view(
+                                            &mut scroll_handle.write(),
+                                            &heights,
+                                            &display,
+                                            selected_id,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        KeyCode::Esc => {
+                            if let Ok(mut ui) = ui_state.write() {
+                                ui.selected_activity = None;
+                            }
+                            scroll_handle.write().scroll_to_bottom();
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
             }
         }
     });
@@ -732,6 +959,7 @@ async fn run_view(
     command_tx: Option<mpsc::Sender<ProcessCommand>>,
     pre_expand_height: &mut u16,
     exit_flag: ExitFlag,
+    mouse_capture: bool,
 ) -> std::io::Result<()> {
     // Copy view_mode in a block to ensure the guard is dropped before any await
     let view_mode = {
@@ -759,7 +987,9 @@ async fn run_view(
                                 ContextProvider(value: Context::owned(ui_state.clone())) {
                                     ContextProvider(value: Context::owned(command_tx.clone())) {
                                         ContextProvider(value: Context::owned(exit_flag.clone())) {
-                                            MainView
+                                            ContextProvider(value: Context::owned(mouse_capture)) {
+                                                MainView
+                                            }
                                         }
                                     }
                                 }
@@ -769,11 +999,15 @@ async fn run_view(
                 }
             };
 
-            element
-                .render_loop()
-                .output(Output::Stderr)
-                .ignore_ctrl_c()
-                .await
+            let render = element.render_loop().output(Output::Stderr).ignore_ctrl_c();
+            let render = if mouse_capture {
+                render.enable_mouse_capture()
+            } else {
+                render
+            };
+            let result = render.await;
+
+            result
         }
         ViewMode::ExpandedLogs { activity_id } => {
             // Calculate height before switching to expanded view
