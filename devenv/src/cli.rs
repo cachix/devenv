@@ -593,12 +593,43 @@ pub enum Commands {
         print_config: bool,
     },
 
+    #[command(
+        about = "Print shell hook for auto-activation on directory change.",
+        long_about = "Print shell hook for auto-activation on directory change.\n\nAdd to your shell config:\n\n  bash:    eval \"$(devenv hook bash)\"     # in ~/.bashrc\n  zsh:     eval \"$(devenv hook zsh)\"      # in ~/.zshrc\n  fish:    devenv hook fish | source       # in ~/.config/fish/config.fish\n  nushell: see devenv hook nu              # in config.nu"
+    )]
+    Hook {
+        #[arg(value_enum)]
+        shell: HookShell,
+    },
+
+    #[command(about = "Allow auto-activation for the current directory.")]
+    Allow,
+
+    #[command(about = "Revoke auto-activation for the current directory.")]
+    Revoke,
+
+    /// Internal: check if hook should activate devenv in current directory
+    #[clap(hide = true)]
+    HookShouldActivate {
+        /// Last activated project directory (to prevent re-entry)
+        #[arg(long)]
+        last: Option<String>,
+    },
+
     /// Internal: run native process manager as a daemon (used by `devenv up -d`)
     #[clap(hide = true)]
     DaemonProcesses {
         /// Path to the serialized task config JSON file
         config_file: PathBuf,
     },
+}
+
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+pub enum HookShell {
+    Bash,
+    Zsh,
+    Fish,
+    Nu,
 }
 
 #[derive(clap::Args, Clone, Debug)]
