@@ -338,6 +338,12 @@ pub fn is_process_dep_satisfied(
         }
         (ProcessPhase::Ready, _) => DepSatisfaction::NotYet,
 
+        // Exited: process exited and won't restart; @completed and @started are satisfied
+        (ProcessPhase::Exited, DependencyKind::Completed | DependencyKind::Started) => {
+            DepSatisfaction::Satisfied
+        }
+        (ProcessPhase::Exited, _) => DepSatisfaction::NeverSatisfiable,
+
         // GaveUp: @completed is satisfied, others are never satisfiable
         (ProcessPhase::GaveUp, DependencyKind::Completed) => DepSatisfaction::Satisfied,
         (ProcessPhase::GaveUp, _) => DepSatisfaction::NeverSatisfiable,
@@ -468,12 +474,13 @@ mod tests {
         DependencyKind::Completed,
     ];
 
-    const ALL_PHASES: [ProcessPhase; 6] = [
+    const ALL_PHASES: [ProcessPhase; 7] = [
         ProcessPhase::NotStarted,
         ProcessPhase::Stopped,
         ProcessPhase::Waiting,
         ProcessPhase::Starting,
         ProcessPhase::Ready,
+        ProcessPhase::Exited,
         ProcessPhase::GaveUp,
     ];
 
@@ -543,6 +550,11 @@ mod tests {
             (ProcessPhase::Ready, ready, Satisfied),
             (ProcessPhase::Ready, succeeded, NotYet),
             (ProcessPhase::Ready, completed, NotYet),
+            // Exited
+            (ProcessPhase::Exited, started, Satisfied),
+            (ProcessPhase::Exited, ready, NeverSatisfiable),
+            (ProcessPhase::Exited, succeeded, NeverSatisfiable),
+            (ProcessPhase::Exited, completed, Satisfied),
             // GaveUp
             (ProcessPhase::GaveUp, started, NeverSatisfiable),
             (ProcessPhase::GaveUp, ready, NeverSatisfiable),

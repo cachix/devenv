@@ -186,6 +186,7 @@ impl Tasks {
                 TaskStatus::Oneshot(OneshotStatus::Running(_)) => status.running += 1,
                 TaskStatus::Process(ps) => match ps.phase {
                     ProcessPhase::NotStarted | ProcessPhase::Stopped => status.skipped += 1,
+                    ProcessPhase::Exited => status.succeeded += 1,
                     ProcessPhase::GaveUp => status.failed += 1,
                     ProcessPhase::Waiting | ProcessPhase::Starting | ProcessPhase::Ready => {
                         status.running += 1
@@ -963,7 +964,11 @@ impl Tasks {
                                         &notify_finished_clone,
                                         &shutdown_clone,
                                         status_rx,
-                                        &[ProcessPhase::Ready, ProcessPhase::GaveUp],
+                                        &[
+                                            ProcessPhase::Ready,
+                                            ProcessPhase::GaveUp,
+                                            ProcessPhase::Exited,
+                                        ],
                                     )
                                     .await;
                                 }
@@ -1212,7 +1217,12 @@ async fn process_status_watcher(
         notified.as_mut().enable();
 
         match manager.get_phase(&name).await {
-            Some(ProcessPhase::NotStarted | ProcessPhase::Stopped | ProcessPhase::Waiting)
+            Some(
+                ProcessPhase::NotStarted
+                | ProcessPhase::Stopped
+                | ProcessPhase::Waiting
+                | ProcessPhase::Exited,
+            )
             | None => {
                 // Process is not active yet (auto start off, stopped, or waiting).
                 // Wait for a lifecycle notification before re-checking.
@@ -1224,11 +1234,20 @@ async fn process_status_watcher(
             Some(ProcessPhase::Starting | ProcessPhase::Ready | ProcessPhase::GaveUp) => {
                 if let Some(status_rx) = manager.subscribe_status(&name).await {
                     set_process_phase(&task_state, &notify_finished, ProcessPhase::Starting).await;
-                    // Watch indefinitely (no terminal phases). GaveUp is not terminal
-                    // because the process can be restarted (e.g. via explicit restart).
-                    // The watcher stays alive so it tracks the new lifecycle.
-                    watch_status_until(&task_state, &notify_finished, &shutdown, status_rx, &[])
-                        .await;
+                    // Watch until Exited (process won't restart). GaveUp is not
+                    // terminal because the process can be restarted explicitly.
+                    let reached_terminal = watch_status_until(
+                        &task_state,
+                        &notify_finished,
+                        &shutdown,
+                        status_rx,
+                        &[ProcessPhase::Exited],
+                    )
+                    .await;
+                    if reached_terminal {
+                        // Process exited and won't restart; phase already set.
+                        continue;
+                    }
                 }
                 // Channel closed (process was stopped) or could not subscribe.
                 // Update phase to Stopped and loop back to wait for restart.
