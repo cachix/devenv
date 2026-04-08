@@ -137,6 +137,8 @@ pub enum ProcessPhase {
     Starting,
     /// Readiness probe passed.
     Ready,
+    /// Process exited and will not be restarted.
+    Exited,
     /// Supervisor gave up (crash loop).
     GaveUp,
 }
@@ -149,6 +151,7 @@ impl std::fmt::Display for ProcessPhase {
             Self::Waiting => write!(f, "waiting"),
             Self::Starting => write!(f, "starting"),
             Self::Ready => write!(f, "ready"),
+            Self::Exited => write!(f, "exited"),
             Self::GaveUp => write!(f, "gave_up"),
         }
     }
@@ -159,6 +162,7 @@ impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
         match phase {
             crate::supervisor_state::SupervisorPhase::Starting => Self::Starting,
             crate::supervisor_state::SupervisorPhase::Ready => Self::Ready,
+            crate::supervisor_state::SupervisorPhase::Exited => Self::Exited,
             crate::supervisor_state::SupervisorPhase::GaveUp => Self::GaveUp,
         }
     }
