@@ -1,4 +1,4 @@
-{ ... }:
+{ config, ... }:
 {
   # Task that exports an env var before enterShell.
   # This tests that enterShell tasks run during `devenv test`
@@ -39,6 +39,26 @@
       export DEVENV_TEST_ENTER_TEST_RAN="yes"
     '';
     exports = [ "DEVENV_TEST_ENTER_TEST_RAN" ];
+    before = [ "devenv:enterTest" ];
+  };
+
+  # Process with exec readiness probe. Tests that the bash path is resolved
+  # for exec probes when processes are pulled into the enterTest task graph.
+  # Regression test for https://github.com/cachix/devenv/issues/2713
+  processes.probe-test = {
+    exec = ''
+      touch ${config.devenv.state}/probe-test-ready
+      sleep 300
+    '';
+    ready.exec = "test -f ${config.devenv.state}/probe-test-ready";
+  };
+
+  tasks."test:wait-for-process" = {
+    exec = ''
+      export DEVENV_TEST_PROCESS_WAS_READY="yes"
+    '';
+    exports = [ "DEVENV_TEST_PROCESS_WAS_READY" ];
+    after = [ "devenv:processes:probe-test" ];
     before = [ "devenv:enterTest" ];
   };
 }

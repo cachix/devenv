@@ -81,11 +81,16 @@ impl TasksUi {
 
     /// Run the UI, processing activity events until task runner completes.
     ///
-    /// If processes are still running after the task runner finishes, continues
-    /// forwarding process output until all processes exit or shutdown is signaled.
+    /// If `stop_processes` is false and processes are still running after the
+    /// task runner finishes, continues forwarding process output until all
+    /// processes exit or shutdown is signaled.
+    ///
+    /// If `stop_processes` is true, any processes started during task execution
+    /// are stopped once all tasks complete, so the caller regains control.
     pub async fn run(
         mut self,
         run_handle: tokio::task::JoinHandle<Outputs>,
+        stop_processes: bool,
     ) -> Result<(TasksStatus, Outputs), Error> {
         // Print header (unless quiet mode)
         if self.verbosity != VerbosityLevel::Quiet {
@@ -102,17 +107,23 @@ impl TasksUi {
         // Phase 2: If processes are still running (e.g., devenv-tasks invoked by
         // process-compose), keep forwarding output and wait for them to exit.
         if !self.tasks.process_manager.list().await.is_empty() {
-            let cancel = self.tasks.shutdown.cancellation_token();
-            let pm = Arc::clone(&self.tasks.process_manager);
-            let fg_handle = tokio::spawn(async move { pm.run_foreground(cancel, None).await });
+            if stop_processes {
+                // Stop processes so the caller regains control (e.g., enterTest
+                // tasks that pulled processes into the task graph).
+                let _ = self.tasks.process_manager.stop_all().await;
+            } else {
+                let cancel = self.tasks.shutdown.cancellation_token();
+                let pm = Arc::clone(&self.tasks.process_manager);
+                let fg_handle = tokio::spawn(async move { pm.run_foreground(cancel, None).await });
 
-            if let Err(e) = self
-                .consume_events_until(fg_handle)
-                .await
-                .map_err(|e| format!("Process manager panicked: {e}"))
-                .and_then(|r| r.map_err(|e| format!("Process manager error: {e}")))
-            {
-                return Err(Error::io(e));
+                if let Err(e) = self
+                    .consume_events_until(fg_handle)
+                    .await
+                    .map_err(|e| format!("Process manager panicked: {e}"))
+                    .and_then(|r| r.map_err(|e| format!("Process manager error: {e}")))
+                {
+                    return Err(Error::io(e));
+                }
             }
         }
 

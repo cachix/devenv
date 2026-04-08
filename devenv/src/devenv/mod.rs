@@ -972,7 +972,7 @@ impl Devenv {
             .build()
             .await?;
 
-        let (status, outputs) = run_tasks_with_ui(tasks, verbosity, tui).await?;
+        let (status, outputs) = run_tasks_with_ui(tasks, verbosity, tui, false).await?;
 
         if status.has_failures() {
             miette::bail!("Some tasks failed");
@@ -1036,6 +1036,7 @@ impl Devenv {
         verbosity: tasks::VerbosityLevel,
         tui: bool,
     ) -> Result<(tasks::TasksStatus, BTreeMap<String, String>, Vec<String>)> {
+        let bash = self.get_bash_path().await?;
         let config = tasks::Config {
             roots,
             tasks: task_configs,
@@ -1044,7 +1045,7 @@ impl Devenv {
             cache_dir: self.devenv_state_dir(),
             sudo_context: None,
             env: envs,
-            bash: String::new(),
+            bash,
             ignore_process_deps: false,
         };
 
@@ -1052,7 +1053,7 @@ impl Devenv {
             .build()
             .await?;
 
-        let (status, outputs) = run_tasks_with_ui(tasks, verbosity, tui).await?;
+        let (status, outputs) = run_tasks_with_ui(tasks, verbosity, tui, true).await?;
 
         let exports = outputs.collect_env_exports();
         let messages = outputs.collect_messages();
@@ -2197,9 +2198,13 @@ async fn run_tasks_with_ui(
     tasks: Tasks,
     verbosity: tasks::VerbosityLevel,
     tui: bool,
+    stop_processes: bool,
 ) -> Result<(tasks::TasksStatus, tasks::Outputs)> {
     if tui {
         let outputs = tasks.run(false).await;
+        if stop_processes {
+            let _ = tasks.process_manager().stop_all().await;
+        }
         let status = tasks.get_completion_status().await;
         Ok((status, outputs))
     } else {
@@ -2212,7 +2217,7 @@ async fn run_tasks_with_ui(
         let run_handle = tokio::spawn(async move { tasks_clone.run(false).await });
 
         let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
-        Ok(ui.run(run_handle).await?)
+        Ok(ui.run(run_handle, stop_processes).await?)
     }
 }
 

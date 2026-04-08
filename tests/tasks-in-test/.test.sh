@@ -29,3 +29,7 @@ test -z "${DEVENV_TEST_NOT_EXPORTED:-}"
 # enterTest-only task should have run (devenv test runs enterTest root,
 # which depends on enterShell)
 test "$DEVENV_TEST_ENTER_TEST_RAN" = "yes"
+
+# Task depending on a process with exec readiness probe should have run.
+# Regression test for https://github.com/cachix/devenv/issues/2713
+test "$DEVENV_TEST_PROCESS_WAS_READY" = "yes"

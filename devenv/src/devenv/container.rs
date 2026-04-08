@@ -99,7 +99,7 @@ impl Devenv {
             .build()
             .await?;
 
-        let (status, _outputs) = run_tasks_with_ui(tasks, verbosity, tui).await?;
+        let (status, _outputs) = run_tasks_with_ui(tasks, verbosity, tui, true).await?;
 
         if status.has_failures() {
             bail!("Failed to copy container");
