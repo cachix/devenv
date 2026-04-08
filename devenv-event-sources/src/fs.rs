@@ -83,6 +83,55 @@ impl WatcherHandle {
         }
     }
 
+    /// Force all watched paths to be re-registered with the OS.
+    ///
+    /// On Linux, inotify watches track file inodes. When an editor does an
+    /// atomic save (write temp + rename), the inode changes and the old watch
+    /// becomes stale. The watchexec fs worker's diff logic skips paths already
+    /// in its pathset, so stale watches are never refreshed.
+    ///
+    /// This method forces a full refresh by briefly clearing the pathset
+    /// (causing the fs worker to drop all watches) and then re-setting it
+    /// (causing fresh watches to be created on current inodes).
+    pub async fn rewatch_all(&self) {
+        let mut ready = self.config.as_ref().map(|c| c.fs_ready());
+
+        {
+            let paths = self.watched_paths.lock().unwrap();
+            if paths.is_empty() {
+                return;
+            }
+
+            if let Some(ref config) = self.config {
+                // Clear forces the fs worker to unwatch everything
+                config.pathset(std::iter::empty::<WatchedPath>());
+            }
+        }
+
+        // Wait for the clear to be processed
+        if let Some(ref mut rx) = ready {
+            let _ = rx.changed().await;
+        }
+
+        // Now re-subscribe for the re-add
+        let mut ready = self.config.as_ref().map(|c| c.fs_ready());
+
+        {
+            let paths = self.watched_paths.lock().unwrap();
+            if let Some(ref config) = self.config {
+                config.pathset(
+                    paths
+                        .iter()
+                        .map(|p| WatchedPath::non_recursive(p.as_path())),
+                );
+            }
+        }
+
+        if let Some(ref mut rx) = ready {
+            let _ = rx.changed().await;
+        }
+    }
+
     pub fn watched_paths(&self) -> Vec<PathBuf> {
         self.watched_paths.lock().unwrap().iter().cloned().collect()
     }

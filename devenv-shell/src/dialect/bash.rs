@@ -65,7 +65,7 @@ if [[ -n "${{GHOSTTY_RESOURCES_DIR:-}}" && -r "${{GHOSTTY_RESOURCES_DIR}}/shell-
     source "${{GHOSTTY_RESOURCES_DIR}}/shell-integration/bash/ghostty.bash"
 fi
 
-# Hot-reload hook (keybinding and PROMPT_COMMAND integration)
+# Hot-reload hook (PROMPT_COMMAND integration)
 {reload_hook}
 
 # Re-enable history after init
@@ -235,13 +235,9 @@ __devenv_restore_path() {{
 }}
 
 __devenv_reload_hook() {{
+    __devenv_reload_apply
     __devenv_restore_path
 }}
-
-if [[ $- == *i* ]] && command -v bind >/dev/null 2>&1; then
-    __devenv_reload_keybind="${{DEVENV_RELOAD_KEYBIND:-\\e\\C-r}}"
-    bind -x "\"${{__devenv_reload_keybind}}\":__devenv_reload_apply"
-fi
 
 # Append hook so it runs AFTER direnv's _direnv_hook (only if not already added)
 if [[ "$PROMPT_COMMAND" != *"__devenv_reload_hook"* ]]; then

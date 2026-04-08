@@ -129,9 +129,9 @@ in
   # Crates that need tracing_unstable
   devenv-core = tracingUnstable;
   devenv-eval-cache = tracingUnstable;
-  devenv-tasks = tracingUnstable;
   devenv-reload = tracingUnstable;
   devenv-shell = tracingUnstable;
+  devenv-tasks = tracingUnstable;
   devenv-tui = tracingUnstable;
   devenv-activity = tracingUnstable;
 
