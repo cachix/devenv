@@ -199,7 +199,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
 
             // Run UI - processes events and waits for run_handle
             let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
-            let (status, _) = ui.run(run_handle).await?;
+            let (status, _) = ui.run(run_handle, false).await?;
 
             if shutdown.last_signal().is_some() {
                 let _ = tasks.process_manager().stop_all().await;
