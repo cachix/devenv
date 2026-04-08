@@ -1,5 +1,7 @@
 # Auto Activation
 
+!!! tip "New in version 2.1"
+
 devenv includes a built in shell hook that automatically activates your developer environment when you `cd` into a project directory. No external tools required.
 
 ## Setup
