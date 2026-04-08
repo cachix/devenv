@@ -8,6 +8,7 @@
 - Fixed warning messages from Nix not being forwarded and displayed during evaluation.
 - Fixed `devenv test` leaving orphaned processes after test failures by ensuring processes are always stopped before propagating errors.
 - Fixed adding a new input to `devenv.yaml` causing all existing inputs to be re-fetched instead of only resolving the new one ([#2688](https://github.com/cachix/devenv/issues/2688)).
+- Fixed `processes.<name>.watch.paths` not triggering process restarts because Nix paths were serialized as store paths instead of source directory paths ([#2657](https://github.com/cachix/devenv/issues/2657)).
 - Fixed cursor shape escape sequences (DECSCUSR) not being forwarded to the terminal in `devenv shell`, which caused programs like neovim to not change cursor shape between modes (e.g. block in normal mode, bar in insert mode).
 - Fixed shift+mouse configuration (XTSHIFTESCAPE) not being forwarded to the terminal in `devenv shell`.
 - Fixed `devenv shell` hanging indefinitely when exiting the shell during a hot-reload build by interrupting the lingering Nix evaluation on shutdown.
@@ -16,12 +17,15 @@
 - Fixed TUI panic when expanding error details containing multi-byte UTF-8 characters (e.g. miette underlines) by using character-based truncation instead of byte-based slicing.
 - Fixed `devenv processes stop` removing the process from the manager state, making it impossible to start or restart afterwards.
 - Fixed process exec probes failing with "No such file or directory" during `devenv test` when a task depends on a process (e.g. `after = [ "devenv:processes:postgres" ]`), because the bash path was not resolved for the enterTest task runner ([#2713](https://github.com/cachix/devenv/issues/2713)).
+- Fixed processes with `restart = "never"` not satisfying `@completed` task dependencies, causing a hot loop and dependencies to never resolve ([#2712](https://github.com/cachix/devenv/issues/2712)).
 
 ### Improvements
 
+- Upgraded Nix to 2.34, bringing multithreaded tarball unpacking, evaluator performance improvements, and REPL enhancements.
 - Added Ctrl+X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
 - Tasks can now display messages when entering the shell by writing `{"devenv":{"messages":["..."]}}` to `$DEVENV_TASK_OUTPUT_FILE` ([#2500](https://github.com/cachix/devenv/issues/2500)).
 - Added `devenv hook <shell>` for native directory based auto-activation without direnv. Supports bash, zsh, fish, and nushell. Automatically deactivates when you leave the project directory. Add `eval "$(devenv hook bash)"` to your shell config to activate. Use `devenv allow` and `devenv revoke` to manage trust ([#2488](https://github.com/cachix/devenv/issues/2488)).
+- Shell environment now auto-reloads at the next prompt when watched files change, instead of requiring a manual Ctrl-Alt-R keybind ([#2595](https://github.com/cachix/devenv/issues/2595)).
 - Added `nixpkgs.rocmSupport` option to enable ROCm support in nixpkgs configuration.
 - Added process management subcommands and MCP tools: `devenv processes list`, `status`, `logs`, `restart`, `start`, `stop` for interacting with running native processes ([#2621](https://github.com/cachix/devenv/issues/2621)).
 ## 2.0.6 (2026-03-22)

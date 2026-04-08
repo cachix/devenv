@@ -336,7 +336,7 @@ let
                   type = types.submodule {
                     options = {
                       paths = lib.mkOption {
-                        type = types.listOf types.path;
+                        type = types.listOf types.str;
                         default = [ ];
                         description = ''
                           Paths to watch for changes (files or directories).

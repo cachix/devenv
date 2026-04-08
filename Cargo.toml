@@ -50,13 +50,13 @@ nix-conf-parser = { path = "nix-conf-parser" }
 tokio-shutdown = { path = "tokio-shutdown" }
 xtask = { path = "xtask" }
 
-nix-bindings-flake = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
-nix-bindings-expr = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
-nix-bindings-store = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
-nix-bindings-util = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
-nix-bindings-fetchers = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
-nix-cmd = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
-nix-bindings-bindgen-raw = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "for-upstream" }
+nix-bindings-flake = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
+nix-bindings-expr = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
+nix-bindings-store = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
+nix-bindings-util = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
+nix-bindings-fetchers = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
+nix-cmd = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
+nix-bindings-bindgen-raw = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
 
 avt = "0.17"
 base64 = "0.22"
@@ -104,7 +104,13 @@ schematic = { version = "0.19", features = [
 ] }
 secrecy = "0.10"
 # https://github.com/mikaelmello/inquire/pull/330
-secretspec = { git = "https://github.com/cachix/secretspec", tag = "v0.8.0", features = ["cli", "keyring", "gcsm", "awssm", "vault"] }
+secretspec = { git = "https://github.com/cachix/secretspec", tag = "v0.8.0", features = [
+  "cli",
+  "keyring",
+  "gcsm",
+  "awssm",
+  "vault",
+] }
 serde = { version = "1.0.226", features = ["derive"] }
 serde_json = "1.0.145"
 serde_repr = "0.1.20"
@@ -193,7 +199,7 @@ crossterm = "0.29.0"
 [patch.crates-io]
 # Waiting on iocraft release with stderr rendering support
 # https://github.com/ccbrown/iocraft/pull/157
-iocraft = { git = "https://github.com/cachix/iocraft", branch = "row-level-diff" }
+iocraft = { git = "https://github.com/cachix/iocraft", branch = "cachix" }
 # https://github.com/crossterm-rs/crossterm/pull/1026
 crossterm = { git = "https://github.com/cachix/crossterm", branch = "0.29-cachix" }
 

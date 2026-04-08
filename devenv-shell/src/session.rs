@@ -997,6 +997,21 @@ impl ShellSession {
                         continue;
                     }
                 }
+            } else if let Some(remaining) = self.status_line.state().reloaded_remaining() {
+                tokio::select! {
+                    event = event_rx.recv() => event,
+                    _ = tokio::time::sleep(remaining) => {
+                        self.status_line.state_mut().clear_reloaded();
+                        if self.config.show_status_line {
+                            queue!(stdout, terminal::BeginSynchronizedUpdate)?;
+                            self.status_line.draw(stdout, self.size.cols, self.size.rows)?;
+                            renderer.write_cursor(stdout, vt)?;
+                            queue!(stdout, terminal::EndSynchronizedUpdate)?;
+                            stdout.flush()?;
+                        }
+                        continue;
+                    }
+                }
             } else {
                 event_rx.recv().await
             };
@@ -1264,7 +1279,7 @@ impl ShellSession {
             }
 
             ShellCommand::ReloadApplied => {
-                self.status_line.state_mut().clear();
+                self.status_line.state_mut().set_reloaded();
             }
 
             ShellCommand::WatchedFiles { files } => {

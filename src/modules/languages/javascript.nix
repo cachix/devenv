@@ -8,10 +8,10 @@ let
   cfg = config.languages.javascript;
 
   nodeModulesPath = "${
-    lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''
+    lib.optionalString (cfg.directory != config.devenv.root) "${cfg.directory}/"
   }node_modules";
 
-  dirPrefix = lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"'';
+  dirPrefix = lib.optionalString (cfg.directory != config.devenv.root) "${cfg.directory}/";
 
   initNpmScript = pkgs.writeShellScript "init-npm.sh" ''
     function _devenv-npm-install()
@@ -41,14 +41,12 @@ let
       fi
     }
 
-    if [ ! -f ${
-      lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''
-    }package.json ]
+    if [ ! -f "${dirPrefix}package.json" ]
     then
       echo "No package.json found${
-        lib.optionalString (cfg.directory != config.devenv.root) ''"in ${cfg.directory}"''
+        lib.optionalString (cfg.directory != config.devenv.root) " in ${cfg.directory}"
       }. Run '${
-        lib.optionalString (cfg.directory != config.devenv.root) ''"cd ${cfg.directory}/ && "''
+        lib.optionalString (cfg.directory != config.devenv.root) "cd ${cfg.directory}/ && "
       }npm init' to create one." >&2
     else
       _devenv-npm-install
@@ -83,14 +81,12 @@ let
       fi
     }
 
-    if [ ! -f ${
-      lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''
-    }package.json ]
+    if [ ! -f "${dirPrefix}package.json" ]
     then
       echo "No package.json found${
-        lib.optionalString (cfg.directory != config.devenv.root) ''"in ${cfg.directory}"''
+        lib.optionalString (cfg.directory != config.devenv.root) " in ${cfg.directory}"
       }. Run '${
-        lib.optionalString (cfg.directory != config.devenv.root) ''"cd ${cfg.directory}/ && "''
+        lib.optionalString (cfg.directory != config.devenv.root) "cd ${cfg.directory}/ && "
       }pnpm init' to create one." >&2
     else
       _devenv-pnpm-install
@@ -125,14 +121,12 @@ let
       fi
     }
 
-    if [ ! -f ${
-      lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''
-    }package.json ]
+    if [ ! -f "${dirPrefix}package.json" ]
     then
       echo "No package.json found${
-        lib.optionalString (cfg.directory != config.devenv.root) ''"in ${cfg.directory}"''
+        lib.optionalString (cfg.directory != config.devenv.root) " in ${cfg.directory}"
       }. Run '${
-        lib.optionalString (cfg.directory != config.devenv.root) ''"cd ${cfg.directory}/ && "''
+        lib.optionalString (cfg.directory != config.devenv.root) "cd ${cfg.directory}/ && "
       }yarn init' to create one." >&2
     else
       _devenv-yarn-install
@@ -203,14 +197,12 @@ let
       fi
     }
 
-    if [ ! -f ${
-      lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''
-    }package.json ]
+    if [ ! -f "${dirPrefix}package.json" ]
     then
       echo "No package.json found${
-        lib.optionalString (cfg.directory != config.devenv.root) ''"in ${cfg.directory}"''
+        lib.optionalString (cfg.directory != config.devenv.root) " in ${cfg.directory}"
       }. Run '${
-        lib.optionalString (cfg.directory != config.devenv.root) ''"cd ${cfg.directory}/ && "''
+        lib.optionalString (cfg.directory != config.devenv.root) "cd ${cfg.directory}/ && "
       }bun init' to create one." >&2
     else
       ${

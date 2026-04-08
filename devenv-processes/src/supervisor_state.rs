@@ -12,6 +12,8 @@ pub enum SupervisorPhase {
     Starting,
     /// READY=1 received (or require_ready=false and first WATCHDOG received)
     Ready,
+    /// Process exited and will not be restarted (restart policy says stop).
+    Exited,
     /// Restart rate limit exceeded or policy says stop
     GaveUp,
 }
@@ -194,6 +196,7 @@ impl SupervisorState {
                     RestartPolicy::OnFailure => status == ExitStatus::Failure,
                 };
                 if !should_restart {
+                    self.phase = SupervisorPhase::Exited;
                     return Action::None;
                 }
                 self.try_restart(now, RestartTrigger::ProcessExit)
@@ -798,6 +801,43 @@ mod tests {
             ),
             Action::None
         );
+    }
+
+    /// Regression test for https://github.com/cachix/devenv/issues/2712
+    ///
+    /// When a process exits and the restart policy says not to restart,
+    /// the phase must transition to Exited so that @completed
+    /// dependencies are satisfied.
+    #[test]
+    fn policy_never_transitions_to_exited() {
+        let now = Instant::now();
+        let config = config_with_policy(RestartPolicy::Never);
+        let mut state = SupervisorState::new(&config, now);
+        assert_eq!(state.phase(), SupervisorPhase::Starting);
+
+        state.on_event(
+            Event::ProcessExit {
+                status: ExitStatus::Success,
+            },
+            now,
+        );
+        assert_eq!(state.phase(), SupervisorPhase::Exited);
+    }
+
+    /// Same regression test for on_failure policy with a successful exit.
+    #[test]
+    fn policy_on_failure_transitions_to_exited_on_success() {
+        let now = Instant::now();
+        let config = config_with_policy(RestartPolicy::OnFailure);
+        let mut state = SupervisorState::new(&config, now);
+
+        state.on_event(
+            Event::ProcessExit {
+                status: ExitStatus::Success,
+            },
+            now,
+        );
+        assert_eq!(state.phase(), SupervisorPhase::Exited);
     }
 
     #[test]
