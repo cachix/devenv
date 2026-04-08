@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv hook` not changing directory when `cd`ing out of a devenv project. The shell would deactivate but remain in the project directory instead of following the user to the target directory.
 - Fixed cachix daemon failing to start because the evaluated store path for the cachix binary was never realized. Now uses the cachix bundled with devenv via PATH, falling back to evaluating `cachix.binary` only when needed.
 - Fixed warning messages from Nix not being forwarded and displayed during evaluation.
 - Fixed `devenv test` leaving orphaned processes after test failures by ensuring processes are always stopped before propagating errors.

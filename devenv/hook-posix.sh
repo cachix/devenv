@@ -12,7 +12,11 @@ _devenv_hook() {
     if [[ -n "${DEVENV_ROOT:-}" ]]; then
         case "$PWD" in
             "${DEVENV_ROOT}"|"${DEVENV_ROOT}"/*) ;;
-            *) exit $previous_exit_status ;;
+            *)
+                # Save target directory so the parent shell can cd there after exit
+                printf '%s' "$PWD" > "${DEVENV_ROOT}/.devenv/exit-dir"
+                exit $previous_exit_status
+                ;;
         esac
         _DEVENV_HOOK_PWD="$PWD"
         return $previous_exit_status
@@ -27,6 +31,16 @@ _devenv_hook() {
             _DEVENV_HOOK_UNTRUSTED=""
             (cd "$project_dir" && devenv shell)
             _DEVENV_HOOK_LAST_PROJECT="$project_dir"
+            # If the devenv shell exited due to cd outside the project, follow the user there
+            local exit_dir_file="$project_dir/.devenv/exit-dir"
+            if [[ -f "$exit_dir_file" ]]; then
+                local target_dir
+                target_dir=$(cat "$exit_dir_file")
+                rm -f "$exit_dir_file"
+                if [[ -d "$target_dir" ]]; then
+                    cd "$target_dir"
+                fi
+            fi
         fi
         return $previous_exit_status
     fi
@@ -40,6 +54,16 @@ _devenv_hook() {
         _DEVENV_HOOK_UNTRUSTED=""
         (cd "$project_dir" && devenv shell)
         _DEVENV_HOOK_LAST_PROJECT="$project_dir"
+        # If the devenv shell exited due to cd outside the project, follow the user there
+        local exit_dir_file="$project_dir/.devenv/exit-dir"
+        if [[ -f "$exit_dir_file" ]]; then
+            local target_dir
+            target_dir=$(cat "$exit_dir_file")
+            rm -f "$exit_dir_file"
+            if [[ -d "$target_dir" ]]; then
+                cd "$target_dir"
+            fi
+        fi
     elif [[ $exit_code -eq 0 ]]; then
         # No project or already activated; cache to avoid rechecking
         _DEVENV_HOOK_PWD="$PWD"
