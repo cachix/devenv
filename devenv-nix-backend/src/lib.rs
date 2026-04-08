@@ -256,7 +256,11 @@ pub fn write_lock_file(lock_file: &LockFile, output_path: &Path) -> Result<()> {
 ///
 /// Returns a hex-encoded BLAKE3 hash of the combined fingerprints.
 /// If no lock file exists or no inputs have fingerprints, returns the hash of an empty string.
-pub fn compute_lock_fingerprint(lock_file: Option<&LockFile>, store: &Store) -> Result<String> {
+pub fn compute_lock_fingerprint(
+    lock_file: Option<&LockFile>,
+    fetch_settings: &FetchersSettings,
+    store: &Store,
+) -> Result<String> {
     let mut parts: Vec<String> = Vec::new();
 
     if let Some(lock) = lock_file {
@@ -265,7 +269,7 @@ pub fn compute_lock_fingerprint(lock_file: Option<&LockFile>, store: &Store) -> 
         // The iterator starts pointing at the first element
         loop {
             let attr_path = iter.attr_path()?;
-            if let Some(fingerprint) = iter.fingerprint(store)? {
+            if let Some(fingerprint) = iter.fingerprint(fetch_settings, store)? {
                 tracing::debug!("attr_path: {}, fingerprint: {}", attr_path, fingerprint);
                 parts.push(format!("{}={}", attr_path, fingerprint));
             }
