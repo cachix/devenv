@@ -531,28 +531,9 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.detail.clone()
             };
 
-            // For selected evaluation activities, show expandable file list
-            if *is_selected && logs.is_some() {
-                let prefix = build_activity_prefix(*depth, *completed, true);
-
-                let main_line = ActivityTextComponent::name_only(
-                    activity.name.clone(),
-                    elapsed_str,
-                    activity.variant.clone(),
-                )
-                .with_suffix(suffix)
-                .with_completed(completed.is_some())
-                .with_selection(*is_selected)
-                .render(terminal_width, *depth, prefix);
-
-                return ExpandedContentComponent::new(logs.as_deref())
-                    .with_empty_message("  → no files evaluated yet (press '^e' to expand)")
-                    .render_with_main_line(main_line);
-            }
-
             let prefix = build_activity_prefix(*depth, *completed, true);
 
-            return ActivityTextComponent::name_only(
+            let main_line = ActivityTextComponent::name_only(
                 activity.name.clone(),
                 elapsed_str,
                 activity.variant.clone(),
@@ -561,6 +542,19 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .with_completed(completed.is_some())
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
+
+            // Show logs when selected or when failed (so error details are visible)
+            let failed = *completed == Some(false);
+            if (failed || *is_selected) && logs.is_some() {
+                let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_empty_message("  → no files evaluated yet (press '^e' to expand)");
+                if failed {
+                    component = component.with_max_lines(LOG_VIEWPORT_FAILED);
+                }
+                return component.render_with_main_line(main_line);
+            }
+
+            return main_line;
         }
         ActivityVariant::UserOperation => {
             let prefix = build_activity_prefix(*depth, *completed, true);

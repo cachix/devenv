@@ -1002,6 +1002,7 @@ impl ActivityModel {
             let id = msg.id;
             let level = msg.level;
             let has_details = msg.details.is_some();
+            let text = msg.text.clone();
             let variant = ActivityVariant::Message(MessageActivity {
                 level,
                 details: msg.details.clone(),
@@ -1017,9 +1018,22 @@ impl ActivityModel {
             );
 
             // Store details as lines in build_logs for expansion
-            if let Some(details) = msg.details {
+            if let Some(details) = &msg.details {
                 let lines: VecDeque<String> = details.lines().map(String::from).collect();
                 self.build_logs.insert(id, Arc::new(lines));
+            }
+
+            // Propagate error details to parent's build_logs so the parent
+            // activity can show them inline when it fails (e.g. Evaluate errors).
+            if level == ActivityLevel::Error {
+                if let Some(parent_id) = msg.parent {
+                    self.log_to_activity(parent_id, text);
+                    if let Some(details) = &msg.details {
+                        for line in details.lines() {
+                            self.log_to_activity(parent_id, line.to_string());
+                        }
+                    }
+                }
             }
 
             // Mark message activities as immediately completed (they're just informational)
