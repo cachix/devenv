@@ -366,13 +366,13 @@ pub struct ShellCliArgs {
     pub no_reload: bool,
 
     #[arg(
-        long,
+        long = "shell",
         global = true,
         env = "DEVENV_SHELL_TYPE",
         value_parser = clap::builder::PossibleValuesParser::new(["bash", "zsh", "fish", "nu"]),
         help = "Shell to use for interactive sessions (bash, zsh, fish, nu)."
     )]
-    pub shell: Option<String>,
+    pub shell_type: Option<String>,
 }
 
 impl From<ShellCliArgs> for ShellOptions {
@@ -381,7 +381,7 @@ impl From<ShellCliArgs> for ShellOptions {
             clean: cli.clean,
             profiles: cli.profiles,
             reload: flag(cli.reload, cli.no_reload),
-            shell: cli.shell,
+            shell: cli.shell_type,
         }
     }
 }
