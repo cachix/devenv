@@ -1,5 +1,18 @@
 set -e
 
+# Verify PHP extensions are loaded (regression test for #2404)
+echo "Checking PHP extensions..."
+php_modules=$(php -m)
+for ext in mysqli pdo_mysql gd zip intl exif; do
+    if ! echo "$php_modules" | grep -qi "^$ext$"; then
+        echo "ERROR: PHP extension '$ext' is not loaded"
+        echo "Loaded modules:"
+        echo "$php_modules"
+        exit 1
+    fi
+done
+echo "All required PHP extensions are loaded"
+
 # Wait for MySQL
 wait_for_port 3306
 
