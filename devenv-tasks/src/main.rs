@@ -20,7 +20,7 @@ enum Command {
         #[clap()]
         roots: Vec<String>,
 
-        #[clap(long, value_enum, default_value_t = RunMode::Single, help = "The execution mode for tasks (affects dependency resolution)")]
+        #[clap(long, value_enum, default_value_t = RunMode::Before, help = "The execution mode for tasks (affects dependency resolution)")]
         mode: RunMode,
 
         #[clap(
