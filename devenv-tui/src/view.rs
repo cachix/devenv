@@ -79,7 +79,15 @@ pub fn view(
                 NixActivityState::Completed { success: false, .. }
             )
         );
+        let evaluate_failed = matches!(
+            (&activity.variant, &activity.state),
+            (
+                ActivityVariant::Evaluating(_),
+                NixActivityState::Completed { success: false, .. }
+            )
+        );
         let show_activity_logs = devenv_failed
+            || evaluate_failed
             || match &activity.variant {
                 ActivityVariant::Task(task_data) => task_data.show_output || task_failed,
                 ActivityVariant::Process(_) => true,

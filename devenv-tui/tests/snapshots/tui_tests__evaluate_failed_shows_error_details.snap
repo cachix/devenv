@@ -1,15 +1,19 @@
 ---
 source: devenv-tui/tests/tui_tests.rs
-assertion_line: 1171
 expression: output
 ---
 ✗ Evaluating shell                                                          [TIME]
-    … while evaluating the option `packages':
-    … while evaluating definitions from `languages/rust.nix':
-
-    error: To use 'languages.rust.channel', run the following command:
-
-    $ devenv inputs add rust-overlay github:oxalica/rust-overlay --follows nixpkgs
-  ✗ Evaluation error: Failed to get drvPath from shell derivation
+  │ Evaluation error: Failed to get drvPath from shell derivation
+  │ … while evaluating the option `packages':
+  │ … while evaluating definitions from `languages/rust.nix':
+  │
+  │ error: To use 'languages.rust.channel', run the following command:
+  │
+  │ $ devenv inputs add rust-overlay github:oxalica/rust-overlay --follows nixpkgs
+  • evaluating file 0
+  • evaluating file 1
+  • evaluating file 2
+  • evaluating file 3
+  • evaluating file 4
 
                                                                             ↑↓ nav

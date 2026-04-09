@@ -1125,6 +1125,9 @@ fn test_error_message_without_details() {
 }
 
 /// Test that failed evaluations show error details inline (not hidden behind navigation).
+/// The error details must be propagated from the child Message to the parent Evaluate
+/// activity's build_logs, because the child expires after the linger duration and gets
+/// pushed out by newer children (max_lines=5 default).
 /// Regression test for https://github.com/cachix/devenv/issues/2720
 #[test]
 fn test_evaluate_failed_shows_error_details() {
@@ -1166,6 +1169,23 @@ fn test_evaluate_failed_shows_error_details() {
         timestamp: Timestamp::now(),
     });
     model.apply_activity_event(complete_event);
+
+    // Simulate the child error message expiring: backdate it past the linger duration,
+    // then add 5 lingering siblings to fill max_lines and push the expired error out.
+    if let Some(child) = model.activities.get_mut(&100) {
+        child.completed_at = Some(std::time::Instant::now() - std::time::Duration::from_secs(10));
+    }
+    for i in 0..5 {
+        let filler = ActivityEvent::Message(Message {
+            id: 200 + i,
+            level: ActivityLevel::Info,
+            text: format!("evaluating file {i}"),
+            details: None,
+            parent: Some(1),
+            timestamp: Timestamp::now(),
+        });
+        model.apply_activity_event(filler);
+    }
 
     let output = render_to_string(&model, &ui_state);
     insta::assert_snapshot!(output);
