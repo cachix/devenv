@@ -693,7 +693,6 @@ fn test_backend_options_default() {
     assert!(options.bail_on_error);
     assert!(!options.cache_output);
     assert!(!options.refresh_cached_output);
-    assert!(!options.nix_flags.is_empty());
 }
 
 /// Benchmark test comparing FFI vs shell-based operations
