@@ -380,7 +380,9 @@ impl Config {
         let base_path = path.as_ref();
         let base_yaml = base_path.join(YAML_CONFIG);
 
-        // Collect all yaml files to load (base + imports)
+        // Collect all yaml files to load (imports first, then base).
+        // merge_btreemap gives precedence to later entries, so the base
+        // config must be loaded last to let its inputs override imports.
         let mut yaml_files = Vec::new();
         let mut visited = HashSet::new();
 
@@ -392,7 +394,6 @@ impl Config {
                     .wrap_err_with(|| {
                         format!("Failed to canonicalize base path: {}", base_yaml.display())
                     })?;
-            yaml_files.push(base_yaml.clone());
             visited.insert(canonical_base);
         }
 
@@ -414,7 +415,7 @@ impl Config {
         // Detect git repository root for import resolution
         let git_root = Self::detect_git_root(base_path);
 
-        // Recursively collect all imported yaml files
+        // Recursively collect imported yaml files (loaded first, lowest priority)
         Self::collect_import_files(
             &temp_result.config.imports,
             base_path,
@@ -423,6 +424,11 @@ impl Config {
             &mut visited,
             0,
         )?;
+
+        // Base config is loaded last so it takes precedence over imports
+        if base_yaml.exists() {
+            yaml_files.push(base_yaml.clone());
+        }
 
         // Load all configs and track which inputs come from which config file
         // This is needed to correctly normalize relative URLs
@@ -447,12 +453,10 @@ impl Config {
                 )
             })?;
 
-            // Record the source directory for each input defined in this config
-            // Earlier configs take precedence (first definition wins)
+            // Record the source directory for each input defined in this config.
+            // Later configs take precedence (base overrides imports).
             for input_name in single_result.config.inputs.keys() {
-                input_source_dirs
-                    .entry(input_name.clone())
-                    .or_insert_with(|| config_dir.clone());
+                input_source_dirs.insert(input_name.clone(), config_dir.clone());
             }
 
             loader
@@ -1354,6 +1358,60 @@ inputs:
             !url.contains("../"),
             "Should not be converted to relative path with ../, got: {}",
             url
+        );
+    }
+
+    #[test]
+    fn imported_config_does_not_override_base_inputs() {
+        // When a sub project imports a shared config and both define the same
+        // input, the sub project's (base) definition should take precedence.
+        // Regression test for https://github.com/cachix/devenv/issues/2728
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path();
+
+        // Initialize a git repo so import security checks pass
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(root)
+            .output()
+            .expect("Failed to git init");
+
+        // Shared config defines nixpkgs with the default URL
+        let shared_dir = root.join("shared");
+        std::fs::create_dir(&shared_dir).expect("Failed to create shared dir");
+        std::fs::write(
+            shared_dir.join("devenv.yaml"),
+            r#"
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
+"#,
+        )
+        .expect("Failed to write shared config");
+
+        // Sub project imports shared and overrides nixpkgs
+        let sub_dir = root.join("sub");
+        std::fs::create_dir(&sub_dir).expect("Failed to create sub dir");
+        std::fs::write(
+            sub_dir.join("devenv.yaml"),
+            r#"
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixos-25.11
+
+imports:
+  - ../shared
+"#,
+        )
+        .expect("Failed to write sub config");
+
+        let config = Config::load_from(&sub_dir).expect("Failed to load config");
+
+        let nixpkgs = config.inputs.get("nixpkgs").expect("nixpkgs not found");
+        assert_eq!(
+            nixpkgs.url,
+            Some("github:NixOS/nixpkgs/nixos-25.11".to_string()),
+            "Base config's nixpkgs URL should take precedence over imported config's URL"
         );
     }
 }

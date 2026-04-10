@@ -4,6 +4,8 @@
 
 ### Bug Fixes
 
+- Fixed `imports` overriding the base project's `inputs` (e.g. `inputs.nixpkgs.url`) instead of the base config taking precedence ([#2728](https://github.com/cachix/devenv/issues/2728)).
+- Fixed Boehm GC "Repeated allocation of very large block" warnings being printed to stderr during `devenv shell`.
 - Fixed `devenv hook` not changing directory when `cd`ing out of a devenv project. The shell would deactivate but remain in the project directory instead of following the user to the target directory.
 - Fixed cachix daemon failing to start because the evaluated store path for the cachix binary was never realized. Now uses the cachix bundled with devenv via PATH, falling back to evaluating `cachix.binary` only when needed.
 - Fixed warning messages from Nix not being forwarded and displayed during evaluation.
