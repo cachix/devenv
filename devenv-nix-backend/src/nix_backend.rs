@@ -804,6 +804,13 @@ in cfg // {{
                 .wrap_err("Failed to set tarball-ttl")?;
         }
 
+        // show-trace: always show full evaluation stack traces on error
+        // Without this, Nix truncates traces and suggests --show-trace which
+        // does not exist in the devenv CLI.
+        settings::set("show-trace", "true")
+            .to_miette()
+            .wrap_err("Failed to set show-trace")?;
+
         // nix_options: apply custom Nix configuration pairs
         // These are passed as pairs: ["key1", "value1", "key2", "value2", ...]
         for pair in nix_settings.nix_options.chunks_exact(2) {

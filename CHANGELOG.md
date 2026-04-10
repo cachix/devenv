@@ -23,6 +23,7 @@
 
 ### Improvements
 
+- Always enable Nix's `show-trace` setting so full evaluation stack traces are shown on error, instead of a truncated trace suggesting the nonexistent `--show-trace` flag ([#2725](https://github.com/cachix/devenv/issues/2725)).
 - Upgraded Nix to 2.34, bringing multithreaded tarball unpacking, evaluator performance improvements, and REPL enhancements.
 - Added Ctrl+X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
 - Tasks can now display messages when entering the shell by writing `{"devenv":{"messages":["..."]}}` to `$DEVENV_TASK_OUTPUT_FILE` ([#2500](https://github.com/cachix/devenv/issues/2500)).
