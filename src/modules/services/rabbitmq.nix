@@ -12,6 +12,8 @@ let
   baseManagementPort = cfg.managementPlugin.port;
   allocatedPort = config.processes.rabbitmq.ports.main.value;
   allocatedManagementPort = config.processes.rabbitmq.ports.management.value;
+  allocatedDistributionPort = config.processes.rabbitmq.ports.distribution.value;
+  allocatedEpmdPort = config.processes.rabbitmq.ports.epmd.value;
 
   config_file_content = lib.generators.toKeyValue { } cfg.configItems;
   config_file = pkgs.writeText "rabbitmq.conf" config_file_content;
@@ -167,11 +169,15 @@ in
     env.RABBITMQ_ENABLED_PLUGINS_FILE = plugin_file;
     env.RABBITMQ_NODENAME = cfg.nodeName;
     env.RABBITMQ_HOST = cfg.listenAddress;
+    env.RABBITMQ_DIST_PORT = toString allocatedDistributionPort;
     env.ERL_EPMD_ADDRESS = cfg.listenAddress;
+    env.ERL_EPMD_PORT = toString allocatedEpmdPort;
 
     processes.rabbitmq = {
       ports.main.allocate = basePort;
       ports.management.allocate = baseManagementPort;
+      ports.distribution.allocate = basePort + 20000;
+      ports.epmd.allocate = 4369;
       exec = "exec ${cfg.package}/bin/rabbitmq-server";
 
       ready = {
