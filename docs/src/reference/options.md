@@ -36806,6 +36806,30 @@ null
 
 
 
+## tasks.\<name>.execIf
+
+
+
+Condition to evaluate before dependency tasks run. If it exits non-zero, the task (and its unneeded dependencies) are skipped.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
 ## tasks.\<name>.execIfModified
 
 
