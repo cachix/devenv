@@ -23,6 +23,8 @@
 
 ### Improvements
 
+- Added `execIf` task option for pre-flight skip checks evaluated before dependencies run. Non-zero exit skips the task and prunes unneeded dependencies.
+- `execIfModified` checks now run in the pre-flight pass and participate in dependency pruning.
 - Always enable Nix's `show-trace` setting so full evaluation stack traces are shown on error, instead of a truncated trace suggesting the nonexistent `--show-trace` flag ([#2725](https://github.com/cachix/devenv/issues/2725)).
 - Upgraded Nix to 2.34, bringing multithreaded tarball unpacking, evaluator performance improvements, and REPL enhancements.
 - Added Ctrl+X keybinding to stop individual processes from the TUI while keeping them visible and restartable.

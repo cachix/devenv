@@ -119,6 +119,34 @@ If you define a `status` command, it will be executed first and if it returns `0
 
 Tasks using the `status` attribute will also cache their outputs. When a task is skipped because its status command returns success, the output from the most recent successful run will be restored and passed to dependent tasks.
 
+## Avoiding expensive dependencies via `execIf` check
+
+!!! tip "New in version 2.0"
+
+If you define an `execIf` command, it is evaluated **before** dependency tasks run. If it exits with a non-zero code, the task is skipped and its unneeded dependencies are pruned automatically.
+
+```nix title="devenv.nix"
+{ pkgs, lib, config, ... }:
+
+{
+  tasks = {
+    "myapp:expensive-dependency".exec = "sleep 10";  # pruned unless it's Monday or Wednesday
+    "myapp:monday" = {
+      after = [ "myapp:expensive-dependency" ];
+      exec = "echo 'Happy Monday!'";
+      execIf = "[ `date +%u` -eq 1 ]";
+    };
+    "myapp:monday" = {
+      after = [ "myapp:expensive-dependency" ];
+      exec = "echo 'Happy Wednesday!'";
+      execIf = "[ `date +%u` -eq 3 ]";
+    };
+  };
+}
+```
+
+`execIf` does **not** receive `$DEVENV_TASKS_OUTPUTS` since dependencies have not yet executed. It can be combined with `status` on the same task: `execIf` acts as an early gate, while `status` is evaluated after dependencies complete.
+
 ## Executing tasks only when files have been modified
 
 You can specify a list of files to monitor with `execIfModified`. The task will only run if any of these files have been modified since the last successful run. This attribute supports glob patterns, allowing you to monitor multiple files matching specific patterns.
@@ -154,7 +182,7 @@ When a task is skipped due to no file changes, any previous outputs from that ta
 Tasks support passing inputs and produce outputs, both as JSON objects:
 
 - `$DEVENV_TASK_INPUT`: JSON object of `tasks."myapp:mytask".input`.
-- `$DEVENV_TASKS_OUTPUTS`: JSON object with dependent tasks as keys and their outputs as values.
+- `$DEVENV_TASKS_OUTPUTS`: JSON object with dependent tasks as keys and their outputs as values. Not set for `execIf` commands; set for `exec` and `status` commands.
 - `$DEVENV_TASK_OUTPUT_FILE`: a writable file with tasks' outputs in JSON.
 - `$DEVENV_TASK_EXPORTS_FILE`: a writable file where tasks can export environment variables. Write `name\0base64(value)\0` pairs to this file and they will be set in the environment of dependent tasks.
 
