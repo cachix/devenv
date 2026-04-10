@@ -146,47 +146,65 @@ in
     };
   };
 
-  config = mkIf cfg.enable {
-    packages = [ cfg.package ];
+  config = mkMerge [
+    {
+      changelogs = [
+        {
+          date = "2026-04-11";
+          title = "services.rabbitmq: allocate distribution and EPMD ports dynamically";
+          when = cfg.enable;
+          description = ''
+            RabbitMQ's Erlang distribution port and EPMD port now use devenv's dynamic port allocation,
+            just like the AMQP and management listeners.
 
-    services.rabbitmq.configItems = {
-      "listeners.tcp.1" = mkDefault "${cfg.listenAddress}:${toString allocatedPort}";
-      "distribution.listener.interface" = mkDefault cfg.listenAddress;
-    } // optionalAttrs cfg.managementPlugin.enable {
-      "management.tcp.port" = toString allocatedManagementPort;
-      "management.tcp.ip" = cfg.listenAddress;
-    };
+            This avoids hardcoded use of ports `25672` and `4369`, which could previously cause port collisions
+            when running multiple environments.
+          '';
+        }
+      ];
+    }
+    (mkIf cfg.enable {
+      packages = [ cfg.package ];
 
-    services.rabbitmq.plugins =
-      optional cfg.managementPlugin.enable "rabbitmq_management";
-
-    env.RABBITMQ_DATA_DIR = config.env.DEVENV_STATE + "/rabbitmq";
-    env.RABBITMQ_MNESIA_BASE = config.env.RABBITMQ_DATA_DIR + "/mnesia";
-    env.RABBITMQ_LOGS = "-";
-    env.RABBITMQ_LOG_BASE = config.env.RABBITMQ_DATA_DIR + "/logs";
-    env.RABBITMQ_CONFIG_FILE = config_file;
-    env.RABBITMQ_PLUGINS_DIR = concatStringsSep ":" cfg.pluginDirs;
-    env.RABBITMQ_ENABLED_PLUGINS_FILE = plugin_file;
-    env.RABBITMQ_NODENAME = cfg.nodeName;
-    env.RABBITMQ_HOST = cfg.listenAddress;
-    env.RABBITMQ_DIST_PORT = toString allocatedDistributionPort;
-    env.ERL_EPMD_ADDRESS = cfg.listenAddress;
-    env.ERL_EPMD_PORT = toString allocatedEpmdPort;
-
-    processes.rabbitmq = {
-      ports.main.allocate = basePort;
-      ports.management.allocate = baseManagementPort;
-      ports.distribution.allocate = basePort + 20000;
-      ports.epmd.allocate = 4369;
-      exec = "exec ${cfg.package}/bin/rabbitmq-server";
-
-      ready = {
-        exec = "${cfg.package}/bin/rabbitmq-diagnostics -q ping";
-        initial_delay = 10;
-        period = 3;
-        probe_timeout = 3;
-        failure_threshold = 5;
+      services.rabbitmq.configItems = {
+        "listeners.tcp.1" = mkDefault "${cfg.listenAddress}:${toString allocatedPort}";
+        "distribution.listener.interface" = mkDefault cfg.listenAddress;
+      } // optionalAttrs cfg.managementPlugin.enable {
+        "management.tcp.port" = toString allocatedManagementPort;
+        "management.tcp.ip" = cfg.listenAddress;
       };
-    };
-  };
+
+      services.rabbitmq.plugins =
+        optional cfg.managementPlugin.enable "rabbitmq_management";
+
+      env.RABBITMQ_DATA_DIR = config.env.DEVENV_STATE + "/rabbitmq";
+      env.RABBITMQ_MNESIA_BASE = config.env.RABBITMQ_DATA_DIR + "/mnesia";
+      env.RABBITMQ_LOGS = "-";
+      env.RABBITMQ_LOG_BASE = config.env.RABBITMQ_DATA_DIR + "/logs";
+      env.RABBITMQ_CONFIG_FILE = config_file;
+      env.RABBITMQ_PLUGINS_DIR = concatStringsSep ":" cfg.pluginDirs;
+      env.RABBITMQ_ENABLED_PLUGINS_FILE = plugin_file;
+      env.RABBITMQ_NODENAME = cfg.nodeName;
+      env.RABBITMQ_HOST = cfg.listenAddress;
+      env.RABBITMQ_DIST_PORT = toString allocatedDistributionPort;
+      env.ERL_EPMD_ADDRESS = cfg.listenAddress;
+      env.ERL_EPMD_PORT = toString allocatedEpmdPort;
+
+      processes.rabbitmq = {
+        ports.main.allocate = basePort;
+        ports.management.allocate = baseManagementPort;
+        ports.distribution.allocate = basePort + 20000;
+        ports.epmd.allocate = 4369;
+        exec = "exec ${cfg.package}/bin/rabbitmq-server";
+
+        ready = {
+          exec = "${cfg.package}/bin/rabbitmq-diagnostics -q ping";
+          initial_delay = 10;
+          period = 3;
+          probe_timeout = 3;
+          failure_threshold = 5;
+        };
+      };
+    })
+  ];
 }
