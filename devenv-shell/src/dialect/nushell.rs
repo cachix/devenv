@@ -202,7 +202,7 @@ exit 1
 
 # Apply a reload: run the bash helper script to compute the env diff,
 # then parse `export -p` output and apply environment changes.
-def __devenv_reload_apply [] {{
+def --env __devenv_reload_apply [] {{
     let reload_file = "{reload_file}"
     if ($reload_file | path exists) {{
         let bash_output = (bash "{helper_path}" | complete)
@@ -223,7 +223,7 @@ def __devenv_reload_apply [] {{
                             $raw_value
                         }}
                         # Skip shell internal variables
-                        if $var_name not-in ["BASH" "BASHOPTS" "BASH_ARGC" "BASH_ARGV" "BASH_LINENO" "BASH_SOURCE" "BASH_VERSINFO" "BASH_VERSION" "SHELLOPTS" "SHLVL" "OLDPWD" "_"] {{
+                        if $var_name not-in ["BASH" "BASHOPTS" "BASH_ARGC" "BASH_ARGV" "BASH_LINENO" "BASH_SOURCE" "BASH_VERSINFO" "BASH_VERSION" "SHELLOPTS" "SHLVL" "OLDPWD" "_" "_DEVENV_PATH"] {{
                             # PATH is a list in nushell; split colon-separated values
                             if $var_name == "PATH" {{
                                 $env.PATH = ($value | split row ":")
@@ -249,12 +249,17 @@ $env.config.keybindings = ($env.config.keybindings? | default [] | append {{
     event: {{ send: executehostcommand cmd: "__devenv_reload_apply" }}
 }})
 
-# Pre-prompt hook: restore devenv PATH and check for pending reloads.
-# _DEVENV_PATH is a colon-separated string; split into a list for nushell.
+# Pre-prompt hook: apply pending reloads and restore devenv PATH.
+# This mirrors bash's PROMPT_COMMAND which auto-applies reloads on every prompt.
+# Nushell scoping: env changes inside `if` blocks within hook closures
+# do NOT propagate, and nested `if` expressions also fail. Keep the
+# logic flat with no nesting.
 $env.config.hooks.pre_prompt = ($env.config.hooks.pre_prompt? | default [] | append {{||
-    if ("_DEVENV_PATH" in $env) {{
-        $env.PATH = ($env._DEVENV_PATH | split row ":")
-    }}
+    let reload_file = "{reload_file}"
+    let helper_output = (if ($reload_file | path exists) {{ bash "{helper_path}" | complete | get stdout }} else {{ "" }})
+    let path_lines = ($helper_output | lines | where {{|l| $l | str starts-with "declare -x PATH="}})
+    $env._DEVENV_PATH = (if ($path_lines | is-not-empty) {{ $path_lines | first | str substring 18.. | str trim --char '"' }} else {{ ($env._DEVENV_PATH? | default ($env.PATH | str join ":")) }})
+    $env.PATH = ($env._DEVENV_PATH | split row ":")
 }})
 "#,
                 reload_file = reload_file,
