@@ -17,6 +17,7 @@ reqwest.workspace = true
 tokio = { workspace = true, features = ["net", "process"] }
 tracing.workspace = true
 watchexec.workspace = true
+watchexec-events = "6.1"
 watchexec-filterer-globset.workspace = true
 
 [dev-dependencies]

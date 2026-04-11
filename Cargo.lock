@@ -1935,6 +1935,7 @@ dependencies = [
  "tokio",
  "tracing",
  "watchexec",
+ "watchexec-events",
  "watchexec-filterer-globset",
 ]
 

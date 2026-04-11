@@ -8,6 +8,10 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{debug, warn};
 use watchexec::{Config, WatchedPath};
+use watchexec_events::{
+    Tag,
+    filekind::{FileEventKind, ModifyKind},
+};
 use watchexec_filterer_globset::GlobsetFilterer;
 
 #[derive(Debug, Clone)]
@@ -311,6 +315,9 @@ impl FileWatcher {
                     if !filterer.check_event(event, *priority).unwrap_or(true) {
                         continue;
                     }
+                    if !is_restart_worthy_event(event) {
+                        continue;
+                    }
                     for (path, _) in event.paths() {
                         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
                         // Use send().await instead of try_send to apply backpressure
@@ -349,6 +356,24 @@ impl FileWatcher {
     }
 }
 
+fn is_restart_worthy_event(event: &watchexec_events::Event) -> bool {
+    event.tags.iter().any(|tag| match tag {
+        Tag::FileEventKind(kind) => is_restart_worthy_kind(kind),
+        _ => false,
+    })
+}
+
+fn is_restart_worthy_kind(kind: &FileEventKind) -> bool {
+    match kind {
+        FileEventKind::Create(_)
+        | FileEventKind::Remove(_)
+        | FileEventKind::Any
+        | FileEventKind::Other => true,
+        FileEventKind::Modify(ModifyKind::Any | ModifyKind::Data(_) | ModifyKind::Name(_)) => true,
+        FileEventKind::Access(_) | FileEventKind::Modify(_) => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -367,6 +392,38 @@ mod tests {
             result.is_err(),
             "unexpected file watcher event for {context}"
         );
+    }
+
+    #[test]
+    fn test_restart_worthy_kind_filter() {
+        use watchexec_events::filekind::{
+            AccessKind, AccessMode, CreateKind, DataChange, MetadataKind, RemoveKind, RenameMode,
+        };
+
+        assert!(is_restart_worthy_kind(&FileEventKind::Create(
+            CreateKind::File
+        )));
+        assert!(is_restart_worthy_kind(&FileEventKind::Remove(
+            RemoveKind::File
+        )));
+        assert!(is_restart_worthy_kind(&FileEventKind::Modify(
+            ModifyKind::Data(DataChange::Any,)
+        )));
+        assert!(is_restart_worthy_kind(&FileEventKind::Modify(
+            ModifyKind::Name(RenameMode::Any,)
+        )));
+        assert!(is_restart_worthy_kind(&FileEventKind::Modify(
+            ModifyKind::Any
+        )));
+        assert!(is_restart_worthy_kind(&FileEventKind::Any));
+        assert!(is_restart_worthy_kind(&FileEventKind::Other));
+
+        assert!(!is_restart_worthy_kind(&FileEventKind::Access(
+            AccessKind::Open(AccessMode::Read,)
+        )));
+        assert!(!is_restart_worthy_kind(&FileEventKind::Modify(
+            ModifyKind::Metadata(MetadataKind::Any),
+        )));
     }
 
     #[tokio::test]
