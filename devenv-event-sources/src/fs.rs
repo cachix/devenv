@@ -347,6 +347,10 @@ impl FileWatcher {
     pub async fn recv(&mut self) -> Option<FileChangeEvent> {
         self.rx.recv().await
     }
+
+    pub fn try_recv(&mut self) -> Result<FileChangeEvent, tokio::sync::mpsc::error::TryRecvError> {
+        self.rx.try_recv()
+    }
 }
 
 #[cfg(test)]
