@@ -4,7 +4,7 @@
 
 ### Bug Fixes
 
-- Fixed `processes.<name>.watch` restarting processes multiple times for a single burst of queued file watcher events by draining the watch queue before restart.
+- Fixed `processes.<name>.watch` restarting processes multiple times for a single burst of queued file watcher events by draining the watch queue before restart ([#2735](https://github.com/cachix/devenv/pull/2735)).
 - Fixed `imports` overriding the base project's `inputs` (e.g. `inputs.nixpkgs.url`) instead of the base config taking precedence ([#2728](https://github.com/cachix/devenv/issues/2728)).
 - Fixed Boehm GC "Repeated allocation of very large block" warnings being printed to stderr during `devenv shell`.
 - Fixed `devenv hook` not changing directory when `cd`ing out of a devenv project. The shell would deactivate but remain in the project directory instead of following the user to the target directory.
