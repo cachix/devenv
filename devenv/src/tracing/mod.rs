@@ -92,11 +92,20 @@ where
 }
 
 fn create_filter(level: Level) -> EnvFilter {
-    EnvFilter::builder()
+    let filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::from(level).into())
         .from_env_lossy()
-        .add_directive("devenv::activity=trace".parse().unwrap())
-        .add_directive("watchexec=warn".parse().unwrap())
+        .add_directive("watchexec=warn".parse().unwrap());
+
+    if level >= Level::Warn {
+        // In quiet mode the TUI is off and activity span events would just
+        // leak to stderr, so suppress them entirely.
+        filter.add_directive("devenv_activity=warn".parse().unwrap())
+    } else {
+        // Activity spans at trace level are needed so the TUI can render
+        // all activity events.
+        filter.add_directive("devenv::activity=trace".parse().unwrap())
+    }
 }
 
 pub fn init_tracing_default() {

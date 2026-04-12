@@ -162,15 +162,37 @@ struct LaunchConfig {
     tracing_output: Option<TraceOutput>,
 }
 
+/// Detect whether we are running inside an AI coding agent.
+///
+/// LLM tools typically allocate a PTY so is_terminal() returns true,
+/// but their verbose TUI output wastes tokens. We check for well-known
+/// environment variables set by popular AI agents and the emerging
+/// AI_AGENT standard (https://github.com/anthropics/claude-code/blob/main/AI_AGENT.md).
+fn is_ai_agent() -> bool {
+    std::env::var_os("CLAUDECODE").is_some()
+        || std::env::var_os("OPENCODE_CLIENT").is_some()
+        || std::env::var_os("AI_AGENT").is_some()
+}
+
 /// Resolve all configuration from CLI + config files + environment.
 /// This is a sync function that runs before any async runtime.
 fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
     let command = cli.command.take().expect("Command should exist");
 
     // Extract values from CLI before consuming fields via From conversions
-    let log_level = cli.get_log_level();
     let nix_debugger = cli.nix_args.nix_debugger;
-    let verbosity = if cli.cli_options.quiet {
+
+    // Auto-quiet when running inside an AI agent (LLM tools allocate a PTY,
+    // making is_terminal() true, but verbose output wastes tokens).
+    let ai_agent = is_ai_agent();
+    let quiet = cli.cli_options.quiet || (ai_agent && !cli.cli_options.verbose);
+
+    let log_level = if quiet {
+        devenv_tracing::Level::Warn
+    } else {
+        cli.get_log_level()
+    };
+    let verbosity = if quiet {
         devenv::tasks::VerbosityLevel::Quiet
     } else if cli.cli_options.verbose {
         devenv::tasks::VerbosityLevel::Verbose
@@ -237,12 +259,12 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
     let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
 
     // Resolve TUI flag: explicit --tui/--no-tui wins, otherwise default
-    // to TUI when running interactively outside CI.
+    // to TUI when running interactively outside CI and outside AI agents.
     let tui_requested = devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
         .unwrap_or_else(|| {
             let is_ci = std::env::var_os("CI").is_some();
             let is_tty = std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
-            is_tty && !is_ci
+            is_tty && !is_ci && !ai_agent
         });
 
     // Some commands don't support the TUI regardless of user options
@@ -254,7 +276,6 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
             | Commands::Init { .. } // interactive prompts (dialoguer) need direct terminal
     );
 
-    let quiet = cli.cli_options.quiet;
     let tui = tui_requested && !tui_unsupported && !use_tracing_mode && !quiet;
 
     // Determine use_pty from resolved settings (single source of truth)
