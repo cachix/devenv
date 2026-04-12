@@ -79,6 +79,7 @@ pub struct DevenvOptions {
     pub secret_settings: SecretSettings,
     pub input_overrides: InputOverrides,
     pub from_external: bool,
+    pub require_version_match: bool,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
     pub devenv_state: Option<PathBuf>,
@@ -99,6 +100,7 @@ impl DevenvOptions {
             secret_settings: SecretSettings::default(),
             input_overrides: InputOverrides::default(),
             from_external: false,
+            require_version_match: false,
             devenv_root: None,
             devenv_dotfile: None,
             devenv_state: None,
@@ -213,6 +215,7 @@ pub struct Devenv {
     pub secret_settings: SecretSettings,
     pub input_overrides: InputOverrides,
     pub from_external: bool,
+    require_version_match: bool,
     is_testing: bool,
 
     pub nix: Arc<Box<dyn NixBackend>>,
@@ -398,6 +401,7 @@ impl Devenv {
             secret_settings,
             input_overrides: options.input_overrides,
             from_external: options.from_external,
+            require_version_match: options.require_version_match,
             is_testing: options.is_testing,
             devenv_root,
             devenv_dotfile,
@@ -2063,6 +2067,7 @@ impl Devenv {
         let args = NixArgs {
             version: crate_version!(),
             is_development_version: crate::is_development_version(),
+            require_version_match: self.require_version_match,
             system: &self.nix_settings.system,
             devenv_root: &self.devenv_root,
             skip_local_src: self.from_external

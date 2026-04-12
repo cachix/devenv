@@ -1890,6 +1890,7 @@ dependencies = [
  "regex",
  "schemars 1.2.1",
  "schematic",
+ "semver",
  "ser_nix",
  "serde",
  "serde_json",

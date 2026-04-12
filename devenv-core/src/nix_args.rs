@@ -322,6 +322,9 @@ pub struct NixArgs<'a> {
     /// Whether this is a development build (not from a release tag)
     pub is_development_version: bool,
 
+    /// Whether `require_version: true` is set, meaning CLI must match modules version
+    pub require_version_match: bool,
+
     /// The system string (e.g., "x86_64-linux", "aarch64-darwin")
     pub system: &'a str,
 
@@ -443,6 +446,7 @@ mod tests {
         let args = NixArgs {
             version,
             is_development_version: false,
+            require_version_match: false,
             system,
             devenv_root: &root,
             skip_local_src: false,
@@ -551,6 +555,7 @@ mod tests {
         let args = NixArgs {
             version,
             is_development_version: false,
+            require_version_match: false,
             system,
             devenv_root: &root,
             skip_local_src: false,

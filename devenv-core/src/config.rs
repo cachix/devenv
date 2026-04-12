@@ -2,6 +2,7 @@ use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use pathdiff;
 use schemars::{JsonSchema, schema_for};
 use schematic::ConfigLoader;
+use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -11,6 +12,19 @@ use std::{
 
 const YAML_CONFIG: &str = "devenv.yaml";
 const YAML_LOCAL_CONFIG: &str = "devenv.local.yaml";
+
+/// Version requirement for the devenv CLI.
+///
+/// - `true`: CLI version must match the modules version (checked during Nix evaluation)
+/// - A constraint string like `">=2.0.0"`: checked before Nix evaluation
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, schematic::Schematic)]
+#[serde(untagged)]
+pub enum RequireVersion {
+    /// When true, CLI version must match the modules version
+    Match(bool),
+    /// Version constraint string (e.g., ">=2.0.0", "2.0.7")
+    Constraint(String),
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, schematic::Schematic)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
@@ -246,6 +260,12 @@ pub struct Nixpkgs {
 #[config(rename_all = "camelCase", allow_unknown_fields)]
 #[serde(rename_all = "snake_case")]
 pub struct Config {
+    /// Version requirement for the devenv CLI.
+    /// Set to `true` to enforce CLI matches the modules version,
+    /// or a constraint string like `">=2.0.0"`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[setting(merge = schematic::merge::replace)]
+    pub require_version: Option<RequireVersion>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     #[setting(nested, merge = schematic::merge::merge_btreemap)]
     pub inputs: BTreeMap<String, Input>,
@@ -613,6 +633,62 @@ impl Config {
         config.git_root = git_root;
 
         Ok(config)
+    }
+
+    /// Check that `current` (e.g. "2.0.7") satisfies the version requirement in
+    /// `devenv.yaml`. No-op when no requirement is set or when `require_version: true`
+    /// (deferred to Nix evaluation where the modules version is available).
+    pub fn check_version(&self, current: &str) -> Result<()> {
+        let constraint = match &self.require_version {
+            // Match(_) is either disabled (false) or deferred to Nix eval (true)
+            None | Some(RequireVersion::Match(_)) => return Ok(()),
+            Some(RequireVersion::Constraint(c)) => c,
+        };
+
+        // Bare version "2.0.7" means exact match; semver crate treats it as "^2.0.7"
+        let req_str = if constraint.starts_with('>')
+            || constraint.starts_with('<')
+            || constraint.starts_with('=')
+        {
+            constraint.clone()
+        } else {
+            format!("={constraint}")
+        };
+
+        let cur = Self::parse_version(current)
+            .wrap_err_with(|| format!("Failed to parse current devenv version '{current}'"))?;
+        let req = VersionReq::parse(&req_str)
+            .into_diagnostic()
+            .wrap_err_with(|| {
+                format!("Failed to parse version constraint '{constraint}' in devenv.yaml")
+            })?;
+
+        if !req.matches(&cur) {
+            bail!(
+                "devenv version {current} does not satisfy the constraint '{constraint}' in devenv.yaml"
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Returns true when `require_version: true` is set, meaning the Nix modules
+    /// should assert that CLI version matches the modules version.
+    pub fn requires_version_match(&self) -> bool {
+        matches!(&self.require_version, Some(RequireVersion::Match(true)))
+    }
+
+    /// Parse a version string, accepting "X.Y" (appending ".0") and "X.Y.Z".
+    fn parse_version(s: &str) -> Result<Version> {
+        // semver crate requires X.Y.Z; support X.Y by appending .0
+        let normalized = if s.matches('.').count() == 1 {
+            format!("{s}.0")
+        } else {
+            s.to_string()
+        };
+        Version::parse(&normalized)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("expected version format X.Y or X.Y.Z, got '{s}'"))
     }
 
     /// Detects the git repository root starting from the given path.
@@ -1413,5 +1489,108 @@ imports:
             Some("github:NixOS/nixpkgs/nixos-25.11".to_string()),
             "Base config's nixpkgs URL should take precedence over imported config's URL"
         );
+    }
+
+    #[test]
+    fn check_version_none_always_passes() {
+        let config = Config::default();
+        assert!(config.check_version("2.0.7").is_ok());
+    }
+
+    #[test]
+    fn check_version_false_always_passes() {
+        let config = Config {
+            require_version: Some(RequireVersion::Match(false)),
+            ..Default::default()
+        };
+        assert!(config.check_version("2.0.7").is_ok());
+    }
+
+    #[test]
+    fn check_version_true_deferred_to_nix() {
+        let config = Config {
+            require_version: Some(RequireVersion::Match(true)),
+            ..Default::default()
+        };
+        // `true` is checked during Nix evaluation, so Rust check always passes
+        assert!(config.check_version("2.0.7").is_ok());
+        assert!(config.requires_version_match());
+    }
+
+    #[test]
+    fn check_version_exact_match() {
+        let config = Config {
+            require_version: Some(RequireVersion::Constraint("2.0.7".to_string())),
+            ..Default::default()
+        };
+        assert!(config.check_version("2.0.7").is_ok());
+        assert!(config.check_version("2.0.8").is_err());
+    }
+
+    #[test]
+    fn check_version_gte() {
+        let config = Config {
+            require_version: Some(RequireVersion::Constraint(">=2.0.0".to_string())),
+            ..Default::default()
+        };
+        assert!(config.check_version("2.0.0").is_ok());
+        assert!(config.check_version("2.0.7").is_ok());
+        assert!(config.check_version("3.0.0").is_ok());
+        assert!(config.check_version("1.9.9").is_err());
+    }
+
+    #[test]
+    fn check_version_lt() {
+        let config = Config {
+            require_version: Some(RequireVersion::Constraint("<3.0.0".to_string())),
+            ..Default::default()
+        };
+        assert!(config.check_version("2.0.7").is_ok());
+        assert!(config.check_version("3.0.0").is_err());
+    }
+
+    #[test]
+    fn check_version_two_component() {
+        let config = Config {
+            require_version: Some(RequireVersion::Constraint(">=2.1".to_string())),
+            ..Default::default()
+        };
+        assert!(config.check_version("2.1.0").is_ok());
+        assert!(config.check_version("2.1.5").is_ok());
+        assert!(config.check_version("2.0.9").is_err());
+    }
+
+    #[test]
+    fn check_version_invalid_constraint() {
+        let config = Config {
+            require_version: Some(RequireVersion::Constraint(">=abc".to_string())),
+            ..Default::default()
+        };
+        assert!(config.check_version("2.0.7").is_err());
+    }
+
+    #[test]
+    fn check_version_invalid_current() {
+        let config = Config {
+            require_version: Some(RequireVersion::Constraint(">=2.0.0".to_string())),
+            ..Default::default()
+        };
+        assert!(config.check_version("not-a-version").is_err());
+    }
+
+    #[test]
+    fn require_version_yaml_bool() {
+        let yaml = "require_version: true\n";
+        let parsed: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let rv: RequireVersion = serde_yaml::from_value(parsed["require_version"].clone()).unwrap();
+        assert_eq!(rv, RequireVersion::Match(true));
+    }
+
+    #[test]
+    fn require_version_yaml_string() {
+        let yaml = "require_version: \">=2.0.0\"\n";
+        let parsed: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let rv: RequireVersion = serde_yaml::from_value(parsed["require_version"].clone()).unwrap();
+        assert_eq!(rv, RequireVersion::Constraint(">=2.0.0".to_string()));
     }
 }

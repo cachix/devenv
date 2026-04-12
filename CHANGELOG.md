@@ -31,6 +31,7 @@
 - Auto-detect AI coding agents (via `CLAUDECODE`, `OPENCODE_CLIENT`, and `AI_AGENT` environment variables) and enable quiet mode to avoid wasting LLM tokens on TUI progress output. Override with `--verbose` or `--tui` ([#2723](https://github.com/cachix/devenv/issues/2723)).
 - Always enable Nix's `show-trace` setting so full evaluation stack traces are shown on error, instead of a truncated trace suggesting the nonexistent `--show-trace` flag ([#2725](https://github.com/cachix/devenv/issues/2725)).
 - Upgraded Nix to 2.34, bringing multithreaded tarball unpacking, evaluator performance improvements, and REPL enhancements.
+- Added `require_version` field to `devenv.yaml` to enforce a devenv CLI version. Set to `true` to match the modules version, or use a constraint string like `">=2.1"` ([#2391](https://github.com/cachix/devenv/issues/2391)).
 - Added Ctrl-X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
 - Tasks can now display messages when entering the shell by writing `{"devenv":{"messages":["..."]}}` to `$DEVENV_TASK_OUTPUT_FILE` ([#2500](https://github.com/cachix/devenv/issues/2500)).
 - Added `devenv hook <shell>` for native directory based auto-activation without direnv. Supports bash, zsh, fish, and nushell. Automatically deactivates when you leave the project directory. Add `eval "$(devenv hook bash)"` to your shell config to activate. Use `devenv allow` and `devenv revoke` to manage trust ([#2488](https://github.com/cachix/devenv/issues/2488)).
