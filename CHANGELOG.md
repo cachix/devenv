@@ -27,9 +27,10 @@
 
 ### Improvements
 
+- Standardized keyboard shortcut notation across `devenv up` TUI and `devenv shell` to use consistent `Ctrl-E` format instead of mixed `^e`/`Ctrl-Alt-E` styles. macOS now shows `Opt` instead of `Alt` ([#2736](https://github.com/cachix/devenv/issues/2736)).
 - Always enable Nix's `show-trace` setting so full evaluation stack traces are shown on error, instead of a truncated trace suggesting the nonexistent `--show-trace` flag ([#2725](https://github.com/cachix/devenv/issues/2725)).
 - Upgraded Nix to 2.34, bringing multithreaded tarball unpacking, evaluator performance improvements, and REPL enhancements.
-- Added Ctrl+X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
+- Added Ctrl-X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
 - Tasks can now display messages when entering the shell by writing `{"devenv":{"messages":["..."]}}` to `$DEVENV_TASK_OUTPUT_FILE` ([#2500](https://github.com/cachix/devenv/issues/2500)).
 - Added `devenv hook <shell>` for native directory based auto-activation without direnv. Supports bash, zsh, fish, and nushell. Automatically deactivates when you leave the project directory. Add `eval "$(devenv hook bash)"` to your shell config to activate. Use `devenv allow` and `devenv revoke` to manage trust ([#2488](https://github.com/cachix/devenv/issues/2488)).
 - Shell environment now auto-reloads at the next prompt when watched files change, instead of requiring a manual Ctrl-Alt-R keybind ([#2595](https://github.com/cachix/devenv/issues/2595)).

@@ -518,18 +518,18 @@ fn render_expanded_view(
     let footer_text = if interrupt_prompt_active {
         if width < 88 {
             format!(
-                "{} \u{2502} Quit devenv?  c:keep running  q/^C:quit",
+                "{} \u{2502} Quit devenv?  c:keep running  q/Ctrl-C:quit",
                 progress
             )
         } else {
             format!(
-                "{} \u{2502} Quit devenv? Nothing has been stopped yet  c:keep running  q:quit  ^C:quit",
+                "{} \u{2502} Quit devenv? Nothing has been stopped yet  c:keep running  q:quit  Ctrl-C:quit",
                 progress
             )
         }
     } else if selection.is_some() {
         format!(
-            "{} \u{2502} j/k:line  PgUp/PgDn:page  g/G:top/bottom  Ctrl+C:copy  Esc:deselect  q:back",
+            "{} \u{2502} j/k:line  PgUp/PgDn:page  g/G:top/bottom  Ctrl-C:copy  Esc:deselect  q:back",
             progress
         )
     } else {

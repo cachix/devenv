@@ -338,7 +338,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .render(terminal_width, *depth, prefix);
 
                 return ExpandedContentComponent::new(logs.as_deref())
-                    .with_empty_message("  → no build logs yet (press '^e' to expand)")
+                    .with_empty_message("  → no build logs yet (press Ctrl-E to expand)")
                     .render_with_main_line(main_line);
             }
 
@@ -555,7 +555,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let failed = *completed == Some(false);
             if (failed || *is_selected) && logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
-                    .with_empty_message("  → no files evaluated yet (press '^e' to expand)");
+                    .with_empty_message("  → no files evaluated yet (press Ctrl-E to expand)");
                 if failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
                 }
@@ -951,7 +951,7 @@ fn build_summary_view_impl(
                 Text(content: " keep running • ")
                 Text(content: "q", color: COLOR_INTERACTIVE)
                 Text(content: " quit • ")
-                Text(content: "^C", color: COLOR_INTERACTIVE)
+                Text(content: "Ctrl-C", color: COLOR_INTERACTIVE)
                 Text(content: " quit")
             }
         })
@@ -1178,7 +1178,7 @@ fn build_summary_view_impl(
         } else {
             help_children.push(element!(Text(content: " • ")).into_any());
         }
-        help_children.push(element!(Text(content: "^e", color: COLOR_INTERACTIVE)).into_any());
+        help_children.push(element!(Text(content: if use_short_text { "^E" } else { "Ctrl-E" }, color: COLOR_INTERACTIVE)).into_any());
         if use_symbols {
             help_children.push(element!(Text(content: " ▼ • ")).into_any());
         } else if use_short_text {
@@ -1189,14 +1189,14 @@ fn build_summary_view_impl(
         if is_process {
             if is_stoppable {
                 help_children
-                    .push(element!(Text(content: "^x", color: COLOR_INTERACTIVE)).into_any());
+                    .push(element!(Text(content: if use_short_text { "^X" } else { "Ctrl-X" }, color: COLOR_INTERACTIVE)).into_any());
                 if use_short_text {
                     help_children.push(element!(Text(content: " stop • ")).into_any());
                 } else {
                     help_children.push(element!(Text(content: " stop process • ")).into_any());
                 }
             }
-            help_children.push(element!(Text(content: "^r", color: COLOR_INTERACTIVE)).into_any());
+            help_children.push(element!(Text(content: if use_short_text { "^R" } else { "Ctrl-R" }, color: COLOR_INTERACTIVE)).into_any());
             if use_short_text {
                 help_children.push(element!(Text(content: " (re)start • ")).into_any());
             } else {
@@ -1217,7 +1217,7 @@ fn build_summary_view_impl(
             help_children.push(element!(Text(content: " clear")).into_any());
         }
     } else {
-        // Show navigate hint only when no selection (^e requires selection)
+        // Show navigate hint only when no selection (Ctrl-E requires selection)
         help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
         help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
         if !use_symbols {

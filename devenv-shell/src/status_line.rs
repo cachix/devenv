@@ -47,9 +47,16 @@ pub const CHECKMARK: &str = "✓";
 /// Failure X character
 pub const XMARK: &str = "✗";
 
-/// Keybind labels (short, long) for status line actions
-const KEYBIND_ERROR: (&str, &str) = ("^⌥e", "Ctrl-Alt-E");
-const KEYBIND_PAUSE: (&str, &str) = ("^⌥d", "Ctrl-Alt-D");
+/// Keybind labels (short, long) for status line actions.
+/// Short form uses ⌥ (Option symbol). Long form uses "Opt" on macOS, "Alt" elsewhere.
+#[cfg(target_os = "macos")]
+const KEYBIND_ERROR: (&str, &str) = ("^⌥E", "Ctrl-Opt-E");
+#[cfg(not(target_os = "macos"))]
+const KEYBIND_ERROR: (&str, &str) = ("^⌥E", "Ctrl-Alt-E");
+#[cfg(target_os = "macos")]
+const KEYBIND_PAUSE: (&str, &str) = ("^⌥D", "Ctrl-Opt-D");
+#[cfg(not(target_os = "macos"))]
+const KEYBIND_PAUSE: (&str, &str) = ("^⌥D", "Ctrl-Alt-D");
 
 /// Current status state.
 #[derive(Debug, Clone, Default)]
