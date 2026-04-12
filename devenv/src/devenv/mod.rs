@@ -1958,6 +1958,45 @@ impl Devenv {
         }
     }
 
+    pub async fn processes_endpoints(&self) -> Result<String> {
+        match self
+            .native_api_request(&processes::ApiRequest::Endpoints)
+            .await?
+        {
+            processes::ApiResponse::Endpoints { endpoints } => {
+                if endpoints.is_empty() {
+                    return Ok("No endpoints found.\n".to_string());
+                }
+
+                let mut grouped: std::collections::BTreeMap<String, Vec<(String, String)>> =
+                    std::collections::BTreeMap::new();
+                for endpoint in endpoints {
+                    grouped
+                        .entry(endpoint.process_name)
+                        .or_default()
+                        .push((endpoint.label, endpoint.url));
+                }
+
+                let mut output = String::new();
+                let mut first_process = true;
+                for (process_name, mut urls) in grouped {
+                    urls.sort_by(|a, b| a.0.cmp(&b.0));
+                    if !first_process {
+                        output.push('\n');
+                    }
+                    first_process = false;
+                    output.push_str(&format!("{process_name}\n"));
+                    for (label, url) in urls {
+                        output.push_str(&format!("  {:<12} {}\n", label, url));
+                    }
+                }
+                Ok(output)
+            }
+            processes::ApiResponse::Error { message } => bail!("{}", message),
+            other => bail!("Unexpected response: {:?}", other),
+        }
+    }
+
     async fn expect_ok_response(&self, request: &processes::ApiRequest) -> Result<()> {
         match self.native_api_request(request).await? {
             processes::ApiResponse::Ok => Ok(()),

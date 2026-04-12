@@ -975,6 +975,12 @@ async fn dispatch_command(
             Ok(CommandResult::Print(output))
         }
         Commands::Processes {
+            command: ProcessesCommand::Endpoints {},
+        } => {
+            let output = devenv.processes_endpoints().await?;
+            Ok(CommandResult::Print(output))
+        }
+        Commands::Processes {
             command: ProcessesCommand::Restart { name },
         } => {
             devenv.processes_restart(&name).await?;
