@@ -48,6 +48,8 @@ pub enum ApiRequest {
     Stop { name: String },
     /// Query all port allocations from running processes.
     Ports,
+    /// Query all human-facing process endpoints from managed processes.
+    Endpoints,
 }
 
 /// Port allocation info from a running process.
@@ -56,6 +58,14 @@ pub struct PortInfo {
     pub process_name: String,
     pub port_name: String,
     pub port: u16,
+}
+
+/// Human-facing endpoint info from a managed process.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EndpointInfo {
+    pub process_name: String,
+    pub label: String,
+    pub url: String,
 }
 
 /// Summary information about a managed process.
@@ -84,6 +94,8 @@ pub enum ApiResponse {
     Ok,
     /// All port allocations from managed processes.
     PortAllocations { ports: Vec<PortInfo> },
+    /// All human-facing endpoints from managed processes.
+    Endpoints { endpoints: Vec<EndpointInfo> },
 }
 
 use watchexec_supervisor::{
@@ -91,7 +103,7 @@ use watchexec_supervisor::{
     job::{Job, start_job},
 };
 
-use crate::config::ProcessConfig;
+use crate::config::{ProcessConfig, ProcessUrl};
 use crate::pid::{self, PidStatus};
 use crate::socket_activation::{ProcessSetupWrapper, activation_from_listen};
 use crate::{ProcessManager, StartOptions};
@@ -130,6 +142,30 @@ pub struct JobHandle {
     pub supervisor_task: JoinHandle<()>,
     /// Output reader tasks (stdout, stderr)
     pub output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
+}
+
+fn render_process_url(url: &ProcessUrl) -> String {
+    let path = if url.path.is_empty() {
+        "/".to_string()
+    } else if url.path.starts_with('/') {
+        url.path.clone()
+    } else {
+        format!("/{}", url.path)
+    };
+
+    format!("{}://{}:{}{}", url.scheme, url.host, url.port, path)
+}
+
+fn collect_endpoints_from_config(process_name: &str, config: &ProcessConfig) -> Vec<EndpointInfo> {
+    config
+        .urls
+        .iter()
+        .map(|(label, url)| EndpointInfo {
+            process_name: process_name.to_string(),
+            label: label.clone(),
+            url: render_process_url(url),
+        })
+        .collect()
 }
 
 /// Lifecycle phase of a managed process.
@@ -1518,6 +1554,20 @@ impl NativeProcessManager {
                 }
                 ApiResponse::PortAllocations { ports }
             }
+            Ok(ApiRequest::Endpoints) => {
+                let procs = manager.processes.read().await;
+                let mut endpoints = Vec::new();
+                for (name, entry) in procs.iter() {
+                    let config = match entry {
+                        ProcessEntry::NotStarted { config, .. }
+                        | ProcessEntry::Stopped { config, .. }
+                        | ProcessEntry::Waiting { config, .. } => config,
+                        ProcessEntry::Active(handle) => &handle.resources.config,
+                    };
+                    endpoints.extend(collect_endpoints_from_config(name, config));
+                }
+                ApiResponse::Endpoints { endpoints }
+            }
             Err(e) => ApiResponse::Error {
                 message: format!("invalid request: {}", e),
             },
@@ -2003,6 +2053,42 @@ mod tests {
             },
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn test_render_process_url_normalizes_path() {
+        let url = ProcessUrl {
+            scheme: "http".to_string(),
+            host: "127.0.0.1".to_string(),
+            port: 8080,
+            path: "admin".to_string(),
+        };
+
+        assert_eq!(render_process_url(&url), "http://127.0.0.1:8080/admin");
+    }
+
+    #[test]
+    fn test_collect_endpoints_from_config() {
+        let mut config = test_config("rabbitmq");
+        config.urls.insert(
+            "admin".to_string(),
+            ProcessUrl {
+                scheme: "http".to_string(),
+                host: "127.0.0.1".to_string(),
+                port: 15672,
+                path: "/".to_string(),
+            },
+        );
+
+        let endpoints = collect_endpoints_from_config("rabbitmq", &config);
+        assert_eq!(
+            endpoints,
+            vec![EndpointInfo {
+                process_name: "rabbitmq".to_string(),
+                label: "admin".to_string(),
+                url: "http://127.0.0.1:15672/".to_string(),
+            }]
+        );
     }
 
     #[tokio::test]
