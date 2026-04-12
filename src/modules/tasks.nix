@@ -143,6 +143,17 @@ let
             default = mkCommand config.status true;
             description = "Path to the script to run.";
           };
+          execIf = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Condition to evaluate before dependency tasks run. If it exits non-zero, the task (and its unneeded dependencies) are skipped.";
+          };
+          execIfCommand = lib.mkOption {
+            type = types.nullOr types.package;
+            internal = true;
+            default = mkCommand config.execIf true;
+            description = "Path to the script to run.";
+          };
           execIfModified = lib.mkOption {
             type = types.listOf types.str;
             default = [ ];
@@ -156,6 +167,7 @@ let
               type = config.type;
               description = config.description;
               status = config.statusCommand;
+              exec_if = config.execIfCommand;
               after = config.after;
               before = config.before;
               command = config.command;
@@ -409,6 +421,10 @@ in
       {
         assertion = lib.all (task: task.status == null || task.execIfModified == [ ]) (lib.attrValues config.tasks);
         message = "The 'status' and 'execIfModified' options cannot be used together. Use only one of them to determine whether a task should run.";
+      }
+      {
+        assertion = lib.all (task: task.execIf == null || task.execIfModified == [ ]) (lib.attrValues config.tasks);
+        message = "The 'execIf' and 'execIfModified' options cannot be used together. Use only one of them to determine whether a task should run.";
       }
     ];
 

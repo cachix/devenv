@@ -6,6 +6,7 @@ use crate::types::{Skipped, TaskCompleted, TaskStatus, VerbosityLevel};
 use pretty_assertions::assert_matches;
 use serde_json::json;
 use sqlx::Row;
+use std::collections::HashMap;
 use std::fs::Permissions;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -1715,6 +1716,1153 @@ async fn test_status_without_command() -> Result<(), Error> {
     .await;
 
     assert!(matches!(result, Err(Error::MissingCommand(_))));
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_exec_if_without_command() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let exec_if_script = create_script("#!/bin/sh\nexit 0")?;
+
+    let result = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["myapp:task_1"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "myapp:task_1",
+                    "exec_if": exec_if_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await;
+
+    assert!(matches!(result, Err(Error::MissingCommand(_))));
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_skip_propagation_basic() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let expensive_script = create_script("#!/bin/sh\necho expensive")?;
+    let exec_if_script = create_script("#!/bin/sh\nexit 1")?;
+    let child_script = create_script("#!/bin/sh\necho child")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:expensive",
+                "command": expensive_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:conditional",
+                "after": ["myapp:expensive"],
+                "command": child_script.to_str().unwrap(),
+                "exec_if": exec_if_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:conditional"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+
+    assert_matches!(
+        statuses.remove("myapp:expensive"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::AllDependentsSkipped
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:conditional"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:root"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert!(statuses.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_skip_propagation_partial_dependents() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let script_a = create_script("#!/bin/sh\necho a")?;
+    let script_b = create_script("#!/bin/sh\necho b")?;
+    let script_c = create_script("#!/bin/sh\necho c")?;
+    let script_d = create_script("#!/bin/sh\necho d")?;
+    let exec_if_skip = create_script("#!/bin/sh\nexit 1")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:d"],
+        "run_mode": "all",
+        "tasks": [
+            { "name": "myapp:a", "command": script_a.to_str().unwrap() },
+            {
+                "name": "myapp:b",
+                "after": ["myapp:a"],
+                "command": script_b.to_str().unwrap(),
+                "exec_if": exec_if_skip.to_str().unwrap()
+            },
+            {
+                "name": "myapp:c",
+                "after": ["myapp:a"],
+                "command": script_c.to_str().unwrap()
+            },
+            {
+                "name": "myapp:d",
+                "after": ["myapp:b", "myapp:c"],
+                "command": script_d.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+
+    assert_matches!(
+        statuses.remove("myapp:a"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert_matches!(
+        statuses.remove("myapp:b"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:c"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert_matches!(
+        statuses.remove("myapp:d"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert!(statuses.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_skip_propagation_chain() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let script_a = create_script("#!/bin/sh\necho a")?;
+    let script_b = create_script("#!/bin/sh\necho b")?;
+    let script_c = create_script("#!/bin/sh\necho c")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+    let exec_if_skip = create_script("#!/bin/sh\nexit 1")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            { "name": "myapp:a", "command": script_a.to_str().unwrap() },
+            {
+                "name": "myapp:b",
+                "after": ["myapp:a"],
+                "command": script_b.to_str().unwrap()
+            },
+            {
+                "name": "myapp:c",
+                "after": ["myapp:b"],
+                "command": script_c.to_str().unwrap(),
+                "exec_if": exec_if_skip.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:c"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+
+    assert_matches!(
+        statuses.remove("myapp:a"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::AllDependentsSkipped
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:b"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::AllDependentsSkipped
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:c"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:root"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert!(statuses.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_skip_propagation_root_not_pruned() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let root_script = create_script("#!/bin/sh\necho root")?;
+    let child_script = create_script("#!/bin/sh\necho child")?;
+    let exec_if_skip = create_script("#!/bin/sh\nexit 1")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:root",
+                "command": root_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:child",
+                "after": ["myapp:root"],
+                "command": child_script.to_str().unwrap(),
+                "exec_if": exec_if_skip.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+
+    assert_matches!(
+        statuses.remove("myapp:root"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert_matches!(
+        statuses.remove("myapp:child"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+    assert!(statuses.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_skip_propagation_exec_if_modified() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let test_file = tempfile::NamedTempFile::new_in(temp_dir.path())?;
+    let test_file_path = test_file.path().to_str().unwrap().to_string();
+    fs::write(&test_file_path, "initial").await?;
+
+    let dep_script = create_script("#!/bin/sh\necho dep")?;
+    let child_script = create_script(
+        r#"#!/bin/sh
+echo '{"result": "child"}' > $DEVENV_TASK_OUTPUT_FILE
+echo child
+"#,
+    )?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config1 = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            { "name": "myapp:dep", "command": dep_script.to_str().unwrap() },
+            {
+                "name": "myapp:child",
+                "after": ["myapp:dep"],
+                "command": child_script.to_str().unwrap(),
+                "exec_if_modified": [test_file_path.clone()]
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:child"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks1 = Tasks::builder(config1, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
+    tasks1.run(false).await;
+
+    let config2 = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            { "name": "myapp:dep", "command": dep_script.to_str().unwrap() },
+            {
+                "name": "myapp:child",
+                "after": ["myapp:dep"],
+                "command": child_script.to_str().unwrap(),
+                "exec_if_modified": [test_file_path]
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:child"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks2.run(false).await;
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks2).await.into_iter().collect();
+
+    assert_matches!(
+        statuses.remove("myapp:dep"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::AllDependentsSkipped
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:child"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:root"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert!(statuses.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_skip_propagation_disabled_by_refresh() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let expensive_script = create_script("#!/bin/sh\necho expensive")?;
+    let exec_if_script = create_script("#!/bin/sh\nexit 1")?;
+    let child_script = create_script("#!/bin/sh\necho child")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:expensive",
+                "command": expensive_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:conditional",
+                "after": ["myapp:expensive"],
+                "command": child_script.to_str().unwrap(),
+                "exec_if": exec_if_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:conditional"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .with_refresh_task_cache(true)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+
+    assert_matches!(
+        statuses.remove("myapp:expensive"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert_matches!(
+        statuses.remove("myapp:conditional"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert_matches!(
+        statuses.remove("myapp:root"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert!(statuses.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_exec_if_check_runs_at_most_once() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+    let counter_path = temp_dir.path().join("exec_if_invocations");
+
+    let counter = counter_path.to_str().unwrap();
+    let exec_if_script = create_script(&format!(
+        r#"#!/bin/sh
+printf 'x\n' >> "{}"
+exit 0
+"#,
+        counter
+    ))?;
+    let main_script = create_script("#!/bin/sh\necho main")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:task",
+                "command": main_script.to_str().unwrap(),
+                "exec_if": exec_if_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:task"],
+                "command": create_script("#!/bin/sh\necho root")?.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let lines = fs::read_to_string(&counter_path).await.unwrap_or_default();
+    let n = lines.lines().filter(|l| !l.is_empty()).count();
+    assert_eq!(
+        n, 1,
+        "exec_if command should run exactly once, got {} lines",
+        n
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_exec_if_no_devenv_tasks_outputs() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    // Exit 0 (run) if DEVENV_TASKS_OUTPUTS is set, exit 1 (skip) if not set.
+    // Since exec_if runs pre-flight without DEVENV_TASKS_OUTPUTS, this skips.
+    let exec_if_script = create_script(
+        r#"#!/bin/sh
+case ${DEVENV_TASKS_OUTPUTS+x} in x) exit 0 ;; esac
+exit 1
+"#,
+    )?;
+    let main_script = create_script("#!/bin/sh\necho should-not-run")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:task",
+                "command": main_script.to_str().unwrap(),
+                "exec_if": exec_if_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:task"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+    assert_matches!(
+        statuses.remove("myapp:task"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:root"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert!(statuses.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_status_skip() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+    let counter_path = temp_dir.path().join("main_invocations");
+    let counter = counter_path.to_str().unwrap();
+
+    let dep_script = create_script(
+        r#"#!/bin/sh
+echo '{"result": "from_dep"}' > $DEVENV_TASK_OUTPUT_FILE
+"#,
+    )?;
+    let main_script = create_script(&format!(
+        r#"#!/bin/sh
+printf 'x\n' >> "{}"
+"#,
+        counter
+    ))?;
+    let status_script = create_script("#!/bin/sh\nexit 0")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:dep",
+                "command": dep_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:child",
+                "after": ["myapp:dep"],
+                "command": main_script.to_str().unwrap(),
+                "status": status_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:child"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let lines = fs::read_to_string(&counter_path).await.unwrap_or_default();
+    assert_eq!(
+        lines.lines().filter(|l| !l.is_empty()).count(),
+        0,
+        "main exec should be skipped when status exits 0"
+    );
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+    assert_matches!(
+        statuses.remove("myapp:child"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+    assert!(statuses.contains_key("myapp:dep"));
+    assert!(statuses.contains_key("myapp:root"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_status_run() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+    let counter_path = temp_dir.path().join("main_invocations_status_run");
+    let counter = counter_path.to_str().unwrap();
+
+    let dep_script = create_script(
+        r#"#!/bin/sh
+echo '{"result": "from_dep"}' > $DEVENV_TASK_OUTPUT_FILE
+"#,
+    )?;
+    let main_script = create_script(&format!(
+        r#"#!/bin/sh
+printf 'x\n' >> "{}"
+"#,
+        counter
+    ))?;
+    let status_script = create_script("#!/bin/sh\nexit 1")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:dep",
+                "command": dep_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:child",
+                "after": ["myapp:dep"],
+                "command": main_script.to_str().unwrap(),
+                "status": status_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:child"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let lines = fs::read_to_string(&counter_path).await.unwrap_or_default();
+    assert_eq!(
+        lines.lines().filter(|l| !l.is_empty()).count(),
+        1,
+        "main exec should run when status exits non-zero"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_status_receives_outputs() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let dep_script = create_script(
+        r#"#!/bin/sh
+echo '{"k":1}' > $DEVENV_TASK_OUTPUT_FILE
+"#,
+    )?;
+    // Exit 0 (skip) only if DEVENV_TASKS_OUTPUTS mentions the dependency task name
+    let status_script = create_script(
+        r#"#!/bin/sh
+case ${DEVENV_TASKS_OUTPUTS+x} in
+  '') exit 1 ;;
+esac
+echo "$DEVENV_TASKS_OUTPUTS" | grep -q 'myapp:dep' || exit 1
+exit 0
+"#,
+    )?;
+    let main_script = create_script("#!/bin/sh\necho should-not-run")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:dep",
+                "command": dep_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:child",
+                "after": ["myapp:dep"],
+                "command": main_script.to_str().unwrap(),
+                "status": status_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:child"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+    assert_matches!(
+        statuses.remove("myapp:child"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_status_with_exec_if() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+    let counter_path = temp_dir.path().join("status_invocations");
+    let counter = counter_path.to_str().unwrap();
+
+    let exec_if_skip = create_script("#!/bin/sh\nexit 1")?;
+    let status_script = create_script(&format!(
+        r#"#!/bin/sh
+printf 'x\n' >> "{}"
+exit 0
+"#,
+        counter
+    ))?;
+    let main_script = create_script("#!/bin/sh\necho main")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:task",
+                "command": main_script.to_str().unwrap(),
+                "exec_if": exec_if_skip.to_str().unwrap(),
+                "status": status_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:task"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let lines = fs::read_to_string(&counter_path).await.unwrap_or_default();
+    assert_eq!(
+        lines.lines().filter(|l| !l.is_empty()).count(),
+        0,
+        "status must not run when pre-flight exec_if already skipped the task"
+    );
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+    assert_matches!(
+        statuses.remove("myapp:task"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_exec_if_no_skip_status_skip() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+    let counter_path = temp_dir
+        .path()
+        .join("main_invocations_exec_if_pass_status_skip");
+    let counter = counter_path.to_str().unwrap();
+
+    let exec_if_run = create_script("#!/bin/sh\nexit 0")?;
+    let status_skip = create_script("#!/bin/sh\nexit 0")?;
+    let main_script = create_script(&format!(
+        r#"#!/bin/sh
+printf 'x\n' >> "{}"
+"#,
+        counter
+    ))?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:task",
+                "command": main_script.to_str().unwrap(),
+                "exec_if": exec_if_run.to_str().unwrap(),
+                "status": status_skip.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:task"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let lines = fs::read_to_string(&counter_path).await.unwrap_or_default();
+    assert_eq!(
+        lines.lines().filter(|l| !l.is_empty()).count(),
+        0,
+        "main command should not run when exec_if allows but status skips"
+    );
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+    assert_matches!(
+        statuses.remove("myapp:task"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:root"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert!(statuses.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_exec_if_no_skip_status_no_skip() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+    let counter_path = temp_dir.path().join("main_invocations_both_pass");
+    let counter = counter_path.to_str().unwrap();
+
+    let exec_if_run = create_script("#!/bin/sh\nexit 0")?;
+    let status_run = create_script("#!/bin/sh\nexit 1")?;
+    let main_script = create_script(&format!(
+        r#"#!/bin/sh
+printf 'x\n' >> "{}"
+"#,
+        counter
+    ))?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:task",
+                "command": main_script.to_str().unwrap(),
+                "exec_if": exec_if_run.to_str().unwrap(),
+                "status": status_run.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:task"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let lines = fs::read_to_string(&counter_path).await.unwrap_or_default();
+    assert_eq!(
+        lines.lines().filter(|l| !l.is_empty()).count(),
+        1,
+        "main command should run when both exec_if and status indicate no skip"
+    );
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+    assert_matches!(
+        statuses.remove("myapp:task"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert_matches!(
+        statuses.remove("myapp:root"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert!(statuses.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_status_disabled_by_refresh() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+    let counter_path = temp_dir.path().join("main_invocations_refresh");
+    let counter = counter_path.to_str().unwrap();
+
+    let dep_script = create_script(
+        r#"#!/bin/sh
+echo '{"result": "from_dep"}' > $DEVENV_TASK_OUTPUT_FILE
+"#,
+    )?;
+    let main_script = create_script(&format!(
+        r#"#!/bin/sh
+printf 'x\n' >> "{}"
+"#,
+        counter
+    ))?;
+    let status_script = create_script("#!/bin/sh\nexit 0")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:dep",
+                "command": dep_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:child",
+                "after": ["myapp:dep"],
+                "command": main_script.to_str().unwrap(),
+                "status": status_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:child"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .with_refresh_task_cache(true)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let lines = fs::read_to_string(&counter_path).await.unwrap_or_default();
+    assert_eq!(
+        lines.lines().filter(|l| !l.is_empty()).count(),
+        1,
+        "refresh_task_cache should bypass status so main exec runs"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_skip_short_circuits_exec_if_check() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+    let counter_path = temp_dir.path().join("b_exec_if_invocations");
+    let counter = counter_path.to_str().unwrap();
+
+    let exec_if_b = create_script(&format!(
+        r#"#!/bin/sh
+printf 'x\n' >> "{}"
+exit 1
+"#,
+        counter
+    ))?;
+    let exec_if_c = create_script("#!/bin/sh\nexit 1")?;
+    let cmd = create_script("#!/bin/sh\necho run")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            { "name": "myapp:a", "command": cmd.to_str().unwrap() },
+            {
+                "name": "myapp:b",
+                "after": ["myapp:a"],
+                "command": cmd.to_str().unwrap(),
+                "exec_if": exec_if_b.to_str().unwrap()
+            },
+            {
+                "name": "myapp:c",
+                "after": ["myapp:b"],
+                "command": cmd.to_str().unwrap(),
+                "exec_if": exec_if_c.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:c"],
+                "command": cmd.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let lines = fs::read_to_string(&counter_path).await.unwrap_or_default();
+    let n = lines.lines().filter(|l| !l.is_empty()).count();
+    assert_eq!(
+        n, 0,
+        "B's exec_if should be short-circuited by pruning; got {} invocations",
+        n
+    );
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+    assert_matches!(
+        statuses.remove("myapp:a"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::AllDependentsSkipped
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:b"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::AllDependentsSkipped
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:c"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:root"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert!(statuses.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_status_does_not_cause_pruning() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let dep_script = create_script("#!/bin/sh\necho dep")?;
+    let main_script = create_script("#!/bin/sh\necho main")?;
+    let status_skip = create_script("#!/bin/sh\nexit 0")?;
+    let root_script = create_script("#!/bin/sh\necho root")?;
+
+    let config = Config::try_from(json!({
+        "roots": ["myapp:root"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "myapp:dep",
+                "command": dep_script.to_str().unwrap()
+            },
+            {
+                "name": "myapp:child",
+                "after": ["myapp:dep"],
+                "command": main_script.to_str().unwrap(),
+                "status": status_skip.to_str().unwrap()
+            },
+            {
+                "name": "myapp:root",
+                "after": ["myapp:child"],
+                "command": root_script.to_str().unwrap()
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+
+    tasks.run(false).await;
+
+    let mut statuses: HashMap<_, _> = inspect_tasks(&tasks).await.into_iter().collect();
+
+    assert_matches!(
+        statuses.remove("myapp:dep"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _))),
+        "dep must run because status is not a preflight check and cannot cause pruning"
+    );
+    assert_matches!(
+        statuses.remove("myapp:child"),
+        Some(TaskStatus::Completed(TaskCompleted::Skipped(
+            Skipped::Cached(_)
+        )))
+    );
+    assert_matches!(
+        statuses.remove("myapp:root"),
+        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+    );
+    assert!(statuses.is_empty());
+
     Ok(())
 }
 

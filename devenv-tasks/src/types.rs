@@ -272,6 +272,8 @@ pub struct TaskFailure {
 pub enum Skipped {
     Cached(Output),
     NoCommand,
+    /// Skipped because every dependent task in the scheduled graph was skipped or pruned.
+    AllDependentsSkipped,
 }
 
 #[derive(Debug, Clone)]
@@ -444,6 +446,10 @@ mod tests {
         TaskCompleted::Skipped(Skipped::NoCommand)
     }
 
+    fn make_skipped_all_dependents() -> TaskCompleted {
+        TaskCompleted::Skipped(Skipped::AllDependentsSkipped)
+    }
+
     fn make_failed() -> TaskCompleted {
         TaskCompleted::Failed(
             Duration::from_secs(0),
@@ -609,6 +615,11 @@ mod tests {
             (make_skipped_no_command(), Ready, Satisfied),
             (make_skipped_no_command(), Succeeded, Satisfied),
             (make_skipped_no_command(), Completed, Satisfied),
+            // Skipped (AllDependentsSkipped)
+            (make_skipped_all_dependents(), Started, Satisfied),
+            (make_skipped_all_dependents(), Ready, Satisfied),
+            (make_skipped_all_dependents(), Succeeded, Satisfied),
+            (make_skipped_all_dependents(), Completed, Satisfied),
             // Failed
             (make_failed(), Started, Satisfied),
             (make_failed(), Ready, NeverSatisfiable),
@@ -732,6 +743,7 @@ mod tests {
             make_success(),
             make_skipped_cached(),
             make_skipped_no_command(),
+            make_skipped_all_dependents(),
             make_failed(),
             make_dependency_failed(),
             make_cancelled_running(),
