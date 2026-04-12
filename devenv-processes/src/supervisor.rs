@@ -239,8 +239,19 @@ pub fn spawn_supervisor(
                     // The biased select catches it next iteration, but we skip
                     // expensive restart work below.
                     if shutdown.is_cancelled() { break 'supervisor; }
+                    let mut drained = 0usize;
+                    while file_watcher.try_recv().is_ok() {
+                        drained += 1;
+                    }
                     info!("File change detected for {}, restarting", name);
-                    activity.log("File change detected, restarting");
+                    if drained == 0 {
+                        activity.log("File change detected, restarting");
+                    } else {
+                        activity.log(format!(
+                            "File change detected, drained {} queued watch event(s), restarting",
+                            drained
+                        ));
+                    }
                     match state.on_event(Event::FileChange, Instant::now()) {
                         Action::Restart => {
                             job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
