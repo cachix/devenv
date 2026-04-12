@@ -1237,7 +1237,8 @@ impl Devenv {
                 detach: true,
                 ..Default::default()
             };
-            self.start_processes(vec![], envs, options, None).await?;
+            self.start_processes(vec![], devenv_tasks::RunMode::All, envs, options, None)
+                .await?;
         }
 
         // ── Phase 5: Running tests ──────────────────────────────────
@@ -1386,6 +1387,7 @@ impl Devenv {
     pub async fn up(
         &self,
         processes: Vec<String>,
+        task_mode: devenv_tasks::RunMode,
         options: ProcessOptions,
         verbosity: tasks::VerbosityLevel,
         tui: bool,
@@ -1419,7 +1421,7 @@ impl Devenv {
         envs.extend(exports);
 
         // ── Phase 3: Running processes ──────────────────────────────
-        self.start_processes(processes, envs, options, Some(task_configs))
+        self.start_processes(processes, task_mode, envs, options, Some(task_configs))
             .await
     }
 
@@ -1427,6 +1429,7 @@ impl Devenv {
     async fn start_processes(
         &self,
         processes: Vec<String>,
+        task_mode: devenv_tasks::RunMode,
         envs: HashMap<String, String>,
         mut options: ProcessOptions,
         preloaded_tasks: Option<Vec<tasks::TaskConfig>>,
@@ -1482,8 +1485,7 @@ impl Devenv {
             );
 
             let bash = self.get_bash_path().await?;
-            let config =
-                self.make_task_config(roots, task_configs, tasks::RunMode::All, envs, bash)?;
+            let config = self.make_task_config(roots, task_configs, task_mode, envs, bash)?;
 
             if options.daemon {
                 // Spawn a separate daemon process via re-exec to avoid

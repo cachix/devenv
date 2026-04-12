@@ -887,7 +887,7 @@ async fn dispatch_command(
                 daemon: up_args.detach,
             };
             match devenv
-                .up(up_args.processes, options, verbosity, tui)
+                .up(up_args.processes, up_args.mode, options, verbosity, tui)
                 .await?
             {
                 RunMode::Detached => Ok(CommandResult::Done),
@@ -956,7 +956,10 @@ async fn dispatch_command(
                 command_rx,
                 daemon: detach,
             };
-            match devenv.up(vec![], options, verbosity, tui).await? {
+            match devenv
+                .up(vec![], devenv::tasks::RunMode::All, options, verbosity, tui)
+                .await?
+            {
                 RunMode::Detached => Ok(CommandResult::Done),
                 RunMode::Foreground(shell_command) => {
                     Ok(CommandResult::Exec(shell_command.command))

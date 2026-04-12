@@ -37,6 +37,7 @@
 - Shell environment now auto-reloads at the next prompt when watched files change, instead of requiring a manual Ctrl-Alt-R keybind ([#2595](https://github.com/cachix/devenv/issues/2595)).
 - Added `nixpkgs.rocmSupport` option to enable ROCm support in nixpkgs configuration.
 - Added process management subcommands and MCP tools: `devenv processes list`, `status`, `logs`, `restart`, `start`, `stop` for interacting with running native processes ([#2621](https://github.com/cachix/devenv/issues/2621)).
+- Added `--mode` flag to `devenv up` / `devenv processes up` to control dependency resolution for process tasks. Supports `single`, `before`, `after`, and `all` modes, matching `devenv tasks run --mode`. Defaults to `all`, so `devenv up` starts all processes by default ([#2721](https://github.com/cachix/devenv/issues/2721)).
 
 ### Breaking Changes
 

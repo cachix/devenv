@@ -641,6 +641,15 @@ pub struct UpArgs {
     pub detach: bool,
 
     #[arg(
+        short,
+        long,
+        help = "The execution mode for process tasks (affects dependency resolution)",
+        value_enum,
+        default_value_t = RunMode::Before
+    )]
+    pub mode: RunMode,
+
+    #[arg(
         long,
         help = "Error if a port is already in use instead of auto-allocating the next available port."
     )]
