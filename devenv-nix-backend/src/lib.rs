@@ -40,6 +40,14 @@ pub fn trigger_interrupt() {
 /// Must be called before any thread tries to register with GC.
 pub fn nix_init() {
     NIX_INIT.call_once(|| {
+        // Suppress Boehm GC "Repeated allocation of very large block" warnings.
+        // These are harmless and would otherwise be printed directly to stderr,
+        // bypassing our activity logger.
+        if std::env::var_os("GC_LARGE_ALLOC_WARN_INTERVAL").is_none() {
+            // SAFETY: Called once during single-threaded initialization (inside Once::call_once)
+            // before any worker threads are spawned.
+            unsafe { std::env::set_var("GC_LARGE_ALLOC_WARN_INTERVAL", "1000000") };
+        }
         nix_bindings_expr::eval_state::init().expect("Failed to initialize Nix expression library");
     });
 }
