@@ -68,8 +68,8 @@ pub use config::{
 };
 pub use devenv_event_sources::{NotifyMessage, NotifySocket};
 pub use manager::{
-    ApiRequest, ApiResponse, JobHandle, NativeProcessManager, ProcessCommand, ProcessInfo,
-    ProcessPhase, ProcessResources, ProcessState,
+    ApiRequest, ApiResponse, JobHandle, NativeProcessManager, PortInfo, ProcessCommand,
+    ProcessInfo, ProcessPhase, ProcessResources, ProcessState,
 };
 pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
 pub use process_compose::ProcessComposeManager;

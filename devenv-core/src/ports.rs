@@ -163,6 +163,28 @@ impl PortAllocator {
         self.allow_in_use.load(Ordering::SeqCst)
     }
 
+    /// Pre-populate port allocations from an external source (e.g., a running process manager).
+    ///
+    /// Inserts entries without binding any ports (empty listeners). This is used to seed
+    /// the allocator with allocations from a running native manager so that subsequent
+    /// `allocate()` calls during Nix evaluation return the already-assigned ports.
+    ///
+    /// Existing entries are preserved (not overwritten).
+    pub fn seed(&self, allocations: &[(String, String, u16)]) {
+        let mut ports = self
+            .ports
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        for (process_name, port_name, port) in allocations {
+            let key = (process_name.clone(), port_name.clone());
+            ports.entry(key).or_insert(PortEntry {
+                port: *port,
+                base: *port,
+                listeners: vec![],
+            });
+        }
+    }
+
     /// Enable or disable port allocation.
     ///
     /// When disabled, `allocate()` returns the base port without reserving it.
@@ -1164,5 +1186,54 @@ mod tests {
             "Should not sleep when the port owner cannot be determined"
         );
         assert_eq!(err.kind(), std::io::ErrorKind::AddrInUse);
+    }
+
+    #[test]
+    fn test_seed_populates_allocator() {
+        let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
+
+        allocator.seed(&[
+            ("server".into(), "http".into(), 8080),
+            ("server".into(), "admin".into(), 9090),
+        ]);
+
+        // allocate() should return seeded values from cache
+        assert_eq!(allocator.allocate("server", "http", 3000).unwrap(), 8080);
+        assert_eq!(allocator.allocate("server", "admin", 3000).unwrap(), 9090);
+    }
+
+    #[test]
+    fn test_seed_does_not_overwrite_existing() {
+        let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
+
+        // Allocate first
+        let port = allocator.allocate("server", "http", 49800).unwrap();
+
+        // Seed with a different value for the same key
+        allocator.seed(&[("server".into(), "http".into(), 9999)]);
+
+        // Original allocation is preserved
+        assert_eq!(allocator.allocate("server", "http", 49800).unwrap(), port);
+    }
+
+    #[test]
+    fn test_seed_visible_in_snapshot() {
+        let allocator = PortAllocator::new();
+        allocator.seed(&[("pg".into(), "main".into(), 5433)]);
+
+        let spec = allocator.snapshot();
+        assert_eq!(spec.allocations.len(), 1);
+        assert_eq!(spec.allocations[0].process_name, "pg");
+        assert_eq!(spec.allocations[0].port_name, "main");
+        assert_eq!(spec.allocations[0].allocated_port, 5433);
+    }
+
+    #[test]
+    fn test_seed_empty_is_noop() {
+        let allocator = PortAllocator::new();
+        allocator.seed(&[]);
+        assert!(allocator.snapshot().allocations.is_empty());
     }
 }

@@ -27,6 +27,7 @@
 
 ### Improvements
 
+- Fixed port allocation values (`config.processes.<name>.ports.<port>.value`) resolving to the base `allocate` port in `devenv shell`, `devenv tasks run`, and other commands. When the native process manager is running, port values now match the ports allocated by `devenv up` ([#2710](https://github.com/cachix/devenv/issues/2710)).
 - Standardized keyboard shortcut notation across `devenv up` TUI and `devenv shell` to use consistent `Ctrl-E` format instead of mixed `^e`/`Ctrl-Alt-E` styles. macOS now shows `Opt` instead of `Alt` ([#2736](https://github.com/cachix/devenv/issues/2736)).
 - Auto-detect AI coding agents (via `CLAUDECODE`, `OPENCODE_CLIENT`, and `AI_AGENT` environment variables) and enable quiet mode to avoid wasting LLM tokens on TUI progress output. Override with `--verbose` or `--tui` ([#2723](https://github.com/cachix/devenv/issues/2723)).
 - Always enable Nix's `show-trace` setting so full evaluation stack traces are shown on error, instead of a truncated trace suggesting the nonexistent `--show-trace` flag ([#2725](https://github.com/cachix/devenv/issues/2725)).

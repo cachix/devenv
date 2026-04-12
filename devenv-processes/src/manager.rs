@@ -46,6 +46,16 @@ pub enum ApiRequest {
     Start { name: String },
     /// Stop a running process.
     Stop { name: String },
+    /// Query all port allocations from running processes.
+    Ports,
+}
+
+/// Port allocation info from a running process.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortInfo {
+    pub process_name: String,
+    pub port_name: String,
+    pub port: u16,
 }
 
 /// Summary information about a managed process.
@@ -72,6 +82,8 @@ pub enum ApiResponse {
     ProcessLogs { stdout: String, stderr: String },
     /// Operation completed successfully.
     Ok,
+    /// All port allocations from managed processes.
+    PortAllocations { ports: Vec<PortInfo> },
 }
 
 use watchexec_supervisor::{
@@ -1481,6 +1493,26 @@ impl NativeProcessManager {
                     message: format!("failed to stop process '{}': {}", name, e),
                 },
             },
+            Ok(ApiRequest::Ports) => {
+                let procs = manager.processes.read().await;
+                let mut ports = Vec::new();
+                for (name, entry) in procs.iter() {
+                    let config = match entry {
+                        ProcessEntry::NotStarted { config, .. }
+                        | ProcessEntry::Stopped { config, .. }
+                        | ProcessEntry::Waiting { config, .. } => config,
+                        ProcessEntry::Active(handle) => &handle.resources.config,
+                    };
+                    for (port_name, &port) in &config.ports {
+                        ports.push(PortInfo {
+                            process_name: name.clone(),
+                            port_name: port_name.clone(),
+                            port,
+                        });
+                    }
+                }
+                ApiResponse::PortAllocations { ports }
+            }
             Err(e) => ApiResponse::Error {
                 message: format!("invalid request: {}", e),
             },
