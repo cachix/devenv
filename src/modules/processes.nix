@@ -3,6 +3,7 @@ let
   types = lib.types;
   listenType = import ./lib/listen.nix { inherit lib; };
   readyType = import ./lib/ready.nix { inherit lib; };
+  urlType = import ./lib/url.nix { inherit lib; };
 
   # Get primops from _module.args (set via specialArgs in bootstrapLib.nix)
   # Use default empty attrset if not available (e.g., when evaluated without devenv CLI)
@@ -77,6 +78,34 @@ let
           {
             http.allocate = 8080;
             admin.allocate = 9000;
+          }
+        '';
+      };
+
+      urls = lib.mkOption {
+        type = types.attrsOf urlType;
+        default = { };
+        description = ''
+          Human-facing URLs for this process.
+
+          These are intended for clickable local endpoints such as admin UIs,
+          dashboards, or application dev servers, and can reference dynamically
+          allocated process ports via `config.processes.<name>.ports.<port>.value`.
+        '';
+        example = lib.literalExpression ''
+          {
+            app = {
+              scheme = "http";
+              host = "127.0.0.1";
+              port = config.processes.myapp.ports.http.value;
+              path = "/";
+            };
+            admin = {
+              scheme = "http";
+              host = "127.0.0.1";
+              port = config.processes.myapp.ports.admin.value;
+              path = "/admin";
+            };
           }
         '';
       };
@@ -485,6 +514,7 @@ in
                 restart = process.restart;
                 listen = process.listen;
                 ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
+                urls = process.urls;
                 watch = process.watch // {
                   paths = map toString process.watch.paths;
                 };
