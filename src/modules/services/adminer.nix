@@ -41,7 +41,7 @@ in
 
   config = lib.mkIf cfg.enable {
     processes.adminer.ports.main.allocate = basePort;
-    processes.adminer.urls.main = {
+    processes.adminer.urls.ui = {
       scheme = "http";
       host = urlHost;
       port = allocatedPort;
