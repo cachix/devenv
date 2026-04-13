@@ -2025,6 +2025,7 @@ dependencies = [
  "iocraft",
  "libc",
  "libghostty-vt",
+ "libghostty-vt-sys",
  "portable-pty",
  "shell-escape",
  "tempfile",
@@ -4316,7 +4317,7 @@ dependencies = [
 [[package]]
 name = "libghostty-vt"
 version = "0.1.1"
-source = "git+https://github.com/domenkozar/libghostty-rs.git?branch=pkg-config-support#b948e4b69e9a3e6f5b35a8ce297a7de7c95ba306"
+source = "git+https://github.com/domenkozar/libghostty-rs.git?branch=pkg-config-support#7c0d74831f5bb84e5f0fc7d1fd29402a4d2c93c6"
 dependencies = [
  "bitflags 2.11.0",
  "int-enum",
@@ -4326,7 +4327,7 @@ dependencies = [
 [[package]]
 name = "libghostty-vt-sys"
 version = "0.1.1"
-source = "git+https://github.com/domenkozar/libghostty-rs.git?branch=pkg-config-support#b948e4b69e9a3e6f5b35a8ce297a7de7c95ba306"
+source = "git+https://github.com/domenkozar/libghostty-rs.git?branch=pkg-config-support#7c0d74831f5bb84e5f0fc7d1fd29402a4d2c93c6"
 dependencies = [
  "pkg-config",
 ]

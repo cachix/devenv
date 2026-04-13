@@ -17,6 +17,7 @@ iocraft = { workspace = true }
 
 # Terminal state tracking
 libghostty-vt = { workspace = true }
+libghostty-vt-sys = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true, features = ["sync", "rt", "signal", "io-util"] }
