@@ -14,6 +14,10 @@ let
   allocatedSmtpPort = config.processes.mailpit.ports.smtp.value;
   uiHost = parseHost cfg.uiListenAddress;
   smtpHost = parseHost cfg.smtpListenAddress;
+  uiUrlHost =
+    if uiHost == "" || uiHost == "0.0.0.0" || uiHost == "::"
+    then "127.0.0.1"
+    else uiHost;
   uiAddr = "${uiHost}:${toString allocatedUiPort}";
   smtpAddr = "${smtpHost}:${toString allocatedSmtpPort}";
 in
@@ -61,6 +65,12 @@ in
 
     processes.mailpit.ports.ui.allocate = baseUiPort;
     processes.mailpit.ports.smtp.allocate = baseSmtpPort;
+    processes.mailpit.urls.ui = {
+      scheme = "http";
+      host = uiUrlHost;
+      port = allocatedUiPort;
+      path = "/";
+    };
     processes.mailpit.exec = "exec ${cfg.package}/bin/mailpit --db-file $DEVENV_STATE/mailpit/db.sqlite3 --listen ${lib.escapeShellArg uiAddr} --smtp ${lib.escapeShellArg smtpAddr} ${lib.escapeShellArgs cfg.additionalArgs}";
   };
 }
