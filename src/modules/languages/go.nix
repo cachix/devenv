@@ -60,6 +60,16 @@ in
       description = "Enable hardening workaround required for Delve debugger (https://github.com/go-delve/delve/issues/3085)";
     };
 
+    delve = {
+      enable = lib.mkEnableOption "Delve debugger" // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.delve;
+        defaultText = lib.literalExpression "pkgs.delve";
+        description = "The Delve package to use. Override this to customize the build, e.g. to disable tests.";
+      };
+    };
+
     lsp = {
       enable = lib.mkEnableOption "Go Language Server" // { default = true; };
       package = lib.mkOption {
@@ -79,10 +89,10 @@ in
 
     packages = [
       cfg.package
-
-      # Required by vscode-go
-      (buildWithSpecificGo pkgs.delve)
-
+    ]
+    # Required by vscode-go
+    ++ lib.optional cfg.delve.enable (buildWithSpecificGo cfg.delve.package)
+    ++ [
       # vscode-go expects all tool compiled with the same used go version, see: https://github.com/golang/vscode-go/blob/72249dc940e5b6ec97b08e6690a5f042644e2bb5/src/goInstallTools.ts#L721
       (buildWithSpecificGo pkgs.gotools)
       (buildWithSpecificGo pkgs.gomodifytags)
