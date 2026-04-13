@@ -431,7 +431,7 @@ pub struct TracingCliArgs {
         long = "trace-to",
         global = true,
         action = clap::ArgAction::Append,
-        help = "Enable tracing. Repeatable. Syntax: [format:]destination.",
+        help = "Enable tracing. Repeatable. Syntax: [format:]destination. [env: DEVENV_TRACE_TO=]",
         long_help = "Enable tracing and set output destination(s). Can be repeated for multiple outputs.\n\n\
             Syntax: [format:]destination\n\n\
             Examples:\n  \
@@ -445,7 +445,8 @@ pub struct TracingCliArgs {
             Destinations: stdout, stderr, file:<path>, http(s)://<host>:<port>\n\
             Formats: json (default), pretty, full, otlp-grpc, otlp-http-protobuf, otlp-http-json\n\n\
             When format is omitted, defaults to json.\n\
-            Tracing is disabled by default."
+            Tracing is disabled by default.\n\n\
+            [env: DEVENV_TRACE_TO=] (comma-separated)"
     )]
     pub trace_to: Vec<TraceOutputSpec>,
 
@@ -516,7 +517,23 @@ pub struct CliOptions {
 }
 
 impl TracingCliArgs {
-    /// Validate and merge `--trace-to` and legacy `--trace-output`/`--trace-format` into specs.
+    /// Parse `DEVENV_TRACE_TO` env var (comma-separated `[format:]destination` specs).
+    fn specs_from_env() -> Result<Vec<TraceOutputSpec>, String> {
+        let val = match std::env::var("DEVENV_TRACE_TO") {
+            Ok(v) if !v.is_empty() => v,
+            _ => return Ok(Vec::new()),
+        };
+        val.split(',')
+            .map(|s| {
+                s.trim()
+                    .parse::<TraceOutputSpec>()
+                    .map_err(|e| format!("DEVENV_TRACE_TO: {e}"))
+            })
+            .collect()
+    }
+
+    /// Validate and merge all trace sources: `DEVENV_TRACE_TO` env var,
+    /// `--trace-to` CLI flags, and legacy `--trace-output`/`--trace-format`.
     pub fn resolve_and_validate(&self) -> Result<Vec<TraceOutputSpec>, String> {
         // Legacy --trace-output doesn't support URLs
         if let Some(TraceOutput::Url(_)) = self.trace_output {
@@ -531,7 +548,11 @@ impl TracingCliArgs {
             );
         }
 
-        let mut specs = self.trace_to.clone();
+        let mut specs = Self::specs_from_env()?;
+
+        // CLI --trace-to flags append after env var specs
+        specs.extend(self.trace_to.iter().cloned());
+
         if let Some(ref output) = self.trace_output {
             specs.push(TraceOutputSpec {
                 format: self.trace_format,
@@ -542,14 +563,39 @@ impl TracingCliArgs {
         for spec in &specs {
             spec.validate()?;
         }
+
+        // Reject duplicate destinations (e.g. json:stderr + pretty:stderr)
+        for (i, a) in specs.iter().enumerate() {
+            for b in &specs[i + 1..] {
+                if a.destination == b.destination {
+                    let dest = match &a.destination {
+                        TraceOutput::Stdout => "stdout".to_string(),
+                        TraceOutput::Stderr => "stderr".to_string(),
+                        TraceOutput::File(p) => format!("file:{}", p.display()),
+                        TraceOutput::Url(u) => u.to_string(),
+                    };
+                    return Err(format!(
+                        "duplicate trace destination '{dest}' (would interleave output)"
+                    ));
+                }
+            }
+        }
+
         Ok(specs)
     }
 
     /// Returns true if tracing-only mode should be used (disables TUI).
     pub fn use_tracing_mode(&self) -> bool {
-        self.trace_to
-            .iter()
-            .any(|s| s.destination.targets_terminal())
+        let env_targets_terminal = std::env::var("DEVENV_TRACE_TO")
+            .ok()
+            .map(|v| v.contains("stderr") || v.contains("stdout"))
+            .unwrap_or(false);
+
+        env_targets_terminal
+            || self
+                .trace_to
+                .iter()
+                .any(|s| s.destination.targets_terminal())
             || self
                 .trace_output
                 .as_ref()
@@ -1123,7 +1169,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_and_new_merge() {
+    fn legacy_and_new_merge_different_destinations() {
         let args = TracingCliArgs {
             trace_to: vec!["json:file:/tmp/t.json".parse().unwrap()],
             trace_output: Some(TraceOutput::Stderr),
@@ -1151,6 +1197,31 @@ mod tests {
             destination: TraceOutput::Url("http://localhost:4317".parse().unwrap()),
         };
         assert!(spec.validate().is_err());
+    }
+
+    #[test]
+    fn duplicate_destination_rejected() {
+        let args = TracingCliArgs {
+            trace_to: vec![
+                "json:stderr".parse().unwrap(),
+                "pretty:stderr".parse().unwrap(),
+            ],
+            trace_output: None,
+            trace_format: TraceFormat::Json,
+        };
+        let err = args.resolve_and_validate().unwrap_err();
+        assert!(err.contains("duplicate"), "{err}");
+    }
+
+    #[test]
+    fn duplicate_destination_legacy_and_new() {
+        let args = TracingCliArgs {
+            trace_to: vec!["json:stderr".parse().unwrap()],
+            trace_output: Some(TraceOutput::Stderr),
+            trace_format: TraceFormat::Pretty,
+        };
+        let err = args.resolve_and_validate().unwrap_err();
+        assert!(err.contains("duplicate"), "{err}");
     }
 
     #[test]
@@ -1184,6 +1255,33 @@ mod tests {
         assert_eq!(specs.len(), 1);
         assert_eq!(specs[0].format, TraceFormat::Pretty);
         assert_eq!(specs[0].destination, TraceOutput::Stderr);
+    }
+
+    #[test]
+    fn parse_comma_separated_trace_specs() {
+        let specs: Vec<TraceOutputSpec> = "pretty:stderr,json:file:/tmp/t.json"
+            .split(',')
+            .map(|s| s.trim().parse().unwrap())
+            .collect();
+        assert_eq!(specs.len(), 2);
+        assert_eq!(specs[0].format, TraceFormat::Pretty);
+        assert_eq!(specs[0].destination, TraceOutput::Stderr);
+        assert_eq!(specs[1].format, TraceFormat::Json);
+        assert_eq!(
+            specs[1].destination,
+            TraceOutput::File(PathBuf::from("/tmp/t.json"))
+        );
+    }
+
+    #[test]
+    fn parse_comma_separated_with_otlp() {
+        let specs: Vec<TraceOutputSpec> = "otlp-grpc,pretty:stderr"
+            .split(',')
+            .map(|s| s.trim().parse().unwrap())
+            .collect();
+        assert_eq!(specs.len(), 2);
+        assert_eq!(specs[0].format, TraceFormat::OtlpGrpc);
+        assert_eq!(specs[1].format, TraceFormat::Pretty);
     }
 
     #[test]

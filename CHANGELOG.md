@@ -40,7 +40,7 @@
 - Added process management subcommands and MCP tools: `devenv processes list`, `status`, `logs`, `restart`, `start`, `stop` for interacting with running native processes ([#2621](https://github.com/cachix/devenv/issues/2621)).
 - Added `--mode` flag to `devenv up` / `devenv processes up` to control dependency resolution for process tasks. Supports `single`, `before`, `after`, and `all` modes, matching `devenv tasks run --mode`. Defaults to `all`, so `devenv up` starts all processes by default ([#2721](https://github.com/cachix/devenv/issues/2721)).
 - Added OpenTelemetry OTLP trace export support via `--trace-to` (`otlp-grpc`, `otlp-http-protobuf`, `otlp-http-json`) with configurable endpoints or standard `OTEL_*` environment variables. Enabled by default with the `otlp-grpc` cargo feature; `otlp-http-protobuf` and `otlp-http-json` are opt-in.
-- Added `--trace-to` unified tracing flag with `[format:]destination` syntax, supporting multiple simultaneous outputs (e.g. `--trace-to pretty:stderr --trace-to json:file:/tmp/trace.json`). Legacy `--trace-output`/`--trace-format` flags are still supported but hidden.
+- Added `--trace-to` unified tracing flag with `[format:]destination` syntax, supporting multiple simultaneous outputs (e.g. `--trace-to pretty:stderr --trace-to json:file:/tmp/trace.json`). Also available as `DEVENV_TRACE_TO` env var (comma-separated). Legacy `--trace-output`/`--trace-format` flags are still supported but hidden.
 
 ### Breaking Changes
 

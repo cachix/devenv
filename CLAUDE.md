@@ -115,6 +115,8 @@ Multiple outputs can be active simultaneously by repeating the flag.
 When format is omitted, defaults to json.
 When any output targets stdout or stderr, the TUI is automatically disabled.
 
+Environment variable `DEVENV_TRACE_TO` accepts comma-separated specs (e.g. `DEVENV_TRACE_TO=pretty:stderr,json:file:/tmp/t.json`).
+
 Legacy flags `--trace-output` and `--trace-format` (env: `DEVENV_TRACE_OUTPUT`, `DEVENV_TRACE_FORMAT`) are still supported but hidden.
 
 ## Code Style
