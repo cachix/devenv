@@ -96,21 +96,11 @@ in
     pkgs.dbus # secretspec
     pkgs.nixd # LSP for devenv lsp command
     inputs.crate2nix.packages.${system}.default # Generate Cargo.nix from Cargo.lock
+    (pkgs.callPackage ./nix/libghostty-vt.nix { }) # Provides pkg-config for libghostty-vt
   ];
 
-  # Ensure libghostty-vt.so (built by the libghostty-vt-sys build script
-  # inside cargo's build directory) is found at runtime for tests and binaries.
-  enterShell = ''
-    for d in "$HOME"/.cargo/build/*/debug/build/libghostty-vt-sys-*/out/ghostty-install/lib; do
-      if [ -d "$d" ]; then
-        export LD_LIBRARY_PATH="$d''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-        break
-      fi
-    done
-  '';
-
   languages = {
-    # For building libghostty-vt-sys from source
+    # For building libghostty-vt-sys from source (fallback when pkg-config not available)
     zig.enable = true;
     zig.package = pkgs.zig_0_15;
 

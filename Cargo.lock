@@ -4316,7 +4316,7 @@ dependencies = [
 [[package]]
 name = "libghostty-vt"
 version = "0.1.1"
-source = "git+https://github.com/Uzaaft/libghostty-rs.git#811cbdd85a99b40a63424a9d247c4f3653c11924"
+source = "git+https://github.com/domenkozar/libghostty-rs.git?branch=pkg-config-support#b948e4b69e9a3e6f5b35a8ce297a7de7c95ba306"
 dependencies = [
  "bitflags 2.11.0",
  "int-enum",
@@ -4326,7 +4326,10 @@ dependencies = [
 [[package]]
 name = "libghostty-vt-sys"
 version = "0.1.1"
-source = "git+https://github.com/Uzaaft/libghostty-rs.git#811cbdd85a99b40a63424a9d247c4f3653c11924"
+source = "git+https://github.com/domenkozar/libghostty-rs.git?branch=pkg-config-support#b948e4b69e9a3e6f5b35a8ce297a7de7c95ba306"
+dependencies = [
+ "pkg-config",
+]
 
 [[package]]
 name = "libloading"

@@ -235,9 +235,10 @@ impl ShellManager {
                                         format: Format::Vt,
                                         trim: false,
                                         unwrap: false,
+                                        selection: None,
                                     },
                                 )
-                                .and_then(|mut f| f.format_alloc::<()>(None))
+                                .and_then(|mut f| f.format_alloc(None))
                                 .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
                                 {
                                     Ok(s) => s,
