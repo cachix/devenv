@@ -35,6 +35,9 @@ pub trait ActivityStart: Sized {
     /// Resolve the effective tracing level for this activity.
     fn resolved_level(&self) -> ActivityLevel;
 
+    /// Return the pre-assigned activity ID, if one was set via `.id()`.
+    fn existing_id(&self) -> Option<u64>;
+
     /// Set the pre-assigned activity ID on the builder.
     fn with_id(self, id: u64) -> Self;
 
@@ -63,10 +66,16 @@ macro_rules! activity {
     ($builder:expr) => {{
         let __builder = $builder;
         let __name = $crate::ActivityStart::activity_name(&__builder);
-        let __otel_name = __name.to_ascii_lowercase();
-        let __id = $crate::next_id();
+        let __otel_name_owned;
+        let __otel_name: &str = if __name.as_bytes().iter().any(|b| b.is_ascii_uppercase()) {
+            __otel_name_owned = __name.to_ascii_lowercase();
+            __otel_name_owned.as_str()
+        } else {
+            __name
+        };
+        let __id = $crate::ActivityStart::existing_id(&__builder).unwrap_or_else($crate::next_id);
         let __level = $crate::ActivityStart::resolved_level(&__builder);
-        let __span = $crate::__create_activity_span!(__id, __otel_name.as_str(), __name, __level);
+        let __span = $crate::__create_activity_span!(__id, __otel_name, __name, __level);
         $crate::ActivityStart::start_with_span(
             $crate::ActivityStart::with_id(__builder, __id),
             __span,
@@ -82,10 +91,16 @@ macro_rules! start_queue {
     ($builder:expr) => {{
         let __builder: $crate::BuildBuilder = $builder;
         let __name = $crate::ActivityStart::activity_name(&__builder);
-        let __otel_name = __name.to_ascii_lowercase();
-        let __id = $crate::next_id();
+        let __otel_name_owned;
+        let __otel_name: &str = if __name.as_bytes().iter().any(|b| b.is_ascii_uppercase()) {
+            __otel_name_owned = __name.to_ascii_lowercase();
+            __otel_name_owned.as_str()
+        } else {
+            __name
+        };
+        let __id = $crate::ActivityStart::existing_id(&__builder).unwrap_or_else($crate::next_id);
         let __level = $crate::ActivityStart::resolved_level(&__builder);
-        let __span = $crate::__create_activity_span!(__id, __otel_name.as_str(), __name, __level);
+        let __span = $crate::__create_activity_span!(__id, __otel_name, __name, __level);
         $crate::ActivityStart::with_id(__builder, __id).queue_with_span(__span)
     }};
 }
@@ -184,18 +199,15 @@ impl BuildBuilder {
         self
     }
 
-    /// Queue a build with an externally-created span (used by [`queue!`] macro).
+    /// Queue a build with an externally-created span (used by [`start_queue!`] macro).
     pub fn queue_with_span(self, span: Span) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
-        let level = self
-            .level
-            .or_else(current_activity_level)
-            .unwrap_or_default();
+        let level = self.resolved_level();
 
         send_activity_event(ActivityEvent::Build(Build::Queued {
             id,
-            name: self.name.clone(),
+            name: self.name,
             parent,
             derivation_path: self.derivation_path,
             timestamp: Timestamp::now(),
@@ -216,6 +228,10 @@ impl ActivityStart for BuildBuilder {
             .unwrap_or_default()
     }
 
+    fn existing_id(&self) -> Option<u64> {
+        self.id
+    }
+
     fn with_id(mut self, id: u64) -> Self {
         self.id = Some(id);
         self
@@ -228,7 +244,7 @@ impl ActivityStart for BuildBuilder {
 
         send_activity_event(ActivityEvent::Build(Build::Start {
             id,
-            name: self.name.clone(),
+            name: self.name,
             parent,
             derivation_path: self.derivation_path,
             timestamp: Timestamp::now(),
@@ -292,6 +308,10 @@ impl ActivityStart for FetchBuilder {
             .unwrap_or_default()
     }
 
+    fn existing_id(&self) -> Option<u64> {
+        self.id
+    }
+
     fn with_id(mut self, id: u64) -> Self {
         self.id = Some(id);
         self
@@ -301,17 +321,18 @@ impl ActivityStart for FetchBuilder {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
         let level = self.resolved_level();
+        let kind = self.kind;
 
         send_activity_event(ActivityEvent::Fetch(Fetch::Start {
             id,
-            kind: self.kind,
-            name: self.name.clone(),
+            kind,
+            name: self.name,
             parent,
             url: self.url,
             timestamp: Timestamp::now(),
         }));
 
-        Activity::new(span, id, ActivityType::Fetch(self.kind), level)
+        Activity::new(span, id, ActivityType::Fetch(kind), level)
     }
 }
 
@@ -358,6 +379,10 @@ impl ActivityStart for EvaluateBuilder {
         self.level
             .or_else(current_activity_level)
             .unwrap_or_default()
+    }
+
+    fn existing_id(&self) -> Option<u64> {
+        self.id
     }
 
     fn with_id(mut self, id: u64) -> Self {
@@ -418,6 +443,10 @@ impl ActivityStart for TaskBuilder {
         self.level
             .or_else(current_activity_level)
             .unwrap_or_default()
+    }
+
+    fn existing_id(&self) -> Option<u64> {
+        self.id
     }
 
     fn with_id(mut self, id: u64) -> Self {
@@ -490,6 +519,10 @@ impl ActivityStart for CommandBuilder {
             .unwrap_or(ActivityLevel::Debug)
     }
 
+    fn existing_id(&self) -> Option<u64> {
+        self.id
+    }
+
     fn with_id(mut self, id: u64) -> Self {
         self.id = Some(id);
         self
@@ -502,7 +535,7 @@ impl ActivityStart for CommandBuilder {
 
         send_activity_event(ActivityEvent::Command(Command::Start {
             id,
-            name: self.name.clone(),
+            name: self.name,
             parent,
             command: self.command,
             timestamp: Timestamp::now(),
@@ -578,6 +611,10 @@ impl ActivityStart for ProcessBuilder {
             .unwrap_or_default()
     }
 
+    fn existing_id(&self) -> Option<u64> {
+        self.id
+    }
+
     fn with_id(mut self, id: u64) -> Self {
         self.id = Some(id);
         self
@@ -590,7 +627,7 @@ impl ActivityStart for ProcessBuilder {
 
         send_activity_event(ActivityEvent::Process(Process::Start {
             id,
-            name: self.name.clone(),
+            name: self.name,
             parent,
             command: self.command,
             ports: self.ports,
@@ -655,6 +692,10 @@ impl ActivityStart for OperationBuilder {
             .unwrap_or_default()
     }
 
+    fn existing_id(&self) -> Option<u64> {
+        self.id
+    }
+
     fn with_id(mut self, id: u64) -> Self {
         self.id = Some(id);
         self
@@ -667,7 +708,7 @@ impl ActivityStart for OperationBuilder {
 
         send_activity_event(ActivityEvent::Operation(Operation::Start {
             id,
-            name: self.name.clone(),
+            name: self.name,
             parent,
             detail: self.detail,
             level,

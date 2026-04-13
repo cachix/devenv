@@ -97,27 +97,15 @@ devenv-nix-backend-macros.workspace = true
 
 [features]
 default = ["otlp-grpc"]
-otlp-grpc = [
+otlp = [
   "dep:opentelemetry",
   "dep:opentelemetry_sdk",
   "dep:tracing-opentelemetry",
   "dep:opentelemetry-otlp",
-  "opentelemetry-otlp/grpc-tonic",
 ]
-otlp-http-protobuf = [
-  "dep:opentelemetry",
-  "dep:opentelemetry_sdk",
-  "dep:tracing-opentelemetry",
-  "dep:opentelemetry-otlp",
-  "opentelemetry-otlp/http-proto",
-]
-otlp-http-json = [
-  "dep:opentelemetry",
-  "dep:opentelemetry_sdk",
-  "dep:tracing-opentelemetry",
-  "dep:opentelemetry-otlp",
-  "opentelemetry-otlp/http-json",
-]
+otlp-grpc = ["otlp", "opentelemetry-otlp/grpc-tonic"]
+otlp-http-protobuf = ["otlp", "opentelemetry-otlp/http-proto"]
+otlp-http-json = ["otlp", "opentelemetry-otlp/http-json"]
 test-all = [
   "test-mcp",
   "devenv-processes/test-all",

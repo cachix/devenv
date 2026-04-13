@@ -4,7 +4,7 @@ use devenv::{
     Devenv, RunMode,
     cli::{
         Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
-        TraceOutput, TraceOutputSpec,
+        TraceOutputSpec,
     },
     hook,
     processes::ProcessCommand,
@@ -198,11 +198,11 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
     } else {
         devenv::tasks::VerbosityLevel::Normal
     };
-    if let Err(e) = cli.tracing_args.validate() {
-        miette::bail!("{e}");
-    }
     let use_tracing_mode = cli.tracing_args.use_tracing_mode();
-    let tracing_specs = cli.tracing_args.resolve_specs();
+    let tracing_specs = cli
+        .tracing_args
+        .resolve_and_validate()
+        .map_err(|e| miette::miette!("{e}"))?;
 
     let mut config = Config::load()?;
 
@@ -327,7 +327,7 @@ fn run(launch: LaunchConfig) -> Result<()> {
         && !launch
             .tracing_specs
             .iter()
-            .any(|s| matches!(s.destination, TraceOutput::Stdout | TraceOutput::Stderr));
+            .any(|s| s.destination.targets_terminal());
     let _tracing_guard =
         devenv_tracing::init_tracing(launch.log_level, &launch.tracing_specs, cli_output);
 

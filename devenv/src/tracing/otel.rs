@@ -42,6 +42,9 @@ pub(super) fn init_tracing_unified(
     // The OTLP exporter and batch processor need a tokio runtime.
     // This is called before the application's main runtime exists, so we
     // create a lightweight dedicated runtime.
+    // Uses multi-thread (not current-thread) because the batch exporter spawns
+    // background flush tasks via tokio::spawn that need a worker thread to drive
+    // them without an explicit block_on loop.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(1)
         .enable_all()
@@ -71,6 +74,7 @@ pub(super) fn init_tracing_unified(
     }
 
     // OTLP layers — each gets its own provider but shares the runtime
+    let resource = Resource::builder().with_service_name("devenv").build();
     for spec in specs.iter().filter(|s| s.format.is_otlp()) {
         let endpoint = match &spec.destination {
             TraceOutput::Url(url) => Some(url.as_str()),
@@ -85,10 +89,9 @@ pub(super) fn init_tracing_unified(
             }
         };
 
-        let resource = Resource::builder().with_service_name("devenv").build();
         let provider = SdkTracerProvider::builder()
             .with_batch_exporter(exporter)
-            .with_resource(resource)
+            .with_resource(resource.clone())
             .build();
         let tracer = provider.tracer("devenv");
         let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);

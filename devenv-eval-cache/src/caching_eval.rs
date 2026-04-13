@@ -1297,7 +1297,7 @@ mod tests {
         // Now call eval() for key1. The cache hit will try to replay port 50300
         // for "postgres:default", but it is already held by "other_process:blocker",
         // so replay fails and handle_replay_failure should fire.
-        let activity = devenv_activity::Activity::evaluate("test").start();
+        let activity = devenv_activity::activity!(devenv_activity::Activity::evaluate("test"));
         let (result, cache_hit) = cached_eval
             .eval(&key1, &activity, || async {
                 Ok(r#"{"port":50302}"#.to_string())

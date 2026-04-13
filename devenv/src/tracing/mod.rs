@@ -1,10 +1,6 @@
 mod devenv_layer;
 mod human_duration;
-#[cfg(any(
-    feature = "otlp-grpc",
-    feature = "otlp-http-protobuf",
-    feature = "otlp-http-json"
-))]
+#[cfg(feature = "otlp")]
 mod otel;
 mod span_ids;
 mod span_timings;
@@ -15,12 +11,6 @@ use span_ids::{SpanContext, SpanIdLayer};
 pub use crate::cli::{TraceFormat, TraceOutput, TraceOutputSpec};
 pub use human_duration::HumanReadableDuration;
 
-#[cfg(not(any(
-    feature = "otlp-grpc",
-    feature = "otlp-http-protobuf",
-    feature = "otlp-http-json"
-)))]
-use clap::ValueEnum;
 use json_subscriber::JsonLayer;
 use std::fs::File;
 use std::io::{self, IsTerminal, LineWriter, Write};
@@ -251,11 +241,7 @@ fn init_tracing_with_otlp(
         otel::init_tracing_unified(level, specs, cli_output)
     }
 
-    #[cfg(not(any(
-        feature = "otlp-grpc",
-        feature = "otlp-http-protobuf",
-        feature = "otlp-http-json"
-    )))]
+    #[cfg(not(feature = "otlp"))]
     {
         let _ = (level, cli_output);
         use clap::ValueEnum;

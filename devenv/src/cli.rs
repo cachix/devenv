@@ -48,6 +48,13 @@ pub enum TraceOutput {
     Url(Url),
 }
 
+impl TraceOutput {
+    /// Returns true if this output targets the terminal (stdout or stderr).
+    pub fn targets_terminal(&self) -> bool {
+        matches!(self, TraceOutput::Stdout | TraceOutput::Stderr)
+    }
+}
+
 impl FromStr for TraceOutput {
     type Err = ParseTraceOutputError;
 
@@ -509,32 +516,8 @@ pub struct CliOptions {
 }
 
 impl TracingCliArgs {
-    /// Merge `--trace-to` and legacy `--trace-output`/`--trace-format` into specs.
-    pub fn resolve_specs(&self) -> Vec<TraceOutputSpec> {
-        let mut specs = self.trace_to.clone();
-
-        if let Some(ref output) = self.trace_output {
-            specs.push(TraceOutputSpec {
-                format: self.trace_format,
-                destination: output.clone(),
-            });
-        }
-
-        specs
-    }
-
-    /// Returns true if tracing-only mode should be used (disables TUI).
-    pub fn use_tracing_mode(&self) -> bool {
-        let targets_terminal =
-            |d: &TraceOutput| matches!(d, TraceOutput::Stdout | TraceOutput::Stderr);
-        self.trace_to
-            .iter()
-            .any(|s| targets_terminal(&s.destination))
-            || self.trace_output.as_ref().is_some_and(targets_terminal)
-    }
-
-    /// Validate that all trace specs are valid.
-    pub fn validate(&self) -> Result<(), String> {
+    /// Validate and merge `--trace-to` and legacy `--trace-output`/`--trace-format` into specs.
+    pub fn resolve_and_validate(&self) -> Result<Vec<TraceOutputSpec>, String> {
         // Legacy --trace-output doesn't support URLs
         if let Some(TraceOutput::Url(_)) = self.trace_output {
             return Err(
@@ -547,10 +530,30 @@ impl TracingCliArgs {
                 "--trace-format does not support OTLP formats. Use --trace-to instead.".to_string(),
             );
         }
-        for spec in &self.resolve_specs() {
+
+        let mut specs = self.trace_to.clone();
+        if let Some(ref output) = self.trace_output {
+            specs.push(TraceOutputSpec {
+                format: self.trace_format,
+                destination: output.clone(),
+            });
+        }
+
+        for spec in &specs {
             spec.validate()?;
         }
-        Ok(())
+        Ok(specs)
+    }
+
+    /// Returns true if tracing-only mode should be used (disables TUI).
+    pub fn use_tracing_mode(&self) -> bool {
+        self.trace_to
+            .iter()
+            .any(|s| s.destination.targets_terminal())
+            || self
+                .trace_output
+                .as_ref()
+                .is_some_and(|d| d.targets_terminal())
     }
 }
 
@@ -1091,7 +1094,7 @@ mod tests {
             trace_output: None,
             trace_format: TraceFormat::Pretty, // should NOT affect --trace-to
         };
-        let specs = args.resolve_specs();
+        let specs = args.resolve_and_validate().unwrap();
         assert_eq!(specs[0].format, TraceFormat::Json);
     }
 
@@ -1102,7 +1105,7 @@ mod tests {
             trace_output: None,
             trace_format: TraceFormat::Json,
         };
-        let specs = args.resolve_specs();
+        let specs = args.resolve_and_validate().unwrap();
         assert_eq!(specs[0].format, TraceFormat::Pretty);
     }
 
@@ -1113,7 +1116,7 @@ mod tests {
             trace_output: Some(TraceOutput::Stderr),
             trace_format: TraceFormat::Pretty,
         };
-        let specs = args.resolve_specs();
+        let specs = args.resolve_and_validate().unwrap();
         assert_eq!(specs.len(), 1);
         assert_eq!(specs[0].format, TraceFormat::Pretty);
         assert_eq!(specs[0].destination, TraceOutput::Stderr);
@@ -1126,7 +1129,7 @@ mod tests {
             trace_output: Some(TraceOutput::Stderr),
             trace_format: TraceFormat::Pretty,
         };
-        let specs = args.resolve_specs();
+        let specs = args.resolve_and_validate().unwrap();
         assert_eq!(specs.len(), 2);
         assert_eq!(specs[0].format, TraceFormat::Json);
         assert_eq!(specs[1].format, TraceFormat::Pretty);
@@ -1160,7 +1163,7 @@ mod tests {
             "pretty:stderr",
             "shell",
         ]);
-        let specs = cli.tracing_args.resolve_specs();
+        let specs = cli.tracing_args.resolve_and_validate().unwrap();
         assert_eq!(specs.len(), 2);
         assert_eq!(specs[0].format, TraceFormat::Json);
         assert_eq!(specs[1].format, TraceFormat::Pretty);
@@ -1177,7 +1180,7 @@ mod tests {
             "pretty",
             "shell",
         ]);
-        let specs = cli.tracing_args.resolve_specs();
+        let specs = cli.tracing_args.resolve_and_validate().unwrap();
         assert_eq!(specs.len(), 1);
         assert_eq!(specs[0].format, TraceFormat::Pretty);
         assert_eq!(specs[0].destination, TraceOutput::Stderr);
