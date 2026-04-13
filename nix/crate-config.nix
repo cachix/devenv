@@ -161,19 +161,11 @@ in
     ];
   };
 
-  # libghostty-vt-sys builds ghostty VT from source using zig + git, which
-  # fails in the Nix sandbox.  Replace the build script with a stub that
-  # links against the pre-built library instead.
+  # libghostty-vt-sys has a pkg-config feature that finds the pre-built
+  # library from the ghostty flake, so just provide pkg-config + the library.
   libghostty-vt-sys = attrs: {
-    preConfigure = (attrs.preConfigure or "") + ''
-      cat > build.rs << 'BUILDRS'
-      fn main() {
-          println!("cargo:rustc-link-search=native=${libghostty-vt}/lib");
-          println!("cargo:rustc-link-lib=dylib=ghostty-vt");
-          println!("cargo:include=${libghostty-vt}/include");
-      }
-      BUILDRS
-    '';
+    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
+    buildInputs = (attrs.buildInputs or [ ]) ++ [ libghostty-vt.dev ];
   };
 
   nix-bindings-util = nixLibsOverride;
