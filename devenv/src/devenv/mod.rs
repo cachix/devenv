@@ -16,6 +16,7 @@ use devenv_core::{
     ports::PortAllocator,
     settings::{CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings},
 };
+use devenv_processes::manager::EndpointInfo;
 use devenv_shell::dialect::{BashDialect, ShellDialect};
 use include_dir::{Dir, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
@@ -1854,33 +1855,7 @@ impl Devenv {
             .await?
         {
             processes::ApiResponse::Endpoints { endpoints } => {
-                if endpoints.is_empty() {
-                    return Ok("No endpoints found.\n".to_string());
-                }
-
-                let mut grouped: std::collections::BTreeMap<String, Vec<(String, String)>> =
-                    std::collections::BTreeMap::new();
-                for endpoint in endpoints {
-                    grouped
-                        .entry(endpoint.process_name)
-                        .or_default()
-                        .push((endpoint.label, endpoint.url));
-                }
-
-                let mut output = String::new();
-                let mut first_process = true;
-                for (process_name, mut urls) in grouped {
-                    urls.sort_by(|a, b| a.0.cmp(&b.0));
-                    if !first_process {
-                        output.push('\n');
-                    }
-                    first_process = false;
-                    output.push_str(&format!("{process_name}\n"));
-                    for (label, url) in urls {
-                        output.push_str(&format!("  {:<12} {}\n", label, url));
-                    }
-                }
-                Ok(output)
+                Ok(format_process_endpoints(endpoints))
             }
             processes::ApiResponse::Error { message } => bail!("{}", message),
             other => bail!("Unexpected response: {:?}", other),
@@ -2515,6 +2490,27 @@ fn format_tasks_tree(tasks: &[tasks::TaskConfig]) -> String {
     output
 }
 
+fn format_process_endpoints(mut endpoints: Vec<EndpointInfo>) -> String {
+    if endpoints.is_empty() {
+        return "No endpoints found.\n".to_string();
+    }
+
+    endpoints.sort_by(|a, b| {
+        a.process_name
+            .cmp(&b.process_name)
+            .then_with(|| a.label.cmp(&b.label))
+    });
+
+    let mut output = String::new();
+    for endpoint in endpoints {
+        output.push_str(&format!(
+            "{}/{}   {}\n",
+            endpoint.process_name, endpoint.label, endpoint.url
+        ));
+    }
+    output
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2615,6 +2611,36 @@ mod tests {
             .unwrap_or_default();
         build_children.sort();
         assert_eq!(build_children, vec!["myapp:setup"]);
+    }
+
+    #[test]
+    fn test_format_process_endpoints_flat_output() {
+        let output = format_process_endpoints(vec![
+            EndpointInfo {
+                process_name: "rabbitmq".to_string(),
+                label: "admin".to_string(),
+                url: "http://127.0.0.1:15672/".to_string(),
+            },
+            EndpointInfo {
+                process_name: "mailpit".to_string(),
+                label: "ui".to_string(),
+                url: "http://127.0.0.1:8025/".to_string(),
+            },
+            EndpointInfo {
+                process_name: "rabbitmq".to_string(),
+                label: "metrics".to_string(),
+                url: "http://127.0.0.1:15692/metrics".to_string(),
+            },
+        ]);
+
+        assert_eq!(
+            output,
+            concat!(
+                "mailpit/ui   http://127.0.0.1:8025/\n",
+                "rabbitmq/admin   http://127.0.0.1:15672/\n",
+                "rabbitmq/metrics   http://127.0.0.1:15692/metrics\n",
+            )
+        );
     }
 
     #[test]

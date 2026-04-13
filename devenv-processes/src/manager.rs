@@ -156,6 +156,18 @@ fn render_process_url(url: &ProcessUrl) -> String {
     format!("{}://{}:{}{}", url.scheme, url.host, url.port, path)
 }
 
+fn render_process_activity_urls(config: &ProcessConfig) -> Vec<String> {
+    let mut urls: Vec<(String, String)> = config
+        .urls
+        .iter()
+        .map(|(label, url)| (label.clone(), render_process_url(url)))
+        .collect();
+    urls.sort_by(|a, b| a.0.cmp(&b.0));
+    urls.into_iter()
+        .map(|(label, url)| format!("{label}: {url}"))
+        .collect()
+}
+
 fn collect_endpoints_from_config(process_name: &str, config: &ProcessConfig) -> Vec<EndpointInfo> {
     config
         .urls
@@ -547,6 +559,10 @@ impl NativeProcessManager {
         let mut builder = Activity::process(&config.name)
             .command(&config.exec)
             .ports(ports);
+        let urls = render_process_activity_urls(config);
+        if !urls.is_empty() {
+            builder = builder.urls(urls);
+        }
         if let Some(probe_desc) = probe_description(config) {
             builder = builder.ready_probe(probe_desc);
         }
