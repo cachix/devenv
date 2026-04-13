@@ -114,6 +114,11 @@ macro_rules! start_queue {
 /// match on the runtime level and expand a separate `span!()` for each variant.
 /// Since this macro is called from [`activity!`]/[`start_queue!`], all `span!()` calls
 /// expand at the user's call site — giving correct `file!()`/`line!()`.
+///
+/// The span declares `Empty` fields for type-specific attributes (`devenv.derivation_path`,
+/// `devenv.url`, etc.) and outcome tracking (`devenv.outcome`, `otel.status_code`).
+/// Builders record type-specific fields in `start_with_span()`; the `Activity::Drop`
+/// impl records outcome fields.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __create_activity_span {
@@ -125,6 +130,12 @@ macro_rules! __create_activity_span {
                 activity_id = $id,
                 otel.name = $otel_name,
                 devenv.user_message = $name,
+                devenv.activity.kind = tracing::field::Empty,
+                devenv.derivation_path = tracing::field::Empty,
+                devenv.url = tracing::field::Empty,
+                devenv.fetch.kind = tracing::field::Empty,
+                devenv.outcome = tracing::field::Empty,
+                otel.status_code = tracing::field::Empty,
             ),
             $crate::ActivityLevel::Warn => tracing::span!(
                 tracing::Level::WARN,
@@ -132,6 +143,12 @@ macro_rules! __create_activity_span {
                 activity_id = $id,
                 otel.name = $otel_name,
                 devenv.user_message = $name,
+                devenv.activity.kind = tracing::field::Empty,
+                devenv.derivation_path = tracing::field::Empty,
+                devenv.url = tracing::field::Empty,
+                devenv.fetch.kind = tracing::field::Empty,
+                devenv.outcome = tracing::field::Empty,
+                otel.status_code = tracing::field::Empty,
             ),
             $crate::ActivityLevel::Info => tracing::span!(
                 tracing::Level::INFO,
@@ -139,6 +156,12 @@ macro_rules! __create_activity_span {
                 activity_id = $id,
                 otel.name = $otel_name,
                 devenv.user_message = $name,
+                devenv.activity.kind = tracing::field::Empty,
+                devenv.derivation_path = tracing::field::Empty,
+                devenv.url = tracing::field::Empty,
+                devenv.fetch.kind = tracing::field::Empty,
+                devenv.outcome = tracing::field::Empty,
+                otel.status_code = tracing::field::Empty,
             ),
             $crate::ActivityLevel::Debug => tracing::span!(
                 tracing::Level::DEBUG,
@@ -146,6 +169,12 @@ macro_rules! __create_activity_span {
                 activity_id = $id,
                 otel.name = $otel_name,
                 devenv.user_message = $name,
+                devenv.activity.kind = tracing::field::Empty,
+                devenv.derivation_path = tracing::field::Empty,
+                devenv.url = tracing::field::Empty,
+                devenv.fetch.kind = tracing::field::Empty,
+                devenv.outcome = tracing::field::Empty,
+                otel.status_code = tracing::field::Empty,
             ),
             $crate::ActivityLevel::Trace => tracing::span!(
                 tracing::Level::TRACE,
@@ -153,6 +182,12 @@ macro_rules! __create_activity_span {
                 activity_id = $id,
                 otel.name = $otel_name,
                 devenv.user_message = $name,
+                devenv.activity.kind = tracing::field::Empty,
+                devenv.derivation_path = tracing::field::Empty,
+                devenv.url = tracing::field::Empty,
+                devenv.fetch.kind = tracing::field::Empty,
+                devenv.outcome = tracing::field::Empty,
+                otel.status_code = tracing::field::Empty,
             ),
         }
     };
@@ -202,11 +237,20 @@ impl BuildBuilder {
         self
     }
 
-    /// Queue a build with an externally-created span (used by [`start_queue!`] macro).
-    pub fn queue_with_span(self, span: Span) -> Activity {
+    fn resolve_and_record(&self, span: &Span) -> (u64, Option<u64>, ActivityLevel) {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
         let level = self.resolved_level();
+        span.record("devenv.activity.kind", "build");
+        if let Some(ref path) = self.derivation_path {
+            span.record("devenv.derivation_path", path.as_str());
+        }
+        (id, parent, level)
+    }
+
+    /// Queue a build with an externally-created span (used by [`start_queue!`] macro).
+    pub fn queue_with_span(self, span: Span) -> Activity {
+        let (id, parent, level) = self.resolve_and_record(&span);
 
         send_activity_event(ActivityEvent::Build(Build::Queued {
             id,
@@ -241,9 +285,7 @@ impl ActivityStart for BuildBuilder {
     }
 
     fn start_with_span(self, span: Span) -> Activity {
-        let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(current_activity_id);
-        let level = self.resolved_level();
+        let (id, parent, level) = self.resolve_and_record(&span);
 
         send_activity_event(ActivityEvent::Build(Build::Start {
             id,
@@ -326,6 +368,12 @@ impl ActivityStart for FetchBuilder {
         let level = self.resolved_level();
         let kind = self.kind;
 
+        span.record("devenv.activity.kind", "fetch");
+        span.record("devenv.fetch.kind", kind.as_str());
+        if let Some(ref url) = self.url {
+            span.record("devenv.url", url.as_str());
+        }
+
         send_activity_event(ActivityEvent::Fetch(Fetch::Start {
             id,
             kind,
@@ -398,6 +446,8 @@ impl ActivityStart for EvaluateBuilder {
         let parent = self.parent.unwrap_or_else(current_activity_id);
         let level = self.resolved_level();
 
+        span.record("devenv.activity.kind", "evaluate");
+
         send_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
             id,
             name: self.name,
@@ -460,6 +510,8 @@ impl ActivityStart for TaskBuilder {
     fn start_with_span(self, span: Span) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let level = self.resolved_level();
+
+        span.record("devenv.activity.kind", "task");
 
         send_activity_event(ActivityEvent::Task(Task::Start {
             id,
@@ -535,6 +587,8 @@ impl ActivityStart for CommandBuilder {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
         let level = self.resolved_level();
+
+        span.record("devenv.activity.kind", "command");
 
         send_activity_event(ActivityEvent::Command(Command::Start {
             id,
@@ -628,6 +682,8 @@ impl ActivityStart for ProcessBuilder {
         let parent = self.parent.unwrap_or_else(current_activity_id);
         let level = self.resolved_level();
 
+        span.record("devenv.activity.kind", "process");
+
         send_activity_event(ActivityEvent::Process(Process::Start {
             id,
             name: self.name,
@@ -708,6 +764,8 @@ impl ActivityStart for OperationBuilder {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
         let level = self.resolved_level();
+
+        span.record("devenv.activity.kind", "operation");
 
         send_activity_event(ActivityEvent::Operation(Operation::Start {
             id,

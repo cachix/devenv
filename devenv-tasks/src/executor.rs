@@ -53,6 +53,11 @@ impl<'a> ExecutionContext<'a> {
         command.env("DEVENV_TASK_OUTPUT_FILE", self.output_file_path);
         command.env("DEVENV_TASK_EXPORTS_FILE", self.exports_file_path);
 
+        // Inject OTEL trace context so instrumented subprocesses join the trace.
+        for (key, value) in devenv_activity::trace_propagation_env() {
+            command.env(key, value);
+        }
+
         command
     }
 }

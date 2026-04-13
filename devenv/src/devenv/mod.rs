@@ -723,6 +723,11 @@ impl Devenv {
 
         crate::shell_env::apply_shell_env(&mut shell_cmd, &bash, &self.shell_settings.clean);
 
+        // Inject OTEL trace context so instrumented subprocesses join the trace.
+        for (key, value) in devenv_activity::trace_propagation_env() {
+            shell_cmd.env(key, value);
+        }
+
         Ok(shell_cmd)
     }
 

@@ -1,7 +1,12 @@
+use std::collections::HashMap;
+
+use opentelemetry::propagation::TextMapPropagator;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_otlp::{ExporterBuildError, SpanExporter, WithExportConfig};
 use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::SdkTracerProvider;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{Layer, Registry, layer::SubscriberExt, util::SubscriberInitExt};
 
 use super::devenv_layer::DevenvLayer;
@@ -109,6 +114,20 @@ pub(super) fn init_tracing_unified(
         .with(layers)
         .with(DevenvLayer::new())
         .try_init();
+
+    // Register trace context propagator so subprocesses inherit TRACEPARENT/TRACESTATE.
+    devenv_activity::register_trace_propagator({
+        let propagator = TraceContextPropagator::new();
+        move || {
+            let context = tracing::Span::current().context();
+            let mut headers: HashMap<String, String> = HashMap::new();
+            propagator.inject_context(&context, &mut headers);
+            headers
+                .into_iter()
+                .map(|(k, v)| (k.to_ascii_uppercase(), v))
+                .collect()
+        }
+    });
 
     // Runtime must be dropped last — push it after all OtelGuards
     guards.push(Box::new(runtime));

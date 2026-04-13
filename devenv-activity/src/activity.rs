@@ -560,6 +560,11 @@ impl Drop for Activity {
             .map(|o| *o)
             .unwrap_or(ActivityOutcome::Success);
 
+        self.span.record("devenv.outcome", outcome.as_str());
+        if outcome.is_error() {
+            self.span.record("otel.status_code", "ERROR");
+        }
+
         send_activity_event(make_complete_event(self.id, self.activity_type, outcome));
     }
 }

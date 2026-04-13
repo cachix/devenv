@@ -39,6 +39,7 @@ mod builders;
 mod events;
 mod handle;
 mod instrument;
+mod propagation;
 mod serde_valuable;
 mod stack;
 mod timestamp;
@@ -74,3 +75,6 @@ pub use stack::{
 
 // Traits
 pub use instrument::ActivityInstrument;
+
+// Trace context propagation
+pub use propagation::{register_trace_propagator, trace_propagation_env};

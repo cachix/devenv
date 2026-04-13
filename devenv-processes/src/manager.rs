@@ -707,6 +707,11 @@ impl NativeProcessManager {
                     .unwrap_or_else(std::process::Stdio::null),
             );
 
+            // Inject OTEL trace context so instrumented subprocesses join the trace.
+            for (key, value) in devenv_activity::trace_propagation_env() {
+                cmd.env(key, value);
+            }
+
             if let Some((ref fds, ref capabilities)) = process_setup {
                 command_wrap.wrap(ProcessSetupWrapper::new(fds.clone(), capabilities.clone()));
             }

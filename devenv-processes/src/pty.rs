@@ -53,6 +53,11 @@ impl PtyProcess {
             cmd.env(key, value);
         }
 
+        // Inject OTEL trace context so instrumented subprocesses join the trace.
+        for (key, value) in devenv_activity::trace_propagation_env() {
+            cmd.env(key, value);
+        }
+
         // Spawn the child process
         let child = pair
             .slave
