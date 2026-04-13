@@ -22,30 +22,31 @@ pub const SUMMARY_BAR_HEIGHT: u16 = 2;
 /// Map from activity_id to rendered height in lines.
 pub type ActivityHeights = Ref<HashMap<u64, i32>>;
 
-fn render_process_urls(urls: &[String], depth: usize) -> AnyElement<'static> {
+fn render_process_urls(urls: &[String], depth: usize, terminal_width: u16) -> AnyElement<'static> {
     let indent = 2 + (depth * 2);
     let mut line_elements = vec![];
+    let filler = " ".repeat(terminal_width as usize);
 
     for entry in urls {
         let (label, url) = entry.split_once(": ").unwrap_or(("", entry.as_str()));
+        let mut contents = vec![];
+        if !label.is_empty() {
+            contents
+                .push(MixedTextContent::new(format!(" {label}: ")).color(Color::AnsiValue(245)));
+        }
+        contents.push(
+            MixedTextContent::new(url.to_string())
+                .color(COLOR_INFO)
+                .decoration(TextDecoration::Underline),
+        );
+        contents.push(MixedTextContent::new(filler.clone()));
         line_elements.push(
             element! {
-                View(height: 1, flex_direction: FlexDirection::Row) {
-                    #(if label.is_empty() {
-                        vec![]
-                    } else {
-                        vec![element!(Text(
-                            content: format!(" {label}: "),
-                            color: Color::AnsiValue(245)
-                        ))
-                        .into_any()]
-                    })
-                    Text(
-                        content: url.to_string(),
-                        color: COLOR_INFO,
-                        decoration: TextDecoration::Underline
+                View(height: 1, overflow: Overflow::Hidden) {
+                    MixedText(
+                        contents: contents,
+                        wrap: TextWrap::NoWrap
                     )
-                    Text(content: " ")
                 }
             }
             .into_any(),
@@ -700,7 +701,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             };
 
             // Format ports: extract just the port numbers for brevity
-            let ports_suffix = if !process_data.ports.is_empty() {
+            let ports_suffix = if !process_data.ports.is_empty() && process_data.urls.is_empty() {
                 let port_list: Vec<String> = process_data
                     .ports
                     .iter()
@@ -755,7 +756,11 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let mut total_height = 1usize;
 
                 if show_urls {
-                    elements.push(render_process_urls(&process_data.urls, *depth));
+                    elements.push(render_process_urls(
+                        &process_data.urls,
+                        *depth,
+                        terminal_width,
+                    ));
                     total_height += process_data.urls.len();
                 }
 
