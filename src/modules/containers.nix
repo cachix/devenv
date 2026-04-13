@@ -96,10 +96,9 @@ let
     };
 
 
-  mkDerivation = cfg: nix2container.nix2container.buildImage {
+  mkDerivation = cfg: nix2container.nix2container.buildImage ({
     name = cfg.name;
     tag = cfg.version;
-    fromImage = cfg.fromImage;
     initializeNixDatabase = true;
     nixUid = lib.toInt uid;
     nixGid = lib.toInt gid;
@@ -162,7 +161,9 @@ let
         then cfg.startupCommand
         else [ cfg.startupCommand ];
     };
-  };
+  } // lib.optionalAttrs (cfg.fromImage != null) {
+    fromImage = cfg.fromImage;
+  });
 
   # <container> <registry> <args>
   mkCopyScript = cfg: pkgs.writeShellScript "copy-container" ''
