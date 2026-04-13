@@ -2,43 +2,46 @@ use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_otlp::{ExporterBuildError, SpanExporter, WithExportConfig};
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::trace::SdkTracerProvider;
-use tracing_subscriber::{Registry, prelude::*};
+use tracing_subscriber::{Layer, Registry, layer::SubscriberExt, util::SubscriberInitExt};
 
-use super::devenv_layer::{DevenvFormat, DevenvLayer};
+use super::devenv_layer::DevenvLayer;
 use super::span_ids::SpanIdLayer;
-use super::{Level, TraceFormat, TraceOutput, TracingGuard, create_filter};
-use std::io::{self, IsTerminal};
+use super::{
+    Level, TraceFormat, TraceOutput, TraceOutputSpec, TracingGuard, build_cli_layer, create_filter,
+    create_local_boxed_layer,
+};
 
-/// Guard that shuts down the OTEL tracer provider and runtime on drop.
+/// Guard that shuts down an OTEL tracer provider on drop.
 ///
-/// The OTLP batch exporter needs a tokio runtime for its background flush task.
-/// Since `init_tracing` is called before any application runtime exists, we
-/// create a dedicated single-thread runtime here. Dropping this guard shuts
-/// down the provider (flushing pending spans) and then the runtime.
+/// Uses a runtime `Handle` to enter the runtime context for async flush.
+/// The runtime itself is stored separately in `TracingGuard` and must
+/// outlive all `OtelGuard` instances.
 struct OtelGuard {
     provider: SdkTracerProvider,
-    _runtime: tokio::runtime::Runtime,
+    runtime_handle: tokio::runtime::Handle,
 }
 
 impl Drop for OtelGuard {
     fn drop(&mut self) {
-        // Enter the runtime context so the provider can drive async flush tasks
-        let _guard = self._runtime.enter();
+        let _guard = self.runtime_handle.enter();
         if let Err(e) = self.provider.shutdown() {
             eprintln!("warning: failed to shut down OpenTelemetry tracer provider: {e}");
         }
     }
 }
 
-pub(super) fn init_tracing_otlp(
+/// Initialize tracing with a mix of local and OTLP output specs.
+///
+/// All layers (CLI, local exports, OTLP exports) are collected into a single
+/// `Vec<Box<dyn Layer>>` and composed onto one `Registry`.
+pub(super) fn init_tracing_unified(
     level: Level,
-    trace_format: TraceFormat,
-    trace_output: Option<&TraceOutput>,
+    specs: &[TraceOutputSpec],
     cli_output: bool,
 ) -> TracingGuard {
     // The OTLP exporter and batch processor need a tokio runtime.
     // This is called before the application's main runtime exists, so we
-    // create a lightweight dedicated runtime that lives in the guard.
+    // create a lightweight dedicated runtime.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(1)
         .enable_all()
@@ -46,63 +49,68 @@ pub(super) fn init_tracing_otlp(
         .build()
         .expect("Failed to create OpenTelemetry runtime");
 
-    let _guard = runtime.enter();
+    let _rt_guard = runtime.enter();
+    let runtime_handle = runtime.handle().clone();
 
-    // Resolve the endpoint: explicit URL > OTEL env var (handled by crate) > format default
-    let endpoint = match trace_output {
-        Some(TraceOutput::Url(url)) => Some(url.as_str()),
-        _ => None,
-    };
+    // Providers must be dropped (flushed) before the runtime.
+    // Vec drops front-to-back, so we push OtelGuards first, runtime last.
+    let mut guards: Vec<Box<dyn Send>> = Vec::new();
 
-    let exporter = match create_exporter(trace_format, endpoint) {
-        Ok(exporter) => exporter,
-        Err(e) => {
-            eprintln!("error: failed to create OTLP exporter: {e}");
-            std::process::exit(1);
+    let mut layers: Vec<Box<dyn Layer<_> + Send + Sync>> = Vec::new();
+
+    // CLI layer
+    if let Some(cli_layer) = build_cli_layer(level, cli_output) {
+        layers.push(cli_layer);
+    }
+
+    // Local format layers
+    for spec in specs.iter().filter(|s| !s.format.is_otlp()) {
+        if let Some(layer) = create_local_boxed_layer(spec) {
+            layers.push(layer);
         }
-    };
+    }
 
-    let resource = Resource::builder().with_service_name("devenv").build();
+    // OTLP layers — each gets its own provider but shares the runtime
+    for spec in specs.iter().filter(|s| s.format.is_otlp()) {
+        let endpoint = match &spec.destination {
+            TraceOutput::Url(url) => Some(url.as_str()),
+            _ => None,
+        };
 
-    let provider = SdkTracerProvider::builder()
-        .with_batch_exporter(exporter)
-        .with_resource(resource)
-        .build();
+        let exporter = match create_exporter(spec.format, endpoint) {
+            Ok(exporter) => exporter,
+            Err(e) => {
+                eprintln!("error: failed to create OTLP exporter: {e}");
+                std::process::exit(1);
+            }
+        };
 
-    let tracer = provider.tracer("devenv");
+        let resource = Resource::builder().with_service_name("devenv").build();
+        let provider = SdkTracerProvider::builder()
+            .with_batch_exporter(exporter)
+            .with_resource(resource)
+            .build();
+        let tracer = provider.tracer("devenv");
+        let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
-    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+        layers.push(Box::new(otel_layer));
+        guards.push(Box::new(OtelGuard {
+            provider,
+            runtime_handle: runtime_handle.clone(),
+        }));
+    }
 
-    let base = Registry::default()
+    let _ = Registry::default()
         .with(create_filter(level))
-        .with(SpanIdLayer);
-
-    // CLI output layer (same as non-OTLP path)
-    let cli_layer = if cli_output {
-        let ansi = io::stderr().is_terminal();
-        let verbose = level >= Level::Debug;
-        Some(
-            tracing_subscriber::fmt::layer()
-                .event_format(DevenvFormat { verbose })
-                .with_writer(io::stderr)
-                .with_ansi(ansi),
-        )
-    } else {
-        None
-    };
-
-    let _ = base
-        .with(cli_layer)
-        .with(otel_layer)
+        .with(SpanIdLayer)
+        .with(layers)
         .with(DevenvLayer::new())
         .try_init();
 
-    TracingGuard {
-        _inner: vec![Box::new(OtelGuard {
-            provider,
-            _runtime: runtime,
-        })],
-    }
+    // Runtime must be dropped last — push it after all OtelGuards
+    guards.push(Box::new(runtime));
+
+    TracingGuard { _inner: guards }
 }
 
 fn create_exporter(

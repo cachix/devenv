@@ -4,7 +4,7 @@ use devenv::{
     Devenv, RunMode,
     cli::{
         Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
-        TraceFormat, TraceOutput,
+        TraceOutput, TraceOutputSpec,
     },
     hook,
     processes::ProcessCommand,
@@ -158,8 +158,7 @@ struct LaunchConfig {
     is_testing: bool,
     needs_terminal_handoff: bool,
     log_level: devenv_tracing::Level,
-    tracing_format: TraceFormat,
-    tracing_output: Option<TraceOutput>,
+    tracing_specs: Vec<TraceOutputSpec>,
 }
 
 /// Detect whether we are running inside an AI coding agent.
@@ -203,8 +202,7 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
         miette::bail!("{e}");
     }
     let use_tracing_mode = cli.tracing_args.use_tracing_mode();
-    let tracing_format = cli.tracing_args.trace_format;
-    let tracing_output = cli.tracing_args.trace_output;
+    let tracing_specs = cli.tracing_args.resolve_specs();
 
     let mut config = Config::load()?;
 
@@ -309,8 +307,7 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
         is_testing,
         needs_terminal_handoff,
         log_level,
-        tracing_format,
-        tracing_output,
+        tracing_specs,
     })
 }
 
@@ -327,16 +324,12 @@ fn run(launch: LaunchConfig) -> Result<()> {
 
     // CLI output: human-readable stderr when no TUI and not in tracing mode
     let cli_output = !launch.tui
-        && !matches!(
-            launch.tracing_output,
-            Some(TraceOutput::Stdout) | Some(TraceOutput::Stderr)
-        );
-    let _tracing_guard = devenv_tracing::init_tracing(
-        launch.log_level,
-        launch.tracing_format,
-        launch.tracing_output.as_ref(),
-        cli_output,
-    );
+        && !launch
+            .tracing_specs
+            .iter()
+            .any(|s| matches!(s.destination, TraceOutput::Stdout | TraceOutput::Stderr));
+    let _tracing_guard =
+        devenv_tracing::init_tracing(launch.log_level, &launch.tracing_specs, cli_output);
 
     let tui = launch.tui;
     let needs_terminal_handoff = launch.needs_terminal_handoff;
@@ -551,8 +544,7 @@ async fn run_backend(
         // Consumed by run() before run_backend is called
         needs_terminal_handoff: _,
         log_level: _,
-        tracing_format: _,
-        tracing_output: _,
+        tracing_specs: _,
     } = launch;
 
     // Ensure TUI is notified when backend exits, even on early return or panic.

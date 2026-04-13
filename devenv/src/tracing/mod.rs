@@ -12,7 +12,7 @@ mod span_timings;
 use devenv_layer::{DevenvFormat, DevenvLayer};
 use span_ids::{SpanContext, SpanIdLayer};
 
-pub use crate::cli::{TraceFormat, TraceOutput};
+pub use crate::cli::{TraceFormat, TraceOutput, TraceOutputSpec};
 pub use human_duration::HumanReadableDuration;
 
 #[cfg(not(any(
@@ -26,7 +26,8 @@ use std::fs::File;
 use std::io::{self, IsTerminal, LineWriter, Write};
 use std::sync::Mutex;
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{EnvFilter, Registry, prelude::*};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{EnvFilter, Layer, Registry, util::SubscriberInitExt};
 
 #[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Level {
@@ -135,103 +136,110 @@ impl TracingGuard {
 }
 
 pub fn init_tracing_default() -> TracingGuard {
-    init_tracing(Level::default(), TraceFormat::Json, None, true)
+    init_tracing(Level::default(), &[], true)
 }
 
-/// Initialize tracing.
+/// Initialize tracing with multiple output specs.
 ///
 /// When `cli_output` is true, a human-readable stderr layer is added for
 /// direct terminal output (used when no TUI is active).
 ///
-/// `trace_format` and `trace_output` control an optional export layer for
-/// structured trace output to stdout, stderr, a file, or an OTLP collector.
+/// Each `TraceOutputSpec` adds an export layer with its own format and destination.
+/// Multiple outputs can be active simultaneously (e.g. pretty to stderr + JSON to file).
 ///
 /// Returns a [`TracingGuard`] that must be held until program exit to ensure
 /// proper flushing of trace data.
-pub fn init_tracing(
-    level: Level,
-    trace_format: TraceFormat,
-    trace_output: Option<&TraceOutput>,
-    cli_output: bool,
-) -> TracingGuard {
-    // OTLP formats use a separate initialization path
-    if trace_format.is_otlp() {
-        return init_tracing_otlp(level, trace_format, trace_output, cli_output);
+pub fn init_tracing(level: Level, specs: &[TraceOutputSpec], cli_output: bool) -> TracingGuard {
+    let has_otlp = specs.iter().any(|s| s.format.is_otlp());
+
+    if has_otlp {
+        return init_tracing_with_otlp(level, specs, cli_output);
     }
 
-    let base = Registry::default()
-        .with(create_filter(level))
-        .with(SpanIdLayer);
+    init_tracing_local(level, specs, cli_output)
+}
 
-    // CLI output: human-readable format on stderr (when no TUI handles display)
-    let cli_layer = if cli_output {
-        let ansi = io::stderr().is_terminal();
-        let verbose = level >= Level::Debug;
-        Some(
+/// Build a CLI output layer (human-readable stderr for direct terminal output).
+pub(crate) fn build_cli_layer<S>(
+    level: Level,
+    cli_output: bool,
+) -> Option<Box<dyn Layer<S> + Send + Sync>>
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+{
+    if !cli_output {
+        return None;
+    }
+    let ansi = io::stderr().is_terminal();
+    let verbose = level >= Level::Debug;
+    Some(Box::new(
+        tracing_subscriber::fmt::layer()
+            .event_format(DevenvFormat { verbose })
+            .with_writer(io::stderr)
+            .with_ansi(ansi),
+    ))
+}
+
+/// Create a boxed local-format layer for a single spec.
+pub(crate) fn create_local_boxed_layer<S>(
+    spec: &TraceOutputSpec,
+) -> Option<Box<dyn Layer<S> + Send + Sync>>
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+{
+    let writer = create_trace_writer(&spec.destination)?;
+    let ansi = match &spec.destination {
+        TraceOutput::Stdout => io::stdout().is_terminal(),
+        TraceOutput::Stderr => io::stderr().is_terminal(),
+        _ => false,
+    };
+    match spec.format {
+        TraceFormat::Full => Some(Box::new(
             tracing_subscriber::fmt::layer()
-                .event_format(DevenvFormat { verbose })
-                .with_writer(io::stderr)
-                .with_ansi(ansi),
-        )
-    } else {
-        None
-    };
+                .with_ansi(ansi)
+                .with_writer(writer),
+        )),
+        TraceFormat::Pretty => Some(Box::new(
+            tracing_subscriber::fmt::layer()
+                .with_ansi(ansi)
+                .with_writer(writer)
+                .pretty(),
+        )),
+        TraceFormat::Json => Some(Box::new(create_json_layer(writer))),
+        _ => None, // OTLP handled elsewhere
+    }
+}
 
-    // Export layer: configurable format to chosen destination
-    let ansi = match trace_output {
-        Some(TraceOutput::Stdout) => io::stdout().is_terminal(),
-        Some(TraceOutput::Stderr) => io::stderr().is_terminal(),
-        Some(TraceOutput::File(_)) | Some(TraceOutput::Url(_)) | None => false,
-    };
-    let writer = trace_output.and_then(create_trace_writer);
+/// Init tracing with only local-format specs (no OTLP).
+fn init_tracing_local(level: Level, specs: &[TraceOutputSpec], cli_output: bool) -> TracingGuard {
+    let mut layers: Vec<Box<dyn Layer<_> + Send + Sync>> = Vec::new();
+
+    if let Some(cli_layer) = build_cli_layer(level, cli_output) {
+        layers.push(cli_layer);
+    }
+
+    for spec in specs {
+        if let Some(layer) = create_local_boxed_layer(spec) {
+            layers.push(layer);
+        }
+    }
 
     // DevenvLayer must be outermost: its on_new_span/on_close emit events via
     // ctx.event(), which only dispatches to layers *below* it. Placing it last
-    // ensures cli_layer and export_layer receive those events.
-    let _ = match trace_format {
-        TraceFormat::Full => {
-            let export_layer = writer.map(|w| {
-                tracing_subscriber::fmt::layer()
-                    .with_ansi(ansi)
-                    .with_writer(w)
-            });
-            base.with(cli_layer)
-                .with(export_layer)
-                .with(DevenvLayer::new())
-                .try_init()
-        }
-        TraceFormat::Pretty => {
-            let export_layer = writer.map(|w| {
-                tracing_subscriber::fmt::layer()
-                    .with_ansi(ansi)
-                    .with_writer(w)
-                    .pretty()
-            });
-            base.with(cli_layer)
-                .with(export_layer)
-                .with(DevenvLayer::new())
-                .try_init()
-        }
-        TraceFormat::Json => {
-            let export_layer = writer.map(create_json_layer);
-            base.with(cli_layer)
-                .with(export_layer)
-                .with(DevenvLayer::new())
-                .try_init()
-        }
-        // OTLP variants are handled above
-        TraceFormat::OtlpGrpc | TraceFormat::OtlpHttpProtobuf | TraceFormat::OtlpHttpJson => {
-            unreachable!()
-        }
-    };
+    // ensures all export layers receive those events.
+    let _ = Registry::default()
+        .with(create_filter(level))
+        .with(SpanIdLayer)
+        .with(layers)
+        .with(DevenvLayer::new())
+        .try_init();
 
     TracingGuard::empty()
 }
 
-fn init_tracing_otlp(
+fn init_tracing_with_otlp(
     level: Level,
-    trace_format: TraceFormat,
-    trace_output: Option<&TraceOutput>,
+    specs: &[TraceOutputSpec],
     cli_output: bool,
 ) -> TracingGuard {
     #[cfg(any(
@@ -240,7 +248,7 @@ fn init_tracing_otlp(
         feature = "otlp-http-json"
     ))]
     {
-        otel::init_tracing_otlp(level, trace_format, trace_output, cli_output)
+        otel::init_tracing_unified(level, specs, cli_output)
     }
 
     #[cfg(not(any(
@@ -249,14 +257,22 @@ fn init_tracing_otlp(
         feature = "otlp-http-json"
     )))]
     {
-        let _ = (level, trace_output, cli_output);
-        let format_name = trace_format
-            .to_possible_value()
-            .map(|v| v.get_name().to_string())
-            .unwrap_or_else(|| format!("{trace_format:?}"));
+        let _ = (level, cli_output);
+        use clap::ValueEnum;
+        let otlp_formats: Vec<_> = specs
+            .iter()
+            .filter(|s| s.format.is_otlp())
+            .map(|s| {
+                s.format
+                    .to_possible_value()
+                    .map(|v| v.get_name().to_string())
+                    .unwrap_or_else(|| format!("{:?}", s.format))
+            })
+            .collect();
         eprintln!(
-            "error: trace format '{format_name}' requires the corresponding cargo feature \
-             (otlp-grpc, otlp-http-protobuf, or otlp-http-json)"
+            "error: trace format(s) '{}' require the corresponding cargo feature \
+             (otlp-grpc, otlp-http-protobuf, or otlp-http-json)",
+            otlp_formats.join(", ")
         );
         std::process::exit(1);
     }

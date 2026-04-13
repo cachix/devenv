@@ -101,17 +101,21 @@ Integration tests live in `tests/` and `examples/` directories. Each test is a d
 
 ## Tracing / Debugging
 
-Tracing is disabled by default. Enable it with `--trace-output` to set the destination and optionally `--trace-format` to control the format:
+Tracing is disabled by default.
+Enable it with `--trace-to` using the syntax `[format:]destination`.
+Multiple outputs can be active simultaneously by repeating the flag.
 
-- **Trace to stderr**: `cargo run -- --trace-output stderr shell`
-- **Trace to file**: `cargo run -- --trace-output file:/tmp/devenv.log shell`
-- **Pretty format**: `cargo run -- --trace-output stderr --trace-format pretty shell`
-- **JSON format** (default): `cargo run -- --trace-output stderr --trace-format json shell`
-- **Full format**: `cargo run -- --trace-output stderr --trace-format full shell`
+- **Trace to stderr**: `cargo run -- --trace-to stderr shell`
+- **Trace to file**: `cargo run -- --trace-to file:/tmp/devenv.log shell`
+- **Pretty format**: `cargo run -- --trace-to pretty:stderr shell`
+- **JSON format** (default): `cargo run -- --trace-to json:stderr shell`
+- **Full format**: `cargo run -- --trace-to full:stderr shell`
+- **Multiple outputs**: `cargo run -- --trace-to pretty:stderr --trace-to json:file:/tmp/trace.json shell`
 
-When `--trace-output` is stdout or stderr, the TUI is automatically disabled (tracing mode).
+When format is omitted, defaults to json.
+When any output targets stdout or stderr, the TUI is automatically disabled.
 
-Environment variables `DEVENV_TRACE_OUTPUT` and `DEVENV_TRACE_FORMAT` can be used instead of CLI flags.
+Legacy flags `--trace-output` and `--trace-format` (env: `DEVENV_TRACE_OUTPUT`, `DEVENV_TRACE_FORMAT`) are still supported but hidden.
 
 ## Code Style
 
