@@ -16018,6 +16018,62 @@ pkgs.go
 
 
 
+## languages.go.delve.enable
+
+
+
+Whether to enable Delve debugger.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+true
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
+
+
+
+## languages.go.delve.package
+
+
+
+The Delve package to use. Override this to customize the build, e.g. to disable tests.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.delve
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
+
+
+
 ## languages.go.lsp.enable
 
 
