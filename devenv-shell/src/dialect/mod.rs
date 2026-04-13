@@ -72,7 +72,14 @@ pub fn create_dialect(shell_name: &str) -> Box<dyn ShellDialect> {
         "zsh" => Box::new(ZshDialect),
         "fish" => Box::new(FishDialect),
         "nu" => Box::new(NushellDialect),
-        _ => Box::new(BashDialect),
+        "bash" => Box::new(BashDialect),
+        other => {
+            tracing::warn!(
+                shell = other,
+                "unrecognized shell dialect, falling back to bash"
+            );
+            Box::new(BashDialect)
+        }
     }
 }
 

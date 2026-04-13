@@ -125,8 +125,15 @@ exit 1
         for (key, value) in exports {
             // Nushell: $env.KEY = "value"
             // Escape backslashes and double quotes for nushell strings
+            // Validate key is a valid identifier to prevent injection
             result.push_str("$env.");
-            result.push_str(key);
+            if key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                result.push_str(key);
+            } else {
+                // Nushell does not support arbitrary env var names in $env.X syntax;
+                // skip keys that are not valid identifiers.
+                continue;
+            }
             result.push_str(" = \"");
             result.push_str(&value.replace('\\', "\\\\").replace('"', "\\\""));
             result.push_str("\"\n");
@@ -216,9 +223,10 @@ def --env __devenv_reload_apply [] {{
                     if $eq_pos >= 0 {{
                         let var_name = ($vardef | str substring ..$eq_pos)
                         let raw_value = ($vardef | str substring ($eq_pos + 1)..)
-                        # Strip surrounding double quotes if present
-                        let value = if ($raw_value | str starts-with '"') {{
-                            $raw_value | str trim --char '"'
+                        # Strip exactly one pair of surrounding double quotes,
+                        # then unescape bash declare -x output (\" -> " and \\ -> \)
+                        let value = if ($raw_value | str starts-with '"') and ($raw_value | str ends-with '"') {{
+                            $raw_value | str substring 1..(-2) | str replace --all '\\"' '"' | str replace --all '\\\\' '\\'
                         }} else {{
                             $raw_value
                         }}
@@ -251,14 +259,10 @@ $env.config.keybindings = ($env.config.keybindings? | default [] | append {{
 
 # Pre-prompt hook: apply pending reloads and restore devenv PATH.
 # This mirrors bash's PROMPT_COMMAND which auto-applies reloads on every prompt.
-# Nushell scoping: env changes inside `if` blocks within hook closures
-# do NOT propagate, and nested `if` expressions also fail. Keep the
-# logic flat with no nesting.
+# We call __devenv_reload_apply (a `def --env` command) so all env changes
+# propagate. After that, restore PATH in case other tools modified it.
 $env.config.hooks.pre_prompt = ($env.config.hooks.pre_prompt? | default [] | append {{||
-    let reload_file = "{reload_file}"
-    let helper_output = (if ($reload_file | path exists) {{ bash "{helper_path}" | complete | get stdout }} else {{ "" }})
-    let path_lines = ($helper_output | lines | where {{|l| $l | str starts-with "declare -x PATH="}})
-    $env._DEVENV_PATH = (if ($path_lines | is-not-empty) {{ $path_lines | first | str substring 18.. | str trim --char '"' }} else {{ ($env._DEVENV_PATH? | default ($env.PATH | str join ":")) }})
+    __devenv_reload_apply
     $env.PATH = ($env._DEVENV_PATH | split row ":")
 }})
 "#,

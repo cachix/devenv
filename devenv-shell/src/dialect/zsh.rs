@@ -112,7 +112,11 @@ __devenv_restore_path() {{
     export PATH="$_DEVENV_PATH"
 }}
 
-add-zsh-hook precmd __devenv_restore_path
+__devenv_precmd_hook() {{
+    __devenv_reload_apply
+    __devenv_restore_path
+}}
+add-zsh-hook precmd __devenv_precmd_hook
 
 # Keybinding for manual reload
 __devenv_reload_widget() {{

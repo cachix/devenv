@@ -1,4 +1,5 @@
 use super::{InteractiveArgs, RcfileContext, ShellDialect};
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -167,12 +168,14 @@ bind \e\cr __devenv_reload_keybind_handler
         for (key, value) in exports {
             // Fish: set -gx KEY VALUE (no = sign, value is separate argument)
             result.push_str("set -gx ");
-            result.push_str(key);
+            result.push_str(&shell_escape::escape(Cow::Borrowed(key)));
             result.push(' ');
-            // Fish single-quoting: replace ' with \' (end quote, escaped quote, start quote)
-            result.push('\'');
-            result.push_str(&value.replace('\'', "\\'"));
-            result.push('\'');
+            // Fish double-quoting: escape backslashes and double quotes.
+            // Fish single-quoted strings cannot contain single quotes at all,
+            // so we must use double-quoted strings.
+            result.push('"');
+            result.push_str(&value.replace('\\', "\\\\").replace('"', "\\\""));
+            result.push('"');
             result.push('\n');
         }
         result
@@ -181,9 +184,10 @@ bind \e\cr __devenv_reload_keybind_handler
     fn format_task_messages(&self, messages: &[String]) -> String {
         let mut result = String::with_capacity(messages.len() * 40);
         for msg in messages {
-            result.push_str("echo '");
-            result.push_str(&msg.replace('\'', "\\'"));
-            result.push_str("'\n");
+            // Fish double-quoting: escape backslashes and double quotes.
+            result.push_str("echo \"");
+            result.push_str(&msg.replace('\\', "\\\\").replace('"', "\\\""));
+            result.push_str("\"\n");
         }
         result
     }
