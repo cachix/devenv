@@ -6564,6 +6564,10 @@ rec {
             features = [ "schema" "yaml" "renderer_template" "renderer_json_schema" ];
           }
           {
+            name = "semver";
+            packageId = "semver";
+          }
+          {
             name = "ser_nix";
             packageId = "ser_nix";
           }

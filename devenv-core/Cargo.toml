@@ -24,6 +24,7 @@ netstat2.workspace = true
 once_cell.workspace = true
 socket2.workspace = true
 schemars.workspace = true
+semver.workspace = true
 schematic.workspace = true
 serde.workspace = true
 serde_json.workspace = true

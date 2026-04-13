@@ -23,6 +23,18 @@ that developers can override some things for their local use case.
 Configuration for [inputs](inputs.md) and [imports](composing-using-imports.md),
 allowing you to specify dependencies and how to compose them.
 
+You can require a specific devenv version to make sure all developers use a compatible version:
+
+```yaml title="devenv.yaml"
+# Enforce CLI matches the modules version
+require_version: true
+
+# Or use an explicit constraint
+require_version: ">=2.1"
+```
+
+See [devenv.yaml reference](reference/yaml-options.md#require_version) for details.
+
 ### devenv.lock
 
 Pinned [inputs](inputs.md), making sure your developer environment is reproducible.

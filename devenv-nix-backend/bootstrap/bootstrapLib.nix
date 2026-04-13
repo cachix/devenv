@@ -24,6 +24,7 @@ rec {
   mkDevenvForSystem =
     { version
     , is_development_version ? false
+    , require_version_match ? false
     , system
     , devenv_root
     , git_root ? null
@@ -158,6 +159,7 @@ rec {
                     {
                       cli.version = version;
                       cli.isDevelopment = is_development_version;
+                      cli.requireVersionMatch = require_version_match;
                     }
                   else
                     {

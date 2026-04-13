@@ -44,6 +44,7 @@ impl TestNixArgs {
         NixArgs {
             version: "1.0.0",
             is_development_version: false,
+            require_version_match: false,
             system: get_current_system(),
             devenv_root: &paths.root,
             skip_local_src: false,

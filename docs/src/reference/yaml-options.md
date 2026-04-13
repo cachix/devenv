@@ -189,3 +189,26 @@ Error if a port is already in use instead of auto-allocating the next available 
 Can be overridden by `--strict-ports` or `--no-strict-ports` CLI flags.
 
 *Type:* `boolean` · *Default:* `false`
+
+## require_version
+
+Require a specific devenv CLI version. Set to `true` to enforce that the CLI version matches
+the modules version (from the `devenv` input), or use a constraint string with operators.
+
+```yaml
+# Enforce CLI matches modules version (recommended for teams)
+require_version: true
+
+# Or use an explicit constraint
+require_version: ">=2.1"
+```
+
+Supported constraint operators: `>=`, `<=`, `>`, `<`, `=`, or a bare version for exact match.
+
+When set to `true`, the check happens during Nix evaluation and compares the CLI version
+against the version embedded in the `devenv` input. This keeps versions in sync automatically
+after running `devenv update`.
+
+*Type:* `boolean | string` · *Default:* not set
+
+!!! tip "New in version 2.1"

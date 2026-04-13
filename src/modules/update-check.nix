@@ -2,6 +2,10 @@
 
 let
   cfg = config.devenv;
+  # Strip trailing .0 segments so that e.g. "2.1.0" compares equal to "2.1".
+  normalizeVersion = v:
+    let stripped = lib.removeSuffix ".0" v;
+    in if stripped != v then normalizeVersion stripped else v;
 in
 {
   imports = [
@@ -38,6 +42,15 @@ in
           Whether the CLI was built from a development (non-release) version.
         '';
       };
+      requireVersionMatch = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        internal = true;
+        description = ''
+          Whether require_version: true is set in devenv.yaml,
+          meaning the CLI version must match the modules version.
+        '';
+      };
     };
     latestVersion = lib.mkOption {
       type = lib.types.str;
@@ -56,8 +69,23 @@ in
     };
   };
 
-  config = lib.mkIf cfg.warnOnNewVersion {
-    enterShell =
+  config = {
+    assertions = lib.mkIf cfg.cli.requireVersionMatch [
+      {
+        assertion =
+          cfg.cli.version == null
+          || cfg.cli.isDevelopment
+          || normalizeVersion cfg.cli.version == normalizeVersion cfg.latestVersion;
+        message = ''
+          devenv CLI version ${cfg.cli.version} does not match the modules version ${cfg.latestVersion}.
+
+          require_version: true is set in devenv.yaml, which requires the CLI and modules versions to match.
+          Run 'devenv update' to sync the modules, or update your CLI to version ${cfg.latestVersion}.
+        '';
+      }
+    ];
+
+    enterShell = lib.mkIf cfg.warnOnNewVersion (
       let
         versionWarning =
           if cfg.cli.version == null then ""
@@ -74,12 +102,6 @@ in
                   echo "✨ devenv ${cfg.cli.version} is out of date. Please update to ${cfg.latestVersion}: https://devenv.sh/getting-started/#installation" >&2
                 '';
               };
-              # Normalize versions by stripping trailing .0 to make X.x.0 equivalent to X.X
-              normalizeVersion = v:
-                let
-                  stripped = builtins.replaceStrings [ ".0" ] [ "" ] v;
-                in
-                if stripped != v then normalizeVersion stripped else v;
               normalizedCliVersion = normalizeVersion cfg.cli.version;
               normalizedLatestVersion = normalizeVersion cfg.latestVersion;
               versionComparison = builtins.compareVersions normalizedCliVersion normalizedLatestVersion;
@@ -129,6 +151,7 @@ in
             fi
           fi
         } >&2
-      '';
+      ''
+    );
   };
 }

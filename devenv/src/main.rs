@@ -204,6 +204,7 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
     let tracing_output = cli.tracing_args.trace_output;
 
     let mut config = Config::load()?;
+    config.check_version(crate_version!())?;
 
     let input_overrides = InputOverrides::from(cli.input_overrides);
 
@@ -574,6 +575,8 @@ async fn run_backend(
 
     let config_strict_ports = config.strict_ports.unwrap_or(false);
 
+    let require_version_match = config.requires_version_match();
+
     let mut options = devenv::DevenvOptions {
         inputs: config.inputs,
         imports: config.imports,
@@ -585,6 +588,7 @@ async fn run_backend(
         secret_settings,
         input_overrides,
         from_external,
+        require_version_match,
         devenv_root: None,
         devenv_dotfile: None,
         devenv_state: None,
