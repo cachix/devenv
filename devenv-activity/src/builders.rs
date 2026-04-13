@@ -61,11 +61,15 @@ pub trait ActivityStart: Sized {
 /// let act = activity!(Activity::build("container").derivation_path(&path));
 /// let act = activity!(Activity::task("devenv:enterShell").id(42));
 /// ```
+/// Internal macro: resolve builder → (id, otel_name, user_message, span).
+///
+/// Shared between [`activity!`] and [`start_queue!`] so the otel-name
+/// lowercasing logic lives in exactly one place.
+#[doc(hidden)]
 #[macro_export]
-macro_rules! activity {
+macro_rules! __prepare_activity {
     ($builder:expr) => {{
-        let __builder = $builder;
-        let __name = $crate::ActivityStart::activity_name(&__builder);
+        let __name = $crate::ActivityStart::activity_name(&$builder);
         let __otel_name_owned;
         let __otel_name: &str = if __name.as_bytes().iter().any(|b| b.is_ascii_uppercase()) {
             __otel_name_owned = __name.to_ascii_lowercase();
@@ -73,9 +77,18 @@ macro_rules! activity {
         } else {
             __name
         };
-        let __id = $crate::ActivityStart::existing_id(&__builder).unwrap_or_else($crate::next_id);
-        let __level = $crate::ActivityStart::resolved_level(&__builder);
+        let __id = $crate::ActivityStart::existing_id(&$builder).unwrap_or_else($crate::next_id);
+        let __level = $crate::ActivityStart::resolved_level(&$builder);
         let __span = $crate::__create_activity_span!(__id, __otel_name, __name, __level);
+        (__id, __span)
+    }};
+}
+
+#[macro_export]
+macro_rules! activity {
+    ($builder:expr) => {{
+        let __builder = $builder;
+        let (__id, __span) = $crate::__prepare_activity!(__builder);
         $crate::ActivityStart::start_with_span(
             $crate::ActivityStart::with_id(__builder, __id),
             __span,
@@ -90,17 +103,7 @@ macro_rules! activity {
 macro_rules! start_queue {
     ($builder:expr) => {{
         let __builder: $crate::BuildBuilder = $builder;
-        let __name = $crate::ActivityStart::activity_name(&__builder);
-        let __otel_name_owned;
-        let __otel_name: &str = if __name.as_bytes().iter().any(|b| b.is_ascii_uppercase()) {
-            __otel_name_owned = __name.to_ascii_lowercase();
-            __otel_name_owned.as_str()
-        } else {
-            __name
-        };
-        let __id = $crate::ActivityStart::existing_id(&__builder).unwrap_or_else($crate::next_id);
-        let __level = $crate::ActivityStart::resolved_level(&__builder);
-        let __span = $crate::__create_activity_span!(__id, __otel_name, __name, __level);
+        let (__id, __span) = $crate::__prepare_activity!(__builder);
         $crate::ActivityStart::with_id(__builder, __id).queue_with_span(__span)
     }};
 }

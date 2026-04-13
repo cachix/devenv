@@ -48,6 +48,17 @@ pub enum TraceOutput {
     Url(Url),
 }
 
+impl std::fmt::Display for TraceOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TraceOutput::Stdout => f.write_str("stdout"),
+            TraceOutput::Stderr => f.write_str("stderr"),
+            TraceOutput::File(p) => write!(f, "file:{}", p.display()),
+            TraceOutput::Url(u) => write!(f, "{u}"),
+        }
+    }
+}
+
 impl TraceOutput {
     /// Returns true if this output targets the terminal (stdout or stderr).
     pub fn targets_terminal(&self) -> bool {
@@ -568,14 +579,9 @@ impl TracingCliArgs {
         for (i, a) in specs.iter().enumerate() {
             for b in &specs[i + 1..] {
                 if a.destination == b.destination {
-                    let dest = match &a.destination {
-                        TraceOutput::Stdout => "stdout".to_string(),
-                        TraceOutput::Stderr => "stderr".to_string(),
-                        TraceOutput::File(p) => format!("file:{}", p.display()),
-                        TraceOutput::Url(u) => u.to_string(),
-                    };
                     return Err(format!(
-                        "duplicate trace destination '{dest}' (would interleave output)"
+                        "duplicate trace destination '{}' (would interleave output)",
+                        a.destination
                     ));
                 }
             }
@@ -586,10 +592,9 @@ impl TracingCliArgs {
 
     /// Returns true if tracing-only mode should be used (disables TUI).
     pub fn use_tracing_mode(&self) -> bool {
-        let env_targets_terminal = std::env::var("DEVENV_TRACE_TO")
+        let env_targets_terminal = Self::specs_from_env()
             .ok()
-            .map(|v| v.contains("stderr") || v.contains("stdout"))
-            .unwrap_or(false);
+            .is_some_and(|specs| specs.iter().any(|s| s.destination.targets_terminal()));
 
         env_targets_terminal
             || self

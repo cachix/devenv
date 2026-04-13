@@ -232,11 +232,7 @@ fn init_tracing_with_otlp(
     specs: &[TraceOutputSpec],
     cli_output: bool,
 ) -> TracingGuard {
-    #[cfg(any(
-        feature = "otlp-grpc",
-        feature = "otlp-http-protobuf",
-        feature = "otlp-http-json"
-    ))]
+    #[cfg(feature = "otlp")]
     {
         otel::init_tracing_unified(level, specs, cli_output)
     }
