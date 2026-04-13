@@ -41,8 +41,8 @@ let
     inherit rustc cargo;
   };
 
-  # Pre-built libghostty-vt shared library for the crate2nix build
-  libghostty-vt = callPackage ./libghostty-vt.nix { };
+  # Pre-built libghostty-vt shared library from the ghostty flake
+  libghostty-vt = pkgs.libghostty-vt;
 
   # Import crate2nix generated file with overrides
   crateConfig = callPackage ./crate-config.nix { inherit gitRev isRelease libghostty-vt; };

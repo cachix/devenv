@@ -7095,6 +7095,12 @@ rec {
             packageId = "libghostty-vt";
           }
           {
+            name = "libghostty-vt-sys";
+            packageId = "libghostty-vt-sys";
+            usesDefaultFeatures = false;
+            features = [ "pkg-config" ];
+          }
+          {
             name = "portable-pty";
             packageId = "portable-pty";
           }
@@ -14671,9 +14677,9 @@ rec {
         edition = "2024";
         workspace_member = null;
         src = pkgs.fetchgit {
-          url = "https://github.com/Uzaaft/libghostty-rs.git";
-          rev = "811cbdd85a99b40a63424a9d247c4f3653c11924";
-          sha256 = "012jdfxdwlp3r3qrhrjsf5aj5rhcvpzz34pllqb62j5fs46g3dpv";
+          url = "https://github.com/domenkozar/libghostty-rs.git";
+          rev = "7c0d74831f5bb84e5f0fc7d1fd29402a4d2c93c6";
+          sha256 = "17mm2vlpl9nl7icdgifywzq5l0r5cs3yk15hyfaykq45xwaqjvqm";
         };
         libName = "libghostty_vt";
         dependencies = [
@@ -14698,7 +14704,11 @@ rec {
         ];
         features = {
           "allocator_api" = [ "dep:allocator-api2" ];
+          "default" = [ "kitty-graphics" ];
+          "kitty-graphics" = [ "libghostty-vt-sys/kitty-graphics" ];
+          "png" = [ "dep:png" ];
         };
+        resolvedDefaultFeatures = [ "default" "kitty-graphics" ];
       };
       "libghostty-vt-sys" = rec {
         crateName = "libghostty-vt-sys";
@@ -14708,16 +14718,24 @@ rec {
         crateBin = [];
         workspace_member = null;
         src = pkgs.fetchgit {
-          url = "https://github.com/Uzaaft/libghostty-rs.git";
-          rev = "811cbdd85a99b40a63424a9d247c4f3653c11924";
-          sha256 = "012jdfxdwlp3r3qrhrjsf5aj5rhcvpzz34pllqb62j5fs46g3dpv";
+          url = "https://github.com/domenkozar/libghostty-rs.git";
+          rev = "7c0d74831f5bb84e5f0fc7d1fd29402a4d2c93c6";
+          sha256 = "17mm2vlpl9nl7icdgifywzq5l0r5cs3yk15hyfaykq45xwaqjvqm";
         };
         libName = "libghostty_vt_sys";
+        buildDependencies = [
+          {
+            name = "pkg-config";
+            packageId = "pkg-config";
+            optional = true;
+          }
+        ];
         features = {
           "bindgen-tool" = [ "dep:bindgen" "dep:libc" "dep:heck" ];
           "default" = [ "vendored" ];
+          "pkg-config" = [ "dep:pkg-config" ];
         };
-        resolvedDefaultFeatures = [ "default" "vendored" ];
+        resolvedDefaultFeatures = [ "default" "kitty-graphics" "pkg-config" "vendored" ];
       };
       "libloading" = rec {
         crateName = "libloading";
