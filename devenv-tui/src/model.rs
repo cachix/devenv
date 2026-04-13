@@ -106,6 +106,8 @@ pub struct ProcessActivity {
     pub ports: Vec<String>,
     /// Human-readable description of the readiness probe (e.g., "exec: pg_isready")
     pub ready_probe: Option<String>,
+    /// Human-facing URLs for this process (e.g., ["admin: http://127.0.0.1:15672/"])
+    pub urls: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -639,6 +641,7 @@ impl ActivityModel {
                 command,
                 ports,
                 ready_probe,
+                urls,
                 level,
                 ..
             } => {
@@ -646,6 +649,7 @@ impl ActivityModel {
                     status: ProcessStatus::Starting,
                     ports,
                     ready_probe,
+                    urls,
                 });
                 self.create_activity(id, name, parent, command, variant, level);
             }
