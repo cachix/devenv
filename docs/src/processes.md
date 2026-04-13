@@ -39,6 +39,14 @@ $ devenv processes wait --timeout 120
 
 The default timeout is 120 seconds.
 
+To list human-facing process endpoints (useful for clicking into admin UIs, mock servers, or your app):
+
+```shell-session
+$ devenv processes endpoints
+rabbitmq/admin   http://127.0.0.1:15672/
+mailpit/ui       http://127.0.0.1:8025/
+```
+
 ## Dependencies
 
 Processes can depend on other processes and tasks using `after` and `before`:
@@ -332,6 +340,29 @@ $ devenv up --no-strict-ports
 The CLI flags take precedence over the config value.
 
 This is useful when you need deterministic port assignments and want to be notified of conflicts rather than having them silently resolved. When a port conflict is detected in strict mode, devenv will show an error message including which process is currently using the port.
+
+### Human-facing URLs
+
+Use `processes.<name>.urls` to declare clickable endpoints for a process. This is meant for browser-facing endpoints like admin UIs, dashboards, mock servers, or your application under development. It's particularly helpful when using dynamically allocated process ports.
+
+```nix title="devenv.nix"
+{ config, ... }:
+
+{
+  processes.app = {
+    ports.http.allocate = 8080;
+    exec = "my-dev-server --port ${toString config.processes.app.ports.http.value}";
+    urls.main = {
+      scheme = "http";
+      host = "127.0.0.1";
+      port = config.processes.app.ports.http.value;
+      path = "/";
+    };
+  };
+}
+```
+
+These URLs are shown by `devenv processes endpoints`, and browser-facing built-in services can surface them directly in the `devenv up` TUI.
 
 ## Alternative Process Managers
 
