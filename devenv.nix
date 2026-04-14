@@ -96,14 +96,9 @@ in
     pkgs.dbus # secretspec
     pkgs.nixd # LSP for devenv lsp command
     inputs.crate2nix.packages.${system}.default # Generate Cargo.nix from Cargo.lock
-    (pkgs.callPackage ./nix/libghostty-vt.nix { }) # Provides pkg-config for libghostty-vt
   ];
 
   languages = {
-    # For building libghostty-vt-sys from source (fallback when pkg-config not available)
-    zig.enable = true;
-    zig.package = pkgs.zig_0_15;
-
     # For developing the Nix modules
     nix.enable = true;
 
