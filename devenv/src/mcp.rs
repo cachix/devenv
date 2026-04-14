@@ -3,7 +3,7 @@
 use crate::devenv::{Devenv, DevenvOptions};
 use devenv_activity::Activity;
 use devenv_core::Options;
-use miette::Result;
+use miette::{Result, miette};
 use rmcp::handler::server::tool::{ToolCallContext, ToolRouter};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{
@@ -194,7 +194,7 @@ impl DevenvMcpServer {
 
         let options_content = tokio::fs::read_to_string(&options_json_path)
             .await
-            .map_err(|e| miette::miette!("Failed to read options.json: {}", e))?;
+            .map_err(|e| miette!("Failed to read options.json: {}", e))?;
 
         #[derive(Deserialize)]
         struct OptionResults(BTreeMap<String, OptionResult>);
@@ -208,7 +208,7 @@ impl DevenvMcpServer {
         }
 
         let options_json: OptionResults = serde_json::from_str(&options_content)
-            .map_err(|e| miette::miette!("Failed to parse options.json: {}", e))?;
+            .map_err(|e| miette!("Failed to parse options.json: {}", e))?;
 
         let options: Vec<OptionInfo> = options_json
             .0
@@ -490,7 +490,7 @@ pub async fn run_mcp_server(options: DevenvOptions, http_port: Option<u16>) -> R
     // Server starts immediately, tools return empty results until cache is ready
     // Activities from the background thread are sent to TUI via global channel
     let init_server = server.clone();
-    std::thread::Builder::new()
+    let init_handle = std::thread::Builder::new()
         .name("mcp-cache-init".into())
         .spawn(move || {
             let rt =
@@ -517,7 +517,7 @@ pub async fn run_mcp_server(options: DevenvOptions, http_port: Option<u16>) -> R
             let addr = format!("0.0.0.0:{}", port);
             let tcp_listener = tokio::net::TcpListener::bind(&addr)
                 .await
-                .map_err(|e| miette::miette!("Failed to bind to {}: {}", addr, e))?;
+                .map_err(|e| miette!("Failed to bind to {}: {}", addr, e))?;
 
             info!("MCP server ready at http://{}/", addr);
 
@@ -531,7 +531,7 @@ pub async fn run_mcp_server(options: DevenvOptions, http_port: Option<u16>) -> R
                     tokio::signal::ctrl_c().await.ok();
                 })
                 .await
-                .map_err(|e| miette::miette!("HTTP server error: {}", e))?;
+                .map_err(|e| miette!("HTTP server error: {}", e))?;
         }
         None => {
             info!("Starting MCP server in stdio mode");
@@ -539,14 +539,19 @@ pub async fn run_mcp_server(options: DevenvOptions, http_port: Option<u16>) -> R
             let service = server
                 .serve(rmcp::transport::stdio())
                 .await
-                .map_err(|e| miette::miette!("Failed to start MCP server: {}", e))?;
+                .map_err(|e| miette!("Failed to start MCP server: {}", e))?;
 
             service
                 .waiting()
                 .await
-                .map_err(|e| miette::miette!("MCP server error: {}", e))?;
+                .map_err(|e| miette!("MCP server error: {}", e))?;
         }
     }
+
+    // Wait for the init thread to finish before exiting.
+    init_handle
+        .join()
+        .map_err(|e| miette!("MCP cache init thread panicked: {:?}", e))?;
 
     Ok(())
 }
