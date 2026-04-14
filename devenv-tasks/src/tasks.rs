@@ -799,25 +799,11 @@ impl Tasks {
                 ts.task.r#type == TaskType::Process
             };
 
-            let mut cancelled = self.shutdown.is_cancelled();
-            let mut dependency_failed = false;
-
-            // Only block the main loop for oneshot task dependencies.
-            // Process tasks check dependencies in their background spawn.
-            if !cancelled && !is_process_task {
-                let deps = self.collect_deps(*index);
-
-                let (c, f) =
-                    Self::wait_for_task_deps(&deps, &self.notify_finished, &self.shutdown).await;
-                cancelled = c;
-                dependency_failed = f;
-            }
-
-            if cancelled || dependency_failed {
+            if self.shutdown.is_cancelled() {
                 Self::mark_task_skipped(
                     task_state,
                     task_activity_id,
-                    cancelled,
+                    true,
                     &completed_tasks,
                     total_tasks,
                     &orchestration_activity,
@@ -1019,17 +1005,9 @@ impl Tasks {
                 continue;
             }
 
-            // Oneshot task: run once and complete
-            // Reset the timer
-            let now = Instant::now();
-
-            {
-                let mut task_state = task_state.write().await;
-                task_state.status = TaskStatus::Oneshot(OneshotStatus::Running(now));
-            };
-
-            // Notify UI that task is starting
-            self.notify_ui.notify_one();
+            // Oneshot task: spawn into background with dependency checking,
+            // so independent tasks can run in parallel.
+            let deps = self.collect_deps(*index);
 
             // TODO: consider Arc-ing self at this point
             let task_state_clone = Arc::clone(task_state);
@@ -1048,9 +1026,37 @@ impl Tasks {
                 // Clone for use inside the async block; the original is borrowed by in_activity
                 let orchestration_activity_inner = Arc::clone(&orchestration_activity_clone);
 
-                // Run the task within the orchestration activity's parent context
-                // so child task activities have proper parent-child relationships and tracing spans
                 async move {
+                    // Wait for dependencies in background
+                    let (dep_cancelled, dep_failed) =
+                        Self::wait_for_task_deps(&deps, &notify_finished_clone, &shutdown_clone)
+                            .await;
+
+                    if dep_cancelled || dep_failed {
+                        Self::mark_task_skipped(
+                            &task_state_clone,
+                            task_activity_id,
+                            dep_cancelled,
+                            &completed_tasks_clone,
+                            total_tasks,
+                            &orchestration_activity_inner,
+                            &notify_finished_clone,
+                            &notify_ui_clone,
+                        )
+                        .await;
+                        return;
+                    }
+
+                    // Reset the timer
+                    let now = Instant::now();
+
+                    {
+                        let mut task_state = task_state_clone.write().await;
+                        task_state.status = TaskStatus::Oneshot(OneshotStatus::Running(now));
+                    };
+
+                    // Notify UI that task is starting
+                    notify_ui_clone.notify_one();
                     let completed = {
                         let outputs = outputs_clone.lock().await.clone();
                         match task_state_clone

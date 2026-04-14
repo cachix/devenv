@@ -4169,6 +4169,75 @@ echo 'after invalid bytes'
     Ok(())
 }
 
+/// Test that independent oneshot tasks run in parallel, not sequentially.
+/// Two tasks that both declare `before = ["root"]` but have no dependency on each other
+/// should run concurrently, so total time ≈ max(task_time) rather than sum(task_times).
+#[tokio::test]
+async fn test_independent_oneshot_tasks_run_in_parallel() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    // Each task sleeps 0.5s — if parallel, total ≈ 0.5s; if sequential, total ≈ 1.0s
+    let task_a = create_script("#!/bin/sh\nsleep 0.5")?;
+    let task_b = create_script("#!/bin/sh\nsleep 0.5")?;
+    let task_root = create_script("#!/bin/sh\ntrue")?;
+
+    let shutdown = Shutdown::new();
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["test:root"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task_a",
+                    "command": task_a.to_str().unwrap(),
+                    "before": ["test:root"]
+                },
+                {
+                    "name": "test:task_b",
+                    "command": task_b.to_str().unwrap(),
+                    "before": ["test:root"]
+                },
+                {
+                    "name": "test:root",
+                    "command": task_root.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        shutdown.clone(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    let start = std::time::Instant::now();
+    tasks.run(false).await;
+    let elapsed = start.elapsed();
+
+    // All tasks should succeed
+    let task_statuses = inspect_tasks(&tasks).await;
+    for (name, status) in &task_statuses {
+        assert_matches!(
+            status,
+            TaskStatus::Completed(TaskCompleted::Success(_, _)),
+            "Task {} should succeed",
+            name
+        );
+    }
+
+    // If tasks ran in parallel, total time should be well under 1.0s
+    assert!(
+        elapsed < std::time::Duration::from_millis(900),
+        "Independent tasks should run in parallel, but took {:?} (expected < 900ms)",
+        elapsed
+    );
+
+    Ok(())
+}
+
 fn create_script(script: &str) -> std::io::Result<tempfile::TempPath> {
     let mut temp_file = tempfile::Builder::new()
         .prefix("script")
