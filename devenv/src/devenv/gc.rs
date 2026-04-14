@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use devenv_activity::{Activity, ActivityInstrument};
+use devenv_activity::{ActivityInstrument, activity};
 use miette::Result;
 use tokio::fs;
 
@@ -11,18 +11,21 @@ impl Devenv {
     /// Returns (paths_deleted, bytes_freed).
     pub async fn gc(&self) -> Result<(u64, u64)> {
         let (to_gc, _removed_symlinks) = {
-            let activity = Activity::operation(format!(
-                "Removing non-existing symlinks in {}",
-                &self.devenv_home_gc.display()
-            ))
-            .start();
+            let activity = activity!(
+                INFO,
+                operation,
+                format!(
+                    "Removing non-existing symlinks in {}",
+                    &self.devenv_home_gc.display()
+                )
+            );
             cleanup_symlinks(&self.devenv_home_gc)
                 .in_activity(&activity)
                 .await
         };
 
         let (paths_deleted, bytes_freed) = {
-            let activity = Activity::operation("Running garbage collection").start();
+            let activity = activity!(INFO, operation, "Running garbage collection");
             self.nix.gc(to_gc).in_activity(&activity).await?
         };
 

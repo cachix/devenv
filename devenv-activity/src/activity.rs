@@ -176,13 +176,8 @@ impl Activity {
     }
 
     /// Create a builder for a Task activity
-    pub fn task() -> TaskBuilder {
-        TaskBuilder::new()
-    }
-
-    /// Create and start a Task activity with a pre-assigned ID.
-    pub fn task_with_id(id: u64) -> Activity {
-        Activity::task().id(id).start()
+    pub fn task(name: impl Into<String>) -> TaskBuilder {
+        TaskBuilder::new(name)
     }
 
     /// Create a builder for a Command activity
@@ -564,6 +559,11 @@ impl Drop for Activity {
             .lock()
             .map(|o| *o)
             .unwrap_or(ActivityOutcome::Success);
+
+        self.span.record("devenv.outcome", outcome.as_str());
+        if outcome.is_error() {
+            self.span.record("otel.status_code", "ERROR");
+        }
 
         send_activity_event(make_complete_event(self.id, self.activity_type, outcome));
     }

@@ -39,7 +39,7 @@ devenv is a Rust CLI tool that creates fast, declarative, reproducible developer
 
 - **devenv-tasks/** - DAG-based task execution system with caching, parallel execution, and privilege escalation support.
 
-- **devenv-activity/** - Tracing-based activity system that powers the TUI progress display. Use `#[activity("description")]` macro for TUI-visible operations.
+- **devenv-activity/** - Tracing-based activity system that powers the TUI progress display. Use `#[instrument_activity("description")]` macro for TUI-visible operations.
 
 - **devenv-tui/** - Terminal UI for displaying build progress and activities.
 
@@ -73,7 +73,7 @@ Nix modules in `src/modules/` define the devenv configuration schema:
 ### Key Patterns
 
 - **Dual Backend Architecture**: The `NixBackend` trait allows swapping between the FFI-based backend (default) and Snix backend.
-- **Activity Tracing**: Use `#[activity("description")]` macro or `Activity::operation()` for TUI-visible operations.
+- **Activity Tracing**: Use `#[instrument_activity("description")]` macro or `activity!(INFO, operation, "...")` for TUI-visible operations.
 - **Error Handling**: Use `miette` for errors with `bail!()` and `?`. Custom error types use `thiserror`.
 - **SQLite Migrations**: Both `devenv-eval-cache` and `devenv-tasks` use sqlx with migrations in `migrations/` directories.
 
@@ -101,17 +101,23 @@ Integration tests live in `tests/` and `examples/` directories. Each test is a d
 
 ## Tracing / Debugging
 
-Tracing is disabled by default. Enable it with `--trace-output` to set the destination and optionally `--trace-format` to control the format:
+Tracing is disabled by default.
+Enable it with `--trace-to` using the syntax `[format:]destination`.
+Multiple outputs can be active simultaneously by repeating the flag.
 
-- **Trace to stderr**: `cargo run -- --trace-output stderr shell`
-- **Trace to file**: `cargo run -- --trace-output file:/tmp/devenv.log shell`
-- **Pretty format**: `cargo run -- --trace-output stderr --trace-format pretty shell`
-- **JSON format** (default): `cargo run -- --trace-output stderr --trace-format json shell`
-- **Full format**: `cargo run -- --trace-output stderr --trace-format full shell`
+- **Trace to stderr**: `cargo run -- --trace-to stderr shell`
+- **Trace to file**: `cargo run -- --trace-to file:/tmp/devenv.log shell`
+- **Pretty format**: `cargo run -- --trace-to pretty:stderr shell`
+- **JSON format** (default): `cargo run -- --trace-to json:stderr shell`
+- **Full format**: `cargo run -- --trace-to full:stderr shell`
+- **Multiple outputs**: `cargo run -- --trace-to pretty:stderr --trace-to json:file:/tmp/trace.json shell`
 
-When `--trace-output` is stdout or stderr, the TUI is automatically disabled (tracing mode).
+When format is omitted, defaults to json.
+When any output targets stdout or stderr, the TUI is automatically disabled.
 
-Environment variables `DEVENV_TRACE_OUTPUT` and `DEVENV_TRACE_FORMAT` can be used instead of CLI flags.
+Environment variable `DEVENV_TRACE_TO` accepts comma-separated specs (e.g. `DEVENV_TRACE_TO=pretty:stderr,json:file:/tmp/t.json`).
+
+Legacy flags `--trace-output` and `--trace-format` (env: `DEVENV_TRACE_OUTPUT`, `DEVENV_TRACE_FORMAT`) are still supported but hidden.
 
 ## Code Style
 

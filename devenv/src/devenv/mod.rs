@@ -4,8 +4,9 @@ mod search;
 
 use super::{processes, tasks, util};
 use clap::crate_version;
-use devenv_activity::ActivityInstrument;
-use devenv_activity::{Activity, ActivityLevel, activity, message};
+use devenv_activity::{
+    Activity, ActivityInstrument, ActivityLevel, activity, instrument_activity, message,
+};
 use devenv_cache_core::compute_string_hash;
 use devenv_core::{
     cachix::{CachixManager, CachixPaths},
@@ -726,6 +727,9 @@ impl Devenv {
 
         crate::shell_env::apply_shell_env(&mut shell_cmd, &bash, &self.shell_settings.clean);
 
+        // Inject OTEL trace context so instrumented subprocesses join the trace.
+        shell_cmd.envs(devenv_activity::trace_propagation_env());
+
         Ok(shell_cmd)
     }
 
@@ -767,7 +771,7 @@ impl Devenv {
         shell_cmd.stdout(Stdio::piped());
         shell_cmd.stderr(Stdio::piped());
 
-        let activity = Activity::operation(activity_name.unwrap_or("Running in shell")).start();
+        let activity = activity!(INFO, operation, activity_name.unwrap_or("Running in shell"));
 
         let mut child = shell_cmd.spawn().into_diagnostic()?;
 
@@ -844,7 +848,7 @@ impl Devenv {
             None => "Updating devenv.lock".to_string(),
         };
 
-        let activity = Activity::operation(&msg).start();
+        let activity = activity!(INFO, operation, &msg);
         self.nix
             .update(
                 input_name,
@@ -898,7 +902,7 @@ impl Devenv {
         Ok(*value)
     }
 
-    #[activity("Loading tasks")]
+    #[instrument_activity("Loading tasks")]
     async fn load_tasks(&self) -> Result<Vec<tasks::TaskConfig>> {
         let tasks_json_file = {
             let gc_root = self.devenv_dot_gc.join("task-config");
@@ -1107,6 +1111,7 @@ impl Devenv {
         envs
     }
 
+    #[instrument(skip(self))]
     async fn capture_shell_environment(&self) -> Result<HashMap<String, String>> {
         let temp_dir = tempfile::TempDir::with_prefix("devenv-env")
             .into_diagnostic()
@@ -1140,11 +1145,14 @@ impl Devenv {
             .prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
             .await?;
         cmd.env("DEVENV_SKIP_TASKS", "1");
-        let output = cmd
-            .output()
-            .await
-            .into_diagnostic()
-            .wrap_err("Failed to execute environment capture script")?;
+        let output = async {
+            cmd.output()
+                .await
+                .into_diagnostic()
+                .wrap_err("Failed to execute environment capture script")
+        }
+        .instrument(tracing::info_span!("capture_env_subprocess"))
+        .await?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1175,9 +1183,7 @@ impl Devenv {
 
     /// Assemble, build dev environment, cache it, and capture shell env vars.
     async fn configure_shell(&self) -> Result<HashMap<String, String>> {
-        let phase1 = Activity::operation("Configuring shell")
-            .parent(None)
-            .start();
+        let phase1 = devenv_activity::start!(Activity::operation("Configuring shell").parent(None));
         async {
             self.assemble().await?;
             let dev_env = self.get_dev_environment_inner(false).await?;
@@ -1222,7 +1228,8 @@ impl Devenv {
 
         // ── Phase 3: Building tests ─────────────────────────────────
         let test_script = {
-            let phase3 = Activity::operation("Building tests").parent(None).start();
+            let phase3 =
+                devenv_activity::start!(Activity::operation("Building tests").parent(None));
             async {
                 let gc_root = self.devenv_dot_gc.join("test");
                 let test_script = self
@@ -1276,7 +1283,7 @@ impl Devenv {
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<Vec<(String, PathBuf)>> {
-        let activity = Activity::operation("Building").start();
+        let activity = activity!(INFO, operation, "Building");
         async move {
             self.assemble().await?;
 
@@ -1364,7 +1371,7 @@ impl Devenv {
     }
 
     pub async fn eval(&self, attributes: &[String]) -> Result<String> {
-        let activity = Activity::operation("Evaluating").start();
+        let activity = activity!(INFO, operation, "Evaluating");
         async move {
             self.assemble().await?;
 
@@ -1443,9 +1450,7 @@ impl Devenv {
         // race conditions; dropping them here makes the ports available.
         drop(self.port_allocator.take_reservations());
 
-        let phase4 = Activity::operation("Running processes")
-            .parent(None)
-            .start();
+        let phase4 = devenv_activity::start!(Activity::operation("Running processes").parent(None));
         let impl_result = async {
             self.nix
                 .eval(&["devenv.config.process.manager.implementation"])
@@ -2226,7 +2231,7 @@ impl Devenv {
 
     /// Get dev environment with "Configuring shell" activity wrapper.
     /// Used by non-up callers (shell, print-dev-env).
-    #[activity("Configuring shell")]
+    #[instrument_activity("Configuring shell")]
     pub async fn get_dev_environment(&self, json: bool) -> Result<DevEnv> {
         self.get_dev_environment_inner(json).await
     }
@@ -2257,7 +2262,8 @@ async fn run_tasks_with_ui(
         let tasks = Arc::new(tasks);
         let tasks_clone = Arc::clone(&tasks);
 
-        let run_handle = tokio::spawn(async move { tasks_clone.run(false).await });
+        let run_handle =
+            tokio::spawn(async move { tasks_clone.run(false).await }.in_current_span());
 
         let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
         Ok(ui.run(run_handle, stop_processes).await?)

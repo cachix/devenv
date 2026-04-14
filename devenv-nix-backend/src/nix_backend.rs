@@ -15,7 +15,7 @@ use cstr::cstr;
 use include_dir::{Dir, include_dir};
 use tokio_shutdown::Shutdown;
 
-use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
+use devenv_activity::{Activity, ActivityInstrument, activity};
 use devenv_cache_core::compute_string_hash;
 use devenv_core::PortAllocator;
 use devenv_core::cachix::{Cachix, CachixCacheInfo, CachixManager};
@@ -836,9 +836,7 @@ in cfg // {{
 
         let attr_path = format!("config.cachix.{}", field);
         let cache_key = caching_state.cache_key(&attr_path);
-        let activity = Activity::evaluate(format!("Checking cachix.{}", field))
-            .level(ActivityLevel::Debug)
-            .start();
+        let activity = activity!(DEBUG, evaluate, format!("Checking cachix.{}", field));
 
         let (json_str, _) = async {
             caching_state
@@ -985,9 +983,7 @@ in cfg // {{
             .mode(LockMode::Virtual)
             .use_registries(true);
 
-        let activity = Activity::evaluate("Validating lock")
-            .level(ActivityLevel::Debug)
-            .start();
+        let activity = activity!(DEBUG, evaluate, "Validating lock");
 
         let lock_result = {
             let eval_state = self.eval_session(&activity)?;
@@ -1037,7 +1033,7 @@ in cfg // {{
             dry_run: false,
         };
 
-        let activity = Activity::operation(format!("Pushing to {}", push_cache)).start();
+        let activity = activity!(INFO, operation, format!("Pushing to {}", push_cache));
 
         match crate::cachix_daemon::OwnedDaemon::spawn(
             spawn_config,
@@ -1363,9 +1359,7 @@ impl NixBackend for NixRustBackend {
             None
         };
 
-        let activity = Activity::evaluate("Evaluating shell")
-            .level(ActivityLevel::Info)
-            .start();
+        let activity = activity!(INFO, evaluate, "Evaluating shell");
 
         let (drv_path_str, out_path_str, env_path, cache_hit) = if let Some(paths) = cached_paths {
             // Cache hit - skip evaluation entirely
@@ -1469,9 +1463,7 @@ impl NixBackend for NixRustBackend {
 
         // Evaluate the devenv configuration (the slow part).
         // Result is cached in cached_devenv_value for launch_repl().
-        let activity = Activity::evaluate("Evaluating Nix")
-            .level(ActivityLevel::Info)
-            .start();
+        let activity = activity!(INFO, evaluate, "Evaluating Nix");
         let mut eval_state = self.eval_session(&activity)?;
         let devenv_attrs = self.get_or_eval_devenv(&mut eval_state)?;
 
@@ -1500,9 +1492,7 @@ impl NixBackend for NixRustBackend {
             eprintln!("{}", error);
         }
 
-        let activity = Activity::evaluate("Launching REPL")
-            .level(ActivityLevel::Info)
-            .start();
+        let activity = activity!(INFO, evaluate, "Launching REPL");
         let mut eval_state = self.eval_session(&activity)?;
 
         // Check if there's a pending debugger session from a previous error
@@ -1622,9 +1612,7 @@ impl NixBackend for NixRustBackend {
                 None
             };
 
-            let activity = Activity::evaluate(format!("Evaluating {}", attr_path))
-                .level(ActivityLevel::Info)
-                .start();
+            let activity = activity!(INFO, evaluate, format!("Evaluating {}", attr_path));
 
             let (path_str, cache_hit) = if let Some(path) = cached_path {
                 // Cache hit - skip evaluation entirely
@@ -1709,9 +1697,7 @@ impl NixBackend for NixRustBackend {
             let clean_path = attr_path.trim_start_matches(".#");
 
             let cache_key = caching_state.cache_key(clean_path);
-            let activity = Activity::evaluate("Evaluating Nix")
-                .level(ActivityLevel::Info)
-                .start();
+            let activity = activity!(INFO, evaluate, "Evaluating Nix");
 
             let attr_path_owned = attr_path.to_string();
             let clean_path_owned = clean_path.to_string();
@@ -1826,9 +1812,7 @@ impl NixBackend for NixRustBackend {
 
         // Get eval state from mutex only when needed for locking
         // This ensures we reuse the same eval state across calls
-        let activity = Activity::evaluate("Updating inputs")
-            .level(ActivityLevel::Info)
-            .start();
+        let activity = activity!(INFO, evaluate, "Updating inputs");
         let eval_state = self.eval_session(&activity)?;
 
         // Lock the inputs - pass eval_state by reference to avoid cloning
@@ -1892,9 +1876,7 @@ impl NixBackend for NixRustBackend {
         // Uses the nix search C API which handles recurseForDerivations logic
         // Respects overlays, locked versions, and devenv configuration
 
-        let activity = Activity::evaluate("Searching packages")
-            .level(ActivityLevel::Info)
-            .start();
+        let activity = activity!(INFO, evaluate, "Searching packages");
         let mut eval_state = self.eval_session(&activity)?;
 
         // Import default.nix with primops to get the configured pkgs
@@ -1952,8 +1934,6 @@ impl NixBackend for NixRustBackend {
     }
 
     async fn gc(&self, paths: Vec<PathBuf>) -> Result<(u64, u64)> {
-        use devenv_activity::Activity;
-
         // Delete store paths using FFI
         // Strategy: Try to delete each path individually, skipping paths that
         // are still alive (referenced by other GC roots).
@@ -1972,7 +1952,7 @@ impl NixBackend for NixRustBackend {
         let mut total_bytes_freed = 0u64;
         let total_paths = paths.len() as u64;
 
-        let activity = Activity::operation("Deleting store paths").start();
+        let activity = activity!(INFO, operation, "Deleting store paths");
 
         for (i, path) in paths.iter().enumerate() {
             let path_str = match path.to_str() {

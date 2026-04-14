@@ -442,7 +442,8 @@ impl TaskState {
         shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<TaskCompleted> {
         // Create the Activity with the pre-assigned ID - this emits Task::Start
-        let task_activity = Activity::task_with_id(activity_id);
+        let task_activity =
+            devenv_activity::start!(Activity::task(&self.task.name).id(activity_id));
 
         // Run the entire task within the activity's scope for proper parent-child nesting
         self.run_inner(
@@ -497,10 +498,11 @@ impl TaskState {
                 let mut command = ctx.build_command();
 
                 // Create a Command activity for the status check (automatically parented to task_activity)
-                let status_activity = Activity::command(&self.task.name)
-                    .command(cmd)
-                    .level(ActivityLevel::Debug)
-                    .start();
+                let status_activity = devenv_activity::start!(
+                    Activity::command("check status")
+                        .command(cmd)
+                        .level(ActivityLevel::Debug)
+                );
 
                 match command.output().await {
                     Ok(output) => {
@@ -582,10 +584,11 @@ impl TaskState {
         };
 
         // Create a Command activity for the main execution (automatically parented to task_activity)
-        let cmd_activity = Activity::command(&self.task.name)
-            .command(cmd)
-            .level(ActivityLevel::Debug)
-            .start();
+        let cmd_activity = devenv_activity::start!(
+            Activity::command("execute command")
+                .command(cmd)
+                .level(ActivityLevel::Debug)
+        );
 
         self.validate_cwd()?;
 

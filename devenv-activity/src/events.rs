@@ -144,6 +144,17 @@ pub enum FetchKind {
     Copy,
 }
 
+impl FetchKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            FetchKind::Download => "download",
+            FetchKind::Query => "query",
+            FetchKind::Tree => "tree",
+            FetchKind::Copy => "copy",
+        }
+    }
+}
+
 /// A filesystem or environment operation observed during Nix evaluation.
 ///
 /// These operations are logged during evaluation and can be used for
@@ -506,6 +517,26 @@ pub enum ActivityOutcome {
     Skipped,
     /// Task's dependency failed
     DependencyFailed,
+}
+
+impl ActivityOutcome {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ActivityOutcome::Success => "success",
+            ActivityOutcome::Failed => "failed",
+            ActivityOutcome::Cancelled => "cancelled",
+            ActivityOutcome::Cached => "cached",
+            ActivityOutcome::Skipped => "skipped",
+            ActivityOutcome::DependencyFailed => "dependency_failed",
+        }
+    }
+
+    pub fn is_error(&self) -> bool {
+        matches!(
+            self,
+            ActivityOutcome::Failed | ActivityOutcome::DependencyFailed
+        )
+    }
 }
 
 /// Activity level (maps to tracing::Level)

@@ -41,6 +41,9 @@
 - Added `nixpkgs.rocmSupport` option to enable ROCm support in nixpkgs configuration.
 - Added process management subcommands and MCP tools: `devenv processes list`, `status`, `logs`, `restart`, `start`, `stop` for interacting with running native processes ([#2621](https://github.com/cachix/devenv/issues/2621)).
 - Added `--mode` flag to `devenv up` / `devenv processes up` to control dependency resolution for process tasks. Supports `single`, `before`, `after`, and `all` modes, matching `devenv tasks run --mode`. Defaults to `all`, so `devenv up` starts all processes by default ([#2721](https://github.com/cachix/devenv/issues/2721)).
+- Added OpenTelemetry OTLP trace export support via `--trace-to` (`otlp-grpc`, `otlp-http-protobuf`, `otlp-http-json`) with configurable endpoints or standard `OTEL_*` environment variables. OTLP spans include rich attributes (`devenv.activity.kind`, `devenv.derivation_path`, `devenv.url`, `devenv.fetch.kind`) and outcome tracking (`devenv.outcome`, `otel.status_code`). Enabled by default with the `otlp-grpc` cargo feature; `otlp-http-protobuf` and `otlp-http-json` are opt-in ([#2415](https://github.com/cachix/devenv/issues/2415)).
+- Added OTEL trace context propagation to subprocesses: tasks, shell commands, and processes automatically receive `TRACEPARENT`/`TRACESTATE` environment variables when OTLP export is enabled, allowing instrumented child processes to join the same trace ([#2415](https://github.com/cachix/devenv/issues/2415)).
+- Added `--trace-to` unified tracing flag with `[format:]destination` syntax, supporting multiple simultaneous outputs (e.g. `--trace-to pretty:stderr --trace-to json:file:/tmp/trace.json`). Also available as `DEVENV_TRACE_TO` env var (comma-separated). Legacy `--trace-output`/`--trace-format` flags are still supported but hidden.
 
 ### Breaking Changes
 

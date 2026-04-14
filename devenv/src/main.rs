@@ -4,7 +4,7 @@ use devenv::{
     Devenv, RunMode,
     cli::{
         Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
-        TraceFormat, TraceOutput,
+        TraceOutputSpec,
     },
     hook,
     processes::ProcessCommand,
@@ -26,7 +26,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio_shutdown::Shutdown;
-use tracing::info;
+use tracing::{info, instrument};
 
 /// Stack size for threads that run Nix evaluation.
 ///
@@ -158,8 +158,7 @@ struct LaunchConfig {
     is_testing: bool,
     needs_terminal_handoff: bool,
     log_level: devenv_tracing::Level,
-    tracing_format: TraceFormat,
-    tracing_output: Option<TraceOutput>,
+    tracing_specs: Vec<TraceOutputSpec>,
 }
 
 /// Detect whether we are running inside an AI coding agent.
@@ -199,9 +198,18 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
     } else {
         devenv::tasks::VerbosityLevel::Normal
     };
-    let use_tracing_mode = cli.tracing_args.use_tracing_mode();
-    let tracing_format = cli.tracing_args.trace_format;
-    let tracing_output = cli.tracing_args.trace_output;
+    let tracing_specs = cli
+        .tracing_args
+        .resolve_and_validate()
+        .map_err(|e| miette::miette!("{e}"))?;
+    let use_tracing_mode = tracing_specs
+        .iter()
+        .any(|s| s.destination.targets_terminal())
+        || cli
+            .tracing_args
+            .trace_output
+            .as_ref()
+            .is_some_and(|d| d.targets_terminal());
 
     let mut config = Config::load()?;
     config.check_version(crate_version!())?;
@@ -307,8 +315,7 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
         is_testing,
         needs_terminal_handoff,
         log_level,
-        tracing_format,
-        tracing_output,
+        tracing_specs,
     })
 }
 
@@ -325,16 +332,12 @@ fn run(launch: LaunchConfig) -> Result<()> {
 
     // CLI output: human-readable stderr when no TUI and not in tracing mode
     let cli_output = !launch.tui
-        && !matches!(
-            launch.tracing_output,
-            Some(TraceOutput::Stdout) | Some(TraceOutput::Stderr)
-        );
-    devenv_tracing::init_tracing(
-        launch.log_level,
-        launch.tracing_format,
-        launch.tracing_output.as_ref(),
-        cli_output,
-    );
+        && !launch
+            .tracing_specs
+            .iter()
+            .any(|s| s.destination.targets_terminal());
+    let _tracing_guard =
+        devenv_tracing::init_tracing(launch.log_level, &launch.tracing_specs, cli_output);
 
     let tui = launch.tui;
     let needs_terminal_handoff = launch.needs_terminal_handoff;
@@ -434,6 +437,10 @@ fn run(launch: LaunchConfig) -> Result<()> {
         .join()
         .map_err(|e| miette::miette!("devenv thread panicked: {}", panic_message(e)))?;
 
+    // Flush tracing before finish() — CommandResult::Exec replaces the
+    // process via exec(), so destructors after that point never run.
+    drop(_tracing_guard);
+
     devenv_output.finish()
 }
 
@@ -519,6 +526,7 @@ impl Drop for BackendDoneGuard {
 
 /// Run the backend: construct Devenv and dispatch the command.
 /// All config loading and settings resolution has already happened in prepare_launch_config.
+#[instrument(name = "devenv", skip_all)]
 async fn run_backend(
     launch: LaunchConfig,
     shutdown: Arc<Shutdown>,
@@ -544,8 +552,7 @@ async fn run_backend(
         // Consumed by run() before run_backend is called
         needs_terminal_handoff: _,
         log_level: _,
-        tracing_format: _,
-        tracing_output: _,
+        tracing_specs: _,
     } = launch;
 
     // Ensure TUI is notified when backend exits, even on early return or panic.
@@ -777,6 +784,7 @@ impl CommandResult {
 }
 
 /// Dispatch a CLI command to the appropriate Devenv method.
+#[instrument(skip_all)]
 async fn dispatch_command(
     devenv: &Devenv,
     command: Commands,
@@ -1282,9 +1290,9 @@ fn run_daemon_processes(config_file: std::path::PathBuf) -> Result<()> {
         .map_err(|e| miette::miette!("Failed to build task runner: {}", e))?;
 
         // Run the full task DAG (starts processes, waits for readiness probes)
-        let phase = devenv_activity::Activity::operation("Running processes")
-            .parent(None)
-            .start();
+        let phase = devenv_activity::start!(
+            devenv_activity::Activity::operation("Running processes").parent(None)
+        );
         let _outputs = tasks_runner.run_with_parent_activity(Arc::new(phase)).await;
 
         // Write PID so `devenv processes down` can find us
