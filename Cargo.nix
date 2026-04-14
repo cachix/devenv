@@ -447,7 +447,7 @@ rec {
         dependencies = [
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.60.2";
+            packageId = "windows-sys 0.61.2";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_System_Console" "Win32_Foundation" ];
           }
@@ -472,7 +472,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.60.2";
+            packageId = "windows-sys 0.61.2";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_System_Console" "Win32_Foundation" ];
           }
@@ -3390,9 +3390,9 @@ rec {
       };
       "blake3" = rec {
         crateName = "blake3";
-        version = "1.8.4";
+        version = "1.8.3";
         edition = "2024";
-        sha256 = "07mmw05638klqy4kcnwvbjbn279j1g7ysfnhms2hgzax8a8mjbad";
+        sha256 = "0b9ay320z90xs5hyk48l1v3208yyvdy3gs3nnlb7xyxkaxyyys14";
         authors = [
           "Jack O'Connor <oconnor663@gmail.com>"
           "Samuel Neves"
@@ -3418,12 +3418,12 @@ rec {
           }
           {
             name = "cpufeatures";
-            packageId = "cpufeatures 0.3.0";
+            packageId = "cpufeatures 0.2.17";
             target = { target, features }: (("x86" == target."arch" or null) || ("x86_64" == target."arch" or null));
           }
           {
             name = "digest";
-            packageId = "digest 0.11.2";
+            packageId = "digest";
             optional = true;
             features = [ "mac" ];
           }
@@ -3451,7 +3451,7 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "rayon" "std" "traits-preview" ];
       };
-      "block-buffer 0.10.4" = rec {
+      "block-buffer" = rec {
         crateName = "block-buffer";
         version = "0.10.4";
         edition = "2018";
@@ -3467,25 +3467,6 @@ rec {
           }
         ];
 
-      };
-      "block-buffer 0.12.0" = rec {
-        crateName = "block-buffer";
-        version = "0.12.0";
-        edition = "2024";
-        sha256 = "1glh8w49a7cj0wlkalyn9j605jzf2ss0lg8dqq5xh8cr2q451lyd";
-        libName = "block_buffer";
-        authors = [
-          "RustCrypto Developers"
-        ];
-        dependencies = [
-          {
-            name = "hybrid-array";
-            packageId = "hybrid-array";
-          }
-        ];
-        features = {
-          "zeroize" = [ "dep:zeroize" ];
-        };
       };
       "bstr" = rec {
         crateName = "bstr";
@@ -4204,16 +4185,6 @@ rec {
         ];
 
       };
-      "cmov" = rec {
-        crateName = "cmov";
-        version = "0.5.3";
-        edition = "2024";
-        sha256 = "0ipp2fzpcz2z9l4ywks98bd1viwpw81lfd5pdj3sdi0z04ys921z";
-        authors = [
-          "RustCrypto Developers"
-        ];
-
-      };
       "codemap" = rec {
         crateName = "codemap";
         version = "0.1.3";
@@ -4264,7 +4235,7 @@ rec {
         dependencies = [
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.48.0";
+            packageId = "windows-sys 0.61.2";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_System_Console" ];
           }
@@ -4522,6 +4493,47 @@ rec {
           "windows-console-colors" = [ "ansi-parsing" ];
         };
         resolvedDefaultFeatures = [ "alloc" "ansi-parsing" "default" "std" "unicode-width" ];
+      };
+      "const-hex" = rec {
+        crateName = "const-hex";
+        version = "1.18.1";
+        edition = "2021";
+        sha256 = "16yl8m4rp9260mg51msahi6qsii1mgkyjhd5rlgdncdv6bj8a4ak";
+        libName = "const_hex";
+        authors = [
+          "DaniPopes <57450786+DaniPopes@users.noreply.github.com>"
+        ];
+        dependencies = [
+          {
+            name = "cfg-if";
+            packageId = "cfg-if";
+          }
+          {
+            name = "cpufeatures";
+            packageId = "cpufeatures 0.2.17";
+            target = { target, features }: (("x86" == target."arch" or null) || ("x86_64" == target."arch" or null));
+          }
+          {
+            name = "proptest";
+            packageId = "proptest";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "serde_core";
+            packageId = "serde_core";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+        ];
+        features = {
+          "__fuzzing" = [ "dep:proptest" "std" ];
+          "alloc" = [ "serde_core?/alloc" "proptest?/alloc" ];
+          "default" = [ "std" ];
+          "serde" = [ "dep:serde_core" ];
+          "std" = [ "serde_core?/std" "proptest?/std" "alloc" ];
+        };
+        resolvedDefaultFeatures = [ "alloc" "default" "std" ];
       };
       "const-oid" = rec {
         crateName = "const-oid";
@@ -5150,7 +5162,7 @@ rec {
         ];
 
       };
-      "crypto-common 0.1.7" = rec {
+      "crypto-common" = rec {
         crateName = "crypto-common";
         version = "0.1.7";
         edition = "2018";
@@ -5175,27 +5187,6 @@ rec {
           "rand_core" = [ "dep:rand_core" ];
         };
         resolvedDefaultFeatures = [ "std" ];
-      };
-      "crypto-common 0.2.1" = rec {
-        crateName = "crypto-common";
-        version = "0.2.1";
-        edition = "2024";
-        sha256 = "041p8bs680hrg6rhicfifn19cfvybq9aya5i4i0k08d9byqpnwkp";
-        libName = "crypto_common";
-        authors = [
-          "RustCrypto Developers"
-        ];
-        dependencies = [
-          {
-            name = "hybrid-array";
-            packageId = "hybrid-array";
-          }
-        ];
-        features = {
-          "getrandom" = [ "rand_core" "dep:getrandom" ];
-          "rand_core" = [ "dep:rand_core" ];
-          "zeroize" = [ "hybrid-array/zeroize" ];
-        };
       };
       "cstr" = rec {
         crateName = "cstr";
@@ -5291,24 +5282,6 @@ rec {
         features = {
         };
       };
-      "ctutils" = rec {
-        crateName = "ctutils";
-        version = "0.4.2";
-        edition = "2024";
-        sha256 = "17m2s9jv7i780k26cq2fcyslg0pakv9plwdrmygdwha1hfiiambx";
-        authors = [
-          "RustCrypto Developers"
-        ];
-        dependencies = [
-          {
-            name = "cmov";
-            packageId = "cmov";
-          }
-        ];
-        features = {
-          "subtle" = [ "dep:subtle" ];
-        };
-      };
       "curve25519-dalek" = rec {
         crateName = "curve25519-dalek";
         version = "4.1.3";
@@ -5336,7 +5309,7 @@ rec {
           }
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
             optional = true;
             usesDefaultFeatures = false;
           }
@@ -6080,6 +6053,24 @@ rec {
             packageId = "once_cell";
           }
           {
+            name = "opentelemetry";
+            packageId = "opentelemetry 0.31.0";
+            optional = true;
+          }
+          {
+            name = "opentelemetry-otlp";
+            packageId = "opentelemetry-otlp 0.31.1";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "trace" ];
+          }
+          {
+            name = "opentelemetry_sdk";
+            packageId = "opentelemetry_sdk 0.31.0";
+            optional = true;
+            features = [ "rt-tokio" ];
+          }
+          {
             name = "pathdiff";
             packageId = "pathdiff";
           }
@@ -6213,9 +6204,18 @@ rec {
             features = [ "valuable" ];
           }
           {
+            name = "tracing-opentelemetry";
+            packageId = "tracing-opentelemetry 0.32.1";
+            optional = true;
+          }
+          {
             name = "tracing-subscriber";
             packageId = "tracing-subscriber";
             features = [ "env-filter" "json" "valuable" ];
+          }
+          {
+            name = "url";
+            packageId = "url";
           }
           {
             name = "valuable";
@@ -6248,10 +6248,15 @@ rec {
           }
         ];
         features = {
+          "default" = [ "otlp-grpc" ];
+          "otlp" = [ "dep:opentelemetry" "dep:opentelemetry_sdk" "dep:tracing-opentelemetry" "dep:opentelemetry-otlp" ];
+          "otlp-grpc" = [ "otlp" "opentelemetry-otlp/grpc-tonic" ];
+          "otlp-http-json" = [ "otlp" "opentelemetry-otlp/http-json" ];
+          "otlp-http-protobuf" = [ "otlp" "opentelemetry-otlp/http-proto" ];
           "snix" = [ "dep:devenv-snix-backend" "dep:nix-compat" "dep:nix-compat-derive" "dep:snix-build" "dep:snix-castore" "dep:snix-eval" "dep:snix-glue" "dep:snix-store" ];
           "test-all" = [ "test-mcp" "devenv-processes/test-all" "devenv-nix-backend/test-all" "devenv-reload/test-all" "devenv-shell/test-all" "devenv-tui/test-all" ];
         };
-        resolvedDefaultFeatures = [ "default" "snix" "test-all" "test-mcp" ];
+        resolvedDefaultFeatures = [ "default" "otlp" "otlp-grpc" "otlp-http-json" "otlp-http-protobuf" "snix" "test-all" "test-mcp" ];
       };
       "devenv-activity" = rec {
         crateName = "devenv-activity";
@@ -7544,7 +7549,7 @@ rec {
         ];
 
       };
-      "digest 0.10.7" = rec {
+      "digest" = rec {
         crateName = "digest";
         version = "0.10.7";
         edition = "2018";
@@ -7555,7 +7560,7 @@ rec {
         dependencies = [
           {
             name = "block-buffer";
-            packageId = "block-buffer 0.10.4";
+            packageId = "block-buffer";
             optional = true;
           }
           {
@@ -7565,7 +7570,7 @@ rec {
           }
           {
             name = "crypto-common";
-            packageId = "crypto-common 0.1.7";
+            packageId = "crypto-common";
           }
           {
             name = "subtle";
@@ -7588,44 +7593,6 @@ rec {
           "subtle" = [ "dep:subtle" ];
         };
         resolvedDefaultFeatures = [ "alloc" "block-buffer" "const-oid" "core-api" "default" "mac" "oid" "std" "subtle" ];
-      };
-      "digest 0.11.2" = rec {
-        crateName = "digest";
-        version = "0.11.2";
-        edition = "2024";
-        sha256 = "0g0m77q7zfafm4jgy6i70wwimy9f41ywidbz9w467rh8px4xnl28";
-        authors = [
-          "RustCrypto Developers"
-        ];
-        dependencies = [
-          {
-            name = "block-buffer";
-            packageId = "block-buffer 0.12.0";
-            optional = true;
-          }
-          {
-            name = "crypto-common";
-            packageId = "crypto-common 0.2.1";
-            rename = "common";
-          }
-          {
-            name = "ctutils";
-            packageId = "ctutils";
-            optional = true;
-          }
-        ];
-        features = {
-          "blobby" = [ "dep:blobby" ];
-          "block-api" = [ "dep:block-buffer" ];
-          "default" = [ "block-api" ];
-          "dev" = [ "blobby" ];
-          "getrandom" = [ "common/getrandom" "rand_core" ];
-          "mac" = [ "dep:ctutils" ];
-          "oid" = [ "dep:const-oid" ];
-          "rand_core" = [ "common/rand_core" ];
-          "zeroize" = [ "dep:zeroize" "block-buffer?/zeroize" ];
-        };
-        resolvedDefaultFeatures = [ "block-api" "default" "mac" ];
       };
       "dirs 4.0.0" = rec {
         crateName = "dirs";
@@ -7716,7 +7683,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.59.0";
+            packageId = "windows-sys 0.61.2";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_UI_Shell" "Win32_Foundation" "Win32_Globalization" "Win32_System_Com" ];
           }
@@ -8148,7 +8115,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.52.0";
+            packageId = "windows-sys 0.61.2";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_System_Diagnostics_Debug" ];
           }
@@ -11662,14 +11629,14 @@ rec {
         dependencies = [
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
             features = [ "mac" ];
           }
         ];
         devDependencies = [
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
             features = [ "dev" ];
           }
         ];
@@ -11905,32 +11872,6 @@ rec {
         edition = "2021";
         sha256 = "092lpipp32ayz4kyyn4k3vz59j9blng36wprm5by0g2ykqr14nqk";
         features = {
-        };
-      };
-      "hybrid-array" = rec {
-        crateName = "hybrid-array";
-        version = "0.4.10";
-        edition = "2024";
-        sha256 = "055jvmp7rsb44z5aimj9zbam9y33nplyagik38m0xd36yy6cyi1r";
-        libName = "hybrid_array";
-        authors = [
-          "RustCrypto Developers"
-        ];
-        dependencies = [
-          {
-            name = "typenum";
-            packageId = "typenum";
-            features = [ "const-generics" ];
-          }
-        ];
-        features = {
-          "arbitrary" = [ "dep:arbitrary" ];
-          "bytemuck" = [ "dep:bytemuck" ];
-          "ctutils" = [ "dep:ctutils" ];
-          "serde" = [ "dep:serde" ];
-          "subtle" = [ "dep:subtle" ];
-          "zerocopy" = [ "dep:zerocopy" ];
-          "zeroize" = [ "dep:zeroize" ];
         };
       };
       "hyper 0.14.32" = rec {
@@ -13780,7 +13721,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.52.0";
+            packageId = "windows-sys 0.61.2";
             optional = true;
             usesDefaultFeatures = false;
             target = { target, features }: (target."windows" or false);
@@ -15238,13 +15179,13 @@ rec {
           }
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
           }
         ];
         devDependencies = [
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
             features = [ "dev" ];
           }
         ];
@@ -16791,7 +16732,7 @@ rec {
         dependencies = [
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.59.0";
+            packageId = "windows-sys 0.61.2";
             rename = "windows";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_System_Console" "Win32_Storage_FileSystem" "Win32_Security" ];
@@ -17588,9 +17529,9 @@ rec {
           "trace" = [ "futures" "thiserror" ];
           "tracing" = [ "dep:tracing" ];
         };
-        resolvedDefaultFeatures = [ "futures" "futures-core" "futures-sink" "internal-logs" "metrics" "pin-project-lite" "thiserror" "trace" "tracing" ];
+        resolvedDefaultFeatures = [ "default" "futures" "futures-core" "futures-sink" "internal-logs" "logs" "metrics" "pin-project-lite" "thiserror" "trace" "tracing" ];
       };
-      "opentelemetry-http" = rec {
+      "opentelemetry-http 0.28.0" = rec {
         crateName = "opentelemetry-http";
         version = "0.28.0";
         edition = "2021";
@@ -17641,7 +17582,45 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "internal-logs" "reqwest" "tracing" ];
       };
-      "opentelemetry-otlp" = rec {
+      "opentelemetry-http 0.31.0" = rec {
+        crateName = "opentelemetry-http";
+        version = "0.31.0";
+        edition = "2021";
+        sha256 = "0pc5nw1ds8v8w0nvyall39m92v8m1xl1p3vwvxk6nkhrffdd19np";
+        libName = "opentelemetry_http";
+        dependencies = [
+          {
+            name = "async-trait";
+            packageId = "async-trait";
+          }
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "opentelemetry";
+            packageId = "opentelemetry 0.31.0";
+            usesDefaultFeatures = false;
+            features = [ "trace" ];
+          }
+        ];
+        features = {
+          "default" = [ "internal-logs" ];
+          "hyper" = [ "dep:http-body-util" "dep:hyper" "dep:hyper-util" "dep:tokio" ];
+          "internal-logs" = [ "opentelemetry/internal-logs" ];
+          "reqwest" = [ "dep:reqwest" ];
+          "reqwest-blocking" = [ "dep:reqwest" "reqwest/blocking" ];
+          "reqwest-rustls" = [ "dep:reqwest" "reqwest/rustls-tls-native-roots" ];
+          "reqwest-rustls-webpki-roots" = [ "dep:reqwest" "reqwest/rustls-tls-webpki-roots" ];
+        };
+      };
+      "opentelemetry-otlp 0.28.0" = rec {
         crateName = "opentelemetry-otlp";
         version = "0.28.0";
         edition = "2021";
@@ -17670,12 +17649,12 @@ rec {
           }
           {
             name = "opentelemetry-http";
-            packageId = "opentelemetry-http";
+            packageId = "opentelemetry-http 0.28.0";
             optional = true;
           }
           {
             name = "opentelemetry-proto";
-            packageId = "opentelemetry-proto";
+            packageId = "opentelemetry-proto 0.28.0";
             usesDefaultFeatures = false;
           }
           {
@@ -17760,7 +17739,131 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "grpc-tonic" "http" "http-proto" "internal-logs" "logs" "metrics" "opentelemetry-http" "prost" "reqwest" "reqwest-blocking-client" "tokio" "tonic" "trace" "tracing" ];
       };
-      "opentelemetry-proto" = rec {
+      "opentelemetry-otlp 0.31.1" = rec {
+        crateName = "opentelemetry-otlp";
+        version = "0.31.1";
+        edition = "2021";
+        sha256 = "07zp0b62b9dajnvvcd6j2ppw5zg7wp4ixka9z6fr3bxrrdmcss8z";
+        libName = "opentelemetry_otlp";
+        dependencies = [
+          {
+            name = "http";
+            packageId = "http 1.4.0";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
+            name = "opentelemetry";
+            packageId = "opentelemetry 0.31.0";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "opentelemetry-http";
+            packageId = "opentelemetry-http 0.31.0";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "opentelemetry-proto";
+            packageId = "opentelemetry-proto 0.31.0";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "opentelemetry_sdk";
+            packageId = "opentelemetry_sdk 0.31.0";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "prost";
+            packageId = "prost 0.14.3";
+            optional = true;
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+            optional = true;
+          }
+          {
+            name = "thiserror";
+            packageId = "thiserror 2.0.18";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "sync" "rt" ];
+          }
+          {
+            name = "tonic";
+            packageId = "tonic 0.14.5";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+        ];
+        devDependencies = [
+          {
+            name = "opentelemetry_sdk";
+            packageId = "opentelemetry_sdk 0.31.0";
+            usesDefaultFeatures = false;
+            features = [ "trace" "testing" ];
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            usesDefaultFeatures = false;
+            features = [ "macros" "rt-multi-thread" ];
+          }
+          {
+            name = "tonic";
+            packageId = "tonic 0.14.5";
+            usesDefaultFeatures = false;
+            features = [ "router" "server" ];
+          }
+        ];
+        features = {
+          "default" = [ "http-proto" "reqwest-blocking-client" "trace" "metrics" "logs" "internal-logs" ];
+          "flate2" = [ "dep:flate2" ];
+          "grpc-tonic" = [ "tonic" "prost" "http" "tokio" "opentelemetry-proto/gen-tonic" ];
+          "gzip-http" = [ "flate2" ];
+          "gzip-tonic" = [ "tonic/gzip" ];
+          "http" = [ "dep:http" ];
+          "http-json" = [ "serde_json" "prost" "opentelemetry-http" "opentelemetry-proto/gen-tonic-messages" "opentelemetry-proto/with-serde" "http" "trace" "metrics" ];
+          "http-proto" = [ "prost" "opentelemetry-http" "opentelemetry-proto/gen-tonic-messages" "http" "trace" "metrics" ];
+          "hyper-client" = [ "opentelemetry-http/hyper" ];
+          "integration-testing" = [ "tonic" "prost" "tokio/full" "trace" "logs" ];
+          "internal-logs" = [ "tracing" "opentelemetry_sdk/internal-logs" "opentelemetry-http/internal-logs" ];
+          "logs" = [ "opentelemetry/logs" "opentelemetry_sdk/logs" "opentelemetry-proto/logs" ];
+          "metrics" = [ "opentelemetry/metrics" "opentelemetry_sdk/metrics" "opentelemetry-proto/metrics" ];
+          "opentelemetry-http" = [ "dep:opentelemetry-http" ];
+          "prost" = [ "dep:prost" ];
+          "reqwest" = [ "dep:reqwest" ];
+          "reqwest-blocking-client" = [ "reqwest/blocking" "opentelemetry-http/reqwest-blocking" ];
+          "reqwest-client" = [ "reqwest" "opentelemetry-http/reqwest" ];
+          "reqwest-rustls" = [ "reqwest" "opentelemetry-http/reqwest-rustls" ];
+          "reqwest-rustls-webpki-roots" = [ "reqwest" "opentelemetry-http/reqwest-rustls-webpki-roots" ];
+          "serde" = [ "dep:serde" ];
+          "serde_json" = [ "dep:serde_json" ];
+          "serialize" = [ "serde" "serde_json" ];
+          "tls" = [ "tonic/tls-ring" ];
+          "tls-aws-lc" = [ "tonic/tls-aws-lc" ];
+          "tls-provider-agnostic" = [ "tonic/_tls-any" ];
+          "tls-ring" = [ "tonic/tls-ring" ];
+          "tls-roots" = [ "tls" "tonic/tls-native-roots" ];
+          "tls-webpki-roots" = [ "tls" "tonic/tls-webpki-roots" ];
+          "tokio" = [ "dep:tokio" ];
+          "tonic" = [ "dep:tonic" ];
+          "trace" = [ "opentelemetry/trace" "opentelemetry_sdk/trace" "opentelemetry-proto/trace" ];
+          "tracing" = [ "dep:tracing" ];
+          "zstd" = [ "dep:zstd" ];
+          "zstd-http" = [ "zstd" ];
+          "zstd-tonic" = [ "tonic/zstd" ];
+        };
+        resolvedDefaultFeatures = [ "grpc-tonic" "http" "http-json" "http-proto" "metrics" "opentelemetry-http" "prost" "serde_json" "tokio" "tonic" "trace" ];
+      };
+      "opentelemetry-proto 0.28.0" = rec {
         crateName = "opentelemetry-proto";
         version = "0.28.0";
         edition = "2021";
@@ -17812,6 +17915,99 @@ rec {
           "zpages" = [ "trace" ];
         };
         resolvedDefaultFeatures = [ "gen-tonic" "gen-tonic-messages" "logs" "metrics" "prost" "tonic" "trace" ];
+      };
+      "opentelemetry-proto 0.31.0" = rec {
+        crateName = "opentelemetry-proto";
+        version = "0.31.0";
+        edition = "2021";
+        sha256 = "03xkjsjrsm7zkkx5gascqd9bg2z20wymm06l16cyxsp5dpq5s5x7";
+        libName = "opentelemetry_proto";
+        dependencies = [
+          {
+            name = "base64";
+            packageId = "base64";
+            optional = true;
+          }
+          {
+            name = "const-hex";
+            packageId = "const-hex";
+            optional = true;
+          }
+          {
+            name = "opentelemetry";
+            packageId = "opentelemetry 0.31.0";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "opentelemetry_sdk";
+            packageId = "opentelemetry_sdk 0.31.0";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "prost";
+            packageId = "prost 0.14.3";
+            optional = true;
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "serde_derive" "std" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+            optional = true;
+          }
+          {
+            name = "tonic";
+            packageId = "tonic 0.14.5";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "codegen" ];
+          }
+          {
+            name = "tonic-prost";
+            packageId = "tonic-prost";
+            optional = true;
+          }
+        ];
+        devDependencies = [
+          {
+            name = "opentelemetry";
+            packageId = "opentelemetry 0.31.0";
+            usesDefaultFeatures = false;
+            features = [ "testing" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+          }
+        ];
+        features = {
+          "base64" = [ "dep:base64" ];
+          "const-hex" = [ "dep:const-hex" ];
+          "default" = [ "full" ];
+          "full" = [ "gen-tonic" "trace" "logs" "metrics" "zpages" "with-serde" "internal-logs" ];
+          "gen-tonic" = [ "gen-tonic-messages" "tonic/channel" ];
+          "gen-tonic-messages" = [ "tonic" "tonic-prost" "prost" ];
+          "internal-logs" = [ "opentelemetry/internal-logs" ];
+          "logs" = [ "opentelemetry/logs" "opentelemetry_sdk/logs" ];
+          "metrics" = [ "opentelemetry/metrics" "opentelemetry_sdk/metrics" ];
+          "prost" = [ "dep:prost" ];
+          "schemars" = [ "dep:schemars" ];
+          "serde" = [ "dep:serde" ];
+          "serde_json" = [ "dep:serde_json" ];
+          "testing" = [ "opentelemetry/testing" ];
+          "tonic" = [ "dep:tonic" ];
+          "tonic-prost" = [ "dep:tonic-prost" ];
+          "trace" = [ "opentelemetry/trace" "opentelemetry_sdk/trace" ];
+          "with-schemars" = [ "schemars" ];
+          "with-serde" = [ "serde" "const-hex" "base64" "serde_json" ];
+          "zpages" = [ "trace" ];
+        };
+        resolvedDefaultFeatures = [ "base64" "const-hex" "gen-tonic" "gen-tonic-messages" "metrics" "prost" "serde" "serde_json" "tonic" "tonic-prost" "trace" "with-serde" ];
       };
       "opentelemetry-semantic-conventions 0.28.0" = rec {
         crateName = "opentelemetry-semantic-conventions";
@@ -17983,6 +18179,17 @@ rec {
             packageId = "thiserror 2.0.18";
             usesDefaultFeatures = false;
           }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "tokio-stream";
+            packageId = "tokio-stream";
+            optional = true;
+          }
         ];
         features = {
           "default" = [ "trace" "metrics" "logs" "internal-logs" ];
@@ -18012,7 +18219,7 @@ rec {
           "trace" = [ "opentelemetry/trace" "rand" "percent-encoding" ];
           "url" = [ "dep:url" ];
         };
-        resolvedDefaultFeatures = [ "percent-encoding" "rand" "trace" ];
+        resolvedDefaultFeatures = [ "default" "experimental_async_runtime" "internal-logs" "logs" "metrics" "percent-encoding" "rand" "rt-tokio" "tokio" "tokio-stream" "trace" ];
       };
       "option-ext" = rec {
         crateName = "option-ext";
@@ -19164,7 +19371,7 @@ rec {
         dependencies = [
           {
             name = "heck";
-            packageId = "heck 0.4.1";
+            packageId = "heck 0.5.0";
           }
           {
             name = "itertools";
@@ -19244,7 +19451,7 @@ rec {
         dependencies = [
           {
             name = "heck";
-            packageId = "heck 0.4.1";
+            packageId = "heck 0.5.0";
           }
           {
             name = "itertools";
@@ -19503,7 +19710,7 @@ rec {
         dependencies = [
           {
             name = "heck";
-            packageId = "heck 0.4.1";
+            packageId = "heck 0.5.0";
           }
           {
             name = "prost";
@@ -21750,7 +21957,7 @@ rec {
           }
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
             usesDefaultFeatures = false;
             features = [ "alloc" "oid" ];
           }
@@ -22066,7 +22273,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.52.0";
+            packageId = "windows-sys 0.61.2";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_Networking_WinSock" ];
           }
@@ -22398,7 +22605,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.52.0";
+            packageId = "windows-sys 0.61.2";
             usesDefaultFeatures = false;
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_Security_Cryptography" ];
@@ -24099,13 +24306,13 @@ rec {
           }
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
           }
         ];
         devDependencies = [
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
             features = [ "dev" ];
           }
         ];
@@ -24130,7 +24337,7 @@ rec {
         dependencies = [
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
           }
           {
             name = "sha1";
@@ -24142,7 +24349,7 @@ rec {
         devDependencies = [
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
             features = [ "dev" ];
           }
         ];
@@ -24173,13 +24380,13 @@ rec {
           }
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
           }
         ];
         devDependencies = [
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
             features = [ "dev" ];
           }
         ];
@@ -24451,7 +24658,7 @@ rec {
         dependencies = [
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
             optional = true;
             usesDefaultFeatures = false;
           }
@@ -24853,7 +25060,7 @@ rec {
           }
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
           }
           {
             name = "erased-serde";
@@ -25632,12 +25839,12 @@ rec {
           }
           {
             name = "opentelemetry-http";
-            packageId = "opentelemetry-http";
+            packageId = "opentelemetry-http 0.28.0";
             optional = true;
           }
           {
             name = "opentelemetry-otlp";
-            packageId = "opentelemetry-otlp";
+            packageId = "opentelemetry-otlp 0.28.0";
             optional = true;
             features = [ "grpc-tonic" ];
           }
@@ -25744,7 +25951,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.60.2";
+            packageId = "windows-sys 0.61.2";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_Networking_WinSock" "Win32_System_IO" "Win32_System_Threading" "Win32_System_WindowsProgramming" ];
           }
@@ -26340,7 +26547,7 @@ rec {
           }
           {
             name = "digest";
-            packageId = "digest 0.10.7";
+            packageId = "digest";
             usesDefaultFeatures = false;
             features = [ "std" ];
           }
@@ -27389,7 +27596,7 @@ rec {
           }
           {
             name = "getrandom";
-            packageId = "getrandom 0.3.4";
+            packageId = "getrandom 0.4.2";
             optional = true;
             usesDefaultFeatures = false;
             target = { target, features }: ((target."unix" or false) || (target."windows" or false) || ("wasi" == target."os" or null));
@@ -27408,7 +27615,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.52.0";
+            packageId = "windows-sys 0.61.2";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Storage_FileSystem" "Win32_Foundation" ];
           }
@@ -27502,7 +27709,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.59.0";
+            packageId = "windows-sys 0.61.2";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_System_Console" ];
           }
@@ -29958,6 +30165,11 @@ rec {
             features = [ "trace" ];
           }
           {
+            name = "smallvec";
+            packageId = "smallvec";
+            optional = true;
+          }
+          {
             name = "tracing";
             packageId = "tracing";
             usesDefaultFeatures = false;
@@ -29966,6 +30178,12 @@ rec {
           {
             name = "tracing-core";
             packageId = "tracing-core";
+          }
+          {
+            name = "tracing-log";
+            packageId = "tracing-log";
+            optional = true;
+            usesDefaultFeatures = false;
           }
           {
             name = "tracing-subscriber";
@@ -30005,6 +30223,7 @@ rec {
           "smallvec" = [ "dep:smallvec" ];
           "tracing-log" = [ "dep:tracing-log" ];
         };
+        resolvedDefaultFeatures = [ "default" "metrics" "smallvec" "tracing-log" ];
       };
       "tracing-serde" = rec {
         crateName = "tracing-serde";
@@ -30218,7 +30437,6 @@ rec {
           "scale-info" = [ "dep:scale-info" ];
           "scale_info" = [ "scale-info/derive" ];
         };
-        resolvedDefaultFeatures = [ "const-generics" ];
       };
       "typetag" = rec {
         crateName = "typetag";
@@ -31609,7 +31827,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.59.0";
+            packageId = "windows-sys 0.61.2";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_System_Console" "Win32_Foundation" ];
           }
@@ -32550,7 +32768,7 @@ rec {
         dependencies = [
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.48.0";
+            packageId = "windows-sys 0.61.2";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_Storage_FileSystem" "Win32_System_Console" "Win32_System_SystemInformation" ];
           }
@@ -34088,7 +34306,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Console" "Win32_System_IO" "Win32_System_Pipes" "Win32_System_SystemInformation" "Win32_System_WindowsProgramming" "Win32_UI" "Win32_UI_Shell" "default" ];
+        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_IO" "Win32_System_Pipes" "Win32_System_WindowsProgramming" "Win32_UI" "Win32_UI_Shell" "default" ];
       };
       "windows-sys 0.52.0" = rec {
         crateName = "windows-sys";
@@ -34336,7 +34554,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Security_Cryptography" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Diagnostics" "Win32_System_Diagnostics_Debug" "Win32_System_IO" "Win32_System_Threading" "Win32_System_Time" "Win32_System_WindowsProgramming" "default" ];
+        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_System" "Win32_System_IO" "Win32_System_Threading" "Win32_System_WindowsProgramming" "default" ];
       };
       "windows-sys 0.59.0" = rec {
         crateName = "windows-sys";
@@ -34595,7 +34813,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Globalization" "Win32_NetworkManagement" "Win32_NetworkManagement_IpHelper" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Com" "Win32_System_Console" "Win32_System_IO" "Win32_System_Threading" "Win32_UI" "Win32_UI_Shell" "default" ];
+        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_NetworkManagement" "Win32_NetworkManagement_IpHelper" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_IO" "Win32_System_Threading" "default" ];
       };
       "windows-sys 0.60.2" = rec {
         crateName = "windows-sys";
@@ -34860,7 +35078,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Security_Credentials" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Console" "Win32_System_IO" "Win32_System_Threading" "Win32_System_WindowsProgramming" "default" ];
+        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Security_Credentials" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_IO" "Win32_System_Threading" "Win32_System_WindowsProgramming" "default" ];
       };
       "windows-sys 0.61.2" = rec {
         crateName = "windows-sys";
@@ -35122,7 +35340,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Wdk" "Wdk_Foundation" "Wdk_Storage" "Wdk_Storage_FileSystem" "Wdk_System" "Wdk_System_IO" "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Security_Authentication" "Win32_Security_Authentication_Identity" "Win32_Security_Authorization" "Win32_Security_Credentials" "Win32_Security_Cryptography" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Com" "Win32_System_Console" "Win32_System_IO" "Win32_System_LibraryLoader" "Win32_System_Memory" "Win32_System_Pipes" "Win32_System_SystemInformation" "Win32_System_SystemServices" "Win32_System_Threading" "Win32_System_WindowsProgramming" "Win32_UI" "Win32_UI_Input" "Win32_UI_Input_KeyboardAndMouse" "Win32_UI_Shell" "default" ];
+        resolvedDefaultFeatures = [ "Wdk" "Wdk_Foundation" "Wdk_Storage" "Wdk_Storage_FileSystem" "Wdk_System" "Wdk_System_IO" "Win32" "Win32_Foundation" "Win32_Globalization" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Security_Authentication" "Win32_Security_Authentication_Identity" "Win32_Security_Authorization" "Win32_Security_Credentials" "Win32_Security_Cryptography" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Com" "Win32_System_Console" "Win32_System_Diagnostics" "Win32_System_Diagnostics_Debug" "Win32_System_IO" "Win32_System_LibraryLoader" "Win32_System_Memory" "Win32_System_Pipes" "Win32_System_SystemInformation" "Win32_System_SystemServices" "Win32_System_Threading" "Win32_System_Time" "Win32_System_WindowsProgramming" "Win32_UI" "Win32_UI_Input" "Win32_UI_Input_KeyboardAndMouse" "Win32_UI_Shell" "default" ];
       };
       "windows-targets 0.42.2" = rec {
         crateName = "windows-targets";
