@@ -96,6 +96,7 @@ in
     pkgs.dbus # secretspec
     pkgs.nixd # LSP for devenv lsp command
     inputs.crate2nix.packages.${system}.default # Generate Cargo.nix from Cargo.lock
+    inputs.ghostty.packages.${system}.libghostty-vt # pkg-config provider for libghostty-vt-sys
   ];
 
   languages = {
