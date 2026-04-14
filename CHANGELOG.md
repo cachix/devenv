@@ -6,6 +6,7 @@
 
 - Fixed MCP server segfault on exit by waiting for the cache init thread to finish before exiting ([#2699](https://github.com/cachix/devenv/issues/2699)).
 - Fixed independent oneshot tasks (e.g. `devenv:files` and `devenv:python:virtualenv`) running sequentially instead of in parallel, causing unnecessary waterfall delays during `devenv shell` startup.
+- Fixed `nix build` failing with `E0463: can't find crate for devenv_reload` by switching the iocraft `[patch.crates-io]` entry to the `row-level-diff` branch, which carries iocraft 0.8.0. The previous `cachix` branch was stuck at 0.7.18 so the patch no longer applied, leaving two iocraft versions in the dependency graph and causing rustc metadata hash mismatches.
 - Fixed `processes.<name>.watch` restarting processes multiple times for a single burst of queued file watcher events by draining the watch queue before restart ([#2735](https://github.com/cachix/devenv/pull/2735)).
 - Fixed `processes.<name>.watch` restarting processes on read-only access, directory listing, and metadata-only file events ([#2734](https://github.com/cachix/devenv/pull/2734)).
 - Fixed `imports` overriding the base project's `inputs` (e.g. `inputs.nixpkgs.url`) instead of the base config taking precedence ([#2728](https://github.com/cachix/devenv/issues/2728)).

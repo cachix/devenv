@@ -1,5 +1,7 @@
 {
   "git+https://github.com/cachix/crossterm?rev=91e3df5ccee39f142acefb9e99de1bf43c2fea67#crossterm@0.29.0": "0wn6n3znzv1jxw9ghl6qgsancd2myafs7kxpvn3lm3wsxhpvv76l",
+  "git+https://github.com/cachix/iocraft?rev=df0732561aa450d2e3a5c580920be6001c0aa71f#iocraft-macros@0.2.3": "0qp5dnh1p536s5vfqsvhnc1dk9rymc1z2x5qd255n43aj6zyj80a",
+  "git+https://github.com/cachix/iocraft?rev=df0732561aa450d2e3a5c580920be6001c0aa71f#iocraft@0.8.0": "0qp5dnh1p536s5vfqsvhnc1dk9rymc1z2x5qd255n43aj6zyj80a",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=5a2b2861749a3157d4a7f4297aaa2fe7b03dac37#nix-bindings-bindgen-raw@0.1.0": "0a8rxvhydc9a7hmfdzkyl0g7fqlmdj0d9bry3pkyjhyky5w70gi6",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=5a2b2861749a3157d4a7f4297aaa2fe7b03dac37#nix-bindings-expr@0.1.0": "0a8rxvhydc9a7hmfdzkyl0g7fqlmdj0d9bry3pkyjhyky5w70gi6",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=5a2b2861749a3157d4a7f4297aaa2fe7b03dac37#nix-bindings-fetchers@0.1.0": "0a8rxvhydc9a7hmfdzkyl0g7fqlmdj0d9bry3pkyjhyky5w70gi6",
