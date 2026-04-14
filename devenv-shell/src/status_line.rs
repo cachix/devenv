@@ -49,13 +49,18 @@ pub const XMARK: &str = "✗";
 
 /// Keybind labels (short, long) for status line actions.
 /// Short form uses ⌥ (Option symbol). Long form uses "Opt" on macOS, "Alt" elsewhere.
-#[cfg(target_os = "macos")]
-const KEYBIND_ERROR: (&str, &str) = ("^⌥E", "Ctrl-Opt-E");
-#[cfg(not(target_os = "macos"))]
+/// When deterministic-tui is enabled, always use "Alt" for reproducible snapshots.
+#[cfg(feature = "deterministic-tui")]
 const KEYBIND_ERROR: (&str, &str) = ("^⌥E", "Ctrl-Alt-E");
-#[cfg(target_os = "macos")]
+#[cfg(all(not(feature = "deterministic-tui"), target_os = "macos"))]
+const KEYBIND_ERROR: (&str, &str) = ("^⌥E", "Ctrl-Opt-E");
+#[cfg(all(not(feature = "deterministic-tui"), not(target_os = "macos")))]
+const KEYBIND_ERROR: (&str, &str) = ("^⌥E", "Ctrl-Alt-E");
+#[cfg(feature = "deterministic-tui")]
+const KEYBIND_PAUSE: (&str, &str) = ("^⌥D", "Ctrl-Alt-D");
+#[cfg(all(not(feature = "deterministic-tui"), target_os = "macos"))]
 const KEYBIND_PAUSE: (&str, &str) = ("^⌥D", "Ctrl-Opt-D");
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(feature = "deterministic-tui"), not(target_os = "macos")))]
 const KEYBIND_PAUSE: (&str, &str) = ("^⌥D", "Ctrl-Alt-D");
 
 /// Current status state.
