@@ -724,9 +724,7 @@ impl Devenv {
         crate::shell_env::apply_shell_env(&mut shell_cmd, &bash, &self.shell_settings.clean);
 
         // Inject OTEL trace context so instrumented subprocesses join the trace.
-        for (key, value) in devenv_activity::trace_propagation_env() {
-            shell_cmd.env(key, value);
-        }
+        shell_cmd.envs(devenv_activity::trace_propagation_env());
 
         Ok(shell_cmd)
     }
@@ -769,9 +767,7 @@ impl Devenv {
         shell_cmd.stdout(Stdio::piped());
         shell_cmd.stderr(Stdio::piped());
 
-        let activity = activity!(Activity::operation(
-            activity_name.unwrap_or("Running in shell")
-        ));
+        let activity = activity!(INFO, operation, activity_name.unwrap_or("Running in shell"));
 
         let mut child = shell_cmd.spawn().into_diagnostic()?;
 
@@ -848,7 +844,7 @@ impl Devenv {
             None => "Updating devenv.lock".to_string(),
         };
 
-        let activity = activity!(Activity::operation(&msg));
+        let activity = activity!(INFO, operation, &msg);
         self.nix
             .update(
                 input_name,
@@ -1183,7 +1179,7 @@ impl Devenv {
 
     /// Assemble, build dev environment, cache it, and capture shell env vars.
     async fn configure_shell(&self) -> Result<HashMap<String, String>> {
-        let phase1 = activity!(Activity::operation("Configuring shell").parent(None));
+        let phase1 = devenv_activity::start!(Activity::operation("Configuring shell").parent(None));
         async {
             self.assemble().await?;
             let dev_env = self.get_dev_environment_inner(false).await?;
@@ -1228,7 +1224,8 @@ impl Devenv {
 
         // ── Phase 3: Building tests ─────────────────────────────────
         let test_script = {
-            let phase3 = activity!(Activity::operation("Building tests").parent(None));
+            let phase3 =
+                devenv_activity::start!(Activity::operation("Building tests").parent(None));
             async {
                 let gc_root = self.devenv_dot_gc.join("test");
                 let test_script = self
@@ -1282,7 +1279,7 @@ impl Devenv {
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<Vec<(String, PathBuf)>> {
-        let activity = activity!(Activity::operation("Building"));
+        let activity = activity!(INFO, operation, "Building");
         async move {
             self.assemble().await?;
 
@@ -1370,7 +1367,7 @@ impl Devenv {
     }
 
     pub async fn eval(&self, attributes: &[String]) -> Result<String> {
-        let activity = activity!(Activity::operation("Evaluating"));
+        let activity = activity!(INFO, operation, "Evaluating");
         async move {
             self.assemble().await?;
 
@@ -1449,7 +1446,7 @@ impl Devenv {
         // race conditions; dropping them here makes the ports available.
         drop(self.port_allocator.take_reservations());
 
-        let phase4 = activity!(Activity::operation("Running processes").parent(None));
+        let phase4 = devenv_activity::start!(Activity::operation("Running processes").parent(None));
         let impl_result = async {
             self.nix
                 .eval(&["devenv.config.process.manager.implementation"])

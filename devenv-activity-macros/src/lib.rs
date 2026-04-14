@@ -19,7 +19,7 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{ToTokens, quote};
 use syn::{
-    Expr, ExprLit, FnArg, Ident, ItemFn, Lit, Pat, Token,
+    Expr, ExprLit, Ident, ItemFn, Lit, Token,
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
@@ -39,6 +39,7 @@ struct ActivityArgs {
     name: Expr,
     kind: Option<Ident>,
     level: Option<Ident>,
+    #[allow(dead_code)] // Parsed for compatibility but not yet used for span field capture.
     skip: Vec<Ident>,
 }
 
@@ -166,7 +167,7 @@ impl Parse for ActivityArgs {
 /// ```ignore
 /// async fn build_shell() -> Result<()> {
 ///     use devenv_activity::ActivityInstrument;
-///     let __activity = devenv_activity::activity!(devenv_activity::Activity::operation("Building shell"));
+///     let __activity = devenv_activity::Activity::operation("Building shell").start();
 ///     (async move {
 ///         // original function body
 ///     }).in_activity(&__activity).await
@@ -188,7 +189,7 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
         name,
         kind,
         level,
-        skip,
+        skip: _,
     } = args;
 
     let fn_vis = &input_fn.vis;
@@ -259,25 +260,8 @@ fn generate_activity_wrapper(args: ActivityArgs, input_fn: ItemFn) -> syn::Resul
     };
 
     let activity_create = quote! {
-        devenv_activity::activity!(#activity_builder)
+        devenv_activity::start!(#activity_builder)
     };
-
-    // Collect argument names that aren't skipped (for potential future use)
-    let _captured_args: Vec<_> = fn_sig
-        .inputs
-        .iter()
-        .filter_map(|arg| {
-            if let FnArg::Typed(pat_type) = arg
-                && let Pat::Ident(pat_ident) = &*pat_type.pat
-            {
-                let ident = &pat_ident.ident;
-                if !skip.iter().any(|s| s == ident) {
-                    return Some(ident.clone());
-                }
-            }
-            None
-        })
-        .collect();
 
     let output = if is_async {
         // For async functions, use in_activity() which handles both parent tracking and span instrumentation

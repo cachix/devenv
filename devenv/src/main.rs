@@ -11,7 +11,7 @@ use devenv::{
     reload::DevenvShellBuilder,
     tracing as devenv_tracing,
 };
-use devenv_activity::{ActivityLevel, activity};
+use devenv_activity::ActivityLevel;
 use devenv_core::{
     CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings,
     config::{self, Config, NixpkgsConfig},
@@ -198,11 +198,18 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
     } else {
         devenv::tasks::VerbosityLevel::Normal
     };
-    let use_tracing_mode = cli.tracing_args.use_tracing_mode();
     let tracing_specs = cli
         .tracing_args
         .resolve_and_validate()
         .map_err(|e| miette::miette!("{e}"))?;
+    let use_tracing_mode = tracing_specs
+        .iter()
+        .any(|s| s.destination.targets_terminal())
+        || cli
+            .tracing_args
+            .trace_output
+            .as_ref()
+            .is_some_and(|d| d.targets_terminal());
 
     let mut config = Config::load()?;
 
@@ -1279,8 +1286,9 @@ fn run_daemon_processes(config_file: std::path::PathBuf) -> Result<()> {
         .map_err(|e| miette::miette!("Failed to build task runner: {}", e))?;
 
         // Run the full task DAG (starts processes, waits for readiness probes)
-        let phase =
-            activity!(devenv_activity::Activity::operation("Running processes").parent(None));
+        let phase = devenv_activity::start!(
+            devenv_activity::Activity::operation("Running processes").parent(None)
+        );
         let _outputs = tasks_runner.run_with_parent_activity(Arc::new(phase)).await;
 
         // Write PID so `devenv processes down` can find us

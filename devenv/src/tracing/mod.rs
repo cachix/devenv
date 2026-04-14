@@ -73,9 +73,16 @@ fn create_trace_writer(output: &TraceOutput) -> Option<Mutex<TraceWriter>> {
         TraceOutput::Stderr => Some(Mutex::new(TraceWriter::Stderr(LineWriter::new(
             io::stderr(),
         )))),
-        TraceOutput::File(path) => File::create(path)
-            .ok()
-            .map(|f| Mutex::new(TraceWriter::File(LineWriter::new(f)))),
+        TraceOutput::File(path) => match File::create(path) {
+            Ok(f) => Some(Mutex::new(TraceWriter::File(LineWriter::new(f)))),
+            Err(e) => {
+                eprintln!(
+                    "warning: failed to create trace output file '{}': {e}",
+                    path.display()
+                );
+                None
+            }
+        },
         TraceOutput::Url(_) => None,
     }
 }
@@ -101,14 +108,14 @@ fn create_filter(level: Level) -> EnvFilter {
         .from_env_lossy()
         .add_directive("watchexec=warn".parse().unwrap());
 
-    if level >= Level::Warn {
+    if level <= Level::Warn {
         // In quiet mode the TUI is off and activity span events would just
         // leak to stderr, so suppress them entirely.
         filter.add_directive("devenv_activity=warn".parse().unwrap())
     } else {
         // Activity spans at trace level are needed so the TUI can render
         // all activity events.
-        filter.add_directive("devenv::activity=trace".parse().unwrap())
+        filter.add_directive("devenv_activity=trace".parse().unwrap())
     }
 }
 

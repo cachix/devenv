@@ -1,8 +1,15 @@
 //! Builder types for creating activities.
 //!
-//! All activity creation goes through the [`activity!`] macro, which emits
-//! `tracing::span!()` at the call site so that tracing metadata (file, line)
-//! points to where the activity was created, not to this module.
+//! Activities can be started in two ways:
+//!
+//! - **Builder style**: `Activity::operation("name").start()` — convenient
+//!   but span metadata (`module_path`, `file`, `line`) will point to this
+//!   module since `tracing::span!()` expands here.
+//!
+//! - **Macro style**: `activity!(INFO, operation, "name")` or
+//!   `#[instrument_activity("name")]` — creates the span at the call site
+//!   so that tracing *metadata* (`module_path`, `file`, `line`) points to
+//!   the caller's module. This is the preferred approach.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -25,12 +32,12 @@ pub fn next_id() -> u64 {
 }
 
 /// Trait implemented by all activity builders.
-///
-/// Used by the [`activity!`] macro to extract name/level from a builder and
-/// finalize the activity with an externally-created span.
 pub trait ActivityStart: Sized {
     /// The human-readable activity name (used for `otel.name` and `devenv.user_message`).
     fn activity_name(&self) -> &str;
+
+    /// The activity kind (e.g. `"build"`, `"fetch"`, `"operation"`).
+    fn activity_kind(&self) -> &'static str;
 
     /// Resolve the effective tracing level for this activity.
     fn resolved_level(&self) -> ActivityLevel;
@@ -43,52 +50,38 @@ pub trait ActivityStart: Sized {
 
     /// Finalize the activity with a span created at the call site.
     fn start_with_span(self, span: Span) -> Activity;
+
+    /// Start the activity, creating a tracing span.
+    ///
+    /// Prefer the [`start!`] macro which expands the span at the call site,
+    /// giving correct `code.file.path` / `code.module.name` metadata.
+    /// This method exists for use inside other macros that already handle
+    /// span creation (e.g. `activity!`, `#[instrument_activity]`).
+    fn start(self) -> Activity {
+        let id = self.existing_id().unwrap_or_else(crate::next_id);
+        let span = crate::__create_activity_span!(&self, id);
+        self.with_id(id).start_with_span(span)
+    }
 }
 
-/// Create and start an activity with correct source location metadata.
+/// Start an activity from any builder expression.
 ///
-/// This macro emits `tracing::span!()` at the call site, so tracing metadata
-/// (`code.file.path`, `code.line.number`) points to where the activity is
-/// created rather than to the activity library internals.
-///
-/// # Examples
+/// Expands the tracing span at the call site so that span metadata
+/// (`code.file.path`, `code.line.number`, `code.module.name`) points
+/// to the caller's module.
 ///
 /// ```ignore
-/// use devenv_activity::{Activity, activity};
-///
-/// let act = activity!(Activity::operation("Configuring shell"));
-/// let act = activity!(Activity::evaluate("Evaluating Nix"));
-/// let act = activity!(Activity::build("container").derivation_path(&path));
-/// let act = activity!(Activity::task("devenv:enterShell").id(42));
+/// // Simple — shorthand for Activity::operation(...).start()
+/// start!(Activity::operation("Running MCP server").detail(format!(...)))
+/// start!(Activity::fetch(FetchKind::Download, name).url(&u).id(id))
+/// start!(Activity::task(&name).id(activity_id))
 /// ```
-/// Internal macro: resolve builder → (id, otel_name, user_message, span).
-///
-/// Shared between [`activity!`] and [`start_queue!`] so the otel-name
-/// lowercasing logic lives in exactly one place.
-#[doc(hidden)]
 #[macro_export]
-macro_rules! __prepare_activity {
-    ($builder:expr) => {{
-        let __name = $crate::ActivityStart::activity_name(&$builder);
-        let __otel_name_owned;
-        let __otel_name: &str = if __name.as_bytes().iter().any(|b| b.is_ascii_uppercase()) {
-            __otel_name_owned = __name.to_ascii_lowercase();
-            __otel_name_owned.as_str()
-        } else {
-            __name
-        };
-        let __id = $crate::ActivityStart::existing_id(&$builder).unwrap_or_else($crate::next_id);
-        let __level = $crate::ActivityStart::resolved_level(&$builder);
-        let __span = $crate::__create_activity_span!(__id, __otel_name, __name, __level);
-        (__id, __span)
-    }};
-}
-
-#[macro_export]
-macro_rules! activity {
+macro_rules! start {
     ($builder:expr) => {{
         let __builder = $builder;
-        let (__id, __span) = $crate::__prepare_activity!(__builder);
+        let __id = $crate::ActivityStart::existing_id(&__builder).unwrap_or_else($crate::next_id);
+        let __span = $crate::__create_activity_span!(&__builder, __id);
         $crate::ActivityStart::start_with_span(
             $crate::ActivityStart::with_id(__builder, __id),
             __span,
@@ -96,101 +89,166 @@ macro_rules! activity {
     }};
 }
 
-/// Create and queue a build activity with correct source location metadata.
+/// Queue a build activity, expanding the span at the call site.
 ///
-/// Same as [`activity!`] but for build activities that are waiting for a build slot.
+/// ```ignore
+/// queue!(Activity::build("foo").derivation_path(drv).parent(parent_id))
+/// ```
 #[macro_export]
-macro_rules! start_queue {
+macro_rules! queue {
     ($builder:expr) => {{
-        let __builder: $crate::BuildBuilder = $builder;
-        let (__id, __span) = $crate::__prepare_activity!(__builder);
+        let __builder = $builder;
+        let __id = $crate::ActivityStart::existing_id(&__builder).unwrap_or_else($crate::next_id);
+        let __span = $crate::__create_activity_span!(&__builder, __id);
         $crate::ActivityStart::with_id(__builder, __id).queue_with_span(__span)
     }};
 }
 
-/// Internal macro that emits `span!()` at the expansion site.
+/// Create and start an activity (shorthand).
 ///
-/// Each `tracing::span!()` requires a compile-time level constant, so we
-/// match on the runtime level and expand a separate `span!()` for each variant.
-/// Since this macro is called from [`activity!`]/[`start_queue!`], all `span!()` calls
-/// expand at the user's call site — giving correct `file!()`/`line!()`.
+/// ```ignore
+/// activity!(INFO, operation, "Configuring shell")
+/// activity!(DEBUG, evaluate, format!("Checking cachix.{}", field))
+/// ```
+#[macro_export]
+macro_rules! activity {
+    ($level:ident, $kind:ident, $name:expr) => {
+        $crate::start!(
+            $crate::__activity_builder!($kind, $name).level($crate::__to_activity_level!($level))
+        )
+    };
+}
+
+/// Map a kind keyword to a builder constructor.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __activity_builder {
+    (build, $name:expr) => {
+        $crate::Activity::build($name)
+    };
+    (operation, $name:expr) => {
+        $crate::Activity::operation($name)
+    };
+    (evaluate, $name:expr) => {
+        $crate::Activity::evaluate($name)
+    };
+    (task, $name:expr) => {
+        $crate::Activity::task($name)
+    };
+    (command, $name:expr) => {
+        $crate::Activity::command($name)
+    };
+    (process, $name:expr) => {
+        $crate::Activity::process($name)
+    };
+}
+
+/// Map a level keyword to `ActivityLevel`.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __to_activity_level {
+    (ERROR) => {
+        $crate::ActivityLevel::Error
+    };
+    (WARN) => {
+        $crate::ActivityLevel::Warn
+    };
+    (INFO) => {
+        $crate::ActivityLevel::Info
+    };
+    (DEBUG) => {
+        $crate::ActivityLevel::Debug
+    };
+    (TRACE) => {
+        $crate::ActivityLevel::Trace
+    };
+}
+
+/// Create an activity span using tracing's lower-level API directly.
 ///
-/// The span declares `Empty` fields for type-specific attributes (`devenv.derivation_path`,
-/// `devenv.url`, etc.) and outcome tracking (`devenv.outcome`, `otel.status_code`).
-/// Builders record type-specific fields in `start_with_span()`; the `Activity::Drop`
-/// impl records outcome fields.
+/// Used by [`ActivityStart::start()`] and [`BuildBuilder::queue()`] to create
+/// tracing spans with the base activity fields plus any extra fields.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __create_activity_span {
-    ($id:expr, $otel_name:expr, $name:expr, $level:expr) => {
-        match $level {
-            $crate::ActivityLevel::Error => tracing::span!(
-                tracing::Level::ERROR,
-                "activity",
-                activity_id = $id,
-                otel.name = $otel_name,
-                devenv.user_message = $name,
-                devenv.activity.kind = tracing::field::Empty,
-                devenv.derivation_path = tracing::field::Empty,
-                devenv.url = tracing::field::Empty,
-                devenv.fetch.kind = tracing::field::Empty,
-                devenv.outcome = tracing::field::Empty,
-                otel.status_code = tracing::field::Empty,
-            ),
-            $crate::ActivityLevel::Warn => tracing::span!(
-                tracing::Level::WARN,
-                "activity",
-                activity_id = $id,
-                otel.name = $otel_name,
-                devenv.user_message = $name,
-                devenv.activity.kind = tracing::field::Empty,
-                devenv.derivation_path = tracing::field::Empty,
-                devenv.url = tracing::field::Empty,
-                devenv.fetch.kind = tracing::field::Empty,
-                devenv.outcome = tracing::field::Empty,
-                otel.status_code = tracing::field::Empty,
-            ),
-            $crate::ActivityLevel::Info => tracing::span!(
-                tracing::Level::INFO,
-                "activity",
-                activity_id = $id,
-                otel.name = $otel_name,
-                devenv.user_message = $name,
-                devenv.activity.kind = tracing::field::Empty,
-                devenv.derivation_path = tracing::field::Empty,
-                devenv.url = tracing::field::Empty,
-                devenv.fetch.kind = tracing::field::Empty,
-                devenv.outcome = tracing::field::Empty,
-                otel.status_code = tracing::field::Empty,
-            ),
-            $crate::ActivityLevel::Debug => tracing::span!(
-                tracing::Level::DEBUG,
-                "activity",
-                activity_id = $id,
-                otel.name = $otel_name,
-                devenv.user_message = $name,
-                devenv.activity.kind = tracing::field::Empty,
-                devenv.derivation_path = tracing::field::Empty,
-                devenv.url = tracing::field::Empty,
-                devenv.fetch.kind = tracing::field::Empty,
-                devenv.outcome = tracing::field::Empty,
-                otel.status_code = tracing::field::Empty,
-            ),
-            $crate::ActivityLevel::Trace => tracing::span!(
-                tracing::Level::TRACE,
-                "activity",
-                activity_id = $id,
-                otel.name = $otel_name,
-                devenv.user_message = $name,
-                devenv.activity.kind = tracing::field::Empty,
-                devenv.derivation_path = tracing::field::Empty,
-                devenv.url = tracing::field::Empty,
-                devenv.fetch.kind = tracing::field::Empty,
-                devenv.outcome = tracing::field::Empty,
-                otel.status_code = tracing::field::Empty,
-            ),
+    ($builder:expr, $id:expr $(, $($($k:ident).+ = $v:expr),+ )?) => {{
+        use tracing::__macro_support::Callsite as _;
+        use tracing::callsite::{DefaultCallsite, Identifier};
+        use tracing::field::FieldSet;
+
+        // Common fields + caller-supplied extras. Each call site gets its own set.
+        const FIELD_NAMES: &[&str] = &[
+            "activity_id",
+            "otel.name",
+            "devenv.user_message",
+            "devenv.activity.kind",
+            "devenv.outcome",
+            "otel.status_code",
+            $($( stringify!($($k).+) ),+ )?
+        ];
+
+        macro_rules! def_callsite {
+            ($lvl:expr, $CS:ident, $META:ident) => {
+                static $META: tracing::Metadata<'static> = tracing::Metadata::new(
+                    "activity",
+                    module_path!(),
+                    $lvl,
+                    Some(file!()),
+                    Some(line!()),
+                    Some(module_path!()),
+                    FieldSet::new(FIELD_NAMES, Identifier(&$CS)),
+                    tracing::metadata::Kind::SPAN,
+                );
+                static $CS: DefaultCallsite = DefaultCallsite::new(&$META);
+            };
         }
-    };
+
+        def_callsite!(tracing::Level::ERROR, CS_E, M_E);
+        def_callsite!(tracing::Level::WARN, CS_W, M_W);
+        def_callsite!(tracing::Level::INFO, CS_I, M_I);
+        def_callsite!(tracing::Level::DEBUG, CS_D, M_D);
+        def_callsite!(tracing::Level::TRACE, CS_T, M_T);
+
+        let __level = $crate::ActivityStart::resolved_level($builder);
+        let cs: &DefaultCallsite = match __level {
+            $crate::ActivityLevel::Error => &CS_E,
+            $crate::ActivityLevel::Warn => &CS_W,
+            $crate::ActivityLevel::Info => &CS_I,
+            $crate::ActivityLevel::Debug => &CS_D,
+            $crate::ActivityLevel::Trace => &CS_T,
+        };
+
+        let interest = cs.interest();
+        if interest.is_never() {
+            tracing::Span::none()
+        } else {
+            let meta = cs.metadata();
+            if tracing::__macro_support::__is_enabled(meta, interest) {
+                let __name = $crate::ActivityStart::activity_name($builder);
+                let __kind = $crate::ActivityStart::activity_kind($builder);
+                let __otel_name_owned;
+                let __otel_name: &str = if __name.as_bytes().iter().any(|b| b.is_ascii_uppercase()) {
+                    __otel_name_owned = __name.to_ascii_lowercase();
+                    __otel_name_owned.as_str()
+                } else {
+                    __name
+                };
+                let fs = meta.fields();
+                tracing::Span::new(
+                    meta,
+                    &fs.value_set(&[
+                        (&fs.field("activity_id").unwrap(), Some(&$id as &dyn tracing::field::Value)),
+                        (&fs.field("otel.name").unwrap(), Some(&__otel_name as &dyn tracing::field::Value)),
+                        (&fs.field("devenv.user_message").unwrap(), Some(&__name as &dyn tracing::field::Value)),
+                        (&fs.field("devenv.activity.kind").unwrap(), Some(&__kind as &dyn tracing::field::Value)),
+                        $($( (&fs.field(stringify!($($k).+)).unwrap(), Some(&$v as &dyn tracing::field::Value)) ),+ )?
+                    ]),
+                )
+            } else {
+                tracing::Span::none()
+            }
+        }
+    }};
 }
 
 // ---------------------------------------------------------------------------
@@ -237,20 +295,20 @@ impl BuildBuilder {
         self
     }
 
-    fn resolve_and_record(&self, span: &Span) -> (u64, Option<u64>, ActivityLevel) {
+    /// Queue a build activity.
+    ///
+    /// Prefer the [`queue!`] macro for correct call-site metadata.
+    pub fn queue(self) -> Activity {
+        let id = self.existing_id().unwrap_or_else(next_id);
+        let span = crate::__create_activity_span!(&self, id);
+        self.with_id(id).queue_with_span(span)
+    }
+
+    /// Queue a build with an externally-created span.
+    pub fn queue_with_span(self, span: Span) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
         let level = self.resolved_level();
-        span.record("devenv.activity.kind", "build");
-        if let Some(ref path) = self.derivation_path {
-            span.record("devenv.derivation_path", path.as_str());
-        }
-        (id, parent, level)
-    }
-
-    /// Queue a build with an externally-created span (used by [`start_queue!`] macro).
-    pub fn queue_with_span(self, span: Span) -> Activity {
-        let (id, parent, level) = self.resolve_and_record(&span);
 
         send_activity_event(ActivityEvent::Build(Build::Queued {
             id,
@@ -269,6 +327,10 @@ impl ActivityStart for BuildBuilder {
         &self.name
     }
 
+    fn activity_kind(&self) -> &'static str {
+        "build"
+    }
+
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -285,7 +347,9 @@ impl ActivityStart for BuildBuilder {
     }
 
     fn start_with_span(self, span: Span) -> Activity {
-        let (id, parent, level) = self.resolve_and_record(&span);
+        let id = self.id.unwrap_or_else(next_id);
+        let parent = self.parent.unwrap_or_else(current_activity_id);
+        let level = self.resolved_level();
 
         send_activity_event(ActivityEvent::Build(Build::Start {
             id,
@@ -347,6 +411,10 @@ impl ActivityStart for FetchBuilder {
         &self.name
     }
 
+    fn activity_kind(&self) -> &'static str {
+        "fetch"
+    }
+
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -367,12 +435,6 @@ impl ActivityStart for FetchBuilder {
         let parent = self.parent.unwrap_or_else(current_activity_id);
         let level = self.resolved_level();
         let kind = self.kind;
-
-        span.record("devenv.activity.kind", "fetch");
-        span.record("devenv.fetch.kind", kind.as_str());
-        if let Some(ref url) = self.url {
-            span.record("devenv.url", url.as_str());
-        }
 
         send_activity_event(ActivityEvent::Fetch(Fetch::Start {
             id,
@@ -426,6 +488,10 @@ impl ActivityStart for EvaluateBuilder {
         &self.name
     }
 
+    fn activity_kind(&self) -> &'static str {
+        "evaluate"
+    }
+
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -445,8 +511,6 @@ impl ActivityStart for EvaluateBuilder {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
         let level = self.resolved_level();
-
-        span.record("devenv.activity.kind", "evaluate");
 
         send_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
             id,
@@ -492,6 +556,10 @@ impl ActivityStart for TaskBuilder {
         &self.name
     }
 
+    fn activity_kind(&self) -> &'static str {
+        "task"
+    }
+
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -510,8 +578,6 @@ impl ActivityStart for TaskBuilder {
     fn start_with_span(self, span: Span) -> Activity {
         let id = self.id.unwrap_or_else(next_id);
         let level = self.resolved_level();
-
-        span.record("devenv.activity.kind", "task");
 
         send_activity_event(ActivityEvent::Task(Task::Start {
             id,
@@ -568,6 +634,10 @@ impl ActivityStart for CommandBuilder {
         &self.name
     }
 
+    fn activity_kind(&self) -> &'static str {
+        "command"
+    }
+
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -587,8 +657,6 @@ impl ActivityStart for CommandBuilder {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
         let level = self.resolved_level();
-
-        span.record("devenv.activity.kind", "command");
 
         send_activity_event(ActivityEvent::Command(Command::Start {
             id,
@@ -662,6 +730,10 @@ impl ActivityStart for ProcessBuilder {
         &self.name
     }
 
+    fn activity_kind(&self) -> &'static str {
+        "process"
+    }
+
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -681,8 +753,6 @@ impl ActivityStart for ProcessBuilder {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
         let level = self.resolved_level();
-
-        span.record("devenv.activity.kind", "process");
 
         send_activity_event(ActivityEvent::Process(Process::Start {
             id,
@@ -745,6 +815,10 @@ impl ActivityStart for OperationBuilder {
         &self.name
     }
 
+    fn activity_kind(&self) -> &'static str {
+        "operation"
+    }
+
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -764,8 +838,6 @@ impl ActivityStart for OperationBuilder {
         let id = self.id.unwrap_or_else(next_id);
         let parent = self.parent.unwrap_or_else(current_activity_id);
         let level = self.resolved_level();
-
-        span.record("devenv.activity.kind", "operation");
 
         send_activity_event(ActivityEvent::Operation(Operation::Start {
             id,

@@ -116,6 +116,8 @@ pub(super) fn init_tracing_unified(
         .try_init();
 
     // Register trace context propagator so subprocesses inherit TRACEPARENT/TRACESTATE.
+    // HashMap<String, String> implements opentelemetry::propagation::Injector
+    // (lowercases keys), so we uppercase them for env var convention.
     devenv_activity::register_trace_propagator({
         let propagator = TraceContextPropagator::new();
         move || {

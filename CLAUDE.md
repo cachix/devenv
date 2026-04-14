@@ -73,7 +73,7 @@ Nix modules in `src/modules/` define the devenv configuration schema:
 ### Key Patterns
 
 - **Dual Backend Architecture**: The `NixBackend` trait allows swapping between the FFI-based backend (default) and Snix backend.
-- **Activity Tracing**: Use `#[instrument_activity("description")]` macro or `activity!(Activity::operation("..."))` for TUI-visible operations.
+- **Activity Tracing**: Use `#[instrument_activity("description")]` macro or `activity!(INFO, operation, "...")` for TUI-visible operations.
 - **Error Handling**: Use `miette` for errors with `bail!()` and `?`. Custom error types use `thiserror`.
 - **SQLite Migrations**: Both `devenv-eval-cache` and `devenv-tasks` use sqlx with migrations in `migrations/` directories.
 

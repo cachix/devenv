@@ -591,6 +591,10 @@ impl TracingCliArgs {
     }
 
     /// Returns true if tracing-only mode should be used (disables TUI).
+    ///
+    /// Prefer deriving this from the resolved specs returned by
+    /// `resolve_and_validate()` to avoid double-parsing `DEVENV_TRACE_TO`.
+    /// This method remains for cases where validation hasn't run yet.
     pub fn use_tracing_mode(&self) -> bool {
         let env_targets_terminal = Self::specs_from_env()
             .ok()

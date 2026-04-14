@@ -6,9 +6,7 @@ use crate::types::{
     DepSatisfaction, DependencyKind, OneshotStatus, Output, Outputs, ProcessTaskStatus, Skipped,
     TaskCompleted, TaskFailure, TaskStatus, TaskType, TasksStatus, VerbosityLevel,
 };
-use devenv_activity::{
-    Activity, ActivityInstrument, TaskInfo, activity, emit_task_hierarchy, next_id,
-};
+use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
 use devenv_processes::{NativeProcessManager, ProcessConfig, ProcessPhase};
 use petgraph::algo::{has_path_connecting, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -571,15 +569,13 @@ impl Tasks {
         } else {
             ("Running tasks", "tasks")
         };
-        let orchestration_activity = Arc::new(activity!(
-            Activity::operation(label)
-                .detail(format!(
-                    "{} {}, roots: {:?}",
-                    self.tasks_order.len(),
-                    item_type,
-                    self.root_names
-                ))
-                .parent(None)
+        let orchestration_activity = Arc::new(devenv_activity::start!(
+            Activity::operation(label).parent(None).detail(format!(
+                "{} {}, roots: {:?}",
+                self.tasks_order.len(),
+                item_type,
+                self.root_names
+            ))
         ));
 
         self.run_internal(orchestration_activity).await
@@ -626,7 +622,8 @@ impl Tasks {
         };
 
         let task_name = task_state.read().await.task.name.clone();
-        let skip_activity = activity!(Activity::task(&task_name).id(task_activity_id));
+        let skip_activity =
+            devenv_activity::start!(Activity::task(&task_name).id(task_activity_id));
         if cancelled {
             skip_activity.cancel();
         } else {
