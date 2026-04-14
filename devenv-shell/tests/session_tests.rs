@@ -266,8 +266,20 @@ fn render_all_lines(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String
         .collect()
 }
 
+/// Normalize platform-specific keybind labels in status-line snapshots so a
+/// single `.snap` file works on Linux and macOS. On macOS the long form
+/// renders `Ctrl-Opt-E`/`Ctrl-Opt-D`; elsewhere it's `Ctrl-Alt-*`. The guard
+/// must be kept alive for the duration of the snapshot assertions.
+#[must_use]
+fn bind_keybind_filters() -> insta::internals::SettingsBindDropGuard {
+    let mut settings = insta::Settings::clone_current();
+    settings.add_filter(r"Ctrl-Opt-([A-Z])", "Ctrl-Alt-$1");
+    settings.bind_to_scope()
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_status_line_rendered_on_last_row() {
+    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
@@ -358,6 +370,7 @@ async fn test_overflow_viewport_shows_tail() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_overflow_status_line_protected() {
+    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
@@ -406,6 +419,7 @@ async fn test_overflow_status_line_protected() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_build_lifecycle_status_line() {
+    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
@@ -461,6 +475,7 @@ async fn test_build_lifecycle_status_line() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_build_failed_error_toggle() {
+    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
@@ -517,6 +532,7 @@ async fn test_build_failed_error_toggle() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_watching_paused_status_line() {
+    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
