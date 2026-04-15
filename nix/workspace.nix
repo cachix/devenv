@@ -84,12 +84,10 @@ let
 
         wrapProgram $out/bin/devenv \
           --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
-          --prefix LD_LIBRARY_PATH ":" "${libghostty-vt}/lib" \
           ${setDefaultLocaleArchive}
 
         wrapProgram $out/bin/devenv-run-tests \
           --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
-          --prefix LD_LIBRARY_PATH ":" "${libghostty-vt}/lib" \
           ${setDefaultLocaleArchive}
 
         # Generate manpages
