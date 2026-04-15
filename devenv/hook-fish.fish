@@ -1,8 +1,8 @@
 # devenv hook for fish
 # Usage: devenv hook fish | source
 
-set -g _DEVENV_HOOK_LAST_PROJECT ""
-set -g _DEVENV_HOOK_UNTRUSTED ""
+set -q _DEVENV_HOOK_LAST_PROJECT; or set -g _DEVENV_HOOK_LAST_PROJECT ""
+set -q _DEVENV_HOOK_UNTRUSTED; or set -g _DEVENV_HOOK_UNTRUSTED ""
 
 function _devenv_hook --on-variable PWD
     # Inside devenv shell: exit when leaving the project directory
@@ -23,7 +23,7 @@ function _devenv_hook --on-variable PWD
 
     if test $exit_code -eq 0 -a -n "$project_dir"
         set -lx _DEVENV_HOOK_DIR $project_dir
-        fish -c 'cd -- $_DEVENV_HOOK_DIR; and devenv shell'
+        fish --no-config -c 'cd -- $_DEVENV_HOOK_DIR; and devenv shell'
         set -g _DEVENV_HOOK_LAST_PROJECT $project_dir
         set -g _DEVENV_HOOK_UNTRUSTED ""
         # If the devenv shell exited due to cd outside the project, follow the user there
@@ -58,7 +58,7 @@ function _devenv_hook_prompt --on-event fish_prompt
     set -l project_dir (devenv hook-should-activate --last "$_DEVENV_HOOK_LAST_PROJECT" 2>/dev/null)
     if test $status -eq 0 -a -n "$project_dir"
         set -lx _DEVENV_HOOK_DIR $project_dir
-        fish -c 'cd -- $_DEVENV_HOOK_DIR; and devenv shell'
+        fish --no-config -c 'cd -- $_DEVENV_HOOK_DIR; and devenv shell'
         set -g _DEVENV_HOOK_LAST_PROJECT $project_dir
         set -g _DEVENV_HOOK_UNTRUSTED ""
         # If the devenv shell exited due to cd outside the project, follow the user there
