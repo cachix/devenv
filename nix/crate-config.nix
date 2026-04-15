@@ -70,10 +70,15 @@ let
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
   };
 
-  # Shared override for crates linking against nix, openssl, protobuf, dbus, and bindgen
+  # Shared override for crates linking against nix, openssl, protobuf, dbus, and bindgen.
+  # These binaries transitively link devenv-shell -> libghostty-vt-sys, which loads
+  # libghostty-vt.so.0 at runtime. crate2nix does not propagate the shared library's
+  # path into the final binary's rpath, so we embed it here via a linker arg. This
+  # means the produced binaries find libghostty-vt.so.0 without any LD_LIBRARY_PATH
+  # wrapping.
   devenvBase = attrs: {
     buildInputs = (attrs.buildInputs or [ ])
-      ++ [ openssl ]
+      ++ [ openssl libghostty-vt ]
       ++ nixLibs
       ++ lib.optional stdenv.isLinux dbus;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
@@ -82,7 +87,12 @@ let
       rustPlatform.bindgenHook
     ];
     preConfigure = (attrs.preConfigure or "") + protoSetup;
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
+    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
+      "--cfg"
+      "tracing_unstable"
+      "-C"
+      "link-arg=-Wl,-rpath,${libghostty-vt}/lib"
+    ];
   };
 in
 {
