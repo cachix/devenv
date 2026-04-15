@@ -6,7 +6,6 @@
 //! - Shell hook script output (bash/zsh/fish/nushell)
 
 use crate::cli::HookShell;
-use devenv_cache_core::compute_file_hash;
 use miette::{IntoDiagnostic, Result};
 use std::path::{Path, PathBuf};
 
@@ -20,18 +19,21 @@ fn canonical_str(path: &Path) -> Result<String> {
         .map(String::from)
 }
 
-/// BLAKE3 hex hashes are always 64 characters, so trust entries have the format
-/// `<64-char-hash>:<path>`. Parse by fixed offset to handle paths containing colons.
-fn parse_trust_entry(entry: &str) -> Option<(&str, &str)> {
+/// Extract the project path from a trust entry.
+///
+/// Current format: `<path>` (one path per line).
+/// Legacy format: `<64-char-hash>:<path>` — the hash is stripped for backward
+/// compatibility with trust databases written by older devenv versions.
+fn entry_path(entry: &str) -> &str {
     if entry.len() > 65 && entry.as_bytes()[64] == b':' {
-        Some((&entry[..64], &entry[65..]))
+        &entry[65..]
     } else {
-        None
+        entry
     }
 }
 
 fn remove_path_entries(entries: &mut Vec<String>, abs_str: &str) {
-    entries.retain(|e| parse_trust_entry(e).is_none_or(|(_, path)| path != abs_str));
+    entries.retain(|e| entry_path(e) != abs_str);
 }
 
 // ---- Trust database ----
@@ -51,11 +53,6 @@ fn trust_db_path() -> Result<PathBuf> {
     Ok(devenv_home()?.join("allowed"))
 }
 
-fn compute_project_hash(project_dir: &Path) -> Result<String> {
-    let devenv_yaml = project_dir.join("devenv.yaml");
-    compute_file_hash(&devenv_yaml).map_err(|e| miette::miette!("{e}"))
-}
-
 fn read_trust_entries(db_path: &Path) -> Result<Vec<String>> {
     match std::fs::read_to_string(db_path) {
         Ok(content) => Ok(content
@@ -71,18 +68,7 @@ fn read_trust_entries(db_path: &Path) -> Result<Vec<String>> {
 fn is_trusted(abs_str: &str) -> Result<bool> {
     let db_path = trust_db_path()?;
     let entries = read_trust_entries(&db_path)?;
-
-    let stored_hash = entries
-        .iter()
-        .find_map(|e| parse_trust_entry(e).filter(|(_, path)| *path == abs_str))
-        .map(|(hash, _)| hash);
-
-    let Some(stored_hash) = stored_hash else {
-        return Ok(false);
-    };
-
-    let hash = compute_project_hash(Path::new(abs_str))?;
-    Ok(hash == stored_hash)
+    Ok(entries.iter().any(|e| entry_path(e) == abs_str))
 }
 
 pub fn allow(project_dir: &Path) -> Result<()> {
@@ -92,7 +78,6 @@ pub fn allow(project_dir: &Path) -> Result<()> {
         miette::bail!("No devenv.yaml found in {abs_str}");
     }
 
-    let hash = compute_project_hash(project_dir)?;
     let db_path = trust_db_path()?;
 
     if let Some(parent) = db_path.parent() {
@@ -101,7 +86,7 @@ pub fn allow(project_dir: &Path) -> Result<()> {
 
     let mut entries = read_trust_entries(&db_path)?;
     remove_path_entries(&mut entries, &abs_str);
-    entries.push(format!("{hash}:{abs_str}"));
+    entries.push(abs_str.clone());
 
     let content = entries.join("\n") + "\n";
     std::fs::write(&db_path, content).into_diagnostic()?;
@@ -175,9 +160,7 @@ pub fn should_activate(last_project: Option<&str>) -> Result<ActivationCheck> {
     }
 
     if !is_trusted(&abs_str)? {
-        eprintln!(
-            "devenv: {abs_str} is not allowed or devenv.yaml has changed. Run 'devenv allow' to trust this directory."
-        );
+        eprintln!("devenv: {abs_str} is not allowed. Run 'devenv allow' to trust this directory.");
         return Ok(ActivationCheck::Untrusted);
     }
 
@@ -219,38 +202,16 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_compute_project_hash_deterministic() {
-        let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("devenv.yaml"), "inputs:\n  nixpkgs:\n").unwrap();
-
-        let hash = compute_project_hash(dir.path()).unwrap();
-        assert_eq!(hash.len(), 64); // blake3 hex = 64 chars
-
-        let hash2 = compute_project_hash(dir.path()).unwrap();
-        assert_eq!(hash, hash2);
+    fn test_entry_path_current_format() {
+        assert_eq!(entry_path("/home/me/project"), "/home/me/project");
     }
 
     #[test]
-    fn test_compute_project_hash_changes_on_edit() {
-        let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("devenv.yaml"), "inputs:\n  nixpkgs:\n").unwrap();
-        let hash1 = compute_project_hash(dir.path()).unwrap();
-
-        fs::write(
-            dir.path().join("devenv.yaml"),
-            "inputs:\n  nixpkgs:\n  foo:\n",
-        )
-        .unwrap();
-        let hash2 = compute_project_hash(dir.path()).unwrap();
-
-        assert_ne!(hash1, hash2);
-    }
-
-    #[test]
-    fn test_compute_project_hash_requires_yaml() {
-        let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("devenv.nix"), "{}").unwrap();
-        assert!(compute_project_hash(dir.path()).is_err());
+    fn test_entry_path_legacy_hash_format() {
+        // Legacy format: <64-char hash>:<path>
+        let hash = "a".repeat(64);
+        let entry = format!("{hash}:/home/me/project");
+        assert_eq!(entry_path(&entry), "/home/me/project");
     }
 
     #[test]
@@ -315,9 +276,31 @@ mod tests {
         allow(&project).unwrap();
         assert!(is_trusted(&abs_str).unwrap());
 
-        // Change devenv.yaml -> trust should fail
+        // Changing devenv.yaml should not invalidate trust
         fs::write(project.join("devenv.yaml"), "inputs:\n  nixpkgs:\n  new:\n").unwrap();
-        assert!(!is_trusted(&abs_str).unwrap());
+        assert!(is_trusted(&abs_str).unwrap());
+
+        unsafe { std::env::remove_var("DEVENV_HOME") };
+    }
+
+    #[test]
+    fn test_legacy_hash_entries_are_trusted() {
+        let dir = TempDir::new().unwrap();
+        let project = dir.path().join("myproject");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(project.join("devenv.yaml"), "inputs:\n  nixpkgs:\n").unwrap();
+
+        let devenv_home_dir = dir.path().join("devenv-home");
+        unsafe { std::env::set_var("DEVENV_HOME", &devenv_home_dir) };
+
+        let abs_str = canonical_str(&project).unwrap();
+
+        // Seed the trust DB with a legacy `<hash>:<path>` entry.
+        fs::create_dir_all(&devenv_home_dir).unwrap();
+        let legacy_entry = format!("{}:{}\n", "a".repeat(64), abs_str);
+        fs::write(devenv_home_dir.join("allowed"), legacy_entry).unwrap();
+
+        assert!(is_trusted(&abs_str).unwrap());
 
         unsafe { std::env::remove_var("DEVENV_HOME") };
     }

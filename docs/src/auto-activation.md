@@ -67,13 +67,13 @@ devenv: revoked /home/user/myproject
 The hook runs on every directory change and:
 
 1. Walks up from the current directory looking for a `devenv.yaml` file.
-2. Checks the trust database to verify the project was allowed and `devenv.yaml` has not changed since.
+2. Checks the trust database to verify the project was allowed.
 3. If trusted, runs `devenv shell` in a subshell for that project.
 
-If `devenv.yaml` changes after you allow a project (for example, after pulling new changes), you will see a message asking you to run `devenv allow` again:
+If a project has not been trusted yet, you will see a message asking you to run `devenv allow`:
 
 ```
-devenv: /home/user/myproject is not allowed or devenv.yaml has changed. Run 'devenv allow' to trust this directory.
+devenv: /home/user/myproject is not allowed. Run 'devenv allow' to trust this directory.
 ```
 
 !!! note
@@ -98,7 +98,7 @@ The hook will not nest environments. While inside a `devenv shell`, navigating i
 |---|---|---|
 | External dependencies | None | Requires direnv |
 | Setup | One line in shell config | direnv install + `.envrc` per project |
-| Trust granularity | Per project (`devenv.yaml` hash) | Per `.envrc` file |
+| Trust granularity | Per project directory | Per `.envrc` file |
 | Environment application | Spawns a subshell | Modifies current shell in place |
 | Unloading on exit | Subshell exits automatically | direnv unloads variables |
 
