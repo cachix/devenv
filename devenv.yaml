@@ -32,7 +32,7 @@ inputs:
   ghostty:
     # libghostty-vt provides the pkg-config path for libghostty-vt-sys in
     # devenv-shell tests. Kept in sync with flake.nix's ghostty input.
-    url: github:domenkozar/ghostty/nix-darwin-libghostty-vt
+    url: github:cachix/ghostty/cachix-upstream
     flake: true
 
   devenv-claude-agents:
