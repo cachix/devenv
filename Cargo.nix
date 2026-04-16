@@ -7267,10 +7267,6 @@ rec {
             packageId = "devenv-processes";
           }
           {
-            name = "devenv-tui";
-            packageId = "devenv-tui";
-          }
-          {
             name = "ignore";
             packageId = "ignore";
           }

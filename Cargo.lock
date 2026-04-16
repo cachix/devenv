@@ -2050,7 +2050,6 @@ dependencies = [
  "devenv-activity",
  "devenv-cache-core",
  "devenv-processes",
- "devenv-tui",
  "ignore",
  "miette",
  "nix 0.31.2",
