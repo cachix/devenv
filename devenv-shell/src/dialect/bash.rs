@@ -182,14 +182,14 @@ __devenv_apply_reverse_diff() {
             local var="${decl#declare -x }"
             var="${var%%=*}"
             prev_vars["$var"]=1
-            # Use export instead of eval'ing the declare statement directly,
+            # Use export instead of evaluating the declare statement directly,
             # because declare -x inside a function creates a local variable
             # in bash 5.0+.
             eval "export ${decl#declare -x }" 2>/dev/null
         fi
     done <<< "$diff_content"
 
-    # Second pass: unset NEXT vars that weren't in PREV (added vars)
+    # Second pass: unset NEXT vars that were not in PREV (added vars)
     while IFS= read -r line; do
         if [[ "$line" == N:* ]]; then
             local var="${line#N:}"

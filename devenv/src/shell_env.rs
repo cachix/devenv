@@ -36,7 +36,10 @@ impl CommandEnv for devenv_reload::CommandBuilder {
 /// If `clean.enabled`, clears the env and re-sets only the kept vars from
 /// the current process.
 /// Always sets `SHELL` and `DEVENV_CMDLINE`.
-pub(crate) fn apply_shell_env(cmd: &mut impl CommandEnv, bash_path: &str, clean: &Clean) {
+///
+/// `shell_path` should be the target shell binary (e.g., zsh or bash),
+/// not necessarily the bash used internally to source the devenv env.
+pub(crate) fn apply_shell_env(cmd: &mut impl CommandEnv, shell_path: &str, clean: &Clean) {
     if clean.enabled {
         cmd.clear_env();
         for (k, v) in clean.kept_env_vars() {
@@ -44,7 +47,7 @@ pub(crate) fn apply_shell_env(cmd: &mut impl CommandEnv, bash_path: &str, clean:
         }
     }
 
-    cmd.set_env("SHELL", bash_path);
+    cmd.set_env("SHELL", shell_path);
     let cmdline = std::env::args().skip(1).collect::<Vec<_>>().join(" ");
     cmd.set_env("DEVENV_CMDLINE", &cmdline);
 }

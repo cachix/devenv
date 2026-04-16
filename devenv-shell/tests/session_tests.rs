@@ -1,9 +1,10 @@
 #![cfg(feature = "test-pty")]
 
-use avt::Vt;
+use devenv_shell::vt_utils::{DEFAULT_MAX_SCROLLBACK, active_point, row_plain_text, screen_point};
 use devenv_shell::{
     CommandBuilder, PtySize, SessionConfig, SessionIo, ShellCommand, ShellEvent, ShellSession,
 };
+use libghostty_vt::terminal::{Options as TerminalOptions, Terminal};
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -229,28 +230,56 @@ fn status_line_session() -> ShellSession {
 
 /// Render captured stdout through a virtual terminal and return visible viewport row texts.
 fn render(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String> {
-    let mut vt = Vt::new(cols, rows);
-    vt.feed_str(&String::from_utf8_lossy(stdout_bytes));
-    vt.view()
-        .map(|line| line.text().trim_end().to_owned())
+    let mut vt = Terminal::new(TerminalOptions {
+        cols: cols as u16,
+        rows: rows as u16,
+        max_scrollback: 0,
+    })
+    .unwrap();
+    vt.vt_write(stdout_bytes);
+    (0..rows)
+        .map(|y| {
+            row_plain_text(&vt, active_point(y as u32))
+                .trim_end()
+                .to_owned()
+        })
         .collect()
 }
 
 /// Render captured stdout and return ALL lines (scrollback + viewport).
 /// Tests that scrolled-off content was correctly pushed into native scrollback.
 fn render_all_lines(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String> {
-    let mut vt = Vt::builder()
-        .size(cols, rows)
-        .scrollback_limit(10000)
-        .build();
-    vt.feed_str(&String::from_utf8_lossy(stdout_bytes));
-    vt.lines()
-        .map(|line| line.text().trim_end().to_owned())
+    let mut vt = Terminal::new(TerminalOptions {
+        cols: cols as u16,
+        rows: rows as u16,
+        max_scrollback: DEFAULT_MAX_SCROLLBACK,
+    })
+    .unwrap();
+    vt.vt_write(stdout_bytes);
+    let total = vt.total_rows().unwrap_or(0);
+    (0..total)
+        .map(|y| {
+            row_plain_text(&vt, screen_point(y as u32))
+                .trim_end()
+                .to_owned()
+        })
         .collect()
+}
+
+/// Normalize platform-specific keybind labels in status-line snapshots so a
+/// single `.snap` file works on Linux and macOS. On macOS the long form
+/// renders `Ctrl-Opt-E`/`Ctrl-Opt-D`; elsewhere it's `Ctrl-Alt-*`. The guard
+/// must be kept alive for the duration of the snapshot assertions.
+#[must_use]
+fn bind_keybind_filters() -> insta::internals::SettingsBindDropGuard {
+    let mut settings = insta::Settings::clone_current();
+    settings.add_filter(r"Ctrl-Opt-([A-Z])", "Ctrl-Alt-$1");
+    settings.bind_to_scope()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_status_line_rendered_on_last_row() {
+    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
@@ -341,6 +370,7 @@ async fn test_overflow_viewport_shows_tail() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_overflow_status_line_protected() {
+    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
@@ -389,6 +419,7 @@ async fn test_overflow_status_line_protected() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_build_lifecycle_status_line() {
+    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
@@ -444,6 +475,7 @@ async fn test_build_lifecycle_status_line() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_build_failed_error_toggle() {
+    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
@@ -500,6 +532,7 @@ async fn test_build_failed_error_toggle() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_watching_paused_status_line() {
+    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
