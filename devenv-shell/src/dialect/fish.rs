@@ -244,12 +244,11 @@ end
 # _DEVENV_PATH is a colon-separated string from bash; split into fish list.
 set -gx PATH (string split ":" -- $_DEVENV_PATH)
 
-# Set devenv prompt prefix by wrapping fish_prompt
+# Wrap fish_prompt for devenv reload hooks and prompt prefix.
 if functions -q fish_prompt
     functions -c fish_prompt __devenv_user_fish_prompt
     function fish_prompt
         {pre_prompt_calls}
-        echo -n "(devenv) "
         __devenv_user_fish_prompt
     end
 else
