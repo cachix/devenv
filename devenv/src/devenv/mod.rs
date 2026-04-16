@@ -1,6 +1,7 @@
 mod cachix;
 mod container;
 mod gc;
+mod machines;
 mod search;
 
 use super::{processes, tasks, util};

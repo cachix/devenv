@@ -5,8 +5,8 @@ use devenv::{
     SecretSettings, ShellSettings, VerbosityLevel,
     activity::{ActivityGuard, ActivityLevel},
     cli::{
-        Cli, CliOptions, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
-        TraceOutputSpec,
+        Cli, CliOptions, Commands, ContainerCommand, InputsCommand, InstallPhase, MachinesCommand,
+        ProcessesCommand, TasksCommand, TraceOutputSpec,
     },
     commands, is_ai_agent,
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
@@ -1345,6 +1345,73 @@ async fn dispatch_command(
             TasksCommand::List { json } => {
                 let output = devenv.tasks_list(json).await?;
                 Ok(CommandResult::Print(format!("{output}\n")))
+            }
+        },
+        Commands::Machines { command } => match command {
+            MachinesCommand::Info { names } => {
+                let output = devenv.machines_info(&names).await?;
+                Ok(CommandResult::Print(output))
+            }
+            MachinesCommand::Install {
+                max_concurrent,
+                use_machines_as_builders,
+                phases,
+                stop_after_disko,
+                no_reboot,
+                disko_mode,
+                names,
+            } => {
+                use std::collections::HashSet;
+                let phase_set: HashSet<InstallPhase> = if let Some(p) = phases {
+                    p.into_iter().collect()
+                } else if stop_after_disko {
+                    [
+                        InstallPhase::Kexec,
+                        InstallPhase::Facter,
+                        InstallPhase::Disko,
+                    ]
+                    .into_iter()
+                    .collect()
+                } else if no_reboot {
+                    [
+                        InstallPhase::Kexec,
+                        InstallPhase::Facter,
+                        InstallPhase::Disko,
+                        InstallPhase::Install,
+                    ]
+                    .into_iter()
+                    .collect()
+                } else {
+                    [
+                        InstallPhase::Kexec,
+                        InstallPhase::Facter,
+                        InstallPhase::Disko,
+                        InstallPhase::Install,
+                        InstallPhase::Reboot,
+                    ]
+                    .into_iter()
+                    .collect()
+                };
+                devenv
+                    .machines_install(
+                        &names,
+                        max_concurrent,
+                        &phase_set,
+                        disko_mode,
+                        use_machines_as_builders,
+                    )
+                    .await?;
+                Ok(CommandResult::Done)
+            }
+            MachinesCommand::Deploy {
+                max_concurrent,
+                use_machines_as_builders,
+                names,
+            } => {
+                devenv
+                    .machines_deploy(&names, max_concurrent, use_machines_as_builders)
+                    .await?;
+                Ok(CommandResult::Done)
             }
         },
         Commands::Changelogs {} => Ok(devenv
