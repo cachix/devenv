@@ -41,8 +41,10 @@ let
     inherit rustc cargo;
   };
 
-  # Pre-built libghostty-vt shared library from the ghostty flake
-  libghostty-vt = pkgs.libghostty-vt;
+  # Pre-built libghostty-vt shared library from the ghostty flake.
+  # Falls back to null when the ghostty overlay is not applied (e.g. tasks.nix
+  # builds devenv-tasks from a standalone nixpkgs without the overlay).
+  libghostty-vt = pkgs.libghostty-vt or null;
 
   # Import crate2nix generated file with overrides
   crateConfig = callPackage ./crate-config.nix { inherit gitRev isRelease libghostty-vt; };

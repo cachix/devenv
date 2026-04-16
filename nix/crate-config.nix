@@ -73,7 +73,8 @@ let
   # Shared override for crates linking against nix, openssl, protobuf, dbus, and bindgen.
   devenvBase = attrs: {
     buildInputs = (attrs.buildInputs or [ ])
-      ++ [ openssl libghostty-vt ]
+      ++ [ openssl ]
+      ++ lib.optional (libghostty-vt != null) libghostty-vt
       ++ nixLibs
       ++ lib.optional stdenv.isLinux dbus;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
@@ -168,7 +169,7 @@ in
   # library from the ghostty flake, so just provide pkg-config + the library.
   libghostty-vt-sys = attrs: {
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
-    buildInputs = (attrs.buildInputs or [ ]) ++ [ libghostty-vt.dev ];
+    buildInputs = (attrs.buildInputs or [ ]) ++ lib.optional (libghostty-vt != null) libghostty-vt.dev;
   };
 
   nix-bindings-util = nixLibsOverride;
