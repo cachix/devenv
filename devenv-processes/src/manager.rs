@@ -892,11 +892,13 @@ impl NativeProcessManager {
         Ok(())
     }
 
-    /// Stop a process but keep it visible in the TUI and restartable via Ctrl+R.
+    /// Stop a running process but keep its entry in the process map so the TUI
+    /// continues to show it and the user can restart it with Ctrl+R.
     ///
-    /// Unlike `stop()` which removes the entry (used during full shutdown), this
-    /// transitions the entry back to `NotStarted` so the process remains in the TUI
-    /// with "stopped" status and can be restarted with `start_not_started()`.
+    /// Transitions an `Active` entry to `ProcessEntry::Stopped { .. }` — a
+    /// distinct variant from `NotStarted` so callers of [`Self::get_phase`]
+    /// can tell apart a process the user stopped from one that never started.
+    /// Errors if the process is not currently `Active`.
     pub async fn stop_and_keep(&self, name: &str) -> Result<()> {
         let handle = {
             let mut processes = self.processes.write().await;
@@ -1001,10 +1003,10 @@ impl NativeProcessManager {
             stderr_log: _,
         } = handle.resources;
 
-        self.processes.write().await.insert(
-            name.to_string(),
-            ProcessEntry::NotStarted { config, activity },
-        );
+        self.processes
+            .write()
+            .await
+            .insert(name.to_string(), ProcessEntry::Stopped { config, activity });
 
         if let Some(notify) = &self.task_notify {
             notify.notify_waiters();
@@ -2284,7 +2286,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_stop_and_keep_transitions_to_not_started() {
+    async fn test_stop_and_keep_transitions_to_stopped() {
         let temp_dir = tempfile::tempdir().unwrap();
         let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
         let config = long_running_config("keepable");
@@ -2300,8 +2302,8 @@ mod tests {
         );
         assert_eq!(
             manager.get_phase("keepable").await,
-            Some(ProcessPhase::NotStarted),
-            "stopped process should transition to NotStarted"
+            Some(ProcessPhase::Stopped),
+            "stopped process should transition to Stopped"
         );
     }
 
@@ -2377,7 +2379,7 @@ mod tests {
         manager.stop_and_keep("restartable").await.unwrap();
         assert_eq!(
             manager.get_phase("restartable").await,
-            Some(ProcessPhase::NotStarted)
+            Some(ProcessPhase::Stopped)
         );
 
         manager.start_not_started("restartable").await.unwrap();
@@ -2404,7 +2406,7 @@ mod tests {
 
         assert_eq!(
             manager.get_phase("cmd-stop").await,
-            Some(ProcessPhase::NotStarted),
+            Some(ProcessPhase::Stopped),
             "handle_command(Stop) should call stop_and_keep"
         );
     }

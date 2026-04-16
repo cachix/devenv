@@ -22,7 +22,11 @@ pub const SUMMARY_BAR_HEIGHT: u16 = 2;
 /// Map from activity_id to rendered height in lines.
 pub type ActivityHeights = Ref<HashMap<u64, i32>>;
 
-/// Pre-computed state passed from the app to avoid redundant computation in `view()`.
+/// Scroll state and the display list the app already computed for this frame.
+///
+/// Passing `display_activities` through avoids re-walking the activity tree
+/// inside `view()`; the app needs the same list to measure heights before
+/// rendering.
 pub struct ScrollState {
     pub handle: Option<Ref<ScrollViewHandle>>,
     pub display_activities: Vec<DisplayActivity>,
@@ -38,14 +42,15 @@ pub fn view(
 ) -> impl Into<AnyElement<'static>> {
     let (scroll_handle, active_activities) = match scroll {
         Some(s) => (s.handle, s.display_activities),
-        None => (None, model.get_display_activities()),
+        None => (None, model.get_display_activities(ui_state)),
     };
 
     let summary = model.calculate_summary();
-    let selected_id = ui_state.selected_activity;
     let terminal_size = ui_state.terminal_size;
 
-    // Check if we have a selected activity with logs/details
+    let selected_id = ui_state
+        .selected_activity
+        .filter(|id| active_activities.iter().any(|da| da.activity.id == *id));
     let selected_activity = selected_id.and_then(|id| model.get_activity(id));
     let selected_logs = selected_activity
         .as_ref()
@@ -131,7 +136,7 @@ pub fn view(
     }
 
     // Determine if navigation is possible
-    let selectable_ids = model.get_selectable_activity_ids();
+    let selectable_ids = model.get_selectable_activity_ids(ui_state);
     let (can_go_up, can_go_down) = if let Some(current_id) = selected_id {
         if let Some(pos) = selectable_ids.iter().position(|&id| id == current_id) {
             (pos > 0, pos + 1 < selectable_ids.len())
@@ -153,6 +158,7 @@ pub fn view(
             can_go_up,
             can_go_down,
             interrupt_prompt_active: ui_state.interrupt_prompt_active(),
+            hide_stopped_processes: ui_state.hide_stopped_processes,
         })) {
             SummaryView
         }
@@ -894,6 +900,7 @@ struct SummaryViewContext {
     can_go_up: bool,
     can_go_down: bool,
     interrupt_prompt_active: bool,
+    hide_stopped_processes: bool,
 }
 
 /// Summary view component that adapts to terminal width
@@ -901,6 +908,11 @@ struct SummaryViewContext {
 fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let terminal_width = hooks.use_context::<TerminalSize>().width;
     let ctx = hooks.use_context::<SummaryViewContext>();
+    build_summary_view_impl(&ctx, terminal_width)
+}
+
+/// Build the summary view with colored counts
+fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> AnyElement<'static> {
     let SummaryViewContext {
         summary,
         selected,
@@ -908,29 +920,15 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
         can_go_up,
         can_go_down,
         interrupt_prompt_active,
-    } = &*ctx;
+        hide_stopped_processes,
+    } = ctx;
+    let selected = selected.as_ref();
+    let showing_logs = *showing_logs;
+    let can_go_up = *can_go_up;
+    let can_go_down = *can_go_down;
+    let interrupt_prompt_active = *interrupt_prompt_active;
+    let hide_stopped_processes = *hide_stopped_processes;
 
-    build_summary_view_impl(
-        summary,
-        selected.as_ref(),
-        *showing_logs,
-        *can_go_up,
-        *can_go_down,
-        *interrupt_prompt_active,
-        terminal_width,
-    )
-}
-
-/// Build the summary view with colored counts
-fn build_summary_view_impl(
-    summary: &ActivitySummary,
-    selected: Option<&Activity>,
-    showing_logs: bool,
-    can_go_up: bool,
-    can_go_down: bool,
-    interrupt_prompt_active: bool,
-    terminal_width: u16,
-) -> AnyElement<'static> {
     if interrupt_prompt_active {
         let prompt_text = if terminal_width < 72 {
             "Quit devenv? Nothing stopped."
@@ -1153,6 +1151,7 @@ fn build_summary_view_impl(
     // Build help text - always show, adapt based on terminal width
     let mut help_children = vec![];
     let use_short_text = terminal_width < 100; // Use shorter text for narrow terminals
+    let show_hide_toggle = summary.stopped_processes > 0 || hide_stopped_processes;
 
     let up_arrow_color = if can_go_up {
         COLOR_INTERACTIVE
@@ -1203,6 +1202,10 @@ fn build_summary_view_impl(
                 help_children.push(element!(Text(content: " (re)start process • ")).into_any());
             }
         }
+        if show_hide_toggle {
+            help_children.push(element!(Text(content: if use_short_text { "^H" } else { "Ctrl-H" }, color: COLOR_INTERACTIVE)).into_any());
+            help_children.push(element!(Text(content: if hide_stopped_processes { " show stopped • " } else { " hide stopped • " })).into_any());
+        }
         help_children.push(element!(Text(content: "Esc", color: COLOR_INTERACTIVE)).into_any());
         if showing_logs {
             if use_symbols {
@@ -1220,12 +1223,19 @@ fn build_summary_view_impl(
         // Show navigate hint only when no selection (Ctrl-E requires selection)
         help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
         help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
+        let trail = if show_hide_toggle { " • " } else { "" };
         if !use_symbols {
             if use_short_text {
-                help_children.push(element!(Text(content: " nav")).into_any());
+                help_children.push(element!(Text(content: format!(" nav{trail}"))).into_any());
             } else {
-                help_children.push(element!(Text(content: " navigate")).into_any());
+                help_children.push(element!(Text(content: format!(" navigate{trail}"))).into_any());
             }
+        } else if show_hide_toggle {
+            help_children.push(element!(Text(content: " • ")).into_any());
+        }
+        if show_hide_toggle {
+            help_children.push(element!(Text(content: if use_short_text { "^H" } else { "Ctrl-H" }, color: COLOR_INTERACTIVE)).into_any());
+            help_children.push(element!(Text(content: if hide_stopped_processes { " show stopped" } else { " hide stopped" })).into_any());
         }
     }
 
@@ -1251,23 +1261,122 @@ pub fn format_duration(duration: Duration) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::ActivityModel;
+    use devenv_activity::{ActivityEvent, ActivityLevel, Operation, Process, Timestamp};
+
+    fn summary_ctx(
+        hide_stopped_processes: bool,
+        interrupt_prompt_active: bool,
+        stopped_processes: usize,
+    ) -> SummaryViewContext {
+        SummaryViewContext {
+            summary: ActivitySummary {
+                stopped_processes,
+                ..ActivitySummary::default()
+            },
+            selected: None,
+            showing_logs: false,
+            can_go_up: false,
+            can_go_down: false,
+            interrupt_prompt_active,
+            hide_stopped_processes,
+        }
+    }
 
     #[test]
     fn test_summary_interrupt_prompt_renders() {
-        let mut element = build_summary_view_impl(
-            &ActivitySummary::default(),
-            None,
-            false,
-            false,
-            false,
-            true,
-            100,
-        );
+        let mut element = build_summary_view_impl(&summary_ctx(false, true, 0), 100);
         let output = element.render(Some(100)).to_string();
 
         assert!(output.contains("Quit devenv?"));
         assert!(output.contains("stopped"));
         assert!(output.contains("keep running"));
         assert!(output.contains("quit"));
+    }
+
+    #[test]
+    fn test_summary_help_reflects_hide_stopped_processes_state() {
+        let hidden_output = build_summary_view_impl(&summary_ctx(true, false, 0), 100)
+            .render(Some(100))
+            .to_string();
+
+        assert!(hidden_output.contains("show stopped"));
+        assert!(!hidden_output.contains("hide stopped"));
+
+        let shown_output = build_summary_view_impl(&summary_ctx(false, false, 1), 100)
+            .render(Some(100))
+            .to_string();
+
+        assert!(shown_output.contains("hide stopped"));
+        assert!(!shown_output.contains("show stopped"));
+    }
+
+    #[test]
+    fn test_summary_help_omits_hide_toggle_when_no_stopped_processes() {
+        let output = build_summary_view_impl(&summary_ctx(false, false, 0), 100)
+            .render(Some(100))
+            .to_string();
+
+        assert!(!output.contains("hide stopped"));
+        assert!(!output.contains("show stopped"));
+        assert!(!output.contains("Ctrl-H"));
+    }
+
+    #[test]
+    fn test_view_uses_current_ui_state_for_process_visibility() {
+        let mut model = ActivityModel::default();
+        let mut ui_state = UiState::new();
+
+        model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+            id: 100,
+            name: "Running processes".to_string(),
+            parent: None,
+            detail: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+
+        model.apply_activity_event(ActivityEvent::Process(Process::Start {
+            id: 1,
+            name: "manually-stopped".to_string(),
+            parent: Some(100),
+            command: None,
+            ports: vec![],
+            ready_probe: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+        model.apply_activity_event(ActivityEvent::Process(Process::Status {
+            id: 1,
+            status: ProcessStatus::Stopped,
+            timestamp: Timestamp::now(),
+        }));
+
+        let stale_display = model.get_display_activities(&ui_state);
+        assert!(
+            stale_display
+                .iter()
+                .any(|da| da.activity.name == "manually-stopped")
+        );
+
+        ui_state.hide_stopped_processes = true;
+
+        let display_activities = model.get_display_activities(&ui_state);
+        let mut element: AnyElement<'static> = view(
+            &model,
+            &ui_state,
+            RenderContext::Normal,
+            Some(ScrollState {
+                handle: None,
+                display_activities,
+            }),
+            false,
+        )
+        .into();
+        let rendered = element
+            .render(Some(ui_state.terminal_size.width as usize))
+            .to_string();
+
+        assert!(!rendered.contains("manually-stopped"));
     }
 }
