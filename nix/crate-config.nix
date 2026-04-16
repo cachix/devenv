@@ -71,6 +71,10 @@ let
   };
 
   # Shared override for crates linking against nix, openssl, protobuf, dbus, and bindgen.
+  # These binaries transitively link devenv-shell -> libghostty-vt-sys. crate2nix does
+  # not propagate the shared library's store path into the final binary's rpath, so we
+  # embed it via a linker arg. Without this, xtask (and others) fail at runtime with
+  # "Library not loaded: @rpath/libghostty-vt.dylib" on macOS or the equivalent on Linux.
   devenvBase = attrs: {
     buildInputs = (attrs.buildInputs or [ ])
       ++ [ openssl libghostty-vt ]
@@ -82,7 +86,12 @@ let
       rustPlatform.bindgenHook
     ];
     preConfigure = (attrs.preConfigure or "") + protoSetup;
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
+    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
+      "--cfg"
+      "tracing_unstable"
+      "-C"
+      "link-arg=-Wl,-rpath,${libghostty-vt}/lib"
+    ];
   };
 in
 {
