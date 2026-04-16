@@ -331,11 +331,11 @@
         "zon2nix": "zon2nix"
       },
       "locked": {
-        "lastModified": 1776280466,
-        "narHash": "sha256-eGjHtnjWSs5Xd/vIu70jtECV2pEglvSeaud9Q/2m5YI=",
+        "lastModified": 1776365871,
+        "narHash": "sha256-lAFTUeJy7AT4V+t8/HlMM7O5z6W+G4eUhzRoh3ZdZu8=",
         "owner": "cachix",
         "repo": "ghostty",
-        "rev": "68bf0175ce1e1144b6d92972293406f8aebf9fad",
+        "rev": "d882f9106d15c213239b8916083835263d4fb9bc",
         "type": "github"
       },
       "original": {
