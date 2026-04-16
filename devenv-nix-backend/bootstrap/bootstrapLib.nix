@@ -159,12 +159,18 @@ rec {
                     {
                       cli.version = version;
                       cli.isDevelopment = is_development_version;
-                      cli.requireVersionMatch = require_version_match;
                     }
                   else
                     {
                       cliVersion = version;
                     }
+                )
+                (lib.optionalAttrs
+                  (builtins.hasAttr "cli" options.devenv
+                  && builtins.hasAttr "requireVersionMatch" options.devenv.cli)
+                  {
+                    cli.requireVersionMatch = require_version_match;
+                  }
                 )
                 (lib.optionalAttrs (builtins.hasAttr "tmpdir" options.devenv) {
                   tmpdir = devenv_tmpdir;
