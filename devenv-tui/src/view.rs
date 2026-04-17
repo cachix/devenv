@@ -727,7 +727,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             };
 
             // Format ports: extract just the port numbers for brevity
-            let ports_suffix = if !process_data.ports.is_empty() && process_data.urls.is_empty() {
+            let ports_suffix = if !process_data.ports.is_empty() {
                 let port_list: Vec<String> = process_data
                     .ports
                     .iter()
