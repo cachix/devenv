@@ -682,6 +682,14 @@ impl Devenv {
         // For non-interactive commands, always use bash directly
         if cmd.is_some() {
             let mut script = bash_init_script(&shell_env);
+            // Restore SHELL after the Nix env overrides it with /nix/store/.../bash.
+            // Resolve via PATH so we get an absolute path even when the devenv env provides the shell.
+            if let Some(ref target) = target_shell_path {
+                script.push_str(&format!(
+                    "\nexport SHELL=\"$(command -v {target})\"\n",
+                    target = target
+                ));
+            }
             script.push_str(&task_exports);
 
             let command = format!(
