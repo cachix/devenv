@@ -4177,9 +4177,18 @@ async fn test_independent_oneshot_tasks_run_in_parallel() -> Result<(), Error> {
     let temp_dir = TempDir::new().unwrap();
     let db_path = temp_dir.path().join("tasks.db");
 
-    // Each task sleeps 0.5s — if parallel, total ≈ 0.5s; if sequential, total ≈ 1.0s
-    let task_a = create_script("#!/bin/sh\nsleep 0.5")?;
-    let task_b = create_script("#!/bin/sh\nsleep 0.5")?;
+    // Each task records its start/end timestamps (nanoseconds since epoch) to a file,
+    // with a sleep in between. If the tasks run in parallel, their time windows overlap.
+    let ts_a = temp_dir.path().join("timestamps_a");
+    let ts_b = temp_dir.path().join("timestamps_b");
+    let task_a = create_script(&format!(
+        "#!/bin/sh\npython3 -c 'import time; print(time.time())' > {ts}\nsleep 0.5\npython3 -c 'import time; print(time.time())' >> {ts}",
+        ts = ts_a.display()
+    ))?;
+    let task_b = create_script(&format!(
+        "#!/bin/sh\npython3 -c 'import time; print(time.time())' > {ts}\nsleep 0.5\npython3 -c 'import time; print(time.time())' >> {ts}",
+        ts = ts_b.display()
+    ))?;
     let task_root = create_script("#!/bin/sh\ntrue")?;
 
     let shutdown = Shutdown::new();
@@ -4213,9 +4222,7 @@ async fn test_independent_oneshot_tasks_run_in_parallel() -> Result<(), Error> {
     .build()
     .await?;
 
-    let start = std::time::Instant::now();
     tasks.run(false).await;
-    let elapsed = start.elapsed();
 
     // All tasks should succeed
     let task_statuses = inspect_tasks(&tasks).await;
@@ -4228,11 +4235,27 @@ async fn test_independent_oneshot_tasks_run_in_parallel() -> Result<(), Error> {
         );
     }
 
-    // If tasks ran in parallel, total time should be well under 1.0s
+    // Parse start/end timestamps from each task's file
+    let parse_timestamps = |path: &std::path::Path| -> (f64, f64) {
+        let content = std::fs::read_to_string(path).unwrap();
+        let mut lines = content.lines();
+        let start: f64 = lines.next().unwrap().parse().unwrap();
+        let end: f64 = lines.next().unwrap().parse().unwrap();
+        (start, end)
+    };
+
+    let (start_a, end_a) = parse_timestamps(&ts_a);
+    let (start_b, end_b) = parse_timestamps(&ts_b);
+
+    // If tasks ran in parallel, their execution windows must overlap:
+    // overlap exists when max(start_a, start_b) < min(end_a, end_b)
+    let overlap_start = start_a.max(start_b);
+    let overlap_end = end_a.min(end_b);
     assert!(
-        elapsed < std::time::Duration::from_millis(900),
-        "Independent tasks should run in parallel, but took {:?} (expected < 900ms)",
-        elapsed
+        overlap_start < overlap_end,
+        "Independent tasks should run in parallel (execution windows must overlap).\n\
+         Task A: {start_a:.3}..{end_a:.3}\n\
+         Task B: {start_b:.3}..{end_b:.3}",
     );
 
     Ok(())
