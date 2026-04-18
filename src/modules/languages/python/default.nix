@@ -52,6 +52,40 @@ let
     follows = [ "nixpkgs" ];
   };
 
+  # Override nixpkgs' sitecustomize.py with a version that does not pop
+  # NIX_PYTHONPATH from the environment. The nixpkgs version uses
+  # os.environ.pop('NIX_PYTHONPATH'), which prevents the variable from
+  # being inherited by child processes spawned via subprocess.run() etc.
+  # This breaks Python tools in `packages` that invoke other Python tools
+  # as subprocesses (e.g. leanblueprint calling plastex).
+  #
+  # By setting PYTHONPATH to a directory containing only this patched
+  # sitecustomize.py, it is imported before the nixpkgs version (since
+  # PYTHONPATH entries precede site-packages on sys.path). The directory
+  # contains no actual packages, so venv priority is unaffected.
+  devenvSitecustomize = pkgs.writeTextDir "sitecustomize.py" ''
+    import site
+    import sys
+    import os
+    import functools
+
+    paths = os.environ.get('NIX_PYTHONPATH', None)
+    if paths:
+        functools.reduce(lambda k, p: site.addsitedir(p, k), paths.split(':'), site._init_pathinfo())
+
+    in_venv = sys.prefix != sys.base_prefix
+
+    if not in_venv:
+        executable = os.environ.pop('NIX_PYTHONEXECUTABLE', None)
+        prefix = os.environ.pop('NIX_PYTHONPREFIX', None)
+
+        if 'PYTHONEXECUTABLE' not in os.environ and executable is not None:
+            sys.executable = executable
+        if prefix is not None:
+            sys.prefix = sys.exec_prefix = prefix
+            site.PREFIXES.insert(0, prefix)
+  '';
+
   # Write a .pth file into a venv's site-packages so that Nix profile
   # packages are importable, but venv-installed packages take priority.
   # Note: this is a secondary mechanism; NIX_PYTHONPATH in env also makes
@@ -718,6 +752,9 @@ in
         # sitecustomize.py processes this using site.addsitedir(), which appends
         # paths after venv site-packages, preserving venv package priority.
         NIX_PYTHONPATH = "${config.devenv.profile}/${cfg.package.sitePackages}";
+        # Override nixpkgs' sitecustomize.py so NIX_PYTHONPATH is not popped
+        # from the environment and survives into subprocesses.
+        PYTHONPATH = "${devenvSitecustomize}";
       }
       // (lib.optionalAttrs cfg.uv.enable {
         UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
