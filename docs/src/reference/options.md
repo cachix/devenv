@@ -27266,6 +27266,50 @@ Which port to run clickhouse on.
 
 
 
+## services.clickhouse.usersConfig
+
+
+
+Your ` users.yaml ` as a Nix attribute set.
+Check the [documentation](https://clickhouse.com/docs/operations/configuration-files\#user-settings)
+for possible options.
+
+
+
+*Type:*
+YAML 1.1 value
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+````nix
+{
+  profiles = {};
+
+  users = {
+    default = {
+      profile = "default";
+      password_sha256_hex = "36dd292533174299fb0c34665df468bb881756ca9eaf9757d0cfde38f9ededa1";  # `echo -n verysecret | sha256sum`
+    };
+  };
+}
+
+````
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
 ## services.cockroachdb.enable
 
 
