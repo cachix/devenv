@@ -95,7 +95,24 @@ impl FileInputDesc {
     ///
     /// All timestamps are truncated to second precision.
     pub fn new(path: PathBuf, fallback_system_time: SystemTime) -> Result<Self, io::Error> {
-        let is_directory = path.is_dir();
+        Self::new_with_raw_mtime(path, fallback_system_time).map(|(desc, _)| desc)
+    }
+
+    /// Like [`new`], but also returns the untruncated mtime read from disk.
+    ///
+    /// The raw mtime is used for detecting races where an input file was
+    /// written during evaluation. Truncated mtimes lose sub-second precision
+    /// and would miss fast races. `None` means the mtime could not be read
+    /// (missing file, unsupported platform) and the fallback was used — race
+    /// detection must skip such entries, since the fallback is captured after
+    /// evaluation ended and would always compare as "after eval started".
+    pub fn new_with_raw_mtime(
+        path: PathBuf,
+        fallback_system_time: SystemTime,
+    ) -> Result<(Self, Option<SystemTime>), io::Error> {
+        let metadata = path.metadata().ok();
+        let is_directory = metadata.as_ref().is_some_and(|m| m.is_dir());
+        let raw_mtime = metadata.as_ref().and_then(|m| m.modified().ok());
         let content_hash = if is_directory {
             let mut paths: Vec<String> = std::fs::read_dir(&path)?
                 .filter_map(Result::ok)
@@ -108,17 +125,16 @@ impl FileInputDesc {
                 .map_err(|e| std::io::Error::other(format!("Failed to compute file hash: {e}")))
                 .ok()
         };
-        let modified_at = truncate_to_seconds(
-            path.metadata()
-                .and_then(|p| p.modified())
-                .unwrap_or(fallback_system_time),
-        )?;
-        Ok(Self {
-            path,
-            is_directory,
-            content_hash,
-            modified_at,
-        })
+        let modified_at = truncate_to_seconds(raw_mtime.unwrap_or(fallback_system_time))?;
+        Ok((
+            Self {
+                path,
+                is_directory,
+                content_hash,
+                modified_at,
+            },
+            raw_mtime,
+        ))
     }
 }
 
