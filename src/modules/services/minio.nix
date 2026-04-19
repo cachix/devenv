@@ -15,6 +15,10 @@ let
   allocatedConsolePort = config.processes.minio.ports.console.value;
   apiHost = parseHost cfg.listenAddress;
   consoleHost = parseHost cfg.consoleAddress;
+  consoleUrlHost =
+    if consoleHost == "" || consoleHost == "0.0.0.0" || consoleHost == "::"
+    then "127.0.0.1"
+    else consoleHost;
   apiAddr = "${apiHost}:${toString allocatedApiPort}";
   consoleAddr = "${consoleHost}:${toString allocatedConsolePort}";
 
@@ -157,6 +161,14 @@ in
 
     processes.minio.ports.api.allocate = baseApiPort;
     processes.minio.ports.console.allocate = baseConsolePort;
+    processes.minio.urls = lib.optionalAttrs cfg.browser {
+      console = {
+        scheme = "http";
+        host = consoleUrlHost;
+        port = allocatedConsolePort;
+        path = "/";
+      };
+    };
     processes.minio.exec = "${startScript}";
 
     env.MINIO_PORT = allocatedApiPort;
