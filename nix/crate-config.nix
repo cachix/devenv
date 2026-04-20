@@ -155,6 +155,18 @@ in
     CARGO_CRATE_NAME = "rmcp";
   };
 
+  # google-cloud client crates use env!("CARGO_CRATE_NAME") via
+  # gaxi::client_request_signals! at compile time
+  google-cloud-location = attrs: {
+    CARGO_CRATE_NAME = "google_cloud_location";
+  };
+  google-cloud-iam-v1 = attrs: {
+    CARGO_CRATE_NAME = "google_cloud_iam_v1";
+  };
+  google-cloud-secretmanager-v1 = attrs: {
+    CARGO_CRATE_NAME = "google_cloud_secretmanager_v1";
+  };
+
   # nix-bindings crates need pkg-config, nix libs, and bindgen
   nix-bindings-bindgen-raw = attrs: {
     buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
