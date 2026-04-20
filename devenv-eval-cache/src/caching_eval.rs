@@ -186,6 +186,27 @@ impl CachingEvalService {
         Ok(eval_id)
     }
 
+    /// Remove a cached eval entry by key.
+    ///
+    /// Used when the caller detects that the cached result is no longer
+    /// usable (e.g. referenced store paths have been garbage collected)
+    /// and wants the next lookup to miss and re-evaluate. A no-op if the
+    /// key is not present.
+    pub async fn invalidate(&self, key: &EvalCacheKey) -> Result<(), CacheError> {
+        db::delete_eval(&self.pool, &key.key_hash).await?;
+        Ok(())
+    }
+
+    /// Remove all cached eval entries that have associated resource specs.
+    ///
+    /// Used when a resource replay (e.g. port allocation) fails: one bad entry
+    /// means port assignments across attrs may be inconsistent, so every
+    /// port-dependent entry must be purged together. Returns the number of
+    /// rows deleted.
+    pub async fn invalidate_resource_dependent(&self) -> Result<u64, CacheError> {
+        Ok(db::delete_evals_with_resource_specs(&self.pool).await?)
+    }
+
     /// Get the file input paths for a cached eval by key.
     ///
     /// Returns the list of file paths that were tracked during evaluation.
@@ -442,7 +463,7 @@ impl CachedEval {
     ) {
         warn!(error = %error, "Resource replay failed, invalidating all port-dependent cache entries");
 
-        if let Err(db_err) = db::delete_evals_with_resource_specs(service.pool()).await {
+        if let Err(db_err) = service.invalidate_resource_dependent().await {
             warn!(error = %db_err, "Failed to delete port-dependent cache entries");
         }
 

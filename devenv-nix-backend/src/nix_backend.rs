@@ -1317,7 +1317,9 @@ impl NixBackend for NixRustBackend {
                                         );
                                         // Purge all port-dependent cache entries
                                         if let Some(svc) = caching_state.cached_eval().service() {
-                                            if let Err(db_err) = devenv_eval_cache::db::delete_evals_with_resource_specs(svc.pool()).await {
+                                            if let Err(db_err) =
+                                                svc.invalidate_resource_dependent().await
+                                            {
                                                 tracing::warn!(error = %db_err, "Failed to delete port-dependent cache entries");
                                             }
                                         }
@@ -1335,8 +1337,16 @@ impl NixBackend for NixRustBackend {
                                     out_path = %paths.out_path,
                                     drv_exists = drv_exists,
                                     out_exists = out_exists,
-                                    "Cached paths no longer exist (garbage collected?)"
+                                    "Cached paths no longer exist (garbage collected?), invalidating cache entry"
                                 );
+                                // Invalidate the stale cache entry so the re-evaluation below
+                                // re-forces the derivation and writes the .drv back to the store.
+                                if let Err(db_err) = service.invalidate(&cache_key).await {
+                                    tracing::warn!(
+                                        error = %db_err,
+                                        "Failed to invalidate stale shell cache entry"
+                                    );
+                                }
                                 None
                             }
                         }
@@ -1588,8 +1598,15 @@ impl NixBackend for NixRustBackend {
                                     tracing::debug!(
                                         attr_path = attr_path,
                                         path = %path_str,
-                                        "Cached build path no longer exists (garbage collected?)"
+                                        "Cached build path no longer exists (garbage collected?), invalidating cache entry"
                                     );
+                                    if let Err(db_err) = service.invalidate(&cache_key).await {
+                                        tracing::warn!(
+                                            error = %db_err,
+                                            attr_path = attr_path,
+                                            "Failed to invalidate stale build cache entry"
+                                        );
+                                    }
                                     None
                                 }
                             }

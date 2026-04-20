@@ -253,7 +253,7 @@ where
     Ok(id)
 }
 
-async fn delete_eval<'a, A>(conn: A, key_hash: &str) -> Result<(), sqlx::Error>
+pub(crate) async fn delete_eval<'a, A>(conn: A, key_hash: &str) -> Result<(), sqlx::Error>
 where
     A: Acquire<'a, Database = Sqlite>,
 {
@@ -513,7 +513,9 @@ where
 /// must be purged to prevent inconsistent port values across attrs.
 /// The existing `ON DELETE CASCADE` on `eval_resource_spec` and `eval_input_path`
 /// handles cleanup of related rows.
-pub async fn delete_evals_with_resource_specs(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+pub(crate) async fn delete_evals_with_resource_specs(
+    pool: &SqlitePool,
+) -> Result<u64, sqlx::Error> {
     let result = sqlx::query(
         r#"
         DELETE FROM cached_eval
