@@ -4517,6 +4517,13 @@ mod property_tests {
                         let shorter_prefix = segments[0..i].join(":");
                         let longer_prefix = segments[0..i+1].join(":");
 
+                        // Exact-match-priority: if `shorter_prefix` is itself a task name,
+                        // the matcher returns only that task and does not descend into children.
+                        // The hierarchical-inclusion property does not hold in that case.
+                        if task_names.contains(&shorter_prefix) {
+                            continue;
+                        }
+
                         // Skip if the longer prefix doesn't match any tasks
                         let has_longer_matches = task_names.iter()
                             .any(|name| name.starts_with(&format!("{}:", longer_prefix)));
