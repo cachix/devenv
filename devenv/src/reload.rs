@@ -267,11 +267,12 @@ impl ShellBuilder for DevenvShellBuilder {
                     .await
                 {
                     Ok(inputs) => {
-                        for input in inputs {
-                            if input.path.exists() && !input.path.starts_with("/nix/store") {
-                                watcher.watch(&input.path).await;
-                            }
-                        }
+                        let paths: Vec<_> = inputs
+                            .into_iter()
+                            .filter(|i| i.path.exists() && !i.path.starts_with("/nix/store"))
+                            .map(|i| i.path)
+                            .collect();
+                        watcher.watch_many(paths).await;
                     }
                     Err(e) => {
                         tracing::warn!("Failed to query eval cache for shell inputs: {}", e);
@@ -307,11 +308,12 @@ impl DevenvShellBuilder {
             match devenv_eval_cache::get_file_inputs_by_key_hash(pool, &cache_key.key_hash).await {
                 Ok(inputs) if !inputs.is_empty() => {
                     tracing::debug!("Found {} file inputs for shell key", inputs.len());
-                    for input in inputs {
-                        if input.path.exists() && !input.path.starts_with("/nix/store") {
-                            ctx.watcher.watch(&input.path).await;
-                        }
-                    }
+                    let paths: Vec<_> = inputs
+                        .into_iter()
+                        .filter(|i| i.path.exists() && !i.path.starts_with("/nix/store"))
+                        .map(|i| i.path)
+                        .collect();
+                    ctx.watcher.watch_many(paths).await;
                     return;
                 }
                 Ok(_) => {
@@ -327,11 +329,11 @@ impl DevenvShellBuilder {
         match devenv_eval_cache::get_all_tracked_file_paths(pool).await {
             Ok(paths) => {
                 tracing::debug!("Found {} total tracked files in eval cache", paths.len());
-                for path in paths {
-                    if path.exists() && !path.starts_with("/nix/store") {
-                        ctx.watcher.watch(&path).await;
-                    }
-                }
+                let filtered: Vec<_> = paths
+                    .into_iter()
+                    .filter(|p| p.exists() && !p.starts_with("/nix/store"))
+                    .collect();
+                ctx.watcher.watch_many(filtered).await;
             }
             Err(e) => {
                 tracing::warn!("Failed to query all tracked files: {}", e);
