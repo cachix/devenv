@@ -5,6 +5,7 @@
 ### Bug Fixes
 
 - Fixed `devenv shell` and `devenv build` failing with `path '...drv' is required, but there is no substituter that can build it` after the cached derivation was garbage-collected. The stale eval-cache entry is now invalidated when its referenced store paths no longer exist, forcing a re-evaluation that re-materializes the `.drv` on disk.
+- Fixed hot reload missing file and directory changes that occurred during a build or during the brief gap between watch refreshes. The reload watcher now tracks path state (file/directory/missing) across reload cycles, queues deferred events while a build is in progress, and reconciles drift after rewatching so missed changes still trigger a follow-up rebuild.
 - Fixed MCP server segfault on exit by waiting for the cache init thread to finish before exiting ([#2699](https://github.com/cachix/devenv/issues/2699)).
 - Fixed independent oneshot tasks (e.g. `devenv:files` and `devenv:python:virtualenv`) running sequentially instead of in parallel, causing unnecessary waterfall delays during `devenv shell` startup.
 - Fixed `processes.<name>.watch` restarting processes multiple times for a single burst of queued file watcher events by draining the watch queue before restart ([#2735](https://github.com/cachix/devenv/pull/2735)).
@@ -31,6 +32,7 @@
 
 ### Improvements
 
+- Sped up `devenv shell` startup on projects with many cached input paths by batching file watcher registration into a single pathset update and readiness wait, instead of reconciling the pathset once per path. This removes long hangs before `enterShell` on large inputs.
 - Fixed port allocation values (`config.processes.<name>.ports.<port>.value`) resolving to the base `allocate` port in `devenv shell`, `devenv tasks run`, and other commands. When the native process manager is running, port values now match the ports allocated by `devenv up` ([#2710](https://github.com/cachix/devenv/issues/2710)).
 - Standardized keyboard shortcut notation across `devenv up` TUI and `devenv shell` to use consistent `Ctrl-E` format instead of mixed `^e`/`Ctrl-Alt-E` styles. macOS now shows `Opt` instead of `Alt` ([#2736](https://github.com/cachix/devenv/issues/2736)).
 - Auto-detect AI coding agents (via `CLAUDECODE`, `OPENCODE_CLIENT`, and `AI_AGENT` environment variables) and enable quiet mode to avoid wasting LLM tokens on TUI progress output. Override with `--verbose` or `--tui` ([#2723](https://github.com/cachix/devenv/issues/2723)).
