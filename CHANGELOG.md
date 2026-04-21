@@ -43,6 +43,7 @@
 - Upgraded Nix to 2.34, bringing multithreaded tarball unpacking, evaluator performance improvements, and REPL enhancements.
 - Added `require_version` field to `devenv.yaml` to enforce a devenv CLI version. Set to `true` to match the modules version, or use a constraint string like `">=2.1"` ([#2391](https://github.com/cachix/devenv/issues/2391)).
 - Added Ctrl-X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
+- Added Ctrl-H keybinding to toggle hiding stopped processes in the TUI. Failed processes remain visible, and the process count shows how many are hidden ([#2692](https://github.com/cachix/devenv/issues/2692)).
 - Tasks can now display messages when entering the shell by writing `{"devenv":{"messages":["..."]}}` to `$DEVENV_TASK_OUTPUT_FILE` ([#2500](https://github.com/cachix/devenv/issues/2500)).
 - Added `devenv hook <shell>` for native directory based auto-activation without direnv. Supports bash, zsh, fish, and nushell. Automatically deactivates when you leave the project directory. Add `eval "$(devenv hook bash)"` to your shell config to activate. Use `devenv allow` and `devenv revoke` to manage trust ([#2488](https://github.com/cachix/devenv/issues/2488)).
 - Shell environment now auto-reloads at the next prompt when watched files change, instead of requiring a manual Ctrl-Alt-R keybind ([#2595](https://github.com/cachix/devenv/issues/2595)).
