@@ -243,141 +243,6 @@ fn feed_vt(vt: &mut Terminal<'_, '_>, text: &str) -> usize {
     total_after.saturating_sub(total_before)
 }
 
-/// Filters OSC responses from stdin to prevent garbled text.
-///
-/// When we forward OSC queries (e.g., color scheme detection) to the real
-/// terminal, the terminal's responses arrive on stdin. If the querying
-/// program has exited before the response arrives, the response bytes
-/// would be interpreted as user input by readline. This filter removes
-/// OSC response sequences (`ESC ] <digits> ; <payload> <terminator>`)
-/// from the stdin stream while passing everything else through.
-///
-/// DCS responses are NOT filtered — they are replies to queries that the
-/// program itself sent (e.g., XTGETTCAP, DECRQSS) and must reach it.
-struct StdinFilter {
-    state: StdinFilterState,
-    buf: Vec<u8>,
-    output: Vec<u8>,
-}
-
-#[derive(Clone, Copy)]
-enum StdinFilterState {
-    Ground,
-    Esc,
-    OscDigit,
-    OscPayload,
-    OscPayloadEsc,
-}
-
-impl StdinFilter {
-    fn new() -> Self {
-        Self {
-            state: StdinFilterState::Ground,
-            buf: Vec::new(),
-            output: Vec::new(),
-        }
-    }
-
-    /// Filter a chunk of stdin data, returning only non-OSC bytes.
-    fn filter(&mut self, data: &[u8]) -> &[u8] {
-        self.output.clear();
-        self.output.reserve(data.len());
-        let output = &mut self.output;
-
-        for &byte in data {
-            match self.state {
-                StdinFilterState::Ground => {
-                    if byte == 0x1b {
-                        self.buf.clear();
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::Esc;
-                    } else {
-                        output.push(byte);
-                    }
-                }
-                StdinFilterState::Esc => {
-                    if byte == b']' {
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::OscDigit;
-                    } else if byte == 0x1b {
-                        output.push(0x1b);
-                        self.buf.clear();
-                        self.buf.push(byte);
-                    } else {
-                        output.extend_from_slice(&self.buf);
-                        output.push(byte);
-                        self.buf.clear();
-                        self.state = StdinFilterState::Ground;
-                    }
-                }
-                StdinFilterState::OscDigit => {
-                    if byte.is_ascii_digit() {
-                        self.buf.push(byte);
-                    } else if byte == b';' {
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::OscPayload;
-                    } else {
-                        // Not a valid OSC response pattern, emit everything
-                        output.extend_from_slice(&self.buf);
-                        output.push(byte);
-                        self.buf.clear();
-                        self.state = StdinFilterState::Ground;
-                    }
-                }
-                StdinFilterState::OscPayload => {
-                    if byte == 0x07 {
-                        // BEL terminates OSC — drop the entire sequence
-                        self.buf.clear();
-                        self.state = StdinFilterState::Ground;
-                    } else if byte == 0x1b {
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::OscPayloadEsc;
-                    } else {
-                        self.buf.push(byte);
-                        if self.buf.len() > 256 {
-                            // Safety limit: not a real OSC response, emit
-                            output.extend_from_slice(&self.buf);
-                            self.buf.clear();
-                            self.state = StdinFilterState::Ground;
-                        }
-                    }
-                }
-                StdinFilterState::OscPayloadEsc => {
-                    if byte == b'\\' {
-                        // ST (ESC \) terminates OSC — drop the entire sequence
-                        self.buf.clear();
-                        self.state = StdinFilterState::Ground;
-                    } else if byte == 0x1b {
-                        // Another ESC — give up on this OSC, start fresh
-                        output.extend_from_slice(&self.buf[..self.buf.len() - 1]);
-                        self.buf.clear();
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::Esc;
-                    } else {
-                        // Not ST — not a valid OSC, emit everything
-                        output.extend_from_slice(&self.buf);
-                        output.push(byte);
-                        self.buf.clear();
-                        self.state = StdinFilterState::Ground;
-                    }
-                }
-            }
-        }
-
-        // If the chunk ended with a bare ESC (state == Esc), flush it now.
-        // A real escape sequence (e.g. OSC) always has `]` in the same read
-        // chunk. A standalone Esc keypress arrives alone, so emit it
-        // immediately instead of holding it until the next keystroke.
-        if matches!(self.state, StdinFilterState::Esc) {
-            output.extend_from_slice(&self.buf);
-            self.buf.clear();
-            self.state = StdinFilterState::Ground;
-        }
-
-        &self.output
-    }
-}
-
 /// Differential renderer that draws VT state to a bounded terminal region.
 ///
 /// Instead of passing raw PTY output to stdout (which conflicts with the status
@@ -1067,7 +932,6 @@ impl ShellSession {
     ) -> Result<Option<u32>, SessionError> {
         let spinner_interval = Duration::from_millis(SPINNER_INTERVAL_MS);
         let mut scanner = EscapeScanner::new();
-        let mut stdin_filter = StdinFilter::new();
         let mut utf8_acc = Utf8Accumulator::new();
         let mut esc = EscapeState::new();
         let mut resize_pending = false;
@@ -1162,9 +1026,8 @@ impl ShellSession {
                         }
                         continue;
                     }
-                    let filtered = stdin_filter.filter(&data);
-                    if !filtered.is_empty() {
-                        pty.write_all(filtered)?;
+                    if !&data.is_empty() {
+                        pty.write_all(&data)?;
                         pty.flush()?;
                     }
                 }
@@ -1208,9 +1071,8 @@ impl ShellSession {
                                 return Ok(exit_code);
                             }
                             Event::Stdin(stdin_data) => {
-                                let filtered = stdin_filter.filter(&stdin_data);
-                                if !filtered.is_empty() {
-                                    pty.write_all(filtered)?;
+                                if !&stdin_data.is_empty() {
+                                    pty.write_all(&stdin_data)?;
                                     pty.flush()?;
                                 }
                             }
@@ -1439,20 +1301,15 @@ impl ShellSession {
                     }
                 }
                 SequenceEvent::Osc(event) => {
-                    // Forward OSC queries to the real terminal so programs
-                    // can detect color scheme, etc. The terminal's responses
-                    // are filtered from stdin by StdinFilter to prevent them
-                    // from leaking into the shell as garbled text.
+                    // Forward OSC queries to the real terminal so programs can detect color scheme, etc.
                     stdout.write_all(&event.raw_bytes)?;
                 }
                 SequenceEvent::EraseDisplay { .. } => {
-                    // Not forwarded (the renderer handles screen content),
-                    // but signals the caller to consume row_offset.
+                    // Not forwarded (the renderer handles screen content), but signals the caller to consume row_offset.
                     esc.erase_display = true;
                 }
                 SequenceEvent::ClearScrollback { .. } => {
-                    // Deferred so the caller can emit it after scroll_region
-                    // pushes old TUI content into scrollback.
+                    // Deferred so the caller can emit it after scroll_region pushes old TUI content into scrollback.
                     esc.clear_scrollback = true;
                 }
                 SequenceEvent::ForwardCsi { raw_bytes } => {
@@ -1573,65 +1430,6 @@ impl Default for ShellSession {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn stdin_filter_bare_esc_emitted_immediately() {
-        let mut f = StdinFilter::new();
-        // A standalone Esc keypress must pass through, not be held.
-        assert_eq!(f.filter(&[0x1b]), &[0x1b]);
-    }
-
-    #[test]
-    fn stdin_filter_osc_sequence_dropped() {
-        let mut f = StdinFilter::new();
-        // OSC terminated by BEL: ESC ] 0 ; t i t l e BEL
-        let osc = b"\x1b]0;title\x07";
-        assert_eq!(f.filter(osc), &[] as &[u8]);
-    }
-
-    #[test]
-    fn stdin_filter_osc_sequence_with_st_dropped() {
-        let mut f = StdinFilter::new();
-        // OSC terminated by ST (ESC \): ESC ] 0 ; t i t l e ESC \
-        let osc = b"\x1b]0;title\x1b\\";
-        assert_eq!(f.filter(osc), &[] as &[u8]);
-    }
-
-    #[test]
-    fn stdin_filter_esc_bracket_passthrough() {
-        let mut f = StdinFilter::new();
-        // CSI sequence (e.g. arrow key ESC [ A) must pass through
-        assert_eq!(f.filter(b"\x1b[A"), &[0x1b, b'[', b'A']);
-    }
-
-    #[test]
-    fn stdin_filter_normal_bytes_passthrough() {
-        let mut f = StdinFilter::new();
-        assert_eq!(f.filter(b"hello"), b"hello");
-    }
-
-    #[test]
-    fn stdin_filter_consecutive_bare_esc() {
-        let mut f = StdinFilter::new();
-        // Two consecutive Esc in same chunk: first emitted, second flushed at end
-        assert_eq!(f.filter(&[0x1b, 0x1b]), &[0x1b, 0x1b]);
-    }
-
-    #[test]
-    fn stdin_filter_esc_then_normal_in_next_chunk() {
-        let mut f = StdinFilter::new();
-        // Esc alone in first chunk: emitted immediately
-        assert_eq!(f.filter(&[0x1b]), &[0x1b]);
-        // Normal byte in next chunk: passes through
-        assert_eq!(f.filter(b"a"), b"a");
-    }
-
-    #[test]
-    fn stdin_filter_mixed_esc_and_text() {
-        let mut f = StdinFilter::new();
-        // Text followed by bare Esc at end of chunk
-        assert_eq!(f.filter(b"abc\x1b"), &[b'a', b'b', b'c', 0x1b]);
-    }
 
     /// Feed raw bytes through scanner and apply events to state.
     /// Returns bytes that would be forwarded to stdout.
