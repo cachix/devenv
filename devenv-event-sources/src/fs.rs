@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tokio::sync::mpsc;
+use tokio::sync::{Mutex as AsyncMutex, mpsc};
 use tokio::task::JoinHandle;
 use tracing::{debug, warn};
 use watchexec::{Config, WatchedPath};
@@ -52,6 +52,7 @@ impl Default for FileWatcherConfig<'_> {
 #[derive(Clone)]
 pub struct WatcherHandle {
     watched_paths: Arc<Mutex<HashSet<PathBuf>>>,
+    operation_lock: Arc<AsyncMutex<()>>,
     config: Option<Arc<Config>>,
 }
 
@@ -62,6 +63,7 @@ impl WatcherHandle {
     /// Redundant pathset updates signal the fs worker to reconcile its inotify
     /// watches, which can break existing watches.
     pub async fn watch(&self, path: &Path) {
+        let _op = self.operation_lock.lock().await;
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
         // Subscribe BEFORE updating pathset so we don't miss the ready signal.
@@ -87,6 +89,57 @@ impl WatcherHandle {
         }
     }
 
+    /// Adds many paths to watch in a single reconciliation and waits for the
+    /// OS watches to be registered.
+    ///
+    /// Equivalent to calling `watch()` for each path but without the O(n^2)
+    /// cost: `watch()` re-sends the entire growing pathset to watchexec per
+    /// call and awaits the fs worker's ready signal each time. For large
+    /// input sets (e.g. thousands of cached eval inputs) that serialisation
+    /// dominates shell startup time. This method locks the pathset once,
+    /// inserts all new paths, calls `config.pathset(...)` once, and awaits
+    /// a single ready signal.
+    pub async fn watch_many<I, P>(&self, paths: I)
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        let _op = self.operation_lock.lock().await;
+        // Subscribe BEFORE updating pathset so we don't miss the ready signal.
+        let mut ready = self.config.as_ref().map(|c| c.fs_ready());
+
+        let changed = {
+            let mut watched = self.watched_paths.lock().unwrap();
+            let before = watched.len();
+            for p in paths {
+                let path = p.as_ref();
+                let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+                watched.insert(canonical);
+            }
+            let changed = watched.len() != before;
+
+            if changed {
+                if let Some(ref config) = self.config {
+                    config.pathset(
+                        watched
+                            .iter()
+                            .map(|p| WatchedPath::non_recursive(p.as_path())),
+                    );
+                }
+            }
+
+            changed
+        };
+
+        if !changed {
+            return;
+        }
+
+        if let Some(ref mut rx) = ready {
+            let _ = rx.changed().await;
+        }
+    }
+
     /// Force all watched paths to be re-registered with the OS.
     ///
     /// On Linux, inotify watches track file inodes. When an editor does an
@@ -98,6 +151,7 @@ impl WatcherHandle {
     /// (causing the fs worker to drop all watches) and then re-setting it
     /// (causing fresh watches to be created on current inodes).
     pub async fn rewatch_all(&self) {
+        let _op = self.operation_lock.lock().await;
         let mut ready = self.config.as_ref().map(|c| c.fs_ready());
 
         {
@@ -172,6 +226,7 @@ impl FileWatcher {
         let (tx, rx) = mpsc::channel::<FileChangeEvent>(100);
 
         let watched_paths = Arc::new(Mutex::new(HashSet::new()));
+        let operation_lock = Arc::new(AsyncMutex::new(()));
 
         macro_rules! empty_watcher {
             () => {
@@ -180,6 +235,7 @@ impl FileWatcher {
                     _tx: tx,
                     handle: WatcherHandle {
                         watched_paths,
+                        operation_lock,
                         config: None,
                     },
                     tasks: Vec::new(),
@@ -257,6 +313,7 @@ impl FileWatcher {
 
         let handle = WatcherHandle {
             watched_paths,
+            operation_lock,
             config: Some(wx_config.clone()),
         };
 
@@ -659,6 +716,60 @@ mod tests {
                 Ok(Some(_)) => continue,
                 Ok(None) => panic!("watcher channel closed before runtime file event"),
                 Err(_) => panic!("timeout waiting for runtime file change event"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_watch_many_batches_paths() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let base = temp_dir.path().canonicalize().expect("canonicalize");
+
+        let files: Vec<PathBuf> = (0..5)
+            .map(|i| {
+                let p = base.join(format!("f{i}.nix"));
+                File::create(&p)
+                    .expect("create")
+                    .write_all(b"x")
+                    .expect("write");
+                p
+            })
+            .collect();
+
+        let mut watcher = FileWatcher::new(
+            FileWatcherConfig {
+                paths: &[],
+                recursive: false,
+                ..Default::default()
+            },
+            "test-watch-many",
+        )
+        .await;
+
+        let handle = watcher.handle();
+        handle.watch_many(files.iter()).await;
+
+        let watched = handle.watched_paths();
+        for f in &files {
+            assert!(
+                watched.contains(f),
+                "expected {f:?} in watched set, got {watched:?}"
+            );
+        }
+
+        File::create(&files[2])
+            .expect("open")
+            .write_all(b"changed")
+            .expect("write");
+
+        let deadline = tokio::time::Instant::now() + WATCH_TIMEOUT;
+        loop {
+            let remaining = deadline - tokio::time::Instant::now();
+            match tokio::time::timeout(remaining, watcher.recv()).await {
+                Ok(Some(e)) if e.path == files[2] => break,
+                Ok(Some(_)) => continue,
+                Ok(None) => panic!("watcher channel closed"),
+                Err(_) => panic!("timeout waiting for change event after watch_many"),
             }
         }
     }
