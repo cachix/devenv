@@ -28,7 +28,9 @@ use crate::db::{self, EnvInputRow, EvalRow, FileInputRow, empty_to_none};
 use crate::eval_inputs::{
     EnvInputDesc, FileInputDesc, FileState, Input, check_env_state, check_file_state,
 };
-use crate::ffi_cache::{CachingConfig, EvalCacheKey, EvalInputCollector, ops_to_inputs};
+use crate::ffi_cache::{
+    CachingConfig, EvalCacheKey, EvalInputCollector, OpsToInputs, ops_to_inputs,
+};
 use crate::resource_manager::{ResourceManager, ResourceSpec};
 use devenv_activity::Activity;
 use devenv_core::nix_log_bridge::NixLogBridge;
@@ -512,6 +514,36 @@ impl CachedEval {
             .map_err(|e| CacheError::Eval(format!("Resource replay failed: {}", e)))
     }
 
+    /// Persist an eval result and its inputs, or skip when a race was detected.
+    ///
+    /// When `race_detected`, a tracked input was rewritten during evaluation,
+    /// so the recorded fingerprint no longer matches what Nix actually read.
+    /// Persisting would poison the cache — the next run would find a matching
+    /// fingerprint on disk and serve the stale result.
+    async fn persist_eval(
+        &self,
+        service: &CachingEvalService,
+        key: &EvalCacheKey,
+        json_output: &str,
+        inputs: Vec<Input>,
+        race_detected: bool,
+    ) {
+        if race_detected {
+            warn!("eval cache write skipped: an input file was modified during evaluation");
+            return;
+        }
+        match service.store(key, json_output, inputs).await {
+            Ok(eval_id) => {
+                if let Some(ref rm) = self.resource_manager {
+                    self.store_resources(service, rm, eval_id).await;
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, "Failed to store result in cache");
+            }
+        }
+    }
+
     /// Snapshot and store resource allocations after a cache miss evaluation.
     async fn store_resources(
         &self,
@@ -600,26 +632,19 @@ impl CachedEval {
         self.log_bridge.add_observer(observer.clone());
         let _observer_guard = ObserverClearGuard::new(self.log_bridge.clone(), observer);
 
+        let eval_started_at = SystemTime::now();
         let result = eval_fn().await;
         drop(_observer_guard);
         let result = result.map_err(|e| CacheError::Eval(format!("{e:#}")))?;
 
-        // Stop collecting and store result
         let ops = collector.take_ops();
-        let inputs = ops_to_inputs(ops, &self.config);
+        let OpsToInputs {
+            inputs,
+            race_detected,
+        } = ops_to_inputs(ops, &self.config, eval_started_at);
 
-        match service.store(key, &result, inputs).await {
-            Ok(eval_id) => {
-                // Store resource specs alongside the cache entry
-                if let Some(ref rm) = self.resource_manager {
-                    self.store_resources(service, rm, eval_id).await;
-                }
-            }
-            Err(e) => {
-                // Log but don't fail - result is still valid
-                warn!(error = %e, "Failed to store result in cache");
-            }
-        }
+        self.persist_eval(service, key, &result, inputs, race_detected)
+            .await;
 
         Ok((result, false))
     }
@@ -695,27 +720,20 @@ impl CachedEval {
         self.log_bridge.add_observer(observer.clone());
         let _observer_guard = ObserverClearGuard::new(self.log_bridge.clone(), observer);
 
+        let eval_started_at = SystemTime::now();
         let result = eval_fn().await;
         drop(_observer_guard);
         let result = result.map_err(|e| CacheError::Eval(format!("{e:#}")))?;
 
-        // Stop collecting and store result
         let ops = collector.take_ops();
-        let inputs = ops_to_inputs(ops, &self.config);
+        let OpsToInputs {
+            inputs,
+            race_detected,
+        } = ops_to_inputs(ops, &self.config, eval_started_at);
 
         let json = serde_json::to_string(&result)?;
-        match service.store(key, &json, inputs).await {
-            Ok(eval_id) => {
-                // Store resource specs alongside the cache entry
-                if let Some(ref rm) = self.resource_manager {
-                    self.store_resources(service, rm, eval_id).await;
-                }
-            }
-            Err(e) => {
-                // Log but don't fail - result is still valid
-                warn!(error = %e, "Failed to store result in cache");
-            }
-        }
+        self.persist_eval(service, key, &json, inputs, race_detected)
+            .await;
 
         Ok((result, false))
     }

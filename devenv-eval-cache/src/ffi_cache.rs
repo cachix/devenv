@@ -85,11 +85,13 @@ pub struct CachingConfig {
 /// ```ignore
 /// let collector = EvalInputCollector::start();
 /// log_bridge.add_observer(collector.clone());
+/// let eval_started_at = std::time::SystemTime::now();
 ///
 /// // ... perform evaluation ...
 ///
 /// log_bridge.clear_observers();
-/// let inputs = collector.into_inputs(&config);
+/// let OpsToInputs { inputs, race_detected } =
+///     collector.into_inputs(&config, eval_started_at);
 /// ```
 pub struct EvalInputCollector {
     ops: Arc<Mutex<Vec<EvalOp>>>,
@@ -149,9 +151,16 @@ impl EvalInputCollector {
     ///
     /// And adds:
     /// - Paths from `config.extra_watch_paths`
-    pub fn into_inputs(self: Arc<Self>, config: &CachingConfig) -> Vec<Input> {
+    ///
+    /// `eval_started_at` is forwarded to [`ops_to_inputs`] for race detection
+    /// against files modified during evaluation.
+    pub fn into_inputs(
+        self: Arc<Self>,
+        config: &CachingConfig,
+        eval_started_at: SystemTime,
+    ) -> OpsToInputs {
         let ops = self.take_ops();
-        ops_to_inputs(ops, config)
+        ops_to_inputs(ops, config, eval_started_at)
     }
 }
 
@@ -169,6 +178,18 @@ impl OpObserver for EvalInputCollector {
     }
 }
 
+/// Result of converting evaluation ops into cacheable inputs.
+#[derive(Debug)]
+pub struct OpsToInputs {
+    pub inputs: Vec<Input>,
+    /// Set if any tracked file was modified after `eval_started_at`. When
+    /// true, the caller must not persist the eval result: the recorded
+    /// fingerprint reflects the post-modification file, but the result was
+    /// derived from whatever Nix happened to read. Next run will re-evaluate
+    /// against the actual disk state.
+    pub race_detected: bool,
+}
+
 /// Convert a list of operations to Input descriptors.
 ///
 /// This is the core conversion logic that:
@@ -177,9 +198,27 @@ impl OpObserver for EvalInputCollector {
 /// 3. Creates `EnvInputDesc` for environment variable access
 /// 4. Adds extra watch paths
 /// 5. Deduplicates the result
-pub fn ops_to_inputs(ops: Vec<EvalOp>, config: &CachingConfig) -> Vec<Input> {
+///
+/// `eval_started_at` is the wall-clock moment just before evaluation began.
+/// If any tracked file's untruncated mtime is strictly later than that, the
+/// file was rewritten during eval and `race_detected` is set.
+pub fn ops_to_inputs(
+    ops: Vec<EvalOp>,
+    config: &CachingConfig,
+    eval_started_at: SystemTime,
+) -> OpsToInputs {
     let fallback_time = SystemTime::now();
     let mut inputs: Vec<Input> = Vec::new();
+    let mut race_detected = false;
+
+    let push_file = |source: PathBuf, inputs: &mut Vec<Input>, race: &mut bool| {
+        if let Ok((desc, raw_mtime)) = FileInputDesc::new_with_raw_mtime(source, fallback_time) {
+            if raw_mtime.is_some_and(|m| m > eval_started_at) {
+                *race = true;
+            }
+            inputs.push(Input::File(desc));
+        }
+    };
 
     for op in ops {
         match op {
@@ -208,10 +247,7 @@ pub fn ops_to_inputs(ops: Vec<EvalOp>, config: &CachingConfig) -> Vec<Input> {
                     continue;
                 }
 
-                // Create file input descriptor
-                if let Ok(desc) = FileInputDesc::new(source, fallback_time) {
-                    inputs.push(Input::File(desc));
-                }
+                push_file(source, &mut inputs, &mut race_detected);
             }
             EvalOp::GetEnv { name } => {
                 // Skip excluded env vars (already tracked elsewhere, e.g., via NixArgs)
@@ -228,16 +264,17 @@ pub fn ops_to_inputs(ops: Vec<EvalOp>, config: &CachingConfig) -> Vec<Input> {
 
     // Add extra watch paths
     for path in &config.extra_watch_paths {
-        if let Ok(desc) = FileInputDesc::new(path.clone(), fallback_time) {
-            inputs.push(Input::File(desc));
-        }
+        push_file(path.clone(), &mut inputs, &mut race_detected);
     }
 
     // Sort and deduplicate
     inputs.sort();
     inputs.dedup_by(Input::dedup);
 
-    inputs
+    OpsToInputs {
+        inputs,
+        race_detected,
+    }
 }
 
 #[cfg(test)]
@@ -286,8 +323,9 @@ mod tests {
         let ops = vec![EvalOp::ReadFile {
             source: PathBuf::from("/nix/store/abc123-foo/bar.txt"),
         }];
-        let inputs = ops_to_inputs(ops, &CachingConfig::default());
-        assert!(inputs.is_empty());
+        let result = ops_to_inputs(ops, &CachingConfig::default(), SystemTime::now());
+        assert!(result.inputs.is_empty());
+        assert!(!result.race_detected);
     }
 
     #[test]
@@ -295,8 +333,9 @@ mod tests {
         let ops = vec![EvalOp::ReadFile {
             source: PathBuf::from("relative/path.txt"),
         }];
-        let inputs = ops_to_inputs(ops, &CachingConfig::default());
-        assert!(inputs.is_empty());
+        let result = ops_to_inputs(ops, &CachingConfig::default(), SystemTime::now());
+        assert!(result.inputs.is_empty());
+        assert!(!result.race_detected);
     }
 
     #[test]
@@ -308,8 +347,9 @@ mod tests {
         let ops = vec![EvalOp::ReadFile {
             source: PathBuf::from("/excluded/file.txt"),
         }];
-        let inputs = ops_to_inputs(ops, &config);
-        assert!(inputs.is_empty());
+        let result = ops_to_inputs(ops, &config, SystemTime::now());
+        assert!(result.inputs.is_empty());
+        assert!(!result.race_detected);
     }
 
     #[test]
@@ -326,10 +366,10 @@ mod tests {
                 name: "OTHER_VAR".to_string(),
             },
         ];
-        let inputs = ops_to_inputs(ops, &config);
+        let result = ops_to_inputs(ops, &config, SystemTime::now());
         // NIXPKGS_CONFIG should be filtered out, only OTHER_VAR remains
-        assert_eq!(inputs.len(), 1);
-        assert!(matches!(inputs[0], Input::Env(ref e) if e.name == "OTHER_VAR"));
+        assert_eq!(result.inputs.len(), 1);
+        assert!(matches!(result.inputs[0], Input::Env(ref e) if e.name == "OTHER_VAR"));
     }
 
     #[test]
@@ -337,8 +377,98 @@ mod tests {
         let ops = vec![EvalOp::GetEnv {
             name: "MY_VAR".to_string(),
         }];
-        let inputs = ops_to_inputs(ops, &CachingConfig::default());
-        assert_eq!(inputs.len(), 1);
-        assert!(matches!(inputs[0], Input::Env(ref e) if e.name == "MY_VAR"));
+        let result = ops_to_inputs(ops, &CachingConfig::default(), SystemTime::now());
+        assert_eq!(result.inputs.len(), 1);
+        assert!(matches!(result.inputs[0], Input::Env(ref e) if e.name == "MY_VAR"));
+    }
+
+    /// Regression test for issue #2745.
+    ///
+    /// A file written after `eval_started_at` must trigger `race_detected`,
+    /// so the caller skips persisting a cache entry whose fingerprint would
+    /// not correspond to the result that was actually computed.
+    #[test]
+    fn test_ops_to_inputs_detects_race_when_file_modified_during_eval() {
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::with_prefix("test_race_detection").unwrap();
+        let file_path = temp_dir.path().join("devenv.nix");
+
+        // Pretend eval started at a fixed instant.
+        let eval_started_at = SystemTime::now();
+
+        // Write the file and set its mtime AFTER eval_started_at: this
+        // simulates a user rewriting the file while eval was still running.
+        let mut f = File::create(&file_path).unwrap();
+        f.write_all(b"{ ... }: { tasks.demo-show.exec = \"echo\"; }")
+            .unwrap();
+        let post_eval = eval_started_at + std::time::Duration::from_secs(2);
+        f.set_modified(post_eval).unwrap();
+        drop(f);
+
+        let ops = vec![EvalOp::ReadFile {
+            source: file_path.clone(),
+        }];
+        let result = ops_to_inputs(ops, &CachingConfig::default(), eval_started_at);
+        assert_eq!(result.inputs.len(), 1);
+        assert!(
+            result.race_detected,
+            "file modified after eval_started_at must set race_detected"
+        );
+    }
+
+    #[test]
+    fn test_ops_to_inputs_no_race_when_file_stable() {
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::with_prefix("test_no_race").unwrap();
+        let file_path = temp_dir.path().join("devenv.nix");
+
+        // Write the file and set its mtime to the distant past.
+        let mut f = File::create(&file_path).unwrap();
+        f.write_all(b"{ ... }: { }").unwrap();
+        let pre_eval = SystemTime::now() - std::time::Duration::from_secs(60);
+        f.set_modified(pre_eval).unwrap();
+        drop(f);
+
+        // eval_started_at is AFTER the file's last modification.
+        let eval_started_at = SystemTime::now();
+
+        let ops = vec![EvalOp::ReadFile {
+            source: file_path.clone(),
+        }];
+        let result = ops_to_inputs(ops, &CachingConfig::default(), eval_started_at);
+        assert_eq!(result.inputs.len(), 1);
+        assert!(!result.race_detected);
+    }
+
+    #[test]
+    fn test_ops_to_inputs_detects_race_on_extra_watch_path() {
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::with_prefix("test_race_watch_path").unwrap();
+        let file_path = temp_dir.path().join("flake.lock");
+
+        let eval_started_at = SystemTime::now();
+
+        let mut f = File::create(&file_path).unwrap();
+        f.write_all(b"{}").unwrap();
+        let post_eval = eval_started_at + std::time::Duration::from_secs(2);
+        f.set_modified(post_eval).unwrap();
+        drop(f);
+
+        let config = CachingConfig {
+            extra_watch_paths: vec![file_path],
+            ..Default::default()
+        };
+        let result = ops_to_inputs(vec![], &config, eval_started_at);
+        assert_eq!(result.inputs.len(), 1);
+        assert!(result.race_detected);
     }
 }

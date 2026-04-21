@@ -192,10 +192,14 @@ During evaluation, `EvalInputCollector` observes operations via `NixLogBridge`:
 let collector = EvalInputCollector::start();
 log_bridge.add_observer(collector.clone());
 
+let eval_started_at = std::time::SystemTime::now();
 // ... evaluation runs, collector receives EvalOp events ...
 
 log_bridge.clear_observers();
-let inputs = collector.into_inputs(&config);
+let OpsToInputs { inputs, race_detected } =
+    collector.into_inputs(&config, eval_started_at);
+// If race_detected, do not persist inputs: a tracked file was modified
+// during evaluation and the fingerprint no longer matches what Nix read.
 ```
 
 ### Observed Operations
