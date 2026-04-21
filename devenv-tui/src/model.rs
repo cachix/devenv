@@ -1213,6 +1213,30 @@ impl ActivityModel {
         }
     }
 
+    /// Whether `activity` is a direct child of `parent_id`, accounting for the
+    /// primary parent link and any additional parents.
+    fn is_direct_child_of(&self, activity: &Activity, parent_id: u64) -> bool {
+        activity.parent_id == Some(parent_id)
+            || self
+                .additional_parents
+                .get(&activity.id)
+                .is_some_and(|parents| parents.contains(&parent_id))
+    }
+
+    /// Count how many direct children of `parent_id` are hidden by the
+    /// `hide_stopped_processes` filter. Returns 0 when the filter is off.
+    pub fn count_hidden_process_children(&self, parent_id: u64, ui_state: &UiState) -> usize {
+        if !ui_state.hide_stopped_processes {
+            return 0;
+        }
+        self.activities
+            .values()
+            .filter(|a| {
+                self.is_direct_child_of(a, parent_id) && self.is_hidden_process(a, ui_state)
+            })
+            .count()
+    }
+
     pub fn calculate_summary(&self) -> ActivitySummary {
         let mut summary = ActivitySummary::default();
 
@@ -1259,10 +1283,12 @@ impl ActivityModel {
                 (ActivityVariant::Process(proc), state) => {
                     if proc.status.is_active() {
                         summary.running_processes += 1;
-                    } else if matches!(proc.status, ProcessStatus::Stopped)
-                        && !matches!(state, NixActivityState::Completed { success: false, .. })
-                    {
-                        summary.stopped_processes += 1;
+                        summary.total_processes += 1;
+                    } else if matches!(proc.status, ProcessStatus::Stopped) {
+                        if !matches!(state, NixActivityState::Completed { success: false, .. }) {
+                            summary.stopped_processes += 1;
+                        }
+                        summary.total_processes += 1;
                     }
                 }
                 _ => {}
@@ -1390,19 +1416,9 @@ impl ActivityModel {
             .activities
             .values()
             .filter(|a| {
-                if matches!(a.variant, ActivityVariant::UserOperation)
-                    || a.variant.is_always_top_level()
-                {
-                    return false;
-                }
-                // Check primary parent
-                if a.parent_id == Some(parent_id) {
-                    return true;
-                }
-                // Check additional parents
-                self.additional_parents
-                    .get(&a.id)
-                    .is_some_and(|parents| parents.contains(&parent_id))
+                !matches!(a.variant, ActivityVariant::UserOperation)
+                    && !a.variant.is_always_top_level()
+                    && self.is_direct_child_of(a, parent_id)
             })
             .collect();
 
@@ -1548,6 +1564,12 @@ pub struct ActivitySummary {
     pub failed_tasks: usize,
     pub running_processes: usize,
     pub stopped_processes: usize,
+    /// Process activities the summary bar tracks: active plus stopped
+    /// (including failed-stopped). Excludes `NotStarted`, so a shell that
+    /// only has disabled-autostart processes renders nothing in the bar.
+    /// `running_processes` is a live gauge (can go down); this is a
+    /// snapshot count of tracked processes, not cumulative progress.
+    pub total_processes: usize,
 }
 
 /// Format an EvalOp as a display string for logging.
@@ -1680,5 +1702,93 @@ mod tests {
             .map(|da| da.activity.name)
             .collect();
         assert!(!visible_after.contains(&"manually-stopped".to_string()));
+    }
+
+    #[test]
+    fn test_summary_total_processes_counts_running_and_stopped() {
+        let mut model = ActivityModel::default();
+
+        model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+            id: 100,
+            name: "Running processes".to_string(),
+            parent: None,
+            detail: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+
+        for (id, name) in [(1, "running"), (2, "also-running"), (3, "stopped")] {
+            model.apply_activity_event(ActivityEvent::Process(Process::Start {
+                id,
+                name: name.to_string(),
+                parent: Some(100),
+                command: None,
+                ports: vec![],
+                ready_probe: None,
+                level: ActivityLevel::Info,
+                timestamp: Timestamp::now(),
+            }));
+        }
+        model.apply_activity_event(ActivityEvent::Process(Process::Status {
+            id: 3,
+            status: ProcessStatus::Stopped,
+            timestamp: Timestamp::now(),
+        }));
+
+        let summary = model.calculate_summary();
+        assert_eq!(summary.running_processes, 2);
+        assert_eq!(summary.stopped_processes, 1);
+        assert_eq!(
+            summary.total_processes, 3,
+            "total should reflect the full count of process activities visible in the TUI"
+        );
+    }
+
+    #[test]
+    fn test_count_hidden_process_children_reports_hidden_clean_stops() {
+        let mut model = ActivityModel::default();
+        let mut ui_state = UiState::new();
+
+        model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+            id: 100,
+            name: "Running processes".to_string(),
+            parent: None,
+            detail: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+
+        for (id, name) in [(1, "clean-stop-1"), (2, "clean-stop-2"), (3, "running")] {
+            model.apply_activity_event(ActivityEvent::Process(Process::Start {
+                id,
+                name: name.to_string(),
+                parent: Some(100),
+                command: None,
+                ports: vec![],
+                ready_probe: None,
+                level: ActivityLevel::Info,
+                timestamp: Timestamp::now(),
+            }));
+        }
+        for id in [1, 2] {
+            model.apply_activity_event(ActivityEvent::Process(Process::Status {
+                id,
+                status: ProcessStatus::Stopped,
+                timestamp: Timestamp::now(),
+            }));
+        }
+
+        assert_eq!(
+            model.count_hidden_process_children(100, &ui_state),
+            0,
+            "nothing is hidden while the filter is off"
+        );
+
+        ui_state.hide_stopped_processes = true;
+        assert_eq!(
+            model.count_hidden_process_children(100, &ui_state),
+            2,
+            "both clean stops are hidden under the Running processes parent"
+        );
     }
 }

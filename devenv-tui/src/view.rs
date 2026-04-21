@@ -115,6 +115,12 @@ pub fn view(
             } => (Some(*success), *cached),
         };
 
+        let hidden_children_count = if matches!(activity.variant, ActivityVariant::Devenv) {
+            model.count_hidden_process_children(activity.id, ui_state)
+        } else {
+            0
+        };
+
         activity_elements.push(
             element! {
                 ContextProvider(value: Context::owned(ActivityRenderContext {
@@ -127,6 +133,7 @@ pub fn view(
                     cached,
                     render_context,
                     shutting_down,
+                    hidden_children_count,
                 })) {
                     ActivityItem
                 }
@@ -250,6 +257,8 @@ struct ActivityRenderContext {
     render_context: RenderContext,
     /// Whether the application is shutting down (Ctrl-C pressed)
     shutting_down: bool,
+    /// Number of direct children hidden by the `hide_stopped_processes` filter.
+    hidden_children_count: usize,
 }
 
 /// Helper to build activity prefix with hierarchy and status indicator.
@@ -297,6 +306,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         cached,
         render_context,
         shutting_down,
+        hidden_children_count,
     } = &*ctx;
 
     // Calculate elapsed time - use stored duration for completed activities, skip for queued
@@ -586,7 +596,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let prefix = build_activity_prefix(*depth, *completed, true);
 
             // Show line count as suffix when active or failed with logs
-            let suffix = if *completed == Some(true) {
+            let base_suffix = if *completed == Some(true) {
                 // Success - no suffix needed
                 None
             } else if let Some(ref progress) = activity.progress {
@@ -610,6 +620,16 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 Some(format!("{} lines", log_line_count))
             } else {
                 None
+            };
+
+            let suffix = if *hidden_children_count > 0 {
+                let hidden_note = format!("({} hidden)", hidden_children_count);
+                Some(match base_suffix {
+                    Some(s) => format!("{} {}", s, hidden_note),
+                    None => hidden_note,
+                })
+            } else {
+                base_suffix
             };
 
             let main_line = ActivityTextComponent::name_only(
@@ -1128,21 +1148,39 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         has_content = true;
     }
 
-    // Processes - show if there are any running
-    if summary.running_processes > 0 {
+    // Processes - show if there are any tracked (running or stopped)
+    if summary.total_processes > 0 {
         if has_content {
             children.push(element!(View(margin_left: if use_symbols { 1 } else { 2 }, margin_right: if use_symbols { 1 } else { 2 }, flex_shrink: 0.0) {
                 Text(content: "│", color: COLOR_HIERARCHY)
             }).into_any());
         }
 
-        children.push(element!(View(margin_right: 1, flex_shrink: 0.0) {
-            Text(content: format!("{}", summary.running_processes), color: COLOR_COMPLETED, weight: Weight::Bold)
-        }).into_any());
+        let running_all = summary.running_processes == summary.total_processes;
+        if running_all {
+            children.push(element!(View(margin_right: 1, flex_shrink: 0.0) {
+                Text(content: format!("{}", summary.total_processes), color: COLOR_COMPLETED, weight: Weight::Bold)
+            }).into_any());
+        } else if use_symbols {
+            children.push(element!(View(margin_right: 1, flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                Text(content: format!("{}", summary.running_processes), color: COLOR_COMPLETED, weight: Weight::Bold)
+                Text(content: format!("/{}", summary.total_processes))
+            }).into_any());
+        } else {
+            children.push(element!(View(margin_right: 1, flex_shrink: 0.0) {
+                Text(content: format!("{}", summary.running_processes), color: COLOR_COMPLETED, weight: Weight::Bold)
+            }).into_any());
+            children.push(
+                element!(View(margin_right: 1, flex_shrink: 0.0) {
+                    Text(content: format!("of {}", summary.total_processes))
+                })
+                .into_any(),
+            );
+        }
 
         children.push(
             element!(View(flex_shrink: 0.0) {
-                Text(content: if summary.running_processes == 1 { "process" } else { "processes" })
+                Text(content: if summary.total_processes == 1 { "process" } else { "processes" })
             })
             .into_any(),
         );
@@ -1378,5 +1416,196 @@ mod tests {
             .to_string();
 
         assert!(!rendered.contains("manually-stopped"));
+    }
+
+    #[test]
+    fn test_running_processes_label_shows_hidden_count_when_filter_is_active() {
+        let mut model = ActivityModel::default();
+        let mut ui_state = UiState::new();
+
+        model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+            id: 100,
+            name: "Running processes".to_string(),
+            parent: None,
+            detail: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+
+        for (id, name) in [(1, "stopped-a"), (2, "stopped-b"), (3, "running")] {
+            model.apply_activity_event(ActivityEvent::Process(Process::Start {
+                id,
+                name: name.to_string(),
+                parent: Some(100),
+                command: None,
+                ports: vec![],
+                ready_probe: None,
+                level: ActivityLevel::Info,
+                timestamp: Timestamp::now(),
+            }));
+        }
+        for id in [1, 2] {
+            model.apply_activity_event(ActivityEvent::Process(Process::Status {
+                id,
+                status: ProcessStatus::Stopped,
+                timestamp: Timestamp::now(),
+            }));
+        }
+
+        let render = |ui: &UiState| {
+            let display_activities = model.get_display_activities(ui);
+            let mut element: AnyElement<'static> = view(
+                &model,
+                ui,
+                RenderContext::Normal,
+                Some(ScrollState {
+                    handle: None,
+                    display_activities,
+                }),
+                false,
+            )
+            .into();
+            element
+                .render(Some(ui.terminal_size.width as usize))
+                .to_string()
+        };
+
+        let rendered_visible = render(&ui_state);
+        assert!(
+            !rendered_visible.contains("hidden)"),
+            "no hidden count is shown while the filter is off: {rendered_visible}"
+        );
+
+        ui_state.hide_stopped_processes = true;
+        let rendered_hidden = render(&ui_state);
+        assert!(
+            rendered_hidden.contains("(2 hidden)"),
+            "hidden count should appear next to the Running processes label: {rendered_hidden}"
+        );
+    }
+
+    #[test]
+    fn test_summary_bar_shows_running_of_total_when_some_are_stopped() {
+        let mut model = ActivityModel::default();
+        let mut ui_state = UiState::new();
+        // Wide enough to fit stats + help without column truncation.
+        ui_state.set_terminal_size(120, 24);
+
+        model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+            id: 100,
+            name: "Running processes".to_string(),
+            parent: None,
+            detail: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+
+        for (id, name) in [(1, "stopped"), (2, "running-a"), (3, "running-b")] {
+            model.apply_activity_event(ActivityEvent::Process(Process::Start {
+                id,
+                name: name.to_string(),
+                parent: Some(100),
+                command: None,
+                ports: vec![],
+                ready_probe: None,
+                level: ActivityLevel::Info,
+                timestamp: Timestamp::now(),
+            }));
+        }
+        model.apply_activity_event(ActivityEvent::Process(Process::Status {
+            id: 1,
+            status: ProcessStatus::Stopped,
+            timestamp: Timestamp::now(),
+        }));
+
+        let display_activities = model.get_display_activities(&ui_state);
+        let mut element: AnyElement<'static> = view(
+            &model,
+            &ui_state,
+            RenderContext::Normal,
+            Some(ScrollState {
+                handle: None,
+                display_activities,
+            }),
+            false,
+        )
+        .into();
+        let rendered = element
+            .render(Some(ui_state.terminal_size.width as usize))
+            .to_string();
+
+        assert!(
+            rendered.contains("2 of 3"),
+            "summary bar must surface running-of-total when some are stopped: {rendered}"
+        );
+    }
+
+    #[test]
+    fn test_summary_bar_excludes_not_started_processes_from_total() {
+        let mut model = ActivityModel::default();
+        let mut ui_state = UiState::new();
+        ui_state.set_terminal_size(120, 24);
+
+        model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+            id: 100,
+            name: "Running processes".to_string(),
+            parent: None,
+            detail: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+
+        for (id, name) in [(1, "disabled-a"), (2, "disabled-b"), (3, "running")] {
+            model.apply_activity_event(ActivityEvent::Process(Process::Start {
+                id,
+                name: name.to_string(),
+                parent: Some(100),
+                command: None,
+                ports: vec![],
+                ready_probe: None,
+                level: ActivityLevel::Info,
+                timestamp: Timestamp::now(),
+            }));
+        }
+        for id in [1, 2] {
+            model.apply_activity_event(ActivityEvent::Process(Process::Status {
+                id,
+                status: ProcessStatus::NotStarted,
+                timestamp: Timestamp::now(),
+            }));
+        }
+
+        let summary = model.calculate_summary();
+        assert_eq!(summary.running_processes, 1);
+        assert_eq!(summary.stopped_processes, 0);
+        assert_eq!(
+            summary.total_processes, 1,
+            "NotStarted processes must not inflate the tracked total"
+        );
+
+        let display_activities = model.get_display_activities(&ui_state);
+        let mut element: AnyElement<'static> = view(
+            &model,
+            &ui_state,
+            RenderContext::Normal,
+            Some(ScrollState {
+                handle: None,
+                display_activities,
+            }),
+            false,
+        )
+        .into();
+        let rendered = element
+            .render(Some(ui_state.terminal_size.width as usize))
+            .to_string();
+
+        assert!(
+            !rendered.contains("of 1 processes") && !rendered.contains("0 of"),
+            "bar must render `1 process` not `0 of 1`: {rendered}"
+        );
+        assert!(
+            rendered.contains("1 process"),
+            "running count should still surface: {rendered}"
+        );
     }
 }
