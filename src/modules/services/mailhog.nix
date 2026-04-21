@@ -15,6 +15,10 @@ let
   apiHost = parseHost cfg.apiListenAddress;
   uiHost = parseHost cfg.uiListenAddress;
   smtpHost = parseHost cfg.smtpListenAddress;
+  uiUrlHost =
+    if uiHost == "" || uiHost == "0.0.0.0" || uiHost == "::"
+    then "127.0.0.1"
+    else uiHost;
   apiAddr = "${apiHost}:${toString allocatedApiPort}";
   uiAddr = "${uiHost}:${toString allocatedApiPort}"; # UI shares port with API
   smtpAddr = "${smtpHost}:${toString allocatedSmtpPort}";
@@ -61,6 +65,12 @@ in
   config = lib.mkIf cfg.enable {
     processes.mailhog.ports.api.allocate = baseApiPort;
     processes.mailhog.ports.smtp.allocate = baseSmtpPort;
+    processes.mailhog.urls.ui = {
+      scheme = "http";
+      host = uiUrlHost;
+      port = allocatedApiPort;
+      path = "/";
+    };
     processes.mailhog.exec = "exec ${cfg.package}/bin/MailHog -api-bind-addr ${apiAddr} -ui-bind-addr ${uiAddr} -smtp-bind-addr ${smtpAddr} ${lib.concatStringsSep " " cfg.additionalArgs}";
   };
 }

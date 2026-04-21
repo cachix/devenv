@@ -59,6 +59,30 @@ pub struct SocketActivationConfig {
     pub listens: Vec<ListenSpec>,
 }
 
+/// Human-facing URL for a process endpoint
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProcessUrl {
+    #[serde(default = "default_url_scheme")]
+    pub scheme: String,
+    #[serde(default = "default_url_host")]
+    pub host: String,
+    pub port: u16,
+    #[serde(default = "default_url_path")]
+    pub path: String,
+}
+
+fn default_url_scheme() -> String {
+    "http".to_string()
+}
+
+fn default_url_host() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_url_path() -> String {
+    "/".to_string()
+}
+
 /// Watch configuration for file-based process restarts
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WatchConfig {
@@ -240,6 +264,9 @@ pub struct ProcessConfig {
     /// Allocated ports for display (e.g., {"http": 8080, "admin": 9000})
     #[serde(default)]
     pub ports: HashMap<String, u16>,
+    /// Human-facing process URLs/endpoints (e.g., {"admin": {"scheme":"http", ...}})
+    #[serde(default)]
+    pub urls: HashMap<String, ProcessUrl>,
     /// Readiness probe configuration
     #[serde(default)]
     pub ready: Option<ReadyConfig>,
@@ -278,11 +305,43 @@ impl Default for ProcessConfig {
             env: HashMap::new(),
             listen: Vec::new(),
             ports: HashMap::new(),
+            urls: HashMap::new(),
             ready: None,
             restart: RestartConfig::default(),
             watch: WatchConfig::default(),
             watchdog: None,
             linux: LinuxConfig::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn process_config_defaults_urls_to_empty() {
+        let config = ProcessConfig::default();
+        assert!(config.urls.is_empty());
+    }
+
+    #[test]
+    fn process_url_deserializes_with_defaults() {
+        let json = r#"{
+          "name": "app",
+          "exec": "run-app",
+          "urls": {
+            "main": {
+              "port": 8080
+            }
+          }
+        }"#;
+
+        let config: ProcessConfig = serde_json::from_str(json).expect("deserialize process config");
+        let url = config.urls.get("main").expect("main url");
+        assert_eq!(url.scheme, "http");
+        assert_eq!(url.host, "127.0.0.1");
+        assert_eq!(url.port, 8080);
+        assert_eq!(url.path, "/");
     }
 }

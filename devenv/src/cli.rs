@@ -961,6 +961,9 @@ pub enum ProcessesCommand {
         stderr: bool,
     },
 
+    #[command(about = "Show human-facing endpoints for managed processes.")]
+    Endpoints {},
+
     #[command(about = "Restart a process.")]
     Restart {
         #[arg(help = "Name of the process.")]
@@ -1318,6 +1321,18 @@ mod tests {
                 assert!(up_args.no_strict_ports);
             }
             _ => panic!("expected `devenv processes up` command"),
+        }
+    }
+
+    #[test]
+    fn processes_endpoints_parses() {
+        let cli = Cli::parse_from(["devenv", "processes", "endpoints"]);
+
+        match cli.command {
+            Some(Commands::Processes {
+                command: ProcessesCommand::Endpoints {},
+            }) => {}
+            _ => panic!("expected `devenv processes endpoints` command"),
         }
     }
 }
