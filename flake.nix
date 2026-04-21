@@ -48,7 +48,8 @@
   inputs.nixd = {
     url = "github:nix-community/nixd";
     inputs = {
-      nixpkgs.follows = "nixpkgs";
+      # nixd requires nixComponents_2_33 which was dropped
+      # nixpkgs.follows = "nixpkgs";
       flake-parts.follows = "flake-parts";
     };
   };
@@ -63,11 +64,12 @@
   };
 
   outputs =
-    { self
-    , nixpkgs
-    , git-hooks
-    , nix
-    , ...
+    {
+      self,
+      nixpkgs,
+      git-hooks,
+      nix,
+      ...
     }@inputs:
     let
       systems = [
@@ -184,11 +186,11 @@
         mkConfig = args: (self.lib.mkEval args).config;
 
         mkEval =
-          args@{ pkgs
-          , inputs
-          , modules
-          , lib ? pkgs.lib
-          ,
+          args@{
+            pkgs,
+            inputs,
+            modules,
+            lib ? pkgs.lib,
           }:
           let
             # TODO: deprecate default git-hooks input
