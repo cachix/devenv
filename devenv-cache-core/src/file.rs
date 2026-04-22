@@ -143,8 +143,10 @@ pub fn compute_file_hash<P: AsRef<Path>>(path: P) -> CacheResult<String> {
     Ok(hasher.finalize().to_hex().to_string())
 }
 
-/// Compute a hash of a directory's contents
-fn compute_directory_hash<P: AsRef<Path>>(path: P) -> CacheResult<Option<String>> {
+/// Compute a hash of a directory's contents.
+///
+/// Returns `Ok(None)` for an empty directory.
+pub fn compute_directory_hash<P: AsRef<Path>>(path: P) -> CacheResult<Option<String>> {
     let path = path.as_ref();
     let mut entries = Vec::new();
 

@@ -403,10 +403,10 @@ impl Config {
         let base_path = path.as_ref();
         let base_yaml = base_path.join(YAML_CONFIG);
 
-        // Collect all yaml files to load (imports first, then base).
-        // merge_btreemap gives precedence to later entries, so the base
-        // config must be loaded last to let its inputs override imports.
-        let mut yaml_files = Vec::new();
+        // Collect imported yaml files only (not the base). These are merged
+        // first, with the base loaded after them so base definitions take
+        // precedence over imports.
+        let mut imported_yamls = Vec::new();
         let mut visited = HashSet::new();
 
         if base_yaml.exists() {
@@ -443,22 +443,22 @@ impl Config {
             &temp_result.config.imports,
             base_path,
             git_root.as_deref(),
-            &mut yaml_files,
+            &mut imported_yamls,
             &mut visited,
             0,
         )?;
 
-        // Base config is loaded last so it takes precedence over imports
-        if base_yaml.exists() {
-            yaml_files.push(base_yaml.clone());
-        }
+        // Load imports first, then base last so base takes precedence.
+        let load_order = imported_yamls
+            .iter()
+            .chain(base_yaml.exists().then_some(&base_yaml));
 
-        // Load all configs and track which inputs come from which config file
-        // This is needed to correctly normalize relative URLs
+        // Load all configs and track which inputs come from which config file.
+        // This is needed to correctly normalize relative URLs.
         let mut loader = ConfigLoader::<Config>::new();
         let mut input_source_dirs: HashMap<String, PathBuf> = HashMap::new();
 
-        for yaml_file in &yaml_files {
+        for yaml_file in load_order {
             let config_dir = yaml_file.parent().unwrap_or(Path::new(".")).to_path_buf();
 
             // Load this config file to see what inputs it defines
@@ -595,8 +595,8 @@ impl Config {
         let mut final_imports = Vec::new();
         let mut seen = HashSet::new();
 
-        // Add all loaded file imports (normalized)
-        for yaml_path in yaml_files.iter().skip(1) {
+        // Add all loaded file imports (normalized).
+        for yaml_path in &imported_yamls {
             if let Some(import_dir) = yaml_path.parent()
                 && let Some(normalized) = Self::normalize_path(import_dir, base_path)
                 && seen.insert(normalized.clone())
@@ -1491,6 +1491,44 @@ imports:
             nixpkgs.url,
             Some("github:NixOS/nixpkgs/nixos-25.11".to_string()),
             "Base config's nixpkgs URL should take precedence over imported config's URL"
+        );
+    }
+
+    #[test]
+    fn sub_import_with_yaml_does_not_duplicate_base_import() {
+        // When a sub project imports and has a devenv.yaml (even empty),
+        // the base directory should NOT end up in the imports list.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path();
+
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(root)
+            .output()
+            .expect("Failed to git init");
+
+        let sub_dir = root.join("sub");
+        std::fs::create_dir(&sub_dir).expect("Failed to create sub dir");
+        std::fs::write(sub_dir.join("devenv.yaml"), "").expect("Failed to write sub yaml");
+
+        std::fs::write(
+            root.join("devenv.yaml"),
+            r#"
+imports:
+  - ./sub
+"#,
+        )
+        .expect("Failed to write base yaml");
+
+        let config = Config::load_from(root).expect("Failed to load config");
+
+        assert!(
+            !config
+                .imports
+                .iter()
+                .any(|i| i == "./" || i == "." || i == "./."),
+            "Base directory should not appear in final_imports, got: {:?}",
+            config.imports
         );
     }
 

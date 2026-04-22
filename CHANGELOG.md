@@ -4,7 +4,9 @@
 
 ### Bug Fixes
 
+- Fixed the root `devenv.nix` being imported twice when `devenv.yaml` imported a sub-project that also had its own `devenv.yaml` ([#2755](https://github.com/cachix/devenv/issues/2755)).
 - Fixed `devenv shell` and `devenv build` failing with `path '...drv' is required, but there is no substituter that can build it` after the cached derivation was garbage-collected. The stale eval-cache entry is now invalidated when its referenced store paths no longer exist, forcing a re-evaluation that re-materializes the `.drv` on disk.
+- Fixed hot reload missing file and directory changes that occurred during a build or during the brief gap between watch refreshes. The reload watcher now tracks path state (file/directory/missing) across reload cycles, queues deferred events while a build is in progress, and reconciles drift after rewatching so missed changes still trigger a follow-up rebuild.
 - Fixed MCP server segfault on exit by waiting for the cache init thread to finish before exiting ([#2699](https://github.com/cachix/devenv/issues/2699)).
 - Fixed independent oneshot tasks (e.g. `devenv:files` and `devenv:python:virtualenv`) running sequentially instead of in parallel, causing unnecessary waterfall delays during `devenv shell` startup.
 - Fixed `nix build` failing with `E0463: can't find crate for devenv_reload` by switching the iocraft `[patch.crates-io]` entry to the `row-level-diff` branch, which carries iocraft 0.8.0. The previous `cachix` branch was stuck at 0.7.18 so the patch no longer applied, leaving two iocraft versions in the dependency graph and causing rustc metadata hash mismatches.
@@ -25,6 +27,7 @@
 - Fixed `devenv repl` broken TUI output and hanging evaluation by adding proper TUI handoff support, showing evaluation progress in the TUI before handing the terminal to the interactive REPL.
 - Fixed Ghostty shell integration not working in `devenv shell` by sourcing `ghostty.bash` from the rcfile when `GHOSTTY_RESOURCES_DIR` is set.
 - Fixed TUI panic when expanding error details containing multi-byte UTF-8 characters (e.g. miette underlines) by using character-based truncation instead of byte-based slicing.
+- Fixed `devenv:git-hooks:install` in linked worktrees and submodules by updating `rolling` to `prek 0.3.9`, which honors repo-local and worktree-local `core.hooksPath`.
 - Fixed `devenv processes stop` removing the process from the manager state, making it impossible to start or restart afterwards.
 - Fixed process exec probes failing with "No such file or directory" during `devenv test` when a task depends on a process (e.g. `after = [ "devenv:processes:postgres" ]`), because the bash path was not resolved for the enterTest task runner ([#2713](https://github.com/cachix/devenv/issues/2713)).
 - Fixed processes with `restart = "never"` not satisfying `@completed` task dependencies, causing a hot loop and dependencies to never resolve ([#2712](https://github.com/cachix/devenv/issues/2712)).
@@ -32,6 +35,7 @@
 
 ### Improvements
 
+- Sped up `devenv shell` startup on projects with many cached input paths by batching file watcher registration into a single pathset update and readiness wait, instead of reconciling the pathset once per path. This removes long hangs before `enterShell` on large inputs.
 - Fixed port allocation values (`config.processes.<name>.ports.<port>.value`) resolving to the base `allocate` port in `devenv shell`, `devenv tasks run`, and other commands. When the native process manager is running, port values now match the ports allocated by `devenv up` ([#2710](https://github.com/cachix/devenv/issues/2710)).
 - Standardized keyboard shortcut notation across `devenv up` TUI and `devenv shell` to use consistent `Ctrl-E` format instead of mixed `^e`/`Ctrl-Alt-E` styles. macOS now shows `Opt` instead of `Alt` ([#2736](https://github.com/cachix/devenv/issues/2736)).
 - Auto-detect AI coding agents (via `CLAUDECODE`, `OPENCODE_CLIENT`, and `AI_AGENT` environment variables) and enable quiet mode to avoid wasting LLM tokens on TUI progress output. Override with `--verbose` or `--tui` ([#2723](https://github.com/cachix/devenv/issues/2723)).
