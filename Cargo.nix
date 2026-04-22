@@ -6877,6 +6877,11 @@ rec {
             features = [ "fancy" ];
           }
           {
+            name = "nix";
+            packageId = "nix 0.31.2";
+            features = [ "fs" "process" "signal" ];
+          }
+          {
             name = "nix-bindings-bindgen-raw";
             packageId = "nix-bindings-bindgen-raw";
           }
