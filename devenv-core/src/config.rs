@@ -1520,7 +1520,10 @@ imports:
         let config = Config::load_from(root).expect("Failed to load config");
 
         assert!(
-            !config.imports.iter().any(|i| i == "./" || i == "." || i == "./."),
+            !config
+                .imports
+                .iter()
+                .any(|i| i == "./" || i == "." || i == "./."),
             "Base directory should not appear in final_imports, got: {:?}",
             config.imports
         );
