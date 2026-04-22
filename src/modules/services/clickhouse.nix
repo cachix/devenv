@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   cfg = config.services.clickhouse;
@@ -7,8 +12,13 @@ let
   # Port allocation
   basePort = cfg.port;
   baseHttpPort = cfg.httpPort;
+  baseKeeperPort = cfg.keeperPort;
+  baseRaftPort = cfg.raftPort;
   allocatedPort = config.processes.clickhouse-server.ports.main.value;
   allocatedHttpPort = config.processes.clickhouse-server.ports.http.value;
+  allocatedKeeperPort = config.processes.clickhouse-server.ports.keeper.value;
+  allocatedRaftPort = config.processes.clickhouse-server.ports.raft.value;
+
   format = pkgs.formats.yaml { };
 in
 {
@@ -32,6 +42,42 @@ in
       type = types.port;
       description = "Which http port to run clickhouse on.";
       default = 8123;
+    };
+
+    keeperPort = lib.mkOption {
+      type = types.port;
+      description = "Which port to run clickhouse keeper service on.";
+      default = 9181;
+    };
+
+    raftPort = lib.mkOption {
+      type = types.port;
+      description = "Which http port to use clickhouse keeper for raft consensus.";
+      default = 9234;
+    };
+
+    timezone = lib.mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = "Which timezone to use for ClickHouse.";
+    };
+
+    enableMacros = lib.mkOption {
+      type = types.bool;
+      default = false;
+      description = "Whether to enable macros in ClickHouse.";
+    };
+
+    enableRemoteServers = lib.mkOption {
+      type = types.bool;
+      default = false;
+      description = "Whether to enable remote_servers in ClickHouse.";
+    };
+
+    enableKeeper = lib.mkOption {
+      type = types.bool;
+      default = false;
+      description = "Whether to enable keeper_server in ClickHouse.";
     };
 
     config = lib.mkOption {
@@ -68,10 +114,9 @@ in
       logger:
         level: warning
         console: 1
+      ${lib.optionalString (cfg.timezone != null) "timezone: ${cfg.timezone}"}
       tcp_port: ${toString allocatedPort}
       http_port: ${toString allocatedHttpPort}
-      mysql_port: 0
-      postgresql_port: 0
       default_profile: default
       default_database: default
       path: ${config.env.DEVENV_STATE}/clickhouse
@@ -86,43 +131,60 @@ in
         local_directory:
           path: ${config.env.DEVENV_STATE}/clickhouse/access
 
-      macros:
-        shard: 1
-        replica: localhost
+      ${lib.optionalString cfg.enableMacros ''
+        macros:
+          shard: 1
+          replica: localhost
+      ''}
 
-      remote_servers:
-        default:
-          shard:
-            replica:
-              host: localhost
-              port: ${toString allocatedPort}
+      ${lib.optionalString cfg.enableRemoteServers ''
+        remote_servers:
+          default:
+            shard:
+              replica:
+                host: localhost
+                port: ${toString allocatedPort}
+      ''}
 
-      keeper_server:
-        tcp_port: 9181
-        server_id: 1
-        log_storage_path: ${config.env.DEVENV_STATE}/clickhouse/coordination/log
-        snapshot_storage_path: ${config.env.DEVENV_STATE}/clickhouse/coordination/snapshots
-        raft_configuration:
-          server:
-            id: 1
-            hostname: localhost
-            port: 9234
+      ${lib.optionalString cfg.enableKeeper ''
+        keeper_server:
+          tcp_port: ${toString allocatedKeeperPort}
+          server_id: 1
+          log_storage_path: ${config.env.DEVENV_STATE}/clickhouse/coordination/log
+          snapshot_storage_path: ${config.env.DEVENV_STATE}/clickhouse/coordination/snapshots
+          raft_configuration:
+            server:
+              id: 1
+              hostname: localhost
+              port: ${toString allocatedRaftPort}
+      ''}
     '';
 
-    processes.clickhouse-server = {
-      ports.main.allocate = basePort;
-      ports.http.allocate = baseHttpPort;
+    tasks."devenv:clickhouse:setup" = {
+      description = "Setup ClickHouse";
       exec = ''
         mkdir -p ${config.env.DEVENV_STATE}/clickhouse/{server/config.d,server/users.d,tmp,user_files,format_schemas,access,caches,coordination/snapshots,coordination/log}
         install -m 644 ${cfg.package}/etc/clickhouse-server/users.xml ${config.env.DEVENV_STATE}/clickhouse/server/users.xml
         install -m 644 ${cfg.package}/etc/clickhouse-server/config.xml ${config.env.DEVENV_STATE}/clickhouse/server/config.xml
         install -m 644 ${pkgs.writeText "clickhouse-config.yaml" cfg.config} ${config.env.DEVENV_STATE}/clickhouse/server/config.d/clickhouse-config.yaml
         install -m 644 ${format.generate "users.yaml" cfg.usersConfig} ${config.env.DEVENV_STATE}/clickhouse/server/users.d/users.yaml
-        exec clickhouse-server --config-file=${config.env.DEVENV_STATE}/clickhouse/server/config.xml
       '';
+      before = [ "devenv:processes:clickhouse-server" ];
+    };
+
+    processes.clickhouse-server = {
+      ports.main.allocate = basePort;
+      ports.http.allocate = baseHttpPort;
+      ports.keeper.allocate = baseKeeperPort;
+      ports.raft.allocate = baseRaftPort;
+      exec = "exec clickhouse-server --config-file=${config.env.DEVENV_STATE}/clickhouse/server/config.xml";
 
       ready = {
-        exec = "${cfg.package}/bin/clickhouse-client --port ${toString allocatedPort} -q 'SELECT 1'";
+        exec = "${cfg.package}/bin/clickhouse-client --port ${toString allocatedPort} --user default ${
+          lib.optionalString (
+            config.services.clickhouse.usersConfig.users.default ? password
+          ) "--password ${config.services.clickhouse.usersConfig.users.default.password}"
+        } -q 'SELECT 1'";
         initial_delay = 2;
         probe_timeout = 4;
         failure_threshold = 5;
