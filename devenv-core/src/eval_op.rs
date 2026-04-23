@@ -122,22 +122,13 @@ pub trait OpObserver: Send + Sync + 'static {
     ///
     /// Implementations should be efficient as this is called synchronously
     /// from the log processing path.
-    fn on_op(&self, op: EvalOp);
-
-    /// Check if the observer is still active and accepting operations.
-    ///
-    /// Returns `false` to indicate the observer should be removed or skipped.
-    fn is_active(&self) -> bool;
+    fn record(&self, op: EvalOp);
 }
 
 /// Wrapper to allow `Arc<dyn OpObserver>` to implement `OpObserver`
 impl OpObserver for Arc<dyn OpObserver> {
-    fn on_op(&self, op: EvalOp) {
-        (**self).on_op(op);
-    }
-
-    fn is_active(&self) -> bool {
-        (**self).is_active()
+    fn record(&self, op: EvalOp) {
+        (**self).record(op);
     }
 }
 

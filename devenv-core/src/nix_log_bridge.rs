@@ -183,6 +183,18 @@ impl NixLogBridge {
         }
     }
 
+    /// Remove a previously-added observer by `Arc` identity.
+    ///
+    /// Intended for scoped observers that run alongside long-lived ones
+    /// (e.g. a per-eval collector registered for the duration of a concurrent
+    /// Nix FFI call). Production code that needs a permanent observer should
+    /// register it once at construction and leave it in place.
+    pub fn remove_observer(&self, observer: &Arc<dyn OpObserver>) {
+        if let Ok(mut guard) = self.observers.lock() {
+            guard.retain(|o| !Arc::ptr_eq(o, observer));
+        }
+    }
+
     /// Clear all observers.
     ///
     /// Exposed primarily for tests that need to reset bridge state between
@@ -279,12 +291,9 @@ impl NixLogBridge {
             InternalLog::Msg { level, ref msg, .. } => {
                 // Extract any input operation from the log for caching
                 if let Some(op) = EvalOp::from_internal_log(&log) {
-                    // Notify all active observers
                     if let Ok(guard) = self.observers.lock() {
                         for observer in guard.iter() {
-                            if observer.is_active() {
-                                observer.on_op(op.clone());
-                            }
+                            observer.record(op.clone());
                         }
                     }
 
@@ -939,14 +948,12 @@ mod tests {
     /// Helper: create a mock observer that records ops in a shared Vec.
     struct MockObserver {
         ops: Mutex<Vec<EvalOp>>,
-        active: std::sync::atomic::AtomicBool,
     }
 
     impl MockObserver {
         fn new() -> Arc<Self> {
             Arc::new(Self {
                 ops: Mutex::new(Vec::new()),
-                active: std::sync::atomic::AtomicBool::new(true),
             })
         }
 
@@ -956,27 +963,9 @@ mod tests {
     }
 
     impl OpObserver for MockObserver {
-        fn on_op(&self, op: EvalOp) {
+        fn record(&self, op: EvalOp) {
             self.ops.lock().unwrap().push(op);
         }
-
-        fn is_active(&self) -> bool {
-            self.active.load(std::sync::atomic::Ordering::Acquire)
-        }
-    }
-
-    fn sample_ops() -> Vec<EvalOp> {
-        vec![
-            EvalOp::EvaluatedFile {
-                source: "/tmp/default.nix".into(),
-            },
-            EvalOp::ReadFile {
-                source: "/tmp/config.nix".into(),
-            },
-            EvalOp::GetEnv {
-                name: "HOME".into(),
-            },
-        ]
     }
 
     #[test]
@@ -998,24 +987,6 @@ mod tests {
                 source: "/tmp/default.nix".into()
             }
         );
-    }
-
-    #[test]
-    fn test_inactive_observer_is_skipped() {
-        let bridge = NixLogBridge::new();
-        let observer = MockObserver::new();
-        observer
-            .active
-            .store(false, std::sync::atomic::Ordering::Release);
-        bridge.add_observer(observer.clone());
-
-        bridge.process_internal_log(InternalLog::Msg {
-            level: Verbosity::Talkative,
-            msg: "evaluating file '/tmp/default.nix'".into(),
-            raw_msg: None,
-        });
-
-        assert_eq!(observer.collected_ops().len(), 0);
     }
 
     #[test]

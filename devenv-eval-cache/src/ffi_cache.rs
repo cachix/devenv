@@ -121,12 +121,8 @@ impl InputTracker {
 }
 
 impl OpObserver for InputTracker {
-    fn on_op(&self, eval_op: EvalOp) {
-        self.lock().insert(eval_op);
-    }
-
-    fn is_active(&self) -> bool {
-        true
+    fn record(&self, op: EvalOp) {
+        self.lock().insert(op);
     }
 }
 
@@ -217,7 +213,7 @@ mod tests {
     #[test]
     fn test_tracker_push_and_snapshot() {
         let tracker = InputTracker::new();
-        tracker.on_op(EvalOp::GetEnv {
+        tracker.record(EvalOp::GetEnv {
             name: "FOO".to_string(),
         });
         assert_eq!(tracker.snapshot().len(), 1);
@@ -228,13 +224,13 @@ mod tests {
     #[test]
     fn test_tracker_deduplicates_on_insert() {
         let tracker = InputTracker::new();
-        tracker.on_op(EvalOp::GetEnv {
+        tracker.record(EvalOp::GetEnv {
             name: "A".to_string(),
         });
-        tracker.on_op(EvalOp::GetEnv {
+        tracker.record(EvalOp::GetEnv {
             name: "A".to_string(),
         });
-        tracker.on_op(EvalOp::GetEnv {
+        tracker.record(EvalOp::GetEnv {
             name: "B".to_string(),
         });
         assert_eq!(tracker.snapshot().len(), 2);
@@ -243,25 +239,16 @@ mod tests {
     #[test]
     fn test_tracker_clear() {
         let tracker = InputTracker::new();
-        tracker.on_op(EvalOp::GetEnv {
+        tracker.record(EvalOp::GetEnv {
             name: "FOO".to_string(),
         });
         tracker.clear();
         assert!(tracker.is_empty());
         // Still usable after clear.
-        tracker.on_op(EvalOp::GetEnv {
+        tracker.record(EvalOp::GetEnv {
             name: "BAR".to_string(),
         });
         assert_eq!(tracker.snapshot().len(), 1);
-    }
-
-    #[test]
-    fn test_tracker_as_observer_is_always_active() {
-        let tracker = InputTracker::new();
-        let observer: Arc<dyn OpObserver> = tracker.clone();
-        assert!(observer.is_active());
-        tracker.clear();
-        assert!(observer.is_active());
     }
 
     #[test]
