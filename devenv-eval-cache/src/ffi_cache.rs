@@ -3,8 +3,8 @@
 //! This module provides core types for caching evaluation results
 //! when using the FFI backend instead of the CLI backend.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -73,99 +73,60 @@ pub struct CachingConfig {
     pub excluded_envs: Vec<String>,
 }
 
-/// Collects input operations during an evaluation scope.
+/// Long-lived accumulator of distinct file/env operations observed during Nix
+/// evaluation.
 ///
-/// This collector is registered with `NixLogBridge` before evaluation starts
-/// and captures all `EvalOp` events (file reads, env var accesses, etc.) during
-/// the evaluation. After evaluation completes, the collected ops are converted
-/// to `Input` descriptors for cache storage.
+/// Registered once on `NixLogBridge` for the lifetime of a `CachingEvalState`.
+/// Callers `snapshot_inputs()` at cache-miss store time and `clear()` when the
+/// underlying `EvalState` is invalidated (e.g. hot-reload).
 ///
-/// # Example
-///
-/// ```ignore
-/// let collector = EvalInputCollector::start();
-/// log_bridge.add_observer(collector.clone());
-///
-/// // ... perform evaluation ...
-///
-/// log_bridge.clear_observers();
-/// let inputs = collector.into_inputs(&config);
-/// ```
-pub struct EvalInputCollector {
-    ops: Arc<Mutex<Vec<EvalOp>>>,
-    active: Arc<AtomicBool>,
+/// Ops are deduplicated at insertion: Nix's internal `fileEvalCache` already
+/// suppresses same-session re-parses, but env-var accesses and `pathExists`
+/// checks can re-fire across attribute evaluations. The set keeps memory
+/// bounded to the distinct file/env universe of the session rather than the
+/// raw event count.
+pub struct InputTracker {
+    ops: Mutex<HashSet<EvalOp>>,
 }
 
-impl EvalInputCollector {
-    /// Start a new input collector in active state.
-    pub fn start() -> Arc<Self> {
+impl InputTracker {
+    pub fn new() -> Arc<Self> {
         Arc::new(Self {
-            ops: Arc::new(Mutex::new(Vec::new())),
-            active: Arc::new(AtomicBool::new(true)),
+            ops: Mutex::new(HashSet::new()),
         })
     }
 
-    /// Check if the collector is still active.
-    pub fn is_active(&self) -> bool {
-        self.active.load(Ordering::Acquire)
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashSet<EvalOp>> {
+        self.ops.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// Push an operation to the collector if active.
-    ///
-    /// This is called by `NixLogBridge` when it detects input operations
-    /// during evaluation.
-    pub fn push(&self, op: EvalOp) {
-        if self.is_active()
-            && let Ok(mut ops) = self.ops.lock()
-        {
-            ops.push(op);
-        }
+    /// Clear the tracked ops. The tracker stays registered as an observer.
+    pub fn clear(&self) {
+        self.lock().clear();
     }
 
-    /// Deactivate the collector (stop accepting new ops).
-    pub fn stop(&self) {
-        self.active.store(false, Ordering::Release);
+    /// Snapshot current ops and convert them to `Input` descriptors.
+    pub fn snapshot_inputs(&self, config: &CachingConfig) -> Vec<Input> {
+        ops_to_inputs(self.lock().iter().cloned(), config)
     }
 
-    /// Take all collected operations.
-    ///
-    /// This consumes the internal ops vector and returns it.
-    /// The collector should be stopped before calling this.
-    pub fn take_ops(&self) -> Vec<EvalOp> {
-        self.stop();
-        if let Ok(mut ops) = self.ops.lock() {
-            std::mem::take(&mut *ops)
-        } else {
-            Vec::new()
-        }
+    /// Snapshot the tracked ops as a `Vec` (for tests and diagnostics).
+    pub fn snapshot(&self) -> Vec<EvalOp> {
+        self.lock().iter().cloned().collect()
     }
 
-    /// Convert collected operations to Input descriptors.
-    ///
-    /// This filters out:
-    /// - Paths under `/nix/store` (immutable)
-    /// - Paths in `config.excluded_paths`
-    /// - Non-absolute paths
-    ///
-    /// And adds:
-    /// - Paths from `config.extra_watch_paths`
-    pub fn into_inputs(self: Arc<Self>, config: &CachingConfig) -> Vec<Input> {
-        let ops = self.take_ops();
-        ops_to_inputs(ops, config)
+    pub fn is_empty(&self) -> bool {
+        self.lock().is_empty()
     }
 }
 
-/// Implementation of OpObserver for EvalInputCollector.
-///
-/// This allows EvalInputCollector to be registered with NixLogBridge as an observer
-/// and receive EvalOp events during evaluation.
-impl OpObserver for EvalInputCollector {
+impl OpObserver for InputTracker {
     fn on_op(&self, eval_op: EvalOp) {
-        self.push(eval_op);
+        self.lock().insert(eval_op);
     }
 
     fn is_active(&self) -> bool {
-        self.active.load(Ordering::Acquire)
+        true
     }
 }
 
@@ -177,7 +138,7 @@ impl OpObserver for EvalInputCollector {
 /// 3. Creates `EnvInputDesc` for environment variable access
 /// 4. Adds extra watch paths
 /// 5. Deduplicates the result
-pub fn ops_to_inputs(ops: Vec<EvalOp>, config: &CachingConfig) -> Vec<Input> {
+pub fn ops_to_inputs(ops: impl IntoIterator<Item = EvalOp>, config: &CachingConfig) -> Vec<Input> {
     let fallback_time = SystemTime::now();
     let mut inputs: Vec<Input> = Vec::new();
 
@@ -248,37 +209,59 @@ mod tests {
     // Key determinism and differentiation are tested through integration tests.
 
     #[test]
-    fn test_collector_start_is_active() {
-        let collector = EvalInputCollector::start();
-        assert!(collector.is_active());
+    fn test_tracker_starts_empty() {
+        let tracker = InputTracker::new();
+        assert!(tracker.is_empty());
     }
 
     #[test]
-    fn test_collector_stop() {
-        let collector = EvalInputCollector::start();
-        collector.stop();
-        assert!(!collector.is_active());
-    }
-
-    #[test]
-    fn test_collector_push_when_active() {
-        let collector = EvalInputCollector::start();
-        collector.push(EvalOp::GetEnv {
+    fn test_tracker_push_and_snapshot() {
+        let tracker = InputTracker::new();
+        tracker.on_op(EvalOp::GetEnv {
             name: "FOO".to_string(),
         });
-        let ops = collector.take_ops();
-        assert_eq!(ops.len(), 1);
+        assert_eq!(tracker.snapshot().len(), 1);
+        // Snapshot is non-destructive.
+        assert_eq!(tracker.snapshot().len(), 1);
     }
 
     #[test]
-    fn test_collector_push_when_inactive() {
-        let collector = EvalInputCollector::start();
-        collector.stop();
-        collector.push(EvalOp::GetEnv {
+    fn test_tracker_deduplicates_on_insert() {
+        let tracker = InputTracker::new();
+        tracker.on_op(EvalOp::GetEnv {
+            name: "A".to_string(),
+        });
+        tracker.on_op(EvalOp::GetEnv {
+            name: "A".to_string(),
+        });
+        tracker.on_op(EvalOp::GetEnv {
+            name: "B".to_string(),
+        });
+        assert_eq!(tracker.snapshot().len(), 2);
+    }
+
+    #[test]
+    fn test_tracker_clear() {
+        let tracker = InputTracker::new();
+        tracker.on_op(EvalOp::GetEnv {
             name: "FOO".to_string(),
         });
-        let ops = collector.take_ops();
-        assert!(ops.is_empty());
+        tracker.clear();
+        assert!(tracker.is_empty());
+        // Still usable after clear.
+        tracker.on_op(EvalOp::GetEnv {
+            name: "BAR".to_string(),
+        });
+        assert_eq!(tracker.snapshot().len(), 1);
+    }
+
+    #[test]
+    fn test_tracker_as_observer_is_always_active() {
+        let tracker = InputTracker::new();
+        let observer: Arc<dyn OpObserver> = tracker.clone();
+        assert!(observer.is_active());
+        tracker.clear();
+        assert!(observer.is_active());
     }
 
     #[test]

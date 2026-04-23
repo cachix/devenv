@@ -13,7 +13,7 @@ use std::sync::{Arc, LazyLock};
 /// A filesystem or environment operation observed during Nix evaluation.
 ///
 /// These operations are used for cache invalidation and dependency tracking.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum EvalOp {
     /// Copied a file to the Nix store.
     CopiedSource { source: PathBuf, target: PathBuf },
