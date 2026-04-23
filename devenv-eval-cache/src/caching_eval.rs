@@ -534,6 +534,56 @@ impl CachedEval {
         }
     }
 
+    /// Look up `key` in the cache, replaying any associated resources.
+    ///
+    /// Returns `Some(json)` on a usable hit, `None` on miss or when replay fails
+    /// (in which case the caller should re-evaluate).
+    async fn try_cache_hit(
+        &self,
+        service: &CachingEvalService,
+        key: &EvalCacheKey,
+        activity: &Activity,
+    ) -> Option<String> {
+        let cached = match service.get_cached(key).await {
+            Ok(Some(c)) => c,
+            Ok(None) => return None,
+            Err(e) => {
+                warn!(error = %e, "Cache lookup failed, proceeding with evaluation");
+                return None;
+            }
+        };
+
+        if let Some(ref rm) = self.resource_manager
+            && let Err(e) = self.replay_resources(service, rm, cached.eval_id).await
+        {
+            self.handle_replay_failure(service, rm, &e).await;
+            return None;
+        }
+
+        activity.cached();
+        Some(cached.json_output)
+    }
+
+    /// Store a fresh eval result alongside any resource allocations.
+    async fn store_eval(
+        &self,
+        service: &CachingEvalService,
+        key: &EvalCacheKey,
+        json: &str,
+        inputs: Vec<Input>,
+    ) {
+        match service.store(key, json, inputs).await {
+            Ok(eval_id) => {
+                if let Some(ref rm) = self.resource_manager {
+                    self.store_resources(service, rm, eval_id).await;
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, "Failed to store result in cache");
+            }
+        }
+    }
+
     /// Evaluate with transparent caching, returning a JSON string.
     ///
     /// The `eval_fn` closure is only called on cache miss. It should perform
@@ -559,62 +609,23 @@ impl CachedEval {
         F: FnOnce() -> Fut,
         Fut: Future<Output = Result<String, miette::Error>>,
     {
-        let Some(service) = &self.service else {
-            // No caching configured - just evaluate directly
-            let result = eval_fn()
+        let run_eval = || async {
+            eval_fn()
                 .await
-                .map_err(|e| CacheError::Eval(format!("{e:#}")))?;
-            return Ok((result, false));
+                .map_err(|e| CacheError::Eval(format!("{e:#}")))
         };
 
-        // Check cache first
-        match service.get_cached(key).await {
-            Ok(Some(cached)) => {
-                // Try to replay resource allocations (ports, etc.)
-                if let Some(ref rm) = self.resource_manager {
-                    match self.replay_resources(service, rm, cached.eval_id).await {
-                        Ok(()) => {
-                            activity.cached();
-                            return Ok((cached.json_output, true));
-                        }
-                        Err(e) => {
-                            self.handle_replay_failure(service, rm, &e).await;
-                            // Fall through to evaluation
-                        }
-                    }
-                } else {
-                    activity.cached();
-                    return Ok((cached.json_output, true));
-                }
-            }
-            Ok(None) => {
-                // Cache miss - continue to evaluation
-            }
-            Err(e) => {
-                // Log but don't fail - graceful degradation
-                warn!(error = %e, "Cache lookup failed, proceeding with evaluation");
-            }
+        let Some(service) = &self.service else {
+            return Ok((run_eval().await?, false));
+        };
+
+        if let Some(json) = self.try_cache_hit(service, key, activity).await {
+            return Ok((json, true));
         }
 
-        let result = eval_fn()
-            .await
-            .map_err(|e| CacheError::Eval(format!("{e:#}")))?;
-
+        let result = run_eval().await?;
         let inputs = self.input_tracker.snapshot_inputs(&self.config);
-
-        match service.store(key, &result, inputs).await {
-            Ok(eval_id) => {
-                // Store resource specs alongside the cache entry
-                if let Some(ref rm) = self.resource_manager {
-                    self.store_resources(service, rm, eval_id).await;
-                }
-            }
-            Err(e) => {
-                // Log but don't fail - result is still valid
-                warn!(error = %e, "Failed to store result in cache");
-            }
-        }
-
+        self.store_eval(service, key, &result, inputs).await;
         Ok((result, false))
     }
 
@@ -644,65 +655,24 @@ impl CachedEval {
         F: FnOnce() -> Fut,
         Fut: Future<Output = Result<T, miette::Error>>,
     {
-        let Some(service) = &self.service else {
-            // No caching configured - just evaluate directly
-            let result = eval_fn()
+        let run_eval = || async {
+            eval_fn()
                 .await
-                .map_err(|e| CacheError::Eval(format!("{e:#}")))?;
-            return Ok((result, false));
+                .map_err(|e| CacheError::Eval(format!("{e:#}")))
         };
 
-        // Check cache first
-        match service.get_cached(key).await {
-            Ok(Some(cached)) => {
-                // Try to replay resource allocations (ports, etc.)
-                if let Some(ref rm) = self.resource_manager {
-                    match self.replay_resources(service, rm, cached.eval_id).await {
-                        Ok(()) => {
-                            activity.cached();
-                            let value: T = serde_json::from_str(&cached.json_output)?;
-                            return Ok((value, true));
-                        }
-                        Err(e) => {
-                            self.handle_replay_failure(service, rm, &e).await;
-                            // Fall through to evaluation
-                        }
-                    }
-                } else {
-                    activity.cached();
-                    let value: T = serde_json::from_str(&cached.json_output)?;
-                    return Ok((value, true));
-                }
-            }
-            Ok(None) => {
-                // Cache miss - continue to evaluation
-            }
-            Err(e) => {
-                // Log but don't fail - graceful degradation
-                warn!(error = %e, "Cache lookup failed, proceeding with evaluation");
-            }
+        let Some(service) = &self.service else {
+            return Ok((run_eval().await?, false));
+        };
+
+        if let Some(json) = self.try_cache_hit(service, key, activity).await {
+            return Ok((serde_json::from_str(&json)?, true));
         }
 
-        let result = eval_fn()
-            .await
-            .map_err(|e| CacheError::Eval(format!("{e:#}")))?;
-
+        let result = run_eval().await?;
         let inputs = self.input_tracker.snapshot_inputs(&self.config);
-
         let json = serde_json::to_string(&result)?;
-        match service.store(key, &json, inputs).await {
-            Ok(eval_id) => {
-                // Store resource specs alongside the cache entry
-                if let Some(ref rm) = self.resource_manager {
-                    self.store_resources(service, rm, eval_id).await;
-                }
-            }
-            Err(e) => {
-                // Log but don't fail - result is still valid
-                warn!(error = %e, "Failed to store result in cache");
-            }
-        }
-
+        self.store_eval(service, key, &json, inputs).await;
         Ok((result, false))
     }
 }
