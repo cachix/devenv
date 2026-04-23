@@ -151,7 +151,7 @@ pub struct NixRustBackend {
 
     // Store (EvalState destructor may reference it)
     #[allow(dead_code)]
-    store: Arc<Store>,
+    store: Store,
 
     // Settings (must outlive EvalState)
     #[allow(dead_code)]
@@ -464,7 +464,7 @@ in cfg // {{
             devenv_value_invalidated: Arc::new(AtomicBool::new(false)),
             caching_eval_state: OnceCell::new(),
             eval_state: Arc::new(Mutex::new(Some(eval_state))),
-            store: Arc::new(store),
+            store,
             flake_settings,
             fetchers_settings,
             activity_logger,
@@ -701,12 +701,13 @@ in cfg // {{
             }
         }
         let value = self.eval_import_with_primops(eval_state)?;
+        let returned = value.clone();
         let mut cached = self
             .cached_devenv_value
             .lock()
             .map_err(|e| miette!("Failed to lock cached devenv value: {}", e))?;
-        *cached = Some(value.clone());
-        Ok(value)
+        *cached = Some(value);
+        Ok(returned)
     }
 
     /// Apply resolved Nix settings to the Nix environment.
@@ -889,7 +890,7 @@ in cfg // {{
     async fn apply_cachix_substituters(&self, cachix_config: &CachixCacheInfo) -> Result<()> {
         match self.cachix_manager.get_nix_settings(cachix_config).await {
             Ok(settings) => {
-                let mut store = (*self.store).clone();
+                let mut store = self.store.clone();
 
                 if let Some(extra_substituters) = settings.get("extra-substituters") {
                     for substituter in extra_substituters.split_whitespace() {
@@ -1392,7 +1393,7 @@ impl NixBackend for NixRustBackend {
         };
 
         // Parse store path and create GC root
-        let mut store = (*self.store).clone();
+        let mut store = self.store.clone();
         let store_path = store
             .parse_store_path(&out_path_str)
             .to_miette()
@@ -1649,7 +1650,7 @@ impl NixBackend for NixRustBackend {
 
             // Add GC root if requested, named after the attribute
             if let Some(gc_root_base) = gc_root {
-                let mut store = (*self.store).clone();
+                let mut store = self.store.clone();
                 let store_path = store
                     .parse_store_path(&path_str)
                     .to_miette()
@@ -1956,7 +1957,7 @@ impl NixBackend for NixRustBackend {
             return Ok((0, 0));
         }
 
-        let mut store = (*self.store).clone();
+        let mut store = self.store.clone();
         let mut total_deleted = 0u64;
         let mut total_bytes_freed = 0u64;
         let total_paths = paths.len() as u64;
@@ -2053,7 +2054,7 @@ impl NixBackend for NixRustBackend {
     async fn is_trusted_user(&self) -> Result<bool> {
         // Check if the current user is trusted by the Nix daemon/store
         // This is used to determine if we can safely add substituters
-        let mut store = (*self.store).clone();
+        let mut store = self.store.clone();
         let trust_status = store.is_trusted_client();
 
         match trust_status {
@@ -2109,7 +2110,7 @@ impl NixRustBackend {
     /// Create a fresh EvalState, clearing all internal caches (e.g. fileEvalCache).
     /// Used during hot-reload to ensure changed files are re-evaluated.
     fn create_fresh_eval_state(&self) -> Result<EvalState> {
-        let store = (*self.store).clone();
+        let store = self.store.clone();
         let root_str = self
             .paths
             .root
@@ -2346,7 +2347,7 @@ impl NixRustBackend {
             .first()
             .ok_or_else(|| miette!("Shell derivation produced no output paths"))?;
 
-        let mut store = (*self.store).clone();
+        let mut store = self.store.clone();
         let out_path = store
             .real_path(store_path)
             .to_miette()
@@ -2420,7 +2421,7 @@ impl NixRustBackend {
             .first()
             .ok_or_else(|| miette!("Attribute '{}' produced no output paths", attr_path))?;
 
-        let mut store = (*self.store).clone();
+        let mut store = self.store.clone();
         let path_str = store
             .real_path(store_path)
             .to_miette()
