@@ -7,6 +7,24 @@ with lib; let
   cfg = config.services.mysql;
   isMariaDB = getName cfg.package == getName pkgs.mariadb;
 
+  # MariaDB 11.x renamed every `mysql*` client to `mariadb-*` and prints a
+  # deprecation warning on every invocation of the old name. Oracle MySQL
+  # keeps the `mysql*` names. See https://mariadb.com/kb/en/mariadb-vs-mysql-compatibility/.
+  mariadbRenames = {
+    mysql = "mariadb";
+    mysqladmin = "mariadb-admin";
+    mysqldump = "mariadb-dump";
+    mysqld = "mariadbd";
+    mysql_install_db = "mariadb-install-db";
+    mysql_tzinfo_to_sql = "mariadb-tzinfo-to-sql";
+  };
+
+  # Canonical path to each tool in cfg.package, keyed by the original mysql* name.
+  # On MariaDB, resolves to the mariadb-* binary; on Oracle MySQL, unchanged.
+  mysqlBin = mapAttrs
+    (name: _: "${cfg.package}/bin/${if isMariaDB then mariadbRenames.${name} else name}")
+    mariadbRenames;
+
   # Port allocation
   hasPort = hasAttrByPath [ "mysqld" "port" ] cfg.settings;
   basePort = if hasPort then cfg.settings.mysqld.port else 3306;
@@ -32,29 +50,29 @@ with lib; let
   mysqldOptions = "--defaults-file=${configFile} --datadir=$MYSQL_HOME --basedir=${cfg.package}";
 
   mysqlWrapped = pkgs.writeShellScriptBin "mysql" ''
-    exec ${cfg.package}/bin/mysql ${mysqlOptions} "$@"
+    exec ${mysqlBin.mysql} ${mysqlOptions} "$@"
   '';
 
   mysqlWrappedEmpty = pkgs.writeShellScriptBin "mysql" ''
-    exec ${cfg.package}/bin/mysql --defaults-file=${emptyConfig} "$@"
+    exec ${mysqlBin.mysql} --defaults-file=${emptyConfig} "$@"
   '';
 
   mysqladminWrapped = pkgs.writeShellScriptBin "mysqladmin" ''
-    exec ${cfg.package}/bin/mysqladmin ${mysqlOptions} "$@"
+    exec ${mysqlBin.mysqladmin} ${mysqlOptions} "$@"
   '';
 
   mysqladminWrappedEmpty = pkgs.writeShellScriptBin "mysqladmin" ''
-    exec ${cfg.package}/bin/mysqladmin --defaults-file=${emptyConfig} "$@"
+    exec ${mysqlBin.mysqladmin} --defaults-file=${emptyConfig} "$@"
   '';
 
   mysqldumpWrapped = pkgs.writeShellScriptBin "mysqldump" ''
-    exec ${cfg.package}/bin/mysqldump ${mysqlOptions} "$@"
+    exec ${mysqlBin.mysqldump} ${mysqlOptions} "$@"
   '';
 
   initDatabaseCmd =
     if isMariaDB
-    then "${cfg.package}/bin/mysql_install_db ${mysqldOptions} --auth-root-authentication-method=normal"
-    else "${cfg.package}/bin/mysqld ${mysqldOptions} --default-time-zone=SYSTEM --initialize-insecure";
+    then "${mysqlBin.mysql_install_db} ${mysqldOptions} --auth-root-authentication-method=normal"
+    else "${mysqlBin.mysqld} ${mysqldOptions} --default-time-zone=SYSTEM --initialize-insecure";
 
   importTimeZones =
     if (cfg.importTimeZones != null)
@@ -64,13 +82,13 @@ with lib; let
   configureTimezones = ''
     # Start a temp database with the default-time-zone to import tz data
     # and hide the temp database from the configureScript by setting a custom socket
-    nohup ${cfg.package}/bin/mysqld ${mysqldOptions} --socket="$DEVENV_RUNTIME/config.sock" --skip-networking --default-time-zone=SYSTEM &
+    nohup ${mysqlBin.mysqld} ${mysqldOptions} --socket="$DEVENV_RUNTIME/config.sock" --skip-networking --default-time-zone=SYSTEM &
 
     while ! MYSQL_PWD="" ${mysqladminWrappedEmpty}/bin/mysqladmin --socket="$DEVENV_RUNTIME/config.sock" ping -u root --silent; do
       sleep 1
     done
 
-    ${cfg.package}/bin/mysql_tzinfo_to_sql ${pkgs.tzdata}/share/zoneinfo/ | MYSQL_PWD="" ${mysqlWrappedEmpty}/bin/mysql --socket="$DEVENV_RUNTIME/config.sock" -u root mysql
+    ${mysqlBin.mysql_tzinfo_to_sql} ${pkgs.tzdata}/share/zoneinfo/ | MYSQL_PWD="" ${mysqlWrappedEmpty}/bin/mysql --socket="$DEVENV_RUNTIME/config.sock" -u root mysql
 
     # Shutdown the temp database
     MYSQL_PWD="" ${mysqladminWrappedEmpty}/bin/mysqladmin --socket="$DEVENV_RUNTIME/config.sock" shutdown -u root
@@ -85,7 +103,7 @@ with lib; let
       ${optionalString importTimeZones configureTimezones}
     fi
 
-    exec ${cfg.package}/bin/mysqld ${mysqldOptions}
+    exec ${mysqlBin.mysqld} ${mysqldOptions}
   '';
 
   configureScript = ''
