@@ -31,7 +31,10 @@
           local port=$1
           local timeout=''${2:-15}
 
-          timeout $timeout bash -c "until ${pkgs.libressl.nc}/bin/nc -z localhost $port 2>/dev/null; do sleep 0.5; done"
+          if ! timeout "$timeout" bash -c "until ${pkgs.libressl.nc}/bin/nc -z localhost $port 2>/dev/null; do sleep 0.5; done"; then
+            echo "Error: Port $port did not become available within $timeout seconds."
+            exit 1
+          fi
         }
 
         # Wait for processes to be healthy
