@@ -1,6 +1,5 @@
 ---
 source: devenv-tui/tests/tui_tests.rs
-assertion_line: 1830
 expression: output
 ---
 ⠋ Running processes       [TIME]

@@ -631,23 +631,35 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             should_exit.set(true);
                         }
                     }
+                    KeyCode::Char('h') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                        if let Ok(model) = activity_model.read()
+                            && let Ok(mut ui) = ui_state.write()
+                        {
+                            ui.toggle_hide_stopped_processes();
+                            if let Some(id) = ui.selected_activity
+                                && !model.is_selectable(id, &ui)
+                            {
+                                ui.selected_activity = None;
+                            }
+                        }
+                    }
                     KeyCode::Down | KeyCode::Up => {
-                        if let Ok(model) = activity_model.read() {
-                            let selectable = model.get_selectable_activity_ids();
-                            if let Ok(mut ui) = ui_state.write() {
-                                ui.select_activity(&selectable, key_event.code == KeyCode::Down);
-                                if let Some(selected_id) = ui.selected_activity
-                                    && *scroll_view_active.read()
-                                {
-                                    let display = model.get_display_activities();
-                                    let heights = activity_heights.read();
-                                    scroll_selected_into_view(
-                                        &mut scroll_handle.write(),
-                                        &heights,
-                                        &display,
-                                        selected_id,
-                                    );
-                                }
+                        if let Ok(model) = activity_model.read()
+                            && let Ok(mut ui) = ui_state.write()
+                        {
+                            let selectable = model.get_selectable_activity_ids(&ui);
+                            ui.select_activity(&selectable, key_event.code == KeyCode::Down);
+                            if let Some(selected_id) = ui.selected_activity
+                                && *scroll_view_active.read()
+                            {
+                                let display = model.get_display_activities(&ui);
+                                let heights = activity_heights.read();
+                                scroll_selected_into_view(
+                                    &mut scroll_handle.write(),
+                                    &heights,
+                                    &display,
+                                    selected_id,
+                                );
                             }
                         }
                     }
@@ -682,7 +694,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let ui = ui_state.read().unwrap();
     let is_shutting_down = shutdown.is_cancelled();
     let rendered = if let Ok(model_guard) = activity_model.read() {
-        let display = model_guard.get_display_activities();
+        let display = model_guard.get_display_activities(&ui);
 
         // Prune stale entries and compute total content height in a single lock
         let total_content_height: i32 = {
