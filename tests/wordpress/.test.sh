@@ -13,17 +13,12 @@ for ext in mysqli pdo_mysql gd zip intl exif; do
 done
 echo "All required PHP extensions are loaded"
 
-# Wait for MySQL
-wait_for_port 3306
+# Wait for the whole process graph (mysql ready + devenv:mysql:configure seeded
+# + caddy up) to reach a healthy state.
+wait_for_processes
 
-# Wait for configure-mysql to finish
-sleep 5
-
-# Verify database exists and user can connect
+# Verify database exists and the seeded wordpress user can connect
 mysql -h 127.0.0.1 -uwordpress -pwordpress wordpress -e 'SELECT 1'
-
-# Wait for Caddy
-wait_for_port 8000
 
 # Create a test PHP file
 cat > index.php << 'PHPEOF'

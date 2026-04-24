@@ -10,9 +10,8 @@ This guide sets up a local WordPress development environment with:
 ## Quick Start
 
 1. Add the configuration below to your `devenv.nix`
-2. Run `devenv up` to start all services (Caddy, PHP-FPM, MariaDB)
-3. In another terminal, run `setup-wordpress` to download WordPress and configure the database
-4. Visit [http://localhost:8000](http://localhost:8000) to complete the WordPress installation
+2. Run `devenv up` — services start, the database is seeded, WordPress is downloaded, and `wp-config.php` is created automatically
+3. Visit [http://localhost:8000](http://localhost:8000) to complete the WordPress installation
 
 ## Configuration
 
@@ -27,7 +26,7 @@ This guide sets up a local WordPress development environment with:
 
   languages.php = {
     enable = true;
-    version = "8.2";
+    version = "8.4";
 
     # PHP extensions required by WordPress
     # Note: common extensions like xml, mbstring, curl are enabled by default
@@ -86,51 +85,51 @@ This guide sets up a local WordPress development environment with:
       extraConfig = ''
         root * ${config.devenv.root}/wordpress
 
-        # Pass PHP requests to PHP-FPM
+        # Pass PHP requests to PHP-FPM.
         php_fastcgi unix/${config.languages.php.fpm.pools.web.socket}
 
         # Serve static files directly
         file_server
-
-        # WordPress pretty permalinks
-        @notStatic {
-          not path /wp-admin/*
-          not path /wp-includes/*
-          not path /wp-content/*
-          not file
-        }
-        rewrite @notStatic /index.php
       '';
     };
   };
 
-  # Script to download and configure WordPress
-  scripts.setup-wordpress.exec = ''
-    set -e
+  # Download WordPress and write wp-config.php once MariaDB is ready and seeded.
+  # Runs automatically as part of `devenv up` via the caddy process dependency.
+  tasks."wordpress:setup" = {
+    description = "Download WordPress and create wp-config.php";
+    after = [ "devenv:mysql:configure" ];
+    cwd = config.devenv.root;
+    exec = ''
+      set -e
 
-    mkdir -p wordpress
-    cd wordpress
+      mkdir -p wordpress
+      cd wordpress
 
-    if [ ! -f wp-includes/version.php ]; then
-      echo "Downloading WordPress..."
-      wp core download
-    else
-      echo "WordPress already downloaded."
-    fi
+      if [ ! -f wp-includes/version.php ]; then
+        echo "Downloading WordPress..."
+        wp core download
+      else
+        echo "WordPress already downloaded."
+      fi
 
-    if [ ! -f wp-config.php ]; then
-      echo "Creating wp-config.php..."
-      wp config create \
-        --dbname=wordpress \
-        --dbuser=wordpress \
-        --dbpass=wordpress \
-        --dbhost=127.0.0.1
-      echo ""
-      echo "WordPress configured! Visit http://localhost:8000 to complete installation."
-    else
-      echo "wp-config.php already exists."
-    fi
-  '';
+      if [ ! -f wp-config.php ]; then
+        echo "Creating wp-config.php..."
+        wp config create \
+          --dbname=wordpress \
+          --dbuser=wordpress \
+          --dbpass=wordpress \
+          --dbhost=127.0.0.1
+        echo ""
+        echo "WordPress configured! Visit http://localhost:8000 to complete installation."
+      else
+        echo "wp-config.php already exists."
+      fi
+    '';
+  };
+
+  # Hold caddy until WordPress is on disk so the first request isn't a 404.
+  processes.caddy.after = [ "wordpress:setup" ];
 
   # Show helpful instructions when entering the shell
   enterShell = ''
@@ -138,10 +137,8 @@ This guide sets up a local WordPress development environment with:
     echo "WordPress Development Environment"
     echo "=================================="
     echo ""
-    echo "First time setup:"
-    echo "  1. devenv up          # Start services (in one terminal)"
-    echo "  2. setup-wordpress    # Download WordPress (in another terminal)"
-    echo "  3. Open http://localhost:8000"
+    echo "Run devenv up to start services and provision WordPress, then open:"
+    echo "  http://localhost:8000"
     echo ""
     echo "Database credentials (for wp-config.php):"
     echo "  Host:     127.0.0.1"
@@ -155,30 +152,25 @@ This guide sets up a local WordPress development environment with:
 
 ## How It Works
 
-When you run `devenv up`, three services start:
+When you run `devenv up`, devenv runs the following graph in order:
 
-1. **MariaDB** listens on `127.0.0.1:3306` and stores all WordPress data
-2. **PHP-FPM** creates a Unix socket that Caddy uses to execute PHP files
-3. **Caddy** listens on port 8000 and routes requests:
-   - Static files (CSS, JS, images) are served directly
-   - PHP files are passed to PHP-FPM for execution
-   - Non-existent paths are rewritten to `index.php` for pretty permalinks
+1. **MariaDB** starts. `services.mysql` advertises a readiness probe (`mysqladmin ping`), so downstream tasks wait until the server is actually accepting connections, not just until the port is bound.
+2. **`devenv:mysql:configure`** runs as a oneshot task once MariaDB is ready, creating the `wordpress` database, the `wordpress` user, and granting privileges.
+3. **`wordpress:setup`** runs once `devenv:mysql:configure` has succeeded, downloading WordPress core and writing `wp-config.php`.
+4. **Caddy** starts only after `wordpress:setup` completes, so the first HTTP request doesn't hit an empty document root.
+5. **PHP-FPM** exposes a Unix socket that Caddy proxies `.php` requests to. The `php_fastcgi` directive handles WordPress pretty permalinks automatically — non-existent paths fall through to `index.php`.
 
 ## Troubleshooting
 
 ### Database connection errors
 
-Ensure MariaDB is running before running `setup-wordpress`:
-
-```bash
-devenv up  # Wait for "mysql" to show as running
-```
-
-If WordPress shows "Error establishing database connection", verify the database exists:
+`devenv up` seeds the database automatically. If you see "Error establishing database connection", verify the database and user exist:
 
 ```bash
 mysql -u wordpress -pwordpress -h 127.0.0.1 -e "SHOW DATABASES;"
 ```
+
+If the `wordpress` user is missing, the `devenv:mysql:configure` task didn't run — check the logs with `devenv tasks list` and `devenv tasks run devenv:mysql:configure`. A stale `.devenv/state/mysql` from an older setup can also cause this; remove it and re-run `devenv up`.
 
 ### Port 8000 already in use
 
