@@ -103,6 +103,9 @@ pub mod build_environment;
 // Cachix daemon client for pushing store paths
 pub mod cachix_daemon;
 
+// Scoped umask guard for Nix C API calls
+pub mod umask_guard;
+
 /// Convert devenv inputs to FlakeInputs
 ///
 /// # Arguments

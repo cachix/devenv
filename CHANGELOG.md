@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed "suspicious ownership" errors when using Nix installed in single-user mode. Nix requires read-only group permissions on outputs ([#2751](https://github.com/cachix/devenv/issues/2751)).
 - Fixed hot reload not watching files transitively imported by `devenv.nix` (e.g. `imports = [ ./nested/child.nix ]`).
 - Fixed the root `devenv.nix` being imported twice when `devenv.yaml` imported a sub-project that also had its own `devenv.yaml` ([#2755](https://github.com/cachix/devenv/issues/2755)).
 - Fixed `devenv shell` and `devenv build` failing with `path '...drv' is required, but there is no substituter that can build it` after the cached derivation was garbage-collected. The stale eval-cache entry is now invalidated when its referenced store paths no longer exist, forcing a re-evaluation that re-materializes the `.drv` on disk.

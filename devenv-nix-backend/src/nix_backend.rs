@@ -9,6 +9,7 @@
 
 use crate::anyhow_ext::AnyhowToMiette;
 use crate::build_environment::BuildEnvironment as RustBuildEnvironment;
+use crate::umask_guard::UmaskGuard;
 
 use async_trait::async_trait;
 use cstr::cstr;
@@ -980,6 +981,7 @@ in cfg // {{
 
         let lock_result = {
             let eval_state = self.eval_session(&activity)?;
+            let _guard = UmaskGuard::restrictive();
             locker.lock(fetch_settings, &eval_state)
         };
 
@@ -1826,10 +1828,13 @@ impl NixBackend for NixRustBackend {
         let eval_state = self.eval_session(&activity)?;
 
         // Lock the inputs - pass eval_state by reference to avoid cloning
-        let lock_file = locker
-            .lock(fetch_settings, &eval_state)
-            .to_miette()
-            .wrap_err("Failed to lock inputs")?;
+        let lock_file = {
+            let _guard = UmaskGuard::restrictive();
+            locker
+                .lock(fetch_settings, &eval_state)
+                .to_miette()
+                .wrap_err("Failed to lock inputs")?
+        };
 
         // Write the updated lock file
         write_lock_file(&lock_file, &lock_file_path)
@@ -2336,11 +2341,13 @@ impl NixRustBackend {
             "Failed to get outPath from shell derivation",
         )?;
 
-        // Build the derivation to get the output path
-        let realized = self.enriched(
-            eval_state.realise_string(&out_path_value, false),
-            "Failed to realize shell derivation",
-        )?;
+        let realized = {
+            let _guard = UmaskGuard::restrictive();
+            self.enriched(
+                eval_state.realise_string(&out_path_value, false),
+                "Failed to realize shell derivation",
+            )?
+        };
 
         let store_path = realized
             .paths
@@ -2359,10 +2366,12 @@ impl NixRustBackend {
             .parse_store_path(&drv_path)
             .to_miette()
             .wrap_err("Failed to parse derivation store path")?;
-        let (_build_env, env_store_path) =
+        let (_build_env, env_store_path) = {
+            let _guard = UmaskGuard::restrictive();
             BuildEnvironment::get_dev_environment(&self.store, &drv_store_path)
                 .to_miette()
-                .wrap_err("Failed to get dev environment")?;
+                .wrap_err("Failed to get dev environment")?
+        };
 
         // Convert the env store path to a real filesystem path for caching
         let env_path = Some(
@@ -2410,11 +2419,13 @@ impl NixRustBackend {
             )?
             .unwrap_or_else(|| value.clone());
 
-        // Realize the value, which triggers the actual build
-        let realized = self.enriched(
-            eval_state.realise_string(&build_value, false),
-            format!("Failed to build attribute: {}", attr_path),
-        )?;
+        let realized = {
+            let _guard = UmaskGuard::restrictive();
+            self.enriched(
+                eval_state.realise_string(&build_value, false),
+                format!("Failed to build attribute: {}", attr_path),
+            )?
+        };
 
         let store_path = realized
             .paths

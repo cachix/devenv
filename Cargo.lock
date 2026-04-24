@@ -1971,6 +1971,7 @@ dependencies = [
  "devenv-nix-backend-macros",
  "include_dir",
  "miette",
+ "nix 0.31.2",
  "nix-bindings-bindgen-raw",
  "nix-bindings-expr",
  "nix-bindings-fetchers",
