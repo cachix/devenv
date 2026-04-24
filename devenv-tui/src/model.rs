@@ -169,6 +169,7 @@ pub struct Activity {
 pub struct UiState {
     pub viewport: ViewportConfig,
     pub selected_activity: Option<u64>,
+    pub hide_stopped_processes: bool,
     pub scroll: ScrollState,
     pub view_options: ViewOptions,
     pub terminal_size: TerminalSize,
@@ -188,6 +189,7 @@ impl UiState {
                 activities_visible: 5,
             },
             selected_activity: None,
+            hide_stopped_processes: false,
             scroll: ScrollState {
                 log_offset: 0,
                 activity_position: 0,
@@ -216,6 +218,15 @@ impl UiState {
 
     pub fn interrupt_prompt_active(&self) -> bool {
         self.interrupt_prompt_active
+    }
+
+    /// Toggle the `hide_stopped_processes` filter.
+    ///
+    /// Callers must then clear [`Self::selected_activity`] if the previous
+    /// selection is no longer selectable under the new filter state
+    /// (see [`ActivityModel::is_selectable`]).
+    pub fn toggle_hide_stopped_processes(&mut self) {
+        self.hide_stopped_processes = !self.hide_stopped_processes;
     }
 
     /// Select the next or previous activity from the list of selectable IDs.
@@ -1067,9 +1078,9 @@ impl ActivityModel {
             .collect()
     }
 
-    pub fn get_selectable_activity_ids(&self) -> Vec<u64> {
+    pub fn get_selectable_activity_ids(&self, ui_state: &UiState) -> Vec<u64> {
         let mut seen = HashSet::new();
-        self.get_display_activities()
+        self.get_display_activities(ui_state)
             .into_iter()
             .filter(|da| {
                 // Processes are always selectable (so disabled ones can be started)
@@ -1086,13 +1097,20 @@ impl ActivityModel {
             .collect()
     }
 
-    pub fn get_display_activities(&self) -> Vec<DisplayActivity> {
-        self.get_display_activities_with_limit(&ChildActivityLimit::default())
+    /// Returns `true` if `id` would appear in
+    /// [`Self::get_selectable_activity_ids`] for the given `ui_state`.
+    pub fn is_selectable(&self, id: u64, ui_state: &UiState) -> bool {
+        self.get_selectable_activity_ids(ui_state).contains(&id)
+    }
+
+    pub fn get_display_activities(&self, ui_state: &UiState) -> Vec<DisplayActivity> {
+        self.get_display_activities_with_limit(&ChildActivityLimit::default(), ui_state)
     }
 
     pub fn get_display_activities_with_limit(
         &self,
         limit: &ChildActivityLimit,
+        ui_state: &UiState,
     ) -> Vec<DisplayActivity> {
         let mut activities = Vec::new();
         // Track (activity_id, parent_id) pairs to allow same activity under multiple parents
@@ -1100,7 +1118,15 @@ impl ActivityModel {
             std::collections::HashSet::new();
 
         for &root_id in &self.root_activities {
-            self.add_display_activity(&mut activities, root_id, None, 0, &mut processed, limit);
+            self.add_display_activity(
+                &mut activities,
+                root_id,
+                None,
+                0,
+                &mut processed,
+                limit,
+                ui_state,
+            );
         }
 
         activities
@@ -1114,6 +1140,7 @@ impl ActivityModel {
         depth: usize,
         processed: &mut std::collections::HashSet<(u64, Option<u64>)>,
         limit: &ChildActivityLimit,
+        ui_state: &UiState,
     ) {
         // Track (activity_id, parent_id) to allow same activity under different parents
         if !processed.insert((activity_id, parent_id)) {
@@ -1122,7 +1149,9 @@ impl ActivityModel {
 
         if let Some(activity) = self.activities.get(&activity_id) {
             // Skip command activities (UserOperation) - they are internal details
-            if matches!(activity.variant, ActivityVariant::UserOperation) {
+            if matches!(activity.variant, ActivityVariant::UserOperation)
+                || self.is_hidden_process(activity, ui_state)
+            {
                 return;
             }
 
@@ -1154,9 +1183,58 @@ impl ActivityModel {
                     child_depth,
                     processed,
                     limit,
+                    ui_state,
                 );
             }
         }
+    }
+
+    fn is_hidden_process(&self, activity: &Activity, ui_state: &UiState) -> bool {
+        if !ui_state.hide_stopped_processes {
+            return false;
+        }
+
+        match (&activity.variant, &activity.state) {
+            (
+                ActivityVariant::Process(ProcessActivity {
+                    status: ProcessStatus::Stopped,
+                    ..
+                }),
+                NixActivityState::Completed { success: false, .. },
+            ) => false,
+            (
+                ActivityVariant::Process(ProcessActivity {
+                    status: ProcessStatus::Stopped,
+                    ..
+                }),
+                _,
+            ) => true,
+            _ => false,
+        }
+    }
+
+    /// Whether `activity` is a direct child of `parent_id`, accounting for the
+    /// primary parent link and any additional parents.
+    fn is_direct_child_of(&self, activity: &Activity, parent_id: u64) -> bool {
+        activity.parent_id == Some(parent_id)
+            || self
+                .additional_parents
+                .get(&activity.id)
+                .is_some_and(|parents| parents.contains(&parent_id))
+    }
+
+    /// Count how many direct children of `parent_id` are hidden by the
+    /// `hide_stopped_processes` filter. Returns 0 when the filter is off.
+    pub fn count_hidden_process_children(&self, parent_id: u64, ui_state: &UiState) -> usize {
+        if !ui_state.hide_stopped_processes {
+            return 0;
+        }
+        self.activities
+            .values()
+            .filter(|a| {
+                self.is_direct_child_of(a, parent_id) && self.is_hidden_process(a, ui_state)
+            })
+            .count()
     }
 
     pub fn calculate_summary(&self) -> ActivitySummary {
@@ -1202,9 +1280,15 @@ impl ActivityModel {
                         summary.failed_tasks += 1
                     }
                 },
-                (ActivityVariant::Process(proc), _) => {
+                (ActivityVariant::Process(proc), state) => {
                     if proc.status.is_active() {
                         summary.running_processes += 1;
+                        summary.total_processes += 1;
+                    } else if matches!(proc.status, ProcessStatus::Stopped) {
+                        if !matches!(state, NixActivityState::Completed { success: false, .. }) {
+                            summary.stopped_processes += 1;
+                        }
+                        summary.total_processes += 1;
                     }
                 }
                 _ => {}
@@ -1294,8 +1378,8 @@ impl ActivityModel {
         Some(Instant::now().duration_since(earliest_start))
     }
 
-    pub fn get_active_display_activities(&self) -> Vec<DisplayActivity> {
-        self.get_display_activities()
+    pub fn get_active_display_activities(&self, ui_state: &UiState) -> Vec<DisplayActivity> {
+        self.get_display_activities(ui_state)
             .into_iter()
             .filter(|da| {
                 matches!(
@@ -1332,19 +1416,9 @@ impl ActivityModel {
             .activities
             .values()
             .filter(|a| {
-                if matches!(a.variant, ActivityVariant::UserOperation)
-                    || a.variant.is_always_top_level()
-                {
-                    return false;
-                }
-                // Check primary parent
-                if a.parent_id == Some(parent_id) {
-                    return true;
-                }
-                // Check additional parents
-                self.additional_parents
-                    .get(&a.id)
-                    .is_some_and(|parents| parents.contains(&parent_id))
+                !matches!(a.variant, ActivityVariant::UserOperation)
+                    && !a.variant.is_always_top_level()
+                    && self.is_direct_child_of(a, parent_id)
             })
             .collect();
 
@@ -1489,6 +1563,13 @@ pub struct ActivitySummary {
     pub completed_tasks: usize,
     pub failed_tasks: usize,
     pub running_processes: usize,
+    pub stopped_processes: usize,
+    /// Process activities the summary bar tracks: active plus stopped
+    /// (including failed-stopped). Excludes `NotStarted`, so a shell that
+    /// only has disabled-autostart processes renders nothing in the bar.
+    /// `running_processes` is a live gauge (can go down); this is a
+    /// snapshot count of tracked processes, not cumulative progress.
+    pub total_processes: usize,
 }
 
 /// Format an EvalOp as a display string for logging.
@@ -1569,5 +1650,145 @@ mod tests {
 
         ui.clear_interrupt_prompt();
         assert!(!ui.interrupt_prompt_active());
+    }
+
+    #[test]
+    fn test_hide_stopped_processes_matches_runtime_manual_stop_shape() {
+        let mut model = ActivityModel::default();
+        let mut ui_state = UiState::new();
+
+        model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+            id: 100,
+            name: "Running processes".to_string(),
+            parent: None,
+            detail: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+
+        model.apply_activity_event(ActivityEvent::Process(Process::Start {
+            id: 1,
+            name: "manually-stopped".to_string(),
+            parent: Some(100),
+            command: None,
+            ports: vec![],
+            ready_probe: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+        model.apply_activity_event(ActivityEvent::Process(Process::Status {
+            id: 1,
+            status: ProcessStatus::Stopping,
+            timestamp: Timestamp::now(),
+        }));
+        model.apply_activity_event(ActivityEvent::Process(Process::Status {
+            id: 1,
+            status: ProcessStatus::Stopped,
+            timestamp: Timestamp::now(),
+        }));
+
+        let visible_before: Vec<_> = model
+            .get_display_activities(&ui_state)
+            .into_iter()
+            .map(|da| da.activity.name)
+            .collect();
+        assert!(visible_before.contains(&"manually-stopped".to_string()));
+
+        ui_state.hide_stopped_processes = true;
+
+        let visible_after: Vec<_> = model
+            .get_display_activities(&ui_state)
+            .into_iter()
+            .map(|da| da.activity.name)
+            .collect();
+        assert!(!visible_after.contains(&"manually-stopped".to_string()));
+    }
+
+    #[test]
+    fn test_summary_total_processes_counts_running_and_stopped() {
+        let mut model = ActivityModel::default();
+
+        model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+            id: 100,
+            name: "Running processes".to_string(),
+            parent: None,
+            detail: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+
+        for (id, name) in [(1, "running"), (2, "also-running"), (3, "stopped")] {
+            model.apply_activity_event(ActivityEvent::Process(Process::Start {
+                id,
+                name: name.to_string(),
+                parent: Some(100),
+                command: None,
+                ports: vec![],
+                ready_probe: None,
+                level: ActivityLevel::Info,
+                timestamp: Timestamp::now(),
+            }));
+        }
+        model.apply_activity_event(ActivityEvent::Process(Process::Status {
+            id: 3,
+            status: ProcessStatus::Stopped,
+            timestamp: Timestamp::now(),
+        }));
+
+        let summary = model.calculate_summary();
+        assert_eq!(summary.running_processes, 2);
+        assert_eq!(summary.stopped_processes, 1);
+        assert_eq!(
+            summary.total_processes, 3,
+            "total should reflect the full count of process activities visible in the TUI"
+        );
+    }
+
+    #[test]
+    fn test_count_hidden_process_children_reports_hidden_clean_stops() {
+        let mut model = ActivityModel::default();
+        let mut ui_state = UiState::new();
+
+        model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+            id: 100,
+            name: "Running processes".to_string(),
+            parent: None,
+            detail: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+
+        for (id, name) in [(1, "clean-stop-1"), (2, "clean-stop-2"), (3, "running")] {
+            model.apply_activity_event(ActivityEvent::Process(Process::Start {
+                id,
+                name: name.to_string(),
+                parent: Some(100),
+                command: None,
+                ports: vec![],
+                ready_probe: None,
+                level: ActivityLevel::Info,
+                timestamp: Timestamp::now(),
+            }));
+        }
+        for id in [1, 2] {
+            model.apply_activity_event(ActivityEvent::Process(Process::Status {
+                id,
+                status: ProcessStatus::Stopped,
+                timestamp: Timestamp::now(),
+            }));
+        }
+
+        assert_eq!(
+            model.count_hidden_process_children(100, &ui_state),
+            0,
+            "nothing is hidden while the filter is off"
+        );
+
+        ui_state.hide_stopped_processes = true;
+        assert_eq!(
+            model.count_hidden_process_children(100, &ui_state),
+            2,
+            "both clean stops are hidden under the Running processes parent"
+        );
     }
 }

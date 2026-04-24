@@ -5,6 +5,7 @@
 ### Bug Fixes
 
 - Fixed "suspicious ownership" errors when using Nix installed in single-user mode. Nix requires read-only group permissions on outputs ([#2751](https://github.com/cachix/devenv/issues/2751)).
+- Fixed hot reload not watching files transitively imported by `devenv.nix` (e.g. `imports = [ ./nested/child.nix ]`).
 - Fixed the root `devenv.nix` being imported twice when `devenv.yaml` imported a sub-project that also had its own `devenv.yaml` ([#2755](https://github.com/cachix/devenv/issues/2755)).
 - Fixed `devenv shell` and `devenv build` failing with `path '...drv' is required, but there is no substituter that can build it` after the cached derivation was garbage-collected. The stale eval-cache entry is now invalidated when its referenced store paths no longer exist, forcing a re-evaluation that re-materializes the `.drv` on disk.
 - Fixed hot reload missing file and directory changes that occurred during a build or during the brief gap between watch refreshes. The reload watcher now tracks path state (file/directory/missing) across reload cycles, queues deferred events while a build is in progress, and reconciles drift after rewatching so missed changes still trigger a follow-up rebuild.
@@ -43,6 +44,7 @@
 - Upgraded Nix to 2.34, bringing multithreaded tarball unpacking, evaluator performance improvements, and REPL enhancements.
 - Added `require_version` field to `devenv.yaml` to enforce a devenv CLI version. Set to `true` to match the modules version, or use a constraint string like `">=2.1"` ([#2391](https://github.com/cachix/devenv/issues/2391)).
 - Added Ctrl-X keybinding to stop individual processes from the TUI while keeping them visible and restartable.
+- Added Ctrl-H keybinding to toggle hiding stopped processes in the TUI. Failed processes remain visible, and the process count shows how many are hidden ([#2692](https://github.com/cachix/devenv/issues/2692)).
 - Tasks can now display messages when entering the shell by writing `{"devenv":{"messages":["..."]}}` to `$DEVENV_TASK_OUTPUT_FILE` ([#2500](https://github.com/cachix/devenv/issues/2500)).
 - Added `devenv hook <shell>` for native directory based auto-activation without direnv. Supports bash, zsh, fish, and nushell. Automatically deactivates when you leave the project directory. Add `eval "$(devenv hook bash)"` to your shell config to activate. Use `devenv allow` and `devenv revoke` to manage trust ([#2488](https://github.com/cachix/devenv/issues/2488)).
 - Shell environment now auto-reloads at the next prompt when watched files change, instead of requiring a manual Ctrl-Alt-R keybind ([#2595](https://github.com/cachix/devenv/issues/2595)).

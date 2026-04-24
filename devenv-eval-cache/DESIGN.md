@@ -186,17 +186,32 @@ pub enum UncachedReason {
 
 ## Input Collection
 
-During evaluation, `EvalInputCollector` observes operations via `NixLogBridge`:
+A single persistent `InputTracker` observes operations via `NixLogBridge`
+for the lifetime of the `CachedEval`. It is registered once at construction
+and accumulates every `EvalOp` dispatched through the bridge until the next
+`clear()` (invoked during hot-reload to drop stale entries).
 
 ```rust
-let collector = EvalInputCollector::start();
-log_bridge.add_observer(collector.clone());
+// Registered inside CachedEval::with_cache / without_cache.
+let tracker = InputTracker::new();
+log_bridge.add_observer(tracker.clone());
 
-// ... evaluation runs, collector receives EvalOp events ...
+// ... multiple evaluations happen; tracker accumulates every op ...
 
-log_bridge.clear_observers();
-let inputs = collector.into_inputs(&config);
+// At each cache-miss store:
+let inputs = tracker.snapshot_inputs(&config);
+
+// On hot-reload invalidation:
+tracker.clear();
 ```
+
+This is deliberately over-inclusive: a cache row for attr `A` will contain
+every file the session has seen so far, not just files forced by `A`. In
+devenv, module merging runs once per session and any file it reads is
+effectively an input to every later attribute, so the "everything seen so
+far" set is the correct invalidation boundary. It also sidesteps Nix's
+internal `fileEvalCache`, which suppresses the `evaluating file` event on
+the second and subsequent evaluations of a given path within one EvalState.
 
 ### Observed Operations
 
@@ -226,10 +241,9 @@ Inputs are filtered before storage:
 1. CachingEvalState.cache_key("config.shell")
 2. CachedEval.eval(key, || eval_fn())
    a. Check DB for key_hash → miss
-   b. Start EvalInputCollector
-   c. Run eval_fn() → JSON result
-   d. Collect observed inputs
-   e. Store (key_hash, inputs, result) in DB
+   b. Run eval_fn() → JSON result
+   c. Snapshot the persistent InputTracker
+   d. Store (key_hash, inputs, result) in DB
 3. Return (result, cache_hit=false)
 ```
 

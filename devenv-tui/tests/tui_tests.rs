@@ -1331,7 +1331,7 @@ fn test_selectable_ids_dedup_for_multi_parent_tasks() {
         timestamp: Timestamp::now(),
     }));
 
-    let selectable = model.get_selectable_activity_ids();
+    let selectable = model.get_selectable_activity_ids(&ui_state);
     assert_eq!(selectable, vec![1, 3]);
 
     ui_state.select_activity(&selectable, true);
@@ -1689,6 +1689,208 @@ fn test_overflow_clips_top_keeps_bottom() {
         "Last line should be summary, not empty.\nFull output (debug):\n{:?}",
         output
     );
+}
+
+#[test]
+fn test_hide_stopped_processes_filters_manually_stopped_processes_but_keeps_failures() {
+    let (mut model, mut ui_state) = new_test_model();
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+        id: 100,
+        name: "Running processes".to_string(),
+        parent: None,
+        detail: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    for (id, name) in [(1, "clean-stop"), (2, "failed-stop"), (3, "running")] {
+        model.apply_activity_event(ActivityEvent::Process(Process::Start {
+            id,
+            name: name.to_string(),
+            parent: Some(100),
+            command: None,
+            ports: vec![],
+            ready_probe: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+    }
+
+    model.apply_activity_event(ActivityEvent::Process(Process::Status {
+        id: 1,
+        status: devenv_activity::ProcessStatus::Running,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Process(Process::Status {
+        id: 1,
+        status: devenv_activity::ProcessStatus::Stopped,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Process(Process::Complete {
+        id: 2,
+        outcome: ActivityOutcome::Failed,
+        timestamp: Timestamp::now(),
+    }));
+
+    let visible_before: Vec<_> = model
+        .get_display_activities(&ui_state)
+        .into_iter()
+        .map(|da| da.activity.name)
+        .collect();
+    assert!(visible_before.contains(&"clean-stop".to_string()));
+    assert!(visible_before.contains(&"failed-stop".to_string()));
+    assert!(visible_before.contains(&"running".to_string()));
+
+    ui_state.hide_stopped_processes = true;
+
+    let visible_after: Vec<_> = model
+        .get_display_activities(&ui_state)
+        .into_iter()
+        .map(|da| da.activity.name)
+        .collect();
+    assert!(!visible_after.contains(&"clean-stop".to_string()));
+    assert!(visible_after.contains(&"failed-stop".to_string()));
+    assert!(visible_after.contains(&"running".to_string()));
+
+    let summary = model.calculate_summary();
+    assert_eq!(
+        summary.stopped_processes, 1,
+        "summary.stopped_processes must match filter behaviour: only counts processes \
+         the filter would actually hide (i.e. clean stops, not failures)"
+    );
+}
+
+#[test]
+fn test_previous_hide_stopped_processes_coverage_used_completed_success() {
+    let (mut model, mut ui_state) = new_test_model();
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+        id: 100,
+        name: "Running processes".to_string(),
+        parent: None,
+        detail: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Process(Process::Start {
+        id: 1,
+        name: "clean-stop".to_string(),
+        parent: Some(100),
+        command: None,
+        ports: vec![],
+        ready_probe: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Process(Process::Complete {
+        id: 1,
+        outcome: ActivityOutcome::Success,
+        timestamp: Timestamp::now(),
+    }));
+
+    ui_state.hide_stopped_processes = true;
+
+    let visible_after: Vec<_> = model
+        .get_display_activities(&ui_state)
+        .into_iter()
+        .map(|da| da.activity.name)
+        .collect();
+    assert!(
+        !visible_after.contains(&"clean-stop".to_string()),
+        "The old test shape used Process::Complete(Success), which already matched the previous filter."
+    );
+}
+
+#[test]
+fn test_toggle_hide_stopped_processes_clears_hidden_selection() {
+    let (mut model, mut ui_state) = new_test_model();
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+        id: 100,
+        name: "Running processes".to_string(),
+        parent: None,
+        detail: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Process(Process::Start {
+        id: 1,
+        name: "clean-stop".to_string(),
+        parent: Some(100),
+        command: None,
+        ports: vec![],
+        ready_probe: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Process(Process::Status {
+        id: 1,
+        status: devenv_activity::ProcessStatus::Stopped,
+        timestamp: Timestamp::now(),
+    }));
+
+    ui_state.selected_activity = Some(1);
+    ui_state.toggle_hide_stopped_processes();
+    if let Some(id) = ui_state.selected_activity
+        && !model.is_selectable(id, &ui_state)
+    {
+        ui_state.selected_activity = None;
+    }
+
+    assert!(ui_state.hide_stopped_processes);
+    assert_eq!(ui_state.selected_activity, None);
+}
+
+#[test]
+fn test_hide_stopped_processes_removes_hidden_processes_from_selection() {
+    let (mut model, mut ui_state) = new_test_model();
+
+    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+        id: 100,
+        name: "Running processes".to_string(),
+        parent: None,
+        detail: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Process(Process::Start {
+        id: 1,
+        name: "clean-stop".to_string(),
+        parent: Some(100),
+        command: None,
+        ports: vec![],
+        ready_probe: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+    model.apply_activity_event(ActivityEvent::Process(Process::Status {
+        id: 1,
+        status: devenv_activity::ProcessStatus::Stopped,
+        timestamp: Timestamp::now(),
+    }));
+
+    model.apply_activity_event(ActivityEvent::Process(Process::Start {
+        id: 2,
+        name: "running".to_string(),
+        parent: Some(100),
+        command: None,
+        ports: vec![],
+        ready_probe: None,
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    let selectable_before = model.get_selectable_activity_ids(&ui_state);
+    assert_eq!(selectable_before, vec![1, 2]);
+
+    ui_state.hide_stopped_processes = true;
+
+    let selectable_after = model.get_selectable_activity_ids(&ui_state);
+    assert_eq!(selectable_after, vec![2]);
 }
 
 /// Test cachix push operation starting shows in the TUI.

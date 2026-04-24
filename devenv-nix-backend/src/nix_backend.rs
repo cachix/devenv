@@ -21,7 +21,6 @@ use devenv_cache_core::compute_string_hash;
 use devenv_core::PortAllocator;
 use devenv_core::cachix::{Cachix, CachixCacheInfo, CachixManager};
 use devenv_core::config::{Input, NixpkgsConfig};
-use devenv_core::eval_op::EvalOp;
 use devenv_core::nix_args::NixArgs;
 use devenv_core::nix_backend::{
     DevEnvOutput, DevenvPaths, NixBackend, Options, PackageSearchResult, SearchResults,
@@ -137,11 +136,8 @@ pub struct NixRustBackend {
     // Shared with eval cache for resource replay on cache hits
     port_allocator: Arc<PortAllocator>,
 
-    // Cached result of eval_import_with_primops with its file dependency ops (cleared on invalidate).
-    // On cache hit, the ops are replayed into active observers so that the eval cache
-    // records complete file dependencies even when the Value is reused.
-    // Lock ordering: cached_devenv_value → nix_log_bridge.observers (via replay_ops).
-    cached_devenv_value: Mutex<Option<(nix_bindings_expr::value::Value, Vec<EvalOp>)>>,
+    // Cached root devenv Value from `eval_import_with_primops` (cleared on invalidate).
+    cached_devenv_value: Mutex<Option<nix_bindings_expr::value::Value>>,
 
     // Flag set by the resource invalidation callback to signal that cached_devenv_value
     // should be cleared before the next use. Needed because Value is not Send.
@@ -156,7 +152,7 @@ pub struct NixRustBackend {
 
     // Store (EvalState destructor may reference it)
     #[allow(dead_code)]
-    store: Arc<Store>,
+    store: Store,
 
     // Settings (must outlive EvalState)
     #[allow(dead_code)]
@@ -469,7 +465,7 @@ in cfg // {{
             devenv_value_invalidated: Arc::new(AtomicBool::new(false)),
             caching_eval_state: OnceCell::new(),
             eval_state: Arc::new(Mutex::new(Some(eval_state))),
-            store: Arc::new(store),
+            store,
             flake_settings,
             fetchers_settings,
             activity_logger,
@@ -483,6 +479,16 @@ in cfg // {{
     #[cfg(feature = "test-nix-store")]
     pub fn log_bridge(&self) -> &Arc<NixLogBridge> {
         &self.nix_log_bridge
+    }
+
+    /// Access the persistent input tracker for testing.
+    ///
+    /// Returns `None` before `assemble()` has been called.
+    #[cfg(feature = "test-nix-store")]
+    pub fn input_tracker(&self) -> Option<&Arc<devenv_eval_cache::InputTracker>> {
+        self.caching_eval_state
+            .get()
+            .map(|state| state.cached_eval().input_tracker())
     }
 
     /// Create an eval session with activity tracking.
@@ -673,10 +679,7 @@ in cfg // {{
             .wrap_err("Failed to evaluate devenv configuration")
     }
 
-    /// Return the cached result of `eval_import_with_primops`, evaluating on first call.
-    ///
-    /// On cache hit, replays the file-dependency ops into the log bridge's active
-    /// observers so that the eval cache records complete dependencies for every caller.
+    /// Return the cached root devenv Value, evaluating on first call.
     fn get_or_eval_devenv(
         &self,
         eval_state: &mut EvalState,
@@ -694,28 +697,18 @@ in cfg // {{
                 .cached_devenv_value
                 .lock()
                 .map_err(|e| miette!("Failed to lock cached devenv value: {}", e))?;
-            if let Some((value, ops)) = cached.as_ref() {
-                // Replay file-dependency ops so the current eval cache observer sees them
-                self.nix_log_bridge.replay_ops(ops);
+            if let Some(value) = cached.as_ref() {
                 return Ok(value.clone());
             }
         }
-        // Collect ops emitted during eval_import_with_primops alongside any
-        // already-registered observers (e.g. the eval cache's own collector).
-        let collector = devenv_eval_cache::EvalInputCollector::start();
-        let observer: Arc<dyn devenv_core::eval_op::OpObserver> = collector.clone();
-        self.nix_log_bridge.add_observer(observer.clone());
-        let result = self.eval_import_with_primops(eval_state);
-        // Always remove our private collector, even on eval failure
-        let ops = collector.take_ops();
-        self.nix_log_bridge.remove_observer(&observer);
-        let value = result?;
+        let value = self.eval_import_with_primops(eval_state)?;
+        let returned = value.clone();
         let mut cached = self
             .cached_devenv_value
             .lock()
             .map_err(|e| miette!("Failed to lock cached devenv value: {}", e))?;
-        *cached = Some((value.clone(), ops));
-        Ok(value)
+        *cached = Some(value);
+        Ok(returned)
     }
 
     /// Apply resolved Nix settings to the Nix environment.
@@ -898,7 +891,7 @@ in cfg // {{
     async fn apply_cachix_substituters(&self, cachix_config: &CachixCacheInfo) -> Result<()> {
         match self.cachix_manager.get_nix_settings(cachix_config).await {
             Ok(settings) => {
-                let mut store = (*self.store).clone();
+                let mut store = self.store.clone();
 
                 if let Some(extra_substituters) = settings.get("extra-substituters") {
                     for substituter in extra_substituters.split_whitespace() {
@@ -1402,7 +1395,7 @@ impl NixBackend for NixRustBackend {
         };
 
         // Parse store path and create GC root
-        let mut store = (*self.store).clone();
+        let mut store = self.store.clone();
         let store_path = store
             .parse_store_path(&out_path_str)
             .to_miette()
@@ -1659,7 +1652,7 @@ impl NixBackend for NixRustBackend {
 
             // Add GC root if requested, named after the attribute
             if let Some(gc_root_base) = gc_root {
-                let mut store = (*self.store).clone();
+                let mut store = self.store.clone();
                 let store_path = store
                     .parse_store_path(&path_str)
                     .to_miette()
@@ -1969,7 +1962,7 @@ impl NixBackend for NixRustBackend {
             return Ok((0, 0));
         }
 
-        let mut store = (*self.store).clone();
+        let mut store = self.store.clone();
         let mut total_deleted = 0u64;
         let mut total_bytes_freed = 0u64;
         let total_paths = paths.len() as u64;
@@ -2066,7 +2059,7 @@ impl NixBackend for NixRustBackend {
     async fn is_trusted_user(&self) -> Result<bool> {
         // Check if the current user is trusted by the Nix daemon/store
         // This is used to determine if we can safely add substituters
-        let mut store = (*self.store).clone();
+        let mut store = self.store.clone();
         let trust_status = store.is_trusted_client();
 
         match trust_status {
@@ -2088,6 +2081,13 @@ impl NixBackend for NixRustBackend {
                 miette!("Failed to clear cached devenv value, skipping EvalState replacement: {e}")
             })?
             .take();
+
+        // The fresh EvalState below has an empty fileEvalCache, so every
+        // still-imported file will re-emit ops. Keeping stale tracker entries
+        // would pollute future DB rows with files removed from the config.
+        if let Some(state) = self.caching_eval_state.get() {
+            state.cached_eval().input_tracker().clear();
+        }
 
         // Drop old EvalState BEFORE creating new one to ensure C++ global state
         // (fileEvalCache, GC roots, etc.) is fully cleaned up first.
@@ -2115,7 +2115,7 @@ impl NixRustBackend {
     /// Create a fresh EvalState, clearing all internal caches (e.g. fileEvalCache).
     /// Used during hot-reload to ensure changed files are re-evaluated.
     fn create_fresh_eval_state(&self) -> Result<EvalState> {
-        let store = (*self.store).clone();
+        let store = self.store.clone();
         let root_str = self
             .paths
             .root
@@ -2354,7 +2354,7 @@ impl NixRustBackend {
             .first()
             .ok_or_else(|| miette!("Shell derivation produced no output paths"))?;
 
-        let mut store = (*self.store).clone();
+        let mut store = self.store.clone();
         let out_path = store
             .real_path(store_path)
             .to_miette()
@@ -2432,7 +2432,7 @@ impl NixRustBackend {
             .first()
             .ok_or_else(|| miette!("Attribute '{}' produced no output paths", attr_path))?;
 
-        let mut store = (*self.store).clone();
+        let mut store = self.store.clone();
         let path_str = store
             .real_path(store_path)
             .to_miette()

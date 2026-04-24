@@ -8,7 +8,6 @@ use devenv_core::eval_op::EvalOp;
 use devenv_core::{
     CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixOptions, Options,
 };
-use devenv_eval_cache::EvalInputCollector;
 use devenv_nix_backend::nix_backend::NixRustBackend;
 use devenv_nix_backend_macros::nix_test;
 use std::path::PathBuf;
@@ -2438,15 +2437,15 @@ fn evaluated_files(ops: &[EvalOp]) -> std::collections::HashSet<PathBuf> {
         .collect()
 }
 
-/// Verify that the cached Value replay delivers complete file dependencies.
-///
-/// After assemble(), the devenv Value is already cached (get_cachix_config evaluates it).
-/// Subsequent eval() calls reuse the cached Value. The replay mechanism must inject
-/// the base file dependencies (default.nix, bootstrapLib.nix) into any observer that
-/// is active during eval, so that the eval cache records complete dependencies.
-/// Without replay, eval observers would see zero base file deps on cache hits.
+/// The production `InputTracker` (owned by `CachingEvalState`) must accumulate
+/// file deps across attribute evaluations. Once module merging has fired an
+/// `evaluating file` event for a path, Nix's internal fileEvalCache suppresses
+/// re-emission on every later eval — so the tracker is the only place those
+/// deps survive. This is the invariant that keeps later attrs' DB rows (e.g.
+/// `shell`) aware of files first touched during earlier attrs' evaluation
+/// (e.g. `config.cachix.*`).
 #[nix_test]
-async fn test_cached_value_replays_file_deps_to_subsequent_evals() {
+async fn test_input_tracker_accumulates_across_evals() {
     let yaml = r#"inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
@@ -2465,58 +2464,119 @@ async fn test_cached_value_replays_file_deps_to_subsequent_evals() {
         .expect("Failed to assemble");
     copy_fixture_lock(temp_dir.path());
 
-    let bridge = backend.log_bridge();
+    let tracker = backend
+        .input_tracker()
+        .expect("input_tracker available after assemble");
 
-    // After assemble(), the devenv Value is already cached (get_cachix_config triggers
-    // eval_import_with_primops). All subsequent evals hit the cache and rely on replay.
-
-    // First eval: observer should see replayed base file deps
-    let collector1 = EvalInputCollector::start();
-    bridge.add_observer(collector1.clone());
     let result1 = backend.eval(&["config.devenv.root"]).await;
     assert!(
         result1.is_ok(),
         "First eval should succeed: {:?}",
         result1.err()
     );
-    let ops1 = collector1.take_ops();
-    bridge.clear_observers();
 
-    let files1 = evaluated_files(&ops1);
+    let files_after_first = evaluated_files(&tracker.snapshot());
     assert!(
-        !files1.is_empty(),
-        "Eval observer should see replayed base file deps (default.nix, etc.), got 0 ops"
+        !files_after_first.is_empty(),
+        "Tracker should observe base file deps during the first eval"
     );
 
-    // Second eval (different attribute): should also see the same base file deps
-    let collector2 = EvalInputCollector::start();
-    bridge.add_observer(collector2.clone());
     let result2 = backend.eval(&["config.devenv.cliVersion"]).await;
     assert!(
         result2.is_ok(),
         "Second eval should succeed: {:?}",
         result2.err()
     );
-    let ops2 = collector2.take_ops();
-    bridge.clear_observers();
 
-    let files2 = evaluated_files(&ops2);
+    let files_after_second = evaluated_files(&tracker.snapshot());
 
-    // Both evals must see the same base files from replay
-    let missing: Vec<_> = files1.difference(&files2).collect();
+    // The tracker only grows — every file seen in eval #1 must still be present.
+    let missing: Vec<_> = files_after_first.difference(&files_after_second).collect();
     assert!(
         missing.is_empty(),
-        "Second eval is missing {} base file deps that first eval saw: {:?}",
+        "Tracker dropped {} files between evals: {:?}",
         missing.len(),
         missing
     );
+}
 
-    // And vice versa — the base files should be identical
-    let extra: Vec<_> = files2.difference(&files1).collect();
+/// Regression test for the original boop.nix bug.
+///
+/// When a nested file (`imports = [./nested/child.nix]`) is first evaluated
+/// during one attribute's forcing, Nix's fileEvalCache suppresses re-emission
+/// on every later attribute. Before the persistent `InputTracker` fix, later
+/// attrs' DB rows would therefore miss the nested file entirely — and the
+/// hot-reload file watcher would never watch it.
+///
+/// This test verifies the production tracker captures the nested file across
+/// two separate `eval` calls, regardless of which one triggered the initial
+/// parse.
+#[nix_test]
+async fn test_nested_import_tracked_across_evals() {
+    let yaml = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+"#;
+    let nix = r#"{ ... }: { imports = [ ./nested/child.nix ]; }"#;
+    let (temp_dir, _cwd_guard, backend, paths, config) =
+        setup_isolated_test_env(yaml, Some(nix), NixOptions::default());
+
+    // Create the nested import target.
+    let nested_dir = temp_dir.path().join("nested");
+    std::fs::create_dir_all(&nested_dir).expect("Failed to create nested dir");
+    std::fs::write(
+        nested_dir.join("child.nix"),
+        r#"{ ... }: { env.NESTED_MARKER = "present"; }"#,
+    )
+    .expect("Failed to write nested/child.nix");
+
+    backend
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config(get_current_system()),
+        ))
+        .await
+        .expect("Failed to assemble");
+    copy_fixture_lock(temp_dir.path());
+
+    let tracker = backend
+        .input_tracker()
+        .expect("input_tracker available after assemble");
+
+    // First eval forces the module system, which parses nested/child.nix.
+    backend
+        .eval(&["config.devenv.root"])
+        .await
+        .expect("First eval should succeed");
+
+    // Nix records the absolute path it resolved during import; on macOS this
+    // is not automatically routed through /private, so we compare by suffix
+    // rather than canonicalising.
+    let has_nested_child = |files: &std::collections::HashSet<PathBuf>| {
+        files.iter().any(|p| p.ends_with("nested/child.nix"))
+    };
+
+    let files_after_first = evaluated_files(&tracker.snapshot());
     assert!(
-        extra.is_empty(),
-        "Second eval has {} extra base file deps not in first eval: {:?}",
-        extra.len(),
-        extra
+        has_nested_child(&files_after_first),
+        "Tracker should record nested/child.nix during the first eval; got {:?}",
+        files_after_first
+    );
+
+    // Second eval: Nix's fileEvalCache suppresses re-emission, but the
+    // persistent tracker's snapshot must still contain the nested file.
+    backend
+        .eval(&["config.devenv.cliVersion"])
+        .await
+        .expect("Second eval should succeed");
+
+    let files_after_second = evaluated_files(&tracker.snapshot());
+    assert!(
+        has_nested_child(&files_after_second),
+        "Tracker lost nested/child.nix between evals; got {:?}",
+        files_after_second
     );
 }
