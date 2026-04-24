@@ -42,6 +42,26 @@ enum Event {
     PtyExit(u64),
     FileChange(std::path::PathBuf),
     BuildComplete(Result<portable_pty::CommandBuilder, crate::builder::BuildError>),
+    Shutdown,
+}
+
+/// Drop guard that releases the resources keeping the VT thread alive when the
+/// async future is cancelled (e.g. tokio task abort). Without this, the PTY
+/// child sleeps forever and stdin/file-watcher threads keep their senders
+/// alive, so the VT thread's `event_rx.recv()` never returns and the
+/// surrounding `spawn_blocking` join hangs the runtime indefinitely.
+struct ShutdownGuard {
+    pty: Arc<RwLock<Arc<Pty>>>,
+    event_tx: std::sync::mpsc::Sender<Event>,
+}
+
+impl Drop for ShutdownGuard {
+    fn drop(&mut self) {
+        if let Ok(pty) = self.pty.read() {
+            let _ = pty.kill();
+        }
+        let _ = self.event_tx.send(Event::Shutdown);
+    }
 }
 
 pub struct ShellManager;
@@ -91,6 +111,13 @@ impl ShellManager {
         let _raw_guard = RawModeGuard::new()?;
 
         let (event_tx, event_rx) = std::sync::mpsc::channel::<Event>();
+
+        // Wakes the VT thread when the future is dropped (e.g. tokio task abort)
+        // so the surrounding spawn_blocking join can return.
+        let _shutdown = ShutdownGuard {
+            pty: pty.clone(),
+            event_tx: event_tx.clone(),
+        };
 
         // Spawn stdin reader thread
         let stdin_tx = event_tx.clone();
@@ -192,6 +219,8 @@ impl ShellManager {
                             break;
                         }
                     }
+
+                    Event::Shutdown => break,
 
                     Event::FileChange(path) => {
                         if building {
