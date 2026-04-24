@@ -88,14 +88,9 @@ with lib; let
     exec ${cfg.package}/bin/mysqld ${mysqldOptions}
   '';
 
-  configureScript = pkgs.writeShellScriptBin "configure-mysql" ''
+  configureScript = ''
     PATH="${lib.makeBinPath [cfg.package pkgs.coreutils]}:$PATH"
     set -euo pipefail
-
-    while ! MYSQL_PWD="" ${mysqladminWrappedEmpty}/bin/mysqladmin ping -u root --silent; do
-      echo "Sleeping 1s while we wait for MySQL to come up"
-      sleep 1
-    done
 
     ${concatMapStrings (database: ''
         # Create initial databases
@@ -141,9 +136,6 @@ with lib; let
         ) | MYSQL_PWD="" ${mysqlWrappedEmpty}/bin/mysql -u root -N
       '')
       cfg.ensureUsers}
-
-    # We need to sleep until infinity otherwise all processes stop
-    sleep infinity
   '';
 in
 {
@@ -331,6 +323,14 @@ in
 
     processes.mysql.ports.main.allocate = basePort;
     processes.mysql.exec = "${startScript}/bin/start-mysql";
-    processes.mysql-configure.exec = "${configureScript}/bin/configure-mysql";
+    processes.mysql.ready.exec = ''MYSQL_PWD="" ${mysqladminWrappedEmpty}/bin/mysqladmin ping -u root --silent'';
+    processes.mysql.before = [ "devenv:mysql:configure" ];
+
+    # Create initial databases and users once mysqld is accepting connections.
+    # Gated on processes.mysql.ready so CREATE USER/GRANT statements can't
+    # race against an un-initialised server.
+    tasks."devenv:mysql:configure" = {
+      exec = configureScript;
+    };
   };
 }
