@@ -140,38 +140,41 @@ impl ShellManager {
             })
             .expect("failed to spawn reload-stdin thread");
 
-        // Spawn PTY reader thread
-        let spawn_pty_reader =
-            |pty: Arc<Pty>, generation: u64, pty_tx: std::sync::mpsc::Sender<Event>| {
-                std::thread::Builder::new()
-                    .name("reload-pty".into())
-                    .spawn(move || {
-                        let mut buf = [0u8; 4096];
-                        loop {
-                            let result = pty.read(&mut buf);
-                            match result {
-                                Ok(0) => {
-                                    let _ = pty_tx.send(Event::PtyExit(generation));
-                                    break;
-                                }
-                                Ok(n) => {
-                                    if pty_tx
-                                        .send(Event::PtyOutput(generation, buf[..n].to_vec()))
-                                        .is_err()
-                                    {
-                                        break;
-                                    }
-                                }
-                                Err(_) => {
-                                    let _ = pty_tx.send(Event::PtyExit(generation));
+        // Spawn PTY reader thread. Returns the JoinHandle so the VT thread can
+        // bound-join the previous reader on each PTY swap (see swap site).
+        let spawn_pty_reader = |pty: Arc<Pty>,
+                                generation: u64,
+                                pty_tx: std::sync::mpsc::Sender<Event>|
+         -> std::thread::JoinHandle<()> {
+            std::thread::Builder::new()
+                .name("reload-pty".into())
+                .spawn(move || {
+                    let mut buf = [0u8; 4096];
+                    loop {
+                        let result = pty.read(&mut buf);
+                        match result {
+                            Ok(0) => {
+                                let _ = pty_tx.send(Event::PtyExit(generation));
+                                break;
+                            }
+                            Ok(n) => {
+                                if pty_tx
+                                    .send(Event::PtyOutput(generation, buf[..n].to_vec()))
+                                    .is_err()
+                                {
                                     break;
                                 }
                             }
+                            Err(_) => {
+                                let _ = pty_tx.send(Event::PtyExit(generation));
+                                break;
+                            }
                         }
-                    })
-                    .expect("failed to spawn reload-pty thread");
-            };
-        spawn_pty_reader(initial_pty.clone(), 0, event_tx.clone());
+                    }
+                })
+                .expect("failed to spawn reload-pty thread")
+        };
+        let initial_reader_handle = spawn_pty_reader(initial_pty.clone(), 0, event_tx.clone());
 
         // Spawn file watcher forwarder
         let watch_tx = event_tx.clone();
@@ -196,6 +199,8 @@ impl ShellManager {
             let mut pty_generation: u64 = 0;
             let mut building = false;
             let mut pending_changes: Vec<std::path::PathBuf> = Vec::new();
+            let mut pty_reader_handle: Option<std::thread::JoinHandle<()>> =
+                Some(initial_reader_handle);
 
             while let Ok(event) = event_rx.recv() {
                 match event {
@@ -238,12 +243,21 @@ impl ShellManager {
                             reload_file: Some(reload_file.clone()),
                         };
 
-                        // Spawn build in background thread
+                        // Spawn build in background thread. catch_unwind ensures
+                        // a panicking builder still sends BuildComplete so the
+                        // `building` flag is reset and the manager keeps
+                        // accepting future file changes.
                         building = true;
                         let builder = builder.clone();
                         let build_tx = vt_event_tx.clone();
                         std::thread::spawn(move || {
-                            let result = builder.build(&ctx);
+                            let result =
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                    builder.build(&ctx)
+                                }))
+                                .unwrap_or_else(|_| {
+                                    Err(crate::builder::BuildError::new("build thread panicked"))
+                                });
                             let _ = build_tx.send(Event::BuildComplete(result));
                         });
                     }
@@ -289,12 +303,36 @@ impl ShellManager {
                                         };
                                         let _ = old_pty.kill();
 
+                                        // Bound-join the previous reader so it
+                                        // does not outlive the swap. On POSIX
+                                        // the master fd EOFs as soon as the
+                                        // killed child closes the slave; the
+                                        // poll handles slow EOF and the Windows
+                                        // ConPTY worst case.
+                                        if let Some(handle) = pty_reader_handle.take() {
+                                            let deadline = std::time::Instant::now()
+                                                + std::time::Duration::from_millis(500);
+                                            while !handle.is_finished()
+                                                && std::time::Instant::now() < deadline
+                                            {
+                                                std::thread::sleep(
+                                                    std::time::Duration::from_millis(10),
+                                                );
+                                            }
+                                            if handle.is_finished() {
+                                                let _ = handle.join();
+                                            }
+                                            // Otherwise drop the handle and
+                                            // detach. The generation check
+                                            // below filters any stray events.
+                                        }
+
                                         pty_generation = pty_generation.wrapping_add(1);
-                                        spawn_pty_reader(
+                                        pty_reader_handle = Some(spawn_pty_reader(
                                             new_pty.clone(),
                                             pty_generation,
                                             vt_event_tx.clone(),
-                                        );
+                                        ));
 
                                         vt = Terminal::new(TerminalOptions {
                                             cols: new_size.cols,
@@ -302,8 +340,11 @@ impl ShellManager {
                                             max_scrollback: DEFAULT_MAX_SCROLLBACK,
                                         })?;
 
-                                        let _ = new_pty.write_all(state.as_bytes());
-                                        let _ = new_pty.flush();
+                                        // Replay captured terminal state to the
+                                        // user's terminal (stdout), not into
+                                        // the new shell's stdin.
+                                        stdout.write_all(state.as_bytes())?;
+                                        stdout.flush()?;
 
                                         if let Err(e) =
                                             messages.try_send(ManagerMessage::Reloaded { files })

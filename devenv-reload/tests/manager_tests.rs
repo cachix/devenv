@@ -514,3 +514,93 @@ async fn test_manager_drops_file_changes_during_build() {
 
     handle.abort();
 }
+
+#[tokio::test]
+async fn test_manager_recovers_from_build_panic() {
+    let temp_dir = create_temp_dir_with_files(&[("test.nix", "x")]);
+    let watch_file = temp_dir.path().join("test.nix");
+
+    let build_count = Arc::new(AtomicUsize::new(0));
+    let build_count_clone = build_count.clone();
+    let (build_tx, mut build_rx) = mpsc::channel::<usize>(10);
+
+    /// Builder that panics on the first FileChanged trigger and succeeds on later ones.
+    /// Verifies the `building` flag is reset after a panic so subsequent reloads run.
+    struct PanickingBuilder {
+        count: Arc<AtomicUsize>,
+        build_tx: mpsc::Sender<usize>,
+    }
+
+    impl ShellBuilder for PanickingBuilder {
+        fn build(&self, ctx: &BuildContext) -> Result<CommandBuilder, BuildError> {
+            let n = self.count.fetch_add(1, Ordering::SeqCst) + 1;
+            let _ = self.build_tx.try_send(n);
+
+            match &ctx.trigger {
+                BuildTrigger::Initial => {
+                    let mut cmd = CommandBuilder::new("sh");
+                    cmd.arg("-c");
+                    cmd.arg("sleep 30");
+                    Ok(cmd)
+                }
+                BuildTrigger::FileChanged(_) if n == 2 => {
+                    panic!("simulated builder panic");
+                }
+                BuildTrigger::FileChanged(_) => {
+                    let mut cmd = CommandBuilder::new("sh");
+                    cmd.arg("-c");
+                    cmd.arg("sleep 30");
+                    Ok(cmd)
+                }
+            }
+        }
+
+        fn build_reload_env(&self, _ctx: &BuildContext) -> Result<(), BuildError> {
+            Ok(())
+        }
+    }
+
+    let builder = PanickingBuilder {
+        count: build_count_clone,
+        build_tx,
+    };
+
+    let config = Config::new(vec![watch_file.clone()]);
+    let (msg_tx, mut msg_rx) = mpsc::channel::<ManagerMessage>(10);
+    let handle = tokio::spawn(async move { ShellManager::run(config, builder, msg_tx).await });
+
+    // Initial build (#1)
+    let first = tokio::time::timeout(TEST_TIMEOUT, build_rx.recv()).await;
+    assert!(first.is_ok(), "timeout waiting for initial build");
+
+    // Trigger first reload, which panics inside the builder
+    modify_file(&watch_file, "trigger panic");
+
+    let panic_build = tokio::time::timeout(TEST_TIMEOUT, build_rx.recv()).await;
+    assert!(panic_build.is_ok(), "timeout waiting for panicking build");
+
+    // Manager should report BuildFailed with the panic message
+    let msg = tokio::time::timeout(TEST_TIMEOUT, msg_rx.recv()).await;
+    assert!(msg.is_ok(), "timeout waiting for BuildFailed message");
+    match msg.unwrap() {
+        Some(ManagerMessage::BuildFailed { error, .. }) => {
+            assert!(
+                error.contains("build thread panicked"),
+                "expected panic error, got: {}",
+                error
+            );
+        }
+        other => panic!("expected BuildFailed message, got {:?}", other),
+    }
+
+    // Trigger a second reload. If `building` was poisoned by the panic, this is silently dropped.
+    modify_file(&watch_file, "trigger recovery");
+
+    let recovery_build = tokio::time::timeout(TEST_TIMEOUT, build_rx.recv()).await;
+    assert!(
+        recovery_build.is_ok(),
+        "timeout waiting for post-panic build (building flag was likely poisoned)"
+    );
+
+    handle.abort();
+}
