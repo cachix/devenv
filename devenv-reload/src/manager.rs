@@ -1,10 +1,13 @@
 use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
 use devenv_event_sources::{FileWatcher, FileWatcherConfig};
+use devenv_shell::escape::{EscapeScanner, SequenceEvent};
+use devenv_shell::escape_state::{EscapeState, cleanup_forwarded_modes, process_escape_events};
 use devenv_shell::vt_utils::DEFAULT_MAX_SCROLLBACK;
 use devenv_shell::{Pty, PtyError, RawModeGuard, get_terminal_size};
 use libghostty_vt::fmt::{Format, Formatter, FormatterOptions};
 use libghostty_vt::terminal::{Options as TerminalOptions, Terminal};
+use portable_pty::PtySize;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
@@ -201,6 +204,15 @@ impl ShellManager {
             let mut pending_changes: Vec<std::path::PathBuf> = Vec::new();
             let mut pty_reader_handle: Option<std::thread::JoinHandle<()>> =
                 Some(initial_reader_handle);
+            // Tracks terminal modes the embedded shell sets on the user's
+            // terminal (alt-screen, mouse, bracketed paste, kitty keyboard,
+            // etc.) so we can reset them on reload before the new shell
+            // starts. Without this, modes leak across reloads and the new
+            // shell inherits a dirty terminal.
+            let mut esc = EscapeState::new();
+            let mut scanner = EscapeScanner::new();
+            let mut esc_events: Vec<SequenceEvent> = Vec::new();
+            let mut current_pty_size: PtySize = size;
 
             while let Ok(event) = event_rx.recv() {
                 match event {
@@ -214,6 +226,22 @@ impl ShellManager {
                         if generation != pty_generation {
                             continue;
                         }
+                        // Track mode-set escapes so we can reset them on
+                        // reload. The sink discards bytes (we already forward
+                        // raw `data` below); the side effect we want is the
+                        // EscapeState mutation. PTY responses to
+                        // TextAreaSizeQuery still go to the real PTY.
+                        let current_pty = pty.read().unwrap().clone();
+                        esc.reset_batch();
+                        process_escape_events(
+                            &mut scanner,
+                            &data,
+                            &mut esc,
+                            &mut io::sink(),
+                            &current_pty,
+                            current_pty_size,
+                            &mut esc_events,
+                        )?;
                         vt.vt_write(&data);
                         stdout.write_all(&data)?;
                         stdout.flush()?;
@@ -339,6 +367,18 @@ impl ShellManager {
                                             rows: new_size.rows,
                                             max_scrollback: DEFAULT_MAX_SCROLLBACK,
                                         })?;
+                                        current_pty_size = new_size;
+
+                                        // Reset any modes the old shell set on
+                                        // the user's terminal (alt-screen,
+                                        // mouse, paste, kitty keyboard) before
+                                        // replaying captured state, so the new
+                                        // shell starts on a clean baseline.
+                                        cleanup_forwarded_modes(&esc, &mut stdout)?;
+                                        stdout.flush()?;
+                                        esc = EscapeState::new();
+                                        scanner = EscapeScanner::new();
+                                        esc_events.clear();
 
                                         // Replay captured terminal state to the
                                         // user's terminal (stdout), not into

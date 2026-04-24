@@ -347,6 +347,12 @@ pub struct EscapeScanner {
     csi_params: CsiParamState,
 }
 
+impl Default for EscapeScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EscapeScanner {
     pub fn new() -> Self {
         Self {
