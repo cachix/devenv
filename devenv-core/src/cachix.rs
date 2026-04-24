@@ -158,6 +158,40 @@ impl CachixManager {
         Ok(())
     }
 
+    /// Produce the resolved `StoreSettings` derived from this manager's
+    /// cachix configuration plus the netrc state already established by
+    /// `ensure_netrc_file`.
+    ///
+    /// `CachixManager` is one possible producer of `StoreSettings`; the
+    /// type itself is generic over any source (nix.conf parser, env
+    /// overrides, hand-built in tests). The backend consumes a
+    /// `StoreSettings`, never a `CachixManager` reference.
+    pub async fn store_settings(
+        &self,
+        cachix_caches: Option<&CachixCacheInfo>,
+    ) -> Result<crate::store_settings::StoreSettings> {
+        let mut settings = crate::store_settings::StoreSettings::default();
+
+        if let Some(info) = cachix_caches
+            && !info.caches.pull.is_empty()
+        {
+            let nix_settings = self.get_nix_settings(info).await?;
+            if let Some(s) = nix_settings.get("extra-substituters") {
+                settings.extra_substituters = s.split_whitespace().map(str::to_owned).collect();
+            }
+            if let Some(k) = nix_settings.get("extra-trusted-public-keys") {
+                settings.extra_trusted_public_keys =
+                    k.split_whitespace().map(str::to_owned).collect();
+            }
+        }
+
+        if let Some(path) = self.netrc_path.get() {
+            settings.netrc_path = Some(PathBuf::from(path));
+        }
+
+        Ok(settings)
+    }
+
     /// Clean up the netrc file if it was created during this session
     fn cleanup_netrc(&self) {
         if let Some(netrc_path_str) = self.netrc_path.get() {

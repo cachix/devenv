@@ -343,6 +343,10 @@ impl Devenv {
             dotfile: devenv_dotfile.clone(),
             dot_gc: devenv_dot_gc.clone(),
             home_gc: devenv_home_gc.clone(),
+            tmp: devenv_tmp.clone(),
+            runtime: devenv_runtime.clone(),
+            state: options.devenv_state.clone(),
+            git_root: options.git_root.clone(),
         };
 
         // Create CachixPaths for Nix backend
@@ -474,6 +478,10 @@ impl Devenv {
             dotfile: self.devenv_dotfile.clone(),
             dot_gc: self.devenv_dot_gc.clone(),
             home_gc: self.devenv_home_gc.clone(),
+            tmp: self.devenv_tmp.clone(),
+            runtime: self.devenv_runtime.clone(),
+            state: self.devenv_state.clone(),
+            git_root: self.git_root.clone(),
         }
     }
 

@@ -9,10 +9,12 @@ pub mod eval_op;
 pub mod internal_log;
 pub mod nix_args;
 pub mod nix_backend;
+pub mod nix_config;
 pub mod nix_log_bridge;
 pub mod ports;
 pub mod resource;
 pub mod settings;
+pub mod store_settings;
 
 pub use cachix::{CachixCacheInfo, CachixManager, CachixPaths};
 pub use config::Config;
@@ -22,9 +24,11 @@ pub use nix_args::{CliOptionsConfig, NixArgs, SecretspecData};
 pub use nix_backend::{
     DevEnvOutput, DevenvPaths, NixBackend, Options, PackageSearchResult, SearchResults,
 };
+pub use nix_config::NixConfig;
 pub use ports::{PortAllocation, PortAllocator, PortSpec};
 pub use resource::{ReplayError, ReplayableResource};
 pub use settings::{
     CacheOptions, CacheSettings, InputOverrides, NixOptions, NixSettings, SecretOptions,
     SecretSettings, ShellOptions, ShellSettings, default_system, flag,
 };
+pub use store_settings::StoreSettings;

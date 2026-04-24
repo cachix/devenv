@@ -127,12 +127,7 @@ async fn test_create_flake_inputs() {
     fs::write(temp_dir.path().join("devenv.nix"), "{ }").expect("Failed to write devenv.nix");
 
     let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
-    let paths = DevenvPaths {
-        root: temp_dir.path().to_path_buf(),
-        dotfile: temp_dir.path().join(".devenv"),
-        dot_gc: temp_dir.path().join(".devenv/gc"),
-        home_gc: temp_dir.path().join(".devenv/home-gc"),
-    };
+    let paths = common::paths_under(temp_dir.path());
 
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
     // Use offline mode to skip cachix config evaluation in assemble()
@@ -196,12 +191,7 @@ async fn test_selective_input_update() {
     create_test_devenv_yaml(temp_dir.path());
 
     // Create DevenvPaths for the temp directory
-    let paths = DevenvPaths {
-        root: temp_dir.path().to_path_buf(),
-        dotfile: temp_dir.path().join(".devenv"),
-        dot_gc: temp_dir.path().join(".devenv/gc"),
-        home_gc: temp_dir.path().join(".devenv/home-gc"),
-    };
+    let paths = common::paths_under(temp_dir.path());
 
     // Create directories
     fs::create_dir_all(&paths.dot_gc).expect("Failed to create .devenv/gc");
@@ -268,12 +258,7 @@ async fn test_full_workflow() {
     create_minimal_devenv_yaml(temp_dir.path());
 
     // 2. Create DevenvPaths for the temp directory
-    let paths = DevenvPaths {
-        root: temp_dir.path().to_path_buf(),
-        dotfile: temp_dir.path().join(".devenv"),
-        dot_gc: temp_dir.path().join(".devenv/gc"),
-        home_gc: temp_dir.path().join(".devenv/home-gc"),
-    };
+    let paths = common::paths_under(temp_dir.path());
 
     // Create required directories
     fs::create_dir_all(&paths.dot_gc).expect("Failed to create .devenv/gc");
@@ -370,12 +355,7 @@ async fn test_relative_path_with_parent_dir_in_path() {
     fs::write(inner_dir.join("devenv.yaml"), yaml_content).expect("Failed to write devenv.yaml");
 
     // Create DevenvPaths for inner directory
-    let paths = DevenvPaths {
-        root: inner_dir.clone(),
-        dotfile: inner_dir.join(".devenv"),
-        dot_gc: inner_dir.join(".devenv/gc"),
-        home_gc: inner_dir.join(".devenv/home-gc"),
-    };
+    let paths = common::paths_under(&inner_dir);
 
     // Create required directories
     fs::create_dir_all(&paths.dot_gc).expect("Failed to create .devenv/gc");

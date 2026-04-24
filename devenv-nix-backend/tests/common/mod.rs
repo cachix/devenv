@@ -1,5 +1,7 @@
 //! Common test utilities shared across test files
 
+#![allow(dead_code)]
+
 use devenv_core::cachix::{CachixManager, CachixPaths};
 use devenv_core::{
     CacheOptions, CacheSettings, Config, DevenvPaths, NixOptions, NixSettings, PortAllocator,
@@ -8,6 +10,26 @@ use devenv_nix_backend::nix_backend::NixRustBackend;
 use std::path::Path;
 use std::sync::Arc;
 use tokio_shutdown::Shutdown;
+
+/// Build a `DevenvPaths` rooted at `base` for integration tests.
+///
+/// This is a test-only helper: it picks a layout that's convenient for
+/// disposable temp directories (no git root, no state override, gc dirs
+/// under `.devenv/`). Production code populates `DevenvPaths` directly
+/// from XDG dirs, the user's project, and CLI flags.
+pub fn paths_under(base: &Path) -> DevenvPaths {
+    let dotfile = base.join(".devenv");
+    DevenvPaths {
+        root: base.to_path_buf(),
+        dotfile: dotfile.clone(),
+        dot_gc: dotfile.join("gc"),
+        home_gc: dotfile.join("home-gc"),
+        tmp: base.join("tmp"),
+        runtime: base.join("runtime"),
+        state: None,
+        git_root: None,
+    }
+}
 
 /// Get the current Nix system string based on architecture and OS
 pub fn get_current_system() -> &'static str {

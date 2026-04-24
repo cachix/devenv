@@ -35,25 +35,18 @@ impl Drop for CwdGuard {
 
 // Import shared test utilities
 mod common;
-use common::{create_backend, create_test_cachix_manager, get_current_system};
+use common::{create_backend, create_test_cachix_manager, get_current_system, paths_under};
 
-/// Create test paths directory structure within a base directory
+/// Create the test paths layout AND materialize its directories on disk.
+///
+/// `paths_under` only constructs the value; tests that actually run Nix need
+/// the directories to exist beforehand because the backend writes into them.
 fn create_test_paths_in(base: &std::path::Path) -> DevenvPaths {
-    let dotfile = base.join(".devenv");
-    std::fs::create_dir_all(&dotfile).expect("Failed to create .devenv");
-
-    let dot_gc = dotfile.join("gc");
-    std::fs::create_dir_all(&dot_gc).expect("Failed to create gc dir");
-
-    let home_gc = base.join(".cache/devenv/gc");
-    std::fs::create_dir_all(&home_gc).expect("Failed to create home gc dir");
-
-    DevenvPaths {
-        root: base.to_path_buf(),
-        dotfile,
-        dot_gc,
-        home_gc,
-    }
+    let paths = paths_under(base);
+    std::fs::create_dir_all(&paths.dotfile).expect("Failed to create .devenv");
+    std::fs::create_dir_all(&paths.dot_gc).expect("Failed to create gc dir");
+    std::fs::create_dir_all(&paths.home_gc).expect("Failed to create home gc dir");
+    paths
 }
 
 /// Copy fixture lock file to destination directory

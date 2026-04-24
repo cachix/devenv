@@ -42,13 +42,25 @@ pub struct PackageSearchResult {
 /// Result type for package search operations.
 pub type SearchResults = BTreeMap<String, PackageSearchResult>;
 
-/// Common paths used by devenv backends
+/// Common paths used by devenv backends.
+///
+/// No `Default` impl: every required path is project-specific and an
+/// empty `PathBuf` would compile but silently misbehave at runtime.
 #[derive(Debug, Clone)]
 pub struct DevenvPaths {
     pub root: PathBuf,
     pub dotfile: PathBuf,
     pub dot_gc: PathBuf,
     pub home_gc: PathBuf,
+    /// System temporary directory (e.g. `$TMPDIR` or `/tmp`).
+    pub tmp: PathBuf,
+    /// Runtime directory for sockets (e.g. `$XDG_RUNTIME_DIR/devenv/...`).
+    pub runtime: PathBuf,
+    /// Optional override for the state directory.
+    /// When `None`, callers should default to `dotfile.join("state")`.
+    pub state: Option<PathBuf>,
+    /// Git repository root, if detected.
+    pub git_root: Option<PathBuf>,
 }
 
 /// Options for Nix operations
