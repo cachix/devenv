@@ -5,9 +5,7 @@
 //! including input overrides via NixOptions.
 
 use devenv_core::eval_op::EvalOp;
-use devenv_core::{
-    BootstrapArgs, CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixOptions, Options,
-};
+use devenv_core::{Config, DevenvPaths, NixBackend, NixOptions, Options};
 use devenv_nix_backend::nix_backend::NixCBackend;
 use devenv_nix_backend_macros::nix_test;
 use std::path::PathBuf;
@@ -35,7 +33,7 @@ impl Drop for CwdGuard {
 
 // Import shared test utilities
 mod common;
-use common::{create_backend, create_test_cachix_manager, get_current_system, paths_under};
+use common::{create_test_cachix_manager, init_backend, paths_under};
 
 /// Create the test paths layout AND materialize its directories on disk.
 ///
@@ -58,126 +56,61 @@ fn copy_fixture_lock(dest_dir: &std::path::Path) {
     std::fs::copy(&fixture_lock, &dest_lock).expect("Failed to copy fixture lock file");
 }
 
-/// Helper struct to keep NixArgs and its owned values alive together
-struct TestNixArgs {
-    tmpdir: PathBuf,
-    runtime: PathBuf,
-    dotfile_path: PathBuf,
-}
-
-impl TestNixArgs {
-    fn new(paths: &DevenvPaths) -> Self {
-        let dotfile_name = paths
-            .dotfile
-            .file_name()
-            .expect("dotfile should have a file name")
-            .to_string_lossy();
-        TestNixArgs {
-            tmpdir: paths.root.join("tmp"),
-            runtime: paths.root.join("runtime"),
-            dotfile_path: PathBuf::from(format!("./{}", dotfile_name)),
-        }
-    }
-
-    fn to_nix_args<'a>(
-        &'a self,
-        paths: &'a DevenvPaths,
-        config: &'a Config,
-        nixpkgs_config: devenv_core::config::NixpkgsConfig,
-    ) -> NixArgs<'a> {
-        NixArgs {
-            version: "1.0.0",
-            is_development_version: false,
-            require_version_match: false,
-            system: get_current_system(),
-            devenv_root: &paths.root,
-            skip_local_src: false,
-            devenv_dotfile: &paths.dotfile,
-            devenv_dotfile_path: &self.dotfile_path,
-            devenv_tmpdir: &self.tmpdir,
-            devenv_runtime: &self.runtime,
-            devenv_istesting: true,
-            devenv_direnvrc_latest_version: 5,
-            container_name: None,
-            active_profiles: &[],
-            cli_options: CliOptionsConfig::default(),
-            hostname: None,
-            username: None,
-            git_root: None,
-            secretspec: None,
-            devenv_inputs: &config.inputs,
-            devenv_imports: &config.imports,
-            impure: false,
-            nixpkgs_config,
-            lock_fingerprint: "",
-            devenv_state: None,
-        }
-    }
-}
-
-/// Build the framework-side `BootstrapArgs` that the backend's
-/// `assemble()` expects, mirroring `Devenv::assemble`.
-fn test_bootstrap_args(paths: &DevenvPaths, config: &Config) -> BootstrapArgs {
-    let test_args = TestNixArgs::new(paths);
-    let nix_args =
-        test_args.to_nix_args(paths, config, config.nixpkgs_config(get_current_system()));
-    BootstrapArgs::from_serializable(&nix_args).expect("Failed to serialize bootstrap args")
-}
-
-/// Setup isolated test environment with all necessary files and configuration
+/// Set up an isolated working directory for a test.
 ///
-/// This function:
-/// 1. Creates a temporary directory
-/// 2. Changes cwd to the temp directory (restored via CwdGuard on drop)
-/// 3. Copies required files from bootstrap/ (default.nix, resolve-lock.nix, optionally devenv.nix)
-/// 4. Writes devenv.yaml with provided content
-/// 5. Creates directory structure (DevenvPaths)
-/// 6. Loads configuration with nixpkgs fallback
-/// 7. Instantiates and returns NixCBackend
-///
-/// The returned TempDir and CwdGuard must be kept alive to prevent cleanup during the test.
-fn setup_isolated_test_env(
+/// Creates a temp dir, changes cwd to it (restored via CwdGuard on drop),
+/// writes `devenv.nix` (custom or minimal) and `devenv.yaml`, materializes
+/// the test paths layout, and loads the resulting `Config`. No backend is
+/// instantiated.
+fn setup_isolated_test_files(
     yaml_content: &str,
     nix_content: Option<&str>,
-    nix_cli: NixOptions,
-) -> (TempDir, CwdGuard, NixCBackend, DevenvPaths, Config) {
+) -> (TempDir, CwdGuard, DevenvPaths, Config) {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let temp_path = temp_dir.path();
 
-    // Change to temp directory for the duration of the test
     let cwd_guard = CwdGuard::new(temp_path);
 
-    // Get repo root for copying files
-    // Write custom devenv.nix if provided
     if let Some(nix) = nix_content {
         std::fs::write(temp_path.join("devenv.nix"), nix)
             .expect("Failed to write custom devenv.nix");
     } else {
-        // Create minimal devenv.nix for tests (avoids dependencies from repo's devenv.nix)
         std::fs::write(temp_path.join("devenv.nix"), "{ ... }: { }")
             .expect("Failed to write minimal devenv.nix");
     }
 
-    // Write devenv.yaml
     std::fs::write(temp_path.join("devenv.yaml"), yaml_content)
         .expect("Failed to write devenv.yaml");
 
-    // Create paths structure
     let paths = create_test_paths_in(temp_path);
-
-    // Load config (devenv.yaml should already contain nixpkgs)
     let config = Config::load_from(temp_path).expect("Failed to load config");
 
-    let cachix_manager = create_test_cachix_manager(temp_path, None);
+    (temp_dir, cwd_guard, paths, config)
+}
+
+/// Like [`setup_isolated_test_files`] plus a fully-bootstrapped `NixCBackend`.
+///
+/// Use this for tests that exercise evaluation paths. For tests that
+/// expect bootstrap itself to fail, call `setup_isolated_test_files`
+/// followed by `init_backend` so the result can be inspected.
+async fn setup_isolated_test_env(
+    yaml_content: &str,
+    nix_content: Option<&str>,
+    nix_cli: NixOptions,
+) -> (TempDir, CwdGuard, NixCBackend, DevenvPaths, Config) {
+    let (temp_dir, cwd_guard, paths, config) = setup_isolated_test_files(yaml_content, nix_content);
+
+    let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
     let shutdown = Shutdown::new();
-    let backend = create_backend(
+    let backend = init_backend(
         paths.clone(),
         config.clone(),
         nix_cli,
         cachix_manager,
         shutdown,
     )
-    .expect("Failed to create NixCBackend");
+    .await
+    .expect("Failed to initialize NixCBackend");
 
     (temp_dir, cwd_guard, backend, paths, config)
 }
@@ -191,28 +124,8 @@ async fn test_backend_creation() {
     url: github:cachix/git-hooks.nix
 "#;
     let (_temp_dir, _cwd_guard, backend, _paths, _config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     assert_eq!(backend.name(), "nix");
-}
-
-#[nix_test]
-async fn test_backend_assemble() {
-    let yaml = r#"inputs:
-  nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
-  git-hooks:
-    url: github:cachix/git-hooks.nix
-"#;
-    let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-
-    let result = backend.assemble(test_bootstrap_args(&paths, &config)).await;
-
-    assert!(
-        result.is_ok(),
-        "Assemble should succeed: {:?}",
-        result.err()
-    );
 }
 
 #[nix_test]
@@ -223,13 +136,8 @@ async fn test_backend_update_all_inputs() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Update all inputs
     let result = backend.update(&None, &config.inputs, &[]).await;
     assert!(result.is_ok(), "Update should succeed: {:?}", result.err());
@@ -247,13 +155,8 @@ async fn test_backend_update_specific_input() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (_temp_dir, _cwd_guard, backend, _paths, config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // First create an initial lock
     backend
         .update(&None, &config.inputs, &[])
@@ -279,13 +182,8 @@ async fn test_backend_eval_expression() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for evaluation
     copy_fixture_lock(temp_dir.path());
 
@@ -319,13 +217,8 @@ async fn test_backend_eval_multiple_attributes() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for evaluation
     copy_fixture_lock(temp_dir.path());
 
@@ -356,13 +249,8 @@ async fn test_backend_build_package() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for build
     copy_fixture_lock(temp_dir.path());
 
@@ -384,13 +272,8 @@ async fn test_backend_build_with_gc_root() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for build
     copy_fixture_lock(temp_dir.path());
 
@@ -422,13 +305,8 @@ async fn test_backend_dev_env() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for dev_env
     copy_fixture_lock(temp_dir.path());
 
@@ -457,17 +335,12 @@ async fn assert_invalidate_picks_up_change(
     expected_before: &str,
     expected_after: &str,
 ) {
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, Some(nix_content), NixOptions::default());
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, Some(nix_content), NixOptions::default()).await;
 
     for (name, content) in extra_files {
         std::fs::write(temp_dir.path().join(name), content).expect("Failed to write extra file");
     }
-
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
 
     copy_fixture_lock(temp_dir.path());
     let gc_root = temp_dir.path().join(".devenv/profile");
@@ -586,13 +459,8 @@ async fn test_backend_metadata() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (_temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Get flake metadata
     let result = backend.metadata().await;
     assert!(
@@ -619,13 +487,8 @@ async fn test_backend_gc() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Create some dummy paths to collect
     let path1 = temp_dir.path().join("path1");
     let path2 = temp_dir.path().join("path2");
@@ -673,14 +536,10 @@ async fn test_metadata_standalone() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
+    let (_temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     println!("Created backend");
 
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
     println!("Backend assembled");
 
     // Call metadata WITHOUT any prior update/build
@@ -697,14 +556,10 @@ async fn test_metadata_after_update() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
+    let (_temp_dir, _cwd_guard, backend, _paths, config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     println!("Created backend");
 
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
     println!("Backend assembled");
 
     // Update first
@@ -728,15 +583,11 @@ async fn test_full_backend_workflow() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
+    let (_temp_dir, _cwd_guard, backend, _paths, config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     println!("Created NixCBackend: {}", backend.name());
 
     // 2. Initialize
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
     println!("Backend assembled");
 
     // 3. Update inputs
@@ -776,13 +627,8 @@ async fn test_backend_update_with_input_overrides() {
         "github:NixOS/nixpkgs/nixos-unstable".to_string(),
     ];
 
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Update with overrides
     let result = backend
         .update(&None, &config.inputs, &override_inputs)
@@ -825,13 +671,8 @@ async fn test_backend_update_with_multiple_overrides() {
         "github:cachix/devenv/v1.1".to_string(),
     ];
 
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Update with multiple overrides
     let result = backend
         .update(&None, &config.inputs, &override_inputs)
@@ -860,13 +701,8 @@ async fn test_eval_nonexistent_attribute() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for evaluation
     copy_fixture_lock(temp_dir.path());
 
@@ -898,13 +734,8 @@ async fn test_build_nonexistent_attribute() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for build
     copy_fixture_lock(temp_dir.path());
 
@@ -942,34 +773,35 @@ async fn test_build_with_syntax_error_in_nix() {
   this is not valid nix syntax!!!
 }"#;
 
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, Some(broken_nix), NixOptions::default());
+    let (temp_dir, _cwd_guard, paths, config) = setup_isolated_test_files(yaml, Some(broken_nix));
 
-    // Use fixture lock file
     copy_fixture_lock(temp_dir.path());
 
-    // Error can occur during assemble() (if cachix config is evaluated early)
-    // or during eval(). Either way, we should get a clear syntax error message.
-    let assemble_result = backend.assemble(test_bootstrap_args(&paths, &config)).await;
+    let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
+    let init_result = init_backend(
+        paths.clone(),
+        config.clone(),
+        NixOptions::default(),
+        cachix_manager,
+        Shutdown::new(),
+    )
+    .await;
 
-    let error_msg = if let Err(e) = assemble_result {
-        // Error caught during assemble - this is fine, errors should be caught early
-        format!("{:?}", e)
-    } else {
-        // Assemble succeeded, error should happen during eval
-        let result = backend.eval(&["shell"]).await;
-        assert!(result.is_err(), "Eval should fail with syntax error");
-        format!("{:?}", result.unwrap_err())
+    let error_msg = match init_result {
+        Err(e) => format!("{:?}", e),
+        Ok(backend) => {
+            let result = backend.eval(&["shell"]).await;
+            assert!(result.is_err(), "Eval should fail with syntax error");
+            format!("{:?}", result.unwrap_err())
+        }
     };
 
-    // Error message should indicate a syntax or evaluation error
     assert!(
         error_msg.contains("syntax") || error_msg.contains("parse") || error_msg.contains("error"),
         "Error should indicate syntax/parse error, got: {}",
         error_msg
     );
 
-    // Clean up temp dir
     drop(temp_dir);
 }
 
@@ -996,21 +828,27 @@ async fn test_eval_error_includes_nix_details() {
   packages = [ nonexistent_var_xyz ];
 }"#;
 
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, Some(broken_nix), NixOptions::default());
+    let (temp_dir, _cwd_guard, paths, config) = setup_isolated_test_files(yaml, Some(broken_nix));
 
-    // Use fixture lock file
     copy_fixture_lock(temp_dir.path());
 
-    // Try to assemble or eval - error can occur at either stage
-    let assemble_result = backend.assemble(test_bootstrap_args(&paths, &config)).await;
+    let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
+    let init_result = init_backend(
+        paths.clone(),
+        config.clone(),
+        NixOptions::default(),
+        cachix_manager,
+        Shutdown::new(),
+    )
+    .await;
 
-    let error_msg = if let Err(e) = assemble_result {
-        format!("{:?}", e)
-    } else {
-        let result = backend.eval(&["packages"]).await;
-        assert!(result.is_err(), "Eval should fail with undefined variable");
-        format!("{:?}", result.unwrap_err())
+    let error_msg = match init_result {
+        Err(e) => format!("{:?}", e),
+        Ok(backend) => {
+            let result = backend.eval(&["packages"]).await;
+            assert!(result.is_err(), "Eval should fail with undefined variable");
+            format!("{:?}", result.unwrap_err())
+        }
     };
 
     // The error message MUST include the specific Nix error details.
@@ -1043,13 +881,8 @@ async fn test_metadata_with_corrupted_lock_file() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Create a corrupted lock file in the isolated test directory
     let lock_file_path = temp_dir.path().join("devenv.lock");
     std::fs::write(&lock_file_path, "{ invalid json here")
@@ -1085,13 +918,8 @@ async fn test_gc_with_invalid_store_paths() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Test gc() with invalid store paths - should handle gracefully
     let invalid_paths = vec![
         temp_dir.path().join("not/a/store/path"),
@@ -1123,7 +951,7 @@ async fn test_update_with_invalid_override_inputs() {
     let override_inputs = vec!["nixpkgs".to_string()];
 
     let (_temp_dir, _cwd_guard, backend, _paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
 
     // Update should succeed - malformed override is ignored (no assemble needed for update-only tests)
     let result = backend
@@ -1155,13 +983,8 @@ async fn test_eval_empty_attributes_array() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (_temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Test eval(&[]) - should return empty JSON array
     let result = backend.eval(&[]).await;
 
@@ -1192,13 +1015,8 @@ async fn test_build_empty_attributes_array() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (_temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Test build(&[], None, None) - should return empty vec
     let result = backend.build(&[], None, None).await;
 
@@ -1225,13 +1043,8 @@ async fn test_build_gc_root_already_exists() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for build
     copy_fixture_lock(temp_dir.path());
 
@@ -1281,7 +1094,7 @@ async fn test_update_lock_file_already_exists() {
 "#;
 
     let (_temp_dir, _cwd_guard, backend, _paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
 
     // Create initial lock (no assemble needed for update-only tests)
     backend
@@ -1340,13 +1153,8 @@ async fn test_metadata_before_any_update() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (_temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Call metadata before any update - should succeed and show "no lock file"
     let result = backend.metadata().await;
     assert!(
@@ -1388,13 +1196,8 @@ async fn test_get_bash_returns_valid_path() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for bash evaluation
     copy_fixture_lock(temp_dir.path());
 
@@ -1428,13 +1231,8 @@ async fn test_get_bash_caching_with_gc_root() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for bash evaluation
     copy_fixture_lock(temp_dir.path());
 
@@ -1473,13 +1271,8 @@ async fn test_get_bash_with_refresh_cached_output() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for bash evaluation
     copy_fixture_lock(temp_dir.path());
 
@@ -1513,13 +1306,8 @@ async fn test_get_bash_returns_executable() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for bash evaluation
     copy_fixture_lock(temp_dir.path());
 
@@ -1563,13 +1351,8 @@ async fn test_gc_with_actual_nix_store_paths() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for build
     copy_fixture_lock(temp_dir.path());
 
@@ -1619,13 +1402,8 @@ async fn test_gc_with_protected_gc_roots() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for build
     copy_fixture_lock(temp_dir.path());
 
@@ -1687,13 +1465,8 @@ async fn test_gc_computes_closure_correctly() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for build
     copy_fixture_lock(temp_dir.path());
 
@@ -1737,13 +1510,8 @@ async fn test_gc_reports_bytes_freed() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for build
     copy_fixture_lock(temp_dir.path());
 
@@ -1788,13 +1556,8 @@ async fn test_gc_with_mixed_store_and_temp_paths() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for build
     copy_fixture_lock(temp_dir.path());
 
@@ -1879,13 +1642,8 @@ async fn test_workflow_build_then_incremental_update() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (_temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (_temp_dir, _cwd_guard, backend, _paths, config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Initial update and build
     backend
         .update(&None, &config.inputs, &[])
@@ -1931,13 +1689,8 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for builds
     copy_fixture_lock(temp_dir.path());
 
@@ -1997,7 +1750,7 @@ async fn test_update_with_many_inputs() {
 "#;
 
     let (_temp_dir, _cwd_guard, backend, _paths, config) =
-        setup_isolated_test_env(yaml_content, None, NixOptions::default());
+        setup_isolated_test_env(yaml_content, None, NixOptions::default()).await;
 
     // Update with 6 inputs (no assemble needed for update-only tests)
     let result = backend.update(&None, &config.inputs, &[]).await;
@@ -2057,7 +1810,7 @@ async fn test_update_with_nested_input_follows() {
 "#;
 
     let (_temp_dir, _cwd_guard, backend, _paths, config) =
-        setup_isolated_test_env(yaml_content, None, NixOptions::default());
+        setup_isolated_test_env(yaml_content, None, NixOptions::default()).await;
 
     // Update with "follows" references (no assemble needed for update-only tests)
     let result = backend.update(&None, &config.inputs, &[]).await;
@@ -2117,13 +1870,8 @@ async fn test_build_multiple_attributes_single_call() {
     url: github:cachix/git-hooks.nix
 "#;
 
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Use fixture lock file for builds
     copy_fixture_lock(temp_dir.path());
 
@@ -2164,15 +1912,10 @@ async fn test_eval_state_mutex_under_concurrent_eval() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
 
     let backend = std::sync::Arc::new(backend);
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
     // Use fixture lock file for evaluation
     copy_fixture_lock(temp_dir.path());
 
@@ -2215,13 +1958,8 @@ async fn test_concurrent_build_operations() {
   languages.php.enable = true;
 }"#;
 
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, Some(devenv_nix), NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
-
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, Some(devenv_nix), NixOptions::default()).await;
     // Use fixture lock file for builds
     copy_fixture_lock(temp_dir.path());
 
@@ -2291,12 +2029,8 @@ async fn test_input_tracker_accumulates_across_evals() {
   git-hooks:
     url: github:cachix/git-hooks.nix
 "#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, None, NixOptions::default());
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     copy_fixture_lock(temp_dir.path());
 
     let tracker = backend
@@ -2355,8 +2089,8 @@ async fn test_nested_import_tracked_across_evals() {
     url: github:cachix/git-hooks.nix
 "#;
     let nix = r#"{ ... }: { imports = [ ./nested/child.nix ]; }"#;
-    let (temp_dir, _cwd_guard, backend, paths, config) =
-        setup_isolated_test_env(yaml, Some(nix), NixOptions::default());
+    let (temp_dir, _cwd_guard, backend, _paths, _config) =
+        setup_isolated_test_env(yaml, Some(nix), NixOptions::default()).await;
 
     // Create the nested import target.
     let nested_dir = temp_dir.path().join("nested");
@@ -2367,10 +2101,6 @@ async fn test_nested_import_tracked_across_evals() {
     )
     .expect("Failed to write nested/child.nix");
 
-    backend
-        .assemble(test_bootstrap_args(&paths, &config))
-        .await
-        .expect("Failed to assemble");
     copy_fixture_lock(temp_dir.path());
 
     let tracker = backend

@@ -1,9 +1,7 @@
 #![cfg(feature = "test-nix-store")]
 //! Integration tests for flake locking functionality
 
-use devenv_core::{
-    BootstrapArgs, CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixOptions,
-};
+use devenv_core::{Config, NixBackend, NixOptions};
 use devenv_nix_backend::load_lock_file;
 use devenv_nix_backend_macros::nix_test;
 use nix_bindings_fetchers::FetchersSettings;
@@ -14,64 +12,7 @@ use tokio_shutdown::Shutdown;
 
 // Import shared test utilities
 mod common;
-use common::{create_backend, create_test_cachix_manager, get_current_system};
-
-/// Helper struct to keep NixArgs and its owned values alive together
-struct TestNixArgs {
-    tmpdir: PathBuf,
-    runtime: PathBuf,
-    dotfile_path: PathBuf,
-}
-
-impl TestNixArgs {
-    fn new(paths: &DevenvPaths) -> Self {
-        let dotfile_name = paths
-            .dotfile
-            .file_name()
-            .expect("dotfile should have a file name")
-            .to_string_lossy();
-        TestNixArgs {
-            tmpdir: paths.root.join("tmp"),
-            runtime: paths.root.join("runtime"),
-            dotfile_path: PathBuf::from(format!("./{}", dotfile_name)),
-        }
-    }
-
-    fn to_nix_args<'a>(
-        &'a self,
-        paths: &'a DevenvPaths,
-        config: &'a Config,
-        nixpkgs_config: devenv_core::config::NixpkgsConfig,
-    ) -> NixArgs<'a> {
-        NixArgs {
-            version: "1.0.0",
-            is_development_version: false,
-            require_version_match: false,
-            system: get_current_system(),
-            devenv_root: &paths.root,
-            skip_local_src: false,
-            devenv_dotfile: &paths.dotfile,
-            devenv_dotfile_path: &self.dotfile_path,
-            devenv_tmpdir: &self.tmpdir,
-            devenv_runtime: &self.runtime,
-            devenv_istesting: true,
-            devenv_direnvrc_latest_version: 5,
-            container_name: None,
-            active_profiles: &[],
-            cli_options: CliOptionsConfig::default(),
-            hostname: None,
-            username: None,
-            git_root: None,
-            secretspec: None,
-            devenv_inputs: &config.inputs,
-            devenv_imports: &config.imports,
-            impure: false,
-            nixpkgs_config,
-            lock_fingerprint: "",
-            devenv_state: None,
-        }
-    }
-}
+use common::{create_backend, create_test_cachix_manager, init_backend};
 
 /// Create a test devenv.yaml file
 fn create_test_devenv_yaml(dir: &Path) -> PathBuf {
@@ -125,37 +66,28 @@ async fn test_create_flake_inputs() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     create_test_devenv_yaml(temp_dir.path());
 
-    // Create minimal devenv.nix - required when assemble() evaluates default.nix
+    // Minimal devenv.nix is required because backend init evaluates default.nix.
     fs::write(temp_dir.path().join("devenv.nix"), "{ }").expect("Failed to write devenv.nix");
 
     let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
     let paths = common::paths_under(temp_dir.path());
 
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    // Use offline mode to skip cachix config evaluation in assemble()
-    // This test focuses on lock file creation, not cachix configuration
+    // Use offline mode to skip cachix config evaluation during bootstrap.
+    // This test focuses on lock file creation, not cachix configuration.
     let nix_cli = NixOptions {
         offline: Some(true),
         ..Default::default()
     };
-    let backend = create_backend(
+    let backend = init_backend(
         paths.clone(),
         config.clone(),
         nix_cli,
         cachix_manager,
         Shutdown::new(),
     )
-    .expect("Failed to create backend");
-
-    let test_args = TestNixArgs::new(&paths);
-    let nix_args =
-        test_args.to_nix_args(&paths, &config, config.nixpkgs_config(get_current_system()));
-    let bootstrap_args =
-        BootstrapArgs::from_serializable(&nix_args).expect("Failed to serialize bootstrap args");
-    backend
-        .assemble(bootstrap_args)
-        .await
-        .expect("Failed to assemble backend");
+    .await
+    .expect("Failed to initialize backend");
 
     // Call update() which enables flakes and creates flake inputs
     let result = backend.update(&None, &config.inputs, &[]).await;
