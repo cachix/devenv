@@ -465,6 +465,39 @@ in cfg // {{
         Ok(backend)
     }
 
+    /// Construct a fully-initialized backend in a single call.
+    ///
+    /// Combines FFI/store setup with the framework-driven `assemble` step
+    /// so callers receive a backend that is ready for evaluation.
+    #[must_use = "init returns the constructed backend; dropping it discards the eval state"]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn init(
+        bootstrap_args: BootstrapArgs,
+        paths: DevenvPaths,
+        nixpkgs_config: NixpkgsConfig,
+        nix_settings: NixSettings,
+        cache_settings: CacheSettings,
+        cachix_manager: Arc<CachixManager>,
+        shutdown: Arc<Shutdown>,
+        eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
+        store: Option<std::path::PathBuf>,
+        port_allocator: Arc<PortAllocator>,
+    ) -> Result<Self> {
+        let backend = Self::new(
+            paths,
+            nixpkgs_config,
+            nix_settings,
+            cache_settings,
+            cachix_manager,
+            shutdown,
+            eval_cache_pool,
+            store,
+            port_allocator,
+        )?;
+        backend.assemble(bootstrap_args).await?;
+        Ok(backend)
+    }
+
     /// Access the log bridge for testing (registering observers to verify file deps).
     #[cfg(feature = "test-nix-store")]
     pub fn log_bridge(&self) -> &Arc<NixLogBridge> {

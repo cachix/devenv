@@ -254,6 +254,10 @@ pub struct Devenv {
     // Pre-serialized bootstrap arguments shared with the backend.
     bootstrap_args: OnceCell<BootstrapArgs>,
 
+    // Tracks whether the backend has been initialized with the bootstrap
+    // arguments. Empty until `backend()` is first awaited.
+    backend_assembled: OnceCell<()>,
+
     // Port allocator shared with NixBackend for holding port reservations
     port_allocator: Arc<PortAllocator>,
 
@@ -429,6 +433,7 @@ impl Devenv {
             eval_cache_pool,
             secretspec: OnceCell::new(),
             bootstrap_args: OnceCell::new(),
+            backend_assembled: OnceCell::new(),
             port_allocator,
             native_process_manager: OnceCell::new(),
             shutdown: options.shutdown,
@@ -546,12 +551,27 @@ impl Devenv {
         self.eval_cache_pool.get()
     }
 
-    /// Get the bootstrap arguments shared with the backend.
+    /// Get the bootstrap arguments shared with the backend, building them on
+    /// first call.
     ///
-    /// Set during `assemble()`. Callers that need to splice the same payload
-    /// the backend used (LSP, MCP, shell-cache lookups) read it through here.
-    pub fn bootstrap_args(&self) -> Option<&BootstrapArgs> {
-        self.bootstrap_args.get()
+    /// Callers that need to splice the same payload the backend used
+    /// (LSP, MCP, shell-cache lookups) read it through here.
+    pub async fn bootstrap_args(&self) -> Result<&BootstrapArgs> {
+        self.bootstrap_args
+            .get_or_try_init(|| async { self.build_bootstrap_args().await })
+            .await
+    }
+
+    /// Get the backend, ensuring it has been initialized with the framework's
+    /// bootstrap arguments.
+    pub async fn backend(&self) -> Result<&dyn NixBackend> {
+        self.backend_assembled
+            .get_or_try_init(|| async {
+                let bootstrap_args = self.bootstrap_args().await?.clone();
+                self.nix.assemble(bootstrap_args).await
+            })
+            .await?;
+        Ok(&**self.nix)
     }
 
     /// Get the cache key for shell evaluation.
@@ -897,31 +917,31 @@ impl Devenv {
             .in_activity(&activity)
             .await?;
 
-        // Assemble is required for changelog.show_new() which builds changelog.json
-        // Allow assemble to fail gracefully - changelogs are informational only
-        match self.assemble().await {
-            Ok(_) => {
-                // Show new changelogs (if any)
-                let changelog = crate::changelog::Changelog::new(&**self.nix, &self.paths());
+        // Backend init is required for changelog.show_new() which builds changelog.json.
+        // Allow it to fail gracefully — changelogs are informational only.
+        match self.backend().await {
+            Ok(backend) => {
+                let changelog = crate::changelog::Changelog::new(backend, &self.paths());
                 match changelog.show_new().await {
                     Ok(output) => Ok(output),
                     Err(e) => {
-                        // Don't fail the update if changelogs fail to load
                         tracing::warn!("Failed to show changelogs: {}", e);
                         Ok(None)
                     }
                 }
             }
             Err(e) => {
-                tracing::warn!("Failed to assemble environment, skipping changelog: {}", e);
+                tracing::warn!(
+                    "Failed to initialize the backend, skipping changelog: {}",
+                    e
+                );
                 Ok(None)
             }
         }
     }
 
     pub async fn prepare_repl(&self) -> Result<()> {
-        self.assemble().await?;
-        self.nix.prepare_repl().await?;
+        self.backend().await?.prepare_repl().await?;
         Ok(())
     }
 
@@ -977,7 +997,8 @@ impl Devenv {
         verbosity: tasks::VerbosityLevel,
         tui: bool,
     ) -> Result<String> {
-        self.assemble().await?;
+        self.reserve_running_ports().await;
+        self.backend().await?;
         if roots.is_empty() {
             bail!("No tasks specified.");
         }
@@ -1029,7 +1050,7 @@ impl Devenv {
     }
 
     pub async fn tasks_list(&self) -> Result<String> {
-        self.assemble().await?;
+        self.backend().await?;
 
         let tasks = self.load_tasks().await?;
 
@@ -1052,7 +1073,7 @@ impl Devenv {
         verbosity: tasks::VerbosityLevel,
         tui: bool,
     ) -> Result<(BTreeMap<String, String>, Vec<String>)> {
-        self.assemble().await?;
+        self.backend().await?;
 
         let envs = match pre_captured_envs {
             Some(e) => e,
@@ -1220,11 +1241,10 @@ impl Devenv {
         Ok(envs)
     }
 
-    /// Assemble, build dev environment, cache it, and capture shell env vars.
+    /// Build the dev environment, cache it, and capture shell env vars.
     async fn configure_shell(&self) -> Result<HashMap<String, String>> {
         let phase1 = devenv_activity::start!(Activity::operation("Configuring shell").parent(None));
         async {
-            self.assemble().await?;
             let dev_env = self.get_dev_environment_inner(false).await?;
             let _ = self.dev_env_cache.set(dev_env);
             self.capture_shell_environment().await
@@ -1317,14 +1337,13 @@ impl Devenv {
     }
 
     pub async fn info(&self) -> Result<String> {
-        self.assemble().await?;
-        self.nix.metadata().await
+        self.backend().await?.metadata().await
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<Vec<(String, PathBuf)>> {
         let activity = activity!(INFO, operation, "Building");
         async move {
-            self.assemble().await?;
+            self.backend().await?;
 
             fn flatten_object(prefix: &str, value: &serde_json::Value) -> Vec<String> {
                 match value {
@@ -1412,7 +1431,7 @@ impl Devenv {
     pub async fn eval(&self, attributes: &[String]) -> Result<String> {
         let activity = activity!(INFO, operation, "Evaluating");
         async move {
-            self.assemble().await?;
+            self.backend().await?;
 
             let mut results = serde_json::Map::new();
 
@@ -1442,9 +1461,10 @@ impl Devenv {
         verbosity: tasks::VerbosityLevel,
         tui: bool,
     ) -> Result<RunMode> {
-        // Set strict port mode before assemble (which triggers port allocation)
+        // Set strict port mode before backend init triggers port allocation.
         self.port_allocator.set_strict(options.strict_ports);
         self.port_allocator.set_enabled(true);
+        self.reserve_running_ports().await;
 
         // ── Phase 1: Configuring shell ──────────────────────────────
         let mut envs = self.configure_shell().await?;
@@ -1960,19 +1980,6 @@ impl Devenv {
         }
     }
 
-    /// Assemble the devenv environment and return the serialized NixArgs string.
-    /// The returned string can be used with `import bootstrap/default.nix <args>`.
-    pub async fn assemble(&self) -> Result<String> {
-        self.reserve_running_ports().await;
-
-        let bootstrap_args = self
-            .bootstrap_args
-            .get_or_try_init(|| async { self.build_bootstrap_args().await })
-            .await?;
-
-        Ok(bootstrap_args.as_str().to_owned())
-    }
-
     async fn build_bootstrap_args(&self) -> Result<BootstrapArgs> {
         if self.input_overrides.nix_module_options.is_empty()
             && !self.from_external
@@ -2083,9 +2090,7 @@ impl Devenv {
             devenv_state: self.devenv_state.as_deref(),
         };
 
-        let bootstrap_args = BootstrapArgs::from_serializable(&args)?;
-        self.nix.assemble(bootstrap_args.clone()).await?;
-        Ok(bootstrap_args)
+        BootstrapArgs::from_serializable(&args)
     }
 
     fn resolve_secretspec(&self) -> Result<()> {
@@ -2179,11 +2184,11 @@ impl Devenv {
     /// Called directly by `up()` (which creates its own "Configuring shell" activity)
     /// and by `get_dev_environment()` (which wraps with `#[activity]`).
     async fn get_dev_environment_inner(&self, json: bool) -> Result<DevEnv> {
-        self.assemble().await?;
+        let backend = self.backend().await?;
 
         let gc_root = self.devenv_dot_gc.join("shell");
         let span = tracing::debug_span!("evaluating_dev_env");
-        let env = self.nix.dev_env(json, &gc_root).instrument(span).await?;
+        let env = backend.dev_env(json, &gc_root).instrument(span).await?;
 
         // Save timestamped GC root symlink for history tracking and GC protection
         // This is backend-independent: all backends create a gc_root symlink,

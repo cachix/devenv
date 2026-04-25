@@ -1015,7 +1015,7 @@ async fn dispatch_command(
             .map_or(CommandResult::Done, CommandResult::Print)),
         // hidden
         Commands::Assemble => {
-            devenv.assemble().await?;
+            devenv.backend().await?;
             Ok(CommandResult::Done)
         }
         Commands::PrintDevEnv { json } => {

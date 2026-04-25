@@ -59,6 +59,28 @@ impl SnixBackend {
         })
     }
 
+    /// Construct a fully-initialized backend in a single call.
+    #[must_use = "init returns the constructed backend; dropping it discards the eval state"]
+    pub async fn init(
+        bootstrap_args: BootstrapArgs,
+        nix_settings: NixSettings,
+        cache_settings: CacheSettings,
+        paths: DevenvPaths,
+        cachix_manager: Arc<CachixManager>,
+        eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
+    ) -> Result<Self> {
+        let backend = Self::new(
+            nix_settings,
+            cache_settings,
+            paths,
+            cachix_manager,
+            eval_cache_pool,
+        )
+        .await?;
+        backend.assemble(bootstrap_args).await?;
+        Ok(backend)
+    }
+
     /// Create a fresh Snix evaluator for a single operation.
     ///
     /// Since snix types use single-threaded Rc pointers, we cannot store them in shared state.

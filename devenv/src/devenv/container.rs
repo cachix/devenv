@@ -14,7 +14,7 @@ fn sanitize_container_name(name: &str) -> String {
 impl Devenv {
     pub async fn container_build(&self, name: &str) -> Result<String> {
         let _ = self.container_name.set(name.to_string());
-        self.assemble().await?;
+        self.backend().await?;
 
         let sanitized_name = sanitize_container_name(name);
         let gc_root = self

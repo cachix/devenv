@@ -45,7 +45,7 @@ struct DevenvPackageResult {
 impl Devenv {
     #[instrument_activity("Searching options and packages")]
     pub async fn search(&self, name: &str) -> Result<String> {
-        self.assemble().await?;
+        self.backend().await?;
 
         // Run both searches concurrently
         let (options_results, package_results) =

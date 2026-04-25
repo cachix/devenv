@@ -1,6 +1,7 @@
 // SecretsNeedPrompting fields trigger unused_assignments due to cross-crate usage (rustc 1.93)
 #![allow(unused_assignments)]
 
+pub mod backend;
 pub mod changelog;
 pub mod cli;
 mod devenv;

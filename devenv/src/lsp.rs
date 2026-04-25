@@ -36,9 +36,7 @@ struct OptionEntry {
 
 /// Run the LSP server
 pub async fn run(devenv: &Devenv, print_config: bool) -> Result<()> {
-    // Assemble and get the serialized NixArgs
-    let nix_args = devenv.assemble().await?;
-
+    let nix_args = devenv.bootstrap_args().await?.as_str();
     let bootstrap_path = devenv.dotfile().join("bootstrap");
 
     // Expression that imports default.nix with proper args and accesses .project.options

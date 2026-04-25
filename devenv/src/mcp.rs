@@ -103,8 +103,8 @@ impl DevenvMcpServer {
 
         let devenv = Devenv::new(self.options.clone()).await;
 
-        // Assemble once for all operations
-        devenv.assemble().await?;
+        // Initialize the backend once for all operations.
+        devenv.backend().await?;
 
         // Fetch and cache packages
         {
@@ -670,7 +670,7 @@ mod tests {
         let server = DevenvMcpServer::new(options.clone());
 
         let devenv = Devenv::new(options).await;
-        devenv.assemble().await.unwrap();
+        devenv.backend().await.unwrap();
 
         let packages = server.fetch_packages_with_devenv(&devenv).await;
 
@@ -743,7 +743,7 @@ mod tests {
         let server = DevenvMcpServer::new(options.clone());
 
         let devenv = Devenv::new(options).await;
-        devenv.assemble().await.unwrap();
+        devenv.backend().await.unwrap();
 
         let options = server.fetch_options_with_devenv(&devenv).await;
 
