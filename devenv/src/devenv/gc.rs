@@ -24,10 +24,12 @@ impl Devenv {
                 .await
         };
 
-        let (paths_deleted, bytes_freed) = {
+        let stats = {
             let activity = activity!(INFO, operation, "Running garbage collection");
-            self.nix.gc(to_gc).in_activity(&activity).await?
+            self.backend().gc(to_gc).in_activity(&activity).await?
         };
+        let paths_deleted = stats.paths_deleted;
+        let bytes_freed = stats.bytes_freed;
 
         Ok((paths_deleted, bytes_freed))
     }

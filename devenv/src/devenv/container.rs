@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use devenv_core::BuildOptions;
 use miette::{Result, bail, miette};
 
 use super::tasks::{self, Tasks};
@@ -14,7 +15,6 @@ fn sanitize_container_name(name: &str) -> String {
 impl Devenv {
     pub async fn container_build(&self, name: &str) -> Result<String> {
         let _ = self.container_name.set(name.to_string());
-        self.backend().await?;
 
         let sanitized_name = sanitize_container_name(name);
         let gc_root = self
@@ -31,17 +31,17 @@ impl Devenv {
         } else {
             &self.nix_settings.system
         };
+        let attr = format!("devenv.perSystem.{target_system}.config.containers.{name}.derivation");
         let paths = self
-            .nix
-            .build(
-                &[&format!(
-                    "devenv.perSystem.{target_system}.config.containers.{name}.derivation"
-                )],
-                None,
-                Some(&gc_root),
+            .backend()
+            .build_devenv(
+                &[attr.as_str()],
+                BuildOptions {
+                    gc_root: Some(gc_root),
+                },
             )
             .await?;
-        let container_store_path = paths[0].to_string_lossy().into_owned();
+        let container_store_path = paths[0].as_path().to_string_lossy().into_owned();
         Ok(container_store_path)
     }
 
@@ -59,15 +59,17 @@ impl Devenv {
         let gc_root = self
             .devenv_dot_gc
             .join(format!("container-{sanitized_name}-copy"));
+        let attr = format!("devenv.config.containers.{name}.copyScript");
         let paths = self
-            .nix
-            .build(
-                &[&format!("devenv.config.containers.{name}.copyScript")],
-                None,
-                Some(&gc_root),
+            .backend()
+            .build_devenv(
+                &[attr.as_str()],
+                BuildOptions {
+                    gc_root: Some(gc_root),
+                },
             )
             .await?;
-        let copy_script = paths[0].to_string_lossy().into_owned();
+        let copy_script = paths[0].as_path().to_string_lossy().into_owned();
 
         let envs = self.capture_shell_environment().await?;
 
@@ -122,17 +124,19 @@ impl Devenv {
         let gc_root = self
             .devenv_dot_gc
             .join(format!("container-{sanitized_name}-run"));
+        let attr = format!("devenv.config.containers.{name}.dockerRun");
         let paths = self
-            .nix
-            .build(
-                &[&format!("devenv.config.containers.{name}.dockerRun")],
-                None,
-                Some(&gc_root),
+            .backend()
+            .build_devenv(
+                &[attr.as_str()],
+                BuildOptions {
+                    gc_root: Some(gc_root),
+                },
             )
             .await?;
 
         Ok(ShellCommand {
-            command: std::process::Command::new(&paths[0]),
+            command: std::process::Command::new(paths[0].as_path()),
         })
     }
 }

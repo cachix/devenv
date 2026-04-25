@@ -11,13 +11,13 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Once;
 
-// Export the NixBackend implementation
-pub mod nix_backend;
-pub use nix_backend::ProjectRoot;
+pub mod backend;
+pub use backend::{NixCBackend, ProjectRoot};
 
-// Pre-bootstrap context for lock-file work (transitional).
-pub mod locking_context;
-pub use locking_context::LockingContext;
+pub mod cnix_store;
+pub use cnix_store::CNixStore;
+
+pub mod lock;
 
 use std::cell::RefCell;
 

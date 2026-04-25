@@ -2,7 +2,7 @@
 
 use crate::devenv::{Devenv, DevenvOptions};
 use devenv_activity::{Activity, activity};
-use devenv_core::Options;
+use devenv_core::BuildOptions;
 use miette::{Result, miette};
 use rmcp::handler::server::tool::{ToolCallContext, ToolRouter};
 use rmcp::handler::server::wrapper::Parameters;
@@ -101,10 +101,7 @@ impl DevenvMcpServer {
     async fn initialize(&self) -> Result<()> {
         info!("Initializing MCP server cache...");
 
-        let devenv = Devenv::new(self.options.clone()).await;
-
-        // Initialize the backend once for all operations.
-        devenv.backend().await?;
+        let devenv = Devenv::new(self.options.clone()).await?;
 
         // Fetch and cache packages
         {
@@ -143,11 +140,11 @@ impl DevenvMcpServer {
     async fn fetch_packages_with_devenv(&self, devenv: &Devenv) -> Result<Vec<PackageInfo>> {
         info!("Fetching available packages from nixpkgs...");
 
-        let search_options = Options {
-            max_results: None,
-            ..Default::default()
-        };
-        let search_results = devenv.nix.search(".*", Some(search_options)).await?;
+        let search_results = devenv
+            .cnix()
+            .ok_or_else(|| miette!("search requires the C-Nix backend"))?
+            .search(".*", None)
+            .await?;
 
         let packages: Vec<PackageInfo> = search_results
             .into_iter()
@@ -174,19 +171,13 @@ impl DevenvMcpServer {
     async fn fetch_options_with_devenv(&self, devenv: &Devenv) -> Result<Vec<OptionInfo>> {
         info!("Fetching available configuration options...");
 
-        // Build the optionsJSON attribute like in devenv.rs search function
-        let build_options = Options {
-            cache_output: true,
-            ..Default::default()
-        };
-
         let options_paths = devenv
-            .nix
-            .build(&["optionsJSON"], Some(build_options), None)
+            .backend()
+            .build_devenv(&["optionsJSON"], BuildOptions::default())
             .await?;
 
-        // Read the options.json file from the build result
         let options_json_path = options_paths[0]
+            .as_path()
             .join("share")
             .join("doc")
             .join("nixos")
@@ -669,8 +660,7 @@ mod tests {
         };
         let server = DevenvMcpServer::new(options.clone());
 
-        let devenv = Devenv::new(options).await;
-        devenv.backend().await.unwrap();
+        let devenv = Devenv::new(options).await.unwrap();
 
         let packages = server.fetch_packages_with_devenv(&devenv).await;
 
@@ -742,8 +732,7 @@ mod tests {
         };
         let server = DevenvMcpServer::new(options.clone());
 
-        let devenv = Devenv::new(options).await;
-        devenv.backend().await.unwrap();
+        let devenv = Devenv::new(options).await.unwrap();
 
         let options = server.fetch_options_with_devenv(&devenv).await;
 

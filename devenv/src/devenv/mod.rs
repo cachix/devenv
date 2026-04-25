@@ -3,17 +3,17 @@ mod gc;
 mod search;
 
 use super::{processes, tasks, util};
-use clap::crate_version;
 use devenv_activity::{
     Activity, ActivityInstrument, ActivityLevel, activity, instrument_activity, message,
 };
 use devenv_cache_core::compute_string_hash;
 use devenv_core::{
+    Backend, Evaluator,
     bootstrap_args::BootstrapArgs,
     cachix::{CachixManager, CachixPaths},
     config::{Input, NixBackendType, NixpkgsConfig},
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
-    nix_backend::{DevenvPaths, NixBackend},
+    nix_backend::DevenvPaths,
     nix_config::NixConfig,
     ports::PortAllocator,
     settings::{CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings},
@@ -217,16 +217,15 @@ pub struct Devenv {
     pub secret_settings: SecretSettings,
     pub input_overrides: InputOverrides,
     pub from_external: bool,
-    require_version_match: bool,
-    is_testing: bool,
 
     /// Aggregated, immutable configuration shared with the backend via
     /// `Arc<NixConfig>`.
     pub config: Arc<NixConfig>,
 
-    pub nix: Arc<Box<dyn NixBackend>>,
+    backend: Backend<dyn Evaluator>,
 
-    cachix_manager: Arc<CachixManager>,
+    #[allow(dead_code)]
+    _cachix_manager: Arc<CachixManager>,
 
     // All kinds of paths
     devenv_root: PathBuf,
@@ -253,14 +252,7 @@ pub struct Devenv {
     // Secretspec resolved data to pass to Nix
     secretspec: OnceCell<ResolvedSecrets>,
 
-    // Pre-serialized bootstrap arguments shared with the backend.
-    bootstrap_args: OnceCell<BootstrapArgs>,
-
-    // Tracks whether the backend has been initialized with the bootstrap
-    // arguments. Empty until `backend()` is first awaited.
-    backend_assembled: OnceCell<()>,
-
-    // Port allocator shared with NixBackend for holding port reservations
+    // Port allocator shared with the backend for holding port reservations.
     port_allocator: Arc<PortAllocator>,
 
     // Native process manager started in-process (for detach mode used by test())
@@ -301,7 +293,7 @@ fn compute_profile_dir_suffix(profiles: &[String]) -> Option<String> {
 }
 
 impl Devenv {
-    pub async fn new(options: DevenvOptions) -> Self {
+    pub async fn new(options: DevenvOptions) -> Result<Self> {
         let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv");
         let devenv_home = xdg_dirs
             .get_data_home()
@@ -377,36 +369,154 @@ impl Devenv {
         // Create port allocator shared with backend for holding port reservations
         let port_allocator = Arc::new(PortAllocator::new());
 
-        let nix: Box<dyn NixBackend> = match nix_settings.backend {
-            NixBackendType::Nix => Box::new(
-                devenv_nix_backend::nix_backend::NixCBackend::new(
-                    paths,
-                    options.nixpkgs_config.clone(),
-                    nix_settings.clone(),
-                    cache_settings.clone(),
-                    cachix_manager.clone(),
-                    options.shutdown.clone(),
-                    Some(eval_cache_pool.clone()),
+        if options.input_overrides.nix_module_options.is_empty()
+            && !options.from_external
+            && !devenv_root.join("devenv.nix").exists()
+        {
+            bail!(indoc::indoc! {"
+            File devenv.nix does not exist. To get started, run:
+
+                $ devenv init
+            "});
+        }
+
+        fs::create_dir_all(&devenv_dot_gc)
+            .await
+            .map_err(|e| miette::miette!("Failed to create {}: {}", devenv_dot_gc.display(), e))?;
+        util::write_file_with_lock(
+            devenv_dotfile.join("imports.txt"),
+            options.imports.join("\n"),
+        )?;
+        fs::create_dir_all(&devenv_runtime)
+            .await
+            .map_err(|e| miette::miette!("Failed to create {}: {}", devenv_runtime.display(), e))?;
+
+        if cache_settings.eval_cache {
+            eval_cache_pool
+                .get_or_try_init(|| async {
+                    let db_path = devenv_dotfile.join("nix-eval-cache.db");
+                    let db = devenv_cache_core::db::Database::new(
+                        db_path,
+                        &devenv_eval_cache::db::MIGRATIONS,
+                    )
+                    .await
+                    .map_err(|e| {
+                        miette::miette!("Failed to initialize eval cache database: {}", e)
+                    })?;
+                    Ok::<_, miette::Report>(db.pool().clone())
+                })
+                .await?;
+        }
+
+        let mut secretspec_cell: OnceCell<ResolvedSecrets> = OnceCell::new();
+        resolve_secretspec_into(&devenv_root, &secret_settings, &mut secretspec_cell)?;
+
+        let store_settings = cachix_manager
+            .store_settings(None)
+            .await
+            .unwrap_or_default();
+
+        let backend = match nix_settings.backend {
+            NixBackendType::Nix => {
+                // Phase 1: bring up Nix, open the store, build settings,
+                // validate the lock against a transient eval state, then
+                // drop it before phase 2 builds the long-lived one.
+                let gc_registration =
+                    crate::backend::init_nix(&nix_settings, &store_settings)?;
+                let store = crate::backend::open_store(&store_settings)?;
+                let (flake_settings, fetchers_settings) = crate::backend::build_settings()?;
+
+                let fingerprint = {
+                    let lock_eval_state = crate::backend::build_lock_eval_state(
+                        &store,
+                        &paths.root,
+                        &flake_settings,
+                    )?;
+                    devenv_nix_backend::lock::validate_and_load(
+                        &lock_eval_state,
+                        &store,
+                        &fetchers_settings,
+                        &flake_settings,
+                        &paths.root,
+                        &options.inputs,
+                    )?
+                };
+
+                let bootstrap_args = build_bootstrap_args_inline(
+                    &paths,
+                    &devenv_root,
+                    &devenv_dotfile,
+                    &devenv_tmp,
+                    &devenv_runtime,
+                    options.devenv_state.as_deref(),
+                    &options.inputs,
+                    &options.imports,
+                    &options.nixpkgs_config,
+                    &nix_settings,
+                    &shell_settings,
+                    &options.input_overrides,
+                    options.from_external,
+                    options.require_version_match,
+                    options.is_testing,
+                    options.git_root.as_deref(),
+                    secretspec_cell.get(),
                     None,
-                    port_allocator.clone(),
-                )
-                .expect("Failed to initialize Nix backend"),
-            ),
-            #[cfg(feature = "snix")]
-            NixBackendType::Snix => Box::new(
-                devenv_snix_backend::SnixBackend::new(
+                    &fingerprint,
+                )?;
+                let bootstrap_args = Arc::new(bootstrap_args);
+
+                // Phase 2: long-lived backend.
+                let cnix = devenv_nix_backend::NixCBackend::new(
+                    paths.clone(),
                     nix_settings.clone(),
                     cache_settings.clone(),
-                    paths,
-                    cachix_manager.clone(),
+                    &options.nixpkgs_config,
+                    store,
+                    flake_settings,
+                    fetchers_settings,
+                    gc_registration,
+                    bootstrap_args.clone(),
+                    port_allocator.clone(),
                     Some(eval_cache_pool.clone()),
-                )
-                .await
-                .expect("Failed to initialize Snix backend"),
-            ),
+                )?;
+                Backend::<dyn Evaluator>::new(Arc::new(cnix) as Arc<dyn Evaluator>, bootstrap_args)
+            }
+            #[cfg(feature = "snix")]
+            NixBackendType::Snix => {
+                let bootstrap_args = build_bootstrap_args_inline(
+                    &paths,
+                    &devenv_root,
+                    &devenv_dotfile,
+                    &devenv_tmp,
+                    &devenv_runtime,
+                    options.devenv_state.as_deref(),
+                    &options.inputs,
+                    &options.imports,
+                    &options.nixpkgs_config,
+                    &nix_settings,
+                    &shell_settings,
+                    &options.input_overrides,
+                    options.from_external,
+                    options.require_version_match,
+                    options.is_testing,
+                    options.git_root.as_deref(),
+                    secretspec_cell.get(),
+                    None,
+                    "",
+                )?;
+                let bootstrap_args = Arc::new(bootstrap_args);
+
+                let snix = devenv_snix_backend::SnixBackend::new(
+                    nix_settings.clone(),
+                    paths.clone(),
+                    bootstrap_args.clone(),
+                    port_allocator.clone(),
+                )?;
+                Backend::<dyn Evaluator>::new(Arc::new(snix) as Arc<dyn Evaluator>, bootstrap_args)
+            }
         };
 
-        Self {
+        Ok(Self {
             inputs: options.inputs,
             imports: options.imports,
             git_root: options.git_root,
@@ -417,8 +527,6 @@ impl Devenv {
             secret_settings,
             input_overrides: options.input_overrides,
             from_external: options.from_external,
-            require_version_match: options.require_version_match,
-            is_testing: options.is_testing,
             devenv_root,
             devenv_dotfile,
             devenv_state: options.devenv_state,
@@ -428,21 +536,19 @@ impl Devenv {
             devenv_runtime,
             process_runtime_dir: SyncOnceCell::new(),
             config,
-            nix: Arc::new(nix),
-            cachix_manager,
+            backend,
+            _cachix_manager: cachix_manager,
             container_name: std::sync::OnceLock::new(),
             has_processes: OnceCell::new(),
             dev_env_cache: OnceCell::new(),
             eval_cache_pool,
-            secretspec: OnceCell::new(),
-            bootstrap_args: OnceCell::new(),
-            backend_assembled: OnceCell::new(),
+            secretspec: secretspec_cell,
             port_allocator,
             native_process_manager: OnceCell::new(),
             shutdown: options.shutdown,
             task_exports: std::sync::Mutex::new(BTreeMap::new()),
             task_messages: std::sync::Mutex::new(Vec::new()),
-        }
+        })
     }
 
     pub fn processes_log(&self) -> PathBuf {
@@ -554,27 +660,25 @@ impl Devenv {
         self.eval_cache_pool.get()
     }
 
-    /// Get the bootstrap arguments shared with the backend, building them on
-    /// first call.
-    ///
-    /// Callers that need to splice the same payload the backend used
-    /// (LSP, MCP, shell-cache lookups) read it through here.
-    pub async fn bootstrap_args(&self) -> Result<&BootstrapArgs> {
-        self.bootstrap_args
-            .get_or_try_init(|| async { self.build_bootstrap_args().await })
-            .await
+    /// Get the bootstrap arguments built at startup.
+    pub fn bootstrap_args(&self) -> &BootstrapArgs {
+        self.backend.bootstrap_args()
     }
 
-    /// Get the backend, ensuring it has been initialized with the framework's
-    /// bootstrap arguments.
-    pub async fn backend(&self) -> Result<&dyn NixBackend> {
-        self.backend_assembled
-            .get_or_try_init(|| async {
-                let bootstrap_args = self.bootstrap_args().await?.clone();
-                self.nix.assemble(bootstrap_args).await
-            })
-            .await?;
-        Ok(&**self.nix)
+    /// Get the devenv-flavored backend adapter.
+    pub fn backend(&self) -> &Backend<dyn Evaluator> {
+        &self.backend
+    }
+
+    /// Typed handle to the C-Nix backend (when selected).
+    pub fn cnix(&self) -> Option<&devenv_nix_backend::NixCBackend> {
+        self.backend
+            .as_concrete::<devenv_nix_backend::NixCBackend>()
+    }
+
+    fn require_cnix(&self) -> Result<&devenv_nix_backend::NixCBackend> {
+        self.cnix()
+            .ok_or_else(|| miette!("C-Nix backend required for this operation"))
     }
 
     /// Get the cache key for shell evaluation.
@@ -585,7 +689,7 @@ impl Devenv {
     /// The cache key must match the backend's format which includes port allocation info:
     /// `{nix_args}:port_allocation={enabled}:strict_ports={strict}:shell`
     pub fn shell_cache_key(&self) -> Option<devenv_eval_cache::EvalCacheKey> {
-        let bootstrap_args = self.bootstrap_args.get()?;
+        let bootstrap_args = self.backend.bootstrap_args();
         let cache_key_args = devenv_core::nix_backend::eval_cache_key_args(
             bootstrap_args.as_str(),
             self.port_allocator.is_enabled(),
@@ -642,16 +746,16 @@ impl Devenv {
     }
 
     pub async fn changelogs(&self) -> Result<Option<String>> {
-        let changelog = crate::changelog::Changelog::new(&**self.nix, &self.paths());
+        let changelog = crate::changelog::Changelog::new(&self.backend, &self.paths());
         changelog.show_all().await
     }
 
     /// Invalidate cached state for hot-reload.
-    ///
-    /// This clears evaluation caches to force re-evaluation when files change.
-    /// Must be called before `print_dev_env()` during hot-reload to pick up changes.
-    pub fn invalidate_for_reload(&self) -> Result<()> {
-        self.nix.invalidate()
+    pub async fn invalidate_for_reload(&self) -> Result<()> {
+        if let Some(cnix) = self.cnix() {
+            cnix.invalidate_eval_state()?;
+        }
+        Ok(())
     }
 
     pub async fn print_dev_env(&self, json: bool) -> Result<String> {
@@ -669,15 +773,17 @@ impl Devenv {
         cmd: &Option<String>,
         args: &[String],
     ) -> Result<process::Command> {
-        // Use cached DevEnv if available (set by up() Phase 1), otherwise
-        // call get_dev_environment which wraps with "Configuring shell" activity.
-        let owned_dev_env;
-        let output = if let Some(cached) = self.dev_env_cache.get() {
-            &cached.output
-        } else {
-            owned_dev_env = self.get_dev_environment(false).await?;
-            &owned_dev_env.output
-        };
+        // Use cached DevEnv if available (set by up() Phase 1 or by an
+        // earlier `prepare_shell` call). Otherwise call
+        // `get_dev_environment` (which wraps with "Configuring shell")
+        // and seed the cache so subsequent callers reuse it instead of
+        // re-running the activity.
+        if self.dev_env_cache.get().is_none() {
+            let env = self.get_dev_environment(false).await?;
+            let _ = self.dev_env_cache.set(env);
+        }
+        let cached = self.dev_env_cache.get().expect("just set above");
+        let output = &cached.output;
 
         let bash = self.get_bash_path().await?;
 
@@ -911,53 +1017,44 @@ impl Devenv {
         };
 
         let activity = activity!(INFO, operation, &msg);
-        self.nix
-            .update(
+        let cnix = self.require_cnix()?;
+        async {
+            cnix.update(
                 input_name,
                 &self.inputs,
                 &self.input_overrides.override_inputs,
             )
-            .in_activity(&activity)
-            .await?;
+            .await
+        }
+        .in_activity(&activity)
+        .await?;
 
-        // Backend init is required for changelog.show_new() which builds changelog.json.
-        // Allow it to fail gracefully — changelogs are informational only.
-        match self.backend().await {
-            Ok(backend) => {
-                let changelog = crate::changelog::Changelog::new(backend, &self.paths());
-                match changelog.show_new().await {
-                    Ok(output) => Ok(output),
-                    Err(e) => {
-                        tracing::warn!("Failed to show changelogs: {}", e);
-                        Ok(None)
-                    }
-                }
-            }
+        let changelog = crate::changelog::Changelog::new(&self.backend, &self.paths());
+        match changelog.show_new().await {
+            Ok(output) => Ok(output),
             Err(e) => {
-                tracing::warn!(
-                    "Failed to initialize the backend, skipping changelog: {}",
-                    e
-                );
+                tracing::warn!("Failed to show changelogs: {}", e);
                 Ok(None)
             }
         }
     }
 
     pub async fn prepare_repl(&self) -> Result<()> {
-        self.backend().await?.prepare_repl().await?;
-        Ok(())
+        self.require_cnix()?.prepare_repl().await
     }
 
     pub async fn launch_repl(&self) -> Result<()> {
-        self.nix.launch_repl().await?;
-        Ok(())
+        self.require_cnix()?.launch_repl().await
     }
 
     pub async fn has_processes(&self) -> Result<bool> {
         let value = self
             .has_processes
             .get_or_try_init(|| async {
-                let processes = self.nix.eval(&["devenv.config.processes"]).await?;
+                let processes = self
+                    .backend
+                    .eval_devenv(&["devenv.config.processes"])
+                    .await?;
                 Ok::<bool, miette::Report>(processes.trim() != "{}")
             })
             .await?;
@@ -968,10 +1065,16 @@ impl Devenv {
     async fn load_tasks(&self) -> Result<Vec<tasks::TaskConfig>> {
         let tasks_json_file = {
             let gc_root = self.devenv_dot_gc.join("task-config");
-            self.nix
-                .build(&["devenv.config.task.config"], None, Some(&gc_root))
+            self.backend
+                .build_devenv(
+                    &["devenv.config.task.config"],
+                    devenv_core::BuildOptions {
+                        gc_root: Some(gc_root),
+                    },
+                )
                 .await?
         };
+        let tasks_json_file: Vec<PathBuf> = tasks_json_file.into_iter().map(|p| p.0).collect();
         // parse tasks config
         let tasks_json = fs::read_to_string(&tasks_json_file[0])
             .await
@@ -1001,7 +1104,6 @@ impl Devenv {
         tui: bool,
     ) -> Result<String> {
         self.reserve_running_ports().await;
-        self.backend().await?;
         if roots.is_empty() {
             bail!("No tasks specified.");
         }
@@ -1053,8 +1155,6 @@ impl Devenv {
     }
 
     pub async fn tasks_list(&self) -> Result<String> {
-        self.backend().await?;
-
         let tasks = self.load_tasks().await?;
 
         if tasks.is_empty() {
@@ -1076,8 +1176,6 @@ impl Devenv {
         verbosity: tasks::VerbosityLevel,
         tui: bool,
     ) -> Result<(BTreeMap<String, String>, Vec<String>)> {
-        self.backend().await?;
-
         let envs = match pre_captured_envs {
             Some(e) => e,
             None => self.capture_shell_environment().await?,
@@ -1138,13 +1236,15 @@ impl Devenv {
 
     /// Get the path to bash.
     pub async fn get_bash_path(&self) -> Result<String> {
-        match self.nix.get_bash(false).await {
+        let gc_root = self.devenv_dotfile.join("bash");
+        let path = match self.backend.get_bash(&gc_root, false).await {
+            Ok(p) => p,
             Err(e) => {
                 tracing::trace!("Failed to get bash: {}. Rebuilding.", e);
-                Ok(self.nix.get_bash(true).await?)
+                self.backend.get_bash(&gc_root, true).await?
             }
-            Ok(bash) => Ok(bash),
-        }
+        };
+        Ok(path.to_string_lossy().into_owned())
     }
 
     /// Check whether a string is a valid POSIX environment variable name
@@ -1295,10 +1395,17 @@ impl Devenv {
             async {
                 let gc_root = self.devenv_dot_gc.join("test");
                 let test_script = self
-                    .nix
-                    .build(&["devenv.config.test"], None, Some(&gc_root))
+                    .backend()
+                    .build_devenv(
+                        &["devenv.config.test"],
+                        devenv_core::BuildOptions {
+                            gc_root: Some(gc_root),
+                        },
+                    )
                     .await?;
-                Ok::<String, miette::Report>(test_script[0].to_string_lossy().into_owned())
+                Ok::<String, miette::Report>(
+                    test_script[0].as_path().to_string_lossy().into_owned(),
+                )
             }
             .in_activity(&phase3)
             .await?
@@ -1340,14 +1447,17 @@ impl Devenv {
     }
 
     pub async fn info(&self) -> Result<String> {
-        self.backend().await?.metadata().await
+        // CNix has a lock-file-aware metadata implementation; for other
+        // backends fall back to the generic `Backend<E>::metadata`.
+        if let Some(cnix) = self.cnix() {
+            return cnix.metadata().await;
+        }
+        self.backend.metadata().await
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<Vec<(String, PathBuf)>> {
         let activity = activity!(INFO, operation, "Building");
         async move {
-            self.backend().await?;
-
             fn flatten_object(prefix: &str, value: &serde_json::Value) -> Vec<String> {
                 match value {
                     // Null values indicate unevaluable/missing attributes - skip them
@@ -1373,8 +1483,7 @@ impl Devenv {
             }
 
             let attributes: Vec<String> = if attributes.is_empty() {
-                // construct dotted names of all attributes that we need to build
-                let build_output = self.nix.eval(&["build"]).await?;
+                let build_output = self.backend.eval_devenv(&["build"]).await?;
                 serde_json::from_str::<serde_json::Value>(&build_output)
                     .map_err(|e| miette::miette!("Failed to parse build output: {}", e))?
                     .as_object()
@@ -1383,11 +1492,10 @@ impl Devenv {
                     .flat_map(|(key, value)| flatten_object(key, value))
                     .collect()
             } else {
-                // Evaluate each attribute to check if it needs flattening
                 let mut flattened = Vec::new();
                 for attr in attributes {
-                    // Try to get from build.{attr} first (for output types that need flattening)
-                    let eval_result = self.nix.eval(&[&format!("build.{attr}")]).await;
+                    let path = format!("build.{attr}");
+                    let eval_result = self.backend.eval_devenv(&[path.as_str()]).await;
                     match eval_result {
                         Ok(eval_output) => {
                             let value: serde_json::Value = serde_json::from_str(&eval_output)
@@ -1402,7 +1510,6 @@ impl Devenv {
                             flattened.extend(flat);
                         }
                         Err(_) => {
-                            // Not in build, try as direct config attribute
                             flattened.push(attr.to_string());
                         }
                     }
@@ -1410,21 +1517,17 @@ impl Devenv {
                 flattened
             };
 
-            // Build with full paths (adding devenv.config. prefix)
             let full_attrs: Vec<String> = attributes
                 .iter()
                 .map(|a| format!("devenv.config.{a}"))
                 .collect();
-            let paths = self
-                .nix
-                .build(
-                    &full_attrs.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
-                    None,
-                    None,
-                )
+            let attr_refs: Vec<&str> = full_attrs.iter().map(AsRef::as_ref).collect();
+            let outputs = self
+                .backend
+                .build_devenv(&attr_refs, devenv_core::BuildOptions::default())
                 .await?;
+            let paths: Vec<PathBuf> = outputs.into_iter().map(|p| p.0).collect();
 
-            // Return pairs of (attribute, path)
             Ok(attributes.into_iter().zip(paths).collect())
         }
         .in_activity(&activity)
@@ -1434,13 +1537,11 @@ impl Devenv {
     pub async fn eval(&self, attributes: &[String]) -> Result<String> {
         let activity = activity!(INFO, operation, "Evaluating");
         async move {
-            self.backend().await?;
-
             let mut results = serde_json::Map::new();
 
             for attr in attributes {
                 let full_attr = format!("devenv.config.{attr}");
-                let eval_output = self.nix.eval(&[&full_attr]).await?;
+                let eval_output = self.backend.eval_devenv(&[full_attr.as_str()]).await?;
                 let value: serde_json::Value = serde_json::from_str(&eval_output).map_err(|e| {
                     miette::miette!("Failed to parse eval output for {}: {}", attr, e)
                 })?;
@@ -1514,8 +1615,8 @@ impl Devenv {
 
         let phase4 = devenv_activity::start!(Activity::operation("Running processes").parent(None));
         let impl_result = async {
-            self.nix
-                .eval(&["devenv.config.process.manager.implementation"])
+            self.backend
+                .eval_devenv(&["devenv.config.process.manager.implementation"])
                 .await
         }
         .in_activity(&phase4)
@@ -1622,10 +1723,15 @@ impl Devenv {
         let procfile_script = async {
             let gc_root = self.devenv_dot_gc.join("procfilescript");
             let paths = self
-                .nix
-                .build(&["devenv.config.procfileScript"], None, Some(&gc_root))
+                .backend()
+                .build_devenv(
+                    &["devenv.config.procfileScript"],
+                    devenv_core::BuildOptions {
+                        gc_root: Some(gc_root),
+                    },
+                )
                 .await?;
-            Ok::<PathBuf, miette::Report>(paths[0].clone())
+            Ok::<PathBuf, miette::Report>(paths[0].as_path().to_path_buf())
         }
         .in_activity(&phase4)
         .await?;
@@ -1983,227 +2089,18 @@ impl Devenv {
         }
     }
 
-    async fn build_bootstrap_args(&self) -> Result<BootstrapArgs> {
-        if self.input_overrides.nix_module_options.is_empty()
-            && !self.from_external
-            && !self.devenv_root.join("devenv.nix").exists()
-        {
-            bail!(indoc::indoc! {"
-            File devenv.nix does not exist. To get started, run:
-
-                $ devenv init
-            "});
-        }
-
-        fs::create_dir_all(&self.devenv_dot_gc).await.map_err(|e| {
-            miette::miette!("Failed to create {}: {}", self.devenv_dot_gc.display(), e)
-        })?;
-
-        // TODO: superceded by eval caching.
-        // Remove once direnvrc migration is implemented.
-        util::write_file_with_lock(
-            self.devenv_dotfile.join("imports.txt"),
-            self.imports.join("\n"),
-        )?;
-
-        fs::create_dir_all(&self.devenv_runtime)
-            .await
-            .map_err(|e| {
-                miette::miette!("Failed to create {}: {}", self.devenv_runtime.display(), e)
-            })?;
-
-        if self.cache_settings.eval_cache {
-            self.eval_cache_pool
-                .get_or_try_init(|| async {
-                    let db_path = self.devenv_dotfile.join("nix-eval-cache.db");
-                    let db = devenv_cache_core::db::Database::new(
-                        db_path,
-                        &devenv_eval_cache::db::MIGRATIONS,
-                    )
-                    .await
-                    .map_err(|e| {
-                        miette::miette!("Failed to initialize eval cache database: {}", e)
-                    })?;
-                    Ok::<_, miette::Report>(db.pool().clone())
-                })
-                .await?;
-        }
-
-        self.resolve_secretspec()?;
-
-        let hostname = hostname::get()
-            .ok()
-            .map(|h| h.to_string_lossy().into_owned());
-
-        let username = whoami::username().ok();
-
-        // TODO: remove devenv_dotfile_path and derive the relative path inside NixArgs instead
-        let dotfile_relative_path = PathBuf::from(format!(
-            "./{}",
-            self.devenv_dotfile
-                .file_name()
-                .expect("Failed to extract the directory name from devenv_dotfile")
-                .to_string_lossy()
-        ));
-
-        let secretspec_data: Option<SecretspecData> =
-            self.secretspec.get().map(|resolved| SecretspecData {
-                profile: resolved.profile.clone(),
-                provider: resolved.provider.clone(),
-                secrets: resolved.secrets.clone().into_iter().collect(),
-            });
-
-        let active_profiles = &self.shell_settings.profiles;
-        let cli_options =
-            CliOptionsConfig(parse_cli_options(&self.input_overrides.nix_module_options)?);
-
-        // Lock-file validation must happen before fingerprinting so the
-        // fingerprint reflects the post-validation state. The bootstrap
-        // nix expression splices the locked inputs into the module
-        // system, so the lock has to be solid before backend assembly.
-        let cachix_global_settings = self
-            .cachix_manager
-            .get_global_settings()
-            .wrap_err("Failed to get cachix global settings")?;
-        let lock_ctx = devenv_nix_backend::LockingContext::new(
-            &self.paths(),
-            &self.nix_settings,
-            &cachix_global_settings,
-        )?;
-        lock_ctx.validate_lock_file(&self.inputs)?;
-        let lock_fingerprint = lock_ctx.lock_fingerprint()?;
-        drop(lock_ctx);
-
-        let container_name = self.container_name.get();
-        let args = NixArgs {
-            version: crate_version!(),
-            is_development_version: crate::is_development_version(),
-            require_version_match: self.require_version_match,
-            system: &self.nix_settings.system,
-            devenv_root: &self.devenv_root,
-            skip_local_src: self.from_external
-                || (!self.input_overrides.nix_module_options.is_empty()
-                    && !self.devenv_root.join("devenv.nix").exists()),
-            devenv_dotfile: &self.devenv_dotfile,
-            devenv_dotfile_path: &dotfile_relative_path,
-            devenv_tmpdir: &self.devenv_tmp,
-            devenv_runtime: &self.devenv_runtime,
-            devenv_istesting: self.is_testing,
-            devenv_direnvrc_latest_version: *DIRENVRC_VERSION,
-            container_name: container_name.map(String::as_str),
-            active_profiles,
-            cli_options,
-            hostname: hostname.as_deref(),
-            username: username.as_deref(),
-            git_root: self.git_root.as_deref(),
-            secretspec: secretspec_data.as_ref(),
-            devenv_inputs: &self.inputs,
-            devenv_imports: &self.imports,
-            impure: self.nix_settings.impure,
-            nixpkgs_config: self.nixpkgs_config.clone(),
-            lock_fingerprint: &lock_fingerprint,
-            devenv_state: self.devenv_state.as_deref(),
-        };
-
-        BootstrapArgs::from_serializable(&args)
-    }
-
-    fn resolve_secretspec(&self) -> Result<()> {
-        let secretspec_path = self.devenv_root.join("secretspec.toml");
-        if !secretspec_path.exists() {
-            return Ok(());
-        }
-
-        let secretspec_config_exists = self.secret_settings.secretspec.is_some();
-        let secretspec_enabled = self
-            .secret_settings
-            .secretspec
-            .as_ref()
-            .map(|c| c.enable)
-            .unwrap_or(false);
-
-        if !secretspec_enabled {
-            if !secretspec_config_exists {
-                info!(
-                    devenv.is_user_message = true,
-                    "{}",
-                    indoc::formatdoc! {"
-                    Found secretspec.toml but secretspec integration is not enabled.
-
-                    To enable, add to devenv.yaml:
-                      secretspec:
-                        enable: true
-
-                    To disable this message:
-                      secretspec:
-                        enable: false
-
-                    Learn more: https://devenv.sh/integrations/secretspec/
-                "}
-                );
-            }
-            return Ok(());
-        }
-
-        let (profile, provider) =
-            if let Some(ref secretspec_config) = self.secret_settings.secretspec {
-                (
-                    secretspec_config.profile.clone(),
-                    secretspec_config.provider.clone(),
-                )
-            } else {
-                (None, None)
-            };
-
-        let mut secrets = secretspec::Secrets::load()
-            .map_err(|e| miette!("Failed to load secretspec configuration: {}", e))?;
-
-        if let Some(ref provider_str) = provider {
-            secrets.set_provider(provider_str);
-        }
-        if let Some(ref profile_str) = profile {
-            secrets.set_profile(profile_str);
-        }
-
-        // Validate secrets — return SecretsNeedPrompting on missing secrets.
-        // The caller (main.rs) decides whether to prompt interactively or fail.
-        let validated_secrets = match secrets.validate()? {
-            Ok(validated) => validated,
-            Err(e) => {
-                return Err(SecretsNeedPrompting {
-                    provider: provider.clone(),
-                    profile: profile.clone(),
-                    missing: e.missing_required,
-                }
-                .into());
-            }
-        };
-
-        let resolved = secretspec::Resolved {
-            secrets: validated_secrets
-                .resolved
-                .secrets
-                .into_iter()
-                .map(|(k, v)| (k, v.expose_secret().to_string()))
-                .collect(),
-            provider: validated_secrets.resolved.provider,
-            profile: validated_secrets.resolved.profile,
-        };
-
-        self.secretspec
-            .set(resolved)
-            .map_err(|_| miette!("Secretspec resolved already set"))
+    pub fn secretspec(&self) -> Option<&ResolvedSecrets> {
+        self.secretspec.get()
     }
 
     /// Inner implementation without activity wrapper.
     /// Called directly by `up()` (which creates its own "Configuring shell" activity)
     /// and by `get_dev_environment()` (which wraps with `#[activity]`).
     async fn get_dev_environment_inner(&self, json: bool) -> Result<DevEnv> {
-        let backend = self.backend().await?;
-
         let gc_root = self.devenv_dot_gc.join("shell");
         let span = tracing::debug_span!("evaluating_dev_env");
-        let env = backend.dev_env(json, &gc_root).instrument(span).await?;
+        let cnix = self.require_cnix()?;
+        let env = cnix.dev_env(json, &gc_root).instrument(span).await?;
 
         // Save timestamped GC root symlink for history tracking and GC protection
         // This is backend-independent: all backends create a gc_root symlink,
@@ -2590,6 +2487,168 @@ fn format_tasks_tree(tasks: &[tasks::TaskConfig]) -> String {
     // Remove trailing newline for consistency with other commands
     output.truncate(output.trim_end().len());
     output
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_bootstrap_args_inline(
+    _paths: &DevenvPaths,
+    devenv_root: &Path,
+    devenv_dotfile: &Path,
+    devenv_tmp: &Path,
+    devenv_runtime: &Path,
+    devenv_state: Option<&Path>,
+    inputs: &BTreeMap<String, Input>,
+    imports: &[String],
+    nixpkgs_config: &NixpkgsConfig,
+    nix_settings: &NixSettings,
+    shell_settings: &ShellSettings,
+    input_overrides: &InputOverrides,
+    from_external: bool,
+    require_version_match: bool,
+    is_testing: bool,
+    git_root: Option<&Path>,
+    secretspec: Option<&ResolvedSecrets>,
+    container_name: Option<&str>,
+    lock_fingerprint: &str,
+) -> Result<BootstrapArgs> {
+    let hostname = hostname::get()
+        .ok()
+        .map(|h| h.to_string_lossy().into_owned());
+    let username = whoami::username().ok();
+
+    let dotfile_relative_path = PathBuf::from(format!(
+        "./{}",
+        devenv_dotfile
+            .file_name()
+            .expect("devenv_dotfile has filename")
+            .to_string_lossy()
+    ));
+
+    let secretspec_data: Option<SecretspecData> = secretspec.map(|resolved| SecretspecData {
+        profile: resolved.profile.clone(),
+        provider: resolved.provider.clone(),
+        secrets: resolved.secrets.clone().into_iter().collect(),
+    });
+
+    let cli_options = CliOptionsConfig(parse_cli_options(&input_overrides.nix_module_options)?);
+
+    let args = NixArgs {
+        version: clap::crate_version!(),
+        is_development_version: crate::is_development_version(),
+        require_version_match,
+        system: &nix_settings.system,
+        devenv_root,
+        skip_local_src: from_external
+            || (!input_overrides.nix_module_options.is_empty()
+                && !devenv_root.join("devenv.nix").exists()),
+        devenv_dotfile,
+        devenv_dotfile_path: &dotfile_relative_path,
+        devenv_tmpdir: devenv_tmp,
+        devenv_runtime,
+        devenv_istesting: is_testing,
+        devenv_direnvrc_latest_version: *DIRENVRC_VERSION,
+        container_name,
+        active_profiles: &shell_settings.profiles,
+        cli_options,
+        hostname: hostname.as_deref(),
+        username: username.as_deref(),
+        git_root,
+        secretspec: secretspec_data.as_ref(),
+        devenv_inputs: inputs,
+        devenv_imports: imports,
+        impure: nix_settings.impure,
+        nixpkgs_config: nixpkgs_config.clone(),
+        lock_fingerprint,
+        devenv_state,
+    };
+
+    BootstrapArgs::from_serializable(&args)
+}
+
+fn resolve_secretspec_into(
+    devenv_root: &Path,
+    secret_settings: &SecretSettings,
+    cell: &mut OnceCell<ResolvedSecrets>,
+) -> Result<()> {
+    let secretspec_path = devenv_root.join("secretspec.toml");
+    if !secretspec_path.exists() {
+        return Ok(());
+    }
+
+    let secretspec_config_exists = secret_settings.secretspec.is_some();
+    let secretspec_enabled = secret_settings
+        .secretspec
+        .as_ref()
+        .map(|c| c.enable)
+        .unwrap_or(false);
+
+    if !secretspec_enabled {
+        if !secretspec_config_exists {
+            info!(
+                devenv.is_user_message = true,
+                "{}",
+                indoc::formatdoc! {"
+                Found secretspec.toml but secretspec integration is not enabled.
+
+                To enable, add to devenv.yaml:
+                  secretspec:
+                    enable: true
+
+                To disable this message:
+                  secretspec:
+                    enable: false
+
+                Learn more: https://devenv.sh/integrations/secretspec/
+            "}
+            );
+        }
+        return Ok(());
+    }
+
+    let (profile, provider) = if let Some(ref secretspec_config) = secret_settings.secretspec {
+        (
+            secretspec_config.profile.clone(),
+            secretspec_config.provider.clone(),
+        )
+    } else {
+        (None, None)
+    };
+
+    let mut secrets = secretspec::Secrets::load()
+        .map_err(|e| miette!("Failed to load secretspec configuration: {}", e))?;
+
+    if let Some(ref provider_str) = provider {
+        secrets.set_provider(provider_str);
+    }
+    if let Some(ref profile_str) = profile {
+        secrets.set_profile(profile_str);
+    }
+
+    let validated_secrets = match secrets.validate()? {
+        Ok(validated) => validated,
+        Err(e) => {
+            return Err(SecretsNeedPrompting {
+                provider: provider.clone(),
+                profile: profile.clone(),
+                missing: e.missing_required,
+            }
+            .into());
+        }
+    };
+
+    let resolved = secretspec::Resolved {
+        secrets: validated_secrets
+            .resolved
+            .secrets
+            .into_iter()
+            .map(|(k, v)| (k, v.expose_secret().to_string()))
+            .collect(),
+        provider: validated_secrets.resolved.provider,
+        profile: validated_secrets.resolved.profile,
+    };
+
+    cell.set(resolved)
+        .map_err(|_| miette!("Secretspec resolved already set"))
 }
 
 #[cfg(test)]

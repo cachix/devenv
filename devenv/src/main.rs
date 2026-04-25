@@ -674,7 +674,15 @@ async fn run_backend(
         _ => (None, None),
     };
 
-    let devenv = Devenv::new(options).await;
+    let devenv = match Devenv::new(options).await {
+        Ok(d) => d,
+        Err(e) => {
+            return DevenvOutput {
+                result: Err(e),
+                devenv_for_debugger: None,
+            };
+        }
+    };
 
     // PTY shell needs shared ownership for the reload coordinator
     if use_pty && let Commands::Shell { cmd, args } = command {
@@ -1015,7 +1023,7 @@ async fn dispatch_command(
             .map_or(CommandResult::Done, CommandResult::Print)),
         // hidden
         Commands::Assemble => {
-            devenv.backend().await?;
+            let _ = devenv.backend();
             Ok(CommandResult::Done)
         }
         Commands::PrintDevEnv { json } => {

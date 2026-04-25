@@ -5,12 +5,11 @@
 //! including input overrides via NixOptions.
 
 use devenv_core::eval_op::EvalOp;
-use devenv_core::{Config, DevenvPaths, NixBackend, NixOptions, Options};
-use devenv_nix_backend::nix_backend::NixCBackend;
+use devenv_core::{BuildOptions, Config, DevenvPaths, Evaluator, NixOptions};
+use devenv_nix_backend::NixCBackend;
 use devenv_nix_backend_macros::nix_test;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use tokio_shutdown::Shutdown;
 
 /// Guard struct that changes cwd to a directory and restores on drop
 struct CwdGuard {
@@ -101,16 +100,8 @@ async fn setup_isolated_test_env(
     let (temp_dir, cwd_guard, paths, config) = setup_isolated_test_files(yaml_content, nix_content);
 
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    let shutdown = Shutdown::new();
-    let backend = init_backend(
-        paths.clone(),
-        config.clone(),
-        nix_cli,
-        cachix_manager,
-        shutdown,
-    )
-    .await
-    .expect("Failed to initialize NixCBackend");
+    let backend = init_backend(paths.clone(), config.clone(), nix_cli, cachix_manager)
+        .expect("Failed to initialize NixCBackend");
 
     (temp_dir, cwd_guard, backend, paths, config)
 }
@@ -255,7 +246,7 @@ async fn test_backend_build_package() {
     copy_fixture_lock(temp_dir.path());
 
     // Build the devenv shell
-    let result = backend.build(&["shell"], None, None).await;
+    let result = backend.build(&["shell"], BuildOptions::default()).await;
 
     assert!(result.is_ok(), "Build should succeed: {:?}", result.err());
 
@@ -280,7 +271,14 @@ async fn test_backend_build_with_gc_root() {
     let gc_root_base = temp_dir.path().join("result");
 
     // Build with GC root
-    let result = backend.build(&["shell"], None, Some(&gc_root_base)).await;
+    let result = backend
+        .build(
+            &["shell"],
+            BuildOptions {
+                gc_root: Some(gc_root_base.clone()),
+            },
+        )
+        .await;
 
     assert!(
         result.is_ok(),
@@ -358,7 +356,9 @@ async fn assert_invalidate_picks_up_change(
     std::fs::write(temp_dir.path().join(modify_file), modified_content)
         .expect("Failed to write modified file");
 
-    backend.invalidate().expect("invalidate should succeed");
+    backend
+        .invalidate_eval_state()
+        .expect("invalidate should succeed");
 
     let output2 = backend
         .dev_env(false, &gc_root)
@@ -508,13 +508,8 @@ async fn test_backend_gc() {
 
 #[test]
 fn test_backend_options_default() {
-    let options = Options::default();
-
-    // Verify default options
-    assert!(!options.replace_shell);
-    assert!(options.bail_on_error);
-    assert!(!options.cache_output);
-    assert!(!options.refresh_cached_output);
+    let options = BuildOptions::default();
+    assert!(options.gc_root.is_none());
 }
 
 /// Benchmark test comparing FFI vs shell-based operations
@@ -603,7 +598,7 @@ async fn test_full_backend_workflow() {
 
     // 5. Build devenv shell
     let build_paths = backend
-        .build(&["shell"], None, None)
+        .build(&["shell"], BuildOptions::default())
         .await
         .expect("Failed to build");
     println!("Built shell: {:?}", build_paths);
@@ -740,7 +735,9 @@ async fn test_build_nonexistent_attribute() {
     copy_fixture_lock(temp_dir.path());
 
     // Try to build a nonexistent attribute - should return an error
-    let result = backend.build(&["nonexistent.package"], None, None).await;
+    let result = backend
+        .build(&["nonexistent.package"], BuildOptions::default())
+        .await;
 
     assert!(
         result.is_err(),
@@ -783,9 +780,7 @@ async fn test_build_with_syntax_error_in_nix() {
         config.clone(),
         NixOptions::default(),
         cachix_manager,
-        Shutdown::new(),
-    )
-    .await;
+    );
 
     let error_msg = match init_result {
         Err(e) => format!("{:?}", e),
@@ -838,9 +833,7 @@ async fn test_eval_error_includes_nix_details() {
         config.clone(),
         NixOptions::default(),
         cachix_manager,
-        Shutdown::new(),
-    )
-    .await;
+    );
 
     let error_msg = match init_result {
         Err(e) => format!("{:?}", e),
@@ -1018,7 +1011,7 @@ async fn test_build_empty_attributes_array() {
     let (_temp_dir, _cwd_guard, backend, _paths, _config) =
         setup_isolated_test_env(yaml, None, NixOptions::default()).await;
     // Test build(&[], None, None) - should return empty vec
-    let result = backend.build(&[], None, None).await;
+    let result = backend.build(&[], BuildOptions::default()).await;
 
     assert!(
         result.is_ok(),
@@ -1053,7 +1046,14 @@ async fn test_build_gc_root_already_exists() {
     let gc_root_actual = temp_dir.path().join("result-shell");
 
     // First build to create the gc_root
-    let result1 = backend.build(&["shell"], None, Some(&gc_root_base)).await;
+    let result1 = backend
+        .build(
+            &["shell"],
+            BuildOptions {
+                gc_root: Some(gc_root_base.clone()),
+            },
+        )
+        .await;
     assert!(
         result1.is_ok(),
         "First build should succeed: {:?}",
@@ -1065,7 +1065,14 @@ async fn test_build_gc_root_already_exists() {
     );
 
     // Build again with same gc_root - Nix's add_perm_root should handle the existing symlink
-    let result2 = backend.build(&["shell"], None, Some(&gc_root_base)).await;
+    let result2 = backend
+        .build(
+            &["shell"],
+            BuildOptions {
+                gc_root: Some(gc_root_base.clone()),
+            },
+        )
+        .await;
 
     assert!(
         result2.is_ok(),
@@ -1357,7 +1364,7 @@ async fn test_gc_with_actual_nix_store_paths() {
     copy_fixture_lock(temp_dir.path());
 
     // Build a package to get actual store paths
-    let build_result = backend.build(&["shell"], None, None).await;
+    let build_result = backend.build(&["shell"], BuildOptions::default()).await;
     assert!(build_result.is_ok(), "Build should succeed");
 
     let built_paths = build_result.unwrap();
@@ -1411,7 +1418,14 @@ async fn test_gc_with_protected_gc_roots() {
     let gc_root_base = temp_dir.path().join("protected-result");
     // The build function appends the attribute name to the gc_root base path
     let gc_root_actual = temp_dir.path().join("protected-result-shell");
-    let build_result = backend.build(&["shell"], None, Some(&gc_root_base)).await;
+    let build_result = backend
+        .build(
+            &["shell"],
+            BuildOptions {
+                gc_root: Some(gc_root_base.clone()),
+            },
+        )
+        .await;
     assert!(
         build_result.is_ok(),
         "Build with gc_root should succeed: {:?}",
@@ -1471,7 +1485,7 @@ async fn test_gc_computes_closure_correctly() {
     copy_fixture_lock(temp_dir.path());
 
     // Build the shell which has dependencies
-    let build_result = backend.build(&["shell"], None, None).await;
+    let build_result = backend.build(&["shell"], BuildOptions::default()).await;
     assert!(build_result.is_ok(), "Build should succeed");
 
     let built_paths = build_result.unwrap();
@@ -1516,7 +1530,7 @@ async fn test_gc_reports_bytes_freed() {
     copy_fixture_lock(temp_dir.path());
 
     // Build a package that will have some size
-    let build_result = backend.build(&["shell"], None, None).await;
+    let build_result = backend.build(&["shell"], BuildOptions::default()).await;
     assert!(build_result.is_ok(), "Build should succeed");
 
     let built_paths = build_result.unwrap();
@@ -1562,7 +1576,7 @@ async fn test_gc_with_mixed_store_and_temp_paths() {
     copy_fixture_lock(temp_dir.path());
 
     // Build a package to get actual store paths
-    let build_result = backend.build(&["shell"], None, None).await;
+    let build_result = backend.build(&["shell"], BuildOptions::default()).await;
     assert!(build_result.is_ok(), "Build should succeed");
 
     let built_paths = build_result.unwrap();
@@ -1650,7 +1664,7 @@ async fn test_workflow_build_then_incremental_update() {
         .await
         .expect("Initial update failed");
 
-    let result1 = backend.build(&["shell"], None, None).await;
+    let result1 = backend.build(&["shell"], BuildOptions::default()).await;
     assert!(
         result1.is_ok(),
         "Initial build should succeed: {:?}",
@@ -1666,7 +1680,7 @@ async fn test_workflow_build_then_incremental_update() {
         .expect("Incremental update failed");
 
     // Rebuild after incremental update
-    let result2 = backend.build(&["shell"], None, None).await;
+    let result2 = backend.build(&["shell"], BuildOptions::default()).await;
     assert!(
         result2.is_ok(),
         "Rebuild after incremental update should succeed: {:?}",
@@ -1701,7 +1715,14 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
     let gc_root2_actual = temp_dir.path().join("result2-shell");
 
     // Build first attribute with first gc_root
-    let result1 = backend.build(&["shell"], None, Some(&gc_root1_base)).await;
+    let result1 = backend
+        .build(
+            &["shell"],
+            BuildOptions {
+                gc_root: Some(gc_root1_base.clone()),
+            },
+        )
+        .await;
     assert!(
         result1.is_ok(),
         "First build should succeed: {:?}",
@@ -1709,7 +1730,14 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
     );
 
     // Build second attribute with second gc_root (same attribute, different gc_root)
-    let result2 = backend.build(&["shell"], None, Some(&gc_root2_base)).await;
+    let result2 = backend
+        .build(
+            &["shell"],
+            BuildOptions {
+                gc_root: Some(gc_root2_base.clone()),
+            },
+        )
+        .await;
     assert!(
         result2.is_ok(),
         "Second build should succeed: {:?}",
@@ -1877,7 +1905,9 @@ async fn test_build_multiple_attributes_single_call() {
 
     // Test build(&[attr1, attr2], ...) builds all attributes in one call
     // Note: Building the same attribute twice should work fine
-    let result = backend.build(&["shell", "shell"], None, None).await;
+    let result = backend
+        .build(&["shell", "shell"], BuildOptions::default())
+        .await;
 
     assert!(
         result.is_ok(),
@@ -1968,9 +1998,12 @@ async fn test_concurrent_build_operations() {
 
     // Create multiple build futures without awaiting them
     // Using different attributes to test true concurrent building
-    let build1 = backend.build(&["shell"], None, None);
-    let build2 = backend.build(&["config.languages.python.package"], None, None);
-    let build3 = backend.build(&["config.languages.php.package"], None, None);
+    let build1 = backend.build(&["shell"], BuildOptions::default());
+    let build2 = backend.build(
+        &["config.languages.python.package"],
+        BuildOptions::default(),
+    );
+    let build3 = backend.build(&["config.languages.php.package"], BuildOptions::default());
 
     // Await all three builds concurrently
     let (result1, result2, result3) = tokio::join!(build1, build2, build3);

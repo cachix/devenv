@@ -269,7 +269,7 @@ impl ShellBuilder for DevenvShellBuilder {
             let devenv = devenv.lock().await;
 
             // Invalidate cached state to force re-evaluation on file changes
-            devenv.invalidate_for_reload().map_err(|e| {
+            devenv.invalidate_for_reload().await.map_err(|e| {
                 BuildError::new(format!("Failed to invalidate state for reload: {}", e))
             })?;
 

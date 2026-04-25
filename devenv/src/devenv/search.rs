@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use cli_table::{Table, WithTitle};
 use devenv_activity::instrument_activity;
-use devenv_core::nix_backend::Options;
+use devenv_core::BuildOptions;
 use miette::Result;
 use serde::Deserialize;
 use tokio::fs;
@@ -45,9 +45,6 @@ struct DevenvPackageResult {
 impl Devenv {
     #[instrument_activity("Searching options and packages")]
     pub async fn search(&self, name: &str) -> Result<String> {
-        self.backend().await?;
-
-        // Run both searches concurrently
         let (options_results, package_results) =
             tokio::try_join!(self.search_options(name), self.search_packages(name))?;
 
@@ -81,15 +78,12 @@ impl Devenv {
     }
 
     async fn search_options(&self, name: &str) -> Result<Vec<DevenvOptionResult>> {
-        let build_options = Options {
-            cache_output: true,
-            ..Default::default()
-        };
-        let options = self
-            .nix
-            .build(&["optionsJSON"], Some(build_options), None)
+        let outputs = self
+            .backend()
+            .build_devenv(&["optionsJSON"], BuildOptions::default())
             .await?;
-        let options_path = options[0]
+        let options_path = outputs[0]
+            .as_path()
             .join("share")
             .join("doc")
             .join("nixos")
@@ -116,11 +110,11 @@ impl Devenv {
     }
 
     async fn search_packages(&self, name: &str) -> Result<Vec<DevenvPackageResult>> {
-        let search_options = Options {
-            cache_output: true,
-            ..Default::default()
-        };
-        let search_results = self.nix.search(name, Some(search_options)).await?;
+        let search_results = self
+            .cnix()
+            .ok_or_else(|| miette::miette!("search requires the C-Nix backend"))?
+            .search(name, None)
+            .await?;
         let results = search_results
             .into_iter()
             .map(|(key, value)| DevenvPackageResult {

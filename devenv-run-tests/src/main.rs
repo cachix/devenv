@@ -429,7 +429,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             devenv_dotfile: Some(devenv_dotfile),
             ..Default::default()
         };
-        let devenv = Devenv::new(options).await;
+        let devenv = Devenv::new(options).await?;
 
         eprintln!("  Running {dir_name}");
 

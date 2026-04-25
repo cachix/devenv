@@ -1,19 +1,9 @@
-//! Abstraction layer for different Nix evaluation backends.
-//!
-//! This module defines a trait that allows devenv to use different Nix implementations,
-//! such as the traditional C++ Nix binary or alternative implementations like Snix.
+//! Project paths and the eval-cache key helper used across backends.
 
-use async_trait::async_trait;
-use miette::Result;
-use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use crate::bootstrap_args::BootstrapArgs;
-use crate::config::Input;
+pub use crate::evaluator::{DevEnvOutput, PackageSearchResult, SearchResults};
 
-/// Build the shared eval-cache key input used by the FFI backend and shell
-/// watcher lookups.
 pub fn eval_cache_key_args(
     nix_args_str: &str,
     port_allocation_enabled: bool,
@@ -22,146 +12,16 @@ pub fn eval_cache_key_args(
     format!("{nix_args_str}:port_allocation={port_allocation_enabled}:strict_ports={strict_ports}")
 }
 
-/// Output of dev_env evaluation.
-#[derive(Debug, Clone, Default)]
-pub struct DevEnvOutput {
-    /// The bash environment script.
-    pub bash_env: Vec<u8>,
-    /// File paths that the evaluation depends on (for direnv to watch).
-    pub inputs: Vec<PathBuf>,
-}
-
-/// Package search result from nixpkgs.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PackageSearchResult {
-    pub pname: String,
-    pub version: String,
-    pub description: String,
-}
-
-/// Result type for package search operations.
-pub type SearchResults = BTreeMap<String, PackageSearchResult>;
-
-/// Common paths used by devenv backends.
-///
-/// No `Default` impl: every required path is project-specific and an
-/// empty `PathBuf` would compile but silently misbehave at runtime.
 #[derive(Debug, Clone)]
 pub struct DevenvPaths {
     pub root: PathBuf,
     pub dotfile: PathBuf,
     pub dot_gc: PathBuf,
     pub home_gc: PathBuf,
-    /// System temporary directory (e.g. `$TMPDIR` or `/tmp`).
     pub tmp: PathBuf,
-    /// Runtime directory for sockets (e.g. `$XDG_RUNTIME_DIR/devenv/...`).
     pub runtime: PathBuf,
-    /// Optional override for the state directory.
-    /// When `None`, callers should default to `dotfile.join("state")`.
     pub state: Option<PathBuf>,
-    /// Git repository root, if detected.
     pub git_root: Option<PathBuf>,
-}
-
-/// Options for Nix operations
-#[derive(Debug, Clone)]
-pub struct Options {
-    /// Run `exec` to replace the shell with the command.
-    pub replace_shell: bool,
-    /// Error out if the command returns a non-zero status code.
-    pub bail_on_error: bool,
-    /// Cache the output of the command.
-    pub cache_output: bool,
-    /// Force a refresh of the cached output.
-    pub refresh_cached_output: bool,
-    /// Maximum number of results to return (for search). None means unlimited.
-    pub max_results: Option<usize>,
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            replace_shell: false,
-            bail_on_error: true,
-            cache_output: false,
-            refresh_cached_output: false,
-            max_results: Some(100),
-        }
-    }
-}
-
-/// Trait defining the interface for Nix evaluation backends
-#[async_trait(?Send)]
-pub trait NixBackend: Send + Sync {
-    /// Initialize the backend with the framework's pre-serialized bootstrap
-    /// arguments.
-    ///
-    /// The serialized payload is both the eval-cache key seed and the
-    /// expression spliced into the bootstrap import call. The framework
-    /// owns the schema; the backend treats the payload as opaque Nix code.
-    async fn assemble(&self, bootstrap_args: BootstrapArgs) -> Result<()>;
-
-    /// Get the development environment
-    async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<DevEnvOutput>;
-
-    /// Evaluate the devenv configuration in preparation for the REPL.
-    ///
-    /// This performs the heavy Nix evaluation with full activity/TUI support.
-    /// Must be called before `launch_repl()`.
-    async fn prepare_repl(&self) -> Result<()>;
-
-    /// Launch the interactive Nix REPL.
-    ///
-    /// Assumes `prepare_repl()` was called first to evaluate the configuration.
-    /// This takes over the terminal for interactive use.
-    async fn launch_repl(&self) -> Result<()>;
-
-    /// Build the specified attributes
-    async fn build(
-        &self,
-        attributes: &[&str],
-        options: Option<Options>,
-        gc_root: Option<&Path>,
-    ) -> Result<Vec<PathBuf>>;
-
-    /// Evaluate a Nix expression
-    async fn eval(&self, attributes: &[&str]) -> Result<String>;
-
-    /// Update flake inputs
-    ///
-    /// `override_inputs` contains name/URL pairs (alternating elements) that override
-    /// specific inputs during locking, even if the lock file is otherwise up-to-date.
-    async fn update(
-        &self,
-        input_name: &Option<String>,
-        inputs: &BTreeMap<String, Input>,
-        override_inputs: &[String],
-    ) -> Result<()>;
-
-    /// Get flake metadata
-    async fn metadata(&self) -> Result<String>;
-
-    /// Search for packages
-    async fn search(&self, name: &str, options: Option<Options>) -> Result<SearchResults>;
-
-    /// Garbage collect the specified paths
-    /// Returns (paths_deleted, bytes_freed)
-    async fn gc(&self, paths: Vec<PathBuf>) -> Result<(u64, u64)>;
-
-    /// Get the backend name (for debugging/logging)
-    fn name(&self) -> &'static str;
-
-    /// Get the bash shell executable path
-    async fn get_bash(&self, refresh_cached_output: bool) -> Result<String>;
-
-    /// Check if the current user is a trusted user of the Nix store
-    async fn is_trusted_user(&self) -> Result<bool>;
-
-    /// Invalidate cached state for hot-reload.
-    ///
-    /// This clears any cached evaluation state to force re-evaluation on the next operation.
-    /// Used by hot-reload to ensure file changes are picked up.
-    fn invalidate(&self) -> Result<()>;
 }
 
 #[cfg(test)]

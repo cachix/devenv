@@ -1,5 +1,5 @@
 use devenv_cache_core::compute_string_hash;
-use devenv_core::{DevenvPaths, NixBackend, Options};
+use devenv_core::{Backend, DevenvPaths, Evaluator};
 use miette::{IntoDiagnostic, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -28,15 +28,15 @@ struct ChangelogCache {
 }
 
 pub struct Changelog<'a> {
-    nix: &'a dyn NixBackend,
+    backend: &'a Backend<dyn Evaluator>,
     dot_gc: PathBuf,
     cache_file: PathBuf,
 }
 
 impl<'a> Changelog<'a> {
-    pub fn new(nix: &'a dyn NixBackend, paths: &DevenvPaths) -> Self {
+    pub fn new(backend: &'a Backend<dyn Evaluator>, paths: &DevenvPaths) -> Self {
         Self {
-            nix,
+            backend,
             dot_gc: paths.dot_gc.clone(),
             cache_file: paths.dotfile.join("changelog-cache.json"),
         }
@@ -96,26 +96,24 @@ impl<'a> Changelog<'a> {
     }
 
     async fn load_changelogs(&self) -> Result<Vec<ChangelogEntry>> {
-        let changelog_json_file = {
-            let gc_root = self.dot_gc.join("changelog-json");
-            let options = Options {
-                bail_on_error: false,
-                ..Default::default()
-            };
-            self.nix
-                .build(
-                    &["devenv.config.changelog.json"],
-                    Some(options),
-                    Some(&gc_root),
-                )
-                .await?
-        };
+        use devenv_core::BuildOptions;
 
-        let changelog_path = changelog_json_file
+        let gc_root = self.dot_gc.join("changelog-json");
+        let outputs = self
+            .backend
+            .build_devenv(
+                &["devenv.config.changelog.json"],
+                BuildOptions {
+                    gc_root: Some(gc_root),
+                },
+            )
+            .await?;
+
+        let changelog_path = outputs
             .first()
             .ok_or_else(|| miette::miette!("No changelog output produced by build"))?;
 
-        let changelog_json = tokio::fs::read_to_string(changelog_path)
+        let changelog_json = tokio::fs::read_to_string(changelog_path.as_path())
             .await
             .into_diagnostic()?;
 

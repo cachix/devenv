@@ -1,14 +1,13 @@
 #![cfg(feature = "test-nix-store")]
 //! Integration tests for flake locking functionality
 
-use devenv_core::{Config, NixBackend, NixOptions};
+use devenv_core::{Config, NixOptions};
 use devenv_nix_backend::load_lock_file;
 use devenv_nix_backend_macros::nix_test;
 use nix_bindings_fetchers::FetchersSettings;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
-use tokio_shutdown::Shutdown;
 
 // Import shared test utilities
 mod common;
@@ -79,15 +78,8 @@ async fn test_create_flake_inputs() {
         offline: Some(true),
         ..Default::default()
     };
-    let backend = init_backend(
-        paths.clone(),
-        config.clone(),
-        nix_cli,
-        cachix_manager,
-        Shutdown::new(),
-    )
-    .await
-    .expect("Failed to initialize backend");
+    let backend = init_backend(paths.clone(), config.clone(), nix_cli, cachix_manager)
+        .expect("Failed to initialize backend");
 
     // Call update() which enables flakes and creates flake inputs
     let result = backend.update(&None, &config.inputs, &[]).await;
@@ -135,14 +127,8 @@ async fn test_selective_input_update() {
     let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
 
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    let backend = create_backend(
-        paths,
-        config.clone(),
-        NixOptions::default(),
-        cachix_manager,
-        Shutdown::new(),
-    )
-    .expect("Failed to create backend");
+    let backend = create_backend(paths, config.clone(), NixOptions::default(), cachix_manager)
+        .expect("Failed to create backend");
 
     // First, create an initial lock (update all inputs)
     backend
@@ -202,14 +188,8 @@ async fn test_full_workflow() {
     let config = Config::load_from(temp_dir.path()).expect("Failed to load config");
 
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    let backend = create_backend(
-        paths,
-        config.clone(),
-        NixOptions::default(),
-        cachix_manager,
-        Shutdown::new(),
-    )
-    .expect("Failed to create backend");
+    let backend = create_backend(paths, config.clone(), NixOptions::default(), cachix_manager)
+        .expect("Failed to create backend");
 
     // 4. Update all inputs (creates lock file)
     backend
@@ -299,14 +279,8 @@ async fn test_relative_path_with_parent_dir_in_path() {
     let config = Config::load_from(&inner_dir).expect("Failed to load config");
 
     let cachix_manager = create_test_cachix_manager(temp_dir.path(), None);
-    let backend = create_backend(
-        paths,
-        config.clone(),
-        NixOptions::default(),
-        cachix_manager,
-        Shutdown::new(),
-    )
-    .expect("Failed to create backend");
+    let backend = create_backend(paths, config.clone(), NixOptions::default(), cachix_manager)
+        .expect("Failed to create backend");
 
     // Update should resolve the relative path correctly
     // Before the fix, this would fail because `..` in the path portion was resolved

@@ -1,237 +1,104 @@
 //! Snix backend implementation for devenv.
 //!
-//! This module provides a Rust-native Nix evaluator backend using Snix
-//! as an alternative to the traditional C++ Nix binary.
+//! Stub implementation. The structure is fixed to match the
+//! `Evaluator` + `Store` traits; bodies bail until the snix
+//! integration is complete.
+
+use std::path::Path;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use devenv_core::bootstrap_args::BootstrapArgs;
-use devenv_core::config::Input;
-use devenv_core::{
-    CacheSettings, CachixManager, DevEnvOutput, DevenvPaths, NixBackend, NixSettings, Options,
-    SearchResults,
-};
+use devenv_core::evaluator::{BuildOptions, Evaluator};
+use devenv_core::store::{GcOptions, GcStats, PathInfo, Store, StorePath};
+use devenv_core::{DevenvPaths, NixSettings, PortAllocator};
 use miette::{Result, bail};
-use snix_build::buildservice::{BuildService, DummyBuildService};
-use snix_castore::blobservice::from_addr as blob_from_addr;
-use snix_castore::directoryservice::from_addr as directory_from_addr;
-use snix_glue::snix_io::SnixIO;
-use snix_glue::snix_store_io::SnixStoreIO;
-use snix_store::nar::{NarCalculationService, SimpleRenderer};
-use snix_store::pathinfoservice::from_addr as pathinfo_from_addr;
-use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
-use std::rc::Rc;
-use std::sync::Arc;
-use tracing::{debug, info, warn};
 
-/// Snix backend implementation for devenv.
-///
-/// NOTE: The snix library (EvaluationBuilder and Evaluation types) uses single-threaded
-/// reference-counted pointers (Rc<T>) internally, making these types incompatible with
-/// multi-threaded sharing. This backend creates fresh evaluator instances per operation
-/// rather than storing them in shared state.
+pub struct SnixStore;
+
+#[async_trait(?Send)]
+impl Store for SnixStore {
+    fn uri(&self) -> &str {
+        "snix"
+    }
+
+    async fn add_gc_root(&self, _gc_root: &Path, _store_path: &StorePath) -> Result<()> {
+        bail!("SnixStore::add_gc_root is not yet implemented")
+    }
+
+    async fn realise(&self, _drv: &StorePath) -> Result<Vec<StorePath>> {
+        bail!("SnixStore::realise is not yet implemented")
+    }
+
+    async fn is_trusted_user(&self) -> Result<bool> {
+        bail!("SnixStore::is_trusted_user is not yet implemented")
+    }
+
+    async fn query_path_info(&self, _p: &StorePath) -> Result<Option<PathInfo>> {
+        Ok(None)
+    }
+
+    async fn collect_garbage(&self, _opts: GcOptions) -> Result<GcStats> {
+        bail!("SnixStore::collect_garbage is not yet implemented")
+    }
+
+    async fn copy_paths(&self, _dest: &dyn Store, _paths: &[StorePath]) -> Result<()> {
+        bail!("SnixStore::copy_paths is not yet implemented")
+    }
+}
+
 pub struct SnixBackend {
     #[allow(dead_code)]
     nix_settings: NixSettings,
     #[allow(dead_code)]
-    cache_settings: CacheSettings,
-    #[allow(dead_code)]
     paths: DevenvPaths,
     #[allow(dead_code)]
-    cachix_manager: Arc<CachixManager>,
+    bootstrap_args: Arc<BootstrapArgs>,
+    store: SnixStore,
+    #[allow(dead_code)]
+    port_allocator: Arc<PortAllocator>,
 }
 
 impl SnixBackend {
-    pub async fn new(
+    pub fn new(
         nix_settings: NixSettings,
-        cache_settings: CacheSettings,
         paths: DevenvPaths,
-        cachix_manager: Arc<CachixManager>,
-        _pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
+        bootstrap_args: Arc<BootstrapArgs>,
+        port_allocator: Arc<PortAllocator>,
     ) -> Result<Self> {
-        info!("Initializing Snix backend");
-
         Ok(Self {
             nix_settings,
-            cache_settings,
             paths,
-            cachix_manager,
+            bootstrap_args,
+            store: SnixStore,
+            port_allocator,
         })
     }
 
-    /// Construct a fully-initialized backend in a single call.
-    #[must_use = "init returns the constructed backend; dropping it discards the eval state"]
-    pub async fn init(
-        bootstrap_args: BootstrapArgs,
-        nix_settings: NixSettings,
-        cache_settings: CacheSettings,
-        paths: DevenvPaths,
-        cachix_manager: Arc<CachixManager>,
-        eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
-    ) -> Result<Self> {
-        let backend = Self::new(
-            nix_settings,
-            cache_settings,
-            paths,
-            cachix_manager,
-            eval_cache_pool,
-        )
-        .await?;
-        backend.assemble(bootstrap_args).await?;
-        Ok(backend)
-    }
-
-    /// Create a fresh Snix evaluator for a single operation.
-    ///
-    /// Since snix types use single-threaded Rc pointers, we cannot store them in shared state.
-    /// Instead, we create a fresh evaluator for each operation.
-    #[allow(dead_code)] // Will be used when backend methods are fully implemented
-    async fn create_evaluator(
-        &self,
-    ) -> Result<snix_eval::Evaluation<'static, 'static, 'static, Box<dyn snix_eval::EvalIO>>> {
-        debug!("Creating fresh Snix evaluator");
-
-        // Create the required services
-        let blob_service = blob_from_addr("memory://")
-            .await
-            .map_err(|e| miette::miette!("Failed to create blob service: {}", e))?;
-        let directory_service = directory_from_addr("memory://")
-            .await
-            .map_err(|e| miette::miette!("Failed to create directory service: {}", e))?;
-        let path_info_service = pathinfo_from_addr(
-            "memory://",
-            None, // Use default composition context
-        )
-        .await
-        .map_err(|e| miette::miette!("Failed to create path info service: {}", e))?;
-
-        let nar_calculation_service: Arc<dyn NarCalculationService> = Arc::new(
-            SimpleRenderer::new(blob_service.clone(), directory_service.clone()),
-        );
-
-        let build_service: Arc<dyn BuildService> = Arc::new(DummyBuildService {});
-
-        // Create a Snix store I/O handle
-        let io_handle = Rc::new(SnixStoreIO::new(
-            blob_service,
-            directory_service,
-            path_info_service,
-            nar_calculation_service,
-            build_service,
-            tokio::runtime::Handle::current(),
-            vec![], // No hashed mirrors for now
-        ));
-
-        // Create evaluation builder
-        let io = Box::new(SnixIO::new(io_handle.clone() as Rc<dyn snix_eval::EvalIO>))
-            as Box<dyn snix_eval::EvalIO>;
-        let mut eval_builder = snix_eval::Evaluation::builder(io)
-            .enable_import()
-            .add_builtins(snix_eval::builtins::impure_builtins());
-
-        // Configure evaluation mode
-        // Note: Snix uses Strict/Lazy modes, not Impure/Pure
-        // Impure is controlled by the IO handle and builtins
-        eval_builder = eval_builder.mode(snix_eval::EvalMode::Lazy);
-
-        // Set up NIX_PATH if needed
-        if let Ok(nix_path) = std::env::var("NIX_PATH") {
-            eval_builder = eval_builder.nix_path(Some(nix_path));
-        }
-
-        // Build the final evaluator
-        Ok(eval_builder.build())
+    pub fn invalidate_eval_state(&self) -> Result<()> {
+        Ok(())
     }
 }
 
 #[async_trait(?Send)]
-impl NixBackend for SnixBackend {
-    async fn assemble(&self, _bootstrap_args: BootstrapArgs) -> Result<()> {
-        Ok(())
-    }
-
-    async fn dev_env(&self, _json: bool, _gc_root: &Path) -> Result<DevEnvOutput> {
-        // TODO: This is a complex operation that requires implementing the equivalent
-        // of `nix print-dev-env`. For now, we'll return a placeholder error.
-        bail!(
-            "dev_env is not yet implemented for Snix backend. This requires implementing shell environment generation."
-        )
-    }
-
-    async fn prepare_repl(&self) -> Result<()> {
-        bail!("REPL is not yet implemented for Snix backend")
-    }
-
-    async fn launch_repl(&self) -> Result<()> {
-        bail!("REPL is not yet implemented for Snix backend")
-    }
-
-    async fn build(
-        &self,
-        _attributes: &[&str],
-        _options: Option<Options>,
-        _gc_root: Option<&Path>,
-    ) -> Result<Vec<PathBuf>> {
-        // TODO: This requires implementing the build functionality
-        // using snix_glue::snix_build
-        bail!("Build functionality is not yet implemented for Snix backend")
-    }
-
-    async fn eval(&self, attributes: &[&str]) -> Result<String> {
-        // Convert attributes to a Nix expression
-        let _expr = if attributes.is_empty() {
-            "{ }".to_string()
-        } else {
-            // Build an attribute path expression like ".#foo.bar"
-            let attr_path = attributes.join(".");
-            format!("(import ./flake.nix).{attr_path}")
-        };
-
-        // For now, return a placeholder - proper implementation would need generator context
-        bail!("eval() is not yet fully implemented for SnixBackend")
-    }
-
-    async fn update(
-        &self,
-        _input_name: &Option<String>,
-        _inputs: &BTreeMap<String, Input>,
-        _override_inputs: &[String],
-    ) -> Result<()> {
-        bail!("Flake update is not yet implemented for Snix backend")
-    }
-
-    async fn metadata(&self) -> Result<String> {
-        // TODO: Implement flake metadata functionality
-        bail!("Flake metadata is not yet implemented for Snix backend")
-    }
-
-    async fn search(&self, _name: &str, _options: Option<Options>) -> Result<SearchResults> {
-        // TODO: Implement package search functionality
-        bail!("Package search is not yet implemented for Snix backend")
-    }
-
-    async fn gc(&self, _paths: Vec<PathBuf>) -> Result<(u64, u64)> {
-        // TODO: Implement garbage collection
-        warn!("Garbage collection not yet implemented for Snix backend");
-        Ok((0, 0))
-    }
-
-    fn name(&self) -> &'static str {
+impl Evaluator for SnixBackend {
+    fn name(&self) -> &str {
         "snix"
     }
 
-    async fn get_bash(&self, _refresh_cached_output: bool) -> Result<String> {
-        // TODO: Implement bash shell acquisition for Snix backend
-        bail!("get_bash is not yet implemented for Snix backend")
+    fn store(&self) -> &dyn Store {
+        &self.store
     }
 
-    async fn is_trusted_user(&self) -> Result<bool> {
-        // TODO: Implement trusted user check for Snix backend
-        bail!("is_trusted_user is not yet implemented for Snix backend")
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn invalidate(&self) -> Result<()> {
-        // No-op: Snix backend doesn't have caching yet
-        Ok(())
+    async fn eval(&self, _attrs: &[&str]) -> Result<String> {
+        bail!("SnixBackend::eval is not yet implemented")
+    }
+
+    async fn build(&self, _attrs: &[&str], _opts: BuildOptions) -> Result<Vec<StorePath>> {
+        bail!("SnixBackend::build is not yet implemented")
     }
 }
