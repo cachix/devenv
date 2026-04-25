@@ -4,14 +4,16 @@
 //! including PTY spawning, terminal handling, and status line rendering.
 
 pub mod dialect;
-mod escape;
+pub mod escape;
+pub mod escape_state;
 mod protocol;
 mod pty;
 mod session;
 mod status_line;
 mod terminal;
-mod terminal_commands;
+pub mod terminal_commands;
 mod utf8_accumulator;
+pub mod vt_utils;
 
 // Protocol types
 pub use protocol::{ShellCommand, ShellEvent};

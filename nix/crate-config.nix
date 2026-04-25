@@ -8,6 +8,7 @@
 , pkg-config
 , llvmPackages
 , rustPlatform
+, libghostty-vt
 , gitRev ? ""
 , isRelease ? false
 }:
@@ -69,10 +70,10 @@ let
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
   };
 
-  # Shared override for crates linking against nix, openssl, protobuf, dbus, and bindgen
+  # Shared override for crates linking against nix, openssl, protobuf, dbus, and bindgen.
   devenvBase = attrs: {
     buildInputs = (attrs.buildInputs or [ ])
-      ++ [ openssl ]
+      ++ [ openssl libghostty-vt ]
       ++ nixLibs
       ++ lib.optional stdenv.isLinux dbus;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
@@ -81,7 +82,10 @@ let
       rustPlatform.bindgenHook
     ];
     preConfigure = (attrs.preConfigure or "") + protoSetup;
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
+    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
+      "--cfg"
+      "tracing_unstable"
+    ];
   };
 in
 {
@@ -151,6 +155,18 @@ in
     CARGO_CRATE_NAME = "rmcp";
   };
 
+  # google-cloud client crates use env!("CARGO_CRATE_NAME") via
+  # gaxi::client_request_signals! at compile time
+  google-cloud-location = attrs: {
+    CARGO_CRATE_NAME = "google_cloud_location";
+  };
+  google-cloud-iam-v1 = attrs: {
+    CARGO_CRATE_NAME = "google_cloud_iam_v1";
+  };
+  google-cloud-secretmanager-v1 = attrs: {
+    CARGO_CRATE_NAME = "google_cloud_secretmanager_v1";
+  };
+
   # nix-bindings crates need pkg-config, nix libs, and bindgen
   nix-bindings-bindgen-raw = attrs: {
     buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
@@ -158,6 +174,13 @@ in
       pkg-config
       rustPlatform.bindgenHook
     ];
+  };
+
+  # libghostty-vt-sys has a pkg-config feature that finds the pre-built
+  # library from the ghostty flake, so just provide pkg-config + the library.
+  libghostty-vt-sys = attrs: {
+    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
+    buildInputs = (attrs.buildInputs or [ ]) ++ [ libghostty-vt.dev ];
   };
 
   nix-bindings-util = nixLibsOverride;

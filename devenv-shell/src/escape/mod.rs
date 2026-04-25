@@ -1,8 +1,8 @@
 //! Stateful byte-level scanner for escape sequences in raw PTY output.
 //!
 //! Detects DEC private mode sequences, CSI queries, DCS sequences, and
-//! OSC sequences so they can be forwarded to the real terminal (avt consumes
-//! them internally).
+//! OSC queries so they can be forwarded to the real terminal (the VT backend
+//! consumes them internally).
 
 mod dec_mode;
 mod osc;
@@ -345,6 +345,12 @@ pub struct EscapeScanner {
     dec_parser: DecModeParser,
     osc_parser: OscParser,
     csi_params: CsiParamState,
+}
+
+impl Default for EscapeScanner {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EscapeScanner {

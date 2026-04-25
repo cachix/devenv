@@ -1,14 +1,20 @@
 use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
-use avt::Vt;
 use devenv_event_sources::{FileWatcher, FileWatcherConfig};
+use devenv_shell::escape::{EscapeScanner, SequenceEvent};
+use devenv_shell::escape_state::{EscapeState, cleanup_forwarded_modes, process_escape_events};
+use devenv_shell::vt_utils::DEFAULT_MAX_SCROLLBACK;
 use devenv_shell::{Pty, PtyError, RawModeGuard, get_terminal_size};
+use libghostty_vt::fmt::{Format, Formatter, FormatterOptions};
+use libghostty_vt::terminal::{Options as TerminalOptions, Terminal};
+use portable_pty::PtySize;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc as tokio_mpsc;
+use tracing::warn;
 
 /// Messages sent by the shell manager to notify consumers of events.
 #[derive(Debug, Clone)]
@@ -29,6 +35,8 @@ pub enum ManagerError {
     Build(#[source] crate::builder::BuildError),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
+    #[error("terminal error: {0}")]
+    Terminal(#[from] libghostty_vt::Error),
 }
 
 enum Event {
@@ -37,6 +45,26 @@ enum Event {
     PtyExit(u64),
     FileChange(std::path::PathBuf),
     BuildComplete(Result<portable_pty::CommandBuilder, crate::builder::BuildError>),
+    Shutdown,
+}
+
+/// Drop guard that releases the resources keeping the VT thread alive when the
+/// async future is cancelled (e.g. tokio task abort). Without this, the PTY
+/// child sleeps forever and stdin/file-watcher threads keep their senders
+/// alive, so the VT thread's `event_rx.recv()` never returns and the
+/// surrounding `spawn_blocking` join hangs the runtime indefinitely.
+struct ShutdownGuard {
+    pty: Arc<RwLock<Arc<Pty>>>,
+    event_tx: std::sync::mpsc::Sender<Event>,
+}
+
+impl Drop for ShutdownGuard {
+    fn drop(&mut self) {
+        if let Ok(pty) = self.pty.read() {
+            let _ = pty.kill();
+        }
+        let _ = self.event_tx.send(Event::Shutdown);
+    }
 }
 
 pub struct ShellManager;
@@ -49,7 +77,7 @@ impl ShellManager {
     pub async fn run<B: ShellBuilder + 'static>(
         config: Config,
         builder: B,
-        messages: mpsc::Sender<ManagerMessage>,
+        messages: tokio_mpsc::Sender<ManagerMessage>,
     ) -> Result<(), ManagerError> {
         let builder = Arc::new(builder);
         let cwd = std::env::current_dir()?;
@@ -81,15 +109,18 @@ impl ShellManager {
         let size = get_terminal_size();
         let initial_pty = Arc::new(Pty::spawn(cmd, size).map_err(ManagerError::Spawn)?);
         let pty = Arc::new(RwLock::new(initial_pty.clone()));
-        let mut pty_generation: u64 = 0;
-
-        // Set up terminal state tracking
-        let mut vt = Vt::new(size.cols as usize, size.rows as usize);
 
         // Set up raw mode for stdin
         let _raw_guard = RawModeGuard::new()?;
 
-        let (event_tx, mut event_rx) = mpsc::channel::<Event>(100);
+        let (event_tx, event_rx) = std::sync::mpsc::channel::<Event>();
+
+        // Wakes the VT thread when the future is dropped (e.g. tokio task abort)
+        // so the surrounding spawn_blocking join can return.
+        let _shutdown = ShutdownGuard {
+            pty: pty.clone(),
+            event_tx: event_tx.clone(),
+        };
 
         // Spawn stdin reader thread
         let stdin_tx = event_tx.clone();
@@ -102,10 +133,7 @@ impl ShellManager {
                     match stdin.read(&mut buf) {
                         Ok(0) => break,
                         Ok(n) => {
-                            if stdin_tx
-                                .blocking_send(Event::Stdin(buf[..n].to_vec()))
-                                .is_err()
-                            {
+                            if stdin_tx.send(Event::Stdin(buf[..n].to_vec())).is_err() {
                                 break;
                             }
                         }
@@ -115,9 +143,12 @@ impl ShellManager {
             })
             .expect("failed to spawn reload-stdin thread");
 
-        // Spawn PTY reader thread
-        let pty_tx = event_tx.clone();
-        let spawn_pty_reader = |pty: Arc<Pty>, generation: u64, pty_tx: mpsc::Sender<Event>| {
+        // Spawn PTY reader thread. Returns the JoinHandle so the VT thread can
+        // bound-join the previous reader on each PTY swap (see swap site).
+        let spawn_pty_reader = |pty: Arc<Pty>,
+                                generation: u64,
+                                pty_tx: std::sync::mpsc::Sender<Event>|
+         -> std::thread::JoinHandle<()> {
             std::thread::Builder::new()
                 .name("reload-pty".into())
                 .spawn(move || {
@@ -126,163 +157,285 @@ impl ShellManager {
                         let result = pty.read(&mut buf);
                         match result {
                             Ok(0) => {
-                                let _ = pty_tx.blocking_send(Event::PtyExit(generation));
+                                let _ = pty_tx.send(Event::PtyExit(generation));
                                 break;
                             }
                             Ok(n) => {
                                 if pty_tx
-                                    .blocking_send(Event::PtyOutput(generation, buf[..n].to_vec()))
+                                    .send(Event::PtyOutput(generation, buf[..n].to_vec()))
                                     .is_err()
                                 {
                                     break;
                                 }
                             }
                             Err(_) => {
-                                let _ = pty_tx.blocking_send(Event::PtyExit(generation));
+                                let _ = pty_tx.send(Event::PtyExit(generation));
                                 break;
                             }
                         }
                     }
                 })
-                .expect("failed to spawn reload-pty thread");
+                .expect("failed to spawn reload-pty thread")
         };
-        spawn_pty_reader(initial_pty.clone(), pty_generation, pty_tx);
+        let initial_reader_handle = spawn_pty_reader(initial_pty.clone(), 0, event_tx.clone());
 
         // Spawn file watcher forwarder
         let watch_tx = event_tx.clone();
         tokio::spawn(async move {
             while let Some(event) = watcher.recv().await {
-                if watch_tx.send(Event::FileChange(event.path)).await.is_err() {
+                if watch_tx.send(Event::FileChange(event.path)).is_err() {
                     break;
                 }
             }
         });
 
-        let mut stdout = io::stdout();
+        // Move VT processing to a dedicated thread.
+        // Terminal is !Send, so all VT access must stay on one thread.
+        let vt_event_tx = event_tx.clone();
+        let vt_handle = std::thread::spawn(move || -> Result<(), ManagerError> {
+            let mut vt = Terminal::new(TerminalOptions {
+                cols: size.cols,
+                rows: size.rows,
+                max_scrollback: DEFAULT_MAX_SCROLLBACK,
+            })?;
+            let mut stdout = io::stdout();
+            let mut pty_generation: u64 = 0;
+            let mut building = false;
+            let mut pending_changes: Vec<std::path::PathBuf> = Vec::new();
+            let mut pty_reader_handle: Option<std::thread::JoinHandle<()>> =
+                Some(initial_reader_handle);
+            // Tracks terminal modes the embedded shell sets on the user's
+            // terminal (alt-screen, mouse, bracketed paste, kitty keyboard,
+            // etc.) so we can reset them on reload before the new shell
+            // starts. Without this, modes leak across reloads and the new
+            // shell inherits a dirty terminal.
+            let mut esc = EscapeState::new();
+            let mut scanner = EscapeScanner::new();
+            let mut esc_events: Vec<SequenceEvent> = Vec::new();
+            let mut current_pty_size: PtySize = size;
 
-        // Track the currently running build task for cancellation
-        let mut current_build: Option<tokio::task::AbortHandle> = None;
-        // Track files that changed and triggered rebuilds
-        let mut pending_changes: Vec<std::path::PathBuf> = Vec::new();
-
-        while let Some(event) = event_rx.recv().await {
-            match event {
-                Event::Stdin(data) => {
-                    let current_pty = pty.read().unwrap().clone();
-                    let _ = current_pty.write_all(&data);
-                    let _ = current_pty.flush();
-                }
-
-                Event::PtyOutput(generation, data) => {
-                    if generation != pty_generation {
-                        continue;
-                    }
-                    vt.feed_str(&String::from_utf8_lossy(&data));
-                    stdout.write_all(&data)?;
-                    stdout.flush()?;
-                }
-
-                Event::PtyExit(generation) => {
-                    if generation == pty_generation {
-                        break;
-                    }
-                }
-
-                Event::FileChange(path) => {
-                    // If a build is already running, drop the event.
-                    // spawn_blocking tasks cannot actually be cancelled, so
-                    // aborting and restarting would accumulate zombie builds
-                    // that can cascade into more file changes (fork bomb).
-                    if current_build.is_some() {
-                        tracing::debug!("Build in progress, ignoring file change: {:?}", path);
-                        continue;
+            while let Ok(event) = event_rx.recv() {
+                match event {
+                    Event::Stdin(data) => {
+                        let current_pty = pty.read().unwrap().clone();
+                        let _ = current_pty.write_all(&data);
+                        let _ = current_pty.flush();
                     }
 
-                    // Track the file that triggered this rebuild
-                    pending_changes.push(path.clone());
+                    Event::PtyOutput(generation, data) => {
+                        if generation != pty_generation {
+                            continue;
+                        }
+                        // Track mode-set escapes so we can reset them on
+                        // reload. The sink discards bytes (we already forward
+                        // raw `data` below); the side effect we want is the
+                        // EscapeState mutation. PTY responses to
+                        // TextAreaSizeQuery still go to the real PTY.
+                        let current_pty = pty.read().unwrap().clone();
+                        esc.reset_batch();
+                        process_escape_events(
+                            &mut scanner,
+                            &data,
+                            &mut esc,
+                            &mut io::sink(),
+                            &current_pty,
+                            current_pty_size,
+                            &mut esc_events,
+                        )?;
+                        vt.vt_write(&data);
+                        stdout.write_all(&data)?;
+                        stdout.flush()?;
+                    }
 
-                    let ctx = BuildContext {
-                        cwd: cwd.clone(),
-                        env: std::env::vars().collect(),
-                        trigger: BuildTrigger::FileChanged(path),
-                        watcher: watcher_handle.clone(),
-                        reload_file: Some(reload_file.clone()),
-                    };
+                    Event::PtyExit(generation) => {
+                        if generation == pty_generation {
+                            break;
+                        }
+                    }
 
-                    // Spawn build in background task
-                    let builder = builder.clone();
-                    let build_tx = event_tx.clone();
-                    let handle = tokio::spawn(async move {
-                        let result = tokio::task::spawn_blocking(move || builder.build(&ctx))
-                            .await
-                            .unwrap_or_else(|e| {
-                                Err(crate::builder::BuildError::new(format!(
-                                    "build task panicked: {}",
-                                    e
-                                )))
-                            });
-                        let _ = build_tx.send(Event::BuildComplete(result)).await;
-                    });
-                    current_build = Some(handle.abort_handle());
-                }
+                    Event::Shutdown => break,
 
-                Event::BuildComplete(result) => {
-                    current_build = None;
+                    Event::FileChange(path) => {
+                        if building {
+                            tracing::debug!("Build in progress, ignoring file change: {:?}", path);
+                            continue;
+                        }
 
-                    // Collect changed files as relative paths
-                    let files: Vec<PathBuf> = pending_changes
-                        .drain(..)
-                        .map(|p| p.strip_prefix(&cwd).map(|p| p.to_path_buf()).unwrap_or(p))
-                        .collect();
+                        pending_changes.push(path.clone());
 
-                    match result {
-                        Ok(cmd) => {
-                            let state = vt.dump();
-                            let new_size = get_terminal_size();
+                        let ctx = BuildContext {
+                            cwd: cwd.clone(),
+                            env: std::env::vars().collect(),
+                            trigger: BuildTrigger::FileChanged(path),
+                            watcher: watcher_handle.clone(),
+                            reload_file: Some(reload_file.clone()),
+                        };
 
-                            match Pty::spawn(cmd, new_size) {
-                                Ok(new_pty) => {
-                                    let new_pty = Arc::new(new_pty);
-                                    let old_pty = {
-                                        let mut pty_guard = pty.write().unwrap();
-                                        let old = pty_guard.clone();
-                                        *pty_guard = new_pty.clone();
-                                        old
-                                    };
-                                    let _ = old_pty.kill();
+                        // Spawn build in background thread. catch_unwind ensures
+                        // a panicking builder still sends BuildComplete so the
+                        // `building` flag is reset and the manager keeps
+                        // accepting future file changes.
+                        building = true;
+                        let builder = builder.clone();
+                        let build_tx = vt_event_tx.clone();
+                        std::thread::spawn(move || {
+                            let result =
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                    builder.build(&ctx)
+                                }))
+                                .unwrap_or_else(|_| {
+                                    Err(crate::builder::BuildError::new("build thread panicked"))
+                                });
+                            let _ = build_tx.send(Event::BuildComplete(result));
+                        });
+                    }
 
-                                    pty_generation = pty_generation.wrapping_add(1);
-                                    spawn_pty_reader(
-                                        new_pty.clone(),
-                                        pty_generation,
-                                        event_tx.clone(),
-                                    );
+                    Event::BuildComplete(result) => {
+                        building = false;
 
-                                    vt = Vt::new(new_size.cols as usize, new_size.rows as usize);
+                        let files: Vec<PathBuf> = pending_changes
+                            .drain(..)
+                            .map(|p| p.strip_prefix(&cwd).map(|p| p.to_path_buf()).unwrap_or(p))
+                            .collect();
 
-                                    let _ = new_pty.write_all(state.as_bytes());
-                                    let _ = new_pty.flush();
+                        match result {
+                            Ok(cmd) => {
+                                let state = match Formatter::new(
+                                    &vt,
+                                    FormatterOptions {
+                                        format: Format::Vt,
+                                        trim: false,
+                                        unwrap: false,
+                                        selection: None,
+                                    },
+                                )
+                                .and_then(|mut f| f.format_alloc(None))
+                                .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+                                {
+                                    Ok(s) => s,
+                                    Err(e) => {
+                                        warn!("failed to dump terminal state: {e}");
+                                        String::new()
+                                    }
+                                };
+                                let new_size = get_terminal_size();
 
-                                    let _ = messages.try_send(ManagerMessage::Reloaded { files });
-                                }
-                                Err(e) => {
-                                    let _ = messages.try_send(ManagerMessage::ReloadFailed {
-                                        files,
-                                        error: e.to_string(),
-                                    });
+                                match Pty::spawn(cmd, new_size) {
+                                    Ok(new_pty) => {
+                                        let new_pty = Arc::new(new_pty);
+                                        let old_pty = {
+                                            let mut pty_guard = pty.write().unwrap();
+                                            let old = pty_guard.clone();
+                                            *pty_guard = new_pty.clone();
+                                            old
+                                        };
+                                        let _ = old_pty.kill();
+
+                                        // Bound-join the previous reader so it
+                                        // does not outlive the swap. On POSIX
+                                        // the master fd EOFs as soon as the
+                                        // killed child closes the slave; the
+                                        // poll handles slow EOF and the Windows
+                                        // ConPTY worst case.
+                                        if let Some(handle) = pty_reader_handle.take() {
+                                            let deadline = std::time::Instant::now()
+                                                + std::time::Duration::from_millis(500);
+                                            while !handle.is_finished()
+                                                && std::time::Instant::now() < deadline
+                                            {
+                                                std::thread::sleep(
+                                                    std::time::Duration::from_millis(10),
+                                                );
+                                            }
+                                            if handle.is_finished() {
+                                                let _ = handle.join();
+                                            }
+                                            // Otherwise drop the handle and
+                                            // detach. The generation check
+                                            // below filters any stray events.
+                                        }
+
+                                        pty_generation = pty_generation.wrapping_add(1);
+                                        pty_reader_handle = Some(spawn_pty_reader(
+                                            new_pty.clone(),
+                                            pty_generation,
+                                            vt_event_tx.clone(),
+                                        ));
+
+                                        vt = Terminal::new(TerminalOptions {
+                                            cols: new_size.cols,
+                                            rows: new_size.rows,
+                                            max_scrollback: DEFAULT_MAX_SCROLLBACK,
+                                        })?;
+                                        current_pty_size = new_size;
+
+                                        // Reset any modes the old shell set on
+                                        // the user's terminal (alt-screen,
+                                        // mouse, paste, kitty keyboard) before
+                                        // replaying captured state, so the new
+                                        // shell starts on a clean baseline.
+                                        cleanup_forwarded_modes(&esc, &mut stdout)?;
+                                        stdout.flush()?;
+                                        esc = EscapeState::new();
+                                        scanner = EscapeScanner::new();
+                                        esc_events.clear();
+
+                                        // Replay captured terminal state to the
+                                        // user's terminal (stdout), not into
+                                        // the new shell's stdin.
+                                        stdout.write_all(state.as_bytes())?;
+                                        stdout.flush()?;
+
+                                        if let Err(e) =
+                                            messages.try_send(ManagerMessage::Reloaded { files })
+                                        {
+                                            tracing::debug!("failed to send Reloaded message: {e}");
+                                        }
+                                    }
+                                    Err(e) => {
+                                        if let Err(send_err) =
+                                            messages.try_send(ManagerMessage::ReloadFailed {
+                                                files,
+                                                error: e.to_string(),
+                                            })
+                                        {
+                                            tracing::debug!(
+                                                "failed to send ReloadFailed message: {send_err}"
+                                            );
+                                        }
+                                    }
                                 }
                             }
-                        }
-                        Err(e) => {
-                            let _ = messages.try_send(ManagerMessage::BuildFailed {
-                                files,
-                                error: e.to_string(),
-                            });
+                            Err(e) => {
+                                if let Err(send_err) =
+                                    messages.try_send(ManagerMessage::BuildFailed {
+                                        files,
+                                        error: e.to_string(),
+                                    })
+                                {
+                                    tracing::debug!(
+                                        "failed to send BuildFailed message: {send_err}"
+                                    );
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
+
+            Ok(())
+        });
+
+        // Wait for VT thread without blocking the tokio runtime
+        tokio::task::spawn_blocking(move || {
+            vt_handle
+                .join()
+                .unwrap_or(Err(ManagerError::Io(io::Error::other(
+                    "VT thread panicked",
+                ))))
+        })
+        .await
+        .map_err(|_| ManagerError::Io(io::Error::other("join task failed")))??;
 
         Ok(())
     }

@@ -3,354 +3,142 @@
 //! This module provides the main `ShellSession` type that orchestrates
 //! PTY lifecycle, terminal I/O, and status line rendering.
 
-use crate::escape::{CLEANUP_MODES, DecModeEvent, EscapeScanner, SequenceEvent};
+use crate::escape::EscapeScanner;
+use crate::escape_state::{
+    EscapeState, cleanup_forwarded_modes as escape_state_cleanup,
+    process_escape_events as escape_state_process,
+};
 use crate::protocol::{ShellCommand, ShellEvent};
 use crate::pty::{Pty, PtyError, get_terminal_size};
 use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
 use crate::terminal::RawModeGuard;
 use crate::terminal_commands::{
-    InBandResizeNotification, ORIGIN_MODE, ReportTextAreaSize, ResetDecMode, ResetModifyOtherKeys,
-    ResetScrollRegion, SetKeypadMode, SetScrollRegion,
+    InBandResizeNotification, ORIGIN_MODE, ResetDecMode, ResetScrollRegion, SetScrollRegion,
 };
 use crate::utf8_accumulator::Utf8Accumulator;
-use avt::Vt;
+use crate::vt_utils::{
+    CursorState, DEFAULT_MAX_SCROLLBACK, active_point, cells_in_row, point_with_x, push_cell_text,
+    screen_point,
+};
 use crossterm::{
-    Command, cursor,
-    event::PopKeyboardEnhancementFlags,
-    queue,
+    Command, cursor, queue,
     style::ResetColor,
     terminal::{self, Clear, ClearType},
 };
+use libghostty_vt::screen::{Cell, CellWide};
+use libghostty_vt::style::{Style, StyleColor, Underline};
+use libghostty_vt::terminal::{Options as TerminalOptions, Point, PointCoordinate, Terminal};
 use portable_pty::PtySize;
-use std::collections::BTreeSet;
 use std::fmt::Write as FmtWrite;
 use std::io::{self, IsTerminal, Read, Write};
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::{Notify, mpsc, oneshot};
+use tokio::sync::{Notify, mpsc as tokio_mpsc, oneshot};
 
 /// Keybind byte sequences (ESC + Ctrl key).
 const KEYBIND_TOGGLE_PAUSE: [u8; 2] = [0x1b, 0x04]; // Ctrl-Alt-D
 const KEYBIND_LIST_WATCHED: [u8; 2] = [0x1b, 0x17]; // Ctrl-Alt-W
 const KEYBIND_TOGGLE_ERROR: [u8; 2] = [0x1b, 0x05]; // Ctrl-Alt-E
 
-/// Escape-sequence state tracked across PTY output processing.
+/// Render a VT row as a string with SGR escape sequences.
 ///
-/// Persistent fields (`in_alternate_screen`, `forwarded_dec_modes`,
-/// `keypad_application_mode`) carry across the entire session.
-/// Per-batch fields (`erase_display`, `clear_scrollback`) are reset at the
-/// start of each `PtyOutput` batch.
-struct EscapeState {
-    in_alternate_screen: bool,
-    /// DEC private modes that were set and need explicit reset on exit.
-    /// Tracked separately from `in_alternate_screen` (which uses
-    /// `LeaveAlternateScreen`) and keypad mode (which uses `ESC >`).
-    forwarded_dec_modes: BTreeSet<u16>,
-    /// Keypad is in application mode (DECKPAM, `ESC =`).
-    keypad_application_mode: bool,
-    /// Set when CSI 2 J is seen — signals the caller to consume `row_offset`.
-    erase_display: bool,
-    /// Set when CSI 3 J is seen — deferred so the caller can emit it *after*
-    /// `scroll_region` pushes old TUI content into scrollback.
-    clear_scrollback: bool,
-    /// Kitty keyboard protocol stack depth.
-    kitty_keyboard_depth: u32,
-    /// XTMODIFYOTHERKEYS is enabled.
-    modify_other_keys: bool,
-    /// Mode 2048 (in-band resize) is enabled by the PTY program.
-    in_band_resize: bool,
-}
-
-impl EscapeState {
-    fn new() -> Self {
-        Self {
-            in_alternate_screen: false,
-            forwarded_dec_modes: BTreeSet::new(),
-            keypad_application_mode: false,
-            erase_display: false,
-            clear_scrollback: false,
-            kitty_keyboard_depth: 0,
-            modify_other_keys: false,
-            in_band_resize: false,
+/// Uses pre-fetched cells for text/style-id and only calls into the terminal
+/// for style details and grapheme clusters, avoiding a second full cell iteration.
+fn dump_row_from_cells(buf: &mut String, vt: &Terminal<'_, '_>, point: Point, cells: &[Cell]) {
+    let mut prev_style_id: Option<libghostty_vt::style::Id> = None;
+    for (x, cell) in cells.iter().enumerate() {
+        if cell.wide().ok() == Some(CellWide::SpacerTail) {
+            continue;
         }
-    }
-
-    /// Reset per-batch flags before processing a new `PtyOutput` batch.
-    fn reset_batch(&mut self) {
-        self.erase_display = false;
-        self.clear_scrollback = false;
-    }
-
-    /// Apply a DEC mode event, updating tracked state.
-    /// Returns the raw bytes to forward to stdout (empty if mode isn't forwarded).
-    fn apply_dec_mode<'a>(&mut self, event: &'a DecModeEvent) -> &'a [u8] {
-        if event.enables_in_band_resize() {
-            self.in_band_resize = true;
-        } else if event.disables_in_band_resize() {
-            self.in_band_resize = false;
-        }
-
-        if !event.has_forwarded_mode() {
-            return &[];
-        }
-
-        if event.enters_alt_screen() {
-            self.in_alternate_screen = true;
-        } else if event.exits_alt_screen() {
-            self.in_alternate_screen = false;
-        }
-
-        match event {
-            DecModeEvent::Set { modes, .. } => {
-                for &m in modes {
-                    if CLEANUP_MODES.contains(&m) {
-                        self.forwarded_dec_modes.insert(m);
-                    }
-                }
+        let Ok(cell_ref) = vt.grid_ref(point_with_x(point, x as u16)) else {
+            continue;
+        };
+        let style_id = cell.style_id().ok();
+        if prev_style_id != style_id {
+            if let Ok(style) = cell_ref.style() {
+                dump_style(buf, &style);
             }
-            DecModeEvent::Reset { modes, .. } => {
-                for m in modes {
-                    self.forwarded_dec_modes.remove(m);
-                }
-            }
+            prev_style_id = style_id;
         }
-
-        event.raw_bytes()
-    }
-
-    /// Apply a kitty keyboard push/pop/set event.
-    fn apply_kitty_keyboard(&mut self, stack_delta: i8) {
-        if stack_delta > 0 {
-            self.kitty_keyboard_depth =
-                self.kitty_keyboard_depth.saturating_add(stack_delta as u32);
-        } else if stack_delta < 0 {
-            self.kitty_keyboard_depth = self
-                .kitty_keyboard_depth
-                .saturating_sub(stack_delta.unsigned_abs() as u32);
-        }
-    }
-
-    /// Apply an XTMODIFYOTHERKEYS set/reset event.
-    fn apply_modify_other_keys(&mut self, enabled: bool) {
-        self.modify_other_keys = enabled;
+        push_cell_text(buf, cell, &cell_ref);
     }
 }
 
-/// Render a VT line as a string with SGR escape sequences.
-///
-/// Equivalent to the `Line::dump()` method that was public in avt 0.14
-/// but made `pub(crate)` in 0.17.
-fn dump_line(buf: &mut String, line: &avt::Line) {
-    for cells in line.chunks(|c1, c2| c1.pen() != c2.pen()) {
-        dump_pen(buf, cells[0].pen());
-        for cell in &cells {
-            buf.push(cell.char());
-        }
-    }
+/// Render a VT row as a string with SGR escape sequences (fetches cells internally).
+fn dump_row(buf: &mut String, vt: &Terminal<'_, '_>, point: Point) {
+    let cells = cells_in_row(vt, point);
+    dump_row_from_cells(buf, vt, point, &cells);
 }
 
-fn dump_pen(s: &mut String, pen: &avt::Pen) {
+fn dump_style(s: &mut String, style: &Style) {
     s.push_str("\x1b[0");
-    if let Some(c) = pen.foreground() {
+    if style.fg_color != StyleColor::None {
         s.push(';');
-        dump_color(s, c, 30);
+        dump_color(s, &style.fg_color, 30);
     }
-    if let Some(c) = pen.background() {
+    if style.bg_color != StyleColor::None {
         s.push(';');
-        dump_color(s, c, 40);
+        dump_color(s, &style.bg_color, 40);
     }
-    if pen.is_bold() {
+    if style.bold {
         s.push_str(";1");
     }
-    if pen.is_faint() {
+    if style.faint {
         s.push_str(";2");
     }
-    if pen.is_italic() {
+    if style.italic {
         s.push_str(";3");
     }
-    if pen.is_underline() {
-        s.push_str(";4");
+    match style.underline {
+        Underline::None => {}
+        Underline::Single => s.push_str(";4"),
+        Underline::Double => s.push_str(";4:2"),
+        Underline::Curly => s.push_str(";4:3"),
+        Underline::Dotted => s.push_str(";4:4"),
+        Underline::Dashed => s.push_str(";4:5"),
+        _ => {}
     }
-    if pen.is_blink() {
+    if style.blink {
         s.push_str(";5");
     }
-    if pen.is_inverse() {
+    if style.inverse {
         s.push_str(";7");
     }
-    if pen.is_strikethrough() {
+    if style.strikethrough {
         s.push_str(";9");
     }
     s.push('m');
 }
 
-fn dump_color(s: &mut String, color: avt::Color, base: u8) {
+fn dump_color(s: &mut String, color: &StyleColor, base: u8) {
     match color {
-        avt::Color::Indexed(c) if c < 8 => {
-            let _ = write!(s, "{}", base + c);
+        StyleColor::Palette(p) if p.0 < 8 => {
+            let _ = write!(s, "{}", base + p.0);
         }
-        avt::Color::Indexed(c) if c < 16 => {
-            let _ = write!(s, "{}", base + 52 + c);
+        StyleColor::Palette(p) if p.0 < 16 => {
+            let _ = write!(s, "{}", base + 52 + p.0);
         }
-        avt::Color::Indexed(c) => {
-            let _ = write!(s, "{}:5:{}", base + 8, c);
+        StyleColor::Palette(p) => {
+            let _ = write!(s, "{}:5:{}", base + 8, p.0);
         }
-        avt::Color::RGB(rgb) => {
+        StyleColor::Rgb(rgb) => {
             let _ = write!(s, "{}:2:{}:{}:{}", base + 8, rgb.r, rgb.g, rgb.b);
         }
+        StyleColor::None => {}
     }
 }
 
-/// Feed text into VT and return `(scroll_count, gc_count)`.
-///
-/// `scroll_count` is the number of lines that scrolled off the viewport
-/// (including lines retained in scrollback and lines trimmed by GC).
-/// `gc_count` is the number of lines trimmed by GC beyond the scrollback
-/// limit — needed to keep `Renderer::scrollback_flushed` accurate.
-fn feed_vt(vt: &mut Vt, text: &str) -> (usize, usize) {
-    let lines_before = vt.lines().count();
-    let gc_count = {
-        let changes = vt.feed_str(text);
-        changes.scrollback.count()
-    };
-    let lines_after = vt.lines().count();
-    let scroll_count = (lines_after + gc_count).saturating_sub(lines_before);
-    (scroll_count, gc_count)
-}
-
-/// Filters OSC responses from stdin to prevent garbled text.
-///
-/// When we forward OSC queries (e.g., color scheme detection) to the real
-/// terminal, the terminal's responses arrive on stdin. If the querying
-/// program has exited before the response arrives, the response bytes
-/// would be interpreted as user input by readline. This filter removes
-/// OSC response sequences (`ESC ] <digits> ; <payload> <terminator>`)
-/// from the stdin stream while passing everything else through.
-///
-/// DCS responses are NOT filtered — they are replies to queries that the
-/// program itself sent (e.g., XTGETTCAP, DECRQSS) and must reach it.
-struct StdinFilter {
-    state: StdinFilterState,
-    buf: Vec<u8>,
-    output: Vec<u8>,
-}
-
-#[derive(Clone, Copy)]
-enum StdinFilterState {
-    Ground,
-    Esc,
-    OscDigit,
-    OscPayload,
-    OscPayloadEsc,
-}
-
-impl StdinFilter {
-    fn new() -> Self {
-        Self {
-            state: StdinFilterState::Ground,
-            buf: Vec::new(),
-            output: Vec::new(),
-        }
-    }
-
-    /// Filter a chunk of stdin data, returning only non-OSC bytes.
-    fn filter(&mut self, data: &[u8]) -> &[u8] {
-        self.output.clear();
-        self.output.reserve(data.len());
-        let output = &mut self.output;
-
-        for &byte in data {
-            match self.state {
-                StdinFilterState::Ground => {
-                    if byte == 0x1b {
-                        self.buf.clear();
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::Esc;
-                    } else {
-                        output.push(byte);
-                    }
-                }
-                StdinFilterState::Esc => {
-                    if byte == b']' {
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::OscDigit;
-                    } else if byte == 0x1b {
-                        output.push(0x1b);
-                        self.buf.clear();
-                        self.buf.push(byte);
-                    } else {
-                        output.extend_from_slice(&self.buf);
-                        output.push(byte);
-                        self.buf.clear();
-                        self.state = StdinFilterState::Ground;
-                    }
-                }
-                StdinFilterState::OscDigit => {
-                    if byte.is_ascii_digit() {
-                        self.buf.push(byte);
-                    } else if byte == b';' {
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::OscPayload;
-                    } else {
-                        // Not a valid OSC response pattern, emit everything
-                        output.extend_from_slice(&self.buf);
-                        output.push(byte);
-                        self.buf.clear();
-                        self.state = StdinFilterState::Ground;
-                    }
-                }
-                StdinFilterState::OscPayload => {
-                    if byte == 0x07 {
-                        // BEL terminates OSC — drop the entire sequence
-                        self.buf.clear();
-                        self.state = StdinFilterState::Ground;
-                    } else if byte == 0x1b {
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::OscPayloadEsc;
-                    } else {
-                        self.buf.push(byte);
-                        if self.buf.len() > 256 {
-                            // Safety limit: not a real OSC response, emit
-                            output.extend_from_slice(&self.buf);
-                            self.buf.clear();
-                            self.state = StdinFilterState::Ground;
-                        }
-                    }
-                }
-                StdinFilterState::OscPayloadEsc => {
-                    if byte == b'\\' {
-                        // ST (ESC \) terminates OSC — drop the entire sequence
-                        self.buf.clear();
-                        self.state = StdinFilterState::Ground;
-                    } else if byte == 0x1b {
-                        // Another ESC — give up on this OSC, start fresh
-                        output.extend_from_slice(&self.buf[..self.buf.len() - 1]);
-                        self.buf.clear();
-                        self.buf.push(byte);
-                        self.state = StdinFilterState::Esc;
-                    } else {
-                        // Not ST — not a valid OSC, emit everything
-                        output.extend_from_slice(&self.buf);
-                        output.push(byte);
-                        self.buf.clear();
-                        self.state = StdinFilterState::Ground;
-                    }
-                }
-            }
-        }
-
-        // If the chunk ended with a bare ESC (state == Esc), flush it now.
-        // A real escape sequence (e.g. OSC) always has `]` in the same read
-        // chunk. A standalone Esc keypress arrives alone, so emit it
-        // immediately instead of holding it until the next keystroke.
-        if matches!(self.state, StdinFilterState::Esc) {
-            output.extend_from_slice(&self.buf);
-            self.buf.clear();
-            self.state = StdinFilterState::Ground;
-        }
-
-        &self.output
-    }
+/// Feed text into VT and return the scroll count (lines that scrolled off the viewport).
+fn feed_vt(vt: &mut Terminal<'_, '_>, text: &str) -> usize {
+    let total_before = vt.total_rows().unwrap_or(0);
+    vt.vt_write(text.as_bytes());
+    let total_after = vt.total_rows().unwrap_or(0);
+    // When scrollback is at the limit, GC trims old lines and total_rows
+    // stays constant (delta = 0). This underestimates scroll_count in that
+    // case. The render_with_scroll method detects this via a fingerprint
+    // check on the last flushed scrollback line and corrects accordingly.
+    total_after.saturating_sub(total_before)
 }
 
 /// Differential renderer that draws VT state to a bounded terminal region.
@@ -360,9 +148,9 @@ impl StdinFilter {
 /// the VT state machine — similar to how tmux works.
 struct Renderer {
     /// Previous frame for diffing — one line of cells per row.
-    prev_lines: Vec<Vec<avt::Cell>>,
-    /// Previous cursor position and visibility.
-    prev_cursor: (usize, usize, bool),
+    prev_lines: Vec<Vec<Cell>>,
+    /// Previous cursor state.
+    prev_cursor: CursorState,
     /// Row offset for the initial phase after TUI handoff.
     /// When > 0, VT row N maps to real terminal row (N + 1 + row_offset)
     /// instead of (N + 1). Gradually consumed as VT content scrolls,
@@ -374,6 +162,9 @@ struct Renderer {
     /// Number of VT scrollback lines already pushed to native terminal scrollback.
     /// Used to flush only new (unflushed) scrollback lines in `render_with_scroll`.
     scrollback_flushed: usize,
+    /// Fingerprint of the last flushed scrollback line, used to detect when
+    /// scrollback GC shifts screen coordinates (making scrollback_flushed stale).
+    last_flushed_fingerprint: Option<[u32; 4]>,
     /// Reusable buffer for SGR line rendering (avoids per-line allocation).
     line_buf: String,
 }
@@ -382,25 +173,43 @@ impl Renderer {
     fn new(content_rows: u16) -> Self {
         Self {
             prev_lines: Vec::new(),
-            prev_cursor: (0, 0, true),
+            prev_cursor: CursorState {
+                col: 0,
+                row: 0,
+                visible: true,
+            },
             row_offset: 0,
             content_rows,
             scrollback_flushed: 0,
+            last_flushed_fingerprint: None,
             line_buf: String::new(),
         }
     }
 
-    /// Feed text into VT and adjust the scrollback watermark for GC.
-    /// Returns the scroll count (lines that scrolled off the viewport).
-    fn feed_vt(&mut self, vt: &mut Vt, text: &str) -> usize {
-        let (scroll, gc) = feed_vt(vt, text);
-        self.scrollback_flushed = self.scrollback_flushed.saturating_sub(gc);
-        scroll
+    /// Mark all current VT scrollback as already flushed (e.g., after resize).
+    fn mark_scrollback_flushed(&mut self, vt: &Terminal<'_, '_>) {
+        self.scrollback_flushed = vt.scrollback_rows().unwrap_or(0);
+        self.last_flushed_fingerprint = self.scrollback_fingerprint(vt);
     }
 
-    /// Mark all current VT scrollback as already flushed (e.g., after resize).
-    fn mark_scrollback_flushed(&mut self, vt: &Vt) {
-        self.scrollback_flushed = vt.lines().count().saturating_sub(vt.size().1);
+    /// Sample codepoints from the last flushed scrollback line for GC detection.
+    fn scrollback_fingerprint(&self, vt: &Terminal<'_, '_>) -> Option<[u32; 4]> {
+        if self.scrollback_flushed == 0 {
+            return None;
+        }
+        let cols = vt.cols().unwrap_or(0);
+        let y = (self.scrollback_flushed - 1) as u32;
+        let sample_xs = [0, cols / 4, cols / 2, 3 * cols / 4];
+        let mut fp = [0u32; 4];
+        for (i, &x) in sample_xs.iter().enumerate() {
+            fp[i] = vt
+                .grid_ref(Point::Screen(PointCoordinate { x, y }))
+                .ok()
+                .and_then(|gr| gr.cell().ok())
+                .and_then(|c| c.codepoint().ok())
+                .unwrap_or(0);
+        }
+        Some(fp)
     }
 
     /// Number of VT rows that fit on-screen given the current offset.
@@ -429,25 +238,43 @@ impl Renderer {
         queue!(stdout, ResetScrollRegion)
     }
 
-    /// Write a single VT line's content (SGR-formatted text + reset) to stdout.
-    fn write_line_content(&mut self, stdout: &mut impl Write, line: &avt::Line) -> io::Result<()> {
+    /// Write a single VT row's content (SGR-formatted text + reset) to stdout.
+    fn write_row_content(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'_, '_>,
+        point: Point,
+    ) -> io::Result<()> {
         self.line_buf.clear();
-        dump_line(&mut self.line_buf, line);
+        dump_row(&mut self.line_buf, vt, point);
+        stdout.write_all(self.line_buf.as_bytes())?;
+        queue!(stdout, ResetColor)
+    }
+
+    /// Write a row using pre-fetched cells (avoids re-iterating cells via FFI).
+    fn write_row_from_cells(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'_, '_>,
+        point: Point,
+        cells: &[Cell],
+    ) -> io::Result<()> {
+        self.line_buf.clear();
+        dump_row_from_cells(&mut self.line_buf, vt, point, cells);
         stdout.write_all(self.line_buf.as_bytes())?;
         queue!(stdout, ResetColor)
     }
 
     /// Render changed VT lines to stdout. Skips lines that haven't changed
     /// and clips rows that would fall outside the visible area.
-    fn render(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+    fn render(&mut self, stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
         let offset = self.row_offset as usize;
         let max_row = self.visible_rows();
-        for (row_idx, line) in vt.view().enumerate() {
-            if row_idx >= max_row {
-                break;
-            }
-            let cells = line.cells();
-            if row_idx < self.prev_lines.len() && cells == &self.prev_lines[row_idx][..] {
+        let rows = vt.rows().unwrap_or(0) as usize;
+        for row_idx in 0..rows.min(max_row) {
+            let point = active_point(row_idx as u32);
+            let cells = cells_in_row(vt, point);
+            if row_idx < self.prev_lines.len() && cells == self.prev_lines[row_idx] {
                 continue;
             }
             queue!(
@@ -455,13 +282,11 @@ impl Renderer {
                 cursor::MoveTo(0, (row_idx + offset) as u16),
                 Clear(ClearType::CurrentLine)
             )?;
-            self.write_line_content(stdout, line)?;
+            self.write_row_from_cells(stdout, vt, point, &cells)?;
             if row_idx >= self.prev_lines.len() {
                 self.prev_lines.resize_with(row_idx + 1, Vec::new);
             }
-            let prev = &mut self.prev_lines[row_idx];
-            prev.clear();
-            prev.extend_from_slice(cells);
+            self.prev_lines[row_idx] = cells;
         }
         self.update_cursor(stdout, vt)
     }
@@ -473,9 +298,30 @@ impl Renderer {
     /// the actual scrolled-off text), this draws VT scrollback lines onto the
     /// real terminal and then scrolls them off via newlines inside a DECSTBM
     /// region that protects the status line.
-    fn render_with_scroll(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
-        let vt_scrollback = vt.lines().count().saturating_sub(vt.size().1);
-        let unflushed = vt_scrollback.saturating_sub(self.scrollback_flushed);
+    fn render_with_scroll(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'_, '_>,
+    ) -> io::Result<()> {
+        let vt_scrollback = vt.scrollback_rows().unwrap_or(0);
+        let mut unflushed = vt_scrollback.saturating_sub(self.scrollback_flushed);
+
+        // Detect scrollback GC: when scrollback is at capacity, old lines are
+        // trimmed and new ones added, but scrollback_rows() stays constant.
+        // This makes unflushed = 0 even though new lines exist. Detect this
+        // by checking whether the content at the last flushed position changed
+        // (indicating screen coordinates shifted due to GC).
+        if unflushed == 0 && self.scrollback_flushed > 0 {
+            let current_fp = self.scrollback_fingerprint(vt);
+            if current_fp != self.last_flushed_fingerprint {
+                // GC shifted coordinates. Re-flush the last content_rows worth
+                // of scrollback. This may duplicate some lines in native
+                // scrollback but ensures new content is not lost.
+                let correction = (self.content_rows as usize).min(self.scrollback_flushed);
+                self.scrollback_flushed -= correction;
+                unflushed = correction;
+            }
+        }
 
         if unflushed > 0 && self.content_rows > 0 {
             let batch_size = self.content_rows as usize;
@@ -490,8 +336,8 @@ impl Renderer {
             )?;
 
             // Iterate scrollback lines starting from the first unflushed one.
-            // vt.line(n) is viewport-relative, so we must use lines() iterator.
-            let mut lines_iter = vt.lines().skip(self.scrollback_flushed);
+            // Uses Screen coordinates where y=0 is the oldest scrollback line.
+            let mut screen_y = self.scrollback_flushed;
             let mut remaining = unflushed;
 
             while remaining > 0 {
@@ -499,15 +345,16 @@ impl Renderer {
                 let mut drawn = 0;
 
                 for i in 0..count {
-                    let Some(line) = lines_iter.next() else {
+                    if screen_y >= vt_scrollback {
                         break;
-                    };
+                    }
                     queue!(
                         stdout,
                         cursor::MoveTo(0, i as u16),
                         Clear(ClearType::CurrentLine)
                     )?;
-                    self.write_line_content(stdout, line)?;
+                    self.write_row_content(stdout, vt, screen_point(screen_y as u32))?;
+                    screen_y += 1;
                     drawn += 1;
                 }
 
@@ -527,33 +374,33 @@ impl Renderer {
 
             queue!(stdout, ResetScrollRegion)?;
             self.scrollback_flushed = vt_scrollback;
+            self.last_flushed_fingerprint = self.scrollback_fingerprint(vt);
             self.prev_lines.clear();
         }
         self.render(stdout, vt)
     }
 
     /// Full redraw of all VT lines (after resize or initialization).
-    fn render_full(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+    fn render_full(&mut self, stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
         self.invalidate();
         self.render(stdout, vt)
     }
 
     /// Position the real terminal cursor to match the VT cursor.
-    fn update_cursor(&mut self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
+    fn update_cursor(&mut self, stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
         let offset = self.row_offset as usize;
-        let cursor = vt.cursor();
-        let new_cursor = (cursor.col, cursor.row, cursor.visible);
-        if new_cursor != self.prev_cursor {
-            if cursor.visible && !self.prev_cursor.2 {
+        let cur = CursorState::from_terminal(vt);
+        if cur != self.prev_cursor {
+            if cur.visible && !self.prev_cursor.visible {
                 queue!(stdout, cursor::Show)?;
-            } else if !cursor.visible && self.prev_cursor.2 {
+            } else if !cur.visible && self.prev_cursor.visible {
                 queue!(stdout, cursor::Hide)?;
             }
             queue!(
                 stdout,
-                cursor::MoveTo(cursor.col as u16, (cursor.row + offset) as u16)
+                cursor::MoveTo(cur.col, (cur.row as usize + offset) as u16)
             )?;
-            self.prev_cursor = new_cursor;
+            self.prev_cursor = cur;
         }
         Ok(())
     }
@@ -562,12 +409,12 @@ impl Renderer {
     ///
     /// Used to restore the real terminal cursor after status line draws
     /// or other operations that move it away from the VT position.
-    fn write_cursor(&self, stdout: &mut impl Write, vt: &Vt) -> io::Result<()> {
-        let c = vt.cursor();
+    fn write_cursor(&self, stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
+        let cur = CursorState::from_terminal(vt);
         let offset = self.row_offset as usize;
         queue!(
             stdout,
-            cursor::MoveTo(c.col as u16, (c.row + offset) as u16)
+            cursor::MoveTo(cur.col, (cur.row as usize + offset) as u16)
         )
     }
 
@@ -579,13 +426,14 @@ impl Renderer {
     /// Snapshot VT state into prev_lines without writing anything to stdout.
     /// Used after TUI handoff to establish a baseline for diff rendering
     /// while preserving existing terminal content.
-    fn sync(&mut self, vt: &Vt) {
+    fn sync(&mut self, vt: &Terminal<'_, '_>) {
         self.prev_lines.clear();
-        for line in vt.view() {
-            self.prev_lines.push(line.cells().to_vec());
+        let rows = vt.rows().unwrap_or(0);
+        for y in 0..rows {
+            let cells = cells_in_row(vt, active_point(y as u32));
+            self.prev_lines.push(cells);
         }
-        let cursor = vt.cursor();
-        self.prev_cursor = (cursor.col, cursor.row, cursor.visible);
+        self.prev_cursor = CursorState::from_terminal(vt);
     }
 }
 
@@ -595,6 +443,8 @@ pub enum SessionError {
     Pty(#[from] PtyError),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
+    #[error("terminal error: {0}")]
+    Terminal(#[from] libghostty_vt::Error),
     #[error("channel closed")]
     ChannelClosed,
     #[error("unexpected command: expected Spawn, got {0}")]
@@ -706,8 +556,8 @@ impl ShellSession {
     /// * `handoff` - Optional TUI handoff configuration
     pub async fn run(
         mut self,
-        mut command_rx: mpsc::Receiver<ShellCommand>,
-        event_tx: mpsc::Sender<ShellEvent>,
+        mut command_rx: tokio_mpsc::Receiver<ShellCommand>,
+        event_tx: tokio_mpsc::Sender<ShellEvent>,
         handoff: Option<TuiHandoff>,
         io: SessionIo,
     ) -> Result<Option<u32>, SessionError> {
@@ -741,10 +591,6 @@ impl ShellSession {
         let pty_size = self.pty_size();
 
         let pty = Arc::new(Pty::spawn(initial_cmd, pty_size)?);
-        let mut vt = Vt::builder()
-            .size(pty_size.cols as usize, pty_size.rows as usize)
-            .scrollback_limit(10_000)
-            .build();
 
         // Handle TUI handoff if present
         if let Some(handoff) = handoff {
@@ -822,30 +668,8 @@ impl ShellSession {
         let pty_size = self.pty_size();
         let _ = pty.resize(pty_size);
 
-        // Reset the VT after resize so any stale PTY output (the shell's
-        // PROMPT_COMMAND after task execution, SIGWINCH redraw from the
-        // resize above) starts on a clean slate. The event loop will
-        // process any pending PTY output normally.
-        vt.resize(pty_size.cols as usize, pty_size.rows as usize);
-        vt.feed_str("\x1b[2J\x1b[H");
-
-        // Initialize the renderer and do a full initial draw
-        let mut renderer = Renderer::new(pty_size.rows);
-        if row_offset > 0 {
-            renderer.row_offset = row_offset;
-            renderer.sync(&vt);
-        } else {
-            renderer.render_full(&mut stdout, &vt)?;
-        }
-        if self.config.show_status_line {
-            self.status_line
-                .draw(&mut stdout, self.size.cols, self.size.rows)?;
-        }
-        renderer.write_cursor(&mut stdout, &vt)?;
-        stdout.flush()?;
-
         // Set up event channel
-        let (event_tx_internal, mut event_rx_internal) = mpsc::channel::<Event>(100);
+        let (event_tx_internal, event_rx_internal) = std::sync::mpsc::channel::<Event>();
 
         // Spawn stdin reader thread
         let stdin_tx = event_tx_internal.clone();
@@ -858,10 +682,7 @@ impl ShellSession {
                     match stdin.read(&mut buf) {
                         Ok(0) => break,
                         Ok(n) => {
-                            if stdin_tx
-                                .blocking_send(Event::Stdin(buf[..n].to_vec()))
-                                .is_err()
-                            {
+                            if stdin_tx.send(Event::Stdin(buf[..n].to_vec())).is_err() {
                                 break;
                             }
                         }
@@ -886,14 +707,11 @@ impl ShellSession {
                         Ok(0) => {
                             let exit_code =
                                 pty_reader.try_wait().ok().flatten().map(|s| s.exit_code());
-                            let _ = pty_tx.blocking_send(Event::PtyExit(exit_code));
+                            let _ = pty_tx.send(Event::PtyExit(exit_code));
                             break;
                         }
                         Ok(n) => {
-                            if pty_tx
-                                .blocking_send(Event::PtyOutput(buf[..n].to_vec()))
-                                .is_err()
-                            {
+                            if pty_tx.send(Event::PtyOutput(buf[..n].to_vec())).is_err() {
                                 break;
                             }
                         }
@@ -901,7 +719,7 @@ impl ShellSession {
                             tracing::warn!("session: PTY read error: {}", e);
                             let exit_code =
                                 pty_reader.try_wait().ok().flatten().map(|s| s.exit_code());
-                            let _ = pty_tx.blocking_send(Event::PtyExit(exit_code));
+                            let _ = pty_tx.send(Event::PtyExit(exit_code));
                             break;
                         }
                     }
@@ -913,7 +731,7 @@ impl ShellSession {
         let cmd_tx = event_tx_internal.clone();
         tokio::spawn(async move {
             while let Some(cmd) = command_rx.recv().await {
-                if cmd_tx.send(Event::Command(cmd)).await.is_err() {
+                if cmd_tx.send(Event::Command(cmd)).is_err() {
                     break;
                 }
             }
@@ -929,50 +747,89 @@ impl ShellSession {
                         .expect("failed to register SIGWINCH handler");
                 loop {
                     sigwinch.recv().await;
-                    if resize_tx.send(Event::Resize).await.is_err() {
+                    if resize_tx.send(Event::Resize).is_err() {
                         break;
                     }
                 }
             });
         }
 
-        // Main event loop
-        tracing::trace!("session: starting event loop");
-        let exit_code = self
-            .event_loop(
-                &pty,
+        // Move VT processing and rendering to a dedicated thread.
+        // Terminal is !Send, so all VT access must stay on one thread.
+        let coordinator_tx = event_tx.clone();
+        let pty_for_thread = Arc::clone(&pty);
+        let vt_handle = std::thread::spawn(move || -> Result<Option<u32>, SessionError> {
+            // Create the VT on this thread (Terminal is !Send)
+            let mut vt = Terminal::new(TerminalOptions {
+                cols: pty_size.cols,
+                rows: pty_size.rows,
+                max_scrollback: DEFAULT_MAX_SCROLLBACK,
+            })?;
+
+            // Reset the VT after resize so any stale PTY output (the shell's
+            // PROMPT_COMMAND after task execution, SIGWINCH redraw from the
+            // resize above) starts on a clean slate. The event loop will
+            // process any pending PTY output normally.
+            if let Err(e) = vt.resize(pty_size.cols, pty_size.rows, 0, 0) {
+                tracing::warn!("failed to resize terminal: {e}");
+            }
+            vt.vt_write(b"\x1b[2J\x1b[H");
+
+            // Initialize the renderer and do a full initial draw
+            let mut renderer = Renderer::new(pty_size.rows);
+            if row_offset > 0 {
+                renderer.row_offset = row_offset;
+                renderer.sync(&vt);
+            } else {
+                renderer.render_full(&mut stdout, &vt)?;
+            }
+            if self.config.show_status_line {
+                self.status_line
+                    .draw(&mut stdout, self.size.cols, self.size.rows)?;
+            }
+            renderer.write_cursor(&mut stdout, &vt)?;
+            stdout.flush()?;
+
+            self.event_loop(
+                &pty_for_thread,
                 &mut vt,
                 &mut renderer,
-                &mut event_rx_internal,
-                &event_tx,
+                event_rx_internal,
+                &coordinator_tx,
                 &mut stdout,
             )
-            .await;
+        });
+
+        // Wait for VT thread without blocking the tokio runtime
+        let exit_code = tokio::task::spawn_blocking(move || {
+            vt_handle.join().unwrap_or(Err(SessionError::ChannelClosed))
+        })
+        .await
+        .map_err(|_| SessionError::ChannelClosed)??;
 
         let _ = pty.kill();
 
-        let exit_code = exit_code?;
-
         // Notify coordinator that shell exited
-        let _ = event_tx.send(ShellEvent::Exited { exit_code }).await;
+        if let Err(e) = event_tx.try_send(ShellEvent::Exited { exit_code }) {
+            tracing::debug!("failed to send Exited event: {e}");
+        }
 
         Ok(exit_code)
     }
 
     /// Main event loop handling stdin, PTY output, and coordinator commands.
     /// Returns the exit code from the PTY child process, if available.
-    async fn event_loop(
+    fn event_loop(
         &mut self,
         pty: &Arc<Pty>,
-        vt: &mut Vt,
+        vt: &mut Terminal<'_, '_>,
         renderer: &mut Renderer,
-        event_rx: &mut mpsc::Receiver<Event>,
-        coordinator_tx: &mpsc::Sender<ShellEvent>,
+        event_rx: std::sync::mpsc::Receiver<Event>,
+        coordinator_tx: &tokio_mpsc::Sender<ShellEvent>,
         stdout: &mut Box<dyn Write + Send>,
     ) -> Result<Option<u32>, SessionError> {
         let spinner_interval = Duration::from_millis(SPINNER_INTERVAL_MS);
         let mut scanner = EscapeScanner::new();
-        let mut stdin_filter = StdinFilter::new();
         let mut utf8_acc = Utf8Accumulator::new();
         let mut esc = EscapeState::new();
         let mut resize_pending = false;
@@ -984,36 +841,40 @@ impl ShellSession {
                 resize_pending = false;
                 Some(Event::Resize)
             } else if self.status_line.state().building {
-                tokio::select! {
-                    event = event_rx.recv() => event,
-                    _ = tokio::time::sleep(spinner_interval) => {
+                match event_rx.recv_timeout(spinner_interval) {
+                    Ok(event) => Some(event),
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         if self.config.show_status_line {
                             queue!(stdout, terminal::BeginSynchronizedUpdate)?;
-                            self.status_line.draw(stdout, self.size.cols, self.size.rows)?;
+                            self.status_line
+                                .draw(stdout, self.size.cols, self.size.rows)?;
                             renderer.write_cursor(stdout, vt)?;
                             queue!(stdout, terminal::EndSynchronizedUpdate)?;
                             stdout.flush()?;
                         }
                         continue;
                     }
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => None,
                 }
             } else if let Some(remaining) = self.status_line.state().reloaded_remaining() {
-                tokio::select! {
-                    event = event_rx.recv() => event,
-                    _ = tokio::time::sleep(remaining) => {
+                match event_rx.recv_timeout(remaining) {
+                    Ok(event) => Some(event),
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         self.status_line.state_mut().clear_reloaded();
                         if self.config.show_status_line {
                             queue!(stdout, terminal::BeginSynchronizedUpdate)?;
-                            self.status_line.draw(stdout, self.size.cols, self.size.rows)?;
+                            self.status_line
+                                .draw(stdout, self.size.cols, self.size.rows)?;
                             renderer.write_cursor(stdout, vt)?;
                             queue!(stdout, terminal::EndSynchronizedUpdate)?;
                             stdout.flush()?;
                         }
                         continue;
                     }
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => None,
                 }
             } else {
-                event_rx.recv().await
+                event_rx.recv().ok()
             };
 
             let Some(event) = event else {
@@ -1023,11 +884,15 @@ impl ShellSession {
             match event {
                 Event::Stdin(data) => {
                     if data.as_slice() == KEYBIND_TOGGLE_PAUSE {
-                        let _ = coordinator_tx.send(ShellEvent::TogglePause).await;
+                        if let Err(e) = coordinator_tx.try_send(ShellEvent::TogglePause) {
+                            tracing::debug!("failed to send TogglePause event: {e}");
+                        }
                         continue;
                     }
                     if data.as_slice() == KEYBIND_LIST_WATCHED {
-                        let _ = coordinator_tx.send(ShellEvent::ListWatchedFiles).await;
+                        if let Err(e) = coordinator_tx.try_send(ShellEvent::ListWatchedFiles) {
+                            tracing::debug!("failed to send ListWatchedFiles event: {e}");
+                        }
                         continue;
                     }
                     if data.as_slice() == KEYBIND_TOGGLE_ERROR {
@@ -1042,7 +907,7 @@ impl ShellSession {
                                     error_text.push_str(&format!("  {}\r\n", line));
                                 }
                                 error_text.push_str("\r\n");
-                                renderer.feed_vt(vt, &error_text);
+                                feed_vt(vt, &error_text);
                                 if renderer.row_offset > 0 {
                                     renderer.render(stdout, vt)?;
                                 } else {
@@ -1059,9 +924,8 @@ impl ShellSession {
                         }
                         continue;
                     }
-                    let filtered = stdin_filter.filter(&data);
-                    if !filtered.is_empty() {
-                        pty.write_all(filtered)?;
+                    if !&data.is_empty() {
+                        pty.write_all(&data)?;
                         pty.flush()?;
                     }
                 }
@@ -1069,50 +933,49 @@ impl ShellSession {
                 Event::PtyOutput(data) => {
                     let was_in_alt = esc.in_alternate_screen;
                     esc.reset_batch();
-                    Self::process_escape_events(
+                    escape_state_process(
                         &mut scanner,
                         &data,
                         &mut esc,
                         stdout,
-                        &pty,
+                        pty,
                         self.pty_size(),
                         &mut esc_events,
                     )?;
 
                     // Feed output into VT and track how many lines scrolled off
                     let text = utf8_acc.accumulate(&data);
-                    let mut total_scroll = renderer.feed_vt(vt, &text);
+                    let mut total_scroll = feed_vt(vt, &text);
 
                     // Batch: drain any additional pending PtyOutput events
                     while let Ok(event) = event_rx.try_recv() {
                         match event {
                             Event::PtyOutput(more) => {
-                                Self::process_escape_events(
+                                escape_state_process(
                                     &mut scanner,
                                     &more,
                                     &mut esc,
                                     stdout,
-                                    &pty,
+                                    pty,
                                     self.pty_size(),
                                     &mut esc_events,
                                 )?;
                                 let text = utf8_acc.accumulate(&more);
-                                total_scroll += renderer.feed_vt(vt, &text);
+                                total_scroll += feed_vt(vt, &text);
                             }
                             Event::PtyExit(exit_code) => {
-                                Self::cleanup_forwarded_modes(&esc, stdout)?;
+                                escape_state_cleanup(&esc, stdout)?;
                                 renderer.render_with_scroll(stdout, vt)?;
                                 return Ok(exit_code);
                             }
                             Event::Stdin(stdin_data) => {
-                                let filtered = stdin_filter.filter(&stdin_data);
-                                if !filtered.is_empty() {
-                                    pty.write_all(filtered)?;
+                                if !&stdin_data.is_empty() {
+                                    pty.write_all(&stdin_data)?;
                                     pty.flush()?;
                                 }
                             }
                             Event::Command(cmd) => {
-                                total_scroll += self.handle_command(cmd, vt, renderer)?;
+                                total_scroll += self.handle_command(cmd, vt)?;
                             }
                             Event::Resize => {
                                 resize_pending = true;
@@ -1136,7 +999,8 @@ impl ShellSession {
                     if renderer.row_offset > 0 {
                         let content_rows = renderer.content_rows;
                         let visible_rows = renderer.visible_rows();
-                        let cursor_excess = (vt.cursor().row + 1).saturating_sub(visible_rows);
+                        let cursor_row = vt.cursor_y().map(|r| r as usize).unwrap_or(0);
+                        let cursor_excess = (cursor_row + 1).saturating_sub(visible_rows);
                         let need = total_scroll.max(cursor_excess);
 
                         let consumed = if esc.in_alternate_screen || esc.erase_display {
@@ -1177,13 +1041,13 @@ impl ShellSession {
 
                 Event::PtyExit(exit_code) => {
                     self.clear_status_row(stdout, esc.in_alternate_screen)?;
-                    Self::cleanup_forwarded_modes(&esc, stdout)?;
+                    escape_state_cleanup(&esc, stdout)?;
                     stdout.flush()?;
                     return Ok(exit_code);
                 }
 
                 Event::Command(cmd) => {
-                    self.handle_command(cmd, vt, renderer)?;
+                    self.handle_command(cmd, vt)?;
                     queue!(stdout, terminal::BeginSynchronizedUpdate)?;
                     if renderer.row_offset > 0 {
                         renderer.render(stdout, vt)?;
@@ -1224,7 +1088,9 @@ impl ShellSession {
                             cmd.write_ansi(&mut buf).unwrap();
                             let _ = pty.write_all(buf.as_bytes());
                         }
-                        vt.resize(pty_size.cols as usize, pty_size.rows as usize);
+                        if let Err(e) = vt.resize(pty_size.cols, pty_size.rows, 0, 0) {
+                            tracing::warn!("failed to resize terminal: {e}");
+                        }
                         renderer.mark_scrollback_flushed(vt);
                         renderer.render_full(stdout, vt)?;
                         if self.config.show_status_line && !esc.in_alternate_screen {
@@ -1232,19 +1098,19 @@ impl ShellSession {
                         }
                         renderer.write_cursor(stdout, vt)?;
                         stdout.flush()?;
-                        let _ = coordinator_tx
-                            .send(ShellEvent::Resize {
-                                cols: pty_size.cols,
-                                rows: pty_size.rows,
-                            })
-                            .await;
+                        if let Err(e) = coordinator_tx.try_send(ShellEvent::Resize {
+                            cols: pty_size.cols,
+                            rows: pty_size.rows,
+                        }) {
+                            tracing::debug!("failed to send Resize event: {e}");
+                        }
                     }
                 }
             }
         }
 
         self.clear_status_row(stdout, esc.in_alternate_screen)?;
-        Self::cleanup_forwarded_modes(&esc, stdout)?;
+        escape_state_cleanup(&esc, stdout)?;
         stdout.flush()?;
         Ok(None)
     }
@@ -1257,8 +1123,7 @@ impl ShellSession {
     fn handle_command(
         &mut self,
         cmd: ShellCommand,
-        vt: &mut Vt,
-        renderer: &mut Renderer,
+        vt: &mut Terminal<'_, '_>,
     ) -> Result<usize, SessionError> {
         match cmd {
             ShellCommand::ReloadReady { changed_files } => {
@@ -1297,7 +1162,7 @@ impl ShellSession {
                 for file in &files {
                     text.push_str(&format!("  {}\r\n", file.display()));
                 }
-                return Ok(renderer.feed_vt(vt, &text));
+                return Ok(feed_vt(vt, &text));
             }
 
             ShellCommand::Shutdown => {
@@ -1312,123 +1177,13 @@ impl ShellSession {
         Ok(0)
     }
 
-    /// Scan raw PTY output for escape sequences (DEC private mode and OSC queries),
-    /// forward relevant ones to the real terminal, and update escape state.
-    fn process_escape_events(
-        scanner: &mut EscapeScanner,
-        data: &[u8],
-        esc: &mut EscapeState,
-        stdout: &mut impl Write,
-        pty: &Pty,
-        pty_size: PtySize,
-        events_buf: &mut Vec<SequenceEvent>,
-    ) -> io::Result<()> {
-        events_buf.clear();
-        scanner.scan_into(data, events_buf);
-        for event in events_buf.drain(..) {
-            match event {
-                SequenceEvent::DecMode(event) => {
-                    let forward = esc.apply_dec_mode(&event);
-                    if !forward.is_empty() {
-                        stdout.write_all(forward)?;
-                    }
-                }
-                SequenceEvent::Osc(event) => {
-                    // Forward OSC queries to the real terminal so programs
-                    // can detect color scheme, etc. The terminal's responses
-                    // are filtered from stdin by StdinFilter to prevent them
-                    // from leaking into the shell as garbled text.
-                    stdout.write_all(&event.raw_bytes)?;
-                }
-                SequenceEvent::EraseDisplay { .. } => {
-                    // Not forwarded (the renderer handles screen content),
-                    // but signals the caller to consume row_offset.
-                    esc.erase_display = true;
-                }
-                SequenceEvent::ClearScrollback { .. } => {
-                    // Deferred so the caller can emit it after scroll_region
-                    // pushes old TUI content into scrollback.
-                    esc.clear_scrollback = true;
-                }
-                SequenceEvent::ForwardCsi { raw_bytes } => {
-                    stdout.write_all(&raw_bytes)?;
-                }
-                SequenceEvent::ForwardDcs { raw_bytes } => {
-                    stdout.write_all(&raw_bytes)?;
-                }
-                SequenceEvent::KittyKeyboard {
-                    raw_bytes,
-                    stack_delta,
-                } => {
-                    stdout.write_all(&raw_bytes)?;
-                    esc.apply_kitty_keyboard(stack_delta);
-                }
-                SequenceEvent::ModifyOtherKeys { raw_bytes, enabled } => {
-                    stdout.write_all(&raw_bytes)?;
-                    esc.apply_modify_other_keys(enabled);
-                }
-                SequenceEvent::TextAreaSizeQuery => {
-                    // Respond with PTY dimensions so programs see the correct
-                    // size (which excludes the status line row).
-                    let cmd = ReportTextAreaSize {
-                        rows: pty_size.rows,
-                        cols: pty_size.cols,
-                    };
-                    let mut buf = String::new();
-                    cmd.write_ansi(&mut buf).unwrap();
-                    pty.write_all(buf.as_bytes())?;
-                    pty.flush()?;
-                }
-                SequenceEvent::KeypadMode { application } => {
-                    queue!(stdout, SetKeypadMode { application })?;
-                    esc.keypad_application_mode = application;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Reset any forwarded DEC modes on exit so the terminal is left clean.
-    ///
-    /// XTSHIFTESCAPE and DECSCUSR are forwarded without explicit cleanup:
-    /// mouse tracking modes (cleaned up above) make XTSHIFTESCAPE inert,
-    /// and most terminals reset cursor shape on their own.
-    fn cleanup_forwarded_modes(esc: &EscapeState, stdout: &mut impl Write) -> io::Result<()> {
-        let mut needs_flush = false;
-        if esc.in_alternate_screen {
-            queue!(stdout, terminal::LeaveAlternateScreen)?;
-            needs_flush = true;
-        }
-        for &mode in &esc.forwarded_dec_modes {
-            queue!(stdout, ResetDecMode(mode))?;
-            needs_flush = true;
-        }
-        if esc.keypad_application_mode {
-            queue!(stdout, SetKeypadMode { application: false })?;
-            needs_flush = true;
-        }
-        // Pop all kitty keyboard stack entries
-        for _ in 0..esc.kitty_keyboard_depth {
-            queue!(stdout, PopKeyboardEnhancementFlags)?;
-            needs_flush = true;
-        }
-        if esc.modify_other_keys {
-            queue!(stdout, ResetModifyOtherKeys)?;
-            needs_flush = true;
-        }
-        if needs_flush {
-            stdout.flush()?;
-        }
-        Ok(())
-    }
-
     /// Draw status line and reposition cursor.
     ///
     /// Does not flush — callers flush after ending their sync block.
     fn draw_status_and_cursor(
         &mut self,
         stdout: &mut impl Write,
-        vt: &Vt,
+        vt: &Terminal<'_, '_>,
         renderer: &Renderer,
     ) -> Result<(), SessionError> {
         if self.config.show_status_line {
@@ -1462,189 +1217,5 @@ impl ShellSession {
 impl Default for ShellSession {
     fn default() -> Self {
         Self::with_defaults()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stdin_filter_bare_esc_emitted_immediately() {
-        let mut f = StdinFilter::new();
-        // A standalone Esc keypress must pass through, not be held.
-        assert_eq!(f.filter(&[0x1b]), &[0x1b]);
-    }
-
-    #[test]
-    fn stdin_filter_osc_sequence_dropped() {
-        let mut f = StdinFilter::new();
-        // OSC terminated by BEL: ESC ] 0 ; t i t l e BEL
-        let osc = b"\x1b]0;title\x07";
-        assert_eq!(f.filter(osc), &[] as &[u8]);
-    }
-
-    #[test]
-    fn stdin_filter_osc_sequence_with_st_dropped() {
-        let mut f = StdinFilter::new();
-        // OSC terminated by ST (ESC \): ESC ] 0 ; t i t l e ESC \
-        let osc = b"\x1b]0;title\x1b\\";
-        assert_eq!(f.filter(osc), &[] as &[u8]);
-    }
-
-    #[test]
-    fn stdin_filter_esc_bracket_passthrough() {
-        let mut f = StdinFilter::new();
-        // CSI sequence (e.g. arrow key ESC [ A) must pass through
-        assert_eq!(f.filter(b"\x1b[A"), &[0x1b, b'[', b'A']);
-    }
-
-    #[test]
-    fn stdin_filter_normal_bytes_passthrough() {
-        let mut f = StdinFilter::new();
-        assert_eq!(f.filter(b"hello"), b"hello");
-    }
-
-    #[test]
-    fn stdin_filter_consecutive_bare_esc() {
-        let mut f = StdinFilter::new();
-        // Two consecutive Esc in same chunk: first emitted, second flushed at end
-        assert_eq!(f.filter(&[0x1b, 0x1b]), &[0x1b, 0x1b]);
-    }
-
-    #[test]
-    fn stdin_filter_esc_then_normal_in_next_chunk() {
-        let mut f = StdinFilter::new();
-        // Esc alone in first chunk: emitted immediately
-        assert_eq!(f.filter(&[0x1b]), &[0x1b]);
-        // Normal byte in next chunk: passes through
-        assert_eq!(f.filter(b"a"), b"a");
-    }
-
-    #[test]
-    fn stdin_filter_mixed_esc_and_text() {
-        let mut f = StdinFilter::new();
-        // Text followed by bare Esc at end of chunk
-        assert_eq!(f.filter(b"abc\x1b"), &[b'a', b'b', b'c', 0x1b]);
-    }
-
-    /// Feed raw bytes through scanner and apply events to state.
-    /// Returns bytes that would be forwarded to stdout.
-    fn scan_and_apply(scanner: &mut EscapeScanner, esc: &mut EscapeState, input: &[u8]) -> Vec<u8> {
-        let events = scanner.scan(input);
-        let mut forwarded = Vec::new();
-        for event in &events {
-            match event {
-                SequenceEvent::DecMode(ev) => forwarded.extend_from_slice(esc.apply_dec_mode(ev)),
-                SequenceEvent::KittyKeyboard { stack_delta, .. } => {
-                    esc.apply_kitty_keyboard(*stack_delta);
-                }
-                SequenceEvent::ModifyOtherKeys { enabled, .. } => {
-                    esc.apply_modify_other_keys(*enabled);
-                }
-                _ => {}
-            }
-        }
-        forwarded
-    }
-
-    #[test]
-    fn in_band_resize_tracked_on_opt_in() {
-        let mut scanner = EscapeScanner::new();
-        let mut esc = EscapeState::new();
-        let forwarded = scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2048h");
-        assert!(esc.in_band_resize);
-        assert!(forwarded.is_empty(), "mode 2048 should not be forwarded");
-    }
-
-    #[test]
-    fn in_band_resize_cleared_on_opt_out() {
-        let mut scanner = EscapeScanner::new();
-        let mut esc = EscapeState::new();
-        scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2048h");
-        assert!(esc.in_band_resize);
-        scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2048l");
-        assert!(!esc.in_band_resize);
-    }
-
-    #[test]
-    fn in_band_resize_compound_mode() {
-        let mut scanner = EscapeScanner::new();
-        let mut esc = EscapeState::new();
-        // Mode 1 (DECCKM) is forwarded, mode 2048 is not
-        let forwarded = scan_and_apply(&mut scanner, &mut esc, b"\x1b[?1;2048h");
-        assert!(esc.in_band_resize);
-        assert!(!forwarded.is_empty(), "mode 1 should be forwarded");
-    }
-
-    #[test]
-    fn alt_screen_enter_exit() {
-        let mut scanner = EscapeScanner::new();
-        let mut esc = EscapeState::new();
-        scan_and_apply(&mut scanner, &mut esc, b"\x1b[?1049h");
-        assert!(esc.in_alternate_screen);
-        // Alt screen modes are not in CLEANUP_MODES (cleaned up via LeaveAlternateScreen)
-
-        scan_and_apply(&mut scanner, &mut esc, b"\x1b[?1049l");
-        assert!(!esc.in_alternate_screen);
-    }
-
-    #[test]
-    fn alt_screen_all_variants() {
-        for mode in [47, 1047, 1049] {
-            let mut scanner = EscapeScanner::new();
-            let mut esc = EscapeState::new();
-            let seq = format!("\x1b[?{}h", mode);
-            scan_and_apply(&mut scanner, &mut esc, seq.as_bytes());
-            assert!(
-                esc.in_alternate_screen,
-                "mode {} should enter alt screen",
-                mode
-            );
-        }
-    }
-
-    #[test]
-    fn forwarded_modes_accumulate() {
-        let mut scanner = EscapeScanner::new();
-        let mut esc = EscapeState::new();
-        scan_and_apply(&mut scanner, &mut esc, b"\x1b[?1000h");
-        scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2004h");
-        assert!(esc.forwarded_dec_modes.contains(&1000));
-        assert!(esc.forwarded_dec_modes.contains(&2004));
-    }
-
-    #[test]
-    fn non_forwarded_mode_no_stdout() {
-        let mut scanner = EscapeScanner::new();
-        let mut esc = EscapeState::new();
-        let forwarded = scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2048h");
-        assert!(forwarded.is_empty());
-    }
-
-    #[test]
-    fn kitty_keyboard_depth_tracking() {
-        let mut scanner = EscapeScanner::new();
-        let mut esc = EscapeState::new();
-        // Push (CSI > u)
-        scan_and_apply(&mut scanner, &mut esc, b"\x1b[>1u");
-        assert_eq!(esc.kitty_keyboard_depth, 1);
-        scan_and_apply(&mut scanner, &mut esc, b"\x1b[>1u");
-        assert_eq!(esc.kitty_keyboard_depth, 2);
-        // Pop (CSI < u)
-        scan_and_apply(&mut scanner, &mut esc, b"\x1b[<u");
-        assert_eq!(esc.kitty_keyboard_depth, 1);
-    }
-
-    #[test]
-    fn modify_other_keys_tracking() {
-        let mut scanner = EscapeScanner::new();
-        let mut esc = EscapeState::new();
-        // CSI > 4 m — enable
-        scan_and_apply(&mut scanner, &mut esc, b"\x1b[>4m");
-        assert!(esc.modify_other_keys);
-        // CSI > 0 m — disable
-        scan_and_apply(&mut scanner, &mut esc, b"\x1b[>0m");
-        assert!(!esc.modify_other_keys);
     }
 }

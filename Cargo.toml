@@ -23,7 +23,7 @@ members = [
 ]
 
 [workspace.package]
-version = "2.0.7"
+version = "2.1.0"
 edition = "2024"
 license = "APACHE-2.0"
 homepage = "https://devenv.sh/"
@@ -58,7 +58,8 @@ nix-bindings-fetchers = { git = "https://github.com/cachix/nix-bindings-rust.git
 nix-cmd = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
 nix-bindings-bindgen-raw = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
 
-avt = "0.17"
+libghostty-vt = { git = "https://github.com/domenkozar/libghostty-rs.git", branch = "pkg-config-support" }
+libghostty-vt-sys = { git = "https://github.com/domenkozar/libghostty-rs.git", branch = "pkg-config-support", default-features = false, features = ["pkg-config"] }
 base64 = "0.22"
 anyhow = "1.0.92"
 ansiterm = "0.12.2"
@@ -66,7 +67,9 @@ astral-tokio-tar = "0.5.6"
 async-priority-channel = "0.2.0"
 async-trait = "0.1"
 binaryornot = "1.0.0"
-blake3 = "1.8.2"
+# Pinned to 1.8.3: blake3 1.8.4 upgraded to digest 0.11 which is incompatible
+# with snix-castore (uses digest 0.10 APIs).
+blake3 = "=1.8.3"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5.48", features = ["derive", "cargo", "env"] }
 clap_complete = { version = "4.5.58", features = ["unstable-dynamic"] }
@@ -200,13 +203,13 @@ nix-compat = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a75
 nix-compat-derive = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
 
 # Ensure crossterm versions match between these
-iocraft = { version = "0.7.18", features = ["unstable-output-streams"] }
+iocraft = { version = "0.8.0", features = ["unstable-output-streams"] }
 crossterm = "0.29.0"
 
 [patch.crates-io]
 # Waiting on iocraft release with stderr rendering support
 # https://github.com/ccbrown/iocraft/pull/157
-iocraft = { git = "https://github.com/cachix/iocraft", branch = "cachix" }
+iocraft = { git = "https://github.com/cachix/iocraft", branch = "row-level-diff" }
 # https://github.com/crossterm-rs/crossterm/pull/1026
 crossterm = { git = "https://github.com/cachix/crossterm", branch = "0.29-cachix" }
 

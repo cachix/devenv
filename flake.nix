@@ -62,6 +62,10 @@
     url = "github:oxalica/rust-overlay";
     inputs.nixpkgs.follows = "nixpkgs";
   };
+  inputs.ghostty = {
+    # Kept in sync with devenv.yaml's ghostty input.
+    url = "github:cachix/ghostty/cachix-upstream";
+  };
 
   outputs =
     { self
@@ -94,6 +98,7 @@
               };
               nixd = inputs.nixd.packages.${system}.nixd;
               crate2nix = inputs.crate2nix.packages.${system}.default;
+              libghostty-vt = inputs.ghostty.packages.${system}.libghostty-vt;
             })
           ];
           pkgs = import nixpkgs { inherit overlays system; };
