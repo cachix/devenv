@@ -115,11 +115,6 @@ pub struct NixCBackend {
     // Activity for the cachix push operation (visible in TUI)
     cachix_activity: Arc<tokio::sync::Mutex<Option<Activity>>>,
 
-    // Cached import expression: (import /path/to/default.nix { ... args ... })
-    // Set once in assemble(). Kept for potential future use (e.g., debugging).
-    #[allow(dead_code)]
-    cached_import_expr: Arc<OnceCell<String>>,
-
     // Pre-serialized NixArgs, spliced into the bootstrap import call to
     // build the args attrset for primop merging in eval_import_with_primops.
     cached_args_nix: Arc<OnceCell<String>>,
@@ -453,7 +448,6 @@ in cfg // {{
             cachix_manager,
             cachix_daemon: cachix_daemon.clone(),
             cachix_activity: cachix_activity.clone(),
-            cached_import_expr: Arc::new(OnceCell::new()),
             cached_args_nix: Arc::new(OnceCell::new()),
             shutdown: shutdown.clone(),
             port_allocator,
@@ -1120,13 +1114,6 @@ impl NixBackend for NixCBackend {
                 self.port_allocator.is_strict(),
             );
 
-            let import_path = self.bootstrap_file("default.nix");
-            let import_nix_path = ser_nix::to_string(&ser_nix::NixPathBuf::from(import_path))
-                .into_diagnostic()
-                .wrap_err("Failed to serialize import path")?;
-            let import_expr = format!("(import ({import_nix_path}) {args_nix})");
-
-            self.cached_import_expr.set(import_expr).ok();
             self.cached_args_nix.set(args_nix).ok();
 
             // Create resource manager for port allocation tracking across cache hits
