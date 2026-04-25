@@ -206,6 +206,8 @@ impl std::fmt::Display for SecretsNeedPrompting {
 
 impl std::error::Error for SecretsNeedPrompting {}
 
+pub type ResolvedSecrets = secretspec::Resolved<HashMap<String, String>>;
+
 pub struct Devenv {
     pub inputs: BTreeMap<String, Input>,
     pub imports: Vec<String>,
@@ -245,17 +247,17 @@ pub struct Devenv {
     // Semaphore to prevent multiple concurrent assembles
     assemble_lock: Arc<Semaphore>,
 
-    has_processes: Arc<OnceCell<bool>>,
+    has_processes: OnceCell<bool>,
 
     // Cached DevEnv result from get_dev_environment_inner, used by up() to avoid
     // redundant activity wrapping when prepare_shell is called later.
-    dev_env_cache: Arc<OnceCell<DevEnv>>,
+    dev_env_cache: OnceCell<DevEnv>,
 
     // Eval-cache pool (framework layer concern, used by backends)
     eval_cache_pool: Arc<OnceCell<SqlitePool>>,
 
     // Secretspec resolved data to pass to Nix
-    secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
+    secretspec: OnceCell<ResolvedSecrets>,
 
     // Cached serialized NixArgs from assemble
     nix_args_string: Arc<OnceCell<String>>,
@@ -264,7 +266,7 @@ pub struct Devenv {
     port_allocator: Arc<PortAllocator>,
 
     // Native process manager started in-process (for detach mode used by test())
-    native_process_manager: Arc<OnceCell<Arc<processes::NativeProcessManager>>>,
+    native_process_manager: OnceCell<Arc<processes::NativeProcessManager>>,
 
     // Shutdown handle for coordinated shutdown
     shutdown: Arc<tokio_shutdown::Shutdown>,
@@ -371,9 +373,6 @@ impl Devenv {
         };
         let cachix_manager = Arc::new(CachixManager::new(cachix_paths));
 
-        // Create shared secretspec_resolved Arc to share between Devenv and Nix
-        let secretspec_resolved = Arc::new(OnceCell::new());
-
         // Create eval-cache pool (framework layer concern, used by backends)
         let eval_cache_pool = Arc::new(OnceCell::new());
 
@@ -435,13 +434,13 @@ impl Devenv {
             container_name: std::sync::OnceLock::new(),
             assembled: Arc::new(AtomicBool::new(false)),
             assemble_lock: Arc::new(Semaphore::new(1)),
-            has_processes: Arc::new(OnceCell::new()),
-            dev_env_cache: Arc::new(OnceCell::new()),
+            has_processes: OnceCell::new(),
+            dev_env_cache: OnceCell::new(),
             eval_cache_pool,
-            secretspec_resolved,
+            secretspec: OnceCell::new(),
             nix_args_string: Arc::new(OnceCell::new()),
             port_allocator,
-            native_process_manager: Arc::new(OnceCell::new()),
+            native_process_manager: OnceCell::new(),
             shutdown: options.shutdown,
             task_exports: std::sync::Mutex::new(BTreeMap::new()),
             task_messages: std::sync::Mutex::new(Vec::new()),
@@ -2110,7 +2109,7 @@ impl Devenv {
                     profile: validated_secrets.resolved.profile,
                 };
 
-                self.secretspec_resolved
+                self.secretspec
                     .set(resolved)
                     .map_err(|_| miette!("Secretspec resolved already set"))?;
             }
@@ -2135,15 +2134,12 @@ impl Devenv {
                 .to_string_lossy()
         ));
 
-        // Convert secretspec::Resolved to SecretspecData if available
         let secretspec_data: Option<SecretspecData> =
-            self.secretspec_resolved
-                .get()
-                .map(|resolved| SecretspecData {
-                    profile: resolved.profile.clone(),
-                    provider: resolved.provider.clone(),
-                    secrets: resolved.secrets.clone().into_iter().collect(),
-                });
+            self.secretspec.get().map(|resolved| SecretspecData {
+                profile: resolved.profile.clone(),
+                provider: resolved.provider.clone(),
+                secrets: resolved.secrets.clone().into_iter().collect(),
+            });
 
         let active_profiles = &self.shell_settings.profiles;
 
