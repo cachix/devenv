@@ -13,6 +13,7 @@ use devenv_core::{
     config::{Input, NixBackendType, NixpkgsConfig},
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
     nix_backend::{DevenvPaths, NixBackend},
+    nix_config::NixConfig,
     ports::PortAllocator,
     settings::{CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings},
 };
@@ -219,6 +220,10 @@ pub struct Devenv {
     require_version_match: bool,
     is_testing: bool,
 
+    /// Aggregated, immutable configuration shared with the backend via
+    /// `Arc<NixConfig>`.
+    pub config: Arc<NixConfig>,
+
     pub nix: Arc<Box<dyn NixBackend>>,
 
     // All kinds of paths
@@ -349,6 +354,15 @@ impl Devenv {
             git_root: options.git_root.clone(),
         };
 
+        let config = Arc::new(NixConfig {
+            paths: paths.clone(),
+            inputs: options.inputs.clone(),
+            input_overrides: options.input_overrides.clone(),
+            nix: nix_settings.clone(),
+            cache: cache_settings.clone(),
+            nixpkgs: options.nixpkgs_config.clone(),
+        });
+
         // Create CachixPaths for Nix backend
         let cachix_paths = CachixPaths {
             trusted_keys: cachix_trusted_keys,
@@ -416,6 +430,7 @@ impl Devenv {
             devenv_tmp,
             devenv_runtime,
             process_runtime_dir: SyncOnceCell::new(),
+            config,
             nix: Arc::new(nix),
             container_name: std::sync::OnceLock::new(),
             assembled: Arc::new(AtomicBool::new(false)),
