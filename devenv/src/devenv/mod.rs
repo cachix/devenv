@@ -9,6 +9,7 @@ use devenv_activity::{
 };
 use devenv_cache_core::compute_string_hash;
 use devenv_core::{
+    bootstrap_args::BootstrapArgs,
     cachix::{CachixManager, CachixPaths},
     config::{Input, NixBackendType, NixpkgsConfig},
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
@@ -259,8 +260,8 @@ pub struct Devenv {
     // Secretspec resolved data to pass to Nix
     secretspec: OnceCell<ResolvedSecrets>,
 
-    // Cached serialized NixArgs from assemble
-    nix_args_string: Arc<OnceCell<String>>,
+    // Pre-serialized bootstrap arguments shared with the backend.
+    bootstrap_args: OnceCell<BootstrapArgs>,
 
     // Port allocator shared with NixBackend for holding port reservations
     port_allocator: Arc<PortAllocator>,
@@ -438,7 +439,7 @@ impl Devenv {
             dev_env_cache: OnceCell::new(),
             eval_cache_pool,
             secretspec: OnceCell::new(),
-            nix_args_string: Arc::new(OnceCell::new()),
+            bootstrap_args: OnceCell::new(),
             port_allocator,
             native_process_manager: OnceCell::new(),
             shutdown: options.shutdown,
@@ -556,12 +557,12 @@ impl Devenv {
         self.eval_cache_pool.get()
     }
 
-    /// Get the NixArgs string used for cache key computation.
+    /// Get the bootstrap arguments shared with the backend.
     ///
-    /// This is set during `assemble()` and can be used to compute cache keys
-    /// for specific evaluations.
-    pub fn nix_args_string(&self) -> Option<&str> {
-        self.nix_args_string.get().map(|s| s.as_str())
+    /// Set during `assemble()`. Callers that need to splice the same payload
+    /// the backend used (LSP, MCP, shell-cache lookups) read it through here.
+    pub fn bootstrap_args(&self) -> Option<&BootstrapArgs> {
+        self.bootstrap_args.get()
     }
 
     /// Get the cache key for shell evaluation.
@@ -572,11 +573,9 @@ impl Devenv {
     /// The cache key must match the backend's format which includes port allocation info:
     /// `{nix_args}:port_allocation={enabled}:strict_ports={strict}:shell`
     pub fn shell_cache_key(&self) -> Option<devenv_eval_cache::EvalCacheKey> {
-        let nix_args_str = self.nix_args_string.get()?;
-        // The backend uses eval_cache_key_args(...) and we must match that
-        // format for shell watcher lookups to hit the same cache row.
+        let bootstrap_args = self.bootstrap_args.get()?;
         let cache_key_args = devenv_core::nix_backend::eval_cache_key_args(
-            nix_args_str,
+            bootstrap_args.as_str(),
             self.port_allocator.is_enabled(),
             self.port_allocator.is_strict(),
         );
@@ -1979,10 +1978,11 @@ impl Devenv {
 
         if self.assembled.load(Ordering::Acquire) {
             return Ok(self
-                .nix_args_string
+                .bootstrap_args
                 .get()
-                .expect("nix_args_string should be set after assemble")
-                .clone());
+                .expect("bootstrap_args should be set after assemble")
+                .as_str()
+                .to_owned());
         }
 
         let _permit = self.assemble_lock.acquire().await.unwrap();
@@ -2196,16 +2196,14 @@ impl Devenv {
             devenv_state: self.devenv_state.as_deref(),
         };
 
-        // Serialize NixArgs for caching and return
-        let nix_args_str = ser_nix::to_string(&args).into_diagnostic()?;
+        let bootstrap_args = BootstrapArgs::from_serializable(&args)?;
+        let nix_args_str = bootstrap_args.as_str().to_owned();
 
-        // Initialise the backend (generates flake and other backend-specific files)
-        self.nix.assemble(&args).await?;
+        self.nix.assemble(bootstrap_args.clone()).await?;
 
-        // Cache the serialized args
-        self.nix_args_string
-            .set(nix_args_str.clone())
-            .expect("nix_args_string should only be set once");
+        self.bootstrap_args
+            .set(bootstrap_args)
+            .map_err(|_| miette!("bootstrap_args should only be set once"))?;
 
         self.assembled.store(true, Ordering::Release);
         Ok(nix_args_str)

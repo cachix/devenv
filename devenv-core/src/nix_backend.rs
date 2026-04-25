@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use crate::bootstrap_args::BootstrapArgs;
 use crate::config::Input;
-use crate::nix_args::NixArgs;
 
 /// Build the shared eval-cache key input used by the FFI backend and shell
 /// watcher lookups.
@@ -108,13 +108,17 @@ pub trait NixBackend: Send + Sync {
     ///
     /// Returns a hex-encoded BLAKE3 hash of the combined narHashes.
     /// Must be called after `validate_lock_file()` so the lock file is up to
-    /// date, and before `assemble()` to include the result in `NixArgs`.
+    /// date, and before `assemble()` to include the result in the bootstrap
+    /// arguments.
     async fn lock_fingerprint(&self) -> Result<String>;
 
-    /// Initialize and assemble the backend
+    /// Initialize the backend with the framework's pre-serialized bootstrap
+    /// arguments.
     ///
-    /// The args parameter contains all context needed for backend-specific file generation
-    async fn assemble(&self, args: &NixArgs<'_>) -> Result<()>;
+    /// The serialized payload is both the eval-cache key seed and the
+    /// expression spliced into the bootstrap import call. The framework
+    /// owns the schema; the backend treats the payload as opaque Nix code.
+    async fn assemble(&self, bootstrap_args: BootstrapArgs) -> Result<()>;
 
     /// Get the development environment
     async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<DevEnvOutput>;

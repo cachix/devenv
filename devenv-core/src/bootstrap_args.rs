@@ -2,18 +2,21 @@
 //!
 //! The framework owns the schema (today: [`crate::nix_args::NixArgs<'a>`]),
 //! serializes it once via [`BootstrapArgs::from_serializable`], and shares
-//! the resulting `Arc<BootstrapArgs>` with the backend. Backends never see
+//! the resulting value with the backend. Backends never see
 //! [`crate::nix_args::NixArgs`] — the payload is opaque Nix code by the
 //! time it crosses the seam.
 
 use miette::Result;
+use std::sync::Arc;
 
 /// Pre-serialized argument attrset for `import bootstrap/default.nix <args>`.
 ///
-/// The string is both the eval-cache key seed and the payload spliced
-/// into the bootstrap import expression.
+/// Cheaply cloneable: the underlying serialized string is shared via
+/// reference counting, so callers that need their own handle can `.clone()`
+/// without duplicating the payload.
+#[derive(Clone)]
 pub struct BootstrapArgs {
-    pub serialized: Box<str>,
+    serialized: Arc<str>,
 }
 
 impl BootstrapArgs {
@@ -22,8 +25,20 @@ impl BootstrapArgs {
         let serialized = ser_nix::to_string(value)
             .map_err(|e| miette::miette!("Failed to serialize bootstrap args: {}", e))?;
         Ok(Self {
-            serialized: serialized.into_boxed_str(),
+            serialized: Arc::from(serialized),
         })
+    }
+
+    /// Borrow the serialized Nix expression. Used both as the payload
+    /// spliced into the bootstrap import call and as the eval-cache key seed.
+    pub fn as_str(&self) -> &str {
+        &self.serialized
+    }
+}
+
+impl AsRef<str> for BootstrapArgs {
+    fn as_ref(&self) -> &str {
+        self.as_str()
     }
 }
 
@@ -45,7 +60,18 @@ mod tests {
             system: "x86_64-linux",
         };
         let b = BootstrapArgs::from_serializable(&args).expect("serialize");
-        assert!(b.serialized.contains("\"1.0.0\""));
-        assert!(b.serialized.contains("\"x86_64-linux\""));
+        assert!(b.as_str().contains("\"1.0.0\""));
+        assert!(b.as_str().contains("\"x86_64-linux\""));
+    }
+
+    #[test]
+    fn clone_shares_the_underlying_payload() {
+        let args = TinyArgs {
+            version: "1.0.0",
+            system: "x86_64-linux",
+        };
+        let a = BootstrapArgs::from_serializable(&args).expect("serialize");
+        let b = a.clone();
+        assert_eq!(a.as_str().as_ptr(), b.as_str().as_ptr());
     }
 }

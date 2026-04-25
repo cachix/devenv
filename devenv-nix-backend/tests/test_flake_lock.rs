@@ -1,7 +1,9 @@
 #![cfg(feature = "test-nix-store")]
 //! Integration tests for flake locking functionality
 
-use devenv_core::{CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixOptions};
+use devenv_core::{
+    BootstrapArgs, CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixOptions,
+};
 use devenv_nix_backend::load_lock_file;
 use devenv_nix_backend_macros::nix_test;
 use nix_bindings_fetchers::FetchersSettings;
@@ -146,12 +148,12 @@ async fn test_create_flake_inputs() {
     .expect("Failed to create backend");
 
     let test_args = TestNixArgs::new(&paths);
+    let nix_args =
+        test_args.to_nix_args(&paths, &config, config.nixpkgs_config(get_current_system()));
+    let bootstrap_args =
+        BootstrapArgs::from_serializable(&nix_args).expect("Failed to serialize bootstrap args");
     backend
-        .assemble(&test_args.to_nix_args(
-            &paths,
-            &config,
-            config.nixpkgs_config(get_current_system()),
-        ))
+        .assemble(bootstrap_args)
         .await
         .expect("Failed to assemble backend");
 

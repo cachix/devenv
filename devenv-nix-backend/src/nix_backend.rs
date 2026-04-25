@@ -19,9 +19,9 @@ use tokio_shutdown::Shutdown;
 use devenv_activity::{Activity, ActivityInstrument, activity};
 use devenv_cache_core::compute_string_hash;
 use devenv_core::PortAllocator;
+use devenv_core::bootstrap_args::BootstrapArgs;
 use devenv_core::cachix::{Cachix, CachixCacheInfo, CachixManager};
 use devenv_core::config::{Input, NixpkgsConfig};
-use devenv_core::nix_args::NixArgs;
 use devenv_core::nix_backend::{
     DevEnvOutput, DevenvPaths, NixBackend, Options, PackageSearchResult, SearchResults,
     eval_cache_key_args,
@@ -115,9 +115,9 @@ pub struct NixCBackend {
     // Activity for the cachix push operation (visible in TUI)
     cachix_activity: Arc<tokio::sync::Mutex<Option<Activity>>>,
 
-    // Pre-serialized NixArgs, spliced into the bootstrap import call to
-    // build the args attrset for primop merging in eval_import_with_primops.
-    cached_args_nix: Arc<OnceCell<String>>,
+    // Framework-supplied bootstrap arguments. The serialized payload is
+    // spliced into the bootstrap import call and seeds the eval-cache key.
+    bootstrap_args: OnceCell<BootstrapArgs>,
 
     // Shutdown coordinator - stored so we can trigger shutdown in Drop
     // This ensures cleanup tasks are signaled to exit when the backend is dropped
@@ -448,7 +448,7 @@ in cfg // {{
             cachix_manager,
             cachix_daemon: cachix_daemon.clone(),
             cachix_activity: cachix_activity.clone(),
-            cached_args_nix: Arc::new(OnceCell::new()),
+            bootstrap_args: OnceCell::new(),
             shutdown: shutdown.clone(),
             port_allocator,
             cached_devenv_value: Mutex::new(None),
@@ -574,9 +574,10 @@ in cfg // {{
         eval_state: &mut EvalState,
     ) -> Result<nix_bindings_expr::value::Value> {
         let args_nix = self
-            .cached_args_nix
+            .bootstrap_args
             .get()
-            .expect("assemble() must be called first");
+            .expect("assemble() must be called first")
+            .as_str();
         let base = self.paths.root.to_str().unwrap();
 
         // 1. Get the import function
@@ -594,7 +595,7 @@ in cfg // {{
         let base_args = eval_state
             .eval_from_string(args_nix, base)
             .to_miette()
-            .wrap_err("Failed to evaluate NixArgs")?;
+            .wrap_err("Failed to evaluate bootstrap args")?;
 
         // 3. Build primops attrset based on whether port allocation is enabled
         // When disabled, we still need to pass primops = {} for module compatibility
@@ -1070,18 +1071,16 @@ impl NixBackend for NixCBackend {
             .wrap_err("Failed to compute lock fingerprint")
     }
 
-    async fn assemble(&self, args: &NixArgs<'_>) -> Result<()> {
+    async fn assemble(&self, bootstrap_args: BootstrapArgs) -> Result<()> {
         // Initialize caching eval state if not already set
         if self.caching_eval_state.get().is_none() {
-            let args_nix = ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string());
-
             let cache_key_args = eval_cache_key_args(
-                &args_nix,
+                bootstrap_args.as_str(),
                 self.port_allocator.is_enabled(),
                 self.port_allocator.is_strict(),
             );
 
-            self.cached_args_nix.set(args_nix).ok();
+            self.bootstrap_args.set(bootstrap_args).ok();
 
             // Create resource manager for port allocation tracking across cache hits
             let resource_manager = Arc::new(ResourceManager::new(self.port_allocator.clone()));

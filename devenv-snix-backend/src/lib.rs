@@ -4,10 +4,11 @@
 //! as an alternative to the traditional C++ Nix binary.
 
 use async_trait::async_trait;
+use devenv_core::bootstrap_args::BootstrapArgs;
 use devenv_core::config::Input;
 use devenv_core::{
-    CacheSettings, CachixManager, DevEnvOutput, DevenvPaths, NixArgs, NixBackend, NixSettings,
-    Options, SearchResults,
+    CacheSettings, CachixManager, DevEnvOutput, DevenvPaths, NixBackend, NixSettings, Options,
+    SearchResults,
 };
 use miette::{Result, bail};
 use snix_build::buildservice::{BuildService, DummyBuildService};
@@ -132,7 +133,7 @@ impl NixBackend for SnixBackend {
         Ok(String::new())
     }
 
-    async fn assemble(&self, _args: &NixArgs<'_>) -> Result<()> {
+    async fn assemble(&self, _bootstrap_args: BootstrapArgs) -> Result<()> {
         Ok(())
     }
 
