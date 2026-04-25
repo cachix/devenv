@@ -37,10 +37,7 @@ use nix_bindings_expr::primop::{PrimOp, PrimOpMeta};
 use nix_bindings_expr::to_json::value_to_json;
 use nix_bindings_expr::{EvalCache, SearchParams, SearchResult, search};
 use nix_bindings_fetchers::FetchersSettings;
-use nix_bindings_flake::{
-    EvalStateBuilderExt, FlakeReference, FlakeReferenceParseFlags, FlakeSettings, InputsLocker,
-    LockMode,
-};
+use nix_bindings_flake::{EvalStateBuilderExt, FlakeSettings};
 use nix_bindings_store::build_env::BuildEnvironment;
 use nix_bindings_store::store::{GcAction, Store, TrustedFlag};
 use nix_bindings_util::settings;
@@ -931,81 +928,16 @@ in cfg // {{
     ///
     /// This matches the behavior of flakes - locks are automatically created/updated as needed.
     async fn validate_lock_file(&self, inputs: &BTreeMap<String, Input>) -> Result<()> {
-        use crate::{create_flake_inputs, load_lock_file, write_lock_file};
-
-        let fetch_settings = &self.fetchers_settings;
-        let flake_settings = &self.flake_settings;
-        let lock_file_path = self.paths.root.join("devenv.lock");
-
-        // If lock file doesn't exist, create it
-        if !lock_file_path.exists() {
-            return self.update(&None, inputs, &[]).await;
-        }
-
-        // Load existing lock file
-        let old_lock = load_lock_file(fetch_settings, &lock_file_path)
-            .to_miette()
-            .wrap_err("Failed to load lock file")?;
-
-        let old_lock = match old_lock {
-            Some(lock) => lock,
-            None => {
-                // Lock file is invalid/empty - regenerate it
-                return self.update(&None, inputs, &[]).await;
-            }
-        };
-
-        // Convert devenv inputs to flake inputs
-        let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, inputs)
-            .to_miette()
-            .wrap_err("Failed to create flake inputs")?;
-
-        // Nix's resolveRelativePath uses parent() on the source_path to get the directory.
-        // Since it expects a file path (like flake.nix), we append devenv.nix so parent() returns our root.
-        let source_path = self.paths.root.join("devenv.nix");
-        let source_path_str = source_path
-            .to_str()
-            .ok_or_else(|| miette!("Source path contains invalid UTF-8"))?;
-
-        // Create a locker in Virtual mode so unlocked local inputs don't fail validation.
-        // We compare the computed lock against the existing one to detect drift.
-        let locker = InputsLocker::new(flake_settings)
-            .with_inputs(flake_inputs)
-            .source_path(source_path_str)
-            .old_lock_file(&old_lock)
-            .mode(LockMode::Virtual)
-            .use_registries(true);
-
         let activity = activity!(DEBUG, evaluate, "Validating lock");
-
-        let lock_result = {
-            let eval_state = self.eval_session(&activity)?;
-            let _guard = UmaskGuard::restrictive();
-            locker.lock(fetch_settings, &eval_state)
-        };
-
-        drop(activity);
-
-        match lock_result {
-            Ok(new_lock) => {
-                if new_lock.has_changes(&old_lock).to_miette()? {
-                    tracing::debug!("Lock validation found changes, writing updated lock");
-                    // Write the new lock directly instead of calling update(), which
-                    // would call update_all() and re-fetch every input. The new_lock
-                    // was computed with the old lock as a base, so unchanged inputs
-                    // are preserved and only new/changed inputs are resolved.
-                    write_lock_file(&new_lock, &lock_file_path)
-                        .to_miette()
-                        .wrap_err("Failed to write lock file")?;
-                }
-            }
-            Err(e) => {
-                tracing::debug!("Lock validation failed: {e}, updating lock");
-                return self.update(&None, inputs, &[]).await;
-            }
-        }
-
-        Ok(())
+        let eval_state = self.eval_session(&activity)?;
+        crate::validate_lock_file(
+            &eval_state,
+            &self.fetchers_settings,
+            &self.flake_settings,
+            &self.paths.root,
+            inputs,
+        )
+        .to_miette()
     }
 
     async fn init_cachix_daemon(&self, push_cache: &str, binary: &Path) -> Result<()> {
@@ -1737,105 +1669,18 @@ impl NixBackend for NixCBackend {
         inputs: &BTreeMap<String, Input>,
         override_inputs: &[String],
     ) -> Result<()> {
-        use crate::{create_flake_inputs, load_lock_file, write_lock_file};
-
-        // Use settings created during backend initialization - ensures consistency
-        let fetch_settings = &self.fetchers_settings;
-        let flake_settings = &self.flake_settings;
-
-        // Convert devenv inputs to flake inputs
-        let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, inputs)
-            .to_miette()
-            .wrap_err("Failed to create flake inputs")?;
-
-        // Determine lock file path
-        let lock_file_path = self.paths.root.join("devenv.lock");
-
-        // Load existing lock file
-        let old_lock = load_lock_file(fetch_settings, &lock_file_path)
-            .to_miette()
-            .wrap_err("Failed to load lock file: {}")?;
-
-        // Base directory for parsing override inputs
-        let base_dir_str = self
-            .paths
-            .root
-            .to_str()
-            .ok_or_else(|| miette!("Root path contains invalid UTF-8"))?;
-
-        // Nix's resolveRelativePath uses parent() on the source_path to get the directory.
-        // Since it expects a file path (like flake.nix), we append devenv.nix so parent() returns our root.
-        let source_path = self.paths.root.join("devenv.nix");
-        let source_path_str = source_path
-            .to_str()
-            .ok_or_else(|| miette!("Source path contains invalid UTF-8"))?;
-
-        let mut locker = InputsLocker::new(flake_settings)
-            .with_inputs(flake_inputs)
-            .source_path(source_path_str)
-            .mode(LockMode::Virtual)
-            .use_registries(true);
-
-        // Set the old lock file if provided
-        if let Some(lock) = &old_lock {
-            locker = locker.old_lock_file(lock);
-        }
-
-        // Mark inputs for update
-        if let Some(name) = input_name {
-            locker = locker.update_input(name);
-        } else {
-            locker = locker.update_all();
-        }
-
-        // Apply input overrides
-        // Note: overrides must live until after lock() is called
-        let overrides: Vec<(String, FlakeReference)> = if !override_inputs.is_empty() {
-            let mut parse_flags = FlakeReferenceParseFlags::new(flake_settings).to_miette()?;
-            parse_flags.set_base_directory(base_dir_str).to_miette()?;
-
-            override_inputs
-                .chunks_exact(2)
-                .map(|pair| {
-                    let (override_ref, _) = FlakeReference::parse_with_fragment(
-                        fetch_settings,
-                        flake_settings,
-                        &parse_flags,
-                        &pair[1],
-                    )?;
-                    Ok((pair[0].clone(), override_ref))
-                })
-                .collect::<anyhow::Result<Vec<_>>>()
-                .to_miette()
-                .wrap_err("Failed to parse input overrides")?
-        } else {
-            Vec::new()
-        };
-
-        if !overrides.is_empty() {
-            locker = locker.overrides(overrides.iter().map(|(name, ref_)| (name.clone(), ref_)));
-        }
-
-        // Get eval state from mutex only when needed for locking
-        // This ensures we reuse the same eval state across calls
         let activity = activity!(INFO, evaluate, "Updating inputs");
         let eval_state = self.eval_session(&activity)?;
-
-        // Lock the inputs - pass eval_state by reference to avoid cloning
-        let lock_file = {
-            let _guard = UmaskGuard::restrictive();
-            locker
-                .lock(fetch_settings, &eval_state)
-                .to_miette()
-                .wrap_err("Failed to lock inputs")?
-        };
-
-        // Write the updated lock file
-        write_lock_file(&lock_file, &lock_file_path)
-            .to_miette()
-            .wrap_err("Failed to write lock file")?;
-
-        Ok(())
+        crate::lock_inputs(
+            &eval_state,
+            &self.fetchers_settings,
+            &self.flake_settings,
+            &self.paths.root,
+            inputs,
+            input_name.as_deref(),
+            override_inputs,
+        )
+        .to_miette()
     }
 
     async fn metadata(&self) -> Result<String> {

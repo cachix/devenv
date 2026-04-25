@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
 use devenv_core::config::Input;
+use nix_bindings_expr::eval_state::EvalState;
 use nix_bindings_fetchers::FetchersSettings;
 use nix_bindings_flake::{
-    FlakeInput, FlakeInputs, FlakeReference, FlakeReferenceParseFlags, FlakeSettings, LockFile,
+    FlakeInput, FlakeInputs, FlakeReference, FlakeReferenceParseFlags, FlakeSettings, InputsLocker,
+    LockFile, LockMode,
 };
 use nix_bindings_store::store::Store;
 use std::collections::BTreeMap;
@@ -256,6 +258,178 @@ pub fn write_lock_file(lock_file: &LockFile, output_path: &Path) -> Result<()> {
     std::fs::write(output_path, &lock_json)
         .with_context(|| format!("Failed to write lock file to {}", output_path.display()))?;
     Ok(())
+}
+
+/// Lock the requested inputs against an existing lock file (if any) and write
+/// the result to `<root>/devenv.lock`.
+///
+/// `input_name = Some(name)` updates a single input; `None` updates all.
+/// `override_inputs` is a flat list of `[name, url, name, url, ...]` parsed
+/// in pairs.
+///
+/// The caller owns the [`EvalState`] lock; this function makes one synchronous
+/// FFI call into the locker and writes the lock file on success.
+pub fn lock_inputs(
+    eval_state: &EvalState,
+    fetch_settings: &FetchersSettings,
+    flake_settings: &FlakeSettings,
+    root: &Path,
+    inputs: &BTreeMap<String, Input>,
+    input_name: Option<&str>,
+    override_inputs: &[String],
+) -> Result<()> {
+    let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, inputs)
+        .context("Failed to create flake inputs")?;
+
+    let lock_file_path = root.join("devenv.lock");
+    let old_lock =
+        load_lock_file(fetch_settings, &lock_file_path).context("Failed to load lock file")?;
+
+    let base_dir_str = root.to_str().context("Root path contains invalid UTF-8")?;
+    // Nix's resolveRelativePath uses parent() on the source_path to get the directory.
+    // Since it expects a file path (like flake.nix), we append devenv.nix so parent() returns the root.
+    let source_path = root.join("devenv.nix");
+    let source_path_str = source_path
+        .to_str()
+        .context("Source path contains invalid UTF-8")?;
+
+    let mut locker = InputsLocker::new(flake_settings)
+        .with_inputs(flake_inputs)
+        .source_path(source_path_str)
+        .mode(LockMode::Virtual)
+        .use_registries(true);
+
+    if let Some(lock) = &old_lock {
+        locker = locker.old_lock_file(lock);
+    }
+
+    if let Some(name) = input_name {
+        locker = locker.update_input(name);
+    } else {
+        locker = locker.update_all();
+    }
+
+    let overrides: Vec<(String, FlakeReference)> = if !override_inputs.is_empty() {
+        let mut parse_flags = FlakeReferenceParseFlags::new(flake_settings)?;
+        parse_flags.set_base_directory(base_dir_str)?;
+
+        override_inputs
+            .chunks_exact(2)
+            .map(|pair| {
+                let (override_ref, _) = FlakeReference::parse_with_fragment(
+                    fetch_settings,
+                    flake_settings,
+                    &parse_flags,
+                    &pair[1],
+                )?;
+                Ok((pair[0].clone(), override_ref))
+            })
+            .collect::<Result<Vec<_>>>()
+            .context("Failed to parse input overrides")?
+    } else {
+        Vec::new()
+    };
+
+    if !overrides.is_empty() {
+        locker = locker.overrides(overrides.iter().map(|(name, r)| (name.clone(), r)));
+    }
+
+    let lock_file = {
+        let _guard = crate::umask_guard::UmaskGuard::restrictive();
+        locker
+            .lock(fetch_settings, eval_state)
+            .context("Failed to lock inputs")?
+    };
+
+    write_lock_file(&lock_file, &lock_file_path).context("Failed to write lock file")?;
+
+    Ok(())
+}
+
+/// Validate the existing lock file against the current inputs, regenerating it
+/// if missing, unparseable, or out of date.
+///
+/// On success, `<root>/devenv.lock` exists and is consistent with `inputs`.
+pub fn validate_lock_file(
+    eval_state: &EvalState,
+    fetch_settings: &FetchersSettings,
+    flake_settings: &FlakeSettings,
+    root: &Path,
+    inputs: &BTreeMap<String, Input>,
+) -> Result<()> {
+    let lock_file_path = root.join("devenv.lock");
+
+    if !lock_file_path.exists() {
+        return lock_inputs(
+            eval_state,
+            fetch_settings,
+            flake_settings,
+            root,
+            inputs,
+            None,
+            &[],
+        );
+    }
+
+    let old_lock =
+        load_lock_file(fetch_settings, &lock_file_path).context("Failed to load lock file")?;
+    let Some(old_lock) = old_lock else {
+        return lock_inputs(
+            eval_state,
+            fetch_settings,
+            flake_settings,
+            root,
+            inputs,
+            None,
+            &[],
+        );
+    };
+
+    let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, inputs)
+        .context("Failed to create flake inputs")?;
+
+    let source_path = root.join("devenv.nix");
+    let source_path_str = source_path
+        .to_str()
+        .context("Source path contains invalid UTF-8")?;
+
+    // Virtual mode so unlocked local inputs don't fail validation;
+    // we compare the computed lock against the existing one to detect drift.
+    let locker = InputsLocker::new(flake_settings)
+        .with_inputs(flake_inputs)
+        .source_path(source_path_str)
+        .old_lock_file(&old_lock)
+        .mode(LockMode::Virtual)
+        .use_registries(true);
+
+    let lock_result = {
+        let _guard = crate::umask_guard::UmaskGuard::restrictive();
+        locker.lock(fetch_settings, eval_state)
+    };
+
+    match lock_result {
+        Ok(new_lock) => {
+            if new_lock.has_changes(&old_lock)? {
+                tracing::debug!("Lock validation found changes, writing updated lock");
+                // Writing new_lock directly avoids re-fetching every input: it was
+                // computed with old_lock as a base, so unchanged inputs are preserved.
+                write_lock_file(&new_lock, &lock_file_path).context("Failed to write lock file")?;
+            }
+            Ok(())
+        }
+        Err(e) => {
+            tracing::debug!("Lock validation failed: {e}, updating lock");
+            lock_inputs(
+                eval_state,
+                fetch_settings,
+                flake_settings,
+                root,
+                inputs,
+                None,
+                &[],
+            )
+        }
+    }
 }
 
 /// Compute a content fingerprint from all locked inputs' fingerprints.
