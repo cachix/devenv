@@ -123,10 +123,9 @@ pub struct NixCBackend {
     #[allow(dead_code)]
     cached_import_expr: Arc<OnceCell<String>>,
 
-    // Pre-serialized NixArgs for Value-based evaluation with primop injection.
-    // Set once in assemble(), used by eval_import_with_primops() to build
-    // the args attrset and merge it with the primops attrset.
-    cached_args_nix_eval: Arc<OnceCell<String>>,
+    // Pre-serialized NixArgs, spliced into the bootstrap import call to
+    // build the args attrset for primop merging in eval_import_with_primops.
+    cached_args_nix: Arc<OnceCell<String>>,
 
     // Shutdown coordinator - stored so we can trigger shutdown in Drop
     // This ensures cleanup tasks are signaled to exit when the backend is dropped
@@ -458,7 +457,7 @@ in cfg // {{
             cachix_daemon: cachix_daemon.clone(),
             cachix_activity: cachix_activity.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
-            cached_args_nix_eval: Arc::new(OnceCell::new()),
+            cached_args_nix: Arc::new(OnceCell::new()),
             shutdown: shutdown.clone(),
             port_allocator,
             cached_devenv_value: Mutex::new(None),
@@ -584,7 +583,7 @@ in cfg // {{
         eval_state: &mut EvalState,
     ) -> Result<nix_bindings_expr::value::Value> {
         let args_nix = self
-            .cached_args_nix_eval
+            .cached_args_nix
             .get()
             .expect("assemble() must be called first");
         let base = self.paths.root.to_str().unwrap();
@@ -1189,18 +1188,14 @@ impl NixBackend for NixCBackend {
                 self.port_allocator.is_strict(),
             );
 
-            // Unquote special Nix expressions that should be evaluated
-            let args_nix_eval =
-                args_nix.replace("\"builtins.currentSystem\"", "builtins.currentSystem");
-
             let import_path = self.bootstrap_file("default.nix");
             let import_nix_path = ser_nix::to_string(&ser_nix::NixPathBuf::from(import_path))
                 .into_diagnostic()
                 .wrap_err("Failed to serialize import path")?;
-            let import_expr = format!("(import ({import_nix_path}) {args_nix_eval})",);
+            let import_expr = format!("(import ({import_nix_path}) {args_nix})");
 
             self.cached_import_expr.set(import_expr).ok();
-            self.cached_args_nix_eval.set(args_nix_eval).ok();
+            self.cached_args_nix.set(args_nix).ok();
 
             // Create resource manager for port allocation tracking across cache hits
             let resource_manager = Arc::new(ResourceManager::new(self.port_allocator.clone()));
@@ -1215,7 +1210,6 @@ impl NixBackend for NixCBackend {
                         excluded_envs: vec!["NIXPKGS_CONFIG".to_string()],
                         // The nixpkgs config file content is already reflected in the cache key
                         excluded_paths: vec![self.nixpkgs_config_path.clone()],
-                        ..Default::default()
                     };
                     let service = CachingEvalService::with_config(pool.clone(), config.clone());
                     tracing::debug!(?config, "Eval caching enabled from framework pool");
