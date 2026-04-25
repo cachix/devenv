@@ -1928,47 +1928,54 @@ impl Devenv {
         .await
     }
 
-    /// Assemble the devenv environment and return the serialized NixArgs string.
-    /// The returned string can be used with `import bootstrap/default.nix <args>`.
-    pub async fn assemble(&self) -> Result<String> {
+    /// Reserve ports already in use by a running native process manager so
+    /// that Nix evaluation does not hand them out as fresh allocations.
+    ///
+    /// Best-effort: failures are logged at debug level and do not propagate.
+    /// Inspects the native socket (not the PID file) because the socket is
+    /// created before processes reach readiness and the PID file is written.
+    pub async fn reserve_running_ports(&self) {
         let processes_running = self.processes_running().await;
         self.port_allocator.set_allow_in_use(processes_running);
 
-        // If the native process manager is running, query its port allocations
-        // and seed the allocator so that Nix evaluation sees the correct ports.
-        // Best-effort: if the query fails, fall back to normal behavior.
-        // Check the socket path (not the PID file) because the socket is created
-        // before processes reach readiness and the PID file is written.
         let native_socket = self.native_socket_path();
-        if native_socket.exists() {
-            match processes::NativeProcessManager::api_request(
-                &native_socket,
-                &processes::ApiRequest::Ports,
-            )
-            .await
-            {
-                Ok(processes::ApiResponse::PortAllocations { ports }) => {
-                    let seeds: Vec<(String, String, u16)> = ports
-                        .into_iter()
-                        .map(|p| (p.process_name, p.port_name, p.port))
-                        .collect();
-                    if !seeds.is_empty() {
-                        tracing::debug!(
-                            count = seeds.len(),
-                            "Seeded port allocator from native manager"
-                        );
-                        self.port_allocator.seed(&seeds);
-                        self.port_allocator.set_enabled(true);
-                    }
-                }
-                Ok(_) => {
-                    tracing::debug!("Unexpected response from native manager ports query");
-                }
-                Err(e) => {
-                    tracing::debug!("Could not query native manager for ports: {}", e);
+        if !native_socket.exists() {
+            return;
+        }
+
+        match processes::NativeProcessManager::api_request(
+            &native_socket,
+            &processes::ApiRequest::Ports,
+        )
+        .await
+        {
+            Ok(processes::ApiResponse::PortAllocations { ports }) => {
+                let seeds: Vec<(String, String, u16)> = ports
+                    .into_iter()
+                    .map(|p| (p.process_name, p.port_name, p.port))
+                    .collect();
+                if !seeds.is_empty() {
+                    tracing::debug!(
+                        count = seeds.len(),
+                        "Seeded port allocator from native manager"
+                    );
+                    self.port_allocator.seed(&seeds);
+                    self.port_allocator.set_enabled(true);
                 }
             }
+            Ok(_) => {
+                tracing::debug!("Unexpected response from native manager ports query");
+            }
+            Err(e) => {
+                tracing::debug!("Could not query native manager for ports: {}", e);
+            }
         }
+    }
+
+    /// Assemble the devenv environment and return the serialized NixArgs string.
+    /// The returned string can be used with `import bootstrap/default.nix <args>`.
+    pub async fn assemble(&self) -> Result<String> {
+        self.reserve_running_ports().await;
 
         if self.assembled.load(Ordering::Acquire) {
             return Ok(self
