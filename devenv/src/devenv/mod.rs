@@ -33,16 +33,13 @@ use std::io::Write;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::Arc;
 use tasks::{Tasks, TasksUi};
 use tokio::fs;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::process;
-use tokio::sync::{OnceCell, Semaphore};
+use tokio::sync::OnceCell;
 use tracing::{Instrument, debug, info, instrument};
 
 // templates
@@ -242,12 +239,6 @@ pub struct Devenv {
     // Container name for container builds, set before assemble
     container_name: std::sync::OnceLock<String>,
 
-    // Whether assemble has been run.
-    // Assemble creates critical runtime directories and files.
-    assembled: Arc<AtomicBool>,
-    // Semaphore to prevent multiple concurrent assembles
-    assemble_lock: Arc<Semaphore>,
-
     has_processes: OnceCell<bool>,
 
     // Cached DevEnv result from get_dev_environment_inner, used by up() to avoid
@@ -433,8 +424,6 @@ impl Devenv {
             config,
             nix: Arc::new(nix),
             container_name: std::sync::OnceLock::new(),
-            assembled: Arc::new(AtomicBool::new(false)),
-            assemble_lock: Arc::new(Semaphore::new(1)),
             has_processes: OnceCell::new(),
             dev_env_cache: OnceCell::new(),
             eval_cache_pool,
@@ -1976,18 +1965,15 @@ impl Devenv {
     pub async fn assemble(&self) -> Result<String> {
         self.reserve_running_ports().await;
 
-        if self.assembled.load(Ordering::Acquire) {
-            return Ok(self
-                .bootstrap_args
-                .get()
-                .expect("bootstrap_args should be set after assemble")
-                .as_str()
-                .to_owned());
-        }
+        let bootstrap_args = self
+            .bootstrap_args
+            .get_or_try_init(|| async { self.build_bootstrap_args().await })
+            .await?;
 
-        let _permit = self.assemble_lock.acquire().await.unwrap();
+        Ok(bootstrap_args.as_str().to_owned())
+    }
 
-        // Skip devenv.nix existence check if --option or --from is provided
+    async fn build_bootstrap_args(&self) -> Result<BootstrapArgs> {
         if self.input_overrides.nix_module_options.is_empty()
             && !self.from_external
             && !self.devenv_root.join("devenv.nix").exists()
@@ -2016,7 +2002,6 @@ impl Devenv {
                 miette::miette!("Failed to create {}: {}", self.devenv_runtime.display(), e)
             })?;
 
-        // Initialize eval-cache database (framework layer concern, used by backends)
         if self.cache_settings.eval_cache {
             self.eval_cache_pool
                 .get_or_try_init(|| async {
@@ -2034,97 +2019,8 @@ impl Devenv {
                 .await?;
         }
 
-        // Check for secretspec.toml and load secrets
-        let secretspec_path = self.devenv_root.join("secretspec.toml");
-        let secretspec_config_exists = self.secret_settings.secretspec.is_some();
-        let secretspec_enabled = self
-            .secret_settings
-            .secretspec
-            .as_ref()
-            .map(|c| c.enable)
-            .unwrap_or(false);
+        self.resolve_secretspec()?;
 
-        if secretspec_path.exists() {
-            // Log warning when secretspec.toml exists but is not configured
-            if !secretspec_enabled && !secretspec_config_exists {
-                info!(
-                    devenv.is_user_message = true,
-                    "{}",
-                    indoc::formatdoc! {"
-                    Found secretspec.toml but secretspec integration is not enabled.
-
-                    To enable, add to devenv.yaml:
-                      secretspec:
-                        enable: true
-
-                    To disable this message:
-                      secretspec:
-                        enable: false
-
-                    Learn more: https://devenv.sh/integrations/secretspec/
-                "}
-                );
-            }
-
-            if secretspec_enabled {
-                // Get profile and provider from resolved secret settings
-                let (profile, provider) =
-                    if let Some(ref secretspec_config) = self.secret_settings.secretspec {
-                        (
-                            secretspec_config.profile.clone(),
-                            secretspec_config.provider.clone(),
-                        )
-                    } else {
-                        (None, None)
-                    };
-
-                // Load and validate secrets using SecretSpec API
-                let mut secrets = secretspec::Secrets::load()
-                    .map_err(|e| miette!("Failed to load secretspec configuration: {}", e))?;
-
-                // Configure provider and profile if specified
-                if let Some(ref provider_str) = provider {
-                    secrets.set_provider(provider_str);
-                }
-                if let Some(ref profile_str) = profile {
-                    secrets.set_profile(profile_str);
-                }
-
-                // Validate secrets — return SecretsNeedPrompting on missing secrets.
-                // The caller (main.rs) decides whether to prompt interactively or fail.
-                let validated_secrets = match secrets.validate()? {
-                    Ok(validated) => validated,
-                    Err(e) => {
-                        return Err(SecretsNeedPrompting {
-                            provider: provider.clone(),
-                            profile: profile.clone(),
-                            missing: e.missing_required,
-                        }
-                        .into());
-                    }
-                };
-
-                // Store resolved secrets in OnceCell for Nix to use
-                let resolved = secretspec::Resolved {
-                    secrets: validated_secrets
-                        .resolved
-                        .secrets
-                        .into_iter()
-                        .map(|(k, v)| (k, v.expose_secret().to_string()))
-                        .collect(),
-                    provider: validated_secrets.resolved.provider,
-                    profile: validated_secrets.resolved.profile,
-                };
-
-                self.secretspec
-                    .set(resolved)
-                    .map_err(|_| miette!("Secretspec resolved already set"))?;
-            }
-        }
-
-        // Create flake.devenv.nix
-
-        // Get current hostname and username using system APIs
         let hostname = hostname::get()
             .ok()
             .map(|h| h.to_string_lossy().into_owned());
@@ -2136,7 +2032,6 @@ impl Devenv {
             "./{}",
             self.devenv_dotfile
                 .file_name()
-                // This should never fail
                 .expect("Failed to extract the directory name from devenv_dotfile")
                 .to_string_lossy()
         ));
@@ -2149,22 +2044,14 @@ impl Devenv {
             });
 
         let active_profiles = &self.shell_settings.profiles;
-
-        // Parse CLI options into structured format with typed values
         let cli_options =
             CliOptionsConfig(parse_cli_options(&self.input_overrides.nix_module_options)?);
 
-        // Validate the lock file before computing the fingerprint so the
-        // fingerprint is stable for the rest of the call chain. On first run
-        // this creates devenv.lock; otherwise it confirms the existing lock is
-        // still consistent with the configured inputs.
+        // Lock-file validation must happen before fingerprinting so the
+        // fingerprint reflects the post-validation state.
         self.nix.validate_lock_file(&self.inputs).await?;
-
-        // Compute lock fingerprint for eval-cache invalidation
-        // This includes narHashes from local path inputs that aren't stored in devenv.lock
         let lock_fingerprint = self.nix.lock_fingerprint().await?;
 
-        // Create the Nix arguments struct
         let container_name = self.container_name.get();
         let args = NixArgs {
             version: crate_version!(),
@@ -2197,16 +2084,95 @@ impl Devenv {
         };
 
         let bootstrap_args = BootstrapArgs::from_serializable(&args)?;
-        let nix_args_str = bootstrap_args.as_str().to_owned();
-
         self.nix.assemble(bootstrap_args.clone()).await?;
+        Ok(bootstrap_args)
+    }
 
-        self.bootstrap_args
-            .set(bootstrap_args)
-            .map_err(|_| miette!("bootstrap_args should only be set once"))?;
+    fn resolve_secretspec(&self) -> Result<()> {
+        let secretspec_path = self.devenv_root.join("secretspec.toml");
+        if !secretspec_path.exists() {
+            return Ok(());
+        }
 
-        self.assembled.store(true, Ordering::Release);
-        Ok(nix_args_str)
+        let secretspec_config_exists = self.secret_settings.secretspec.is_some();
+        let secretspec_enabled = self
+            .secret_settings
+            .secretspec
+            .as_ref()
+            .map(|c| c.enable)
+            .unwrap_or(false);
+
+        if !secretspec_enabled {
+            if !secretspec_config_exists {
+                info!(
+                    devenv.is_user_message = true,
+                    "{}",
+                    indoc::formatdoc! {"
+                    Found secretspec.toml but secretspec integration is not enabled.
+
+                    To enable, add to devenv.yaml:
+                      secretspec:
+                        enable: true
+
+                    To disable this message:
+                      secretspec:
+                        enable: false
+
+                    Learn more: https://devenv.sh/integrations/secretspec/
+                "}
+                );
+            }
+            return Ok(());
+        }
+
+        let (profile, provider) =
+            if let Some(ref secretspec_config) = self.secret_settings.secretspec {
+                (
+                    secretspec_config.profile.clone(),
+                    secretspec_config.provider.clone(),
+                )
+            } else {
+                (None, None)
+            };
+
+        let mut secrets = secretspec::Secrets::load()
+            .map_err(|e| miette!("Failed to load secretspec configuration: {}", e))?;
+
+        if let Some(ref provider_str) = provider {
+            secrets.set_provider(provider_str);
+        }
+        if let Some(ref profile_str) = profile {
+            secrets.set_profile(profile_str);
+        }
+
+        // Validate secrets — return SecretsNeedPrompting on missing secrets.
+        // The caller (main.rs) decides whether to prompt interactively or fail.
+        let validated_secrets = match secrets.validate()? {
+            Ok(validated) => validated,
+            Err(e) => {
+                return Err(SecretsNeedPrompting {
+                    provider: provider.clone(),
+                    profile: profile.clone(),
+                    missing: e.missing_required,
+                }
+                .into());
+            }
+        };
+
+        let resolved = secretspec::Resolved {
+            secrets: validated_secrets
+                .resolved
+                .secrets
+                .into_iter()
+                .map(|(k, v)| (k, v.expose_secret().to_string()))
+                .collect(),
+            provider: validated_secrets.resolved.provider,
+            profile: validated_secrets.resolved.profile,
+        };
+
+        self.secretspec
+            .set(resolved)
+            .map_err(|_| miette!("Secretspec resolved already set"))
     }
 
     /// Inner implementation without activity wrapper.
