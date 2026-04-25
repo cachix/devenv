@@ -2154,6 +2154,12 @@ impl Devenv {
         let cli_options =
             CliOptionsConfig(parse_cli_options(&self.input_overrides.nix_module_options)?);
 
+        // Validate the lock file before computing the fingerprint so the
+        // fingerprint is stable for the rest of the call chain. On first run
+        // this creates devenv.lock; otherwise it confirms the existing lock is
+        // still consistent with the configured inputs.
+        self.nix.validate_lock_file(&self.inputs).await?;
+
         // Compute lock fingerprint for eval-cache invalidation
         // This includes narHashes from local path inputs that aren't stored in devenv.lock
         let lock_fingerprint = self.nix.lock_fingerprint().await?;

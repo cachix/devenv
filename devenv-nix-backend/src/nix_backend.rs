@@ -913,27 +913,6 @@ in cfg // {{
         Ok(())
     }
 
-    /// Validate and ensure lock file is up-to-date with the current devenv configuration
-    ///
-    /// This method:
-    /// 1. If lock file doesn't exist, creates it by calling update()
-    /// 2. If lock file exists, verifies it's in sync with current configuration
-    /// 3. If out of sync, automatically refreshes the locks by calling update()
-    ///
-    /// This matches the behavior of flakes - locks are automatically created/updated as needed.
-    async fn validate_lock_file(&self, inputs: &BTreeMap<String, Input>) -> Result<()> {
-        let activity = activity!(DEBUG, evaluate, "Validating lock");
-        let eval_state = self.eval_session(&activity)?;
-        crate::validate_lock_file(
-            &eval_state,
-            &self.fetchers_settings,
-            &self.flake_settings,
-            &self.paths.root,
-            inputs,
-        )
-        .to_miette()
-    }
-
     async fn init_cachix_daemon(&self, push_cache: &str, binary: &Path) -> Result<()> {
         tracing::debug!(binary = %binary.display(), "Starting cachix daemon");
 
@@ -1068,6 +1047,19 @@ in cfg // {{
 
 #[async_trait(?Send)]
 impl NixBackend for NixCBackend {
+    async fn validate_lock_file(&self, inputs: &BTreeMap<String, Input>) -> Result<()> {
+        let activity = activity!(DEBUG, evaluate, "Validating lock");
+        let eval_state = self.eval_session(&activity)?;
+        crate::validate_lock_file(
+            &eval_state,
+            &self.fetchers_settings,
+            &self.flake_settings,
+            &self.paths.root,
+            inputs,
+        )
+        .to_miette()
+    }
+
     async fn lock_fingerprint(&self) -> Result<String> {
         let lock_file_path = self.paths.root.join("devenv.lock");
         let lock_file = crate::load_lock_file(&self.fetchers_settings, &lock_file_path)
@@ -1079,34 +1071,9 @@ impl NixBackend for NixCBackend {
     }
 
     async fn assemble(&self, args: &NixArgs<'_>) -> Result<()> {
-        // Validate lock file FIRST so the lock fingerprint is stable for cache key computation.
-        // On first run, the lock file doesn't exist yet, so lock_fingerprint (computed before
-        // this call) returns the hash of "". validate_lock_file creates it, and we re-compute
-        // the fingerprint below so the cache key matches what subsequent runs will produce.
-        self.validate_lock_file(args.devenv_inputs).await?;
-
         // Initialize caching eval state if not already set
         if self.caching_eval_state.get().is_none() {
-            // Re-compute the lock fingerprint now that validate_lock_file has ensured
-            // the lock file exists. This corrects the cache key on first run.
-            let lock_fingerprint = self.lock_fingerprint().await?;
-            let corrected_args;
-            let args_to_serialize = if lock_fingerprint != args.lock_fingerprint {
-                tracing::debug!(
-                    old = %args.lock_fingerprint,
-                    new = %lock_fingerprint,
-                    "Lock fingerprint changed after validation, using corrected value for cache key"
-                );
-                corrected_args = NixArgs {
-                    lock_fingerprint: &lock_fingerprint,
-                    ..args.clone()
-                };
-                &corrected_args
-            } else {
-                args
-            };
-            let args_nix =
-                ser_nix::to_string(args_to_serialize).unwrap_or_else(|_| "{}".to_string());
+            let args_nix = ser_nix::to_string(args).unwrap_or_else(|_| "{}".to_string());
 
             let cache_key_args = eval_cache_key_args(
                 &args_nix,

@@ -93,6 +93,13 @@ impl Default for Options {
 /// Trait defining the interface for Nix evaluation backends
 #[async_trait(?Send)]
 pub trait NixBackend: Send + Sync {
+    /// Validate the existing lock file against the current inputs, regenerating
+    /// it if missing or out of date.
+    ///
+    /// Must be called before `lock_fingerprint()` so the fingerprint is stable
+    /// across the rest of the call chain.
+    async fn validate_lock_file(&self, inputs: &BTreeMap<String, Input>) -> Result<()>;
+
     /// Compute a content fingerprint from the lock file's inputs' narHashes.
     ///
     /// This is used for eval-cache invalidation when local inputs change.
@@ -100,7 +107,8 @@ pub trait NixBackend: Send + Sync {
     /// which are normally stripped when writing to disk.
     ///
     /// Returns a hex-encoded BLAKE3 hash of the combined narHashes.
-    /// Must be called before `assemble()` to include in NixArgs.
+    /// Must be called after `validate_lock_file()` so the lock file is up to
+    /// date, and before `assemble()` to include the result in `NixArgs`.
     async fn lock_fingerprint(&self) -> Result<String>;
 
     /// Initialize and assemble the backend

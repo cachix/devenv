@@ -123,6 +123,10 @@ impl SnixBackend {
 
 #[async_trait(?Send)]
 impl NixBackend for SnixBackend {
+    async fn validate_lock_file(&self, _inputs: &BTreeMap<String, Input>) -> Result<()> {
+        Ok(())
+    }
+
     async fn lock_fingerprint(&self) -> Result<String> {
         // Return empty fingerprint for now - snix backend is not yet fully implemented
         Ok(String::new())
