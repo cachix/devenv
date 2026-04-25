@@ -742,7 +742,7 @@ in cfg // {{
     ///
     /// THREAD SAFETY: The underlying Nix settings use global mutable state.
     /// This should only be called during single-threaded initialization.
-    fn apply_nix_settings(nix_settings: &NixSettings) -> Result<()> {
+    pub(crate) fn apply_nix_settings(nix_settings: &NixSettings) -> Result<()> {
         // Disable flake evaluation cache to avoid stale cache issues
         settings::set("eval-cache", "false")
             .to_miette()
@@ -1081,29 +1081,6 @@ in cfg // {{
 
 #[async_trait(?Send)]
 impl NixBackend for NixCBackend {
-    async fn validate_lock_file(&self, inputs: &BTreeMap<String, Input>) -> Result<()> {
-        let activity = activity!(DEBUG, evaluate, "Validating lock");
-        let eval_state = self.eval_session(&activity)?;
-        crate::validate_lock_file(
-            &eval_state,
-            &self.fetchers_settings,
-            &self.flake_settings,
-            &self.paths.root,
-            inputs,
-        )
-        .to_miette()
-    }
-
-    async fn lock_fingerprint(&self) -> Result<String> {
-        let lock_file_path = self.paths.root.join("devenv.lock");
-        let lock_file = crate::load_lock_file(&self.fetchers_settings, &lock_file_path)
-            .to_miette()
-            .wrap_err("Failed to load lock file for fingerprint computation")?;
-        crate::compute_lock_fingerprint(lock_file.as_ref(), &self.fetchers_settings, &self.store)
-            .to_miette()
-            .wrap_err("Failed to compute lock fingerprint")
-    }
-
     async fn assemble(&self, bootstrap_args: BootstrapArgs) -> Result<()> {
         // Initialize caching eval state if not already set
         if self.caching_eval_state.get().is_none() {

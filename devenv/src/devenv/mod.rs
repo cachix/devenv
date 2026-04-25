@@ -226,6 +226,8 @@ pub struct Devenv {
 
     pub nix: Arc<Box<dyn NixBackend>>,
 
+    cachix_manager: Arc<CachixManager>,
+
     // All kinds of paths
     devenv_root: PathBuf,
     devenv_dotfile: PathBuf,
@@ -396,7 +398,7 @@ impl Devenv {
                     nix_settings.clone(),
                     cache_settings.clone(),
                     paths,
-                    cachix_manager,
+                    cachix_manager.clone(),
                     Some(eval_cache_pool.clone()),
                 )
                 .await
@@ -427,6 +429,7 @@ impl Devenv {
             process_runtime_dir: SyncOnceCell::new(),
             config,
             nix: Arc::new(nix),
+            cachix_manager,
             container_name: std::sync::OnceLock::new(),
             has_processes: OnceCell::new(),
             dev_env_cache: OnceCell::new(),
@@ -2055,9 +2058,21 @@ impl Devenv {
             CliOptionsConfig(parse_cli_options(&self.input_overrides.nix_module_options)?);
 
         // Lock-file validation must happen before fingerprinting so the
-        // fingerprint reflects the post-validation state.
-        self.nix.validate_lock_file(&self.inputs).await?;
-        let lock_fingerprint = self.nix.lock_fingerprint().await?;
+        // fingerprint reflects the post-validation state. The bootstrap
+        // nix expression splices the locked inputs into the module
+        // system, so the lock has to be solid before backend assembly.
+        let cachix_global_settings = self
+            .cachix_manager
+            .get_global_settings()
+            .wrap_err("Failed to get cachix global settings")?;
+        let lock_ctx = devenv_nix_backend::LockingContext::new(
+            &self.paths(),
+            &self.nix_settings,
+            &cachix_global_settings,
+        )?;
+        lock_ctx.validate_lock_file(&self.inputs)?;
+        let lock_fingerprint = lock_ctx.lock_fingerprint()?;
+        drop(lock_ctx);
 
         let container_name = self.container_name.get();
         let args = NixArgs {

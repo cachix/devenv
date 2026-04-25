@@ -15,6 +15,10 @@ use std::sync::Once;
 pub mod nix_backend;
 pub use nix_backend::ProjectRoot;
 
+// Pre-bootstrap context for lock-file work (transitional).
+pub mod locking_context;
+pub use locking_context::LockingContext;
+
 use std::cell::RefCell;
 
 // Ensure Nix/GC is initialized exactly once across all threads
