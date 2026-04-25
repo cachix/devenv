@@ -368,7 +368,7 @@ impl Devenv {
 
         let nix: Box<dyn NixBackend> = match nix_settings.backend {
             NixBackendType::Nix => Box::new(
-                devenv_nix_backend::nix_backend::NixRustBackend::new(
+                devenv_nix_backend::nix_backend::NixCBackend::new(
                     paths,
                     options.nixpkgs_config.clone(),
                     nix_settings.clone(),

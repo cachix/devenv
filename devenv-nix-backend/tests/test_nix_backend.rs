@@ -8,7 +8,7 @@ use devenv_core::eval_op::EvalOp;
 use devenv_core::{
     CliOptionsConfig, Config, DevenvPaths, NixArgs, NixBackend, NixOptions, Options,
 };
-use devenv_nix_backend::nix_backend::NixRustBackend;
+use devenv_nix_backend::nix_backend::NixCBackend;
 use devenv_nix_backend_macros::nix_test;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -124,14 +124,14 @@ impl TestNixArgs {
 /// 4. Writes devenv.yaml with provided content
 /// 5. Creates directory structure (DevenvPaths)
 /// 6. Loads configuration with nixpkgs fallback
-/// 7. Instantiates and returns NixRustBackend
+/// 7. Instantiates and returns NixCBackend
 ///
 /// The returned TempDir and CwdGuard must be kept alive to prevent cleanup during the test.
 fn setup_isolated_test_env(
     yaml_content: &str,
     nix_content: Option<&str>,
     nix_cli: NixOptions,
-) -> (TempDir, CwdGuard, NixRustBackend, DevenvPaths, Config) {
+) -> (TempDir, CwdGuard, NixCBackend, DevenvPaths, Config) {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let temp_path = temp_dir.path();
 
@@ -168,7 +168,7 @@ fn setup_isolated_test_env(
         cachix_manager,
         shutdown,
     )
-    .expect("Failed to create NixRustBackend");
+    .expect("Failed to create NixCBackend");
 
     (temp_dir, cwd_guard, backend, paths, config)
 }
@@ -772,7 +772,7 @@ async fn test_full_backend_workflow() {
 "#;
     let (_temp_dir, _cwd_guard, backend, paths, config) =
         setup_isolated_test_env(yaml, None, NixOptions::default());
-    println!("Created NixRustBackend: {}", backend.name());
+    println!("Created NixCBackend: {}", backend.name());
 
     // 2. Initialize
     backend

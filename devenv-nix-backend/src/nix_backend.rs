@@ -89,7 +89,7 @@ impl Default for ProjectRoot {
 /// Field order matters: Rust drops fields in declaration order. FFI fields are
 /// ordered at the end so C++ destructors run in the correct dependency order:
 /// caching_eval_state → eval_state → store → settings → activity_logger → _gc_registration
-pub struct NixRustBackend {
+pub struct NixCBackend {
     pub nix_settings: NixSettings,
     pub cache_settings: CacheSettings,
     pub paths: DevenvPaths,
@@ -187,15 +187,15 @@ pub struct NixRustBackend {
 //
 // RECOMMENDATION:
 // - DO NOT use this backend from multiple threads concurrently if you can avoid it
-// - Consider creating separate NixRustBackend instances per thread instead
+// - Consider creating separate NixCBackend instances per thread instead
 // - This implementation exists to satisfy the NixBackend: Send + Sync trait bound
 //
 // TODO: Verify these assumptions by:
 // 1. Reading Nix C++ source code for Store and EvalState thread safety
 // 2. Adding integration tests that exercise concurrent access
 // 3. Consider upstreaming Send/Sync impls to nix-store and nix-expr crates with proper safety analysis
-unsafe impl Send for NixRustBackend {}
-unsafe impl Sync for NixRustBackend {}
+unsafe impl Send for NixCBackend {}
+unsafe impl Sync for NixCBackend {}
 
 fn core_config_watch_paths(root: &Path) -> Vec<PathBuf> {
     [
@@ -241,8 +241,8 @@ impl<'a> std::ops::DerefMut for EvalSession<'a> {
     }
 }
 
-impl NixRustBackend {
-    /// Create a new NixRustBackend with initialized Nix FFI components
+impl NixCBackend {
+    /// Create a new NixCBackend with initialized Nix FFI components
     ///
     /// # Arguments
     /// * `paths` - DevenvPaths containing root, dotfile, and cache directories
@@ -1142,7 +1142,7 @@ in cfg // {{
 }
 
 #[async_trait(?Send)]
-impl NixBackend for NixRustBackend {
+impl NixBackend for NixCBackend {
     async fn lock_fingerprint(&self) -> Result<String> {
         let lock_file_path = self.paths.root.join("devenv.lock");
         let lock_file = crate::load_lock_file(&self.fetchers_settings, &lock_file_path)
@@ -2110,8 +2110,8 @@ impl NixBackend for NixRustBackend {
     }
 }
 
-// Helper methods for NixRustBackend
-impl NixRustBackend {
+// Helper methods for NixCBackend
+impl NixCBackend {
     /// Create a fresh EvalState, clearing all internal caches (e.g. fileEvalCache).
     /// Used during hot-reload to ensure changed files are re-evaluated.
     fn create_fresh_eval_state(&self) -> Result<EvalState> {
@@ -2494,7 +2494,7 @@ struct CachedShellPaths {
     env_path: Option<String>,
 }
 
-impl Drop for NixRustBackend {
+impl Drop for NixCBackend {
     fn drop(&mut self) {
         // Trigger shutdown to signal the cleanup task to run and exit.
         // This is sync (doesn't wait), but ensures the task doesn't stay

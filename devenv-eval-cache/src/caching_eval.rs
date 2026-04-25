@@ -1,6 +1,6 @@
 //! Caching service for FFI-based Nix evaluation.
 //!
-//! This module provides transparent caching for `NixRustBackend.eval()` operations.
+//! This module provides transparent caching for `NixCBackend.eval()` operations.
 //! When an eval request is made, the service checks if a valid cached result exists
 //! (with unchanged file and env inputs). If so, it returns the cached JSON.
 //! Otherwise, the caller performs the actual evaluation and stores the result.

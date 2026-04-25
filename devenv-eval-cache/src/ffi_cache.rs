@@ -1,4 +1,4 @@
-//! FFI-based eval caching types for NixRustBackend.
+//! FFI-based eval caching types for NixCBackend.
 //!
 //! This module provides core types for caching evaluation results
 //! when using the FFI backend instead of the CLI backend.
