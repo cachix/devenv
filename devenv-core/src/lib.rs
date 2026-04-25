@@ -3,6 +3,7 @@
 //! This crate contains the core abstractions and types that are shared between
 //! different parts of devenv, including backend implementations.
 
+pub mod bootstrap_args;
 pub mod cachix;
 pub mod config;
 pub mod eval_op;
@@ -16,6 +17,7 @@ pub mod resource;
 pub mod settings;
 pub mod store_settings;
 
+pub use bootstrap_args::BootstrapArgs;
 pub use cachix::{CachixCacheInfo, CachixManager, CachixPaths};
 pub use config::Config;
 pub use eval_op::{EvalOp, OpObserver};
