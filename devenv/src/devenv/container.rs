@@ -14,8 +14,6 @@ fn sanitize_container_name(name: &str) -> String {
 
 impl Devenv {
     pub async fn container_build(&self, name: &str) -> Result<String> {
-        let _ = self.container_name.set(name.to_string());
-
         let sanitized_name = sanitize_container_name(name);
         let gc_root = self
             .devenv_dot_gc
@@ -31,7 +29,7 @@ impl Devenv {
         } else {
             &self.nix_settings.system
         };
-        let attr = format!("devenv.perSystem.{target_system}.config.containers.{name}.derivation");
+        let attr = format!("devenv.perSystem.{target_system}.containerBuilds.{name}.derivation");
         let paths = self
             .backend()
             .build_devenv(
@@ -59,7 +57,7 @@ impl Devenv {
         let gc_root = self
             .devenv_dot_gc
             .join(format!("container-{sanitized_name}-copy"));
-        let attr = format!("devenv.config.containers.{name}.copyScript");
+        let attr = format!("devenv.containerBuilds.{name}.copyScript");
         let paths = self
             .backend()
             .build_devenv(
@@ -124,7 +122,7 @@ impl Devenv {
         let gc_root = self
             .devenv_dot_gc
             .join(format!("container-{sanitized_name}-run"));
-        let attr = format!("devenv.config.containers.{name}.dockerRun");
+        let attr = format!("devenv.containerBuilds.{name}.dockerRun");
         let paths = self
             .backend()
             .build_devenv(

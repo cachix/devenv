@@ -35,7 +35,6 @@ rec {
     , devenv_state ? null
     , devenv_istesting ? false
     , devenv_direnvrc_latest_version
-    , container_name ? null
     , active_profiles ? [ ]
     , hostname
     , username
@@ -200,10 +199,6 @@ rec {
               ];
             }
           )
-          (lib.optionalAttrs (container_name != null) {
-            container.isBuilding = lib.mkForce true;
-            containers.${container_name}.isBuilding = true;
-          })
         ]
         ++ (lib.flatten (map importModule devenv_imports))
         ++ (if !skip_local_src then (importModule (devenv_root + "/devenv.nix")) else [ ])
@@ -413,6 +408,27 @@ rec {
 
       config = project.config;
 
+      # Per-container scoped re-evaluation that flips `isBuilding` for the
+      # container being built. Selecting one container cannot pollute the
+      # evaluation of any other operation, since each `containerBuilds.<name>`
+      # is its own `extendModules` scope.
+      mkContainerBuilds =
+        evalProject:
+        lib.genAttrs (lib.attrNames evalProject.config.containers) (
+          name:
+          let
+            scoped = evalProject.extendModules {
+              modules = [{
+                container.isBuilding = lib.mkForce true;
+                containers.${name}.isBuilding = lib.mkForce true;
+              }];
+            };
+          in
+          scoped.config.containers.${name}
+        );
+
+      containerBuilds = mkContainerBuilds project;
+
       # Apply config overlays to pkgs
       pkgs = pkgsBootstrap.appendOverlays (config.overlays or [ ]);
 
@@ -485,6 +501,7 @@ rec {
         in
         {
           config = evalProject.config;
+          containerBuilds = mkContainerBuilds evalProject;
         };
 
       # All supported systems for cross-compilation (lazily evaluated)
@@ -497,7 +514,11 @@ rec {
 
       # Generate perSystem entries for all systems (only evaluated when accessed)
       perSystemConfigs = lib.genAttrs allSystems (
-        perSystem: if perSystem == targetSystem then { config = config; } else evalForSystem perSystem
+        perSystem:
+        if perSystem == targetSystem then
+          { inherit config containerBuilds; }
+        else
+          evalForSystem perSystem
       );
     in
     {
@@ -515,7 +536,7 @@ rec {
       build = build project.options config;
       devenv = {
         # Backwards compatibility: wrap config in devenv attribute for code expecting devenv.config.*
-        config = config;
+        inherit config containerBuilds;
         # perSystem structure for cross-compilation (e.g. macOS building Linux containers)
         perSystem = perSystemConfigs;
       };

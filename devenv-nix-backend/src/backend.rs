@@ -323,8 +323,7 @@ impl NixCBackend {
                 };
                 let service = CachingEvalService::with_config(pool.clone(), config.clone());
                 let invalidation_flag = self.devenv_value_invalidated.clone();
-                let resource_manager =
-                    Arc::new(ResourceManager::new(self.port_allocator.clone()));
+                let resource_manager = Arc::new(ResourceManager::new(self.port_allocator.clone()));
                 CachedEval::with_cache(service, self.nix_log_bridge.clone(), config)
                     .with_resource_manager(resource_manager)
                     .with_on_resource_invalidation(Arc::new(move || {

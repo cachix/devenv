@@ -237,9 +237,6 @@ pub struct Devenv {
     devenv_runtime: PathBuf,
     process_runtime_dir: SyncOnceCell<PathBuf>,
 
-    // Container name for container builds, set before assemble
-    container_name: std::sync::OnceLock<String>,
-
     has_processes: OnceCell<bool>,
 
     // Cached DevEnv result from get_dev_environment_inner, used by up() to avoid
@@ -421,8 +418,7 @@ impl Devenv {
                 // Phase 1: bring up Nix, open the store, build settings,
                 // validate the lock against a transient eval state, then
                 // drop it before phase 2 builds the long-lived one.
-                let gc_registration =
-                    crate::backend::init_nix(&nix_settings, &store_settings)?;
+                let gc_registration = crate::backend::init_nix(&nix_settings, &store_settings)?;
                 let store = crate::backend::open_store(&store_settings)?;
                 let (flake_settings, fetchers_settings) = crate::backend::build_settings()?;
 
@@ -460,7 +456,6 @@ impl Devenv {
                     options.is_testing,
                     options.git_root.as_deref(),
                     secretspec_cell.get(),
-                    None,
                     &fingerprint,
                 )?;
                 let bootstrap_args = Arc::new(bootstrap_args);
@@ -501,7 +496,6 @@ impl Devenv {
                     options.is_testing,
                     options.git_root.as_deref(),
                     secretspec_cell.get(),
-                    None,
                     "",
                 )?;
                 let bootstrap_args = Arc::new(bootstrap_args);
@@ -538,7 +532,6 @@ impl Devenv {
             config,
             backend,
             _cachix_manager: cachix_manager,
-            container_name: std::sync::OnceLock::new(),
             has_processes: OnceCell::new(),
             dev_env_cache: OnceCell::new(),
             eval_cache_pool,
@@ -2508,7 +2501,6 @@ fn build_bootstrap_args_inline(
     is_testing: bool,
     git_root: Option<&Path>,
     secretspec: Option<&ResolvedSecrets>,
-    container_name: Option<&str>,
     lock_fingerprint: &str,
 ) -> Result<BootstrapArgs> {
     let hostname = hostname::get()
@@ -2547,7 +2539,6 @@ fn build_bootstrap_args_inline(
         devenv_runtime,
         devenv_istesting: is_testing,
         devenv_direnvrc_latest_version: *DIRENVRC_VERSION,
-        container_name,
         active_profiles: &shell_settings.profiles,
         cli_options,
         hostname: hostname.as_deref(),

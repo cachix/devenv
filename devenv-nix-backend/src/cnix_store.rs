@@ -96,8 +96,7 @@ impl StoreTrait for CNixStore {
                             // file or directory to clean up. Mirrors the
                             // pre-refactor behavior in NixCBackend::gc.
                             let p = path.as_path();
-                            let _ = std::fs::remove_file(p)
-                                .or_else(|_| std::fs::remove_dir_all(p));
+                            let _ = std::fs::remove_file(p).or_else(|_| std::fs::remove_dir_all(p));
                             continue;
                         }
                     };
