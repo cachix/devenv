@@ -7,7 +7,9 @@
 //! - the post-init evaluation of `config.cachix.{enable,pull,push}`
 //!   that produces a [`CachixCacheInfo`]
 //! - the application of substituters/keys to the open store
-//! - the optional push daemon ([`OwnedDaemon`]) and its [`Activity`]
+//! - the optional push daemon ([`OwnedDaemon`]) — the daemon owns its own
+//!   per-batch [`Activity`] internally, lazily started when work appears
+//!   and dropped when the queue drains
 //! - the realized-paths observer that streams paths from the backend
 //!   into the daemon via an unbounded mpsc + a draining "pump" task
 //! - the shutdown finalizer that drains the daemon before exit
@@ -21,7 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use devenv_activity::{Activity, activity};
+use devenv_activity::activity;
 use devenv_core::cachix::{CachixCacheInfo, CachixManager};
 use devenv_core::evaluator::{BuildOptions, Evaluator};
 use devenv_core::realized::RealizedPathsObserver;
@@ -45,10 +47,6 @@ pub struct CachixIntegration {
     /// of the program.
     #[allow(dead_code)]
     daemon: Arc<Mutex<Option<OwnedDaemon>>>,
-    /// Activity shown in the TUI while pushes are in flight. `take`n
-    /// (and thereby completed) on shutdown.
-    #[allow(dead_code)]
-    activity: Arc<Mutex<Option<Activity>>>,
     /// Pump task draining the observer mpsc into `daemon.queue_paths`.
     /// Lives for the lifetime of `Devenv`.
     #[allow(dead_code)]
@@ -134,8 +132,6 @@ impl CachixIntegration {
                 std::env::temp_dir().join(format!("cachix-daemon-{}.sock", std::process::id()))
             });
 
-        let activity = activity!(INFO, operation, format!("Pushing to {push_cache}"));
-
         let spawn_config = DaemonSpawnConfig {
             cache_name: push_cache.clone(),
             socket_path,
@@ -143,16 +139,9 @@ impl CachixIntegration {
             dry_run: false,
         };
 
-        let owned = match OwnedDaemon::spawn(
-            spawn_config,
-            ConnectionParams::default(),
-            Some(activity.clone()),
-        )
-        .await
-        {
+        let owned = match OwnedDaemon::spawn(spawn_config, ConnectionParams::default()).await {
             Ok(d) => d,
             Err(e) => {
-                activity.fail();
                 warn!("cachix: failed to spawn daemon, push disabled: {e}");
                 return Ok(None);
             }
@@ -161,7 +150,6 @@ impl CachixIntegration {
         info!("cachix: push daemon spawned for cache '{push_cache}'");
 
         let daemon = Arc::new(Mutex::new(Some(owned)));
-        let activity_arc = Arc::new(Mutex::new(Some(activity)));
 
         // Pump: drain unbounded mpsc into daemon.queue_paths. The
         // observer is sync and fire-and-forget; the pump turns that
@@ -190,13 +178,11 @@ impl CachixIntegration {
 
         cnix.add_realized_observer(Arc::new(MpscObserver { tx }));
 
-        // Shutdown finalizer: wait for cancellation, drain daemon,
-        // drop activity (emits Operation::Complete), signal cleanup.
+        // Shutdown finalizer: wait for cancellation, drain daemon, signal cleanup.
         let (cleanup_tx, cleanup_rx) = oneshot::channel::<()>();
         shutdown.set_cleanup_receiver(cleanup_rx);
         let finalizer = {
             let daemon = daemon.clone();
-            let activity = activity_arc.clone();
             let token = shutdown.cancellation_token();
             tokio::spawn(async move {
                 token.cancelled().await;
@@ -207,14 +193,12 @@ impl CachixIntegration {
                         warn!("cachix: error during daemon shutdown: {e}");
                     }
                 }
-                let _ = activity.lock().await.take();
                 let _ = cleanup_tx.send(());
             })
         };
 
         Ok(Some(Self {
             daemon,
-            activity: activity_arc,
             pump,
             finalizer,
         }))
