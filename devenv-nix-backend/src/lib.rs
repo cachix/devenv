@@ -109,6 +109,9 @@ pub mod build_environment;
 // Cachix daemon client for pushing store paths
 pub mod cachix_daemon;
 
+// Wire protocol types for the cachix daemon socket
+pub mod cachix_protocol;
+
 // Scoped umask guard for Nix C API calls
 pub mod umask_guard;
 

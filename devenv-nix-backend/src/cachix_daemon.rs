@@ -11,7 +11,6 @@
 use anyhow::{Context, Result, anyhow};
 use devenv_activity::{Activity, activity};
 use devenv_core::nix_log_bridge::extract_package_name;
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::process::{Child, Stdio};
@@ -98,6 +97,8 @@ pub struct DaemonMetrics {
     pub total_expected: u64,
     /// Paths the daemon reported as successfully pushed.
     pub completed: u64,
+    /// Paths the daemon reported as already cached (no upload performed).
+    pub skipped: u64,
     /// Paths the daemon reported as failed.
     pub failed: u64,
     /// Failure reasons keyed by path.
@@ -107,8 +108,13 @@ pub struct DaemonMetrics {
 impl DaemonMetrics {
     pub fn summary(&self) -> String {
         format!(
-            "Queued: {}, In Progress: {}, Expected: {}, Completed: {}, Failed: {}",
-            self.queued, self.in_progress, self.total_expected, self.completed, self.failed
+            "Queued: {}, In Progress: {}, Expected: {}, Completed: {}, Skipped: {}, Failed: {}",
+            self.queued,
+            self.in_progress,
+            self.total_expected,
+            self.completed,
+            self.skipped,
+            self.failed
         )
     }
 }
@@ -124,163 +130,7 @@ pub trait BuildPathCallback: Send + Sync {
     async fn on_build_complete(&self, path: &str, success: bool) -> Result<()>;
 }
 
-/// Request to push store paths to cachix
-#[derive(Serialize)]
-pub struct ClientPushRequest {
-    pub tag: String,
-    pub contents: PushRequestContents,
-}
-
-#[derive(Serialize)]
-pub struct PushRequestContents {
-    #[serde(rename = "storePaths")]
-    pub store_paths: Vec<String>,
-    #[serde(rename = "subscribeToUpdates")]
-    pub subscribe_to_updates: bool,
-}
-
-impl ClientPushRequest {
-    pub fn new(store_paths: Vec<String>, subscribe: bool) -> Self {
-        Self {
-            tag: "ClientPushRequest".to_string(),
-            contents: PushRequestContents {
-                store_paths,
-                subscribe_to_updates: subscribe,
-            },
-        }
-    }
-}
-
-// --- Protocol types matching the actual daemon wire format ---
-
-/// Top-level message from the daemon.
-/// The daemon sends `{"tag": "DaemonPushEvent", "contents": {...}}` or `{"tag": "DaemonPong"}`.
-#[derive(Debug, Deserialize)]
-struct DaemonMessage {
-    tag: String,
-    #[serde(default)]
-    contents: serde_json::Value,
-}
-
-/// Envelope for push events inside a `DaemonPushEvent`.
-/// Contains timestamp, push ID, and the inner event message.
-#[derive(Debug, Deserialize)]
-struct PushEventEnvelope {
-    #[serde(rename = "eventTimestamp")]
-    #[allow(dead_code)]
-    timestamp: String,
-    #[serde(rename = "eventPushId")]
-    #[allow(dead_code)]
-    push_id: String,
-    #[serde(rename = "eventMessage")]
-    message: DaemonMessage,
-}
-
-/// Parsed push event. Inner events use positional arrays (not named objects).
-#[derive(Debug, Clone)]
-pub enum PushEvent {
-    PushStarted,
-    StorePathAttempt {
-        path: String,
-        nar_size: u64,
-        retry_count: u64,
-    },
-    StorePathProgress {
-        path: String,
-        current_bytes: u64,
-        delta_bytes: u64,
-    },
-    StorePathDone {
-        path: String,
-    },
-    StorePathFailed {
-        path: String,
-        reason: String,
-    },
-    PushFinished,
-    Unknown,
-}
-
-impl PushEvent {
-    /// Parse a push event from the inner `DaemonMessage` of a `PushEventEnvelope`.
-    /// Inner events use positional arrays for their contents.
-    fn parse(msg: &DaemonMessage) -> PushEvent {
-        match msg.tag.as_str() {
-            "PushStarted" => PushEvent::PushStarted,
-            "PushFinished" => PushEvent::PushFinished,
-            "PushStorePathAttempt" => {
-                let arr = match msg.contents.as_array() {
-                    Some(a) => a,
-                    None => return PushEvent::Unknown,
-                };
-                let path = arr
-                    .first()
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let nar_size = arr.get(1).and_then(|v| v.as_u64()).unwrap_or(0);
-                let retry_count = arr
-                    .get(2)
-                    .and_then(|v| v.get("retryCount"))
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0);
-                PushEvent::StorePathAttempt {
-                    path,
-                    nar_size,
-                    retry_count,
-                }
-            }
-            "PushStorePathProgress" => {
-                let arr = match msg.contents.as_array() {
-                    Some(a) => a,
-                    None => return PushEvent::Unknown,
-                };
-                let path = arr
-                    .first()
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let current_bytes = arr.get(1).and_then(|v| v.as_u64()).unwrap_or(0);
-                let delta_bytes = arr.get(2).and_then(|v| v.as_u64()).unwrap_or(0);
-                PushEvent::StorePathProgress {
-                    path,
-                    current_bytes,
-                    delta_bytes,
-                }
-            }
-            "PushStorePathDone" => {
-                let arr = match msg.contents.as_array() {
-                    Some(a) => a,
-                    None => return PushEvent::Unknown,
-                };
-                let path = arr
-                    .first()
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                PushEvent::StorePathDone { path }
-            }
-            "PushStorePathFailed" => {
-                let arr = match msg.contents.as_array() {
-                    Some(a) => a,
-                    None => return PushEvent::Unknown,
-                };
-                let path = arr
-                    .first()
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let reason = arr
-                    .get(1)
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown error")
-                    .to_string();
-                PushEvent::StorePathFailed { path, reason }
-            }
-            _ => PushEvent::Unknown,
-        }
-    }
-}
+use crate::cachix_protocol::{ClientPushRequest, DaemonMessage, PushEvent, PushEventEnvelope};
 
 /// Low-level socket client for daemon communication
 struct SocketClient {
@@ -581,13 +431,17 @@ struct AtomicMetrics {
     in_progress: AtomicU64,
     total_expected: AtomicU64,
     completed: AtomicU64,
+    /// Paths the daemon reported as already in the cache (no upload needed).
+    skipped: AtomicU64,
     failed: AtomicU64,
     failed_with_reasons: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl AtomicMetrics {
     fn report_progress(&self, activity: &Activity, current_path: Option<&str>) {
-        let done = self.completed.load(Ordering::SeqCst) + self.failed.load(Ordering::SeqCst);
+        let done = self.completed.load(Ordering::SeqCst)
+            + self.skipped.load(Ordering::SeqCst)
+            + self.failed.load(Ordering::SeqCst);
         let expected = self.total_expected.load(Ordering::SeqCst);
         activity.progress(done, expected, current_path);
     }
@@ -609,6 +463,7 @@ impl DaemonClient {
             in_progress: AtomicU64::new(0),
             total_expected: AtomicU64::new(0),
             completed: AtomicU64::new(0),
+            skipped: AtomicU64::new(0),
             failed: AtomicU64::new(0),
             failed_with_reasons: Arc::new(Mutex::new(HashMap::new())),
         });
@@ -676,6 +531,7 @@ impl DaemonClient {
             in_progress: self.metrics.in_progress.load(Ordering::SeqCst),
             total_expected: self.metrics.total_expected.load(Ordering::SeqCst),
             completed: self.metrics.completed.load(Ordering::SeqCst),
+            skipped: self.metrics.skipped.load(Ordering::SeqCst),
             failed: self.metrics.failed.load(Ordering::SeqCst),
             failed_with_reasons: Arc::clone(&self.metrics.failed_with_reasons),
         }
@@ -872,6 +728,13 @@ impl DaemonClient {
                             metrics.report_progress(activity, None);
                         }
                     }
+                    PushEvent::StorePathSkipped { ref path } => {
+                        tracing::debug!(path = %path, "Already cached, skipped");
+                        metrics.skipped.fetch_add(1, Ordering::SeqCst);
+                        if let Some(activity) = activity {
+                            metrics.report_progress(activity, None);
+                        }
+                    }
                     PushEvent::StorePathFailed {
                         ref path,
                         ref reason,
@@ -955,30 +818,9 @@ impl BuildPathCallback for ClientCallback {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_push_request_serialization() {
-        let request =
-            ClientPushRequest::new(vec!["/nix/store/abc123-package-1.0".to_string()], true);
-        let json = serde_json::to_string(&request).unwrap();
-        assert!(json.contains("ClientPushRequest"));
-        assert!(json.contains("/nix/store/abc123-package-1.0"));
-    }
-
-    #[test]
-    fn test_push_request_multiple_paths() {
-        let request = ClientPushRequest::new(
-            vec![
-                "/nix/store/abc-1.0".to_string(),
-                "/nix/store/def-2.0".to_string(),
-            ],
-            false,
-        );
-        let json = serde_json::to_string(&request).unwrap();
-        assert!(json.contains("storePaths"));
-        assert!(json.contains("/nix/store/abc-1.0"));
-        assert!(json.contains("/nix/store/def-2.0"));
-        assert!(json.contains("\"subscribeToUpdates\":false"));
-    }
+    // Wire-protocol parsing/serialization tests live in
+    // `cachix_protocol::tests`. This module only covers daemon
+    // configuration and metrics shaping.
 
     #[test]
     fn test_spawn_config() {
@@ -1033,6 +875,7 @@ mod tests {
             in_progress: 2,
             total_expected: 150,
             completed: 100,
+            skipped: 8,
             failed: 2,
             failed_with_reasons: Arc::new(Mutex::new(HashMap::new())),
         };
@@ -1041,6 +884,7 @@ mod tests {
         assert!(summary.contains("In Progress: 2"));
         assert!(summary.contains("Expected: 150"));
         assert!(summary.contains("Completed: 100"));
+        assert!(summary.contains("Skipped: 8"));
         assert!(summary.contains("Failed: 2"));
     }
 
@@ -1051,44 +895,13 @@ mod tests {
             in_progress: 0,
             total_expected: 0,
             completed: 0,
+            skipped: 0,
             failed: 0,
             failed_with_reasons: Arc::new(Mutex::new(HashMap::new())),
         };
         let summary = metrics.summary();
         assert!(summary.contains("Queued: 0"));
         assert!(summary.contains("Completed: 0"));
-    }
-
-    #[test]
-    fn test_push_request_empty_paths() {
-        let request = ClientPushRequest::new(vec![], true);
-        let json = serde_json::to_string(&request).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(
-            parsed["contents"]["storePaths"].as_array().unwrap().len(),
-            0
-        );
-    }
-
-    #[test]
-    fn test_push_request_roundtrip() {
-        let paths = vec![
-            "/nix/store/abc123-pkg".to_string(),
-            "/nix/store/def456-pkg".to_string(),
-        ];
-        let request = ClientPushRequest::new(paths.clone(), true);
-        let json = serde_json::to_string(&request).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(parsed["tag"], "ClientPushRequest");
-        assert_eq!(parsed["contents"]["subscribeToUpdates"], true);
-        let store_paths: Vec<String> = parsed["contents"]["storePaths"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_str().unwrap().to_string())
-            .collect();
-        assert_eq!(store_paths, paths);
     }
 
     #[test]
@@ -1100,179 +913,5 @@ mod tests {
             dry_run: false,
         };
         assert!(!config.dry_run);
-    }
-
-    // --- Protocol parsing tests using actual daemon wire format ---
-
-    /// Helper to build a DaemonPushEvent JSON string
-    fn push_event_json(tag: &str, contents: serde_json::Value) -> String {
-        serde_json::to_string(&serde_json::json!({
-            "tag": "DaemonPushEvent",
-            "contents": {
-                "eventTimestamp": "2024-01-01T00:00:00Z",
-                "eventPushId": "test-push-id",
-                "eventMessage": {
-                    "tag": tag,
-                    "contents": contents
-                }
-            }
-        }))
-        .unwrap()
-    }
-
-    fn parse_push_event(json: &str) -> PushEvent {
-        let msg: DaemonMessage = serde_json::from_str(json).unwrap();
-        assert_eq!(msg.tag, "DaemonPushEvent");
-        let envelope: PushEventEnvelope = serde_json::from_value(msg.contents).unwrap();
-        PushEvent::parse(&envelope.message)
-    }
-
-    #[test]
-    fn test_parse_push_started() {
-        let json = push_event_json("PushStarted", serde_json::json!([]));
-        let event = parse_push_event(&json);
-        assert!(matches!(event, PushEvent::PushStarted));
-    }
-
-    #[test]
-    fn test_parse_push_finished() {
-        let json = push_event_json("PushFinished", serde_json::json!([]));
-        let event = parse_push_event(&json);
-        assert!(matches!(event, PushEvent::PushFinished));
-    }
-
-    #[test]
-    fn test_parse_store_path_attempt() {
-        let json = push_event_json(
-            "PushStorePathAttempt",
-            serde_json::json!(["/nix/store/abc123-pkg", 1024, {"retryCount": 0}]),
-        );
-        let event = parse_push_event(&json);
-        match event {
-            PushEvent::StorePathAttempt {
-                path,
-                nar_size,
-                retry_count,
-            } => {
-                assert_eq!(path, "/nix/store/abc123-pkg");
-                assert_eq!(nar_size, 1024);
-                assert_eq!(retry_count, 0);
-            }
-            other => panic!("Expected StorePathAttempt, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_parse_store_path_attempt_with_retry() {
-        let json = push_event_json(
-            "PushStorePathAttempt",
-            serde_json::json!(["/nix/store/abc123-pkg", 2048, {"retryCount": 3}]),
-        );
-        let event = parse_push_event(&json);
-        match event {
-            PushEvent::StorePathAttempt { retry_count, .. } => {
-                assert_eq!(retry_count, 3);
-            }
-            other => panic!("Expected StorePathAttempt, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_parse_store_path_progress() {
-        let json = push_event_json(
-            "PushStorePathProgress",
-            serde_json::json!(["/nix/store/abc123-pkg", 512, 128]),
-        );
-        let event = parse_push_event(&json);
-        match event {
-            PushEvent::StorePathProgress {
-                path,
-                current_bytes,
-                delta_bytes,
-            } => {
-                assert_eq!(path, "/nix/store/abc123-pkg");
-                assert_eq!(current_bytes, 512);
-                assert_eq!(delta_bytes, 128);
-            }
-            other => panic!("Expected StorePathProgress, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_parse_store_path_done() {
-        let json = push_event_json(
-            "PushStorePathDone",
-            serde_json::json!(["/nix/store/abc123-pkg"]),
-        );
-        let event = parse_push_event(&json);
-        match event {
-            PushEvent::StorePathDone { path } => {
-                assert_eq!(path, "/nix/store/abc123-pkg");
-            }
-            other => panic!("Expected StorePathDone, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_parse_store_path_failed() {
-        let json = push_event_json(
-            "PushStorePathFailed",
-            serde_json::json!(["/nix/store/abc123-pkg", "upload timeout"]),
-        );
-        let event = parse_push_event(&json);
-        match event {
-            PushEvent::StorePathFailed { path, reason } => {
-                assert_eq!(path, "/nix/store/abc123-pkg");
-                assert_eq!(reason, "upload timeout");
-            }
-            other => panic!("Expected StorePathFailed, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_parse_unknown_event_tag() {
-        let json = push_event_json("SomeNewEvent", serde_json::json!([]));
-        let event = parse_push_event(&json);
-        assert!(matches!(event, PushEvent::Unknown));
-    }
-
-    #[test]
-    fn test_parse_daemon_pong_ignored() {
-        let json = r#"{"tag": "DaemonPong"}"#;
-        let msg: DaemonMessage = serde_json::from_str(json).unwrap();
-        assert_eq!(msg.tag, "DaemonPong");
-        // Non-push messages should be filtered at the read_event level (return None)
-        assert_ne!(msg.tag, "DaemonPushEvent");
-    }
-
-    #[test]
-    fn test_parse_store_path_attempt_missing_fields() {
-        let json = push_event_json(
-            "PushStorePathAttempt",
-            serde_json::json!(["/nix/store/abc123-pkg"]),
-        );
-        let event = parse_push_event(&json);
-        match event {
-            PushEvent::StorePathAttempt {
-                path,
-                nar_size,
-                retry_count,
-            } => {
-                assert_eq!(path, "/nix/store/abc123-pkg");
-                assert_eq!(nar_size, 0);
-                assert_eq!(retry_count, 0);
-            }
-            other => panic!("Expected StorePathAttempt, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_parse_store_path_attempt_not_array() {
-        let json = push_event_json(
-            "PushStorePathAttempt",
-            serde_json::json!({"path": "/nix/store/abc123-pkg"}),
-        );
-        let event = parse_push_event(&json);
-        assert!(matches!(event, PushEvent::Unknown));
     }
 }

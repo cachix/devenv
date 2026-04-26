@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed cachix push progress stuck at `0/N`. Already-cached paths now count toward progress.
 - Fixed tracked path log lines showing as dot-prefixed rows under "Evaluating shell" in the TUI instead of attaching to the eval activity.
 - Fixed "suspicious ownership" errors when using Nix installed in single-user mode. Nix requires read-only group permissions on outputs ([#2751](https://github.com/cachix/devenv/issues/2751)).
 - Fixed hot reload not watching files transitively imported by `devenv.nix` (e.g. `imports = [ ./nested/child.nix ]`).
