@@ -535,23 +535,6 @@ impl Deref for Activity {
     }
 }
 
-impl Clone for Activity {
-    fn clone(&self) -> Self {
-        let outcome = self
-            .outcome
-            .lock()
-            .map(|o| *o)
-            .unwrap_or(ActivityOutcome::Success);
-        Self {
-            span: self.span.clone(),
-            id: self.id,
-            activity_type: self.activity_type,
-            level: self.level,
-            outcome: Arc::new(std::sync::Mutex::new(outcome)),
-        }
-    }
-}
-
 impl Drop for Activity {
     fn drop(&mut self) {
         let outcome = self
