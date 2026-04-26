@@ -64,7 +64,7 @@ static GET_ENV: LazyLock<Regex> =
 static PATH_EXISTS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new("^devenv pathExists: '(?P<source>.*)'$").expect("invalid regex"));
 static TRACKED_PATH: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new("^trace: devenv path: '(?P<source>.*)'$").expect("invalid regex"));
+    LazyLock::new(|| Regex::new("^devenv path: '(?P<source>.*)'$").expect("invalid regex"));
 
 impl EvalOp {
     /// Extract an `EvalOp` from an `InternalLog`.
@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn test_tracked_path() {
-        let log = create_log("trace: devenv path: '/path/to/file'");
+        let log = create_log("devenv path: '/path/to/file'");
         let op = EvalOp::from_internal_log(&log);
         assert_eq!(
             op,

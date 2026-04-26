@@ -1587,7 +1587,7 @@ fn format_eval_op(op: &EvalOp) -> String {
         EvalOp::ReadDir { source } => format!("devenv readDir: '{}'", source.display()),
         EvalOp::GetEnv { name } => format!("devenv getEnv: '{}'", name),
         EvalOp::PathExists { source } => format!("devenv pathExists: '{}'", source.display()),
-        EvalOp::TrackedPath { source } => format!("trace: devenv path: '{}'", source.display()),
+        EvalOp::TrackedPath { source } => format!("devenv path: '{}'", source.display()),
     }
 }
 
