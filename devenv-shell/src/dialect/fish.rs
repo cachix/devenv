@@ -186,7 +186,7 @@ bind \e\cr __devenv_reload_keybind_handler
         // When reload is enabled, call both reload-apply and path-restore
         // before each prompt. This matches bash's PROMPT_COMMAND and zsh's
         // precmd behavior where pending reloads are auto-applied.
-        let pre_prompt_calls = if reload_hook.is_empty() {
+        let prompt_calls = if reload_hook.is_empty() {
             ""
         } else {
             "__devenv_reload_apply\n        __devenv_restore_path"
@@ -203,12 +203,12 @@ set -gx PATH (string split ":" -- $_DEVENV_PATH)
 if functions -q fish_prompt
     functions -c fish_prompt __devenv_user_fish_prompt
     function fish_prompt
-        {pre_prompt_calls}
         __devenv_user_fish_prompt
+        {prompt_calls}
     end
 else
     function fish_prompt
-        {pre_prompt_calls}
+        {prompt_calls}
         echo -n "(devenv) > "
     end
 end
@@ -217,7 +217,7 @@ end
 {reload_hook}
 "#,
             reload_hook = reload_hook,
-            pre_prompt_calls = pre_prompt_calls,
+            prompt_calls = prompt_calls,
         );
 
         std::fs::write(ctx.init_dir.join("devenv.fish"), config_fish_content)?;
