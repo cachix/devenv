@@ -6,11 +6,8 @@ use std::path::{Path, PathBuf};
 /// Fish shell dialect implementation.
 ///
 /// Architecture: We always launch bash first to source the devenv environment
-/// (which produces bash syntax). The bash rcfile computes the env diff, saves
-/// XDG_CONFIG_HOME, sets XDG_CONFIG_HOME to our init directory so fish reads
-/// our config.fish, then execs into fish.
-/// Our config.fish restores the original XDG_CONFIG_HOME, sources the user's
-/// conf.d files and config.fish, then sets up devenv integration.
+/// (which produces bash syntax). The bash rcfile computes the env diff, then
+/// execs into fish, sourcing our configuration, which sets up devenv integration.
 pub struct FishDialect;
 
 impl ShellDialect for FishDialect {
@@ -52,17 +49,6 @@ unset _devenv_before_file
 # Save PATH before fish init potentially modifies it
 export _DEVENV_PATH="$PATH"
 
-# Save original XDG_CONFIG_HOME so fish init can restore it
-if [ -n "$XDG_CONFIG_HOME" ]; then
-    export _DEVENV_REAL_XDG_CONFIG_HOME="$XDG_CONFIG_HOME"
-fi
-
-# Point XDG_CONFIG_HOME to our init directory containing fish/config.fish
-export XDG_CONFIG_HOME="{fish_config_dir_parent}"
-
-# Re-enable history before exec
-set -o history
-
 # Exec into fish (resolve via PATH if not absolute, since the devenv
 # environment may have added it after this process started)
 if [ ! -x "{target_shell}" ] && ! command -v "{target_shell}" >/dev/null 2>&1; then
@@ -70,15 +56,13 @@ if [ ! -x "{target_shell}" ] && ! command -v "{target_shell}" >/dev/null 2>&1; t
     echo "devenv: add fish to your devenv.nix packages or set SHELL to an absolute path" >&2
     exit 1
 fi
-exec "{target_shell}" -i
+exec "{target_shell}" -i -C "source {init_dir}/devenv.fish"
 echo "devenv: error: failed to exec into {target_shell}" >&2
 exit 1
 "#,
             env_diff_helpers = ctx.env_diff_helpers,
             env_script_path = ctx.env_script_path.to_string_lossy(),
-            // Fish looks for $XDG_CONFIG_HOME/fish/config.fish, so we set
-            // XDG_CONFIG_HOME to the parent of our fish/ directory.
-            fish_config_dir_parent = ctx.init_dir.to_string_lossy(),
+            init_dir = ctx.init_dir.to_string_lossy(),
             target_shell = target_shell,
         )
     }
@@ -197,9 +181,6 @@ bind \e\cr __devenv_reload_keybind_handler
     }
 
     fn write_init_files(&self, ctx: &RcfileContext) -> std::io::Result<()> {
-        let fish_dir = ctx.init_dir.join("fish");
-        std::fs::create_dir_all(&fish_dir)?;
-
         let reload_hook = ctx.reload_hook;
 
         // When reload is enabled, call both reload-apply and path-restore
@@ -212,37 +193,7 @@ bind \e\cr __devenv_reload_keybind_handler
         };
 
         let config_fish_content = format!(
-            r#"# devenv fish init - restore XDG_CONFIG_HOME and source user's config
-
-# Restore original XDG_CONFIG_HOME and source user's conf.d + config.fish.
-# Fish normally sources conf.d/*.fish before config.fish; since we redirected
-# XDG_CONFIG_HOME, we need to source the user's conf.d files manually.
-if set -q _DEVENV_REAL_XDG_CONFIG_HOME
-    set -gx XDG_CONFIG_HOME $_DEVENV_REAL_XDG_CONFIG_HOME
-    set -e _DEVENV_REAL_XDG_CONFIG_HOME
-
-    # Source user's conf.d files (plugins, Fisher, etc.)
-    for f in $XDG_CONFIG_HOME/fish/conf.d/*.fish
-        source $f
-    end
-
-    # Source user's config.fish
-    if test -f "$XDG_CONFIG_HOME/fish/config.fish"
-        source "$XDG_CONFIG_HOME/fish/config.fish"
-    end
-else
-    set -e XDG_CONFIG_HOME
-
-    # Source user's conf.d files from default location
-    for f in $HOME/.config/fish/conf.d/*.fish
-        source $f
-    end
-
-    # Source user's config.fish from default location
-    if test -f "$HOME/.config/fish/config.fish"
-        source "$HOME/.config/fish/config.fish"
-    end
-end
+            r#"# devenv fish init
 
 # Restore devenv PATH after user config may have modified it.
 # _DEVENV_PATH is a colon-separated string from bash; split into fish list.
@@ -269,7 +220,7 @@ end
             pre_prompt_calls = pre_prompt_calls,
         );
 
-        std::fs::write(fish_dir.join("config.fish"), config_fish_content)?;
+        std::fs::write(ctx.init_dir.join("devenv.fish"), config_fish_content)?;
         Ok(())
     }
 }
