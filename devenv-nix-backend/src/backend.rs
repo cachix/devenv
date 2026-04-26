@@ -43,6 +43,7 @@ use devenv_core::evaluator::{
 };
 use devenv_core::nix_backend::eval_cache_key_args;
 use devenv_core::nix_log_bridge::{EvalActivityGuard, NixLogBridge};
+use devenv_core::realized::RealizedPathsObserver;
 use devenv_core::store::Store as StoreTrait;
 use devenv_core::store::StorePath as CoreStorePath;
 use devenv_core::{CacheSettings, DevenvPaths, NixSettings, PortAllocator, StoreSettings};
@@ -192,6 +193,11 @@ pub struct NixCBackend {
 
     activity_logger: nix_bindings_expr::logger::ActivityLogger,
 
+    /// Observers notified per-realization in `build`/`dev_env`, gated on
+    /// `!cache_hit`. Registered at startup; calls are sync and must not
+    /// block (see [`RealizedPathsObserver`]).
+    realized_observers: Mutex<Vec<Arc<dyn RealizedPathsObserver>>>,
+
     #[allow(dead_code)]
     _gc_registration: ThreadRegistrationGuard,
 }
@@ -297,6 +303,7 @@ impl NixCBackend {
             flake_settings,
             fetchers_settings,
             activity_logger,
+            realized_observers: Mutex::new(Vec::new()),
             _gc_registration: gc_registration,
         };
         backend.init_caching_eval_state();
@@ -768,7 +775,7 @@ impl NixCBackend {
 
         let activity = activity!(INFO, evaluate, "Evaluating shell");
 
-        let (drv_path_str, out_path_str, env_path, _cache_hit) = if let Some(paths) = cached_paths {
+        let (drv_path_str, out_path_str, env_path, cache_hit) = if let Some(paths) = cached_paths {
             activity.cached();
             (paths.drv_path, paths.out_path, paths.env_path, true)
         } else {
@@ -806,6 +813,10 @@ impl NixCBackend {
             .add_perm_root(&store_path, gc_root)
             .to_miette()
             .wrap_err("Failed to create GC root")?;
+
+        if !cache_hit {
+            self.notify_realized(&[PathBuf::from(&out_path_str)]);
+        }
 
         let output_str = if let Some(env_path) = env_path.as_deref() {
             if std::path::Path::new(env_path).exists() {
@@ -1089,6 +1100,80 @@ impl NixCBackend {
         ))
     }
 
+    /// Evaluate a single attribute path against the user's devenv
+    /// config root and return JSON, using a caller-supplied [`Activity`]
+    /// for TUI/tracing instead of the generic "Evaluating Nix" label
+    /// that [`Evaluator::eval`] emits. Use this when calling from
+    /// internal-eval contexts (e.g., reading cachix config) where a
+    /// descriptive label and DEBUG level are preferable.
+    pub async fn eval_attr(&self, attr_path: &str, activity: &Activity) -> Result<String> {
+        let caching_state = self
+            .caching_eval_state
+            .get()
+            .expect("caching eval state must be initialized");
+
+        let clean_path = attr_path.trim_start_matches(".#");
+        let cache_key = caching_state.cache_key(clean_path);
+        let attr_path_owned = attr_path.to_string();
+        let clean_path_owned = clean_path.to_string();
+
+        let (json_str, _cache_hit) = async {
+            caching_state
+                .cached_eval()
+                .eval(&cache_key, activity, || async {
+                    self.eval_attr_uncached(&attr_path_owned, &clean_path_owned, activity)
+                })
+                .await
+        }
+        .in_activity(activity)
+        .await
+        .map_err(cache_error_to_miette)?;
+
+        Ok(json_str)
+    }
+
+    /// Apply substituters and trusted public keys to the open store.
+    ///
+    /// Use after backend init when the cachix configuration has been
+    /// evaluated (the `netrc-file` global setting is the one piece that
+    /// must land before the store opens; everything else is additive
+    /// and can be applied here). Failures are logged warn but never
+    /// fatal — devenv continues without the cachix substituters.
+    pub fn apply_store_settings(&self, store_settings: &StoreSettings) {
+        apply_substituters_and_keys(self.cnix_store.inner(), store_settings);
+    }
+
+    /// Register an observer to be notified about freshly realized store
+    /// paths. Observers are called inline on the evaluation thread, once
+    /// per attribute build (and once for the shell derivation in
+    /// `dev_env`), gated on `!cache_hit`. Implementations must be
+    /// non-blocking.
+    ///
+    /// Typical use: a cachix push pump where the observer holds an
+    /// `mpsc::UnboundedSender` and a separate task drains it into the
+    /// daemon.
+    pub fn add_realized_observer(&self, observer: Arc<dyn RealizedPathsObserver>) {
+        if let Ok(mut guard) = self.realized_observers.lock() {
+            guard.push(observer);
+        }
+    }
+
+    fn notify_realized(&self, paths: &[PathBuf]) {
+        if paths.is_empty() {
+            return;
+        }
+        // Snapshot under the lock; release before invoking observers so
+        // an observer that re-enters the backend cannot deadlock.
+        let observers: Vec<Arc<dyn RealizedPathsObserver>> = match self.realized_observers.lock() {
+            Ok(g) if g.is_empty() => return,
+            Ok(g) => g.clone(),
+            Err(_) => return,
+        };
+        for obs in &observers {
+            obs.on_realized(paths);
+        }
+    }
+
     pub fn invalidate_eval_state(&self) -> Result<()> {
         self.cached_devenv_value
             .lock()
@@ -1147,31 +1232,10 @@ impl Evaluator for NixCBackend {
     }
 
     async fn eval(&self, attrs: &[&str]) -> Result<String> {
-        let caching_state = self
-            .caching_eval_state
-            .get()
-            .expect("caching eval state must be initialized");
-
         let mut results = Vec::new();
         for attr_path in attrs {
-            let clean_path = attr_path.trim_start_matches(".#");
-            let cache_key = caching_state.cache_key(clean_path);
             let activity = activity!(INFO, evaluate, "Evaluating Nix");
-            let attr_path_owned = attr_path.to_string();
-            let clean_path_owned = clean_path.to_string();
-
-            let (json_str, _cache_hit) = async {
-                caching_state
-                    .cached_eval()
-                    .eval(&cache_key, &activity, || async {
-                        self.eval_attr_uncached(&attr_path_owned, &clean_path_owned, &activity)
-                    })
-                    .await
-            }
-            .in_activity(&activity)
-            .await
-            .map_err(cache_error_to_miette)?;
-
+            let json_str = self.eval_attr(attr_path, &activity).await?;
             results.push(json_str);
         }
 
@@ -1229,6 +1293,7 @@ impl Evaluator for NixCBackend {
 
             let activity = activity!(INFO, evaluate, format!("Evaluating {}", attr_path));
 
+            let cache_hit = cached_path.is_some();
             let path_str = if let Some(path) = cached_path {
                 activity.cached();
                 path
@@ -1249,6 +1314,10 @@ impl Evaluator for NixCBackend {
             };
 
             let path = PathBuf::from(&path_str);
+
+            if !cache_hit {
+                self.notify_realized(std::slice::from_ref(&path));
+            }
 
             if let Some(gc_root_base) = &opts.gc_root {
                 let mut store = self.cnix_store.inner().clone();

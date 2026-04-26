@@ -1,3 +1,4 @@
+mod cachix;
 mod container;
 mod gc;
 mod search;
@@ -224,8 +225,13 @@ pub struct Devenv {
 
     backend: Backend<dyn Evaluator>,
 
-    #[allow(dead_code)]
-    _cachix_manager: Arc<CachixManager>,
+    cachix_manager: Arc<CachixManager>,
+    /// Idempotent cachix runtime setup. Populated by [`Devenv::setup_cachix`]
+    /// the first time a realizing command runs. `None` inside means
+    /// cachix is offline/disabled or the user has no `config.cachix.push`
+    /// — the cell is still set so subsequent calls are a single atomic
+    /// load.
+    cachix: OnceCell<Option<cachix::CachixIntegration>>,
 
     // All kinds of paths
     devenv_root: PathBuf,
@@ -531,7 +537,8 @@ impl Devenv {
             process_runtime_dir: SyncOnceCell::new(),
             config,
             backend,
-            _cachix_manager: cachix_manager,
+            cachix_manager,
+            cachix: OnceCell::new(),
             has_processes: OnceCell::new(),
             dev_env_cache: OnceCell::new(),
             eval_cache_pool,
@@ -672,6 +679,28 @@ impl Devenv {
     fn require_cnix(&self) -> Result<&devenv_nix_backend::NixCBackend> {
         self.cnix()
             .ok_or_else(|| miette!("C-Nix backend required for this operation"))
+    }
+
+    /// Cachix setup is expensive (it evaluates the user's module), so
+    /// it runs lazily here rather than eagerly in `Devenv::new`.
+    /// Symptom of `Devenv` being a god struct — should be refactored
+    /// later so cachix init lives in a per-command Nix-session type.
+    pub async fn setup_cachix(&self) -> Result<()> {
+        self.cachix
+            .get_or_try_init(|| async {
+                let Some(cnix) = self.cnix() else {
+                    return Ok(None);
+                };
+                cachix::CachixIntegration::init(
+                    cnix,
+                    &self.cachix_manager,
+                    &self.nix_settings,
+                    &self.shutdown,
+                )
+                .await
+            })
+            .await?;
+        Ok(())
     }
 
     /// Get the cache key for shell evaluation.
@@ -1033,10 +1062,12 @@ impl Devenv {
     }
 
     pub async fn prepare_repl(&self) -> Result<()> {
+        self.setup_cachix().await?;
         self.require_cnix()?.prepare_repl().await
     }
 
     pub async fn launch_repl(&self) -> Result<()> {
+        self.setup_cachix().await?;
         self.require_cnix()?.launch_repl().await
     }
 
@@ -1096,6 +1127,7 @@ impl Devenv {
         verbosity: tasks::VerbosityLevel,
         tui: bool,
     ) -> Result<String> {
+        self.setup_cachix().await?;
         self.reserve_running_ports().await;
         if roots.is_empty() {
             bail!("No tasks specified.");
@@ -1350,6 +1382,7 @@ impl Devenv {
     }
 
     pub async fn test(&self, verbosity: tasks::VerbosityLevel, tui: bool) -> Result<()> {
+        self.setup_cachix().await?;
         // Enable port allocation before assemble so that ports resolved
         // during Nix evaluation (e.g. in enterTest) are properly allocated.
         self.port_allocator.set_enabled(true);
@@ -1440,6 +1473,7 @@ impl Devenv {
     }
 
     pub async fn info(&self) -> Result<String> {
+        self.setup_cachix().await?;
         // CNix has a lock-file-aware metadata implementation; for other
         // backends fall back to the generic `Backend<E>::metadata`.
         if let Some(cnix) = self.cnix() {
@@ -1449,6 +1483,7 @@ impl Devenv {
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<Vec<(String, PathBuf)>> {
+        self.setup_cachix().await?;
         let activity = activity!(INFO, operation, "Building");
         async move {
             fn flatten_object(prefix: &str, value: &serde_json::Value) -> Vec<String> {
@@ -1528,6 +1563,7 @@ impl Devenv {
     }
 
     pub async fn eval(&self, attributes: &[String]) -> Result<String> {
+        self.setup_cachix().await?;
         let activity = activity!(INFO, operation, "Evaluating");
         async move {
             let mut results = serde_json::Map::new();
@@ -1558,6 +1594,7 @@ impl Devenv {
         verbosity: tasks::VerbosityLevel,
         tui: bool,
     ) -> Result<RunMode> {
+        self.setup_cachix().await?;
         // Set strict port mode before backend init triggers port allocation.
         self.port_allocator.set_strict(options.strict_ports);
         self.port_allocator.set_enabled(true);
@@ -2090,6 +2127,7 @@ impl Devenv {
     /// Called directly by `up()` (which creates its own "Configuring shell" activity)
     /// and by `get_dev_environment()` (which wraps with `#[activity]`).
     async fn get_dev_environment_inner(&self, json: bool) -> Result<DevEnv> {
+        self.setup_cachix().await?;
         let gc_root = self.devenv_dot_gc.join("shell");
         let span = tracing::debug_span!("evaluating_dev_env");
         let cnix = self.require_cnix()?;

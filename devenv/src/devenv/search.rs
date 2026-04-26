@@ -45,6 +45,7 @@ struct DevenvPackageResult {
 impl Devenv {
     #[instrument_activity("Searching options and packages")]
     pub async fn search(&self, name: &str) -> Result<String> {
+        self.setup_cachix().await?;
         let (options_results, package_results) =
             tokio::try_join!(self.search_options(name), self.search_packages(name))?;
 

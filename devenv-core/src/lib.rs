@@ -15,6 +15,7 @@ pub mod nix_backend;
 pub mod nix_config;
 pub mod nix_log_bridge;
 pub mod ports;
+pub mod realized;
 pub mod resource;
 pub mod settings;
 pub mod store;
@@ -33,6 +34,7 @@ pub use nix_args::{CliOptionsConfig, NixArgs, SecretspecData};
 pub use nix_backend::DevenvPaths;
 pub use nix_config::NixConfig;
 pub use ports::{PortAllocation, PortAllocator, PortSpec};
+pub use realized::RealizedPathsObserver;
 pub use resource::{ReplayError, ReplayableResource};
 pub use settings::{
     CacheOptions, CacheSettings, InputOverrides, NixOptions, NixSettings, SecretOptions,

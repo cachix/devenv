@@ -14,6 +14,7 @@ fn sanitize_container_name(name: &str) -> String {
 
 impl Devenv {
     pub async fn container_build(&self, name: &str) -> Result<String> {
+        self.setup_cachix().await?;
         let sanitized_name = sanitize_container_name(name);
         let gc_root = self
             .devenv_dot_gc
