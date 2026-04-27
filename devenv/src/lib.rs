@@ -6,7 +6,6 @@ pub mod changelog;
 pub mod cli;
 pub mod commands;
 mod devenv;
-pub mod hook;
 pub mod lsp;
 pub mod mcp;
 pub mod nix_log_bridge;

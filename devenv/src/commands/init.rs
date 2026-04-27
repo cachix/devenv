@@ -2,7 +2,7 @@
 
 use std::fs;
 use std::io::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use console::style;
 use include_dir::{Dir, File, include_dir};
@@ -48,9 +48,9 @@ const TEMPLATES: &[Template] = &[
     },
 ];
 
-pub fn run(target: &Option<PathBuf>) -> Result<()> {
+pub fn run(target: Option<&Path>) -> Result<()> {
     let target = match target {
-        Some(p) => p.clone(),
+        Some(p) => p.to_path_buf(),
         None => std::env::current_dir()
             .into_diagnostic()
             .wrap_err("Failed to get current directory")?,

@@ -6,7 +6,7 @@ use devenv::{
         Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
         TraceOutputSpec,
     },
-    commands, hook,
+    commands,
     processes::ProcessCommand,
     reload::DevenvShellBuilder,
     tracing as devenv_tracing,
@@ -79,31 +79,27 @@ fn main_inner() -> Result<()> {
                 return Ok(());
             }
             Some(Commands::Direnvrc) => {
-                print!("{}", *devenv::DIRENVRC);
+                commands::direnvrc::run();
                 return Ok(());
             }
             Some(Commands::Hook { shell }) => {
-                hook::print_hook(shell);
+                commands::hook::print(shell);
                 return Ok(());
             }
             Some(Commands::Allow) => {
-                hook::allow(&std::env::current_dir().into_diagnostic()?)?;
-                return Ok(());
+                return commands::hook::allow();
             }
             Some(Commands::Revoke) => {
-                hook::revoke(&std::env::current_dir().into_diagnostic()?)?;
-                return Ok(());
+                return commands::hook::revoke();
             }
             Some(Commands::HookShouldActivate { last }) => {
-                match hook::should_activate(last.as_deref())? {
-                    hook::ActivationCheck::Activate(dir) => println!("{dir}"),
-                    hook::ActivationCheck::Skip => {}
-                    hook::ActivationCheck::Untrusted => std::process::exit(2),
-                }
-                return Ok(());
+                return commands::hook::should_activate(last.as_deref());
             }
             Some(Commands::DaemonProcesses { config_file }) => {
-                return run_daemon_processes(config_file.clone());
+                return commands::daemon_processes::run(config_file);
+            }
+            Some(Commands::Init { target }) => {
+                return commands::init::run(target.as_deref());
             }
             _ => {}
         }
@@ -272,7 +268,6 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
         Commands::Mcp { http: None } // stdio mode needs stderr for output
             | Commands::Lsp { .. } // LSP needs direct stdout for protocol/config output
             | Commands::PrintPaths // print output directly, no TUI needed
-            | Commands::Init { .. } // interactive prompts (dialoguer) need direct terminal
     );
 
     let tui = tui_requested && !tui_unsupported && !use_tracing_mode && !quiet;
@@ -568,10 +563,6 @@ async fn run_backend(
         }
     }
 
-    if let Commands::Init { target } = &command {
-        return output(commands::init::run(target).map(|()| CommandResult::Done));
-    }
-
     let config_strict_ports = config.strict_ports.unwrap_or(false);
 
     let require_version_match = config.requires_version_match();
@@ -836,9 +827,6 @@ async fn dispatch_command(
                 Ok(CommandResult::Exec(shell_config.command))
             }
         },
-        Commands::Init { .. } => {
-            unreachable!("Init is dispatched in run_backend before Devenv construction")
-        }
         Commands::Generate => {
             miette::bail!(indoc::indoc! {"
                 The generate command has been removed.
@@ -1011,8 +999,9 @@ async fn dispatch_command(
                 Ok(CommandResult::Print(format!("{output}\n")))
             }
         },
-        // inputs add is early-dispatched above before Devenv construction
-        Commands::Inputs { .. } => unreachable!(),
+        Commands::Inputs { .. } => {
+            unreachable!("Inputs::Add is dispatched in run_backend before Devenv construction")
+        }
         Commands::Changelogs {} => Ok(devenv
             .changelogs()
             .await?
@@ -1071,13 +1060,16 @@ async fn dispatch_command(
             devenv::lsp::run(devenv, print_config).await?;
             Ok(CommandResult::Done)
         }
-        Commands::Direnvrc => unreachable!(),
-        Commands::Version => unreachable!(),
-        Commands::Hook { .. } => unreachable!(),
-        Commands::Allow => unreachable!(),
-        Commands::Revoke => unreachable!(),
-        Commands::HookShouldActivate { .. } => unreachable!(),
-        Commands::DaemonProcesses { .. } => unreachable!(),
+        Commands::Direnvrc
+        | Commands::Version
+        | Commands::Hook { .. }
+        | Commands::Allow
+        | Commands::Revoke
+        | Commands::HookShouldActivate { .. }
+        | Commands::DaemonProcesses { .. }
+        | Commands::Init { .. } => {
+            unreachable!("dispatched in main_inner before Devenv construction")
+        }
     }
 }
 
@@ -1258,61 +1250,4 @@ fn prompt_secrets(provider: Option<String>, profile: Option<String>) -> Result<(
         .map_err(|e| miette::miette!("Failed to set secrets: {}", e))?;
 
     Ok(())
-}
-
-/// Run the native process manager as a daemon.
-///
-/// This is invoked by `devenv up -d` via re-exec to avoid fork-safety issues
-/// in multithreaded programs. The parent serializes the task config to a JSON
-/// file and spawns this process with `setsid` for full detachment.
-fn run_daemon_processes(config_file: std::path::PathBuf) -> Result<()> {
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .into_diagnostic()?;
-
-    runtime.block_on(async {
-        let shutdown = Shutdown::new();
-        shutdown.install_signals().await;
-
-        let config_json = tokio::fs::read_to_string(&config_file)
-            .await
-            .into_diagnostic()
-            .wrap_err("Failed to read daemon config")?;
-        let config: devenv::tasks::Config = serde_json::from_str(&config_json).into_diagnostic()?;
-
-        // Remove temp config file
-        let _ = tokio::fs::remove_file(&config_file).await;
-
-        let tasks_runner = devenv::tasks::Tasks::builder(
-            config,
-            devenv::tasks::VerbosityLevel::Normal,
-            shutdown.clone(),
-        )
-        .build()
-        .await
-        .map_err(|e| miette::miette!("Failed to build task runner: {}", e))?;
-
-        // Run the full task DAG (starts processes, waits for readiness probes)
-        let phase = devenv_activity::start!(
-            devenv_activity::Activity::operation("Running processes").parent(None)
-        );
-        let _outputs = tasks_runner.run_with_parent_activity(Arc::new(phase)).await;
-
-        // Write PID so `devenv processes down` can find us
-        let pid_file = tasks_runner.process_manager().manager_pid_file();
-        devenv::processes::write_pid(&pid_file, std::process::id())
-            .await
-            .map_err(|e| miette::miette!("Failed to write PID: {}", e))?;
-
-        // Keep the daemon alive until SIGTERM/SIGINT
-        let result = tasks_runner
-            .process_manager()
-            .run_foreground(shutdown.cancellation_token(), None)
-            .await
-            .map_err(|e| miette::miette!("Process manager error: {}", e));
-
-        let _ = tokio::fs::remove_file(&pid_file).await;
-        result
-    })
 }

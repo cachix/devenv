@@ -1,4 +1,5 @@
-//! Native shell hook support for auto-activation on directory change.
+//! `devenv hook`/`allow`/`revoke`/`hook-should-activate`: native shell hook
+//! commands for auto-activation on directory change.
 //!
 //! Provides:
 //! - Trust database management (allow/revoke)
@@ -8,6 +9,34 @@
 use crate::cli::HookShell;
 use miette::{IntoDiagnostic, Result};
 use std::path::{Path, PathBuf};
+
+// ---- CLI entry points ----
+
+pub fn print(shell: &HookShell) {
+    match shell {
+        HookShell::Bash => print!("{HOOK_POSIX}\n{HOOK_BASH_REGISTER}"),
+        HookShell::Zsh => print!("{HOOK_POSIX}\n{HOOK_ZSH_REGISTER}"),
+        HookShell::Fish => print!("{}", include_str!("../../hook-fish.fish")),
+        HookShell::Nu => print!("{}", include_str!("../../hook-nu.nu")),
+    }
+}
+
+pub fn allow() -> Result<()> {
+    allow_path(&std::env::current_dir().into_diagnostic()?)
+}
+
+pub fn revoke() -> Result<()> {
+    revoke_path(&std::env::current_dir().into_diagnostic()?)
+}
+
+pub fn should_activate(last: Option<&str>) -> Result<()> {
+    match check_activation(last)? {
+        ActivationCheck::Activate(dir) => println!("{dir}"),
+        ActivationCheck::Skip => {}
+        ActivationCheck::Untrusted => std::process::exit(2),
+    }
+    Ok(())
+}
 
 // ---- Helpers ----
 
@@ -71,7 +100,7 @@ fn is_trusted(abs_str: &str) -> Result<bool> {
     Ok(entries.iter().any(|e| entry_path(e) == abs_str))
 }
 
-pub fn allow(project_dir: &Path) -> Result<()> {
+fn allow_path(project_dir: &Path) -> Result<()> {
     let abs_str = canonical_str(project_dir)?;
 
     if !project_dir.join("devenv.yaml").exists() {
@@ -95,7 +124,7 @@ pub fn allow(project_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn revoke(project_dir: &Path) -> Result<()> {
+fn revoke_path(project_dir: &Path) -> Result<()> {
     let db_path = trust_db_path()?;
     let abs_str = canonical_str(project_dir)?;
 
@@ -133,7 +162,7 @@ fn find_project(start: &Path) -> Option<PathBuf> {
 }
 
 /// Result of checking whether the hook should activate.
-pub enum ActivationCheck {
+enum ActivationCheck {
     /// Activate devenv in this project directory.
     Activate(String),
     /// No project found or already activated; safe to cache and skip future checks.
@@ -143,7 +172,7 @@ pub enum ActivationCheck {
 }
 
 /// Check if the hook should activate devenv in the current directory.
-pub fn should_activate(last_project: Option<&str>) -> Result<ActivationCheck> {
+fn check_activation(last_project: Option<&str>) -> Result<ActivationCheck> {
     let cwd = std::env::current_dir().into_diagnostic()?;
 
     let project_dir = match find_project(&cwd) {
@@ -169,7 +198,7 @@ pub fn should_activate(last_project: Option<&str>) -> Result<ActivationCheck> {
 
 // ---- Hook script output ----
 
-const HOOK_POSIX: &str = include_str!("../hook-posix.sh");
+const HOOK_POSIX: &str = include_str!("../../hook-posix.sh");
 
 const HOOK_BASH_REGISTER: &str = r#"# Register hook
 if [[ -z "${PROMPT_COMMAND:-}" ]]; then
@@ -185,15 +214,6 @@ if (( ! ${precmd_functions[(I)_devenv_hook]} )); then
     precmd_functions=(_devenv_hook $precmd_functions)
 fi
 "#;
-
-pub fn print_hook(shell: &HookShell) {
-    match shell {
-        HookShell::Bash => print!("{HOOK_POSIX}\n{HOOK_BASH_REGISTER}"),
-        HookShell::Zsh => print!("{HOOK_POSIX}\n{HOOK_ZSH_REGISTER}"),
-        HookShell::Fish => print!("{}", include_str!("../hook-fish.fish")),
-        HookShell::Nu => print!("{}", include_str!("../hook-nu.nu")),
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -242,14 +262,14 @@ mod tests {
         // SAFETY: test runs single-threaded (cargo nextest runs each test in its own process)
         unsafe { std::env::set_var("DEVENV_HOME", &devenv_home_dir) };
 
-        allow(&project).unwrap();
+        allow_path(&project).unwrap();
 
         let db_path = devenv_home_dir.join("allowed");
         let content = fs::read_to_string(&db_path).unwrap();
         let canonical = canonical_str(&project).unwrap();
         assert!(content.contains(&canonical));
 
-        revoke(&project).unwrap();
+        revoke_path(&project).unwrap();
 
         let content = fs::read_to_string(&db_path).unwrap();
         assert!(!content.contains(&canonical));
@@ -273,7 +293,7 @@ mod tests {
         assert!(!is_trusted(&abs_str).unwrap());
 
         // Allow and verify
-        allow(&project).unwrap();
+        allow_path(&project).unwrap();
         assert!(is_trusted(&abs_str).unwrap());
 
         // Changing devenv.yaml should not invalidate trust
