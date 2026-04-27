@@ -1,19 +1,58 @@
 //! Common test utilities shared across test files.
+//!
+//! `TestEnv::builder()` is the ergonomic entry point — defaults give a
+//! complete, runnable backend environment, builder methods customize.
 
 #![allow(dead_code)]
 
-use devenv_core::cachix::{CachixManager, CachixPaths};
-use devenv_core::{
-    BootstrapArgs, CacheOptions, CacheSettings, CliOptionsConfig, Config, DevenvPaths, NixArgs,
-    NixOptions, NixSettings, PortAllocator, StoreSettings,
-};
-use devenv_nix_backend::NixCBackend;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use devenv_core::{
+    BootstrapArgs, CacheOptions, CacheSettings, CliOptionsConfig, Config, DevenvPaths, NixArgs,
+    NixOptions, NixSettings, PortAllocator, StoreSettings, default_system,
+};
+use devenv_nix_backend::NixCBackend;
+use tempfile::TempDir;
+
+/// Default `devenv.yaml` for tests that don't care about flake input details.
+pub const DEFAULT_YAML: &str = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+"#;
+
+/// Default `devenv.nix`. Minimal so the bootstrap eval has something to import.
+pub const DEFAULT_NIX: &str = "{ ... }: { }";
+
+/// Restores cwd on drop. Backend ops aren't cwd-dependent, but
+/// `Config::load_from` falls back to `env::current_dir` when resolving
+/// some import paths, so we pin cwd to the temp dir for the duration of
+/// the test.
+pub struct CwdGuard {
+    original: PathBuf,
+}
+
+impl CwdGuard {
+    pub fn enter(target: &Path) -> Self {
+        let original = std::env::current_dir().expect("get cwd");
+        std::env::set_current_dir(target).expect("set cwd");
+        Self { original }
+    }
+}
+
+impl Drop for CwdGuard {
+    fn drop(&mut self) {
+        let _ = std::env::set_current_dir(&self.original);
+    }
+}
+
+/// Build the [`DevenvPaths`] layout under `base` and create the on-disk
+/// directories the backend writes into.
 pub fn paths_under(base: &Path) -> DevenvPaths {
     let dotfile = base.join(".devenv");
-    DevenvPaths {
+    let paths = DevenvPaths {
         root: base.to_path_buf(),
         dotfile: dotfile.clone(),
         dot_gc: dotfile.join("gc"),
@@ -22,103 +61,196 @@ pub fn paths_under(base: &Path) -> DevenvPaths {
         runtime: base.join("runtime"),
         state: None,
         git_root: None,
-    }
-}
-
-pub fn get_current_system() -> &'static str {
-    let arch = std::env::consts::ARCH;
-    let os = std::env::consts::OS;
-    match (arch, os) {
-        ("x86_64", "linux") => "x86_64-linux",
-        ("aarch64", "linux") => "aarch64-linux",
-        ("x86_64", "macos") => "x86_64-darwin",
-        ("aarch64", "macos") => "aarch64-darwin",
-        _ => panic!("Unsupported system: {arch}-{os}"),
-    }
-}
-
-pub fn create_test_cachix_manager(
-    base_dir: &Path,
-    daemon_socket: Option<PathBuf>,
-) -> Arc<CachixManager> {
-    let cachix_paths = CachixPaths {
-        trusted_keys: base_dir.join(".devenv/cachix/trusted-keys.json"),
-        netrc: base_dir.join(".devenv/netrc"),
-        daemon_socket,
     };
-    Arc::new(CachixManager::new(cachix_paths))
+    std::fs::create_dir_all(&paths.dotfile).expect("create .devenv");
+    std::fs::create_dir_all(&paths.dot_gc).expect("create .devenv/gc");
+    std::fs::create_dir_all(&paths.home_gc).expect("create .devenv/home-gc");
+    paths
 }
 
-pub struct TestNixArgs {
-    tmpdir: PathBuf,
-    runtime: PathBuf,
-    dotfile_path: PathBuf,
+/// Copy the bundled lock fixture into `dest_dir`. Tests that exercise
+/// eval/build paths use this to skip an `update()` round-trip.
+pub fn copy_fixture_lock(dest: &Path) {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/devenv.lock");
+    std::fs::copy(&fixture, dest.join("devenv.lock")).expect("copy fixture lock");
 }
 
-impl TestNixArgs {
-    pub fn new(paths: &DevenvPaths) -> Self {
-        let dotfile_name = paths
+/// All the handles a test needs after construction.
+///
+/// Most tests want `env.backend` and `env.path()`; `config` and `paths`
+/// are exposed for tests that need them. `_cwd_guard` and `_temp_dir`
+/// are kept alive by ownership.
+pub struct TestEnv {
+    pub temp_dir: TempDir,
+    pub backend: NixCBackend,
+    pub config: Config,
+    pub paths: DevenvPaths,
+    _cwd_guard: CwdGuard,
+}
+
+impl TestEnv {
+    /// Default env: standard yaml, minimal nix, fixture lock, default options.
+    pub async fn new() -> Self {
+        Self::builder().build().await
+    }
+
+    pub fn builder() -> TestEnvBuilder {
+        TestEnvBuilder::default()
+    }
+
+    pub fn path(&self) -> &Path {
+        self.temp_dir.path()
+    }
+}
+
+#[derive(Clone)]
+pub struct TestEnvBuilder {
+    yaml: String,
+    nix: String,
+    extra_files: Vec<(String, String)>,
+    nix_options: NixOptions,
+    fixture_lock: bool,
+}
+
+impl Default for TestEnvBuilder {
+    fn default() -> Self {
+        Self {
+            yaml: DEFAULT_YAML.into(),
+            nix: DEFAULT_NIX.into(),
+            extra_files: Vec::new(),
+            nix_options: NixOptions::default(),
+            fixture_lock: true,
+        }
+    }
+}
+
+impl TestEnvBuilder {
+    pub fn yaml(mut self, yaml: impl Into<String>) -> Self {
+        self.yaml = yaml.into();
+        self
+    }
+
+    pub fn nix(mut self, nix: impl Into<String>) -> Self {
+        self.nix = nix.into();
+        self
+    }
+
+    /// Add a file under the project root, relative path. Useful for
+    /// `imports = [ ./extra.nix ]` style tests.
+    pub fn extra_file(mut self, name: impl Into<String>, content: impl Into<String>) -> Self {
+        self.extra_files.push((name.into(), content.into()));
+        self
+    }
+
+    pub fn nix_options(mut self, options: NixOptions) -> Self {
+        self.nix_options = options;
+        self
+    }
+
+    /// Skip the fixture lock copy. Use in tests that exercise the
+    /// `update()` path or that intentionally start without a lock.
+    pub fn no_lock(mut self) -> Self {
+        self.fixture_lock = false;
+        self
+    }
+
+    /// Materialize files only — returns the bits needed to inspect a
+    /// bootstrap-time failure (no backend constructed). Use with
+    /// [`init_backend`] at the call site to keep the failure observable.
+    pub fn build_files(self) -> (TempDir, CwdGuard, DevenvPaths, Config, NixOptions) {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let path = temp_dir.path().to_path_buf();
+        let cwd_guard = CwdGuard::enter(&path);
+
+        std::fs::write(path.join("devenv.nix"), &self.nix).expect("write devenv.nix");
+        std::fs::write(path.join("devenv.yaml"), &self.yaml).expect("write devenv.yaml");
+        for (name, content) in &self.extra_files {
+            let dest = path.join(name);
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent).expect("create extra-file parent");
+            }
+            std::fs::write(&dest, content).expect("write extra file");
+        }
+
+        let paths = paths_under(&path);
+        let config = Config::load_from(&path).expect("load config");
+
+        if self.fixture_lock {
+            copy_fixture_lock(&path);
+        }
+
+        (temp_dir, cwd_guard, paths, config, self.nix_options)
+    }
+
+    /// Build everything, requiring backend construction to succeed.
+    pub async fn build(self) -> TestEnv {
+        self.try_build().await.expect("init backend")
+    }
+
+    /// Build everything, returning `Err` if backend construction fails.
+    /// Use when the test's purpose is to inspect that error.
+    pub async fn try_build(self) -> miette::Result<TestEnv> {
+        let (temp_dir, cwd_guard, paths, config, nix_cli) = self.build_files();
+        let backend = init_backend(paths.clone(), config.clone(), nix_cli)?;
+        Ok(TestEnv {
+            temp_dir,
+            backend,
+            config,
+            paths,
+            _cwd_guard: cwd_guard,
+        })
+    }
+}
+
+fn test_bootstrap_args(paths: &DevenvPaths, config: &Config) -> BootstrapArgs {
+    let system = default_system();
+    let nixpkgs_config = config.nixpkgs_config(&system);
+    let dotfile_relative = PathBuf::from(format!(
+        "./{}",
+        paths
             .dotfile
             .file_name()
-            .expect("dotfile should have a file name")
-            .to_string_lossy();
-        TestNixArgs {
-            tmpdir: paths.root.join("tmp"),
-            runtime: paths.root.join("runtime"),
-            dotfile_path: PathBuf::from(format!("./{}", dotfile_name)),
-        }
-    }
+            .expect("dotfile has filename")
+            .to_string_lossy()
+    ));
 
-    pub fn to_nix_args<'a>(
-        &'a self,
-        paths: &'a DevenvPaths,
-        config: &'a Config,
-        nixpkgs_config: devenv_core::config::NixpkgsConfig,
-    ) -> NixArgs<'a> {
-        NixArgs {
-            version: "1.0.0",
-            is_development_version: false,
-            require_version_match: false,
-            system: get_current_system(),
-            devenv_root: &paths.root,
-            skip_local_src: false,
-            devenv_dotfile: &paths.dotfile,
-            devenv_dotfile_path: &self.dotfile_path,
-            devenv_tmpdir: &self.tmpdir,
-            devenv_runtime: &self.runtime,
-            devenv_istesting: true,
-            devenv_direnvrc_latest_version: 5,
-            active_profiles: &[],
-            cli_options: CliOptionsConfig::default(),
-            hostname: None,
-            username: None,
-            git_root: None,
-            secretspec: None,
-            devenv_inputs: &config.inputs,
-            devenv_imports: &config.imports,
-            impure: false,
-            nixpkgs_config,
-            lock_fingerprint: "",
-            devenv_state: None,
-        }
-    }
-}
+    let args = NixArgs {
+        version: "1.0.0",
+        is_development_version: false,
+        require_version_match: false,
+        system: &system,
+        devenv_root: &paths.root,
+        skip_local_src: false,
+        devenv_dotfile: &paths.dotfile,
+        devenv_dotfile_path: &dotfile_relative,
+        devenv_tmpdir: &paths.tmp,
+        devenv_runtime: &paths.runtime,
+        devenv_istesting: true,
+        devenv_direnvrc_latest_version: 5,
+        active_profiles: &[],
+        cli_options: CliOptionsConfig::default(),
+        hostname: None,
+        username: None,
+        git_root: None,
+        secretspec: None,
+        devenv_inputs: &config.inputs,
+        devenv_imports: &config.imports,
+        impure: false,
+        nixpkgs_config,
+        lock_fingerprint: "",
+        devenv_state: None,
+    };
 
-pub fn test_bootstrap_args(paths: &DevenvPaths, config: &Config) -> BootstrapArgs {
-    let test_args = TestNixArgs::new(paths);
-    let nix_args =
-        test_args.to_nix_args(paths, config, config.nixpkgs_config(get_current_system()));
-    BootstrapArgs::from_serializable(&nix_args).expect("Failed to serialize bootstrap args")
+    BootstrapArgs::from_serializable(&args).expect("serialize bootstrap args")
 }
 
 /// Construct a `NixCBackend` for tests by running the standard
 /// setup-then-build flow and skipping lock validation (tests bring
 /// their own minimal devenv.nix without flake inputs).
-pub fn create_backend(
+pub fn init_backend(
     paths: DevenvPaths,
     config: Config,
     nix_cli: NixOptions,
-    _cachix_manager: Arc<CachixManager>,
 ) -> miette::Result<NixCBackend> {
     let nix_settings = NixSettings::resolve(nix_cli, &config);
     let cache_settings = CacheSettings::resolve(CacheOptions::default());
@@ -129,8 +261,6 @@ pub fn create_backend(
     let store = devenv_nix_backend::backend::open_store(&store_settings)?;
     let (flake_settings, fetchers_settings) = devenv_nix_backend::backend::build_settings()?;
 
-    // Tests bring their own minimal devenv.nix without flake inputs, so
-    // skip lock validation entirely.
     let bootstrap_args = test_bootstrap_args(&paths, &config);
     NixCBackend::new(
         paths,
@@ -145,14 +275,4 @@ pub fn create_backend(
         Arc::new(PortAllocator::new()),
         None,
     )
-}
-
-/// Same as [`create_backend`]; tests historically called this `init_backend`.
-pub fn init_backend(
-    paths: DevenvPaths,
-    config: Config,
-    nix_cli: NixOptions,
-    cachix_manager: Arc<CachixManager>,
-) -> miette::Result<NixCBackend> {
-    create_backend(paths, config, nix_cli, cachix_manager)
 }
