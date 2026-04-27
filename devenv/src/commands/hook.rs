@@ -182,10 +182,10 @@ fn check_activation(last_project: Option<&str>) -> Result<ActivationCheck> {
 
     let abs_str = canonical_str(&project_dir)?;
 
-    if let Some(last) = last_project {
-        if last == abs_str {
-            return Ok(ActivationCheck::Skip);
-        }
+    if let Some(last) = last_project
+        && last == abs_str
+    {
+        return Ok(ActivationCheck::Skip);
     }
 
     if !is_trusted(&abs_str)? {

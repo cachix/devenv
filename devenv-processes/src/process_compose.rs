@@ -147,7 +147,7 @@ impl ProcessManager for ProcessComposeManager {
                         nix::unistd::Pid::from_raw(0),
                         nix::unistd::Pid::from_raw(0),
                     )
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                    .map_err(std::io::Error::other)?;
                     Ok(())
                 });
             }

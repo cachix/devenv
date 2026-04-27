@@ -118,14 +118,12 @@ impl WatcherHandle {
             }
             let changed = watched.len() != before;
 
-            if changed {
-                if let Some(ref config) = self.config {
-                    config.pathset(
-                        watched
-                            .iter()
-                            .map(|p| WatchedPath::non_recursive(p.as_path())),
-                    );
-                }
+            if changed && let Some(ref config) = self.config {
+                config.pathset(
+                    watched
+                        .iter()
+                        .map(|p| WatchedPath::non_recursive(p.as_path())),
+                );
             }
 
             changed

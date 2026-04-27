@@ -781,10 +781,10 @@ impl Tasks {
         // Start the API server so `devenv processes wait` can connect.
         // This must happen after pre-registration so the socket is available
         // when external clients connect. Only start if there are process tasks.
-        if !process_configs.is_empty() {
-            if let Err(e) = self.process_manager.start_api_server() {
-                error!("Failed to start process manager API server: {}", e);
-            }
+        if !process_configs.is_empty()
+            && let Err(e) = self.process_manager.start_api_server()
+        {
+            error!("Failed to start process manager API server: {}", e);
         }
 
         for index in &self.tasks_order {

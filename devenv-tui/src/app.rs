@@ -33,6 +33,12 @@ pub struct RenderShutdown(pub Arc<Notify>);
 #[derive(Clone)]
 pub struct ExitFlag(Arc<AtomicBool>);
 
+impl Default for ExitFlag {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExitFlag {
     pub fn new() -> Self {
         Self(Arc::new(AtomicBool::new(false)))
@@ -226,11 +232,11 @@ impl TuiApp {
                                 batch.push(event);
                             }
 
-                            if !batch.is_empty() {
-                                if let Ok(mut m) = activity_model.write() {
-                                    for event in batch.drain(..) {
-                                        m.apply_activity_event(event);
-                                    }
+                            if !batch.is_empty()
+                                && let Ok(mut m) = activity_model.write()
+                            {
+                                for event in batch.drain(..) {
+                                    m.apply_activity_event(event);
                                 }
                             }
 
@@ -613,16 +619,11 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         if let Some(tx) = command_tx.as_ref()
                             && let Ok(ui) = ui_state.read()
                             && let Some(activity_id) = ui.selected_activity
+                            && let Ok(model) = activity_model.read()
+                            && let Some(activity) = model.get_activity(activity_id)
+                            && matches!(activity.variant, crate::model::ActivityVariant::Process(_))
                         {
-                            if let Ok(model) = activity_model.read()
-                                && let Some(activity) = model.get_activity(activity_id)
-                                && matches!(
-                                    activity.variant,
-                                    crate::model::ActivityVariant::Process(_)
-                                )
-                            {
-                                let _ = tx.try_send(ProcessCommand::Restart(activity.name.clone()));
-                            }
+                            let _ = tx.try_send(ProcessCommand::Restart(activity.name.clone()));
                         }
                     }
                     KeyCode::Char('x') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -630,15 +631,13 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         if let Some(tx) = command_tx.as_ref()
                             && let Ok(ui) = ui_state.read()
                             && let Some(activity_id) = ui.selected_activity
+                            && let Ok(model) = activity_model.read()
+                            && let Some(activity) = model.get_activity(activity_id)
+                            && let crate::model::ActivityVariant::Process(ref proc) =
+                                activity.variant
+                            && proc.status.is_stoppable()
                         {
-                            if let Ok(model) = activity_model.read()
-                                && let Some(activity) = model.get_activity(activity_id)
-                                && let crate::model::ActivityVariant::Process(ref proc) =
-                                    activity.variant
-                                && proc.status.is_stoppable()
-                            {
-                                let _ = tx.try_send(ProcessCommand::Stop(activity.name.clone()));
-                            }
+                            let _ = tx.try_send(ProcessCommand::Stop(activity.name.clone()));
                         }
                     }
                     KeyCode::Char('e') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {

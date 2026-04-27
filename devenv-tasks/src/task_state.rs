@@ -329,13 +329,13 @@ impl TaskState {
                 let split_pos = (4..rest.len())
                     .step_by(4)
                     .find(|&i| rest.as_bytes()[i] == b'=');
-                if let Some(pos) = split_pos {
-                    if let (Some(var), Some(val)) = (
-                        Self::decode_b64(rest[..pos].as_bytes(), "DEVENV_EXPORT key"),
-                        Self::decode_b64(rest[pos + 1..].as_bytes(), "DEVENV_EXPORT value"),
-                    ) {
-                        exports.push((var, val));
-                    }
+                if let Some(pos) = split_pos
+                    && let (Some(var), Some(val)) = (
+                        Self::decode_b64(&rest.as_bytes()[..pos], "DEVENV_EXPORT key"),
+                        Self::decode_b64(&rest.as_bytes()[pos + 1..], "DEVENV_EXPORT value"),
+                    )
+                {
+                    exports.push((var, val));
                 }
             }
         }

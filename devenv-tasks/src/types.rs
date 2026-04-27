@@ -233,7 +233,7 @@ impl Outputs {
     pub fn collect_messages(&self) -> Vec<String> {
         self.0
             .values()
-            .flat_map(|v| iter_devenv_messages(v))
+            .flat_map(iter_devenv_messages)
             .map(String::from)
             .collect()
     }

@@ -736,12 +736,11 @@ impl NixCBackend {
                                     Ok(()) => Some(paths),
                                     Err(e) => {
                                         tracing::warn!(error = %e, "Resource replay failed for shell cache hit, re-evaluating");
-                                        if let Some(svc) = caching_state.cached_eval().service() {
-                                            if let Err(db_err) =
+                                        if let Some(svc) = caching_state.cached_eval().service()
+                                            && let Err(db_err) =
                                                 svc.invalidate_resource_dependent().await
-                                            {
-                                                tracing::warn!(error = %db_err, "Failed to delete port-dependent cache entries");
-                                            }
+                                        {
+                                            tracing::warn!(error = %db_err, "Failed to delete port-dependent cache entries");
                                         }
                                         caching_state.cached_eval().clear_resources();
                                         if let Ok(mut cached) = self.cached_devenv_value.lock() {

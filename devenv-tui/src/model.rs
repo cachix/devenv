@@ -1026,13 +1026,13 @@ impl ActivityModel {
 
             // Propagate error details to parent's build_logs so the parent
             // activity can show them inline when it fails (e.g. Evaluate errors).
-            if level == ActivityLevel::Error {
-                if let Some(parent_id) = msg.parent {
-                    self.log_to_activity(parent_id, text);
-                    if let Some(details) = &msg.details {
-                        for line in details.lines() {
-                            self.log_to_activity(parent_id, line.to_string());
-                        }
+            if level == ActivityLevel::Error
+                && let Some(parent_id) = msg.parent
+            {
+                self.log_to_activity(parent_id, text);
+                if let Some(details) = &msg.details {
+                    for line in details.lines() {
+                        self.log_to_activity(parent_id, line.to_string());
                     }
                 }
             }
