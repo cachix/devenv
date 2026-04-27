@@ -4,6 +4,7 @@
 pub mod backend;
 pub mod changelog;
 pub mod cli;
+pub mod commands;
 mod devenv;
 pub mod hook;
 pub mod lsp;

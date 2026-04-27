@@ -20,17 +20,14 @@ use devenv_core::{
     settings::{CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings},
 };
 use devenv_shell::dialect::{BashDialect, RcfileContext, ShellDialect, create_dialect};
-use include_dir::{Dir, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use nix::sys::signal;
 use nix::unistd::Pid;
 use once_cell::sync::{Lazy, OnceCell as SyncOnceCell};
 use processes::ProcessManager as _;
 use secrecy::ExposeSecret;
-use similar::{ChangeTag, TextDiff};
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::io::Write;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
@@ -43,15 +40,6 @@ use tokio::process;
 use tokio::sync::OnceCell;
 use tracing::{Instrument, debug, info, instrument};
 
-// templates
-// Note: gitignore is stored without the dot to work around include_dir not including dotfiles
-const REQUIRED_FILES: [(&str, &str); 3] = [
-    ("devenv.nix", "devenv.nix"),
-    ("devenv.yaml", "devenv.yaml"),
-    ("gitignore", ".gitignore"), // source name -> target name
-];
-const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
-const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
 pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
     include_str!("../../direnvrc").replace(
         "DEVENV_DIRENVRC_ROLLING_UPGRADE=0",
@@ -721,50 +709,6 @@ impl Devenv {
             &cache_key_args,
             "shell",
         ))
-    }
-
-    pub fn init(&self, target: &Option<PathBuf>) -> Result<()> {
-        let target = target.clone().unwrap_or_else(|| {
-            std::fs::canonicalize(".").expect("Failed to get current directory")
-        });
-
-        // create directory target if not exists
-        if !target.exists() {
-            std::fs::create_dir_all(&target).expect("Failed to create target directory");
-        }
-
-        for (source_name, target_name) in REQUIRED_FILES {
-            info!(devenv.is_user_message = true, "Creating {}", target_name);
-
-            let path = PROJECT_DIR
-                .get_file(source_name)
-                .ok_or_else(|| miette::miette!("missing {} in the executable", source_name))?;
-
-            // write path.contents to target/target_name
-            let target_path = target.join(target_name);
-
-            // add a check for files like .gitignore to append buffer instead of bailing out
-            if target_path.exists() && EXISTING_REQUIRED_FILES.contains(&target_name) {
-                std::fs::OpenOptions::new()
-                    .append(true)
-                    .open(&target_path)
-                    .and_then(|mut file| {
-                        file.write_all(b"\n")?;
-                        file.write_all(path.contents())
-                    })
-                    .expect("Failed to append to existing file");
-            } else if target_path.exists() && !EXISTING_REQUIRED_FILES.contains(&target_name) {
-                if let Some(utf8_contents) = path.contents_utf8() {
-                    confirm_overwrite(&target_path, utf8_contents.to_string())?;
-                } else {
-                    bail!("Failed to read file contents as UTF-8");
-                }
-            } else {
-                std::fs::write(&target_path, path.contents()).expect("Failed to write file");
-            }
-        }
-
-        Ok(())
     }
 
     pub async fn changelogs(&self) -> Result<Option<String>> {
@@ -2314,40 +2258,6 @@ pub fn resolve_shell_path(shell_name: &str) -> String {
         }
     }
 }
-fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
-    if std::fs::metadata(file).is_ok() {
-        // first output the old version and propose new changes
-        let before = std::fs::read_to_string(file).expect("Failed to read file");
-
-        let diff = TextDiff::from_lines(&before, &contents);
-
-        eprintln!("\nChanges that will be made to {}:", file.to_string_lossy());
-        for change in diff.iter_all_changes() {
-            let sign = match change.tag() {
-                ChangeTag::Delete => "\x1b[31m-\x1b[0m",
-                ChangeTag::Insert => "\x1b[32m+\x1b[0m",
-                ChangeTag::Equal => " ",
-            };
-            eprint!("{sign}{change}");
-        }
-
-        let confirm = dialoguer::Confirm::new()
-            .with_prompt(format!(
-                "{} already exists. Do you want to overwrite it?",
-                file.to_string_lossy()
-            ))
-            .interact()
-            .into_diagnostic()?;
-
-        if confirm {
-            std::fs::write(file, contents).into_diagnostic()?;
-        }
-    } else {
-        std::fs::write(file, contents).into_diagnostic()?;
-    }
-    Ok(())
-}
-
 pub struct DevEnv {
     output: Vec<u8>,
 }

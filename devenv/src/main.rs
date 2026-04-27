@@ -6,7 +6,7 @@ use devenv::{
         Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
         TraceOutputSpec,
     },
-    hook,
+    commands, hook,
     processes::ProcessCommand,
     reload::DevenvShellBuilder,
     tracing as devenv_tracing,
@@ -577,6 +577,10 @@ async fn run_backend(
         }
     }
 
+    if let Commands::Init { target } = &command {
+        return output(commands::init::run(target).map(|()| CommandResult::Done));
+    }
+
     let config_strict_ports = config.strict_ports.unwrap_or(false);
 
     let require_version_match = config.requires_version_match();
@@ -841,9 +845,8 @@ async fn dispatch_command(
                 Ok(CommandResult::Exec(shell_config.command))
             }
         },
-        Commands::Init { target } => {
-            devenv.init(&target)?;
-            Ok(CommandResult::Done)
+        Commands::Init { .. } => {
+            unreachable!("Init is dispatched in run_backend before Devenv construction")
         }
         Commands::Generate => {
             miette::bail!(indoc::indoc! {"
