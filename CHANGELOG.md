@@ -40,6 +40,8 @@
 
 ### Improvements
 
+- TUI operation activities (`Configuring shell`, `Configuring cachix`, `Loading tasks`, etc.) now nest under their parent activity instead of being forced to the top level. "Configuring cachix" appears as a child of "Configuring shell" (next to "Evaluating shell"), reflecting that cachix setup runs as part of shell configuration.
+- "Validating lock" is now visible in the TUI by default instead of hidden behind the Debug filter.
 - Sped up `devenv shell` startup on projects with many cached input paths by batching file watcher registration into a single pathset update and readiness wait, instead of reconciling the pathset once per path. This removes long hangs before `enterShell` on large inputs.
 - Fixed port allocation values (`config.processes.<name>.ports.<port>.value`) resolving to the base `allocate` port in `devenv shell`, `devenv tasks run`, and other commands. When the native process manager is running, port values now match the ports allocated by `devenv up` ([#2710](https://github.com/cachix/devenv/issues/2710)).
 - Standardized keyboard shortcut notation across `devenv up` TUI and `devenv shell` to use consistent `Ctrl-E` format instead of mixed `^e`/`Ctrl-Alt-E` styles. macOS now shows `Opt` instead of `Alt` ([#2736](https://github.com/cachix/devenv/issues/2736)).

@@ -21,7 +21,7 @@ use crate::anyhow_ext::AnyhowToMiette;
 
 /// Validate (and create or update if needed) `<root>/devenv.lock`,
 /// returning the fingerprint of the resulting lock graph.
-#[instrument_activity("Validating lock", kind = evaluate, level = DEBUG)]
+#[instrument_activity("Validating lock", kind = evaluate)]
 pub fn validate_and_load(
     eval_state: &EvalState,
     store: &Store,

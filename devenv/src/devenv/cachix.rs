@@ -78,21 +78,16 @@ impl CachixIntegration {
             return Ok(None);
         }
 
-        // Probe `enable` at DEBUG: every project pays this regardless of
-        // whether it uses cachix, and a TUI row for the always-false
-        // case is noise. Errors propagate — a broken `config.cachix.enable`
-        // means a broken devenv.nix, not "cachix is off".
-        let enable: bool =
-            eval_field_at(cnix, "config.cachix.enable", ActivityLevel::Debug).await?;
+        // Errors propagate — a broken `config.cachix.enable` means a broken
+        // devenv.nix, not "cachix is off".
+        let enable: bool = eval_field(cnix, "config.cachix.enable").await?;
         if !enable {
             return Ok(None);
         }
 
         let push: Option<String> = async {
-            let pull: Vec<String> =
-                eval_field_at(cnix, "config.cachix.pull", ActivityLevel::Info).await?;
-            let push: Option<String> =
-                eval_field_at(cnix, "config.cachix.push", ActivityLevel::Info).await?;
+            let pull: Vec<String> = eval_field(cnix, "config.cachix.pull").await?;
+            let push: Option<String> = eval_field(cnix, "config.cachix.push").await?;
 
             let known_keys = load_known_keys(&cachix_manager.paths.trusted_keys).await;
             let info = CachixCacheInfo {
@@ -224,15 +219,11 @@ impl RealizedPathsObserver for MpscObserver {
     }
 }
 
-/// Evaluate `attr` and deserialize. `level` controls TUI visibility — use
-/// `Info` for fields users care about (`pull` / `push` / `binary`), `Debug`
-/// for the always-runs-once `enable` probe.
-async fn eval_field_at<T: serde::de::DeserializeOwned>(
-    cnix: &NixCBackend,
-    attr: &str,
-    level: ActivityLevel,
-) -> Result<T> {
-    let activity = start!(Activity::evaluate(format!("Reading {attr}")).level(level));
+/// Evaluate `attr` and deserialize. The "Reading {attr}" activity is at Debug
+/// level — these are internal evaluation steps, not user-facing operations.
+async fn eval_field<T: serde::de::DeserializeOwned>(cnix: &NixCBackend, attr: &str) -> Result<T> {
+    let activity =
+        start!(Activity::evaluate(format!("Reading {attr}")).level(ActivityLevel::Debug));
     let json = cnix.eval_attr(attr, &activity).await?;
     serde_json::from_str(&json)
         .into_diagnostic()
@@ -254,8 +245,7 @@ async fn resolve_cachix_binary(cnix: &NixCBackend) -> Result<PathBuf> {
     // read its binary path. This forces the cachix derivation, which
     // is why the eval-each-field-separately rule applies (we never
     // evaluate `config.cachix` as a whole).
-    let binary_path: PathBuf =
-        eval_field_at(cnix, "config.cachix.binary", ActivityLevel::Info).await?;
+    let binary_path: PathBuf = eval_field(cnix, "config.cachix.binary").await?;
     cnix.build(&["config.cachix.package"], BuildOptions::default())
         .await
         .wrap_err("Failed to build config.cachix.package")?;

@@ -128,16 +128,6 @@ pub enum ActivityVariant {
     Unknown,
 }
 
-impl ActivityVariant {
-    /// Whether this variant is always rendered as a top-level activity in the TUI,
-    /// even when it has a tracing parent.
-    /// These activities are added to `root_activities` and excluded from their
-    /// parent's child list.
-    fn is_always_top_level(&self) -> bool {
-        matches!(self, ActivityVariant::Devenv)
-    }
-}
-
 /// Key-value detail/metadata for an activity
 #[derive(Debug, Clone)]
 pub struct ActivityDetail {
@@ -798,7 +788,7 @@ impl ActivityModel {
             level
         };
 
-        let is_root = parent.is_none() || variant.is_always_top_level();
+        let is_root = parent.is_none();
 
         let activity = Activity {
             id,
@@ -1411,13 +1401,12 @@ impl ActivityModel {
             .is_some_and(|a| matches!(a.variant, ActivityVariant::Task(_)));
 
         // Get all children of this parent (including additional parents),
-        // excluding hidden and promoted-to-top-level activities.
+        // excluding hidden activities.
         let mut all_children: Vec<_> = self
             .activities
             .values()
             .filter(|a| {
                 !matches!(a.variant, ActivityVariant::UserOperation)
-                    && !a.variant.is_always_top_level()
                     && self.is_direct_child_of(a, parent_id)
             })
             .collect();
@@ -1518,7 +1507,6 @@ impl ActivityModel {
             .filter(|a| {
                 a.parent_id == Some(activity_id)
                     && !matches!(a.variant, ActivityVariant::UserOperation)
-                    && !a.variant.is_always_top_level()
                     && a.level <= filter_level
             })
             .count()
