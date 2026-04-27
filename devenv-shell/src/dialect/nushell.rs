@@ -225,7 +225,7 @@ def --env __devenv_reload_apply [] {{
                     let vardef = ($trimmed | str substring 11..)
                     let eq_pos = ($vardef | str index-of "=")
                     if $eq_pos >= 0 {{
-                        let var_name = ($vardef | str substring ..$eq_pos)
+                        let var_name = ($vardef | str substring ..<$eq_pos)
                         let raw_value = ($vardef | str substring ($eq_pos + 1)..)
                         # Strip exactly one pair of surrounding double quotes,
                         # then unescape bash declare -x output (\" -> " and \\ -> \)
