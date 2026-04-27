@@ -1068,38 +1068,6 @@ impl NixCBackend {
         self.invalidate_eval_state()
     }
 
-    /// Build (or reuse a cached) bash and return the path to its `bin/bash`.
-    /// Uses `<dotfile>/bash` as the GC-root base and short-circuits when
-    /// `<dotfile>/bash-bash` already symlinks to a live store path.
-    pub async fn get_bash(&self, refresh_cached_output: bool) -> Result<String> {
-        let gc_root_base = self.paths.dotfile.join("bash");
-        let cached_symlink = self.paths.dotfile.join("bash-bash");
-
-        if !refresh_cached_output
-            && cached_symlink.exists()
-            && let Ok(target) = std::fs::read_link(&cached_symlink)
-            && target.exists()
-        {
-            return Ok(format!("{}/bin/bash", target.to_string_lossy()));
-        }
-
-        let outputs = <Self as Evaluator>::build(
-            self,
-            &["bash"],
-            BuildOptions {
-                gc_root: Some(gc_root_base),
-            },
-        )
-        .await?;
-        if outputs.is_empty() {
-            return Err(miette!("No output paths from bash build"));
-        }
-        Ok(format!(
-            "{}/bin/bash",
-            outputs[0].as_path().to_string_lossy()
-        ))
-    }
-
     /// Evaluate a single attribute path against the user's devenv
     /// config root and return JSON, using a caller-supplied [`Activity`]
     /// for TUI/tracing instead of the generic "Evaluating Nix" label
