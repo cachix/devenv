@@ -4,3 +4,4 @@
 //! takes only the context it needs.
 
 pub mod init;
+pub mod version;

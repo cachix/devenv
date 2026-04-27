@@ -75,16 +75,7 @@ fn main_inner() -> Result<()> {
         // Handle commands that don't need config or runtime
         match &cli.command {
             None | Some(Commands::Version) => {
-                let version = crate_version!();
-                let system = cli
-                    .nix_args
-                    .system
-                    .clone()
-                    .unwrap_or_else(devenv_core::settings::default_system);
-                match build_rev() {
-                    Some(rev) => println!("devenv {version}+{rev} ({system})"),
-                    None => println!("devenv {version} ({system})"),
-                }
+                commands::version::run(cli.nix_args.system.as_deref());
                 return Ok(());
             }
             Some(Commands::Direnvrc) => {
@@ -1324,22 +1315,4 @@ fn run_daemon_processes(config_file: std::path::PathBuf) -> Result<()> {
         let _ = tokio::fs::remove_file(&pid_file).await;
         result
     })
-}
-
-/// Returns the git revision suffix for the version string.
-///
-/// VERGEN_GIT_SHA is set by build.rs:
-/// - From vergen when building from a git checkout
-/// - Parsed from DEVENV_GIT_REV for flake builds
-/// - VERGEN_IDEMPOTENT_OUTPUT for tarball builds (nixpkgs)
-fn build_rev() -> Option<String> {
-    let sha = env!("VERGEN_GIT_SHA");
-    if sha.is_empty() || sha == "VERGEN_IDEMPOTENT_OUTPUT" {
-        return None;
-    }
-    if env!("VERGEN_GIT_DIRTY") == "true" {
-        Some(format!("{sha}-dirty"))
-    } else {
-        Some(sha.to_string())
-    }
 }
