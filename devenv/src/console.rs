@@ -1,9 +1,17 @@
 //! Console output for activity events when the TUI is disabled.
 //!
-//! Consumes the activity event channel and renders activity start/complete
-//! lines plus task and process log forwarding to the terminal.
+//! Every event is normalized into a call to [`ConsoleOutput::begin`],
+//! [`end`], [`log`], or [`message`]. Each of those funnels through
+//! [`ConsoleOutput::write`] — the sole writer of stdout/stderr and the only
+//! caller of [`ConsoleOutput::show_at`]. New event variants therefore cannot
+//! regress the verbosity contract: there is no other way to emit a line.
+//!
+//! [`end`]: ConsoleOutput::end
+//! [`log`]: ConsoleOutput::log
+//! [`message`]: ConsoleOutput::message
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::io::{self, LineWriter, Write};
 use std::sync::Arc;
 use std::time::Instant;
@@ -21,13 +29,32 @@ use crate::tracing::HumanReadableDuration;
 struct Entry {
     name: String,
     start: Instant,
-    show_log: bool,
+    level: ActivityLevel,
+    /// Level at which child log lines from this activity render.
+    log_level: ActivityLevel,
+}
+
+struct PendingTask {
+    name: String,
+    log_level: ActivityLevel,
+}
+
+#[derive(Copy, Clone)]
+enum Sink {
+    Stdout,
+    Stderr,
 }
 
 pub struct ConsoleOutput {
     rx: mpsc::UnboundedReceiver<ActivityEvent>,
     verbosity: VerbosityLevel,
     entries: HashMap<u64, Entry>,
+    /// Task names announced by `Task::Hierarchy` ahead of `Task::Start`. A task
+    /// that never starts is dropped from this map without emitting anything.
+    pending_tasks: HashMap<u64, PendingTask>,
+    /// Display names of fetches we already announced, used to dedup duplicate
+    /// Substitute/CopyPath pairs Nix emits for the same store path.
+    active_fetch_names: HashSet<String>,
     // LineWriter coalesces format-arg writes into one syscall per line and
     // avoids re-acquiring the global stderr/stdout lock for every fragment.
     stdout: LineWriter<io::Stdout>,
@@ -40,6 +67,8 @@ impl ConsoleOutput {
             rx,
             verbosity,
             entries: HashMap::new(),
+            pending_tasks: HashMap::new(),
+            active_fetch_names: HashSet::new(),
             stdout: LineWriter::new(io::stdout()),
             stderr: LineWriter::new(io::stderr()),
         }
@@ -64,20 +93,21 @@ impl ConsoleOutput {
     }
 
     fn handle(&mut self, event: ActivityEvent) {
+        use ActivityLevel::{Debug, Info};
         match event {
             ActivityEvent::Build(Build::Start { id, name, .. }) => {
-                self.start(id, format!("Building {name}"));
+                self.begin(id, format!("Building {name}"), Info, Info);
             }
-            ActivityEvent::Build(Build::Complete { id, outcome, .. }) => self.complete(id, outcome),
-            ActivityEvent::Build(Build::Log { line, is_error, .. }) => self.log(&line, is_error),
+            ActivityEvent::Build(Build::Complete { id, outcome, .. }) => self.end(id, outcome),
+            ActivityEvent::Build(Build::Log {
+                id, line, is_error, ..
+            }) => self.log(id, &line, is_error),
             ActivityEvent::Build(_) => {}
 
             ActivityEvent::Fetch(Fetch::Start { id, kind, name, .. }) => {
-                // Drop noise: Nix emits Query alongside a Download for each .narinfo lookup
-                // and emits a separate CopyPath Download that duplicates the Substitute
-                // Download for the same store path. The Query and the .narinfo Download
-                // pair to the same operation; the second same-named Download is the wrapper
-                // around the file transfer.
+                // Nix emits Query alongside a Download for each .narinfo lookup
+                // and a separate CopyPath Download that duplicates the
+                // Substitute Download for the same store path.
                 if kind == FetchKind::Query
                     || (kind == FetchKind::Download && name.ends_with(".narinfo"))
                 {
@@ -89,160 +119,110 @@ impl ConsoleOutput {
                     FetchKind::Copy => format!("Copying {name}"),
                     FetchKind::Query => return,
                 };
-                if self.entry_name_active(&display) {
+                if !self.active_fetch_names.insert(display.clone()) {
                     return;
                 }
-                self.start(id, display);
+                self.begin(id, display, Info, Info);
             }
-            ActivityEvent::Fetch(Fetch::Complete { id, outcome, .. }) => self.complete(id, outcome),
+            ActivityEvent::Fetch(Fetch::Complete { id, outcome, .. }) => {
+                let Some(name) = self.entries.get(&id).map(|e| e.name.clone()) else {
+                    return;
+                };
+                self.active_fetch_names.remove(&name);
+                self.end(id, outcome);
+            }
             ActivityEvent::Fetch(_) => {}
 
             ActivityEvent::Evaluate(Evaluate::Start {
                 id, name, level, ..
-            }) => self.start_gated(id, name, level),
+            }) => self.begin(id, name, level, Info),
             ActivityEvent::Evaluate(Evaluate::Complete { id, outcome, .. }) => {
-                self.complete(id, outcome)
+                self.end(id, outcome)
             }
             ActivityEvent::Evaluate(_) => {}
 
+            // Tasks announce their full hierarchy before any start, so we
+            // cache names here and emit `begin` lazily on `Task::Start`.
             ActivityEvent::Task(Task::Hierarchy { tasks, .. }) => {
                 for t in tasks {
-                    self.entries.insert(
+                    self.pending_tasks.insert(
                         t.id,
-                        Entry {
+                        PendingTask {
                             name: format!("Running {}", t.name),
-                            start: Instant::now(),
-                            show_log: t.show_output,
+                            log_level: if t.show_output { Info } else { Debug },
                         },
                     );
                 }
             }
             ActivityEvent::Task(Task::Start { id, .. }) => {
-                if !self.show_at(ActivityLevel::Info) {
-                    return;
-                }
-                if let Some(e) = self.entries.get_mut(&id) {
-                    e.start = Instant::now();
-                    let _ = writeln!(self.stderr, "{} {}", style("•").blue(), e.name);
+                if let Some(p) = self.pending_tasks.remove(&id) {
+                    self.begin(id, p.name, Info, p.log_level);
                 }
             }
-            ActivityEvent::Task(Task::Complete { id, outcome, .. }) => self.complete(id, outcome),
+            ActivityEvent::Task(Task::Complete { id, outcome, .. }) => self.end(id, outcome),
             ActivityEvent::Task(Task::Log {
                 id, line, is_error, ..
-            }) => {
-                let show = match self.verbosity {
-                    VerbosityLevel::Quiet => false,
-                    VerbosityLevel::Verbose => true,
-                    VerbosityLevel::Normal => self.entries.get(&id).is_some_and(|e| e.show_log),
-                };
-                if show {
-                    let name = self
-                        .entries
-                        .get(&id)
-                        .map(|e| e.name.strip_prefix("Running ").unwrap_or(&e.name))
-                        .unwrap_or("?");
-                    let prefix = if is_error { "!" } else { " " };
-                    let _ = writeln!(self.stderr, "[{name}]{prefix} {line}");
-                }
-            }
+            }) => self.log(id, &line, is_error),
             ActivityEvent::Task(Task::Progress { .. }) => {}
 
-            // Command activities wrap the actual shell invocation inside a task — their
-            // parent task already prints a user-facing line, so suppress the wrapper itself
-            // unless verbose. Logs from the wrapped command still flow through.
+            // Commands wrap the actual shell invocation inside a task; the
+            // parent task already prints a user-facing line, so the wrapper
+            // sits at Debug. Logs from the wrapped command still flow at Info.
             ActivityEvent::Command(Command::Start { id, name, .. }) => {
-                if self.verbosity == VerbosityLevel::Verbose {
-                    self.start(id, name);
-                }
+                self.begin(id, name, Debug, Info);
             }
-            ActivityEvent::Command(Command::Complete { id, outcome, .. }) => {
-                self.complete(id, outcome)
-            }
-            ActivityEvent::Command(Command::Log { line, is_error, .. }) => {
-                self.log(&line, is_error)
-            }
+            ActivityEvent::Command(Command::Complete { id, outcome, .. }) => self.end(id, outcome),
+            ActivityEvent::Command(Command::Log {
+                id, line, is_error, ..
+            }) => self.log(id, &line, is_error),
 
             ActivityEvent::Process(Process::Start {
                 id, name, level, ..
-            }) => {
-                if self.show_at(level) {
-                    let _ = writeln!(self.stderr, "{} {}", style("•").blue(), name);
-                    self.entries.insert(
-                        id,
-                        Entry {
-                            name,
-                            start: Instant::now(),
-                            show_log: true,
-                        },
-                    );
-                }
-            }
-            ActivityEvent::Process(Process::Complete { id, outcome, .. }) => {
-                self.complete(id, outcome)
-            }
-            ActivityEvent::Process(Process::Log { line, is_error, .. }) => {
-                self.log(&line, is_error)
-            }
+            }) => self.begin(id, name, level, Info),
+            ActivityEvent::Process(Process::Complete { id, outcome, .. }) => self.end(id, outcome),
+            ActivityEvent::Process(Process::Log {
+                id, line, is_error, ..
+            }) => self.log(id, &line, is_error),
             ActivityEvent::Process(Process::Status { .. }) => {}
 
             ActivityEvent::Operation(Operation::Start {
                 id, name, level, ..
-            }) => self.start_gated(id, name, level),
+            }) => self.begin(id, name, level, Info),
             ActivityEvent::Operation(Operation::Complete { id, outcome, .. }) => {
-                self.complete(id, outcome)
+                self.end(id, outcome)
             }
             ActivityEvent::Operation(_) => {}
 
-            ActivityEvent::Message(msg) => {
-                if self.show_at(msg.level) {
-                    let prefix = match msg.level {
-                        ActivityLevel::Error => style("✖").red(),
-                        ActivityLevel::Warn => style("•").yellow(),
-                        _ => style("•").blue(),
-                    };
-                    let _ = writeln!(self.stderr, "{prefix} {}", msg.text);
-                }
-            }
+            ActivityEvent::Message(msg) => self.message(msg.level, &msg.text),
             ActivityEvent::SetExpected(_) | ActivityEvent::Shell(_) => {}
         }
     }
 
-    fn show_at(&self, level: ActivityLevel) -> bool {
-        match self.verbosity {
-            VerbosityLevel::Quiet => level <= ActivityLevel::Error,
-            VerbosityLevel::Normal => level <= ActivityLevel::Info,
-            VerbosityLevel::Verbose => level <= ActivityLevel::Debug,
-        }
-    }
-
-    fn entry_name_active(&self, name: &str) -> bool {
-        self.entries.values().any(|e| e.name == name)
-    }
-
-    fn start(&mut self, id: u64, name: String) {
-        if self.verbosity == VerbosityLevel::Quiet {
-            return;
-        }
-        let _ = writeln!(self.stderr, "{} {}", style("•").blue(), name);
-        self.entries.insert(
-            id,
-            Entry {
-                name,
-                start: Instant::now(),
-                show_log: false,
-            },
+    fn begin(&mut self, id: u64, name: String, level: ActivityLevel, log_level: ActivityLevel) {
+        let entry = Entry {
+            name,
+            start: Instant::now(),
+            level,
+            log_level,
+        };
+        self.write(
+            level,
+            Sink::Stderr,
+            format_args!("{} {}", style("•").blue(), entry.name),
         );
+        self.entries.insert(id, entry);
     }
 
-    fn start_gated(&mut self, id: u64, name: String, level: ActivityLevel) {
-        if self.show_at(level) {
-            self.start(id, name);
-        }
-    }
-
-    fn complete(&mut self, id: u64, outcome: ActivityOutcome) {
+    fn end(&mut self, id: u64, outcome: ActivityOutcome) {
         let Some(entry) = self.entries.remove(&id) else {
             return;
+        };
+        // Failures escalate to Error so they bubble through quiet, even if
+        // the activity itself was at Debug (e.g. a Command wrapper).
+        let level = if outcome.is_error() {
+            ActivityLevel::Error
+        } else {
+            entry.level
         };
         let mark = match outcome {
             ActivityOutcome::Success => style("✓").green(),
@@ -251,22 +231,56 @@ impl ConsoleOutput {
             ActivityOutcome::Failed | ActivityOutcome::DependencyFailed => style("✖").red(),
         };
         let duration = HumanReadableDuration(entry.start.elapsed());
-        let _ = writeln!(
-            self.stderr,
-            "{mark} {} in {duration}{}",
-            entry.name,
-            outcome.display_suffix()
+        self.write(
+            level,
+            Sink::Stderr,
+            format_args!(
+                "{mark} {} in {duration}{}",
+                entry.name,
+                outcome.display_suffix()
+            ),
         );
     }
 
-    fn log(&mut self, line: &str, is_error: bool) {
-        if self.verbosity == VerbosityLevel::Quiet {
+    fn log(&mut self, id: u64, line: &str, is_error: bool) {
+        let level = if is_error {
+            ActivityLevel::Error
+        } else {
+            self.entries
+                .get(&id)
+                .map(|e| e.log_level)
+                .unwrap_or(ActivityLevel::Info)
+        };
+        let sink = if is_error { Sink::Stderr } else { Sink::Stdout };
+        self.write(level, sink, format_args!("{line}"));
+    }
+
+    fn message(&mut self, level: ActivityLevel, text: &str) {
+        let prefix = match level {
+            ActivityLevel::Error => style("✖").red(),
+            ActivityLevel::Warn => style("•").yellow(),
+            _ => style("•").blue(),
+        };
+        self.write(level, Sink::Stderr, format_args!("{prefix} {text}"));
+    }
+
+    /// **The single output gate.** Every byte this module emits goes through
+    /// here. The verbosity check lives nowhere else.
+    fn write(&mut self, level: ActivityLevel, sink: Sink, args: fmt::Arguments) {
+        if !self.show_at(level) {
             return;
         }
-        let _ = if is_error {
-            writeln!(self.stderr, "{line}")
-        } else {
-            writeln!(self.stdout, "{line}")
+        let _ = match sink {
+            Sink::Stdout => writeln!(self.stdout, "{args}"),
+            Sink::Stderr => writeln!(self.stderr, "{args}"),
         };
+    }
+
+    fn show_at(&self, level: ActivityLevel) -> bool {
+        match self.verbosity {
+            VerbosityLevel::Quiet => level <= ActivityLevel::Error,
+            VerbosityLevel::Normal => level <= ActivityLevel::Info,
+            VerbosityLevel::Verbose => level <= ActivityLevel::Debug,
+        }
     }
 }
