@@ -7,7 +7,7 @@
 $env._DEVENV_HOOK_UNTRUSTED = ""
 
 $env.config = ($env.config | upsert hooks.env_change.PWD (
-    ($env.config | get -i hooks.env_change.PWD | default []) | append {||
+    ($env.config | get -o hooks.env_change.PWD | default []) | append {||
         # Inside devenv shell: exit when leaving the project directory
         if ("DEVENV_ROOT" in $env) {
             if not ($env.PWD == $env.DEVENV_ROOT or ($env.PWD | str starts-with ($env.DEVENV_ROOT + "/"))) {
@@ -18,7 +18,7 @@ $env.config = ($env.config | upsert hooks.env_change.PWD (
             return
         }
 
-        let last = ($env | get -i _DEVENV_HOOK_LAST_PROJECT | default "")
+        let last = ($env | get -o _DEVENV_HOOK_LAST_PROJECT | default "")
         let result = (^devenv hook-should-activate --last $last | complete)
 
         if ($result.stderr | str trim) != "" {
@@ -53,8 +53,8 @@ $env.config = ($env.config | upsert hooks.env_change.PWD (
 
 # Retry activation on each prompt for untrusted directories (after 'devenv allow')
 $env.config = ($env.config | upsert hooks.pre_prompt (
-    ($env.config | get -i hooks.pre_prompt | default []) | append {||
-        let untrusted = ($env | get -i _DEVENV_HOOK_UNTRUSTED | default "")
+    ($env.config | get -o hooks.pre_prompt | default []) | append {||
+        let untrusted = ($env | get -o _DEVENV_HOOK_UNTRUSTED | default "")
         if $untrusted == "" {
             return
         }
@@ -62,7 +62,7 @@ $env.config = ($env.config | upsert hooks.pre_prompt (
             return
         }
 
-        let last = ($env | get -i _DEVENV_HOOK_LAST_PROJECT | default "")
+        let last = ($env | get -o _DEVENV_HOOK_LAST_PROJECT | default "")
         let result = (^devenv hook-should-activate --last $last | complete)
 
         if $result.exit_code == 0 {

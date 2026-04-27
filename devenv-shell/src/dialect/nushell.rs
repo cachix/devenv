@@ -225,7 +225,7 @@ def --env __devenv_reload_apply [] {{
                     let vardef = ($trimmed | str substring 11..)
                     let eq_pos = ($vardef | str index-of "=")
                     if $eq_pos >= 0 {{
-                        let var_name = ($vardef | str substring ..$eq_pos)
+                        let var_name = ($vardef | str substring ..<$eq_pos)
                         let raw_value = ($vardef | str substring ($eq_pos + 1)..)
                         # Strip exactly one pair of surrounding double quotes,
                         # then unescape bash declare -x output (\" -> " and \\ -> \)
@@ -234,8 +234,10 @@ def --env __devenv_reload_apply [] {{
                         }} else {{
                             $raw_value
                         }}
-                        # Skip shell internal variables
-                        if $var_name not-in ["BASH" "BASHOPTS" "BASH_ARGC" "BASH_ARGV" "BASH_LINENO" "BASH_SOURCE" "BASH_VERSINFO" "BASH_VERSION" "SHELLOPTS" "SHLVL" "OLDPWD" "_" "_DEVENV_PATH"] {{
+                        # Skip shell internal variables and nushell-auto-managed vars
+                        # (PWD/FILE_PWD/CURRENT_FILE are set automatically by nushell and
+                        # reject manual assignment via load-env).
+                        if $var_name not-in ["BASH" "BASHOPTS" "BASH_ARGC" "BASH_ARGV" "BASH_LINENO" "BASH_SOURCE" "BASH_VERSINFO" "BASH_VERSION" "SHELLOPTS" "SHLVL" "PWD" "OLDPWD" "FILE_PWD" "CURRENT_FILE" "_" "_DEVENV_PATH"] {{
                             # PATH is a list in nushell; split colon-separated values
                             if $var_name == "PATH" {{
                                 $env.PATH = ($value | split row ":")
