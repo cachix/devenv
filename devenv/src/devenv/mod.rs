@@ -9,7 +9,7 @@ use devenv_activity::{
 };
 use devenv_cache_core::compute_string_hash;
 use devenv_core::{
-    Backend, Evaluator,
+    Backend, BuildOptions, Evaluator,
     bootstrap_args::BootstrapArgs,
     cachix::{CachixManager, CachixPaths},
     config::{Input, NixBackendType, NixpkgsConfig},
@@ -432,27 +432,16 @@ impl Devenv {
                     )?
                 };
 
-                let bootstrap_args = build_bootstrap_args_inline(
-                    &paths,
-                    &devenv_root,
-                    &devenv_dotfile,
-                    &devenv_tmp,
-                    &devenv_runtime,
-                    options.devenv_state.as_deref(),
-                    &options.inputs,
+                let bootstrap_args = Arc::new(build_bootstrap_args(
+                    &config,
                     &options.imports,
-                    &options.nixpkgs_config,
-                    &nix_settings,
-                    &shell_settings,
-                    &options.input_overrides,
+                    &shell_settings.profiles,
                     options.from_external,
                     options.require_version_match,
                     options.is_testing,
-                    options.git_root.as_deref(),
                     secretspec_cell.get(),
                     &fingerprint,
-                )?;
-                let bootstrap_args = Arc::new(bootstrap_args);
+                )?);
 
                 // Phase 2: long-lived backend.
                 let cnix = devenv_nix_backend::NixCBackend::new(
@@ -472,27 +461,16 @@ impl Devenv {
             }
             #[cfg(feature = "snix")]
             NixBackendType::Snix => {
-                let bootstrap_args = build_bootstrap_args_inline(
-                    &paths,
-                    &devenv_root,
-                    &devenv_dotfile,
-                    &devenv_tmp,
-                    &devenv_runtime,
-                    options.devenv_state.as_deref(),
-                    &options.inputs,
+                let bootstrap_args = Arc::new(build_bootstrap_args(
+                    &config,
                     &options.imports,
-                    &options.nixpkgs_config,
-                    &nix_settings,
-                    &shell_settings,
-                    &options.input_overrides,
+                    &shell_settings.profiles,
                     options.from_external,
                     options.require_version_match,
                     options.is_testing,
-                    options.git_root.as_deref(),
                     secretspec_cell.get(),
                     "",
-                )?;
-                let bootstrap_args = Arc::new(bootstrap_args);
+                )?);
 
                 let snix = devenv_snix_backend::SnixBackend::new(
                     nix_settings.clone(),
@@ -718,10 +696,7 @@ impl Devenv {
 
     /// Invalidate cached state for hot-reload.
     pub async fn invalidate_for_reload(&self) -> Result<()> {
-        if let Some(cnix) = self.cnix() {
-            cnix.invalidate_eval_state()?;
-        }
-        Ok(())
+        self.require_cnix()?.invalidate_eval_state()
     }
 
     pub async fn print_dev_env(&self, json: bool) -> Result<String> {
@@ -739,16 +714,12 @@ impl Devenv {
         cmd: &Option<String>,
         args: &[String],
     ) -> Result<process::Command> {
-        // Use cached DevEnv if available (set by up() Phase 1 or by an
-        // earlier `prepare_shell` call). Otherwise call
-        // `get_dev_environment` (which wraps with "Configuring shell")
-        // and seed the cache so subsequent callers reuse it instead of
-        // re-running the activity.
-        if self.dev_env_cache.get().is_none() {
-            let env = self.get_dev_environment(false).await?;
-            let _ = self.dev_env_cache.set(env);
-        }
-        let cached = self.dev_env_cache.get().expect("just set above");
+        // Reuse a DevEnv evaluated by `up()` phase 1 or an earlier
+        // `prepare_shell` so we don't re-run "Configuring shell".
+        let cached = self
+            .dev_env_cache
+            .get_or_try_init(|| self.get_dev_environment(false))
+            .await?;
         let output = &cached.output;
 
         let bash = self.get_bash_path().await?;
@@ -1036,7 +1007,7 @@ impl Devenv {
             self.backend
                 .build_devenv(
                     &["devenv.config.task.config"],
-                    devenv_core::BuildOptions {
+                    BuildOptions {
                         gc_root: Some(gc_root),
                     },
                 )
@@ -1368,7 +1339,7 @@ impl Devenv {
                     .backend()
                     .build_devenv(
                         &["devenv.config.test"],
-                        devenv_core::BuildOptions {
+                        BuildOptions {
                             gc_root: Some(gc_root),
                         },
                     )
@@ -1496,7 +1467,7 @@ impl Devenv {
             let attr_refs: Vec<&str> = full_attrs.iter().map(AsRef::as_ref).collect();
             let outputs = self
                 .backend
-                .build_devenv(&attr_refs, devenv_core::BuildOptions::default())
+                .build_devenv(&attr_refs, BuildOptions::default())
                 .await?;
             let paths: Vec<PathBuf> = outputs.into_iter().map(|p| p.0).collect();
 
@@ -1700,7 +1671,7 @@ impl Devenv {
                 .backend()
                 .build_devenv(
                     &["devenv.config.procfileScript"],
-                    devenv_core::BuildOptions {
+                    BuildOptions {
                         gc_root: Some(gc_root),
                     },
                 )
@@ -2430,27 +2401,19 @@ fn format_tasks_tree(tasks: &[tasks::TaskConfig]) -> String {
     output
 }
 
-#[allow(clippy::too_many_arguments)]
-fn build_bootstrap_args_inline(
-    _paths: &DevenvPaths,
-    devenv_root: &Path,
-    devenv_dotfile: &Path,
-    devenv_tmp: &Path,
-    devenv_runtime: &Path,
-    devenv_state: Option<&Path>,
-    inputs: &BTreeMap<String, Input>,
+fn build_bootstrap_args(
+    config: &NixConfig,
     imports: &[String],
-    nixpkgs_config: &NixpkgsConfig,
-    nix_settings: &NixSettings,
-    shell_settings: &ShellSettings,
-    input_overrides: &InputOverrides,
+    active_profiles: &[String],
     from_external: bool,
     require_version_match: bool,
     is_testing: bool,
-    git_root: Option<&Path>,
     secretspec: Option<&ResolvedSecrets>,
     lock_fingerprint: &str,
 ) -> Result<BootstrapArgs> {
+    let paths = &config.paths;
+    let nix = &config.nix;
+
     let hostname = hostname::get()
         .ok()
         .map(|h| h.to_string_lossy().into_owned());
@@ -2458,9 +2421,10 @@ fn build_bootstrap_args_inline(
 
     let dotfile_relative_path = PathBuf::from(format!(
         "./{}",
-        devenv_dotfile
+        paths
+            .dotfile
             .file_name()
-            .expect("devenv_dotfile has filename")
+            .expect("dotfile has filename")
             .to_string_lossy()
     ));
 
@@ -2470,35 +2434,37 @@ fn build_bootstrap_args_inline(
         secrets: resolved.secrets.clone().into_iter().collect(),
     });
 
-    let cli_options = CliOptionsConfig(parse_cli_options(&input_overrides.nix_module_options)?);
+    let cli_options = CliOptionsConfig(parse_cli_options(
+        &config.input_overrides.nix_module_options,
+    )?);
 
     let args = NixArgs {
         version: clap::crate_version!(),
         is_development_version: crate::is_development_version(),
         require_version_match,
-        system: &nix_settings.system,
-        devenv_root,
+        system: &nix.system,
+        devenv_root: &paths.root,
         skip_local_src: from_external
-            || (!input_overrides.nix_module_options.is_empty()
-                && !devenv_root.join("devenv.nix").exists()),
-        devenv_dotfile,
+            || (!config.input_overrides.nix_module_options.is_empty()
+                && !paths.root.join("devenv.nix").exists()),
+        devenv_dotfile: &paths.dotfile,
         devenv_dotfile_path: &dotfile_relative_path,
-        devenv_tmpdir: devenv_tmp,
-        devenv_runtime,
+        devenv_tmpdir: &paths.tmp,
+        devenv_runtime: &paths.runtime,
         devenv_istesting: is_testing,
         devenv_direnvrc_latest_version: *DIRENVRC_VERSION,
-        active_profiles: &shell_settings.profiles,
+        active_profiles,
         cli_options,
         hostname: hostname.as_deref(),
         username: username.as_deref(),
-        git_root,
+        git_root: paths.git_root.as_deref(),
         secretspec: secretspec_data.as_ref(),
-        devenv_inputs: inputs,
+        devenv_inputs: &config.inputs,
         devenv_imports: imports,
-        impure: nix_settings.impure,
-        nixpkgs_config: nixpkgs_config.clone(),
+        impure: nix.impure,
+        nixpkgs_config: config.nixpkgs.clone(),
         lock_fingerprint,
-        devenv_state,
+        devenv_state: paths.state.as_deref(),
     };
 
     BootstrapArgs::from_serializable(&args)

@@ -24,8 +24,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel, activity, start};
+use devenv_core::BuildOptions;
 use devenv_core::cachix::{CachixCacheInfo, CachixManager};
-use devenv_core::evaluator::{BuildOptions, Evaluator};
+use devenv_core::evaluator::Evaluator;
 use devenv_core::realized::RealizedPathsObserver;
 use devenv_core::settings::NixSettings;
 use devenv_nix_backend::NixCBackend;

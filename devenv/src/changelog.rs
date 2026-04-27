@@ -1,5 +1,5 @@
 use devenv_cache_core::compute_string_hash;
-use devenv_core::{Backend, DevenvPaths, Evaluator};
+use devenv_core::{Backend, BuildOptions, DevenvPaths, Evaluator};
 use miette::{IntoDiagnostic, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -96,8 +96,6 @@ impl<'a> Changelog<'a> {
     }
 
     async fn load_changelogs(&self) -> Result<Vec<ChangelogEntry>> {
-        use devenv_core::BuildOptions;
-
         let gc_root = self.dot_gc.join("changelog-json");
         let outputs = self
             .backend
