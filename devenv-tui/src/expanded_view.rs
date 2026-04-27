@@ -84,6 +84,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let ui_state = hooks.use_context::<Arc<RwLock<UiState>>>();
     let activity_id = *hooks.use_context::<u64>();
     let notify = hooks.use_context::<Arc<Notify>>();
+    let render_shutdown = hooks.use_context::<crate::app::RenderShutdown>().0.clone();
     let shutdown = hooks.use_context::<Arc<Shutdown>>();
     let command_tx = hooks.use_context::<Option<mpsc::Sender<ProcessCommand>>>();
     let (width, height) = hooks.use_terminal_size();
@@ -101,9 +102,10 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let redraw = hooks.use_state(|| 0u64);
     hooks.use_future({
         let notify = notify.clone();
+        let render_shutdown = render_shutdown.clone();
         let max_fps = config.max_fps;
         async move {
-            crate::throttled_notify_loop(notify, redraw, max_fps).await;
+            crate::throttled_notify_loop(notify, render_shutdown, redraw, max_fps).await;
         }
     });
 

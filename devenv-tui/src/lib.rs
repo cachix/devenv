@@ -37,7 +37,16 @@ pub use devenv_shell::{
 /// only wakes tasks that are actively waiting on `notified()`. If a notification arrives
 /// while we're in the throttle sleep, it's lost. The timeout ensures we periodically
 /// check for state changes (like the final Done event) even if we missed a notification.
-pub async fn throttled_notify_loop(notify: Arc<Notify>, mut redraw: State<u64>, max_fps: u64) {
+///
+/// The `shutdown` notify bypasses the throttle: when fired, the loop emits one final
+/// redraw and returns immediately, so cooperative-exit flags are observed without
+/// waiting up to a full throttle period.
+pub async fn throttled_notify_loop(
+    notify: Arc<Notify>,
+    shutdown: Arc<Notify>,
+    mut redraw: State<u64>,
+    max_fps: u64,
+) {
     let throttle_duration = Duration::from_millis(1000 / max_fps);
 
     loop {
@@ -46,12 +55,27 @@ pub async fn throttled_notify_loop(notify: Arc<Notify>, mut redraw: State<u64>, 
         tokio::select! {
             _ = notify.notified() => {}
             _ = tokio::time::sleep(throttle_duration) => {}
+            _ = shutdown.notified() => {
+                if let Some(val) = redraw.try_get() {
+                    redraw.set(val.wrapping_add(1));
+                }
+                return;
+            }
         }
         let Some(val) = redraw.try_get() else {
             break;
         };
         redraw.set(val.wrapping_add(1));
-        // Throttle: minimum time between renders to cap FPS
-        tokio::time::sleep(throttle_duration).await;
+        // Throttle: minimum time between renders to cap FPS.
+        // Shutdown also bypasses this sleep so the final render fires promptly.
+        tokio::select! {
+            _ = tokio::time::sleep(throttle_duration) => {}
+            _ = shutdown.notified() => {
+                if let Some(val) = redraw.try_get() {
+                    redraw.set(val.wrapping_add(1));
+                }
+                return;
+            }
+        }
     }
 }

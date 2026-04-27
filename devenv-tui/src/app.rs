@@ -18,6 +18,12 @@ use tokio::sync::{Notify, mpsc};
 use tokio_shutdown::Shutdown;
 use tracing::debug;
 
+/// Newtype around an `Arc<Notify>` used to bypass the render throttle on
+/// shutdown. Distinct from the regular activity-change notify so iocraft's
+/// type-keyed context lookup can resolve them independently.
+#[derive(Clone)]
+pub struct RenderShutdown(pub Arc<Notify>);
+
 /// Cooperative exit flag for TUI shutdown.
 ///
 /// The event processor sets this when the backend is done, and TUI components
@@ -73,7 +79,7 @@ impl Default for TuiConfig {
             max_log_messages: 1000,
             max_log_lines_per_build: 1000,
             log_viewport_collapsed: 10,
-            max_fps: 30,
+            max_fps: 60,
             filter_level: ActivityLevel::Info,
         }
     }
@@ -157,6 +163,10 @@ impl TuiApp {
         let config = Arc::new(self.config);
         let activity_model = Arc::new(RwLock::new(ActivityModel::with_config(config.clone())));
         let notify = Arc::new(Notify::new());
+        // Separate notify for shutdown — bypasses render throttle so the
+        // cooperative exit flag is observed promptly instead of waiting for
+        // the next throttle tick (which can lose intermediate notifies).
+        let render_shutdown = Arc::new(Notify::new());
         let shutdown = self.shutdown;
         let command_tx = self.command_tx;
         let shutdown_on_backend_done = self.shutdown_on_backend_done;
@@ -169,6 +179,7 @@ impl TuiApp {
         let event_processor_handle = tokio::spawn({
             let activity_model = activity_model.clone();
             let notify = notify.clone();
+            let render_shutdown = render_shutdown.clone();
             let shutdown = shutdown.clone();
             let exit_flag = exit_flag.clone();
             let event_batch_size = config.event_batch_size;
@@ -185,6 +196,7 @@ impl TuiApp {
                                 // Channel closed unexpectedly
                                 exit_flag.set();
                                 notify.notify_waiters();
+                                render_shutdown.notify_waiters();
                                 if shutdown_on_backend_done {
                                     shutdown.shutdown();
                                 }
@@ -226,6 +238,9 @@ impl TuiApp {
                             // notify so the triggered re-render sees the flag.
                             exit_flag.set();
                             notify.notify_waiters();
+                            // Bypass render throttle so the exit flag is observed
+                            // on the next frame instead of after another throttle tick.
+                            render_shutdown.notify_waiters();
 
                             if shutdown_on_backend_done {
                                 shutdown.shutdown();
@@ -255,6 +270,7 @@ impl TuiApp {
                 activity_model.clone(),
                 ui_state.clone(),
                 notify.clone(),
+                render_shutdown.clone(),
                 shutdown.clone(),
                 config.clone(),
                 command_tx.clone(),
@@ -529,6 +545,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let activity_model = hooks.use_context::<Arc<RwLock<ActivityModel>>>();
     let ui_state = hooks.use_context::<Arc<RwLock<UiState>>>();
     let notify = hooks.use_context::<Arc<Notify>>();
+    let render_shutdown = hooks.use_context::<RenderShutdown>().0.clone();
     let (terminal_width, terminal_height) = hooks.use_terminal_size();
     let mut should_exit = hooks.use_state(|| false);
     let shutdown = hooks.use_context::<Arc<Shutdown>>();
@@ -544,9 +561,10 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let redraw = hooks.use_state(|| 0u64);
     hooks.use_future({
         let notify = notify.clone();
+        let render_shutdown = render_shutdown.clone();
         let max_fps = config.max_fps;
         async move {
-            crate::throttled_notify_loop(notify, redraw, max_fps).await;
+            crate::throttled_notify_loop(notify, render_shutdown, redraw, max_fps).await;
         }
     });
 
@@ -739,6 +757,7 @@ async fn run_view(
     activity_model: Arc<RwLock<ActivityModel>>,
     ui_state: Arc<RwLock<UiState>>,
     notify: Arc<Notify>,
+    render_shutdown: Arc<Notify>,
     shutdown: Arc<Shutdown>,
     config: Arc<TuiConfig>,
     command_tx: Option<mpsc::Sender<ProcessCommand>>,
@@ -767,11 +786,13 @@ async fn run_view(
                 ContextProvider(value: Context::owned(config.clone())) {
                     ContextProvider(value: Context::owned(shutdown.clone())) {
                         ContextProvider(value: Context::owned(notify.clone())) {
-                            ContextProvider(value: Context::owned(activity_model.clone())) {
-                                ContextProvider(value: Context::owned(ui_state.clone())) {
-                                    ContextProvider(value: Context::owned(command_tx.clone())) {
-                                        ContextProvider(value: Context::owned(exit_flag.clone())) {
-                                            MainView
+                            ContextProvider(value: Context::owned(RenderShutdown(render_shutdown.clone()))) {
+                                ContextProvider(value: Context::owned(activity_model.clone())) {
+                                    ContextProvider(value: Context::owned(ui_state.clone())) {
+                                        ContextProvider(value: Context::owned(command_tx.clone())) {
+                                            ContextProvider(value: Context::owned(exit_flag.clone())) {
+                                                MainView
+                                            }
                                         }
                                     }
                                 }
@@ -806,12 +827,14 @@ async fn run_view(
                 ContextProvider(value: Context::owned(config.clone())) {
                     ContextProvider(value: Context::owned(shutdown.clone())) {
                         ContextProvider(value: Context::owned(notify.clone())) {
-                            ContextProvider(value: Context::owned(activity_model.clone())) {
-                                ContextProvider(value: Context::owned(ui_state.clone())) {
-                                    ContextProvider(value: Context::owned(command_tx.clone())) {
-                                        ContextProvider(value: Context::owned(exit_flag.clone())) {
-                                            ContextProvider(value: Context::owned(activity_id)) {
-                                                ExpandedLogView
+                            ContextProvider(value: Context::owned(RenderShutdown(render_shutdown.clone()))) {
+                                ContextProvider(value: Context::owned(activity_model.clone())) {
+                                    ContextProvider(value: Context::owned(ui_state.clone())) {
+                                        ContextProvider(value: Context::owned(command_tx.clone())) {
+                                            ContextProvider(value: Context::owned(exit_flag.clone())) {
+                                                ContextProvider(value: Context::owned(activity_id)) {
+                                                    ExpandedLogView
+                                                }
                                             }
                                         }
                                     }
