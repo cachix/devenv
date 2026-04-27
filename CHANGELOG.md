@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed TUI freezing while cachix finishes uploading on shell entry. Push progress is now visible during cleanup.
 - Fixed cachix push progress stuck at `0/N`. Already-cached paths now count toward progress.
 - Fixed tracked path log lines showing as dot-prefixed rows under "Evaluating shell" in the TUI instead of attaching to the eval activity.
 - Fixed "suspicious ownership" errors when using Nix installed in single-user mode. Nix requires read-only group permissions on outputs ([#2751](https://github.com/cachix/devenv/issues/2751)).

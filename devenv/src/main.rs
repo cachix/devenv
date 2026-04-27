@@ -386,11 +386,9 @@ fn run(launch: LaunchConfig) -> Result<()> {
                 )
                 .await;
 
-                // Trigger shutdown to start cleanup (if not already triggered by signal)
-                shutdown_clone.shutdown();
-
-                // Wait for cleanup to complete (e.g., Nix interrupt, cachix finalization)
-                shutdown_clone.wait_for_shutdown_complete().await;
+                // Fallback for paths that didn't run cleanup themselves
+                // (PTY shell, REPL). No-op when run_backend already did it.
+                shutdown_clone.shutdown_and_wait().await;
 
                 output
             })
@@ -738,6 +736,10 @@ async fn run_backend(
         config_strict_ports,
     )
     .await;
+
+    // Drain cleanup (e.g. cachix push finalization) while the TUI is
+    // still rendering, so its activity stays visible to the user.
+    shutdown.shutdown_and_wait().await;
 
     // Notify TUI before debugger check, so TUI shuts down before debugger takes the terminal.
     drop(backend_done_guard);

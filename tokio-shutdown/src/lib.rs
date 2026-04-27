@@ -191,6 +191,15 @@ impl Shutdown {
         }
     }
 
+    /// Trigger shutdown and wait for cleanup to finish. Idempotent: safe
+    /// to call multiple times — the second call is a no-op (the
+    /// cancellation token is already cancelled and the cleanup receiver
+    /// has been consumed).
+    pub async fn shutdown_and_wait(&self) {
+        self.shutdown();
+        self.wait_for_shutdown_complete().await;
+    }
+
     /// Check if shutdown has been triggered
     pub fn is_cancelled(&self) -> bool {
         self.token.is_cancelled()
