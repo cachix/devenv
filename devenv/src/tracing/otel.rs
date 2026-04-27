@@ -66,7 +66,6 @@ pub(super) fn init_tracing_unified(
 
     let mut layers: Vec<Box<dyn Layer<_> + Send + Sync>> = Vec::new();
 
-    // CLI layer
     if let Some(cli_layer) = build_cli_layer(level, cli_output) {
         layers.push(cli_layer);
     }

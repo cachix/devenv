@@ -33,7 +33,7 @@ pub fn next_id() -> u64 {
 
 /// Trait implemented by all activity builders.
 pub trait ActivityStart: Sized {
-    /// The human-readable activity name (used for `otel.name` and `devenv.user_message`).
+    /// The human-readable activity name (used for `otel.name` and `devenv.ui.message`).
     fn activity_name(&self) -> &str;
 
     /// The activity kind (e.g. `"build"`, `"fetch"`, `"operation"`).
@@ -180,7 +180,7 @@ macro_rules! __create_activity_span {
         const FIELD_NAMES: &[&str] = &[
             "activity_id",
             "otel.name",
-            "devenv.user_message",
+            "devenv.ui.message",
             "devenv.activity.kind",
             "devenv.outcome",
             "otel.status_code",
@@ -239,7 +239,7 @@ macro_rules! __create_activity_span {
                     &fs.value_set(&[
                         (&fs.field("activity_id").unwrap(), Some(&$id as &dyn tracing::field::Value)),
                         (&fs.field("otel.name").unwrap(), Some(&__otel_name as &dyn tracing::field::Value)),
-                        (&fs.field("devenv.user_message").unwrap(), Some(&__name as &dyn tracing::field::Value)),
+                        (&fs.field("devenv.ui.message").unwrap(), Some(&__name as &dyn tracing::field::Value)),
                         (&fs.field("devenv.activity.kind").unwrap(), Some(&__kind as &dyn tracing::field::Value)),
                         $($( (&fs.field(stringify!($($k).+)).unwrap(), Some(&$v as &dyn tracing::field::Value)) ),+ )?
                     ]),

@@ -138,8 +138,11 @@ pub fn init_tracing_default() -> TracingGuard {
 
 /// Initialize tracing with multiple output specs.
 ///
-/// When `cli_output` is true, a human-readable stderr layer is added for
-/// direct terminal output (used when no TUI is active).
+/// When `cli_output` is true, a stderr layer renders plain `tracing` events
+/// (`info!`/`warn!`/`error!`). Activity start/complete output is produced
+/// separately by the activity channel consumers ([`crate::console::ConsoleOutput`]
+/// or the TUI), not by this layer stack — set `cli_output` to false when those
+/// consumers own the terminal.
 ///
 /// Each `TraceOutputSpec` adds an export layer with its own format and destination.
 /// Multiple outputs can be active simultaneously (e.g. pretty to stderr + JSON to file).
@@ -156,7 +159,9 @@ pub fn init_tracing(level: Level, specs: &[TraceOutputSpec], cli_output: bool) -
     init_tracing_local(level, specs, cli_output)
 }
 
-/// Build a CLI output layer (human-readable stderr for direct terminal output).
+/// Renders plain `tracing` events (info!/warn!/error!) to stderr.
+/// Activity start/complete output is produced by the activity channel
+/// consumers, not here.
 pub(crate) fn build_cli_layer<S>(
     level: Level,
     cli_output: bool,
@@ -221,9 +226,9 @@ fn init_tracing_local(level: Level, specs: &[TraceOutputSpec], cli_output: bool)
         }
     }
 
-    // DevenvLayer must be outermost: its on_new_span/on_close emit events via
-    // ctx.event(), which only dispatches to layers *below* it. Placing it last
-    // ensures all export layers receive those events.
+    // DevenvLayer must be outermost: its on_new_span/on_close emit synthetic
+    // events via ctx.event(), which only dispatch to layers *below* it. Placing
+    // it last ensures all export layers receive those events.
     let _ = Registry::default()
         .with(create_filter(level))
         .with(SpanIdLayer)

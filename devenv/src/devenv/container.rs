@@ -4,7 +4,7 @@ use devenv_core::BuildOptions;
 use miette::{Result, bail, miette};
 
 use super::tasks::{self, Tasks};
-use super::{Devenv, ShellCommand, run_tasks_with_ui};
+use super::{Devenv, ShellCommand, run_tasks};
 
 fn sanitize_container_name(name: &str) -> String {
     name.chars()
@@ -50,7 +50,6 @@ impl Devenv {
         copy_args: &[String],
         registry: Option<&str>,
         verbosity: tasks::VerbosityLevel,
-        tui: bool,
     ) -> Result<()> {
         let spec = self.container_build(name).await?;
 
@@ -100,7 +99,7 @@ impl Devenv {
             .build()
             .await?;
 
-        let (status, _outputs) = run_tasks_with_ui(tasks, verbosity, tui, true).await?;
+        let (status, _outputs) = run_tasks(tasks, true).await?;
 
         if status.has_failures() {
             bail!("Failed to copy container");
@@ -114,9 +113,8 @@ impl Devenv {
         name: &str,
         copy_args: &[String],
         verbosity: tasks::VerbosityLevel,
-        tui: bool,
     ) -> Result<ShellCommand> {
-        self.container_copy(name, copy_args, Some("docker-daemon:"), verbosity, tui)
+        self.container_copy(name, copy_args, Some("docker-daemon:"), verbosity)
             .await?;
 
         let sanitized_name = sanitize_container_name(name);

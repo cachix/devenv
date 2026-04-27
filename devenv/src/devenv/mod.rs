@@ -32,7 +32,7 @@ use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
 use std::sync::Arc;
-use tasks::{Tasks, TasksUi};
+use tasks::Tasks;
 use tokio::fs;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
@@ -1040,7 +1040,6 @@ impl Devenv {
         cli_inputs: Vec<String>,
         input_json: Option<String>,
         verbosity: tasks::VerbosityLevel,
-        tui: bool,
     ) -> Result<String> {
         self.setup_cachix().await?;
         self.reserve_running_ports().await;
@@ -1085,7 +1084,7 @@ impl Devenv {
             .build()
             .await?;
 
-        let (status, outputs) = run_tasks_with_ui(tasks, verbosity, tui, false).await?;
+        let (status, outputs) = run_tasks(tasks, false).await?;
 
         if status.has_failures() {
             miette::bail!("Some tasks failed");
@@ -1105,7 +1104,6 @@ impl Devenv {
     }
 
     /// Run enterShell tasks and return env vars exported by tasks (e.g., PATH with venv/bin).
-    /// This runs tasks via Rust (not bash hook) to enable TUI progress reporting.
     /// Task failures are logged as warnings but don't prevent shell entry.
     ///
     /// If `pre_captured_envs` is provided (e.g. from test() which already captured envs),
@@ -1114,7 +1112,6 @@ impl Devenv {
         &self,
         pre_captured_envs: Option<HashMap<String, String>>,
         verbosity: tasks::VerbosityLevel,
-        tui: bool,
     ) -> Result<(BTreeMap<String, String>, Vec<String>)> {
         let envs = match pre_captured_envs {
             Some(e) => e,
@@ -1123,14 +1120,12 @@ impl Devenv {
 
         let task_configs = self.load_tasks().await?;
         // Shell entry proceeds even if some tasks fail (matches interactive reload behavior).
-        // Task failures are shown in the TUI/UI output, no need to bail here.
         let (_status, exports, messages) = self
             .run_tasks_with_roots(
                 vec!["devenv:enterShell".to_string()],
                 task_configs,
                 envs,
                 verbosity,
-                tui,
             )
             .await?;
         Ok((exports, messages))
@@ -1143,7 +1138,6 @@ impl Devenv {
         task_configs: Vec<tasks::TaskConfig>,
         envs: HashMap<String, String>,
         verbosity: tasks::VerbosityLevel,
-        tui: bool,
     ) -> Result<(tasks::TasksStatus, BTreeMap<String, String>, Vec<String>)> {
         let bash = self.get_bash_path().await?;
         let config = tasks::Config {
@@ -1162,7 +1156,7 @@ impl Devenv {
             .build()
             .await?;
 
-        let (status, outputs) = run_tasks_with_ui(tasks, verbosity, tui, true).await?;
+        let (status, outputs) = run_tasks(tasks, true).await?;
 
         let exports = outputs.collect_env_exports();
         let messages = outputs.collect_messages();
@@ -1296,7 +1290,7 @@ impl Devenv {
         .await
     }
 
-    pub async fn test(&self, verbosity: tasks::VerbosityLevel, tui: bool) -> Result<()> {
+    pub async fn test(&self, verbosity: tasks::VerbosityLevel) -> Result<()> {
         self.setup_cachix().await?;
         // Enable port allocation before assemble so that ports resolved
         // during Nix evaluation (e.g. in enterTest) are properly allocated.
@@ -1320,7 +1314,6 @@ impl Devenv {
                     task_configs,
                     envs.clone(),
                     verbosity,
-                    tui,
                 )
                 .await?;
             if status.has_failures() {
@@ -1382,7 +1375,7 @@ impl Devenv {
             message(ActivityLevel::Error, "Tests failed :(");
             bail!("Tests failed");
         } else {
-            info!(devenv.is_user_message = true, "Tests passed :)");
+            message(ActivityLevel::Info, "Tests passed :)");
             Ok(())
         }
     }
@@ -1507,7 +1500,6 @@ impl Devenv {
         task_mode: devenv_tasks::RunMode,
         options: ProcessOptions,
         verbosity: tasks::VerbosityLevel,
-        tui: bool,
     ) -> Result<RunMode> {
         self.setup_cachix().await?;
         // Set strict port mode before backend init triggers port allocation.
@@ -1534,7 +1526,6 @@ impl Devenv {
                 task_configs.clone(),
                 envs.clone(),
                 verbosity,
-                tui,
             )
             .await?;
         envs.extend(exports);
@@ -2125,37 +2116,18 @@ impl Devenv {
     }
 }
 
-/// Run tasks, dispatching to TUI mode (direct run) or shell mode (with TasksUi).
-///
-/// In TUI mode the activity channel is already set up in main.rs, so tasks run
-/// directly and status is read afterwards. In shell mode we initialise a local
-/// activity channel and drive TasksUi for interactive output.
-async fn run_tasks_with_ui(
+/// Run tasks. All output flows through the activity channel which the
+/// TUI or [`crate::console::ConsoleOutput`] consume.
+async fn run_tasks(
     tasks: Tasks,
-    verbosity: tasks::VerbosityLevel,
-    tui: bool,
     stop_processes: bool,
 ) -> Result<(tasks::TasksStatus, tasks::Outputs)> {
-    if tui {
-        let outputs = tasks.run(false).await;
-        if stop_processes {
-            let _ = tasks.process_manager().stop_all().await;
-        }
-        let status = tasks.get_completion_status().await;
-        Ok((status, outputs))
-    } else {
-        let (activity_rx, activity_handle) = devenv_activity::init();
-        let _activity_guard = activity_handle.install();
-
-        let tasks = Arc::new(tasks);
-        let tasks_clone = Arc::clone(&tasks);
-
-        let run_handle =
-            tokio::spawn(async move { tasks_clone.run(false).await }.in_current_span());
-
-        let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
-        Ok(ui.run(run_handle, stop_processes).await?)
+    let outputs = tasks.run(false).await;
+    if stop_processes {
+        let _ = tasks.process_manager().stop_all().await;
     }
+    let status = tasks.get_completion_status().await;
+    Ok((status, outputs))
 }
 
 /// Format a set of key-value pairs as shell export statements.
@@ -2489,9 +2461,8 @@ fn resolve_secretspec_into(
 
     if !secretspec_enabled {
         if !secretspec_config_exists {
-            info!(
-                devenv.is_user_message = true,
-                "{}",
+            message(
+                ActivityLevel::Info,
                 indoc::formatdoc! {"
                 Found secretspec.toml but secretspec integration is not enabled.
 
@@ -2504,7 +2475,7 @@ fn resolve_secretspec_into(
                     enable: false
 
                 Learn more: https://devenv.sh/integrations/secretspec/
-            "}
+            "},
             );
         }
         return Ok(());

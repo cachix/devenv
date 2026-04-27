@@ -531,6 +531,18 @@ impl ActivityOutcome {
         }
     }
 
+    /// Human-friendly suffix for completion lines (empty for plain success).
+    pub fn display_suffix(&self) -> &'static str {
+        match self {
+            ActivityOutcome::Success => "",
+            ActivityOutcome::Cached => " (cached)",
+            ActivityOutcome::Skipped => " (no command)",
+            ActivityOutcome::Cancelled => " (cancelled)",
+            ActivityOutcome::Failed => " (failed)",
+            ActivityOutcome::DependencyFailed => " (dependency failed)",
+        }
+    }
+
     pub fn is_error(&self) -> bool {
         matches!(
             self,

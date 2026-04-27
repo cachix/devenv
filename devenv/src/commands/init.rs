@@ -5,10 +5,10 @@ use std::io::Write as _;
 use std::path::Path;
 
 use console::style;
+use devenv_activity::{ActivityLevel, message};
 use include_dir::{Dir, File, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use similar::{ChangeTag, TextDiff};
-use tracing::info;
 
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
 
@@ -81,7 +81,7 @@ fn write_template(file: &File<'_>, dest: &Path, on_exists: OnExists) -> Result<(
         .unwrap_or_else(|| dest.display().to_string());
 
     if !dest.exists() {
-        info!(devenv.ui.message = true, "Creating {display_name}");
+        message(ActivityLevel::Info, format!("Creating {display_name}"));
         return fs::write(dest, file.contents())
             .into_diagnostic()
             .wrap_err_with(|| format!("Failed to write {}", dest.display()));
@@ -89,7 +89,7 @@ fn write_template(file: &File<'_>, dest: &Path, on_exists: OnExists) -> Result<(
 
     match on_exists {
         OnExists::Append => {
-            info!(devenv.ui.message = true, "Appending to {display_name}");
+            message(ActivityLevel::Info, format!("Appending to {display_name}"));
             let mut handle = fs::OpenOptions::new()
                 .append(true)
                 .open(dest)

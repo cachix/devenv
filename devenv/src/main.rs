@@ -315,7 +315,9 @@ fn run(launch: LaunchConfig) -> Result<()> {
     let (activity_rx, activity_handle) = devenv_activity::init();
     let _activity_guard = activity_handle.install();
 
-    // CLI output: human-readable stderr when no TUI and not in tracing mode
+    // Plain tracing events (info!/warn!/error!) need a stderr layer when no TUI
+    // owns the terminal. The activity start/complete output is rendered separately
+    // by ConsoleOutput / TuiApp from the activity channel.
     let cli_output = !launch.tui
         && !launch
             .tracing_specs
@@ -382,7 +384,8 @@ fn run(launch: LaunchConfig) -> Result<()> {
         .into_diagnostic()
         .wrap_err("Failed to spawn devenv thread")?;
 
-    // TUI on main thread (if enabled), otherwise drop receiver to avoid buffering events
+    // Activity stream consumer on main thread: TUI in TUI mode, console renderer otherwise.
+    // Both read from the same activity channel, so tasks and other activities have a single sink.
     let tui_render_height = if tui {
         let filter_level = if matches!(verbosity, devenv::tasks::VerbosityLevel::Verbose) {
             ActivityLevel::Debug
@@ -408,7 +411,18 @@ fn run(launch: LaunchConfig) -> Result<()> {
                 .unwrap_or(0)
         })
     } else {
-        drop(activity_rx);
+        let _ = command_tx;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .into_diagnostic()
+            .wrap_err("Failed to create console runtime")?;
+
+        rt.block_on(async {
+            devenv::console::ConsoleOutput::new(activity_rx, verbosity)
+                .run(backend_done.clone())
+                .await;
+        });
         0
     };
 
@@ -528,7 +542,7 @@ async fn run_backend(
         input_overrides,
         from_external,
         verbosity,
-        tui,
+        tui: _,
         use_pty,
         nix_debugger,
         is_testing,
@@ -678,7 +692,6 @@ async fn run_backend(
             backend_done_guard.take(),
             terminal_ready_rx,
             verbosity,
-            tui,
         )
         .await
         .map(|exit_code| match exit_code {
@@ -713,15 +726,8 @@ async fn run_backend(
     }
 
     // All other commands
-    let result = dispatch_command(
-        &devenv,
-        command,
-        verbosity,
-        tui,
-        command_rx,
-        config_strict_ports,
-    )
-    .await;
+    let result =
+        dispatch_command(&devenv, command, verbosity, command_rx, config_strict_ports).await;
 
     // Drain cleanup (e.g. cachix push finalization) while the TUI is
     // still rendering, so its activity stays visible to the user.
@@ -784,7 +790,6 @@ async fn dispatch_command(
     devenv: &Devenv,
     command: Commands,
     verbosity: devenv::tasks::VerbosityLevel,
-    tui: bool,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
     config_strict_ports: bool,
 ) -> Result<CommandResult> {
@@ -792,7 +797,7 @@ async fn dispatch_command(
         Commands::Shell { cmd, ref args } => {
             // Non-PTY shell path (PTY is handled as early return in run_backend)
             // Messages are injected into the shell script by prepare_shell() via self.task_messages.
-            devenv.run_enter_shell_tasks(None, verbosity, tui).await?;
+            devenv.run_enter_shell_tasks(None, verbosity).await?;
 
             let shell_config = match cmd {
                 Some(cmd) => devenv.prepare_exec(Some(cmd), args).await?,
@@ -802,7 +807,7 @@ async fn dispatch_command(
             Ok(CommandResult::Exec(shell_config.command))
         }
         Commands::Test { .. } => {
-            devenv.test(verbosity, tui).await?;
+            devenv.test(verbosity).await?;
             Ok(CommandResult::Done)
         }
         Commands::Container { command } => match command {
@@ -816,14 +821,12 @@ async fn dispatch_command(
                 registry,
             } => {
                 devenv
-                    .container_copy(&name, &copy_args, registry.as_deref(), verbosity, tui)
+                    .container_copy(&name, &copy_args, registry.as_deref(), verbosity)
                     .await?;
                 Ok(CommandResult::Done)
             }
             ContainerCommand::Run { name, copy_args } => {
-                let shell_config = devenv
-                    .container_run(&name, &copy_args, verbosity, tui)
-                    .await?;
+                let shell_config = devenv.container_run(&name, &copy_args, verbosity).await?;
                 Ok(CommandResult::Exec(shell_config.command))
             }
         },
@@ -890,7 +893,7 @@ async fn dispatch_command(
                 daemon: up_args.detach,
             };
             match devenv
-                .up(up_args.processes, up_args.mode, options, verbosity, tui)
+                .up(up_args.processes, up_args.mode, options, verbosity)
                 .await?
             {
                 RunMode::Detached => Ok(CommandResult::Done),
@@ -960,7 +963,7 @@ async fn dispatch_command(
                 daemon: detach,
             };
             match devenv
-                .up(vec![], devenv::tasks::RunMode::All, options, verbosity, tui)
+                .up(vec![], devenv::tasks::RunMode::All, options, verbosity)
                 .await?
             {
                 RunMode::Detached => Ok(CommandResult::Done),
@@ -990,7 +993,7 @@ async fn dispatch_command(
                 input_json,
             } => {
                 let output = devenv
-                    .tasks_run(tasks, mode, show_output, input, input_json, verbosity, tui)
+                    .tasks_run(tasks, mode, show_output, input, input_json, verbosity)
                     .await?;
                 Ok(CommandResult::Print(format!("{output}\n")))
             }
@@ -1019,7 +1022,7 @@ async fn dispatch_command(
             let mut output = devenv.print_dev_env(false).await?;
             // Discard messages: direnv captures stdout as env var definitions,
             // so echo statements would corrupt the output.
-            let task_exports = match devenv.run_enter_shell_tasks(None, verbosity, tui).await {
+            let task_exports = match devenv.run_enter_shell_tasks(None, verbosity).await {
                 Ok((exports, _messages)) => exports,
                 Err(e) => {
                     tracing::warn!("enterShell tasks failed, skipping exports: {e}");
@@ -1093,7 +1096,6 @@ async fn run_reload_shell(
     backend_done: Arc<tokio::sync::Notify>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
     verbosity: devenv::tasks::VerbosityLevel,
-    tui: bool,
 ) -> Result<Option<u32>> {
     use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
     use devenv_tui::{SessionIo, ShellSession, TuiHandoff};
@@ -1124,9 +1126,7 @@ async fn run_reload_shell(
     // Run enterShell tasks with subprocess executor before spawning PTY.
     // Task exports and messages are stored in devenv.task_exports / task_messages
     // and injected into the bash script by prepare_shell().
-    let (task_exports, task_messages) = devenv_guard
-        .run_enter_shell_tasks(None, verbosity, tui)
-        .await?;
+    let (task_exports, task_messages) = devenv_guard.run_enter_shell_tasks(None, verbosity).await?;
 
     // Drop the lock before passing devenv to the builder
     drop(devenv_guard);

@@ -455,9 +455,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         }
 
         let status: miette::Result<()> = if test_config.use_shell {
-            devenv
-                .test(devenv::tasks::VerbosityLevel::Normal, false)
-                .await
+            devenv.test(devenv::tasks::VerbosityLevel::Normal).await
         } else {
             // Run .test.sh directly - it must exist when run_test_sh is false
             if PathBuf::from(".test.sh").exists() {
