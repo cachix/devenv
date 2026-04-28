@@ -1,7 +1,6 @@
 # devenv hook for fish
 # Usage: devenv hook fish | source
 
-set -q _DEVENV_HOOK_LAST_PROJECT; or set -g _DEVENV_HOOK_LAST_PROJECT ""
 set -q _DEVENV_HOOK_UNTRUSTED; or set -g _DEVENV_HOOK_UNTRUSTED ""
 
 function _devenv_hook --on-variable PWD
@@ -18,13 +17,12 @@ function _devenv_hook --on-variable PWD
     end
 
     # stderr flows through so user sees the "not allowed" message
-    set -l project_dir (devenv hook-should-activate --last "$_DEVENV_HOOK_LAST_PROJECT")
+    set -l project_dir (devenv hook-should-activate)
     set -l exit_code $status
 
     if test $exit_code -eq 0 -a -n "$project_dir"
         set -lx _DEVENV_HOOK_DIR $project_dir
         fish --no-config -c 'cd -- $_DEVENV_HOOK_DIR; and devenv shell'
-        set -g _DEVENV_HOOK_LAST_PROJECT $project_dir
         set -g _DEVENV_HOOK_UNTRUSTED ""
         # If the devenv shell exited due to cd outside the project, follow the user there
         set -l exit_dir_file "$project_dir/.devenv/exit-dir"
@@ -38,9 +36,7 @@ function _devenv_hook --on-variable PWD
     else if test $exit_code -ne 0
         # Untrusted; retry silently on each prompt until allowed
         set -g _DEVENV_HOOK_UNTRUSTED $PWD
-        set -g _DEVENV_HOOK_LAST_PROJECT ""
     else
-        set -g _DEVENV_HOOK_LAST_PROJECT ""
         set -g _DEVENV_HOOK_UNTRUSTED ""
     end
 end
@@ -55,11 +51,10 @@ function _devenv_hook_prompt --on-event fish_prompt
         return
     end
 
-    set -l project_dir (devenv hook-should-activate --last "$_DEVENV_HOOK_LAST_PROJECT" 2>/dev/null)
+    set -l project_dir (devenv hook-should-activate 2>/dev/null)
     if test $status -eq 0 -a -n "$project_dir"
         set -lx _DEVENV_HOOK_DIR $project_dir
         fish --no-config -c 'cd -- $_DEVENV_HOOK_DIR; and devenv shell'
-        set -g _DEVENV_HOOK_LAST_PROJECT $project_dir
         set -g _DEVENV_HOOK_UNTRUSTED ""
         # If the devenv shell exited due to cd outside the project, follow the user there
         set -l exit_dir_file "$project_dir/.devenv/exit-dir"

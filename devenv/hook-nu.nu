@@ -18,8 +18,7 @@ $env.config = ($env.config | upsert hooks.env_change.PWD (
             return
         }
 
-        let last = ($env | get -o _DEVENV_HOOK_LAST_PROJECT | default "")
-        let result = (^devenv hook-should-activate --last $last | complete)
+        let result = (^devenv hook-should-activate | complete)
 
         if ($result.stderr | str trim) != "" {
             print -e $result.stderr
@@ -29,7 +28,6 @@ $env.config = ($env.config | upsert hooks.env_change.PWD (
             let dir = ($result.stdout | str trim)
             if $dir != "" {
                 do { cd $dir; ^devenv shell }
-                $env._DEVENV_HOOK_LAST_PROJECT = $dir
                 $env._DEVENV_HOOK_UNTRUSTED = ""
                 # If the devenv shell exited due to cd outside the project, follow the user there
                 let exit_dir_file = ($dir + "/.devenv/exit-dir")
@@ -41,11 +39,9 @@ $env.config = ($env.config | upsert hooks.env_change.PWD (
                     }
                 }
             } else {
-                $env._DEVENV_HOOK_LAST_PROJECT = ""
                 $env._DEVENV_HOOK_UNTRUSTED = ""
             }
         } else {
-            $env._DEVENV_HOOK_LAST_PROJECT = ""
             $env._DEVENV_HOOK_UNTRUSTED = $env.PWD
         }
     }
@@ -62,14 +58,12 @@ $env.config = ($env.config | upsert hooks.pre_prompt (
             return
         }
 
-        let last = ($env | get -o _DEVENV_HOOK_LAST_PROJECT | default "")
-        let result = (^devenv hook-should-activate --last $last | complete)
+        let result = (^devenv hook-should-activate | complete)
 
         if $result.exit_code == 0 {
             let dir = ($result.stdout | str trim)
             if $dir != "" {
                 do { cd $dir; ^devenv shell }
-                $env._DEVENV_HOOK_LAST_PROJECT = $dir
                 $env._DEVENV_HOOK_UNTRUSTED = ""
                 # If the devenv shell exited due to cd outside the project, follow the user there
                 let exit_dir_file = ($dir + "/.devenv/exit-dir")

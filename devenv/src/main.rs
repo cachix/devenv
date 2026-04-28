@@ -92,8 +92,8 @@ fn main_inner() -> Result<()> {
             Some(Commands::Revoke) => {
                 return commands::hook::revoke();
             }
-            Some(Commands::HookShouldActivate { last }) => {
-                return commands::hook::should_activate(last.as_deref());
+            Some(Commands::HookShouldActivate) => {
+                return commands::hook::should_activate();
             }
             Some(Commands::DaemonProcesses { config_file }) => {
                 return commands::daemon_processes::run(config_file);
@@ -1068,7 +1068,7 @@ async fn dispatch_command(
         | Commands::Hook { .. }
         | Commands::Allow
         | Commands::Revoke
-        | Commands::HookShouldActivate { .. }
+        | Commands::HookShouldActivate
         | Commands::DaemonProcesses { .. }
         | Commands::Init { .. } => {
             unreachable!("dispatched in main_inner before Devenv construction")

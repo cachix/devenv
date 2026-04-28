@@ -872,11 +872,7 @@ pub enum Commands {
 
     /// Internal: check if hook should activate devenv in current directory
     #[clap(hide = true)]
-    HookShouldActivate {
-        /// Last activated project directory (to prevent re-entry)
-        #[arg(long)]
-        last: Option<String>,
-    },
+    HookShouldActivate,
 
     /// Internal: run native process manager as a daemon (used by `devenv up -d`)
     #[clap(hide = true)]

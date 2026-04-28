@@ -29,8 +29,8 @@ pub fn revoke() -> Result<()> {
     revoke_path(&std::env::current_dir().into_diagnostic()?)
 }
 
-pub fn should_activate(last: Option<&str>) -> Result<()> {
-    match check_activation(last)? {
+pub fn should_activate() -> Result<()> {
+    match check_activation()? {
         ActivationCheck::Activate(dir) => println!("{dir}"),
         ActivationCheck::Skip => {}
         ActivationCheck::Untrusted => std::process::exit(2),
@@ -172,7 +172,7 @@ enum ActivationCheck {
 }
 
 /// Check if the hook should activate devenv in the current directory.
-fn check_activation(last_project: Option<&str>) -> Result<ActivationCheck> {
+fn check_activation() -> Result<ActivationCheck> {
     let cwd = std::env::current_dir().into_diagnostic()?;
 
     let project_dir = match find_project(&cwd) {
@@ -181,12 +181,6 @@ fn check_activation(last_project: Option<&str>) -> Result<ActivationCheck> {
     };
 
     let abs_str = canonical_str(&project_dir)?;
-
-    if let Some(last) = last_project
-        && last == abs_str
-    {
-        return Ok(ActivationCheck::Skip);
-    }
 
     if !is_trusted(&abs_str)? {
         eprintln!("devenv: {abs_str} is not allowed. Run 'devenv allow' to trust this directory.");
