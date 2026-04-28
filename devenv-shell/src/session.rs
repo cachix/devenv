@@ -120,10 +120,10 @@ fn dump_color(s: &mut String, color: &StyleColor, base: u8) {
             let _ = write!(s, "{}", base + 52 + p.0);
         }
         StyleColor::Palette(p) => {
-            let _ = write!(s, "{}:5:{}", base + 8, p.0);
+            let _ = write!(s, "{};5;{}", base + 8, p.0);
         }
         StyleColor::Rgb(rgb) => {
-            let _ = write!(s, "{}:2:{}:{}:{}", base + 8, rgb.r, rgb.g, rgb.b);
+            let _ = write!(s, "{};2;{};{};{}", base + 8, rgb.r, rgb.g, rgb.b);
         }
         StyleColor::None => {}
     }
