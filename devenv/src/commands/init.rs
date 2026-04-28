@@ -10,6 +10,9 @@ use include_dir::{Dir, File, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use similar::{ChangeTag, TextDiff};
 
+use crate::console as devenv_console;
+use crate::tasks::VerbosityLevel;
+
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
 
 #[derive(Clone, Copy)]
@@ -48,7 +51,9 @@ const TEMPLATES: &[Template] = &[
     },
 ];
 
-pub fn run(target: Option<&Path>) -> Result<()> {
+pub fn run(target: Option<&Path>, verbosity: VerbosityLevel) -> Result<()> {
+    let _console = devenv_console::install(verbosity);
+
     let target = match target {
         Some(p) => p.to_path_buf(),
         None => std::env::current_dir()

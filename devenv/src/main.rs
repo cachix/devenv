@@ -99,7 +99,8 @@ fn main_inner() -> Result<()> {
                 return commands::daemon_processes::run(config_file);
             }
             Some(Commands::Init { target }) => {
-                return commands::init::run(target.as_deref());
+                let verbosity = resolve_verbosity(&cli.cli_options);
+                return commands::init::run(target.as_deref(), verbosity);
             }
             _ => {}
         }
@@ -159,6 +160,18 @@ fn is_ai_agent() -> bool {
         || std::env::var_os("AI_AGENT").is_some()
 }
 
+/// Resolve `--quiet`/`--verbose` (with AI-agent auto-quiet) into a `VerbosityLevel`.
+fn resolve_verbosity(cli_options: &devenv::cli::CliOptions) -> devenv::tasks::VerbosityLevel {
+    let quiet = cli_options.quiet || (is_ai_agent() && !cli_options.verbose);
+    if quiet {
+        devenv::tasks::VerbosityLevel::Quiet
+    } else if cli_options.verbose {
+        devenv::tasks::VerbosityLevel::Verbose
+    } else {
+        devenv::tasks::VerbosityLevel::Normal
+    }
+}
+
 /// Resolve all configuration from CLI + config files + environment.
 /// This is a sync function that runs before any async runtime.
 fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
@@ -167,22 +180,13 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
     // Extract values from CLI before consuming fields via From conversions
     let nix_debugger = cli.nix_args.nix_debugger;
 
-    // Auto-quiet when running inside an AI agent (LLM tools allocate a PTY,
-    // making is_terminal() true, but verbose output wastes tokens).
     let ai_agent = is_ai_agent();
-    let quiet = cli.cli_options.quiet || (ai_agent && !cli.cli_options.verbose);
-
+    let verbosity = resolve_verbosity(&cli.cli_options);
+    let quiet = matches!(verbosity, devenv::tasks::VerbosityLevel::Quiet);
     let log_level = if quiet {
         devenv_tracing::Level::Warn
     } else {
         cli.get_log_level()
-    };
-    let verbosity = if quiet {
-        devenv::tasks::VerbosityLevel::Quiet
-    } else if cli.cli_options.verbose {
-        devenv::tasks::VerbosityLevel::Verbose
-    } else {
-        devenv::tasks::VerbosityLevel::Normal
     };
     let tracing_specs = cli
         .tracing_args

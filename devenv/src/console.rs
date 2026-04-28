@@ -18,8 +18,8 @@ use std::time::Instant;
 
 use console::style;
 use devenv_activity::{
-    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind,
-    Operation, Process, Task,
+    ActivityEvent, ActivityGuard, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, Fetch,
+    FetchKind, Operation, Process, Task,
 };
 use tokio::sync::{Notify, mpsc};
 
@@ -282,5 +282,40 @@ impl ConsoleOutput {
             VerbosityLevel::Normal => level <= ActivityLevel::Info,
             VerbosityLevel::Verbose => level <= ActivityLevel::Debug,
         }
+    }
+}
+
+/// Guard returned by [`install`]. Drops the activity sender (closing the
+/// channel), then joins the drain thread.
+pub struct ConsoleGuard {
+    activity: Option<ActivityGuard>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Drop for ConsoleGuard {
+    fn drop(&mut self) {
+        drop(self.activity.take());
+        if let Some(handle) = self.thread.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+/// Render activity events to stderr until the returned guard is dropped.
+pub fn install(verbosity: VerbosityLevel) -> ConsoleGuard {
+    let (rx, handle) = devenv_activity::init();
+    let activity = handle.install();
+    let mut output = ConsoleOutput::new(rx, verbosity);
+    let thread = std::thread::Builder::new()
+        .name("devenv-console".into())
+        .spawn(move || {
+            while let Some(event) = output.rx.blocking_recv() {
+                output.handle(event);
+            }
+        })
+        .expect("spawn devenv-console thread");
+    ConsoleGuard {
+        activity: Some(activity),
+        thread: Some(thread),
     }
 }
