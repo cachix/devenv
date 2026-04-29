@@ -58,8 +58,8 @@ nix-bindings-fetchers = { git = "https://github.com/cachix/nix-bindings-rust.git
 nix-cmd = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
 nix-bindings-bindgen-raw = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
 
-libghostty-vt = { git = "https://github.com/domenkozar/libghostty-rs.git", branch = "pkg-config-support" }
-libghostty-vt-sys = { git = "https://github.com/domenkozar/libghostty-rs.git", branch = "pkg-config-support", default-features = false, features = ["pkg-config"] }
+libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs.git", branch = "master" }
+libghostty-vt-sys = { git = "https://github.com/Uzaaft/libghostty-rs.git", branch = "master", default-features = false, features = ["pkg-config"] }
 base64 = "0.22"
 anyhow = "1.0.92"
 ansiterm = "0.12.2"
