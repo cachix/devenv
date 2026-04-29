@@ -373,7 +373,12 @@ in
             # TODO: Work around rustc's default lld selection and missing native GCC Wild support;
             # use `-C linker-features=-lld -C link-arg=-B${pkgs.wild}/bin` for now, then switch to
             # `-C link-arg=-fuse-ld=wild` once a released GCC supports it.
-            wildFlags = lib.optionalString cfg.wild.enable "-C linker-features=-lld -C link-arg=-B${pkgs.wild}/bin";
+            # `-C linker-features` is stable on x86_64-linux but gated behind `-Z unstable-options`
+            # on aarch64-linux, so add the flag there (requires nightly on that target).
+            wildFlags = lib.optionalString cfg.wild.enable (
+              "-C linker-features=-lld -C link-arg=-B${pkgs.wild}/bin"
+              + lib.optionalString pkgs.stdenv.isAarch64 " -Z unstable-options"
+            );
             linkerFlags = lib.concatStringsSep " " (lib.filter (x: x != "") [ moldFlags lldFlags wildFlags ]);
             optionalEnv = cond: str: if cond then str else null;
           in
