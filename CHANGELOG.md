@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Nested substituter `nix-cache-info` downloads under "Configuring cachix".
 - Fixed TUI rendering glitches during lock validation, and nested fetch activities (e.g. tarball downloads) under "Validating lock".
 - Fixed TUI freezing while cachix finishes uploading on shell entry. Push progress is now visible during cleanup.
 - Fixed cachix push progress stuck at `0/N`. Already-cached paths now count toward progress.

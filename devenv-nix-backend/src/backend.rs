@@ -1106,6 +1106,11 @@ impl NixCBackend {
     /// and can be applied here). Failures are logged warn but never
     /// fatal — devenv continues without the cachix substituters.
     pub fn apply_store_settings(&self, store_settings: &StoreSettings) {
+        // Open an eval scope on the bridge so substituter info fetches
+        // (e.g. `nix-cache-info` downloads) fired from worker threads
+        // inside the C call nest under the current TUI activity.
+        let _eval_guard =
+            devenv_activity::current_activity_id().map(|id| self.nix_log_bridge.begin_eval(id));
         apply_substituters_and_keys(self.cnix_store.inner(), store_settings);
     }
 
