@@ -51,7 +51,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/devcontainer
           context: git # Get context from checkout out repo
@@ -170,7 +170,7 @@ jobs:
 
       - name: Extract metadata for manifest
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/devenv
           context: git
