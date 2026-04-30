@@ -414,29 +414,14 @@ pub fn validate_lock_file(
         locker.lock(fetch_settings, eval_state)
     };
 
-    match lock_result {
-        Ok(new_lock) => {
-            if new_lock.has_changes(&old_lock)? {
-                tracing::debug!("Lock validation found changes, writing updated lock");
-                // Writing new_lock directly avoids re-fetching every input: it was
-                // computed with old_lock as a base, so unchanged inputs are preserved.
-                write_lock_file(&new_lock, &lock_file_path).context("Failed to write lock file")?;
-            }
-            Ok(())
-        }
-        Err(e) => {
-            tracing::debug!("Lock validation failed: {e}, updating lock");
-            lock_inputs(
-                eval_state,
-                fetch_settings,
-                flake_settings,
-                root,
-                inputs,
-                None,
-                &[],
-            )
-        }
+    let new_lock = lock_result.context("Lock validation failed")?;
+    if new_lock.has_changes(&old_lock)? {
+        tracing::debug!("Lock validation found changes, writing updated lock");
+        // Writing new_lock directly avoids re-fetching every input: it was
+        // computed with old_lock as a base, so unchanged inputs are preserved.
+        write_lock_file(&new_lock, &lock_file_path).context("Failed to write lock file")?;
     }
+    Ok(())
 }
 
 /// Compute a content fingerprint from all locked inputs' fingerprints.
