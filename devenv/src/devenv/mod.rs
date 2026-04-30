@@ -416,6 +416,10 @@ impl Devenv {
                 let store = crate::backend::open_store(&store_settings)?;
                 let (flake_settings, fetchers_settings) = crate::backend::build_settings()?;
 
+                // Install the activity logger before locking.
+                let logger_setup = devenv_nix_backend::logger::setup_nix_logger()
+                    .wrap_err("Failed to set up activity logger")?;
+
                 let fingerprint = {
                     let lock_eval_state = crate::backend::build_lock_eval_state(
                         &store,
@@ -456,6 +460,7 @@ impl Devenv {
                     bootstrap_args.clone(),
                     port_allocator.clone(),
                     Some(eval_cache_pool.clone()),
+                    logger_setup,
                 )?;
                 Backend::<dyn Evaluator>::new(Arc::new(cnix) as Arc<dyn Evaluator>, bootstrap_args)
             }

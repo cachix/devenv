@@ -260,6 +260,7 @@ pub fn init_backend(
     let gc_registration = devenv_nix_backend::backend::init_nix(&nix_settings, &store_settings)?;
     let store = devenv_nix_backend::backend::open_store(&store_settings)?;
     let (flake_settings, fetchers_settings) = devenv_nix_backend::backend::build_settings()?;
+    let logger_setup = devenv_nix_backend::logger::setup_nix_logger()?;
 
     let bootstrap_args = test_bootstrap_args(&paths, &config);
     NixCBackend::new(
@@ -274,5 +275,6 @@ pub fn init_backend(
         Arc::new(bootstrap_args),
         Arc::new(PortAllocator::new()),
         None,
+        logger_setup,
     )
 }

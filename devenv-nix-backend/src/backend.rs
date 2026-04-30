@@ -266,6 +266,7 @@ impl NixCBackend {
         bootstrap_args: Arc<BootstrapArgs>,
         port_allocator: Arc<PortAllocator>,
         eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
+        logger_setup: crate::logger::NixLoggerSetup,
     ) -> Result<Self> {
         let bootstrap_path = extract_bootstrap_files(&paths.dotfile)?;
         let nixpkgs_config_path = write_nixpkgs_config(nixpkgs_config, &paths.dotfile)?;
@@ -278,8 +279,6 @@ impl NixCBackend {
             nix_settings.nix_debugger,
         )?;
 
-        let logger_setup =
-            crate::logger::setup_nix_logger().wrap_err("Failed to set up activity logger")?;
         let activity_logger = logger_setup.logger;
         let nix_log_bridge = logger_setup.bridge;
 
