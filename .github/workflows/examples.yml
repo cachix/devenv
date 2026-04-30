@@ -43,7 +43,7 @@ jobs:
 
     steps:
       - name: Checkout base repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
@@ -90,7 +90,7 @@ jobs:
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
