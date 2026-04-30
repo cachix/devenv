@@ -26,7 +26,7 @@ jobs:
           nix eval github:NixOS/nixpkgs/nixpkgs-unstable#devenv.version --raw > src/modules/latest-version
 
       - name: Auto-commit changes
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "Update latest devenv version"
           file_pattern: "src/modules/latest-version"
