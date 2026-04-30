@@ -32,7 +32,7 @@ jobs:
         working-directory: docs/gen
         run: devenv shell devenv-generate-doc-options
 
-      - uses: EndBug/add-and-commit@v9
+      - uses: EndBug/add-and-commit@v10
         if: ${{ github.event_name == 'push' }}
         with:
           default_author: github_actions
@@ -46,7 +46,7 @@ jobs:
           devenv shell devenv-verify-individual-docs
           devenv shell devenv-generate-individual-docs
 
-      - uses: EndBug/add-and-commit@v9
+      - uses: EndBug/add-and-commit@v10
         if: ${{ github.event_name == 'push' }}
         with:
           default_author: github_actions
@@ -56,7 +56,7 @@ jobs:
       - name: Generate supported-languages example
         run: devenv shell devenv-generate-languages-example
 
-      - uses: EndBug/add-and-commit@v9
+      - uses: EndBug/add-and-commit@v10
         if: ${{ github.event_name == 'push' }}
         with:
           default_author: github_actions
@@ -66,14 +66,14 @@ jobs:
       - name: Generate JSON schema
         run: devenv generate-json-schema
 
-      - uses: EndBug/add-and-commit@v9
+      - uses: EndBug/add-and-commit@v10
         if: ${{ github.event_name == 'push' }}
         with:
           default_author: github_actions
           add: docs/src/devenv.schema.json
           message: "Auto generate docs/src/devenv.schema.json"
 
-      - uses: EndBug/add-and-commit@v9
+      - uses: EndBug/add-and-commit@v10
         if: ${{ github.event_name == 'push' }}
         with:
           default_author: github_actions
