@@ -25,7 +25,7 @@ use crossterm::{
     style::ResetColor,
     terminal::{self, Clear, ClearType},
 };
-use libghostty_vt::screen::{Cell, CellWide};
+use libghostty_vt::screen::{Cell, CellContentTag, CellWide, GridRef};
 use libghostty_vt::style::{Style, StyleColor, Underline};
 use libghostty_vt::terminal::{Options as TerminalOptions, Point, PointCoordinate, Terminal};
 use portable_pty::PtySize;
@@ -41,27 +41,86 @@ const KEYBIND_TOGGLE_PAUSE: [u8; 2] = [0x1b, 0x04]; // Ctrl-Alt-D
 const KEYBIND_LIST_WATCHED: [u8; 2] = [0x1b, 0x17]; // Ctrl-Alt-W
 const KEYBIND_TOGGLE_ERROR: [u8; 2] = [0x1b, 0x05]; // Ctrl-Alt-E
 
-/// Render a VT row as a string with SGR escape sequences.
-///
-/// Uses pre-fetched cells for text/style-id and only calls into the terminal
-/// for style details and grapheme clusters, avoiding a second full cell iteration.
 fn dump_row_from_cells(buf: &mut String, vt: &Terminal<'_, '_>, point: Point, cells: &[Cell]) {
-    let mut prev_style_id: Option<libghostty_vt::style::Id> = None;
+    // TODO(libghostty-rs): Style::is_default() returns true for RGB-bg-only styles
+    // because StyleColor::Rgb is mistagged as NONE in the FFI From conversion.
+    // Compare via PartialEq against Style::default() until upstream is fixed.
+    let default_style = Style::default();
+    let mut cur_style = default_style;
+    let mut blank_cells: usize = 0;
     for (x, cell) in cells.iter().enumerate() {
-        if cell.wide().ok() == Some(CellWide::SpacerTail) {
+        if matches!(
+            cell.wide().ok(),
+            Some(CellWide::SpacerTail | CellWide::SpacerHead)
+        ) {
             continue;
         }
         let Ok(cell_ref) = vt.grid_ref(point_with_x(point, x as u16)) else {
             continue;
         };
-        let style_id = cell.style_id().ok();
-        if prev_style_id != style_id {
-            if let Ok(style) = cell_ref.style() {
-                dump_style(buf, &style);
+        let has_text = cell.has_text().unwrap_or(false);
+        let has_styling = cell.has_styling().unwrap_or(false);
+        let tag = cell.content_tag().ok();
+        let is_bg_only = matches!(
+            tag,
+            Some(CellContentTag::BgColorPalette | CellContentTag::BgColorRgb)
+        );
+        if !has_text && !has_styling && !is_bg_only {
+            blank_cells += 1;
+            continue;
+        }
+        if blank_cells > 0 {
+            for _ in 0..blank_cells {
+                buf.push(' ');
             }
-            prev_style_id = style_id;
+            blank_cells = 0;
+        }
+        let new_style = cell_style(cell, &cell_ref, tag, has_styling, default_style);
+        if new_style != cur_style {
+            if new_style == default_style {
+                buf.push_str("\x1b[0m");
+            } else {
+                dump_style(buf, &new_style);
+            }
+            cur_style = new_style;
         }
         push_cell_text(buf, cell, &cell_ref);
+    }
+    if cur_style != default_style {
+        buf.push_str("\x1b[0m");
+    }
+}
+
+fn cell_style(
+    cell: &Cell,
+    cell_ref: &GridRef<'_>,
+    tag: Option<CellContentTag>,
+    has_styling: bool,
+    default: Style,
+) -> Style {
+    match tag {
+        Some(CellContentTag::Codepoint | CellContentTag::CodepointGrapheme) => {
+            if has_styling {
+                cell_ref.style().unwrap_or(default)
+            } else {
+                default
+            }
+        }
+        Some(CellContentTag::BgColorPalette) => {
+            let mut s = default;
+            if let Ok(idx) = cell.bg_color_palette() {
+                s.bg_color = StyleColor::Palette(idx);
+            }
+            s
+        }
+        Some(CellContentTag::BgColorRgb) => {
+            let mut s = default;
+            if let Ok(rgb) = cell.bg_color_rgb() {
+                s.bg_color = StyleColor::Rgb(rgb);
+            }
+            s
+        }
+        None => default,
     }
 }
 
