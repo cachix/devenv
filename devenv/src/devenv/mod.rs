@@ -431,6 +431,7 @@ impl Devenv {
                         &store,
                         &fetchers_settings,
                         &flake_settings,
+                        &logger_setup.bridge,
                         &paths.root,
                         &options.inputs,
                     )?

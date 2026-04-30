@@ -8,9 +8,11 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::Arc;
 
-use devenv_activity::instrument_activity;
+use devenv_activity::{Activity, ActivityLevel, instrument_activity};
 use devenv_core::config::Input;
+use devenv_core::nix_log_bridge::NixLogBridge;
 use miette::Result;
 use nix_bindings_expr::eval_state::EvalState;
 use nix_bindings_fetchers::FetchersSettings;
@@ -21,18 +23,25 @@ use crate::anyhow_ext::AnyhowToMiette;
 
 /// Validate (and create or update if needed) `<root>/devenv.lock`,
 /// returning the fingerprint of the resulting lock graph.
-#[instrument_activity("Validating lock", kind = evaluate)]
 pub fn validate_and_load(
     eval_state: &EvalState,
     store: &Store,
     fetchers_settings: &FetchersSettings,
     flake_settings: &FlakeSettings,
+    bridge: &Arc<NixLogBridge>,
     root: &Path,
     inputs: &BTreeMap<String, Input>,
 ) -> Result<String> {
-    crate::validate_lock_file(eval_state, fetchers_settings, flake_settings, root, inputs)
-        .to_miette()?;
-    fingerprint(store, fetchers_settings, root)
+    let activity =
+        devenv_activity::start!(Activity::evaluate("Validating lock").level(ActivityLevel::Info));
+    // Register as the current eval scope so Nix activities fired from
+    // worker threads (libgit2 fetch, etc.) nest under this activity.
+    let _eval_guard = bridge.begin_eval(activity.id());
+    activity.with_new_scope_sync(|| {
+        crate::validate_lock_file(eval_state, fetchers_settings, flake_settings, root, inputs)
+            .to_miette()?;
+        fingerprint(store, fetchers_settings, root)
+    })
 }
 
 /// Compute the fingerprint of `<root>/devenv.lock` against `store`.

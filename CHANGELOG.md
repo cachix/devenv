@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed TUI rendering glitches during lock validation, and nested fetch activities (e.g. tarball downloads) under "Validating lock".
 - Fixed TUI freezing while cachix finishes uploading on shell entry. Push progress is now visible during cleanup.
 - Fixed cachix push progress stuck at `0/N`. Already-cached paths now count toward progress.
 - Fixed tracked path log lines showing as dot-prefixed rows under "Evaluating shell" in the TUI instead of attaching to the eval activity.
