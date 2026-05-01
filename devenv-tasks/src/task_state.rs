@@ -1,7 +1,7 @@
 use crate::SudoContext;
 use crate::config::TaskConfig;
 use crate::executor::{ExecutionContext, OutputCallback};
-use crate::task_cache::{TaskCache, expand_glob_patterns};
+use crate::task_cache::{TaskCache, find_files_matching_patterns};
 use crate::types::{
     Output, Outputs, ProcessPhase, ProcessTaskStatus, Skipped, TaskCompleted, TaskFailure,
     TaskStatus, TaskType, VerbosityLevel, get_or_create_devenv_env_mut, process_name,
@@ -157,16 +157,20 @@ impl TaskState {
         let patterns = &self.task.exec_if_modified;
         let include_count = patterns.iter().filter(|p| !p.starts_with('!')).count();
         let exclude_count = patterns.len() - include_count;
-        let mut matched_files = expand_glob_patterns(patterns);
 
         let span = tracing::Span::current();
         span.record("exec_if_modified.pattern_count", patterns.len());
         span.record("exec_if_modified.include_pattern_count", include_count);
         span.record("exec_if_modified.exclude_pattern_count", exclude_count);
+
+        // Walk the filesystem once and reuse the result for both the
+        // modification check and the removed-files check below.
+        let mut matched_files = find_files_matching_patterns(patterns);
+
         span.record("exec_if_modified.matched_file_count", matched_files.len());
 
         let patterns_modified = cache
-            .check_modified_files(&self.task.name, &self.task.exec_if_modified)
+            .check_paths_modified(&self.task.name, &matched_files)
             .await?;
         if patterns_modified {
             span.record("task.cached", false);
@@ -617,7 +621,7 @@ impl TaskState {
 
         // Only update file states on success - failed tasks should not be cached
         if result.success {
-            let expanded_paths = expand_glob_patterns(&self.task.exec_if_modified);
+            let expanded_paths = find_files_matching_patterns(&self.task.exec_if_modified);
             for path in &expanded_paths {
                 cache.update_file_state(&self.task.name, path).await?;
             }

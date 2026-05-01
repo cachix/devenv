@@ -121,10 +121,12 @@ fn extract_base_dir(pattern: &str) -> &Path {
     }
 }
 
-/// Expand glob patterns into actual file paths
+/// Walks the filesystem from each pattern's base directory and returns the
+/// concrete paths that match.
 ///
-/// The expansion walks the filesystem starting from the base directory of each pattern
-/// and matches files against the glob patterns.
+/// This is not a pure pattern transformation — it performs filesystem I/O via
+/// `ignore::WalkBuilder`. Each call traverses the matched directory trees, so
+/// callers should avoid invoking it multiple times for the same pattern set.
 ///
 /// Negation patterns (starting with `!`) are supported to exclude paths:
 /// - `!**/node_modules/**` – excludes all paths containing node_modules
@@ -132,7 +134,7 @@ fn extract_base_dir(pattern: &str) -> &Path {
 ///
 /// Example: `["**/*.ts", "!**/node_modules/**"]` matches all TypeScript files
 /// except those in node_modules directories.
-pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
+pub fn find_files_matching_patterns(patterns: &[String]) -> Vec<String> {
     // Separate positive patterns from negation patterns
     let (negation_patterns, positive_patterns): (Vec<&str>, Vec<&str>) = patterns
         .iter()
@@ -301,31 +303,44 @@ impl TaskCache {
     ///
     /// Returns true if any of the files have been modified since the last time
     /// the task was run, or if this is the first time checking these files.
+    /// Check whether any of the given concrete paths have changed since the
+    /// last cached run. Does not walk the filesystem — caller is responsible
+    /// for resolving glob patterns to paths via [`find_files_matching_patterns`].
+    ///
+    /// Callers that hold the expanded path list (e.g. to also call
+    /// [`Self::has_removed_files`]) should use this directly to avoid walking
+    /// the filesystem twice.
+    pub async fn check_paths_modified(
+        &self,
+        task_name: &str,
+        paths: &[String],
+    ) -> CacheResult<bool> {
+        // Check all files and track if any are modified.
+        // Important: check ALL files, do not return early, so that every
+        // file gets recorded in the database.
+        let mut any_modified = false;
+        for path in paths {
+            if self.is_file_modified(task_name, path).await? {
+                any_modified = true;
+            }
+        }
+        Ok(any_modified)
+    }
+
+    /// Convenience wrapper: expand patterns and check whether any match
+    /// modified files. Walks the filesystem on every call. Prefer
+    /// [`find_files_matching_patterns`] + [`Self::check_paths_modified`]
+    /// when the expanded paths are needed elsewhere.
     pub async fn check_modified_files(
         &self,
         task_name: &str,
-        files: &[String],
+        patterns: &[String],
     ) -> CacheResult<bool> {
-        if files.is_empty() {
+        if patterns.is_empty() {
             return Ok(false);
         }
-
-        // Expand all patterns and collect results
-        let expanded_paths = expand_glob_patterns(files);
-
-        // Check all files and track if any are modified
-        // Important: We need to check ALL files, not return early,
-        // so that all files get recorded in the database
-        let mut any_modified = false;
-        for path in &expanded_paths {
-            let modified = self.is_file_modified(task_name, path).await?;
-            if modified {
-                any_modified = true;
-                // Continue checking other files instead of returning early
-            }
-        }
-
-        Ok(any_modified)
+        let paths = find_files_matching_patterns(patterns);
+        self.check_paths_modified(task_name, &paths).await
     }
 
     /// Check if any previously tracked files for a task are no longer in the current set.
@@ -1082,7 +1097,7 @@ mod tests {
     }
 
     #[test]
-    fn test_expand_glob_patterns_with_negation() {
+    fn test_find_files_matching_patterns_with_negation() {
         let temp_dir = TempDir::new().unwrap();
         let base = temp_dir.path();
 
@@ -1110,39 +1125,39 @@ mod tests {
 
         // Test: all .ts files without negation
         let pattern = format!("{}/**/*.ts", base.display());
-        let all_files = expand_glob_patterns(&[pattern.clone()]);
+        let all_files = find_files_matching_patterns(&[pattern.clone()]);
         assert_eq!(all_files.len(), 4); // main.ts, util.ts, index.ts, test.ts (via **)
 
         // Test: exclude node_modules
         let negation = "!**/node_modules/**".to_string();
-        let filtered = expand_glob_patterns(&[pattern.clone(), negation]);
+        let filtered = find_files_matching_patterns(&[pattern.clone(), negation]);
         assert_eq!(filtered.len(), 3); // main.ts, util.ts, test.ts (excludes index.ts)
         assert!(filtered.iter().all(|p| !p.contains("node_modules")));
 
         // Test: multiple negation patterns
         let negation1 = "!**/node_modules/**".to_string();
         let negation2 = "!**/test.ts".to_string();
-        let filtered2 = expand_glob_patterns(&[pattern.clone(), negation1, negation2]);
+        let filtered2 = find_files_matching_patterns(&[pattern.clone(), negation1, negation2]);
         assert_eq!(filtered2.len(), 2); // main.ts, util.ts only
         assert!(filtered2.iter().all(|p| !p.contains("node_modules")));
         assert!(filtered2.iter().all(|p| !p.ends_with("test.ts")));
     }
 
     #[test]
-    fn test_expand_glob_patterns_negation_only() {
+    fn test_find_files_matching_patterns_negation_only() {
         // Test that negation-only patterns return empty (no positive patterns to match)
-        let result = expand_glob_patterns(&["!**/node_modules/**".to_string()]);
+        let result = find_files_matching_patterns(&["!**/node_modules/**".to_string()]);
         assert!(result.is_empty());
     }
 
     #[test]
-    fn test_expand_glob_patterns_empty() {
-        let result = expand_glob_patterns(&[]);
+    fn test_find_files_matching_patterns_empty() {
+        let result = find_files_matching_patterns(&[]);
         assert!(result.is_empty());
     }
 
     #[test]
-    fn test_expand_glob_patterns_preserves_depth_for_single_segment_patterns() {
+    fn test_find_files_matching_patterns_preserves_depth_for_single_segment_patterns() {
         let temp_dir = TempDir::new().unwrap();
         let base = temp_dir.path();
 
@@ -1156,18 +1171,18 @@ mod tests {
         std::fs::write(src_sub_dir.join("b.ts"), "b").unwrap();
 
         let foo_pattern = format!("{}/src/foo.txt", base.display());
-        let foo_matches = expand_glob_patterns(&[foo_pattern]);
+        let foo_matches = find_files_matching_patterns(&[foo_pattern]);
         assert_eq!(foo_matches.len(), 1);
         assert!(foo_matches[0].ends_with("/src/foo.txt"));
 
         let ts_pattern = format!("{}/src/*.ts", base.display());
-        let ts_matches = expand_glob_patterns(&[ts_pattern]);
+        let ts_matches = find_files_matching_patterns(&[ts_pattern]);
         assert_eq!(ts_matches.len(), 1);
         assert!(ts_matches[0].ends_with("/src/a.ts"));
     }
 
     #[test]
-    fn test_expand_glob_patterns_requires_explicit_dot_for_hidden_files() {
+    fn test_find_files_matching_patterns_requires_explicit_dot_for_hidden_files() {
         let temp_dir = TempDir::new().unwrap();
         let base = temp_dir.path();
 
@@ -1178,18 +1193,18 @@ mod tests {
         std::fs::write(src_dir.join(".hidden.ts"), "hidden").unwrap();
 
         let wildcard_pattern = format!("{}/src/*.ts", base.display());
-        let wildcard_matches = expand_glob_patterns(&[wildcard_pattern]);
+        let wildcard_matches = find_files_matching_patterns(&[wildcard_pattern]);
         assert_eq!(wildcard_matches.len(), 1);
         assert!(wildcard_matches[0].ends_with("/src/visible.ts"));
 
         let explicit_dot_pattern = format!("{}/src/.*.ts", base.display());
-        let explicit_dot_matches = expand_glob_patterns(&[explicit_dot_pattern]);
+        let explicit_dot_matches = find_files_matching_patterns(&[explicit_dot_pattern]);
         assert_eq!(explicit_dot_matches.len(), 1);
         assert!(explicit_dot_matches[0].ends_with("/src/.hidden.ts"));
     }
 
     #[test]
-    fn test_expand_glob_patterns_respects_gitignore() {
+    fn test_find_files_matching_patterns_respects_gitignore() {
         let temp_dir = TempDir::new().unwrap();
         let base = temp_dir.path();
 
@@ -1215,7 +1230,7 @@ mod tests {
         std::fs::write(repos_dir.join("ignored.ts"), "ignored").unwrap();
 
         let pattern = format!("{}/**/*.ts", base.display());
-        let matches = expand_glob_patterns(&[pattern]);
+        let matches = find_files_matching_patterns(&[pattern]);
 
         // Should only find src/main.ts, not repos/deep/ignored.ts
         assert_eq!(matches.len(), 1);
@@ -1275,7 +1290,7 @@ mod tests {
         );
 
         // Store state for all files
-        for path in expand_glob_patterns(&[pattern.clone()]) {
+        for path in find_files_matching_patterns(&[pattern.clone()]) {
             cache.update_file_state(task_name, &path).await.unwrap();
         }
 
@@ -1300,7 +1315,7 @@ mod tests {
         );
 
         // has_removed_files detects that a previously tracked file is gone
-        let current_paths = expand_glob_patterns(&[pattern.clone()]);
+        let current_paths = find_files_matching_patterns(&[pattern.clone()]);
         assert!(
             cache
                 .has_removed_files(task_name, &current_paths)

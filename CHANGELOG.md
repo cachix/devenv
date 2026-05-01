@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `exec_if_modified` task checks walking the filesystem twice per run.
 - Fixed `set: Tried to change the read-only variable "PWD"` and `"SHLVL"` errors in fish after `devenv shell` reloads.
 - Fixed wrong background color in TUI apps (e.g. neovim) inside `devenv shell`. Cells the app cleared with a custom background now keep that color instead of falling back to the terminal default.
 - Nested substituter `nix-cache-info` downloads under "Configuring cachix".
