@@ -117,7 +117,7 @@ in
           stdenv.override
             (prev: {
               extraBuildInputs =
-                builtins.filter (x: !lib.hasPrefix "apple-sdk" x.pname) prev.extraBuildInputs;
+                builtins.filter (x: !(x ? sdkroot)) prev.extraBuildInputs;
             })
         else stdenv;
 
@@ -386,17 +386,18 @@ in
       let
         # `mkShell` merges `packages` into `nativeBuildInputs`.
         # This distinction is generally not important for devShells, except when it comes to setup hooks and their run order.
-        # On macOS, the default apple-sdk is added to stdenv via `extraBuildInputs`.
-        # If we don't remove it from stdenv, then its setup hooks will clobber any SDK added to `packages`.
-        isAppleSDK = pkg: builtins.match ".*apple-sdk.*" (pkg.pname or "") != null;
-        partitionedPkgs = builtins.partition isAppleSDK config.packages;
-        buildInputs = partitionedPkgs.right;
-        nativeBuildInputs = partitionedPkgs.wrong;
+        # On macOS, route apple-sdk packages (identified by `passthru.sdkroot`) into `buildInputs`
+        # so they participate in the SDK version comparison done by stdenv's setup hooks.
+        partitioned =
+          if pkgs.stdenv.isDarwin
+          then builtins.partition (pkg: pkg ? sdkroot) config.packages
+          else { right = [ ]; wrong = config.packages; };
       in
       performAssertions (
         (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
           inherit (config) hardeningDisable inputsFrom name;
-          inherit buildInputs nativeBuildInputs;
+          buildInputs = partitioned.right;
+          nativeBuildInputs = partitioned.wrong;
           shellHook = ''
             ${lib.optionalString config.devenv.debug "set -x"}
             ${config.enterShell}
