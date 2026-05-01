@@ -146,6 +146,7 @@ struct LaunchConfig {
     needs_terminal_handoff: bool,
     log_level: devenv_tracing::Level,
     tracing_specs: Vec<TraceOutputSpec>,
+    tracing_owns_terminal: bool,
 }
 
 /// Detect whether we are running inside an AI coding agent.
@@ -192,14 +193,11 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
         .tracing_args
         .resolve_and_validate()
         .map_err(|e| miette::miette!("{e}"))?;
-    let use_tracing_mode = tracing_specs
+    // `resolve_and_validate()` folds legacy `--trace-output` into `tracing_specs`,
+    // so a single walk covers env, --trace-to, and --trace-output.
+    let tracing_owns_terminal = tracing_specs
         .iter()
-        .any(|s| s.destination.targets_terminal())
-        || cli
-            .tracing_args
-            .trace_output
-            .as_ref()
-            .is_some_and(|d| d.targets_terminal());
+        .any(|s| s.destination.targets_terminal());
 
     let mut config = Config::load()?;
     config.check_version(crate_version!())?;
@@ -274,7 +272,7 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
             | Commands::PrintPaths // print output directly, no TUI needed
     );
 
-    let tui = tui_requested && !tui_unsupported && !use_tracing_mode && !quiet;
+    let tui = tui_requested && !tui_unsupported && !tracing_owns_terminal && !quiet;
 
     // Determine use_pty from resolved settings (single source of truth)
     let use_pty = shell_settings.reload
@@ -305,6 +303,7 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
         needs_terminal_handoff,
         log_level,
         tracing_specs,
+        tracing_owns_terminal,
     })
 }
 
@@ -315,18 +314,26 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
 /// 2. Backend runs on a dedicated GC-registered thread
 /// 3. TUI runs on the main thread (if enabled), otherwise we just wait
 fn run(launch: LaunchConfig) -> Result<()> {
-    // Initialize activity channel (always — powers #[activity] macros)
-    let (activity_rx, activity_handle) = devenv_activity::init();
-    let _activity_guard = activity_handle.install();
+    // Three mutually exclusive activity sinks. `Renderer::None` means tracing
+    // owns the terminal — `send_activity_event` then falls through to
+    // `tracing::trace!` only, which is exactly what `--trace-to <terminal>` wants.
+    enum Renderer {
+        Tui(tokio::sync::mpsc::UnboundedReceiver<devenv_activity::ActivityEvent>),
+        Console(tokio::sync::mpsc::UnboundedReceiver<devenv_activity::ActivityEvent>),
+        None,
+    }
 
-    // Plain tracing events (info!/warn!/error!) need a stderr layer when no TUI
-    // owns the terminal. The activity start/complete output is rendered separately
-    // by ConsoleOutput / TuiApp from the activity channel.
-    let cli_output = !launch.tui
-        && !launch
-            .tracing_specs
-            .iter()
-            .any(|s| s.destination.targets_terminal());
+    let cli_output = !launch.tui && !launch.tracing_owns_terminal;
+    let (renderer, _activity_guard) = if launch.tui {
+        let (rx, handle) = devenv_activity::init();
+        (Renderer::Tui(rx), Some(handle.install()))
+    } else if cli_output {
+        let (rx, handle) = devenv_activity::init();
+        (Renderer::Console(rx), Some(handle.install()))
+    } else {
+        (Renderer::None, None)
+    };
+
     let _tracing_guard =
         devenv_tracing::init_tracing(launch.log_level, &launch.tracing_specs, cli_output);
 
@@ -388,46 +395,51 @@ fn run(launch: LaunchConfig) -> Result<()> {
         .into_diagnostic()
         .wrap_err("Failed to spawn devenv thread")?;
 
-    // Activity stream consumer on main thread: TUI in TUI mode, console renderer otherwise.
-    // Both read from the same activity channel, so tasks and other activities have a single sink.
-    let tui_render_height = if tui {
-        let filter_level = if matches!(verbosity, devenv::tasks::VerbosityLevel::Verbose) {
-            ActivityLevel::Debug
-        } else {
-            ActivityLevel::Info
-        };
+    let tui_render_height = match renderer {
+        Renderer::Tui(activity_rx) => {
+            let filter_level = if matches!(verbosity, devenv::tasks::VerbosityLevel::Verbose) {
+                ActivityLevel::Debug
+            } else {
+                ActivityLevel::Info
+            };
 
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .into_diagnostic()
-            .wrap_err("Failed to create TUI runtime")?;
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .into_diagnostic()
+                .wrap_err("Failed to create TUI runtime")?;
 
-        rt.block_on(async {
-            devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
-                .with_command_sender(command_tx)
-                .filter_level(filter_level)
-                // When a command needs terminal handoff, don't shut down on backend_done —
-                // it's used as a handoff signal (eval done), not a completion signal
-                .shutdown_on_backend_done(!needs_terminal_handoff)
-                .run(backend_done.clone())
-                .await
-                .unwrap_or(0)
-        })
-    } else {
-        let _ = command_tx;
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .into_diagnostic()
-            .wrap_err("Failed to create console runtime")?;
+            rt.block_on(async {
+                devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
+                    .with_command_sender(command_tx)
+                    .filter_level(filter_level)
+                    // When a command needs terminal handoff, don't shut down on backend_done —
+                    // it's used as a handoff signal (eval done), not a completion signal
+                    .shutdown_on_backend_done(!needs_terminal_handoff)
+                    .run(backend_done.clone())
+                    .await
+                    .unwrap_or(0)
+            })
+        }
+        Renderer::Console(activity_rx) => {
+            drop(command_tx);
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .into_diagnostic()
+                .wrap_err("Failed to create console runtime")?;
 
-        rt.block_on(async {
-            devenv::console::ConsoleOutput::new(activity_rx, verbosity)
-                .run(backend_done.clone())
-                .await;
-        });
-        0
+            rt.block_on(async {
+                devenv::console::ConsoleOutput::new(activity_rx, verbosity)
+                    .run(backend_done.clone())
+                    .await;
+            });
+            0
+        }
+        Renderer::None => {
+            drop(command_tx);
+            0
+        }
     };
 
     // Signal backend that terminal is available (with TUI render height for cursor positioning)
@@ -554,6 +566,7 @@ async fn run_backend(
         needs_terminal_handoff: _,
         log_level: _,
         tracing_specs: _,
+        tracing_owns_terminal: _,
     } = launch;
 
     // Ensure TUI is notified when backend exits, even on early return or panic.

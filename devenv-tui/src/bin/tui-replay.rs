@@ -98,7 +98,7 @@ impl TraceStream {
 
 /// Deserializes a trace event into an ActivityEvent.
 fn deserialize_activity(mut event: TraceEvent) -> Result<ActivityEvent, ActivityParseError> {
-    if event.target != "devenv::activity" {
+    if event.target != "devenv_activity::events" {
         return Err(ActivityParseError::NotActivityEvent);
     }
 
