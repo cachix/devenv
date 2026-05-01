@@ -176,7 +176,7 @@ jobs:
           context: git
 
       - name: Download all digests
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: digest-*
           path: /tmp/digests
