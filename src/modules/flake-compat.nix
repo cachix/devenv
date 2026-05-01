@@ -1,3 +1,4 @@
+# Compatibility layer for devenv to work inside of a `nix develop` shell.
 { config
 , pkgs
 , lib
@@ -119,6 +120,26 @@ let
 in
 {
   config = lib.mkIf config.devenv.flakesIntegration {
+    assertions = [
+      {
+        assertion = config.devenv.root != "";
+        message = ''
+          devenv was not able to determine the current directory.
+
+          See https://devenv.sh/guides/using-with-flakes/ how to use it with flakes.
+        '';
+      }
+    ];
+
+    devenv.root = lib.mkDefault (builtins.getEnv "PWD");
+    # Used for TMPDIR override - should NOT use XDG_RUNTIME_DIR as that's
+    # a small tmpfs meant for runtime files (sockets), not build artifacts
+    devenv.tmpdir =
+      let
+        tmp = builtins.getEnv "TMPDIR";
+      in
+      lib.mkDefault (if tmp != "" then tmp else "/tmp");
+
     env.DEVENV_FLAKE_SHELL = shellName;
 
     # Add the flake command helpers directly to the path.
