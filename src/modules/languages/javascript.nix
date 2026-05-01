@@ -311,6 +311,16 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    changelogs = [
+      {
+        date = "2026-05-01";
+        title = "languages.javascript.nodejs.enable makes Node.js optional";
+        description = ''
+          Added `languages.javascript.nodejs.enable` (defaults to `true`) so Node.js can be opted out when only `bun` or another runtime is needed. Enabling `npm`, `pnpm`, `yarn`, `corepack`, or `lsp` requires `nodejs.enable = true`.
+        '';
+      }
+    ];
+
     packages =
       let
         # On nixpkgs 26.05+, nodejs-slim has a corepack output.
@@ -352,39 +362,39 @@ in
 
     assertions = [
       {
-        assertion = (!cfg.npm.enable) || cfg.nodejs.enable;
+        assertion = cfg.npm.enable -> cfg.nodejs.enable;
         message = "languages.javascript.npm.enable requires languages.javascript.nodejs.enable = true;";
       }
       {
-        assertion = (!cfg.pnpm.enable) || cfg.nodejs.enable;
+        assertion = cfg.pnpm.enable -> cfg.nodejs.enable;
         message = "languages.javascript.pnpm.enable requires languages.javascript.nodejs.enable = true;";
       }
       {
-        assertion = (!cfg.yarn.enable) || cfg.nodejs.enable;
+        assertion = cfg.yarn.enable -> cfg.nodejs.enable;
         message = "languages.javascript.yarn.enable requires languages.javascript.nodejs.enable = true;";
       }
       {
-        assertion = (!cfg.corepack.enable) || cfg.nodejs.enable;
+        assertion = cfg.corepack.enable -> cfg.nodejs.enable;
         message = "languages.javascript.corepack.enable requires languages.javascript.nodejs.enable = true;";
       }
       {
-        assertion = (!cfg.lsp.enable) || cfg.nodejs.enable;
+        assertion = cfg.lsp.enable -> cfg.nodejs.enable;
         message = "languages.javascript.lsp.enable requires languages.javascript.nodejs.enable = true;";
       }
       {
-        assertion = (!cfg.npm.install.enable) || cfg.npm.enable;
+        assertion = cfg.npm.install.enable -> cfg.npm.enable;
         message = "languages.javascript.npm.install.enable requires languages.javascript.npm.enable = true;";
       }
       {
-        assertion = (!cfg.pnpm.install.enable) || cfg.pnpm.enable;
+        assertion = cfg.pnpm.install.enable -> cfg.pnpm.enable;
         message = "languages.javascript.pnpm.install.enable requires languages.javascript.pnpm.enable = true;";
       }
       {
-        assertion = (!cfg.yarn.install.enable) || cfg.yarn.enable;
+        assertion = cfg.yarn.install.enable -> cfg.yarn.enable;
         message = "languages.javascript.yarn.install.enable requires languages.javascript.yarn.enable = true;";
       }
       {
-        assertion = (!cfg.bun.install.enable) || cfg.bun.enable;
+        assertion = cfg.bun.install.enable -> cfg.bun.enable;
         message = "languages.javascript.bun.install.enable requires languages.javascript.bun.enable = true;";
       }
     ];
