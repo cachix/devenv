@@ -268,6 +268,38 @@ pkgs.typescript-language-server
 
 
 
+### languages\.javascript\.nodejs\.enable
+
+
+
+Whether to enable Node\.js runtime\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+true
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
 ### languages\.javascript\.npm\.enable
 
 
