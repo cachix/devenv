@@ -48,7 +48,7 @@ use devenv_core::store::Store as StoreTrait;
 use devenv_core::store::StorePath as CoreStorePath;
 use devenv_core::{CacheSettings, DevenvPaths, NixSettings, PortAllocator, StoreSettings};
 use devenv_eval_cache::{
-    CacheError, CachedEval, CachingConfig, CachingEvalService, CachingEvalState, ResourceManager,
+    self, CachedEval, CachingConfig, CachingEvalService, CachingEvalState, ResourceManager,
 };
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use nix_bindings_expr::eval_state::{
@@ -68,6 +68,7 @@ use once_cell::sync::OnceCell;
 use crate::anyhow_ext::AnyhowToMiette;
 use crate::build_environment::BuildEnvironment as RustBuildEnvironment;
 use crate::cnix_store::CNixStore;
+use crate::error::dedent_lines;
 use crate::umask_guard::UmaskGuard;
 
 /// Initialize Nix FFI globals, register the calling thread with the GC,
@@ -222,8 +223,12 @@ fn core_config_watch_paths(root: &Path) -> Vec<PathBuf> {
     .collect()
 }
 
-fn cache_error_to_miette(e: CacheError) -> miette::Error {
-    miette!("{}", e)
+fn eval_cache_error_into_miette(e: devenv_eval_cache::Error<miette::Error>) -> miette::Error {
+    match e {
+        devenv_eval_cache::Error::Eval(err) => err,
+        // Preserve the source chain (sqlx/io/serde_json) instead of stringifying.
+        devenv_eval_cache::Error::Internal(c) => Err::<(), _>(c).into_diagnostic().unwrap_err(),
+    }
 }
 
 /// RAII guard that holds the eval-state lock and registers an activity
@@ -516,12 +521,15 @@ impl NixCBackend {
     }
 
     fn enrich_eval_error(&self, err: miette::Error, context: &str) -> miette::Error {
+        // Flatten into a single diagnostic. Nix already emits a complete
+        // tree-style trace; letting miette render the FFI cause chain on top
+        // of that produces deep continuation indent under `─▶` arrows.
         let nix_errors = self.nix_log_bridge.peek_pre_repl_errors();
-        if nix_errors.is_empty() {
-            return err.wrap_err(context.to_string());
-        }
-        let nix_details = nix_errors.last().unwrap();
-        err.wrap_err(format!("{}: {}", context, nix_details))
+        let raw = nix_errors
+            .last()
+            .cloned()
+            .unwrap_or_else(|| format!("{err:#}"));
+        miette!("{context}: {}", dedent_lines(&raw))
     }
 
     fn eval_attr_uncached(
@@ -780,7 +788,7 @@ impl NixCBackend {
             let result = async {
                 caching_state
                     .cached_eval()
-                    .eval_typed::<CachedShellPaths, _, _>(&cache_key, &activity, || async {
+                    .eval_typed::<CachedShellPaths, _, _, _>(&cache_key, &activity, || async {
                         self.build_shell_uncached(&activity)
                     })
                     .await
@@ -792,7 +800,7 @@ impl NixCBackend {
                 Ok((paths, _)) => (paths.drv_path, paths.out_path, paths.env_path, false),
                 Err(e) => {
                     activity.fail();
-                    return Err(cache_error_to_miette(e));
+                    return Err(eval_cache_error_into_miette(e));
                 }
             }
         };
@@ -1093,7 +1101,7 @@ impl NixCBackend {
         }
         .in_activity(activity)
         .await
-        .map_err(cache_error_to_miette)?;
+        .map_err(eval_cache_error_into_miette)?;
 
         Ok(json_str)
     }
@@ -1273,14 +1281,14 @@ impl Evaluator for NixCBackend {
                 let (path, _) = async {
                     caching_state
                         .cached_eval()
-                        .eval_typed::<String, _, _>(&cache_key, &activity, || async {
+                        .eval_typed::<String, _, _, _>(&cache_key, &activity, || async {
                             self.build_attr_uncached(&attr_path_owned, &activity)
                         })
                         .await
                 }
                 .in_activity(&activity)
                 .await
-                .map_err(cache_error_to_miette)?;
+                .map_err(eval_cache_error_into_miette)?;
                 path
             };
 

@@ -42,17 +42,30 @@ pub struct CachedEvalResult {
     pub eval_id: i64,
 }
 
-/// Error type for caching operations.
+/// Cache-layer failures (DB, IO, serde, resource replay). Evaluation failures
+/// from caller-supplied closures live on [`Error::Eval`] instead, so this
+/// crate stays agnostic of the caller's error type.
 #[derive(Debug, thiserror::Error)]
 pub enum CacheError {
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
-    #[error("Evaluation error: {0}")]
-    Eval(String),
+    #[error("Resource replay failed: {0}")]
+    ResourceReplay(String),
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+}
+
+/// Outcome of a cached evaluation: either the caller-supplied evaluator
+/// failed, or the cache layer did. The eval error type is generic so callers
+/// pick their own (e.g. `miette::Error`).
+#[derive(Debug, thiserror::Error)]
+pub enum Error<E> {
+    #[error("{0}")]
+    Eval(E),
+    #[error(transparent)]
+    Internal(#[from] CacheError),
 }
 
 /// Service for caching eval results.
@@ -511,7 +524,7 @@ impl CachedEval {
         );
 
         rm.replay_all(&specs)
-            .map_err(|e| CacheError::Eval(format!("Resource replay failed: {}", e)))
+            .map_err(|e| CacheError::ResourceReplay(e.to_string()))
     }
 
     /// Snapshot and store resource allocations after a cache miss evaluation.
@@ -597,23 +610,19 @@ impl CachedEval {
     ///
     /// # Errors
     ///
-    /// Returns `CacheError::Eval` if the evaluation function fails, or
-    /// `CacheError::Database` if there's a database error during cache operations.
-    pub async fn eval<F, Fut>(
+    /// Returns `Error::Eval` if the evaluation function fails, or
+    /// `Error::Cache` for any database/IO/serde failure in the cache layer.
+    pub async fn eval<E, F, Fut>(
         &self,
         key: &EvalCacheKey,
         activity: &Activity,
         eval_fn: F,
-    ) -> Result<(String, bool), CacheError>
+    ) -> Result<(String, bool), Error<E>>
     where
         F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<String, miette::Error>>,
+        Fut: Future<Output = Result<String, E>>,
     {
-        let run_eval = || async {
-            eval_fn()
-                .await
-                .map_err(|e| CacheError::Eval(format!("{e:#}")))
-        };
+        let run_eval = || async { eval_fn().await.map_err(Error::Eval) };
 
         let Some(service) = &self.service else {
             return Ok((run_eval().await?, false));
@@ -644,34 +653,31 @@ impl CachedEval {
     /// # Type Parameters
     ///
     /// - `T`: The result type, must implement `Serialize` and `DeserializeOwned`
-    pub async fn eval_typed<T, F, Fut>(
+    pub async fn eval_typed<T, E, F, Fut>(
         &self,
         key: &EvalCacheKey,
         activity: &Activity,
         eval_fn: F,
-    ) -> Result<(T, bool), CacheError>
+    ) -> Result<(T, bool), Error<E>>
     where
         T: Serialize + DeserializeOwned,
         F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<T, miette::Error>>,
+        Fut: Future<Output = Result<T, E>>,
     {
-        let run_eval = || async {
-            eval_fn()
-                .await
-                .map_err(|e| CacheError::Eval(format!("{e:#}")))
-        };
+        let run_eval = || async { eval_fn().await.map_err(Error::Eval) };
 
         let Some(service) = &self.service else {
             return Ok((run_eval().await?, false));
         };
 
         if let Some(json) = self.try_cache_hit(service, key, activity).await {
-            return Ok((serde_json::from_str(&json)?, true));
+            let value = serde_json::from_str(&json).map_err(CacheError::from)?;
+            return Ok((value, true));
         }
 
         let result = run_eval().await?;
         let inputs = self.input_tracker.snapshot_inputs(&self.config);
-        let json = serde_json::to_string(&result)?;
+        let json = serde_json::to_string(&result).map_err(CacheError::from)?;
         self.store_eval(service, key, &json, inputs).await;
         Ok((result, false))
     }
@@ -1277,7 +1283,7 @@ mod tests {
         let activity = devenv_activity::activity!(INFO, evaluate, "test");
         let (result, cache_hit) = cached_eval
             .eval(&key1, &activity, || async {
-                Ok(r#"{"port":50302}"#.to_string())
+                Ok::<_, miette::Error>(r#"{"port":50302}"#.to_string())
             })
             .await
             .unwrap();

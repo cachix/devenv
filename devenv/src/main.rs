@@ -34,6 +34,32 @@ use tracing::{info, instrument};
 /// stack that the Nix CLI itself uses.
 const NIX_STACK_SIZE: usize = 64 * 1024 * 1024;
 
+/// Install a miette report hook with a custom theme.
+///
+/// The default theme draws a continuous vertical bar down the left edge of
+/// every diagnostic, which makes copying error text awkward.
+fn install_miette_hook() {
+    miette::set_hook(Box::new(|_| {
+        let mut theme = miette::GraphicalTheme::unicode();
+        theme.characters.vbar = ' ';
+        theme.characters.vbar_break = ' ';
+        theme.characters.lbot = ' ';
+        theme.characters.ltop = ' ';
+        theme.characters.rbot = ' ';
+        theme.characters.rtop = ' ';
+        theme.characters.lcross = ' ';
+        theme.characters.rcross = ' ';
+        Box::new(
+            miette::MietteHandlerOpts::new()
+                .graphical_theme(theme)
+                .context_lines(2)
+                .wrap_lines(false)
+                .build(),
+        )
+    }))
+    .expect("miette hook already installed");
+}
+
 /// Extract a human readable message from a thread panic payload.
 fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
     if let Some(s) = payload.downcast_ref::<&str>() {
@@ -45,7 +71,9 @@ fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
     }
 }
 
-fn main() -> Result<()> {
+fn main() {
+    install_miette_hook();
+
     // Handle shell completion requests (COMPLETE=bash devenv)
     // Use "devenv" as completer so scripts work after installation (not absolute path)
     CompleteEnv::with_factory(Cli::command)
@@ -57,13 +85,19 @@ fn main() -> Result<()> {
     // main-thread stack is not always enough. The Nix CLI itself raises
     // RLIMIT_STACK to 64MB via nix::setStackSize() before evaluating; we
     // achieve the same by running on a dedicated thread.
-    std::thread::Builder::new()
+    let result: Result<()> = std::thread::Builder::new()
         .name("main".into())
         .stack_size(NIX_STACK_SIZE)
         .spawn(main_inner)
         .expect("Failed to spawn main thread")
         .join()
-        .map_err(|e| miette::miette!("main thread panicked: {}", panic_message(e)))?
+        .map_err(|e| miette::miette!("main thread panicked: {}", panic_message(e)))
+        .and_then(|r| r);
+
+    if let Err(err) = result {
+        eprintln!("{err:?}");
+        std::process::exit(1);
+    }
 }
 
 fn main_inner() -> Result<()> {

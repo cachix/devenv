@@ -115,6 +115,9 @@ pub mod cachix_protocol;
 // Scoped umask guard for Nix C API calls
 pub mod umask_guard;
 
+// Helpers for shaping Nix errors into miette diagnostics
+mod error;
+
 /// Convert devenv inputs to FlakeInputs
 ///
 /// # Arguments
