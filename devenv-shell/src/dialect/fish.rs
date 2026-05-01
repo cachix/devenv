@@ -99,6 +99,11 @@ function __devenv_reload_apply
             if test (count $parts) -gt 0
                 set -l var $parts[2]
                 set -l val $parts[3]
+                # Skip fish read-only electric variables that bash exports.
+                # PWD and SHLVL are managed by fish; assigning to them errors.
+                if test "$var" = PWD -o "$var" = SHLVL
+                    continue
+                end
                 # PATH, MANPATH, CDPATH are list variables in fish;
                 # split colon-separated values into proper lists.
                 if test "$var" = PATH -o "$var" = MANPATH -o "$var" = CDPATH
