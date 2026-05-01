@@ -105,28 +105,31 @@ where
 
         let mut ext = span.extensions_mut();
 
-        if let Some(msg) = visitor.user_message {
-            ext.insert(SpanContext {
-                msg: msg.clone(),
-                has_error: false,
-                timings: SpanTimings::new(),
-            });
+        // Activity spans carry `devenv.ui.message`; plain `#[instrument]` spans
+        // don't. Fall back to the span name so every span emits start/end events
+        // — `json_subscriber` doesn't synthesize span lifecycle on its own.
+        let msg = visitor
+            .user_message
+            .unwrap_or_else(|| span.metadata().name().to_string());
 
-            // Emit a start event to show the initial message
-            let msg = msg.clone();
-            with_event_from_span!(
-                id,
-                span,
-                "message" = msg,
-                "devenv.span_end" = false,
-                "devenv.span_has_error" = false,
-                |event| {
-                    drop(ext);
-                    drop(span);
-                    ctx.event(&event);
-                }
-            );
-        }
+        ext.insert(SpanContext {
+            msg: msg.clone(),
+            has_error: false,
+            timings: SpanTimings::new(),
+        });
+
+        with_event_from_span!(
+            id,
+            span,
+            "message" = msg,
+            "devenv.span_end" = false,
+            "devenv.span_has_error" = false,
+            |event| {
+                drop(ext);
+                drop(span);
+                ctx.event(&event);
+            }
+        );
     }
 
     fn on_enter(&self, id: &span::Id, ctx: layer::Context<'_, S>) {
