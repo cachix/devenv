@@ -36,7 +36,7 @@ jobs:
           ref: ${{ env.REF }}
 
       - name: Set up QEMU for multi-arch builds
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         id: buildx
