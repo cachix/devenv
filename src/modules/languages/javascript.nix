@@ -236,6 +236,10 @@ in
       description = "The Node.js package to use.";
     };
 
+    nodejs = {
+      enable = lib.mkEnableOption "Node.js runtime" // { default = true; };
+    };
+
     corepack = {
       enable = lib.mkEnableOption "wrappers for npm, pnpm and Yarn via Node.js Corepack";
     };
@@ -309,13 +313,10 @@ in
   config = lib.mkIf cfg.enable {
     packages =
       let
-        # On newer nixpkgs, nodejs has a separate npm output that doesn't
-        # include the node binary. Add the base package to keep node on PATH.
-        npmIsSeparateOutput = builtins.elem "npm" (cfg.package.outputs or [ ]);
         # On nixpkgs 26.05+, nodejs-slim has a corepack output.
         corepack = cfg.package.corepack or cfg.package;
       in
-      lib.optional (!cfg.npm.enable || npmIsSeparateOutput) cfg.package
+      lib.optional cfg.nodejs.enable cfg.package
       ++ lib.optional cfg.npm.enable cfg.npm.package
       ++ lib.optional cfg.pnpm.enable (cfg.pnpm.package)
       ++ lib.optional cfg.yarn.enable (cfg.yarn.package.override { nodejs = cfg.package; })
@@ -348,5 +349,44 @@ in
         ''
       ]
     );
+
+    assertions = [
+      {
+        assertion = (!cfg.npm.enable) || cfg.nodejs.enable;
+        message = "languages.javascript.npm.enable requires languages.javascript.nodejs.enable = true;";
+      }
+      {
+        assertion = (!cfg.pnpm.enable) || cfg.nodejs.enable;
+        message = "languages.javascript.pnpm.enable requires languages.javascript.nodejs.enable = true;";
+      }
+      {
+        assertion = (!cfg.yarn.enable) || cfg.nodejs.enable;
+        message = "languages.javascript.yarn.enable requires languages.javascript.nodejs.enable = true;";
+      }
+      {
+        assertion = (!cfg.corepack.enable) || cfg.nodejs.enable;
+        message = "languages.javascript.corepack.enable requires languages.javascript.nodejs.enable = true;";
+      }
+      {
+        assertion = (!cfg.lsp.enable) || cfg.nodejs.enable;
+        message = "languages.javascript.lsp.enable requires languages.javascript.nodejs.enable = true;";
+      }
+      {
+        assertion = (!cfg.npm.install.enable) || cfg.npm.enable;
+        message = "languages.javascript.npm.install.enable requires languages.javascript.npm.enable = true;";
+      }
+      {
+        assertion = (!cfg.pnpm.install.enable) || cfg.pnpm.enable;
+        message = "languages.javascript.pnpm.install.enable requires languages.javascript.pnpm.enable = true;";
+      }
+      {
+        assertion = (!cfg.yarn.install.enable) || cfg.yarn.enable;
+        message = "languages.javascript.yarn.install.enable requires languages.javascript.yarn.enable = true;";
+      }
+      {
+        assertion = (!cfg.bun.install.enable) || cfg.bun.enable;
+        message = "languages.javascript.bun.install.enable requires languages.javascript.bun.enable = true;";
+      }
+    ];
   };
 }
