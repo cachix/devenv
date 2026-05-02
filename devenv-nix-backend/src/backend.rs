@@ -48,7 +48,8 @@ use devenv_core::store::Store as StoreTrait;
 use devenv_core::store::StorePath as CoreStorePath;
 use devenv_core::{CacheSettings, DevenvPaths, NixSettings, PortAllocator, StoreSettings};
 use devenv_eval_cache::{
-    self, CachedEval, CachingConfig, CachingEvalService, CachingEvalState, ResourceManager,
+    self, CachedEval, CachingConfig, CachingEvalService, CachingEvalState, EvalCacheKey,
+    ResourceManager,
 };
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use nix_bindings_expr::eval_state::{
@@ -231,6 +232,19 @@ fn eval_cache_error_into_miette(e: devenv_eval_cache::Error<miette::Error>) -> m
     }
 }
 
+fn cache_key_for(
+    bootstrap_args: &BootstrapArgs,
+    port_allocator: &PortAllocator,
+    attr_name: &str,
+) -> EvalCacheKey {
+    let cache_key_args = eval_cache_key_args(
+        bootstrap_args.as_str(),
+        port_allocator.is_enabled(),
+        port_allocator.is_strict(),
+    );
+    EvalCacheKey::from_nix_args_str(&cache_key_args, attr_name)
+}
+
 /// RAII guard that holds the eval-state lock and registers an activity
 /// for file evaluations during the session.
 pub(crate) struct EvalSession<'a> {
@@ -350,6 +364,10 @@ impl NixCBackend {
         let caching_eval_state =
             CachingEvalState::new(self.eval_state.clone(), cached_eval, cache_key_args);
         let _ = self.caching_eval_state.set(caching_eval_state);
+    }
+
+    fn cache_key(&self, attr_name: &str) -> EvalCacheKey {
+        cache_key_for(&self.bootstrap_args, &self.port_allocator, attr_name)
     }
 
     pub fn paths(&self) -> &DevenvPaths {
@@ -723,7 +741,7 @@ impl NixCBackend {
             .get()
             .expect("caching eval state must be initialized");
 
-        let cache_key = caching_state.cache_key("shell");
+        let cache_key = self.cache_key("shell");
 
         let cached_paths: Option<CachedShellPaths> = if let Some(service) =
             caching_state.cached_eval().service()
@@ -1087,7 +1105,7 @@ impl NixCBackend {
             .expect("caching eval state must be initialized");
 
         let clean_path = attr_path.trim_start_matches(".#");
-        let cache_key = caching_state.cache_key(clean_path);
+        let cache_key = self.cache_key(clean_path);
         let attr_path_owned = attr_path.to_string();
         let clean_path_owned = clean_path.to_string();
 
@@ -1238,7 +1256,7 @@ impl Evaluator for NixCBackend {
         let mut output_paths = Vec::new();
 
         for attr_path in attrs {
-            let cache_key = caching_state.cache_key(&format!("{}:build", attr_path));
+            let cache_key = self.cache_key(&format!("{}:build", attr_path));
 
             let cached_path: Option<String> = if let Some(service) =
                 caching_state.cached_eval().service()
@@ -1586,8 +1604,15 @@ pub fn apply_nix_settings(nix_settings: &NixSettings) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::core_config_watch_paths;
+    use super::{cache_key_for, core_config_watch_paths};
+    use devenv_core::{PortAllocator, bootstrap_args::BootstrapArgs};
+    use serde::Serialize;
     use tempfile::TempDir;
+
+    #[derive(Serialize)]
+    struct TinyArgs<'a> {
+        version: &'a str,
+    }
 
     #[test]
     fn core_config_watch_paths_only_tracks_existing_project_files() {
@@ -1603,5 +1628,20 @@ mod tests {
         assert!(tracked.contains(&temp_dir.path().join("devenv.lock")));
         assert!(!tracked.contains(&temp_dir.path().join("devenv.local.nix")));
         assert!(!tracked.contains(&temp_dir.path().join("devenv.local.yaml")));
+    }
+
+    #[test]
+    fn cache_key_reflects_current_port_allocator_mode() {
+        let args = BootstrapArgs::from_serializable(&TinyArgs { version: "test" }).unwrap();
+        let allocator = PortAllocator::new();
+
+        let shell_key = cache_key_for(&args, &allocator, "shell");
+        allocator.set_enabled(true);
+        let up_key = cache_key_for(&args, &allocator, "shell");
+        allocator.set_strict(true);
+        let strict_key = cache_key_for(&args, &allocator, "shell");
+
+        assert_ne!(shell_key.key_hash, up_key.key_hash);
+        assert_ne!(up_key.key_hash, strict_key.key_hash);
     }
 }
