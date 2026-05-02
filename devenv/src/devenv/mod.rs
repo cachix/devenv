@@ -1994,11 +1994,12 @@ impl Devenv {
     /// Inspects the native socket (not the PID file) because the socket is
     /// created before processes reach readiness and the PID file is written.
     pub async fn reserve_running_ports(&self) {
-        let processes_running = self.processes_running().await;
-        self.port_allocator.set_allow_in_use(processes_running);
-
         let native_socket = self.native_socket_path();
-        if !native_socket.exists() {
+        if native_socket.exists() {
+            self.port_allocator.set_allow_in_use(false);
+        } else {
+            self.port_allocator
+                .set_allow_in_use(self.processes_running().await);
             return;
         }
 

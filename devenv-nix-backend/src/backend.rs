@@ -1265,7 +1265,26 @@ impl Evaluator for NixCBackend {
                     Ok(Some(cached)) => match serde_json::from_str::<String>(&cached.json_output) {
                         Ok(path_str) => {
                             if std::path::Path::new(&path_str).exists() {
-                                Some(path_str)
+                                match caching_state
+                                    .cached_eval()
+                                    .try_replay_resources(cached.eval_id)
+                                    .await
+                                {
+                                    Ok(()) => Some(path_str),
+                                    Err(e) => {
+                                        tracing::warn!(error = %e, attr_path = attr_path, "Resource replay failed for build cache hit, re-evaluating");
+                                        if let Err(db_err) =
+                                            service.invalidate_resource_dependent().await
+                                        {
+                                            tracing::warn!(error = %db_err, "Failed to delete port-dependent cache entries");
+                                        }
+                                        caching_state.cached_eval().clear_resources();
+                                        if let Ok(mut cached) = self.cached_devenv_value.lock() {
+                                            *cached = None;
+                                        }
+                                        None
+                                    }
+                                }
                             } else {
                                 if let Err(db_err) = service.invalidate(&cache_key).await {
                                     tracing::warn!(error = %db_err, attr_path = attr_path, "Failed to invalidate stale build cache entry");
