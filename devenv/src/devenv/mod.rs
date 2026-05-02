@@ -1047,8 +1047,8 @@ impl Devenv {
         input_json: Option<String>,
         verbosity: tasks::VerbosityLevel,
     ) -> Result<String> {
-        self.setup_cachix().await?;
         self.reserve_running_ports().await;
+        self.setup_cachix().await?;
         if roots.is_empty() {
             bail!("No tasks specified.");
         }
@@ -1297,10 +1297,10 @@ impl Devenv {
     }
 
     pub async fn test(&self, verbosity: tasks::VerbosityLevel) -> Result<()> {
-        self.setup_cachix().await?;
         // Enable port allocation before assemble so that ports resolved
         // during Nix evaluation (e.g. in enterTest) are properly allocated.
         self.port_allocator.set_enabled(true);
+        self.setup_cachix().await?;
 
         // ── Phase 1: Configuring shell ──────────────────────────────
         let envs = self.configure_shell().await?;
@@ -1507,11 +1507,11 @@ impl Devenv {
         options: ProcessOptions,
         verbosity: tasks::VerbosityLevel,
     ) -> Result<RunMode> {
-        self.setup_cachix().await?;
         // Set strict port mode before backend init triggers port allocation.
         self.port_allocator.set_strict(options.strict_ports);
         self.port_allocator.set_enabled(true);
         self.reserve_running_ports().await;
+        self.setup_cachix().await?;
 
         // ── Phase 1: Configuring shell ──────────────────────────────
         let mut envs = self.configure_shell().await?;
