@@ -22,7 +22,6 @@ tokio-shutdown.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 sqlx.workspace = true
-blake3.workspace = true
 shell-escape.workspace = true
 base64.workspace = true
 ignore.workspace = true

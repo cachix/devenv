@@ -1754,9 +1754,7 @@ dependencies = [
 name = "devenv"
 version = "2.1.0"
 dependencies = [
- "async-trait",
  "axum 0.8.9",
- "chrono",
  "clap",
  "clap_complete",
  "cli-table",
@@ -1765,7 +1763,6 @@ dependencies = [
  "devenv-cache-core",
  "devenv-core",
  "devenv-eval-cache",
- "devenv-event-sources",
  "devenv-nix-backend",
  "devenv-nix-backend-macros",
  "devenv-processes",
@@ -1775,7 +1772,6 @@ dependencies = [
  "devenv-tasks",
  "devenv-tui",
  "dialoguer",
- "dotlock",
  "fd-lock",
  "futures",
  "hostname",
@@ -1784,35 +1780,18 @@ dependencies = [
  "json-subscriber",
  "miette",
  "nix 0.31.2",
- "nix-compat",
- "nix-compat-derive",
- "nix-conf-parser",
  "once_cell",
  "opentelemetry 0.31.0",
  "opentelemetry-otlp 0.31.1",
  "opentelemetry_sdk 0.31.0",
- "pathdiff",
- "portable-pty",
- "rand 0.10.1",
- "regex",
- "reqwest 0.13.3",
  "rmcp",
- "rmcp-macros",
  "schemars 1.2.1",
- "schematic",
  "secrecy",
  "secretspec",
- "ser_nix",
  "serde",
  "serde_json",
- "serde_yaml",
  "shell-escape",
  "similar 3.1.0",
- "snix-build",
- "snix-castore",
- "snix-eval",
- "snix-glue",
- "snix-store",
  "sqlx",
  "tempfile",
  "termimad",
@@ -1878,12 +1857,10 @@ dependencies = [
  "async-trait",
  "clap",
  "devenv-activity",
- "devenv-cache-core",
  "miette",
  "netstat2",
  "nix-conf-parser",
  "num_enum",
- "once_cell",
  "pathdiff",
  "regex",
  "schemars 1.2.1",
@@ -1910,11 +1887,9 @@ dependencies = [
  "devenv-core",
  "futures",
  "miette",
- "num_enum",
  "ser_nix",
  "serde",
  "serde_json",
- "serde_repr",
  "sqlx",
  "tempfile",
  "thiserror 2.0.18",
@@ -1961,24 +1936,20 @@ dependencies = [
  "nix-bindings-util",
  "nix-cmd",
  "once_cell",
- "secretspec",
  "ser_nix",
  "serde",
  "serde_json",
  "sqlx",
  "tempfile",
  "tokio",
- "tokio-shutdown",
  "tracing",
  "uuid",
- "which 8.0.2",
 ]
 
 [[package]]
 name = "devenv-nix-backend-macros"
 version = "2.1.0"
 dependencies = [
- "proc-macro2",
  "quote",
  "syn 2.0.117",
 ]
@@ -2016,7 +1987,6 @@ dependencies = [
 name = "devenv-reload"
 version = "2.1.0"
 dependencies = [
- "anyhow",
  "devenv-activity",
  "devenv-cache-core",
  "devenv-event-sources",
@@ -2026,7 +1996,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "tokio-test",
  "tracing",
 ]
 
@@ -2043,7 +2012,6 @@ dependencies = [
  "serde_yaml",
  "tempfile",
  "tokio",
- "tokio-shutdown",
 ]
 
 [[package]]
@@ -2058,10 +2026,8 @@ dependencies = [
  "libghostty-vt-sys",
  "portable-pty",
  "shell-escape",
- "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "tokio-test",
  "tracing",
 ]
 
@@ -2090,7 +2056,6 @@ name = "devenv-tasks"
 version = "2.1.0"
 dependencies = [
  "base64",
- "blake3",
  "clap",
  "console",
  "devenv-activity",
@@ -2120,27 +2085,17 @@ name = "devenv-tui"
 version = "2.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "base64",
  "chrono",
  "clap",
- "console",
  "crossterm",
  "devenv-activity",
- "devenv-cache-core",
- "devenv-eval-cache",
  "devenv-processes",
  "devenv-shell",
- "futures",
  "human-repr",
- "indexmap 2.14.0",
  "insta",
  "iocraft",
  "libc",
- "miette",
- "once_cell",
- "rand 0.10.1",
- "regex",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -2265,15 +2220,6 @@ name = "dotenvy"
 version = "0.15.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
-
-[[package]]
-name = "dotlock"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30c541575b952e53113caddb5be24869705052591b534ea11a81a3d4743416a3"
-dependencies = [
- "tempfile",
-]
 
 [[package]]
 name = "downcast-rs"

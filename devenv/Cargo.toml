@@ -17,14 +17,10 @@ devenv-processes.workspace = true
 devenv-tasks.workspace = true
 devenv-tui.workspace = true
 devenv-cache-core.workspace = true
-devenv-event-sources.workspace = true
 devenv-reload.workspace = true
 devenv-shell.workspace = true
-portable-pty.workspace = true
 devenv-snix-backend = { workspace = true, optional = true }
 devenv-nix-backend.workspace = true
-rand.workspace = true
-nix-conf-parser.workspace = true
 tokio-shutdown.workspace = true
 
 clap.workspace = true
@@ -32,7 +28,6 @@ clap_complete.workspace = true
 cli-table.workspace = true
 console.workspace = true
 dialoguer.workspace = true
-dotlock.workspace = true
 fd-lock.workspace = true
 futures.workspace = true
 hostname.workspace = true
@@ -40,14 +35,9 @@ include_dir.workspace = true
 indoc.workspace = true
 miette.workspace = true
 nix.workspace = true
-regex.workspace = true
-reqwest.workspace = true
 schemars.workspace = true
-schematic.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-serde_yaml.workspace = true
-ser_nix.workspace = true
 sqlx.workspace = true
 tempfile.workspace = true
 termimad.workspace = true
@@ -62,13 +52,9 @@ whoami.workspace = true
 xdg.workspace = true
 similar.workspace = true
 once_cell.workspace = true
-pathdiff.workspace = true
 shell-escape.workspace = true
 rmcp.workspace = true
-rmcp-macros.workspace = true
 axum.workspace = true
-async-trait.workspace = true
-chrono.workspace = true
 secretspec.workspace = true
 secrecy.workspace = true
 url.workspace = true
@@ -80,17 +66,11 @@ opentelemetry_sdk = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 
-# Optional snix dependencies
-snix-eval = { workspace = true, optional = true }
-snix-glue = { workspace = true, optional = true }
-snix-castore = { workspace = true, optional = true }
-snix-store = { workspace = true, optional = true }
-snix-build = { workspace = true, optional = true }
-nix-compat = { workspace = true, optional = true }
-nix-compat-derive = { workspace = true, optional = true }
-
 [build-dependencies]
 vergen-gitcl.workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ["vergen-gitcl"]
 
 [dev-dependencies]
 devenv-nix-backend-macros.workspace = true
@@ -115,13 +95,4 @@ test-all = [
   "devenv-tui/test-all",
 ]
 test-mcp = []
-snix = [
-  "dep:devenv-snix-backend",
-  "dep:nix-compat",
-  "dep:nix-compat-derive",
-  "dep:snix-build",
-  "dep:snix-castore",
-  "dep:snix-eval",
-  "dep:snix-glue",
-  "dep:snix-store",
-]
+snix = ["dep:devenv-snix-backend", "devenv-core/snix"]

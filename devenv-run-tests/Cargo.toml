@@ -9,7 +9,6 @@ clap.workspace = true
 devenv.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
-tokio-shutdown.workspace = true
 miette.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -17,6 +17,9 @@ iocraft.workspace = true
 
 # Terminal state tracking
 libghostty-vt.workspace = true
+# Direct dep required to enable the `pkg-config` feature on libghostty-vt-sys.
+# Without it, libghostty-vt pulls libghostty-vt-sys with default features and
+# its build.rs invokes `zig build`, which fails when zig is not installed.
 libghostty-vt-sys.workspace = true
 
 # Async runtime
@@ -36,8 +39,6 @@ libc.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
-tokio-test.workspace = true
-tempfile.workspace = true
 insta.workspace = true
 
 [features]
@@ -45,3 +46,6 @@ default = []
 deterministic-tui = []
 test-all = ["test-pty", "deterministic-tui"]
 test-pty = []
+
+[package.metadata.cargo-machete]
+ignored = ["libghostty-vt-sys"]
