@@ -68,7 +68,7 @@ fn send_notify(socket_path: &std::path::Path, states: &[NotifyState]) {
     unsafe {
         std::env::set_var("NOTIFY_SOCKET", socket_path);
     }
-    sd_notify::notify(false, states).expect("Should send notification");
+    sd_notify::notify(states).expect("Should send notification");
     unsafe {
         std::env::remove_var("NOTIFY_SOCKET");
     }
