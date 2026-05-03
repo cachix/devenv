@@ -1665,6 +1665,7 @@ mod tests {
             command: None,
             ports: vec![],
             ready_probe: None,
+            urls: vec![],
             level: ActivityLevel::Info,
             timestamp: Timestamp::now(),
         }));
@@ -1717,6 +1718,7 @@ mod tests {
                 command: None,
                 ports: vec![],
                 ready_probe: None,
+                urls: vec![],
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),
             }));
@@ -1758,6 +1760,7 @@ mod tests {
                 command: None,
                 ports: vec![],
                 ready_probe: None,
+                urls: vec![],
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),
             }));
