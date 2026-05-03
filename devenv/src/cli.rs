@@ -674,7 +674,7 @@ fn complete_task_names(current: &OsStr) -> Vec<CompletionCandidate> {
 )]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Option<Commands>,
+    pub command: Commands,
 
     #[arg(
         long,
@@ -1305,7 +1305,7 @@ mod tests {
         let cli = Cli::parse_from(["devenv", "up", "--no-strict-ports"]);
 
         match cli.command {
-            Some(Commands::Up { up_args }) => {
+            Commands::Up { up_args } => {
                 assert!(!up_args.strict_ports);
                 assert!(up_args.no_strict_ports);
             }
@@ -1318,9 +1318,9 @@ mod tests {
         let cli = Cli::parse_from(["devenv", "processes", "up", "--no-strict-ports"]);
 
         match cli.command {
-            Some(Commands::Processes {
+            Commands::Processes {
                 command: ProcessesCommand::Up { up_args },
-            }) => {
+            } => {
                 assert!(!up_args.strict_ports);
                 assert!(up_args.no_strict_ports);
             }

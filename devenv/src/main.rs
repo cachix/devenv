@@ -72,29 +72,15 @@ fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
 }
 
 fn main() {
-    install_miette_hook();
-
     // Handle shell completion requests (COMPLETE=bash devenv)
     // Use "devenv" as completer so scripts work after installation (not absolute path)
     CompleteEnv::with_factory(Cli::command)
         .completer("devenv")
         .complete();
 
-    // Re-run on a thread with a larger stack. Nix evaluation via FFI can be
-    // deeply recursive (e.g. large nixpkgs traversals) and the default 8MB
-    // main-thread stack is not always enough. The Nix CLI itself raises
-    // RLIMIT_STACK to 64MB via nix::setStackSize() before evaluating; we
-    // achieve the same by running on a dedicated thread.
-    let result: Result<()> = std::thread::Builder::new()
-        .name("main".into())
-        .stack_size(NIX_STACK_SIZE)
-        .spawn(main_inner)
-        .expect("Failed to spawn main thread")
-        .join()
-        .map_err(|e| miette::miette!("main thread panicked: {}", panic_message(e)))
-        .and_then(|r| r);
+    install_miette_hook();
 
-    if let Err(err) = result {
+    if let Err(err) = main_inner() {
         eprintln!("{err:?}");
         std::process::exit(1);
     }
@@ -108,40 +94,40 @@ fn main_inner() -> Result<()> {
 
         // Handle commands that don't need config or runtime
         match &cli.command {
-            Some(Commands::Version) => {
+            Commands::Version => {
                 commands::version::run(cli.nix_args.system.as_deref());
                 return Ok(());
             }
-            Some(Commands::Direnvrc) => {
+            Commands::Direnvrc => {
                 commands::direnvrc::run();
                 return Ok(());
             }
-            Some(Commands::Hook { shell }) => {
+            Commands::Hook { shell } => {
                 commands::hook::print(shell);
                 return Ok(());
             }
-            Some(Commands::Allow) => {
+            Commands::Allow => {
                 return commands::hook::allow();
             }
-            Some(Commands::Revoke) => {
+            Commands::Revoke => {
                 return commands::hook::revoke();
             }
-            Some(Commands::HookShouldActivate) => {
+            Commands::HookShouldActivate => {
                 return commands::hook::should_activate();
             }
-            Some(Commands::DaemonProcesses { config_file }) => {
+            Commands::DaemonProcesses { config_file } => {
                 return commands::daemon_processes::run(config_file);
             }
-            Some(Commands::Init { target }) => {
+            Commands::Init { target } => {
                 let verbosity = resolve_verbosity(&cli.cli_options);
                 return commands::init::run(target.as_deref(), verbosity);
             }
             _ => {}
         }
 
-        let launch = prepare_launch_config(cli)?;
+        let ctx = build_run_context(cli)?;
 
-        let result = run(launch);
+        let result = run(ctx);
 
         match result {
             Err(err) => match err.downcast::<devenv::SecretsNeedPrompting>() {
@@ -162,7 +148,7 @@ fn main_inner() -> Result<()> {
 }
 
 /// Everything resolved from CLI + config + environment, before any async runtime.
-struct LaunchConfig {
+struct RunContext {
     command: Commands,
     config: Config,
     nix_settings: NixSettings,
@@ -208,10 +194,7 @@ fn resolve_verbosity(cli_options: &devenv::cli::CliOptions) -> devenv::tasks::Ve
 }
 
 /// Resolve all configuration from CLI + config files + environment.
-/// This is a sync function that runs before any async runtime.
-fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
-    let command = cli.command.take().expect("Command should exist");
-
+fn build_run_context(cli: Cli) -> Result<RunContext> {
     // Extract values from CLI before consuming fields via From conversions
     let nix_debugger = cli.nix_args.nix_debugger;
 
@@ -276,6 +259,8 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
         config.imports.push("from".to_string());
     }
 
+    let command = cli.command;
+
     // Resolve settings from CLI + Config (pure functions, no mutation).
     let mut nix_settings =
         NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
@@ -319,7 +304,7 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
     // Commands that do eval with TUI active, then take over the terminal
     let needs_terminal_handoff = use_pty || matches!(&command, Commands::Repl {});
 
-    Ok(LaunchConfig {
+    Ok(RunContext {
         command,
         config,
         nix_settings,
@@ -347,7 +332,7 @@ fn prepare_launch_config(mut cli: Cli) -> Result<LaunchConfig> {
 /// 1. Common setup (activity, tracing, shutdown, channels)
 /// 2. Backend runs on a dedicated GC-registered thread
 /// 3. TUI runs on the main thread (if enabled), otherwise we just wait
-fn run(launch: LaunchConfig) -> Result<()> {
+fn run(ctx: RunContext) -> Result<()> {
     // Three mutually exclusive activity sinks. `Renderer::None` means tracing
     // owns the terminal — `send_activity_event` then falls through to
     // `tracing::trace!` only, which is exactly what `--trace-to <terminal>` wants.
@@ -357,8 +342,8 @@ fn run(launch: LaunchConfig) -> Result<()> {
         None,
     }
 
-    let cli_output = !launch.tui && !launch.tracing_owns_terminal;
-    let (renderer, _activity_guard) = if launch.tui {
+    let cli_output = !ctx.tui && !ctx.tracing_owns_terminal;
+    let (renderer, _activity_guard) = if ctx.tui {
         let (rx, handle) = devenv_activity::init();
         (Renderer::Tui(rx), Some(handle.install()))
     } else if cli_output {
@@ -369,11 +354,11 @@ fn run(launch: LaunchConfig) -> Result<()> {
     };
 
     let _tracing_guard =
-        devenv_tracing::init_tracing(launch.log_level, &launch.tracing_specs, cli_output);
+        devenv_tracing::init_tracing(ctx.log_level, &ctx.tracing_specs, cli_output);
 
-    let tui = launch.tui;
-    let needs_terminal_handoff = launch.needs_terminal_handoff;
-    let verbosity = launch.verbosity;
+    let tui = ctx.tui;
+    let needs_terminal_handoff = ctx.needs_terminal_handoff;
+    let verbosity = ctx.verbosity;
 
     // Shutdown coordination (shared between main thread and backend thread)
     let shutdown = Shutdown::new();
@@ -411,7 +396,7 @@ fn run(launch: LaunchConfig) -> Result<()> {
                 shutdown_clone.install_signals().await;
 
                 let output = run_backend(
-                    launch,
+                    ctx,
                     shutdown_clone.clone(),
                     backend_done_clone,
                     Some(terminal_ready_rx),
@@ -572,16 +557,15 @@ impl Drop for BackendDoneGuard {
 }
 
 /// Run the backend: construct Devenv and dispatch the command.
-/// All config loading and settings resolution has already happened in prepare_launch_config.
 #[instrument(name = "devenv", skip_all)]
 async fn run_backend(
-    launch: LaunchConfig,
+    ctx: RunContext,
     shutdown: Arc<Shutdown>,
     backend_done: Arc<tokio::sync::Notify>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
 ) -> DevenvOutput {
-    let LaunchConfig {
+    let RunContext {
         command,
         config,
         nix_settings,
@@ -592,16 +576,11 @@ async fn run_backend(
         input_overrides,
         from_external,
         verbosity,
-        tui: _,
         use_pty,
         nix_debugger,
         is_testing,
-        // Consumed by run() before run_backend is called
-        needs_terminal_handoff: _,
-        log_level: _,
-        tracing_specs: _,
-        tracing_owns_terminal: _,
-    } = launch;
+        ..
+    } = ctx;
 
     // Ensure TUI is notified when backend exits, even on early return or panic.
     let mut backend_done_guard = BackendDoneGuard::new(backend_done);
