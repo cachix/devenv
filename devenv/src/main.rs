@@ -108,7 +108,7 @@ fn main_inner() -> Result<()> {
 
         // Handle commands that don't need config or runtime
         match &cli.command {
-            None | Some(Commands::Version) => {
+            Some(Commands::Version) => {
                 commands::version::run(cli.nix_args.system.as_deref());
                 return Ok(());
             }

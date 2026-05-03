@@ -70,6 +70,7 @@
 ### Breaking Changes
 
 - **`devenv tasks run`**: The default execution mode is now `before` instead of `single`, so task dependencies declared via `before`/`after` are respected by default. Running `devenv tasks run admin:deploy` now also runs any tasks that `admin:deploy` depends on. Use `--mode single` to restore the previous behavior of running only the specified task ([#2551](https://github.com/cachix/devenv/issues/2551)).
+- Calling `devenv` without a command now shows the help text. This used to print the version. Use `devenv version` or `devenv --version` instead.
 
 ## 2.0.6 (2026-03-22)
 

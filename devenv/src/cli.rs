@@ -666,6 +666,7 @@ fn complete_task_names(current: &OsStr) -> Vec<CompletionCandidate> {
     name = "devenv",
     color = clap::ColorChoice::Auto,
     disable_help_flag = true,
+    arg_required_else_help = true,
     // for --clean to work with subcommands
     subcommand_precedence_over_arg = true,
     dont_delimit_trailing_values = true,
