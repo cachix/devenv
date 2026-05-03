@@ -75,6 +75,55 @@ pub fn copy_fixture_lock(dest: &Path) {
     std::fs::copy(&fixture, dest.join("devenv.lock")).expect("copy fixture lock");
 }
 
+fn run_git(dir: &Path, args: &[&str]) {
+    let status = std::process::Command::new("git")
+        .args([
+            "-c",
+            "user.email=test@devenv",
+            "-c",
+            "user.name=devenv-test",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "init.defaultBranch=main",
+        ])
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .status()
+        .expect("run git");
+    assert!(status.success(), "git {args:?} failed");
+}
+
+/// Initialize a tiny `git+file://` flake at `dir` whose only output is a
+/// marker string. Returns the URL suitable for use in a `devenv.yaml` input.
+///
+/// The flake declares no derivations, so `update()` against it is a pure
+/// local git operation — no network, no eval cost.
+pub fn write_local_flake(dir: &Path, marker: &str) -> String {
+    std::fs::create_dir_all(dir).expect("create flake dir");
+    std::fs::write(
+        dir.join("flake.nix"),
+        format!("{{ outputs = _: {{ marker = \"{marker}\"; }}; }}\n"),
+    )
+    .expect("write flake.nix");
+    run_git(dir, &["init", "-q"]);
+    run_git(dir, &["add", "flake.nix"]);
+    run_git(dir, &["commit", "-q", "-m", marker]);
+    format!("git+file://{}", dir.display())
+}
+
+/// Add a new commit to a flake created with [`write_local_flake`], so that
+/// the next `update()` for that input observes a different rev.
+pub fn bump_local_flake(dir: &Path, marker: &str) {
+    std::fs::write(
+        dir.join("flake.nix"),
+        format!("{{ outputs = _: {{ marker = \"{marker}\"; }}; }}\n"),
+    )
+    .expect("rewrite flake.nix");
+    run_git(dir, &["commit", "-q", "-am", marker]);
+}
+
 /// All the handles a test needs after construction.
 ///
 /// Most tests want `env.backend` and `env.path()`; `config` and `paths`

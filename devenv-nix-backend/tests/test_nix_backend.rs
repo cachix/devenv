@@ -363,6 +363,10 @@ async fn test_build_multiple_attributes_single_call() {
     }
 }
 
+/// Two consecutive `build()` calls on the same backend with different
+/// `gc_root` directories must both produce the symlinks named after the
+/// attr (`result{1,2}-shell`). Guards against shared mutable state in
+/// the backend leaking GC-root paths between calls.
 #[nix_test]
 async fn test_workflow_multiple_builds_different_gc_roots() {
     let env = TestEnv::new().await;
@@ -380,31 +384,62 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
     assert!(env.path().join("result2-shell").exists());
 }
 
+/// Exercises the `update → eval → update → eval` chain on a single
+/// backend instance, where the second update is an *incremental* relock
+/// of one input.
+///
+/// What this guards against:
+/// - Re-running `update()` on a populated lock must not corrupt the lock
+///   or wedge the in-process eval state.
+/// - The selective form of `update(Some(name), ...)` must rewrite only
+///   the requested input's node and leave the others byte-identical.
+/// - After the relock, the backend must re-evaluate cleanly (no stale
+///   eval cache pinning the old lock).
+///
+/// Cost shape:
+/// - `nixpkgs` is fetched from GitHub on cold cache (one-time per host;
+///   binary-cache resolves the lock fast on warm). It exists only because
+///   the bootstrap eval needs a real `pkgs` to construct `shell`.
+/// - The incremental step targets `light`, a tiny in-memory `git+file://`
+///   flake we author and bump in-process — pure local git, no network.
+/// - Both build steps use `eval("shell.drvPath")` instead of `build()`:
+///   we want to assert the eval pipeline succeeds, not that nixpkgs's
+///   stdenv closure can be realised. Realise coverage lives in
+///   `test_backend_build_package` and the gc-root workflow above.
 #[nix_test]
 async fn test_workflow_build_then_incremental_update() {
-    let env = TestEnv::builder().no_lock().build().await;
+    let flake_dir = tempfile::tempdir().expect("flake tempdir");
+    let light_url = common::write_local_flake(flake_dir.path(), "v1");
+    let yaml = format!(
+        "inputs:\n  \
+           nixpkgs:\n    url: github:cachix/devenv-nixpkgs/rolling\n  \
+           light:\n    url: {light_url}\n    flake: false\n"
+    );
+
+    let env = TestEnv::builder().yaml(yaml).no_lock().build().await;
 
     env.backend
         .update(&None, &env.config.inputs, &[])
         .await
         .expect("initial update");
-    let paths1 = env
+    let drv1 = env
         .backend
-        .build(&["shell"], BuildOptions::default())
+        .eval(&["shell.drvPath"])
         .await
-        .expect("initial build");
-    assert!(paths1[0].to_str().unwrap().starts_with("/nix/store"));
+        .expect("initial eval");
+    assert!(drv1.contains("/nix/store"), "drv1 = {drv1}");
+
+    common::bump_local_flake(flake_dir.path(), "v2");
 
     env.backend
-        .update(&Some("nixpkgs".into()), &env.config.inputs, &[])
+        .update(&Some("light".into()), &env.config.inputs, &[])
         .await
         .expect("incremental update");
-    let paths2 = env
-        .backend
-        .build(&["shell"], BuildOptions::default())
-        .await
-        .expect("rebuild");
-    assert!(paths2[0].to_str().unwrap().starts_with("/nix/store"));
+    let drv2 = env.backend.eval(&["shell.drvPath"]).await.expect("re-eval");
+    assert!(drv2.contains("/nix/store"), "drv2 = {drv2}");
+
+    let lock = std::fs::read_to_string(env.path().join("devenv.lock")).expect("read lock");
+    assert!(lock.contains("\"light\""), "light input present in lock");
 }
 
 // ============================================================================
