@@ -15,35 +15,35 @@ tokio = { workspace = true, features = [
   "time",
   "signal",
 ] }
-tokio-shutdown = { workspace = true }
-futures = { workspace = true }
-async-trait = { workspace = true }
+tokio-shutdown.workspace = true
+futures.workspace = true
+async-trait.workspace = true
 
 # TUI library
 iocraft.workspace = true
-crossterm = { workspace = true }
+crossterm.workspace = true
 
 # Tracing integration
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 # Data structures
-indexmap = { workspace = true }
+indexmap.workspace = true
 
 # Terminal state management
 libc.workspace = true
 
 # Error handling
-thiserror = { workspace = true }
-anyhow = { workspace = true }
-miette = { workspace = true }
+thiserror.workspace = true
+anyhow.workspace = true
+miette.workspace = true
 
 # CLI argument parsing
-clap = { workspace = true }
+clap.workspace = true
 
 # Serialization
-serde = { workspace = true }
-serde_json = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
 
 # Nix log parsing
 devenv-eval-cache.workspace = true
@@ -61,32 +61,32 @@ devenv-shell.workspace = true
 devenv-cache-core.workspace = true
 
 # Time handling
-once_cell = { workspace = true }
-chrono = { workspace = true }
+once_cell.workspace = true
+chrono.workspace = true
 
 # Human-readable formatting
-human-repr = { workspace = true }
+human-repr.workspace = true
 
 # URL parsing
-url = { workspace = true }
+url.workspace = true
 
 # Random number generation
-rand = { workspace = true }
+rand.workspace = true
 
 # Regex for ANSI stripping
-regex = { workspace = true }
+regex.workspace = true
 
 # Terminal UI components
-console = { workspace = true }
+console.workspace = true
 
 # Base64 encoding (for OSC 52 clipboard)
-base64 = { workspace = true }
+base64.workspace = true
 [[bin]]
 name = "tui-replay"
 path = "src/bin/tui-replay.rs"
 
 [dev-dependencies]
-insta = { workspace = true }
+insta.workspace = true
 
 [features]
 default = []

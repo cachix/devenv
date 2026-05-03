@@ -61,9 +61,9 @@ nix-bindings-bindgen-raw = { git = "https://github.com/cachix/nix-bindings-rust.
 libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs.git", branch = "master" }
 libghostty-vt-sys = { git = "https://github.com/Uzaaft/libghostty-rs.git", branch = "master", default-features = false, features = ["pkg-config"] }
 base64 = "0.22"
-anyhow = "1.0.92"
+anyhow = "1.0.102"
 ansiterm = "0.12.2"
-astral-tokio-tar = "0.5.6"
+astral-tokio-tar = "0.6.1"
 async-priority-channel = "0.2.0"
 async-trait = "0.1"
 binaryornot = "1.0.0"
@@ -71,34 +71,34 @@ binaryornot = "1.0.0"
 # with snix-castore (uses digest 0.10 APIs).
 blake3 = "=1.8.3"
 chrono = { version = "0.4", features = ["serde"] }
-clap = { version = "4.5.48", features = ["derive", "cargo", "env"] }
-clap_complete = { version = "4.5.58", features = ["unstable-dynamic"] }
-clap_mangen = "0.2.29"
+clap = { version = "4.6.1", features = ["derive", "cargo", "env"] }
+clap_complete = { version = "4.6.3", features = ["unstable-dynamic"] }
+clap_mangen = "0.3.0"
 cstr = "0.2"
 cli-table = "0.5.0"
-console = "0.16.1"
+console = "0.16.3"
 dotlock = "0.5.0"
 dialoguer = "0.12.0"
 fd-lock = "4"
-futures = "0.3.31"
+futures = "0.3.32"
 hex = "0.4.3"
-hostname = "0.4.1"
+hostname = "0.4.2"
 humantime = "2"
 include_dir = "0.7.4"
-indexmap = "2.11.4"
-indoc = "2.0.6"
+indexmap = "2.14.0"
+indoc = "2.0.7"
 lazy_static = "1.5.0"
 pathdiff = "0.2.3"
 miette = { version = "7.6.0", features = ["fancy"] }
 nix = { version = "0.31", features = ["fs", "process", "signal"] }
 num_enum = "0.7"
-once_cell = "1.21.3"
-petgraph = "0.8.2"
+once_cell = "1.21.4"
+petgraph = "0.8.3"
 pretty_assertions = { version = "1.4.1", features = ["unstable"] }
 netstat2 = "0.11"
 rand = "0.10"
-regex = "1.11.3"
-schemars = "1.0.4"
+regex = "1.12.3"
+schemars = "1.2.1"
 schematic = { version = "0.19", features = [
   "schema",
   "yaml",
@@ -115,30 +115,30 @@ secretspec = { git = "https://github.com/cachix/secretspec", tag = "v0.8.0", fea
   "vault",
 ] }
 semver = "1"
-serde = { version = "1.0.226", features = ["derive"] }
-serde_json = "1.0.145"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
 serde_repr = "0.1.20"
 serde_with = "3"
 serde_yaml = "0.9.34"
-ser_nix = "0.2.2"
-similar = "2.7.0"
-sha2 = "0.10.9"
+ser_nix = "0.2.4"
+similar = "3.1.0"
+sha2 = "0.11.0"
 shell-escape = "0.1.5"
 sqlx = { version = "0.8.6", features = ["time", "sqlite", "runtime-tokio"] }
 strum = { version = "0.28", features = ["derive"] }
-tempfile = "3.23.0"
+tempfile = "3.27.0"
 termimad = "0.34"
 tokio-test = "0.4"
-thiserror = "2.0.16"
-tracing = { version = "0.1.41", features = ["valuable"] }
-tracing-subscriber = { version = "0.3.20", features = [
+thiserror = "2.0.18"
+tracing = { version = "0.1.44", features = ["valuable"] }
+tracing-subscriber = { version = "0.3.23", features = [
   "env-filter",
   "json",
   "valuable",
 ] }
 valuable = { version = "0.1", features = ["derive"] }
-json-subscriber = { version = "0.2.6" }
-tokio = { version = "1.47.1", features = [
+json-subscriber = { version = "0.2.8" }
+tokio = { version = "1.52.1", features = [
   "process",
   "fs",
   "io-util",
@@ -147,30 +147,30 @@ tokio = { version = "1.47.1", features = [
   "sync",
   "time",
 ] }
-tokio-util = { version = "0.7.16", features = ["io"] }
+tokio-util = { version = "0.7.18", features = ["io"] }
 tokio-stream = "0.1"
-uuid = { version = "1.18", features = ["v4"] }
-which = "8.0.0"
-whoami = "2.1.1"
+uuid = { version = "1.23", features = ["v4"] }
+which = "8.0.2"
+whoami = "2.1.2"
 xdg = "3.0.0"
 walkdir = "2.5"
 globset = "0.4"
 url = "2"
 human-repr = "1.1"
-insta = { version = "1.40", features = ["filters", "json"] }
+insta = { version = "1.47", features = ["filters", "json"] }
 notify = { version = "8", default-features = false }
 watchexec = "8.2"
 watchexec-filterer-globset = "8.0"
-watchexec-supervisor = "5.1"
+watchexec-supervisor = "5.2"
 signal-hook = "0.4"
 signal-hook-tokio = { version = "0.4", features = ["futures-v0_3"] }
 socket2 = "0.6"
-ctrlc = "3.4"
-process-wrap = { version = "9.0", features = ["tokio1"] }
+ctrlc = "3.5"
+process-wrap = { version = "9.1", features = ["tokio1"] }
 portable-pty = "0.9.0"
-vergen-gitcl = "9.0"
-ignore = "0.4.23"
-proptest = "1.8"
+vergen-gitcl = "9.1"
+ignore = "0.4.25"
+proptest = "1.11"
 libc = "0.2"
 proc-macro2 = "1.0"
 quote = "1.0"
@@ -179,13 +179,13 @@ syn = { version = "2.0", features = ["full", "parsing", "extra-traits"] }
 reqwest = { version = "0.13", features = ["json", "query", "stream"] }
 axum = "0.8"
 caps = "0.5"
-rmcp = { version = "1.1", features = [
+rmcp = { version = "1.6", features = [
   "server",
   "transport-io",
   "transport-streamable-http-server",
 ] }
-rmcp-macros = "1.1"
-sd-notify = "0.4"
+rmcp-macros = "1.6"
+sd-notify = "0.5"
 
 # Optional OpenTelemetry dependencies
 opentelemetry = "0.31"
@@ -203,7 +203,7 @@ nix-compat = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a75
 nix-compat-derive = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
 
 # Ensure crossterm versions match between these
-iocraft = { version = "0.8.0", features = ["unstable-output-streams"] }
+iocraft = { version = "=0.8.0", features = ["unstable-output-streams"] }
 crossterm = "0.29.0"
 
 [patch.crates-io]

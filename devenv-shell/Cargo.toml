@@ -9,27 +9,27 @@ description = "Shell and PTY management for devenv"
 
 [dependencies]
 # PTY management
-portable-pty = { workspace = true }
+portable-pty.workspace = true
 
 # Terminal handling
-crossterm = { workspace = true }
-iocraft = { workspace = true }
+crossterm.workspace = true
+iocraft.workspace = true
 
 # Terminal state tracking
-libghostty-vt = { workspace = true }
-libghostty-vt-sys = { workspace = true }
+libghostty-vt.workspace = true
+libghostty-vt-sys.workspace = true
 
 # Async runtime
 tokio = { workspace = true, features = ["sync", "rt", "signal", "io-util"] }
 
 # Shell escaping
-shell-escape = { workspace = true }
+shell-escape.workspace = true
 
 # Error handling
-thiserror = { workspace = true }
+thiserror.workspace = true
 
 # Logging
-tracing = { workspace = true }
+tracing.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
@@ -37,8 +37,8 @@ libc.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tokio-test.workspace = true
-tempfile = { workspace = true }
-insta = { workspace = true }
+tempfile.workspace = true
+insta.workspace = true
 
 [features]
 default = []

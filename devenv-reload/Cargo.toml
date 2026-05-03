@@ -8,20 +8,20 @@ repository.workspace = true
 description = "Shell session manager with hot-reload capability"
 
 [dependencies]
-devenv-activity = { workspace = true }
-devenv-event-sources = { workspace = true }
-devenv-shell = { workspace = true }
-portable-pty = { workspace = true }
-libghostty-vt = { workspace = true }
+devenv-activity.workspace = true
+devenv-event-sources.workspace = true
+devenv-shell.workspace = true
+portable-pty.workspace = true
+libghostty-vt.workspace = true
 tokio = { workspace = true, features = ["full"] }
-thiserror = { workspace = true }
-tracing = { workspace = true }
-anyhow = { workspace = true }
-devenv-cache-core = { workspace = true }
+thiserror.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+devenv-cache-core.workspace = true
 
 [dev-dependencies]
-tokio-test = { workspace = true }
-tempfile = { workspace = true }
+tokio-test.workspace = true
+tempfile.workspace = true
 
 [features]
 default = []

@@ -16,7 +16,7 @@ tokio = { workspace = true, features = [
   "signal",
   "time",
 ] }
-tokio-util = { workspace = true }
+tokio-util.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
