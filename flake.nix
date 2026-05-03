@@ -63,8 +63,7 @@
     inputs.nixpkgs.follows = "nixpkgs";
   };
   inputs.ghostty = {
-    # Kept in sync with devenv.yaml's ghostty input.
-    url = "github:cachix/ghostty/cachix-upstream";
+    url = "github:ghostty-org/ghostty";
   };
 
   outputs =
