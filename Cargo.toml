@@ -37,7 +37,6 @@ devenv-core = { path = "devenv-core" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-event-sources = { path = "devenv-event-sources" }
 devenv-processes = { path = "devenv-processes" }
-devenv-run-tests = { path = "devenv-run-tests" }
 devenv-snix-backend = { path = "devenv-snix-backend" }
 devenv-nix-backend = { path = "devenv-nix-backend" }
 devenv-nix-backend-macros = { path = "devenv-nix-backend-macros" }
@@ -48,7 +47,6 @@ devenv-shell = { path = "devenv-shell" }
 devenv-cache-core = { path = "devenv-cache-core" }
 nix-conf-parser = { path = "nix-conf-parser" }
 tokio-shutdown = { path = "tokio-shutdown" }
-xtask = { path = "xtask" }
 
 nix-bindings-flake = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
 nix-bindings-expr = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
@@ -62,11 +60,8 @@ libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs.git", branch = 
 libghostty-vt-sys = { git = "https://github.com/Uzaaft/libghostty-rs.git", branch = "master", default-features = false, features = ["pkg-config"] }
 base64 = "0.22"
 anyhow = "1.0.102"
-ansiterm = "0.12.2"
-astral-tokio-tar = "0.6.1"
 async-priority-channel = "0.2.0"
 async-trait = "0.1"
-binaryornot = "1.0.0"
 # Pinned to 1.8.3: blake3 1.8.4 upgraded to digest 0.11 which is incompatible
 # with snix-castore (uses digest 0.10 APIs).
 blake3 = "=1.8.3"
@@ -77,7 +72,6 @@ clap_mangen = "0.3.0"
 cstr = "0.2"
 cli-table = "0.5.0"
 console = "0.16.3"
-dotlock = "0.5.0"
 dialoguer = "0.12.0"
 fd-lock = "4"
 futures = "0.3.32"
@@ -87,7 +81,6 @@ humantime = "2"
 include_dir = "0.7.4"
 indexmap = "2.14.0"
 indoc = "2.0.7"
-lazy_static = "1.5.0"
 pathdiff = "0.2.3"
 miette = { version = "7.6.0", features = ["fancy"] }
 nix = { version = "0.31", features = ["fs", "process", "signal"] }
@@ -96,7 +89,6 @@ once_cell = "1.21.4"
 petgraph = "0.8.3"
 pretty_assertions = { version = "1.4.1", features = ["unstable"] }
 netstat2 = "0.11"
-rand = "0.10"
 regex = "1.12.3"
 schemars = "1.2.1"
 schematic = { version = "0.19", features = [
@@ -165,7 +157,6 @@ watchexec-supervisor = "5.2"
 signal-hook = "0.4"
 signal-hook-tokio = { version = "0.4", features = ["futures-v0_3"] }
 socket2 = "0.6"
-ctrlc = "3.5"
 process-wrap = { version = "9.1", features = ["tokio1"] }
 portable-pty = "0.9.0"
 vergen-gitcl = "9.1"
@@ -184,7 +175,6 @@ rmcp = { version = "1.6", features = [
   "transport-io",
   "transport-streamable-http-server",
 ] }
-rmcp-macros = "1.6"
 sd-notify = "0.5"
 
 # Optional OpenTelemetry dependencies
