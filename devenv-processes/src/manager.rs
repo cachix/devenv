@@ -153,7 +153,19 @@ fn render_process_url(url: &ProcessUrl) -> String {
         format!("/{}", url.path)
     };
 
-    format!("{}://{}:{}{}", url.scheme, url.host, url.port, path)
+    let host = render_process_url_host(&url.host);
+
+    format!("{}://{}:{}{}", url.scheme, host, url.port, path)
+}
+
+fn render_process_url_host(host: &str) -> String {
+    if host.starts_with('[') && host.ends_with(']') {
+        host.to_string()
+    } else if host.contains(':') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    }
 }
 
 fn render_process_activity_urls(config: &ProcessConfig) -> Vec<String> {
@@ -2081,6 +2093,18 @@ mod tests {
         };
 
         assert_eq!(render_process_url(&url), "http://127.0.0.1:8080/admin");
+    }
+
+    #[test]
+    fn test_render_process_url_brackets_ipv6_hosts() {
+        let url = ProcessUrl {
+            scheme: "http".to_string(),
+            host: "::1".to_string(),
+            port: 8080,
+            path: "/".to_string(),
+        };
+
+        assert_eq!(render_process_url(&url), "http://[::1]:8080/");
     }
 
     #[test]
