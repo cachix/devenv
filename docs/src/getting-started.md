@@ -40,7 +40,7 @@
     === "Nix profiles (requires experimental flags)"
 
         ```
-        nix profile install nixpkgs#bashInteractive
+        nix profile add nixpkgs#bashInteractive
         ```
 
 === "Windows (WSL2)"
@@ -68,7 +68,7 @@
 === "Nix profiles (requires experimental flags)"
 
     ```
-    nix profile install nixpkgs#devenv
+    nix profile add nixpkgs#devenv
     ```
 
 === "NixOS/nix-darwin"
