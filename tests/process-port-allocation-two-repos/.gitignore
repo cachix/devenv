@@ -1,0 +1,4 @@
+.devenv/
+/devenv.lock
+/repo1/
+/repo2/

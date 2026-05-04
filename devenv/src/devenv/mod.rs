@@ -1047,8 +1047,8 @@ impl Devenv {
         input_json: Option<String>,
         verbosity: tasks::VerbosityLevel,
     ) -> Result<String> {
-        self.setup_cachix().await?;
         self.reserve_running_ports().await;
+        self.setup_cachix().await?;
         if roots.is_empty() {
             bail!("No tasks specified.");
         }
@@ -1297,10 +1297,10 @@ impl Devenv {
     }
 
     pub async fn test(&self, verbosity: tasks::VerbosityLevel) -> Result<()> {
-        self.setup_cachix().await?;
         // Enable port allocation before assemble so that ports resolved
         // during Nix evaluation (e.g. in enterTest) are properly allocated.
         self.port_allocator.set_enabled(true);
+        self.setup_cachix().await?;
 
         // ── Phase 1: Configuring shell ──────────────────────────────
         let envs = self.configure_shell().await?;
@@ -1507,11 +1507,11 @@ impl Devenv {
         options: ProcessOptions,
         verbosity: tasks::VerbosityLevel,
     ) -> Result<RunMode> {
-        self.setup_cachix().await?;
         // Set strict port mode before backend init triggers port allocation.
         self.port_allocator.set_strict(options.strict_ports);
         self.port_allocator.set_enabled(true);
         self.reserve_running_ports().await;
+        self.setup_cachix().await?;
 
         // ── Phase 1: Configuring shell ──────────────────────────────
         let mut envs = self.configure_shell().await?;
@@ -1994,11 +1994,12 @@ impl Devenv {
     /// Inspects the native socket (not the PID file) because the socket is
     /// created before processes reach readiness and the PID file is written.
     pub async fn reserve_running_ports(&self) {
-        let processes_running = self.processes_running().await;
-        self.port_allocator.set_allow_in_use(processes_running);
-
         let native_socket = self.native_socket_path();
-        if !native_socket.exists() {
+        if native_socket.exists() {
+            self.port_allocator.set_allow_in_use(false);
+        } else {
+            self.port_allocator
+                .set_allow_in_use(self.processes_running().await);
             return;
         }
 
