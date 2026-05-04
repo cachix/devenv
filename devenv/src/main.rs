@@ -175,7 +175,13 @@ struct RunContext {
 /// but their verbose TUI output wastes tokens. We check for well-known
 /// environment variables set by popular AI agents and the emerging
 /// AI_AGENT standard (https://github.com/anthropics/claude-code/blob/main/AI_AGENT.md).
+///
+/// Set `DEVENV_NO_AI_AGENT=1` to opt out of detection (forces normal output/TUI
+/// even when running under a detected agent).
 fn is_ai_agent() -> bool {
+    if std::env::var_os("DEVENV_NO_AI_AGENT").is_some() {
+        return false;
+    }
     std::env::var_os("CLAUDECODE").is_some()
         || std::env::var_os("OPENCODE_CLIENT").is_some()
         || std::env::var_os("AI_AGENT").is_some()
@@ -183,13 +189,13 @@ fn is_ai_agent() -> bool {
 
 /// Resolve `--quiet`/`--verbose` (with AI-agent auto-quiet) into a `VerbosityLevel`.
 fn resolve_verbosity(cli_options: &devenv::cli::CliOptions) -> devenv::tasks::VerbosityLevel {
-    let quiet = cli_options.quiet || (is_ai_agent() && !cli_options.verbose);
-    if quiet {
-        devenv::tasks::VerbosityLevel::Quiet
-    } else if cli_options.verbose {
-        devenv::tasks::VerbosityLevel::Verbose
+    use devenv::tasks::VerbosityLevel;
+    if cli_options.verbose {
+        VerbosityLevel::Verbose
+    } else if cli_options.quiet || is_ai_agent() {
+        VerbosityLevel::Quiet
     } else {
-        devenv::tasks::VerbosityLevel::Normal
+        VerbosityLevel::Normal
     }
 }
 
