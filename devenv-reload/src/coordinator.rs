@@ -1,7 +1,7 @@
 //! Shell coordinator for TUI integration.
 //!
-//! Unlike ShellManager which owns the PTY and terminal, ShellCoordinator
-//! only handles build coordination. The TUI owns the PTY and terminal.
+//! ShellCoordinator handles build coordination only. The TUI owns the PTY
+//! and terminal.
 
 use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
