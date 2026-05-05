@@ -4,7 +4,7 @@
   languages.ruby.enable = true;
 
   # Use a specific Ruby version.
-  # languages.ruby.version = "3.2.1";
+  # languages.ruby.version = "3.4";
 
   # Use a specific Ruby version from a .ruby-version file, compatible with rbenv.
   languages.ruby.versionFile = ./.ruby-version;
