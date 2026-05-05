@@ -187,6 +187,7 @@ in
       env.RABBITMQ_NODENAME = cfg.nodeName;
       env.RABBITMQ_HOST = cfg.listenAddress;
       env.RABBITMQ_DIST_PORT = toString allocatedDistributionPort;
+      env.RABBITMQ_PORT = toString allocatedPort;
       env.ERL_EPMD_ADDRESS = cfg.listenAddress;
       env.ERL_EPMD_PORT = toString allocatedEpmdPort;
 
@@ -198,13 +199,19 @@ in
         exec = "exec ${cfg.package}/bin/rabbitmq-server";
 
         ready = {
-          exec = "${cfg.package}/bin/rabbitmq-diagnostics -q ping";
+          # `check_running` succeeds only after the `rabbit` Erlang application
+          # has fully started, which catches plugin boot failures that `ping`
+          # (TCP/Erlang VM only) silently ignores.
+          exec = "${cfg.package}/bin/rabbitmq-diagnostics -q check_running";
           initial_delay = 10;
           period = 3;
-          probe_timeout = 3;
+          probe_timeout = 5;
           failure_threshold = 5;
         };
       };
+    })
+    (mkIf (cfg.enable && cfg.managementPlugin.enable) {
+      env.RABBITMQ_MANAGEMENT_PORT = toString allocatedManagementPort;
     })
   ];
 }
