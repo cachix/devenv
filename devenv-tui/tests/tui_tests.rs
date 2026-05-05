@@ -1713,6 +1713,7 @@ fn test_hide_stopped_processes_filters_manually_stopped_processes_but_keeps_fail
             command: None,
             ports: vec![],
             ready_probe: None,
+            urls: vec![],
             level: ActivityLevel::Info,
             timestamp: Timestamp::now(),
         }));
@@ -1782,6 +1783,7 @@ fn test_previous_hide_stopped_processes_coverage_used_completed_success() {
         command: None,
         ports: vec![],
         ready_probe: None,
+        urls: vec![],
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -1824,6 +1826,7 @@ fn test_toggle_hide_stopped_processes_clears_hidden_selection() {
         command: None,
         ports: vec![],
         ready_probe: None,
+        urls: vec![],
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -1865,6 +1868,7 @@ fn test_hide_stopped_processes_removes_hidden_processes_from_selection() {
         command: None,
         ports: vec![],
         ready_probe: None,
+        urls: vec![],
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -1881,6 +1885,7 @@ fn test_hide_stopped_processes_removes_hidden_processes_from_selection() {
         command: None,
         ports: vec![],
         ready_probe: None,
+        urls: vec![],
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));

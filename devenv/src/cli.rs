@@ -1336,9 +1336,9 @@ mod tests {
         let cli = Cli::parse_from(["devenv", "processes", "endpoints"]);
 
         match cli.command {
-            Some(Commands::Processes {
+            Commands::Processes {
                 command: ProcessesCommand::Endpoints {},
-            }) => {}
+            } => {}
             _ => panic!("expected `devenv processes endpoints` command"),
         }
     }
