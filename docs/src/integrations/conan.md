@@ -1,4 +1,4 @@
-# `devenv` Integration for [Conan](https://conan.io/) via [conan-flake](https://codeberg.org/tarcisio/conan-flake)
+# `devenv` Integration for [Conan](https://conan.io/) via [`conan-flake`](https://codeberg.org/tarcisio/conan-flake)
 
 ## Set up
 
@@ -8,7 +8,7 @@ Add `conan-flake` to your inputs:
 $ devenv inputs add conan-flake git+https://codeberg.org/tarcisio/conan-flake
 ```
 
-Check [the list of available options](/reference/options.md#conanenable).
+Check [the list of available options](/reference/options.md#conanenable). The [`conan.config`](/reference/options.md#conanconfig) option maps the whole of the options available in the [`conan-flake`](https://codeberg.org/tarcisio/conan-flake) module &mdash; see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to get a grasp on the available options.
 
 Config the `devenv.nix` file accordingly. For example, the following code would configure Conan to use the same CMake available in the developmemnt shell:
 
@@ -42,7 +42,7 @@ Entering shell ...
 conan profile show # This would show the default profile.
 ```
 
-## Additional Devenv Config Examples
+## Additional Examples
 
 ### LLVM-based C++ Toolchain
 
