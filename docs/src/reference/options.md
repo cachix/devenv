@@ -2625,6 +2625,62 @@ list of string
 
 
 
+## conan.enable
+
+
+
+Whether to enable conan integration (through conan-flake).
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/conan.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/conan.nix)
+
+
+
+## conan.config
+
+
+
+conan configuration.
+
+
+
+*Type:*
+attribute set
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/conan.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/conan.nix)
+
+
+
 ## container.isBuilding
 
 
