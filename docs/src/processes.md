@@ -175,9 +175,10 @@ All probe types support these timing options:
       http.get = { port = 8080; path = "/health"; };
       initial_delay = 2;    # seconds before first probe (default: 0)
       period = 10;           # seconds between probes (default: 10)
-      timeout = 1;           # seconds before probe times out (default: 1)
+      probe_timeout = 1;           # seconds before probe times out (default: 1)
       success_threshold = 1; # consecutive successes needed (default: 1)
       failure_threshold = 3; # consecutive failures before unhealthy (default: 3)
+      # timeout = ; Overall deadline in seconds for the process to become ready. null = no deadline.
     };
   };
 }
