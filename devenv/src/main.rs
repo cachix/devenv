@@ -401,6 +401,16 @@ fn run(ctx: RunContext) -> Result<()> {
             build_gc_runtime().block_on(async {
                 shutdown_clone.install_signals().await;
 
+                // Abort in-flight Nix evaluation when shutdown is triggered.
+                // The Nix C++ evaluator polls a process-global interrupt flag
+                // between evaluation steps; without this, eval running inside
+                // spawn_blocking ignores Ctrl-C until it returns naturally.
+                let nix_interrupt_token = shutdown_clone.cancellation_token();
+                tokio::spawn(async move {
+                    nix_interrupt_token.cancelled().await;
+                    devenv_nix_backend::trigger_interrupt();
+                });
+
                 let output = run_backend(
                     ctx,
                     shutdown_clone.clone(),
