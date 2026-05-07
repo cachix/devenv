@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::config::{Input, NixpkgsConfig};
-use crate::nix_backend::DevenvPaths;
+use crate::paths::DevenvPaths;
 use crate::settings::{CacheSettings, InputOverrides, NixSettings};
 
 /// Runtime configuration the backend reads to evaluate Nix:

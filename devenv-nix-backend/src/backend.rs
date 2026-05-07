@@ -38,10 +38,10 @@ use devenv_activity::{Activity, ActivityInstrument, activity, instrument_activit
 use devenv_cache_core::compute_string_hash;
 use devenv_core::bootstrap_args::BootstrapArgs;
 use devenv_core::config::NixpkgsConfig;
+use devenv_core::evaluator::eval_cache_key_args;
 use devenv_core::evaluator::{
     BuildOptions, DevEnvOutput, Evaluator, NixMetadata, PackageSearchResult, SearchResults,
 };
-use devenv_core::nix_backend::eval_cache_key_args;
 use devenv_core::nix_log_bridge::{EvalActivityGuard, NixLogBridge};
 use devenv_core::realized::RealizedPathsObserver;
 use devenv_core::store::Store as StoreTrait;

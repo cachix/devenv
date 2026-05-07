@@ -46,6 +46,29 @@ pub type SearchResults = std::collections::BTreeMap<String, PackageSearchResult>
 /// Formatted flake metadata (lock file inputs + `config.info`).
 pub type NixMetadata = String;
 
+/// Build the eval-cache key suffix for the current invocation. Encodes
+/// CLI-side knobs that affect evaluation output but are not part of the
+/// Nix args themselves.
+pub fn eval_cache_key_args(
+    nix_args_str: &str,
+    port_allocation_enabled: bool,
+    strict_ports: bool,
+) -> String {
+    format!("{nix_args_str}:port_allocation={port_allocation_enabled}:strict_ports={strict_ports}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn eval_cache_key_args_includes_port_flags() {
+        let key = eval_cache_key_args("{ foo = 1; }", true, false);
+        assert!(key.contains("port_allocation=true"));
+        assert!(key.contains("strict_ports=false"));
+    }
+}
+
 /// "A thing that can talk to Nix."
 ///
 /// `eval` and `build` take attribute paths into the project's devenv
