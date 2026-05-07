@@ -31,8 +31,12 @@ unsafe impl Sync for CNixStore {}
 
 #[async_trait(?Send)]
 impl StoreTrait for CNixStore {
-    fn uri(&self) -> &str {
-        "cnix"
+    fn uri(&self) -> Result<String> {
+        self.inner
+            .clone()
+            .get_uri()
+            .to_miette()
+            .wrap_err("Failed to query Nix store URI")
     }
 
     async fn add_gc_root(&self, gc_root: &Path, store_path: &StorePath) -> Result<()> {

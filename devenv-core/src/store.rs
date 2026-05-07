@@ -79,7 +79,7 @@ pub struct PathInfo {
 #[async_trait(?Send)]
 pub trait Store: Send + Sync {
     /// Store URI (e.g. `auto`, `daemon`, `local?root=…`, `rust-plugin://memory`).
-    fn uri(&self) -> &str;
+    fn uri(&self) -> Result<String>;
 
     /// Pin `store_path` against GC by making `gc_root` symlink to it.
     async fn add_gc_root(&self, gc_root: &Path, store_path: &StorePath) -> Result<()>;
