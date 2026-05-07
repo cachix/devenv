@@ -147,6 +147,17 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.adminToken != "";
+        message = "services.garage.adminToken is empty; the admin API ready probe will fail silently.";
+      }
+      {
+        assertion = cfg.rpcSecret != "";
+        message = "services.garage.rpcSecret is empty.";
+      }
+    ];
+
     packages = [ cfg.package ];
 
     processes.garage = {
