@@ -9,6 +9,8 @@
 
 ### Improvements
 
+- Bumped `secretspec` to `v0.9.1`. The new `bws` (Bitwarden Secrets Manager) feature is not enabled because its transitive `bitwarden` crate conflicts with `sqlx` 0.8 on `libsqlite3-sys` and pins `typenum` to 1.18.
+
 ### Breaking Changes
 
 ## 2.1.0 (2026-05-05)

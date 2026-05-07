@@ -6158,6 +6158,7 @@ rec {
           {
             name = "secretspec";
             packageId = "secretspec";
+            usesDefaultFeatures = false;
             features = [ "cli" "keyring" "gcsm" "awssm" "vault" ];
           }
           {
@@ -7952,29 +7953,6 @@ rec {
         libName = "endian_type";
         authors = [
           "Lolirofle <lolipopple@hotmail.com>"
-        ];
-
-      };
-      "envy" = rec {
-        crateName = "envy";
-        version = "0.4.2";
-        edition = "2018";
-        sha256 = "0rar459p7pl19v6pbx98q3hi2hxfl8q1ndxxw5d4zd9cgway0irz";
-        authors = [
-          "softprops <d.tangren@gmail.com>"
-        ];
-        dependencies = [
-          {
-            name = "serde";
-            packageId = "serde";
-          }
-        ];
-        devDependencies = [
-          {
-            name = "serde";
-            packageId = "serde";
-            features = [ "derive" ];
-          }
         ];
 
       };
@@ -23327,14 +23305,14 @@ rec {
       };
       "secretspec" = rec {
         crateName = "secretspec";
-        version = "0.8.0";
+        version = "0.9.1";
         edition = "2024";
         crateBin = [];
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/secretspec";
-          rev = "423da6356c76b33e2147ce577e0644a29d2615a5";
-          sha256 = "1mrw9ij93ni8q6hba7d9hpw54cw0xpqg4aa6mg2h6fkfdxrbv8i7";
+          rev = "7b9fb014b1d095f854743eb642f18007396c95dc";
+          sha256 = "1ps6f3s9pc5xr8gc4jyfblqqx6piv2j51cpjgyf54jppkf38g6bh";
         };
         dependencies = [
           {
@@ -23394,8 +23372,8 @@ rec {
             features = [ "fancy" ];
           }
           {
-            name = "once_cell";
-            packageId = "once_cell";
+            name = "percent-encoding";
+            packageId = "percent-encoding";
           }
           {
             name = "rand";
@@ -23409,6 +23387,11 @@ rec {
             features = [ "json" "rustls-tls" ];
           }
           {
+            name = "rsa";
+            packageId = "rsa";
+            features = [ "pem" ];
+          }
+          {
             name = "secrecy";
             packageId = "secrecy";
             features = [ "serde" ];
@@ -23417,10 +23400,6 @@ rec {
             name = "serde";
             packageId = "serde";
             features = [ "derive" ];
-          }
-          {
-            name = "serde-envfile";
-            packageId = "serde-envfile";
           }
           {
             name = "serde_json";
@@ -23460,12 +23439,13 @@ rec {
         ];
         features = {
           "awssm" = [ "dep:aws-config" "dep:aws-sdk-secretsmanager" ];
-          "default" = [ "cli" "keyring" ];
+          "bws" = [ "dep:bitwarden" "dep:rustls" ];
+          "default" = [ "cli" "keyring" "gcsm" "awssm" "vault" "bws" ];
           "gcsm" = [ "dep:google-cloud-secretmanager-v1" ];
           "keyring" = [ "dep:keyring" "dep:whoami" ];
           "vault" = [ "dep:reqwest" ];
         };
-        resolvedDefaultFeatures = [ "awssm" "cli" "default" "gcsm" "keyring" "vault" ];
+        resolvedDefaultFeatures = [ "awssm" "cli" "gcsm" "keyring" "vault" ];
       };
       "security-framework 2.11.1" = rec {
         crateName = "security-framework";
@@ -23669,43 +23649,6 @@ rec {
           "serde" = [ "dep:serde" ];
         };
         resolvedDefaultFeatures = [ "default" "derive" "serde" "std" ];
-      };
-      "serde-envfile" = rec {
-        crateName = "serde-envfile";
-        version = "0.3.0";
-        edition = "2024";
-        sha256 = "0vdxc176hbj91hj518rd3kg7gc01j2npn77606ri2clvhb5345c9";
-        libName = "serde_envfile";
-        authors = [
-          "Luca Goslar <git@lucagoslar.de>"
-        ];
-        dependencies = [
-          {
-            name = "cfg-if";
-            packageId = "cfg-if";
-          }
-          {
-            name = "dotenvy";
-            packageId = "dotenvy";
-          }
-          {
-            name = "envy";
-            packageId = "envy";
-          }
-          {
-            name = "serde";
-            packageId = "serde";
-            features = [ "derive" ];
-          }
-          {
-            name = "thiserror";
-            packageId = "thiserror 2.0.18";
-          }
-        ];
-        features = {
-          "debug" = [ "dep:log" ];
-          "preserve_order" = [ "dep:indexmap" ];
-        };
       };
       "serde_core" = rec {
         crateName = "serde_core";

@@ -99,7 +99,7 @@ schematic = { version = "0.19", features = [
 ] }
 secrecy = "0.10"
 # https://github.com/mikaelmello/inquire/pull/330
-secretspec = { git = "https://github.com/cachix/secretspec", tag = "v0.8.0", features = [
+secretspec = { git = "https://github.com/cachix/secretspec", tag = "v0.9.1", default-features = false, features = [
   "cli",
   "keyring",
   "gcsm",

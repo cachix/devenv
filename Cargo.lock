@@ -2300,15 +2300,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "869b0adbda23651a9c5c0c3d270aac9fcb52e8622a8f2b17e57802d7791962f2"
 
 [[package]]
-name = "envy"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f47e0157f2cb54f5ae1bd371b30a2ae4311e1c028f575cd4e81de7353215965"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6786,8 +6777,8 @@ dependencies = [
 
 [[package]]
 name = "secretspec"
-version = "0.8.0"
-source = "git+https://github.com/cachix/secretspec?tag=v0.8.0#423da6356c76b33e2147ce577e0644a29d2615a5"
+version = "0.9.1"
+source = "git+https://github.com/cachix/secretspec?tag=v0.9.1#7b9fb014b1d095f854743eb642f18007396c95dc"
 dependencies = [
  "aws-config",
  "aws-sdk-secretsmanager",
@@ -6801,12 +6792,12 @@ dependencies = [
  "keyring",
  "linkme",
  "miette",
- "once_cell",
+ "percent-encoding",
  "rand 0.9.4",
  "reqwest 0.12.28",
+ "rsa",
  "secrecy",
  "serde",
- "serde-envfile",
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
@@ -6885,19 +6876,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3753ca04f350fa92d00b6146a3555e63c55388c9ef2e11e09bce2ff1c0b509c6"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "serde-envfile"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "891532ca829b3211b301e61c7bad9001b077de1c2da350240c492e684e60bd6d"
-dependencies = [
- "cfg-if",
- "dotenvy",
- "envy",
- "serde",
- "thiserror 2.0.18",
 ]
 
 [[package]]
