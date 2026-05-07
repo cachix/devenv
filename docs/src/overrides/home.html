@@ -112,26 +112,9 @@
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
             <div class="px-4 lg:px-0 order-last lg:order-first">
                 <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
-                    <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
-                        <div class="overflow-hidden bg-gray-900">
-                            <div class="flex bg-gray-800/40">
-                                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
-                                    <div class="px-4 text-gray-200">
-                                        Terminal
-                                    </div>
-                                </div>
-                            </div>
-
-                            <pre class="text-white text-sm"><code class="language-shell">$ time devenv shell -- exit
-• Building shell ...
-real    0m4.832s
-
-$ time devenv shell -- exit
-• Using cached shell.
-real    0m0.047s
-</code></pre>
-                        </div>
-                    </div>
+                    <img class="block w-full"
+                         src="/assets/images/devenv-2.0-instant.gif"
+                         alt="Instant cached devenv shell activation" />
                 </div>
             </div>
 
@@ -167,6 +150,18 @@ real    0m0.047s
                             <dd class="inline">
                                 Works out of the box with no setup required.
                                 No daemons, no manual file watching, just instant environments.
+                            </dd>
+                        </div>
+
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
+                                Native shell support
+                            </dt>
+
+                            <dd class="inline">
+                                First class support for <strong>bash</strong>, <strong>zsh</strong>,
+                                <strong>fish</strong>, and <strong>nushell</strong>, with environment reloads
+                                applied at the next prompt.
                             </dd>
                         </div>
                     </dl>
@@ -236,9 +231,9 @@ real    0m0.047s
                             </dt>
 
                             <dd class="inline">
-                                Using <code class="inline-code">direnv</code> will
-                                <a class="link font-semibold" href="/integrations/direnv">
-                                automatically load the environment</a> when you enter the project directory.
+                                Run <code class="inline-code">eval "$(devenv hook bash)"</code> (or zsh/fish/nu) to
+                                <a class="link font-semibold" href="/auto-activation/">automatically activate environments</a>
+                                on <code class="inline-code">cd</code>, with no <code class="inline-code">direnv</code> required.
                             </dd>
                         </div>
                     </dl>
@@ -542,37 +537,9 @@ $
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
             <div class="px-4 lg:px-0 order-last lg:order-first">
                 <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
-                    <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
-                        <div class="overflow-hidden bg-gray-900">
-                            <div class="flex bg-gray-800/40">
-                                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
-                                    <div class="px-4 text-gray-200">
-                                        devenv.nix
-                                    </div>
-                                </div>
-                            </div>
-
-                            <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
-  packages = [
-    pkgs.cargo-watch
-  ];
-
-  processes = {
-    cargo-watch.exec = "cargo watch -x run";
-  };
-}
-</code></pre>
-                        </div>
-                    </div>
-
-                    <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
-                        <pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$">devenv up
-• Building processes ...
-• Starting processes ...
-...
-
-</code></pre>
-                    </div>
+                    <img class="block w-full"
+                         src="/assets/images/devenv-2.0-process-manager.gif"
+                         alt="Native process manager interface" />
                 </div>
             </div>
 
@@ -608,15 +575,10 @@ $
                             </dt>
 
                             <dd class="inline">
-                                By default
-                                <a class="link font-semibold" 
-                                   href="https://github.com/F1bonacc1/process-compose">process-compose</a>
-                                is used to manage processes, giving you a simple
-                                interface to inspect logs and restart processes (Ctrl+R).
-
-                                <img class="mt-4 rounded-md shadow-sm" 
-                                     src="/assets/images/process-compose.png" 
-                                     alt="Process compose interface" />
+                                A built in
+                                <a class="link font-semibold" href="/processes/">native process manager</a>
+                                handles dependency ordering, restart policies, readiness probes,
+                                and automatic port allocation, with a TUI to inspect logs and restart processes.
                             </dd>
                         </div>
                     </dl>
@@ -1338,50 +1300,9 @@ devenv -O languages.python.enable:bool true \
 
             <div class="px-4 lg:px-0">
                 <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
-                    <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
-                        <div class="overflow-hidden bg-gray-900">
-                            <div class="flex bg-gray-800/40">
-                                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
-                                    <div class="px-4 text-gray-200">
-                                        secretspec.toml
-                                    </div>
-                                </div>
-                            </div>
-
-                            <pre class="text-white text-sm"><code class="language-toml">[project]
-name = "my-app"
-
-[profiles.default]
-KEYCLOAK_ADMIN_PASSWORD = {
-  description = "Keycloak admin password",
-  required = true,
-  as_path = true
-}
-
-[profiles.development]
-KEYCLOAK_ADMIN_PASSWORD = { default = "admin" }</code></pre>
-                        </div>
-                    </div>
-
-                    <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
-                        <div class="flex bg-gray-800/40">
-                            <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
-                                <div class="px-4 text-gray-200">
-                                    devenv.nix
-                                </div>
-                            </div>
-                        </div>
-
-                        <pre class="text-white text-sm"><code class="language-nix">{ config, ... }: {
-  secretspec.enable = true;
-
-  services.keycloak = {
-    enable = true;
-    settings.KC_BOOTSTRAP_ADMIN_PASSWORD._secret =
-      config.secretspec.secrets.KEYCLOAK_ADMIN_PASSWORD;
-  };
-}</code></pre>
-                    </div>
+                    <img class="block w-full"
+                         src="/assets/images/devenv-2.0-secretspec.gif"
+                         alt="SecretSpec prompting for declared secrets" />
                 </div>
             </div>
         </div>

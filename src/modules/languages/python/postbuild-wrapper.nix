@@ -22,11 +22,16 @@ let
   pythonPath = "${placeholder "out"}/${python.sitePackages}";
 in
 ''
-  # Extract paths from the pkgs JSON (buildEnv provides $pkgs or $pkgsPath)
-  if [ -n "''${pkgsPath:-}" ]; then
-    paths=$(${jq}/bin/jq -r '.[].paths[]' "$pkgsPath")
+  # Extract paths from the buildEnv metadata.
+  # With __structuredAttrs (newer nixpkgs), all attributes live in
+  # $NIX_ATTRS_JSON_FILE under "chosenOutputs". Older nixpkgs exposed
+  # them as $pkgsPath or $pkgs shell variables.
+  if [ -n "''${NIX_ATTRS_JSON_FILE:-}" ]; then
+    paths=$(${lib.getExe jq} -r '.chosenOutputs[].paths[]' "$NIX_ATTRS_JSON_FILE")
+  elif [ -n "''${pkgsPath:-}" ]; then
+    paths=$(${lib.getExe jq} -r '.[].paths[]' "$pkgsPath")
   else
-    paths=$(echo "$pkgs" | ${jq}/bin/jq -r '.[].paths[]')
+    paths=$(echo "$pkgs" | ${lib.getExe jq} -r '.[].paths[]')
   fi
 
   for path in $paths; do
