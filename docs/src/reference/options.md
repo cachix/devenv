@@ -21372,10 +21372,10 @@ false
 
 
 
-Import a Cargo project using cargo2nix.
+Import a Cargo project using crate2nix.
 
 This function takes a path to a directory containing a Cargo.toml file
-and returns a derivation that builds the Rust project using cargo2nix.
+and returns a derivation that builds the Rust project using crate2nix.
 
 Example usage:
 
