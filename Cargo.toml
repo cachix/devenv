@@ -159,7 +159,6 @@ signal-hook-tokio = { version = "0.4", features = ["futures-v0_3"] }
 socket2 = "0.6"
 process-wrap = { version = "9.1", features = ["tokio1"] }
 portable-pty = "0.9.0"
-vergen-gitcl = "9.1"
 ignore = "0.4.25"
 proptest = "1.11"
 libc = "0.2"

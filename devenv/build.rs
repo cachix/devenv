@@ -1,16 +1,12 @@
 use std::env;
 use std::process::Command;
-use vergen_gitcl::{Emitter, GitclBuilder};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!(
-        "cargo:rustc-env=TARGET_ARCH={}",
-        env::var("CARGO_CFG_TARGET_ARCH").unwrap()
-    );
-    println!(
-        "cargo:rustc-env=TARGET_OS={}",
-        env::var("CARGO_CFG_TARGET_OS").unwrap()
-    );
+    let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+    let os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    println!("cargo:rustc-env=TARGET_ARCH={arch}");
+    println!("cargo:rustc-env=TARGET_OS={os}");
+
     // Rerun if init directory changes
     println!("cargo:rerun-if-changed=init");
 
@@ -32,30 +28,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-env-changed=DEVENV_GIT_REV");
     let git_rev = env::var("DEVENV_GIT_REV").unwrap_or_default();
 
-    if !git_rev.is_empty() {
+    let (sha, dirty) = if !git_rev.is_empty() {
         // Flake build:
         // DEVENV_GIT_REV is set in package.nix from the flake's self.shortRev
         // or self.dirtyShortRev (which appends "-dirty").
         let dirty = git_rev.ends_with("-dirty");
-        let sha = git_rev.trim_end_matches("-dirty");
-        println!("cargo:rustc-env=VERGEN_GIT_SHA={sha}");
-        println!("cargo:rustc-env=VERGEN_GIT_DIRTY={dirty}");
+        let sha = git_rev.trim_end_matches("-dirty").to_string();
+        (sha, dirty)
     } else {
-        // Local cargo build or nixpkgs tarball (no DEVENV_GIT_REV):
-        // Let vergen query git.
-        // Idempotent + quiet mode means vergen falls back to
-        // VERGEN_IDEMPOTENT_OUTPUT without warnings when git is unavailable.
-        let gitcl = GitclBuilder::default().sha(true).dirty(true).build()?;
-        Emitter::default()
-            .idempotent()
-            .quiet()
-            .add_instructions(&gitcl)?
-            .emit()?;
-
-        // Rerun when git state changes
+        // Local cargo build or nixpkgs tarball: query git directly.
+        // Falls back to empty sha when git is unavailable (tarball builds).
         println!("cargo:rerun-if-changed=.git/HEAD");
         println!("cargo:rerun-if-changed=.git/refs/tags");
-    }
+
+        let sha = Command::new("git")
+            .args(["rev-parse", "--short=8", "HEAD"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        let dirty = Command::new("git")
+            .args(["status", "--porcelain"])
+            .output()
+            .map(|o| !o.stdout.is_empty())
+            .unwrap_or(false);
+        (sha, dirty)
+    };
+
+    let version = env::var("CARGO_PKG_VERSION").unwrap();
+    let system = match os.as_str() {
+        "macos" => format!("{arch}-darwin"),
+        other => format!("{arch}-{other}"),
+    };
+    let version_string = if sha.is_empty() {
+        format!("{version} ({system})")
+    } else if dirty {
+        format!("{version}+{sha}-dirty ({system})")
+    } else {
+        format!("{version}+{sha} ({system})")
+    };
+    println!("cargo:rustc-env=DEVENV_VERSION_STRING={version_string}");
 
     Ok(())
 }
