@@ -68,7 +68,17 @@ function _devenv_hook_prompt --on-event fish_prompt
     end
 end
 
-# Trigger initial check
-if test -n "$PWD"
+# Trigger initial check on the first prompt rather than inline.
+#
+# The hook is typically loaded via `devenv hook fish | source`, which makes
+# `source`'s stdin a pipe. Any child shell spawned inline (i.e. during the
+# `source` itself) inherits that closed pipe as stdin, so `devenv shell`
+# detects no tty, disables the watcher UI, and the interactive fish it
+# execs into exits immediately on EOF.
+#
+# Deferring to fish_prompt runs the initial check after fish has entered
+# its main loop, where stdin is the real terminal.
+function _devenv_hook_init --on-event fish_prompt
+    functions -e _devenv_hook_init
     _devenv_hook
 end
