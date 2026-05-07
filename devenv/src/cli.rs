@@ -526,15 +526,6 @@ pub struct CliOptions {
 
     #[arg(short, long, action = clap::ArgAction::Help, global = true, help = "Print help (see a summary with '-h')")]
     pub help: Option<bool>,
-
-    #[arg(
-        short = 'V',
-        long,
-        global = true,
-        help = "Print version information",
-        long_help = "Print version information and exit"
-    )]
-    pub version: bool,
 }
 
 impl TracingCliArgs {
@@ -664,6 +655,7 @@ fn complete_task_names(current: &OsStr) -> Vec<CompletionCandidate> {
 #[derive(Parser)]
 #[command(
     name = "devenv",
+    version = crate_version!(),
     color = clap::ColorChoice::Auto,
     disable_help_flag = true,
     arg_required_else_help = true,
@@ -1298,6 +1290,24 @@ mod tests {
         assert_eq!(specs.len(), 2);
         assert_eq!(specs[0].format, TraceFormat::OtlpGrpc);
         assert_eq!(specs[1].format, TraceFormat::Pretty);
+    }
+
+    #[test]
+    fn version_flag_short_circuits_subcommand_requirement() {
+        // `devenv --version` must work without a subcommand even though
+        // `arg_required_else_help = true` is set on the top-level command.
+        // https://github.com/cachix/devenv/issues/2791
+        for flag in ["--version", "-V"] {
+            let err = match Cli::try_parse_from(["devenv", flag]) {
+                Ok(_) => panic!("expected --version/-V to short-circuit, but parsing succeeded"),
+                Err(e) => e,
+            };
+            assert_eq!(err.kind(), clap::error::ErrorKind::DisplayVersion);
+            assert!(
+                err.to_string().contains(crate_version!()),
+                "expected version output to contain crate version, got: {err}"
+            );
+        }
     }
 
     #[test]

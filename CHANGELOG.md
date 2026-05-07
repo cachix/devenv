@@ -4,6 +4,8 @@
 
 ### Bug Fixes
 
+- Fixed `devenv --version` and `devenv -V` failing with `'devenv' requires a subcommand but one was not provided`. The flags now print the version and exit, matching the behavior of `devenv --help` ([#2791](https://github.com/cachix/devenv/issues/2791)).
+
 ### Improvements
 
 ### Breaking Changes
