@@ -8,7 +8,7 @@
 , pkg-config
 , llvmPackages
 , cachix
-, libghostty-vt
+, libghostty-vt ? null
 , nix
 , nixd
 

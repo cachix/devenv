@@ -45,7 +45,6 @@ let
         then devenvPkgs.rust-bin.stable.latest.default
         else devenvPkgs.rustc;
       workspace = devenvPkgs.callPackage ./../../nix/workspace.nix {
-        pkgs = devenvPkgs;
         rustc = rustToolchain;
         cargo = rustToolchain;
       };
