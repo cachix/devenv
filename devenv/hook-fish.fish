@@ -30,7 +30,7 @@ function _devenv_hook --on-variable PWD
             set -l target_dir (cat "$exit_dir_file")
             rm -f "$exit_dir_file"
             if test -d "$target_dir"
-                cd "$target_dir"
+                builtin cd "$target_dir"
             end
         end
     else if test $exit_code -ne 0
@@ -62,7 +62,7 @@ function _devenv_hook_prompt --on-event fish_prompt
             set -l target_dir (cat "$exit_dir_file")
             rm -f "$exit_dir_file"
             if test -d "$target_dir"
-                cd "$target_dir"
+                builtin cd "$target_dir"
             end
         end
     end
