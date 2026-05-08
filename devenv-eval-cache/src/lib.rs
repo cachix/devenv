@@ -20,4 +20,4 @@ pub use ffi_cache::{CachingConfig, EvalCacheKey, InputTracker, ops_to_inputs};
 pub use resource_manager::{ResourceManager, ResourceSpec};
 
 // Re-export database query functions for file tracking
-pub use db::{get_all_tracked_file_paths, get_file_inputs_by_key_hash};
+pub use db::{DB_FILENAME, get_all_tracked_file_paths, get_file_inputs_by_key_hash};

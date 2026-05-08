@@ -325,7 +325,39 @@ impl NixCBackend {
                     force_refresh: self.cache_settings.refresh_eval_cache,
                     extra_watch_paths: core_config_watch_paths(&self.paths.root),
                     excluded_envs: vec!["NIXPKGS_CONFIG".to_string()],
-                    excluded_paths: vec![self.nixpkgs_config_path.clone()],
+                    // Exclude devenv's own dotfile dir from the tracked input
+                    // set. Files inside (eval cache + WAL/SHM, tasks DB,
+                    // generated shell scripts, imports.txt, etc.) are
+                    // rewritten on every evaluation or build; tracking them
+                    // would let `lib.fileset.fromSource ./.` (or any other
+                    // `readDir` on a parent) drag devenv's own churn into
+                    // the cache key and trigger spurious rebuilds.
+                    excluded_paths: {
+                        let state = self.paths.dotfile.join("state");
+                        vec![
+                            self.nixpkgs_config_path.clone(),
+                            self.paths.dotfile.clone(),
+                            // Re-exclude devenv-managed leaves that the
+                            // broader `state/` carve-out below would
+                            // otherwise re-admit. The tasks DB is rewritten
+                            // on every task run and the git-hooks state on
+                            // every reload; tracking either would invalidate
+                            // the eval cache and self-trigger reload loops.
+                            // `tasks.db-wal`/`tasks.db-shm` are listed
+                            // separately because path prefix matching is
+                            // component-wise, not byte-wise.
+                            state.join("tasks.db"),
+                            state.join("tasks.db-wal"),
+                            state.join("tasks.db-shm"),
+                            state.join("git-hooks"),
+                        ]
+                    },
+                    // Carve-out: keep `.devenv/state/` tracked. That's the
+                    // documented `$DEVENV_STATE` area where users persist
+                    // files they want reload/eval to react to. The
+                    // devenv-internal leaves above re-exclude themselves by
+                    // longest-prefix-match.
+                    excluded_path_exceptions: vec![self.paths.dotfile.join("state")],
                 };
                 let service = CachingEvalService::with_config(pool.clone(), config.clone());
                 let invalidation_flag = self.devenv_value_invalidated.clone();
