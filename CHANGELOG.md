@@ -6,6 +6,7 @@
 
 - Fixed `devenv --version` and `devenv -V` failing with `'devenv' requires a subcommand but one was not provided`. The flags now print the version and exit, matching the behavior of `devenv --help` ([#2791](https://github.com/cachix/devenv/issues/2791)).
 - Fixed `devenv hook fish` not activating when starting a new fish shell directly inside a project directory. The initial activation now runs on the first `fish_prompt` event instead of inline during `source`, so the spawned `devenv shell` inherits the real terminal as stdin instead of the closed pipe from `devenv hook fish | source` ([#2798](https://github.com/cachix/devenv/issues/2798)).
+- Fixed `devenv shell` self-triggering hot-reload in an infinite loop after the first reload. The eval cache (`.devenv/profiles/<profile>/nix-eval-cache.db`) and its SQLite WAL/SHM sidecars were being added to the reload watch set; every Nix evaluation rewrote the WAL and the watcher saw it as a content change. Devenv's own state directory is now excluded both from the reload watch set and from the eval cache's tracked input paths.
 
 ### Improvements
 

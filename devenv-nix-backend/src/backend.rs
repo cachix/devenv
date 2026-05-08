@@ -344,7 +344,15 @@ impl NixCBackend {
                     force_refresh: self.cache_settings.refresh_eval_cache,
                     extra_watch_paths: core_config_watch_paths(&self.paths.root),
                     excluded_envs: vec!["NIXPKGS_CONFIG".to_string()],
-                    excluded_paths: vec![self.nixpkgs_config_path.clone()],
+                    // Exclude devenv's own state dir. Its SQLite eval cache
+                    // (and the WAL/SHM sidecars) lives under `.devenv/` and
+                    // is rewritten on every evaluation; tracking it as an
+                    // input poisons cache validity and lets the reload
+                    // watcher self-trigger in a loop.
+                    excluded_paths: vec![
+                        self.nixpkgs_config_path.clone(),
+                        self.paths.dotfile.clone(),
+                    ],
                 };
                 let service = CachingEvalService::with_config(pool.clone(), config.clone());
                 let invalidation_flag = self.devenv_value_invalidated.clone();

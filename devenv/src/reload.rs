@@ -13,9 +13,23 @@ use devenv_core::config::Clean;
 use devenv_reload::{BuildContext, BuildError, CommandBuilder, ShellBuilder};
 use devenv_shell::dialect::{BashDialect, RcfileContext, ShellDialect, create_dialect};
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 use tokio::sync::Mutex;
+
+/// Drop paths that should never end up in the reload watch set.
+///
+/// Excludes:
+/// - missing files (likely deleted between eval and reload setup)
+/// - `/nix/store` paths (immutable)
+/// - anything inside devenv's own state dir (`.devenv/profiles/<profile>/`).
+///   The eval cache lives there as a SQLite DB and its WAL/SHM files are
+///   rewritten on every Nix evaluation. Watching them would let devenv
+///   self-trigger reloads in an infinite loop.
+fn is_watchable_input(path: &Path, dotfile: &Path) -> bool {
+    path.exists() && !path.starts_with("/nix/store") && !path.starts_with(dotfile)
+}
 
 /// Shell builder that evaluates devenv environment on each build.
 pub struct DevenvShellBuilder {
@@ -264,6 +278,7 @@ impl ShellBuilder for DevenvShellBuilder {
         let watcher = ctx.watcher.clone();
         let eval_cache_pool = self.eval_cache_pool.clone();
         let shell_cache_key = self.shell_cache_key.clone();
+        let dotfile = self.dotfile.clone();
 
         rt.block_on(async move {
             let devenv = devenv.lock().await;
@@ -294,7 +309,7 @@ impl ShellBuilder for DevenvShellBuilder {
                     Ok(inputs) => {
                         let paths: Vec<_> = inputs
                             .into_iter()
-                            .filter(|i| i.path.exists() && !i.path.starts_with("/nix/store"))
+                            .filter(|i| is_watchable_input(&i.path, &dotfile))
                             .map(|i| i.path)
                             .collect();
                         watcher.watch_many(paths).await;
@@ -335,7 +350,7 @@ impl DevenvShellBuilder {
                     tracing::debug!("Found {} file inputs for shell key", inputs.len());
                     let paths: Vec<_> = inputs
                         .into_iter()
-                        .filter(|i| i.path.exists() && !i.path.starts_with("/nix/store"))
+                        .filter(|i| is_watchable_input(&i.path, &self.dotfile))
                         .map(|i| i.path)
                         .collect();
                     ctx.watcher.watch_many(paths).await;
@@ -356,7 +371,7 @@ impl DevenvShellBuilder {
                 tracing::debug!("Found {} total tracked files in eval cache", paths.len());
                 let filtered: Vec<_> = paths
                     .into_iter()
-                    .filter(|p| p.exists() && !p.starts_with("/nix/store"))
+                    .filter(|p| is_watchable_input(p, &self.dotfile))
                     .collect();
                 ctx.watcher.watch_many(filtered).await;
             }
@@ -364,5 +379,62 @@ impl DevenvShellBuilder {
                 tracing::warn!("Failed to query all tracked files: {}", e);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn rejects_paths_inside_dotfile_dir() {
+        // The eval cache's own SQLite WAL lives inside the dotfile dir and
+        // changes on every evaluation. Watching it would self-trigger reloads.
+        let temp = TempDir::new().unwrap();
+        let dotfile = temp.path().join(".devenv/profiles/lean");
+        std::fs::create_dir_all(&dotfile).unwrap();
+
+        for sidecar in [
+            "nix-eval-cache.db",
+            "nix-eval-cache.db-wal",
+            "nix-eval-cache.db-shm",
+        ] {
+            let path = dotfile.join(sidecar);
+            std::fs::write(&path, b"").unwrap();
+            assert!(
+                !is_watchable_input(&path, &dotfile),
+                "{} must be excluded from watch set",
+                sidecar
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_nix_store_and_missing_paths() {
+        let temp = TempDir::new().unwrap();
+        let dotfile = temp.path().join(".devenv");
+        std::fs::create_dir_all(&dotfile).unwrap();
+
+        assert!(!is_watchable_input(
+            Path::new("/nix/store/abc-foo/x.nix"),
+            &dotfile
+        ));
+        assert!(!is_watchable_input(
+            &temp.path().join("does-not-exist"),
+            &dotfile
+        ));
+    }
+
+    #[test]
+    fn accepts_real_user_input_files() {
+        let temp = TempDir::new().unwrap();
+        let dotfile = temp.path().join(".devenv");
+        std::fs::create_dir_all(&dotfile).unwrap();
+
+        let user_file = temp.path().join("devenv.nix");
+        std::fs::write(&user_file, b"{}").unwrap();
+
+        assert!(is_watchable_input(&user_file, &dotfile));
     }
 }
