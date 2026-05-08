@@ -1,4 +1,6 @@
 use std::env;
+use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -9,6 +11,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Rerun if init directory changes
     println!("cargo:rerun-if-changed=init");
+
+    assemble_shell_hooks()?;
 
     // DEVENV_IS_RELEASE can be set explicitly (e.g. in package.nix or CI)
     // to mark a build as a release. In local builds, auto-detect from git tags.
@@ -69,6 +73,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         format!("{version}+{sha} ({system})")
     };
     println!("cargo:rustc-env=DEVENV_VERSION_STRING={version_string}");
+
+    Ok(())
+}
+
+// ---- Shell hook assembly ----
+//
+// Produces a standalone hook script per shell in OUT_DIR:
+//   - hook-bash.sh / hook-zsh.sh: `hooks/posix.sh` + the per-shell register snippet
+//   - hook-fish.fish / hook-nu.nu: copied verbatim from `hooks/`
+// src/commands/hook.rs `include_str!`s the OUT_DIR artifacts uniformly.
+fn assemble_shell_hooks() -> Result<(), Box<dyn std::error::Error>> {
+    let out_dir = PathBuf::from(env::var("OUT_DIR")?);
+
+    let posix = fs::read_to_string("hooks/hook.posix.sh")?;
+    println!("cargo:rerun-if-changed=hooks/hook.posix.sh");
+
+    for (register_path, out_name) in [
+        ("hooks/hook.bash-register.sh", "hook.sh"),
+        ("hooks/hook.zsh-register.zsh", "hook.zsh"),
+    ] {
+        let register = fs::read_to_string(register_path)?;
+        fs::write(out_dir.join(out_name), format!("{posix}\n{register}"))?;
+        println!("cargo:rerun-if-changed={register_path}");
+    }
+
+    for name in ["hook.fish", "hook.nu"] {
+        let src = format!("hooks/{name}");
+        fs::copy(&src, out_dir.join(name))?;
+        println!("cargo:rerun-if-changed={src}");
+    }
 
     Ok(())
 }

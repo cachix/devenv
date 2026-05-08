@@ -1,4 +1,4 @@
-# devenv hook shared function for bash/zsh
+# devenv hook shared function for bash/zsh.
 
 _DEVENV_HOOK_PWD=""
 _DEVENV_HOOK_UNTRUSTED=""
