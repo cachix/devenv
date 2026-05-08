@@ -10,6 +10,7 @@
 - Fixed `devenv shell` skipping the user's `.zshenv` when launching zsh, which could mangle prompts and break `.zshrc` configurations that depend on env vars defined in `.zshenv`. The user's `.zshenv` is now sourced before `.zshrc` during shell init, matching zsh's documented startup order ([#2802](https://github.com/cachix/devenv/pull/2802)).
 - Fixed in-flight Nix evaluation not aborting on Ctrl-C in `devenv shell`. The shutdown signal now flips Nix's process-global interrupt flag so the evaluator stops at its next check, instead of running to completion inside `spawn_blocking` regardless of the cancellation token.
 - Fixed `devenv hook` not retrying auto-activation when the inner `devenv shell` fails on first allow (e.g. unauthenticated secretspec provider). The bash/zsh/fish/nu hooks now wrap `devenv` so that re-running `devenv allow` after fixing the underlying issue re-triggers activation, instead of requiring the user to `cd` out and back in.
+- Fixed `devenv shell` being killed by `SIGUSR1` (and the terminal being left in Kitty keyboard protocol mode) when Ctrl-C is pressed during a flake fetch. Nix uses `pthread_kill(thread, SIGUSR1)` to interrupt blocking download syscalls; without a no-op handler that the Nix CLI installs in `initNix()`, SIGUSR1 hits its default disposition and terminates the process before the TUI can restore the terminal. devenv now installs the same dummy handler during Nix init.
 
 ### Improvements
 

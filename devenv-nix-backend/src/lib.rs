@@ -40,6 +40,36 @@ pub fn trigger_interrupt() {
     nix_bindings_util::trigger_interrupt();
 }
 
+/// No-op SIGUSR1 handler.
+///
+/// Nix uses `pthread_kill(thread, SIGUSR1)` to abort blocking syscalls in
+/// worker threads (e.g. curl downloads, `ReceiveInterrupts` in
+/// libutil/signals.hh). The signal's only purpose is to make the syscall
+/// return `EINTR`, so the body is intentionally empty.
+extern "C" fn nix_sigusr1_handler(_: nix::libc::c_int) {}
+
+/// Install Nix's libmain signal handlers so Nix's internal interrupt mechanism
+/// behaves the same when Nix is linked as a library as it does in the Nix CLI.
+///
+/// Without this, a Ctrl-C during an in-flight flake fetch terminates devenv
+/// outright: Nix calls `pthread_kill(thread, SIGUSR1)` on the curl thread to
+/// interrupt the download, and SIGUSR1's default disposition is process
+/// termination. Mirrors `initNix()` in Nix's `libmain/shared.cc`.
+fn install_nix_signal_handlers() {
+    use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction};
+
+    // Empty SaFlags (no SA_RESTART) so blocking syscalls exit with EINTR.
+    let action = SigAction::new(
+        SigHandler::Handler(nix_sigusr1_handler),
+        SaFlags::empty(),
+        SigSet::empty(),
+    );
+    // SAFETY: called once during single-threaded init, after Nix/GC is up.
+    unsafe {
+        let _ = sigaction(Signal::SIGUSR1, &action);
+    }
+}
+
 /// Initialize the Nix expression library and Boehm GC.
 ///
 /// This is safe to call multiple times - initialization only happens once.
@@ -55,6 +85,9 @@ pub fn nix_init() {
             unsafe { std::env::set_var("GC_LARGE_ALLOC_WARN_INTERVAL", "1000000") };
         }
         nix_bindings_expr::eval_state::init().expect("Failed to initialize Nix expression library");
+        // Install after Nix init so Boehm GC's stop-the-world handlers (set up
+        // during Nix init) aren't clobbered. SIGUSR1 isn't used by GC.
+        install_nix_signal_handlers();
     });
 }
 
