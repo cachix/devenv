@@ -1,6 +1,5 @@
 # Tooling to build the workspace crates using crate2nix
-{ pkgs
-, lib
+{ lib
 , stdenv
 
 , openssl
@@ -9,6 +8,7 @@
 , pkg-config
 , llvmPackages
 , cachix
+, libghostty-vt
 , nix
 , nixd
 
@@ -32,7 +32,7 @@
 
 let
   cargoToml = builtins.fromTOML (builtins.readFile ../Cargo.toml);
-  version = cargoToml.workspace.package.version;
+  inherit (cargoToml.workspace.package) version;
 
   # Override buildRustCrate to use the newer rustc from languages.rust
   # The default buildRustCrate uses an older rustc (1.73) which doesn't support
@@ -41,14 +41,10 @@ let
     inherit rustc cargo;
   };
 
-  # Pre-built libghostty-vt shared library from the ghostty flake
-  libghostty-vt = pkgs.libghostty-vt;
-
   # Import crate2nix generated file with overrides
   crateConfig = callPackage ./crate-config.nix { inherit gitRev isRelease libghostty-vt; };
 
-  cargoNix = import ../Cargo.nix {
-    inherit pkgs lib stdenv;
+  cargoNix = callPackage ../Cargo.nix {
     buildRustCrateForPkgs = _: buildRustCrateNew;
     defaultCrateOverrides = defaultCrateOverrides // crateConfig;
     release = cargoProfile == "release";
