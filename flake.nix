@@ -168,6 +168,9 @@
           default = self.templates.flake;
         };
 
+      nixosModules.default = import ./nix/nixos-module.nix;
+      homeManagerModules.default = import ./nix/home-manager-module.nix;
+
       flakeModule = self.flakeModules.default; # Backwards compatibility
       flakeModules = {
         default = import ./flake-module.nix self;
