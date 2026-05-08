@@ -17,7 +17,7 @@ function _devenv_hook --on-variable PWD
     end
 
     # stderr flows through so user sees the "not allowed" message
-    set -l project_dir (devenv hook-should-activate)
+    set -l project_dir (command devenv hook-should-activate)
     set -l exit_code $status
 
     if test $exit_code -eq 0 -a -n "$project_dir"
@@ -51,7 +51,7 @@ function _devenv_hook_prompt --on-event fish_prompt
         return
     end
 
-    set -l project_dir (devenv hook-should-activate 2>/dev/null)
+    set -l project_dir (command devenv hook-should-activate 2>/dev/null)
     if test $status -eq 0 -a -n "$project_dir"
         set -lx _DEVENV_HOOK_DIR $project_dir
         fish --no-config -c 'cd -- $_DEVENV_HOOK_DIR; and devenv shell'
@@ -81,4 +81,17 @@ end
 function _devenv_hook_init --on-event fish_prompt
     functions -e _devenv_hook_init
     _devenv_hook
+end
+
+# Re-trigger activation after `devenv allow` succeeds, so a failed shell
+# startup (e.g. secretspec auth error) can be retried by re-running
+# `devenv allow` once the underlying issue is fixed, without having to
+# cd out and back in.
+function devenv
+    command devenv $argv
+    set -l devenv_status $status
+    if test $devenv_status -eq 0; and test "$argv[1]" = allow; and not set -q DEVENV_ROOT
+        _devenv_hook
+    end
+    return $devenv_status
 end

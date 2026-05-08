@@ -24,15 +24,15 @@ _devenv_hook() {
     # Suppress stderr when retrying the same untrusted PWD (message was already shown)
     local project_dir exit_code
     if [[ "$_DEVENV_HOOK_UNTRUSTED" == "$PWD" ]]; then
-        project_dir=$(devenv hook-should-activate 2>/dev/null)
+        project_dir=$(command devenv hook-should-activate 2>/dev/null)
     else
-        project_dir=$(devenv hook-should-activate)
+        project_dir=$(command devenv hook-should-activate)
     fi
     exit_code=$?
 
     if [[ $exit_code -eq 0 && -n "$project_dir" ]]; then
         _DEVENV_HOOK_UNTRUSTED=""
-        (cd "$project_dir" && devenv shell)
+        (cd "$project_dir" && command devenv shell)
         # If the devenv shell exited due to cd outside the project, follow the user there
         local exit_dir_file="$project_dir/.devenv/exit-dir"
         if [[ -f "$exit_dir_file" ]]; then
@@ -54,4 +54,18 @@ _devenv_hook() {
         _DEVENV_HOOK_UNTRUSTED="$PWD"
     fi
     return $previous_exit_status
+}
+
+# Re-trigger activation after `devenv allow` succeeds, so a failed shell
+# startup (e.g. secretspec auth error) can be retried by re-running
+# `devenv allow` once the underlying issue is fixed, without having to
+# cd out and back in.
+devenv() {
+    command devenv "$@"
+    local devenv_status=$?
+    if [[ $devenv_status -eq 0 && "${1:-}" == "allow" && -z "${DEVENV_ROOT:-}" ]]; then
+        _DEVENV_HOOK_PWD=""
+        _devenv_hook
+    fi
+    return $devenv_status
 }

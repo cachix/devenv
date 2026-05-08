@@ -9,6 +9,7 @@
 - Fixed `devenv hook fish` not activating when starting a new fish shell directly inside a project directory. The initial activation now runs on the first `fish_prompt` event instead of inline during `source`, so the spawned `devenv shell` inherits the real terminal as stdin instead of the closed pipe from `devenv hook fish | source` ([#2798](https://github.com/cachix/devenv/issues/2798)).
 - Fixed `devenv shell` skipping the user's `.zshenv` when launching zsh, which could mangle prompts and break `.zshrc` configurations that depend on env vars defined in `.zshenv`. The user's `.zshenv` is now sourced before `.zshrc` during shell init, matching zsh's documented startup order ([#2802](https://github.com/cachix/devenv/pull/2802)).
 - Fixed in-flight Nix evaluation not aborting on Ctrl-C in `devenv shell`. The shutdown signal now flips Nix's process-global interrupt flag so the evaluator stops at its next check, instead of running to completion inside `spawn_blocking` regardless of the cancellation token.
+- Fixed `devenv hook` not retrying auto-activation when the inner `devenv shell` fails on first allow (e.g. unauthenticated secretspec provider). The bash/zsh/fish/nu hooks now wrap `devenv` so that re-running `devenv allow` after fixing the underlying issue re-triggers activation, instead of requiring the user to `cd` out and back in.
 
 ### Improvements
 
