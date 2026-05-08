@@ -3904,8 +3904,8 @@ dependencies = [
 
 [[package]]
 name = "iocraft"
-version = "0.8.0"
-source = "git+https://github.com/cachix/iocraft?branch=row-level-diff#8de1f645c2010d2ad0959017ea06f5be1a5c1030"
+version = "0.8.2"
+source = "git+https://github.com/ccbrown/iocraft?branch=main#dd287dcf6a320dd06d0749efe93de7b0e32c3d9c"
 dependencies = [
  "bitflags 2.11.1",
  "crossterm",
@@ -3919,8 +3919,8 @@ dependencies = [
 
 [[package]]
 name = "iocraft-macros"
-version = "0.2.3"
-source = "git+https://github.com/cachix/iocraft?branch=row-level-diff#8de1f645c2010d2ad0959017ea06f5be1a5c1030"
+version = "0.2.4"
+source = "git+https://github.com/ccbrown/iocraft?branch=main#dd287dcf6a320dd06d0749efe93de7b0e32c3d9c"
 dependencies = [
  "proc-macro2",
  "quote",
