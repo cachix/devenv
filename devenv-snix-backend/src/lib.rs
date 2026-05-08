@@ -18,8 +18,8 @@ pub struct SnixStore;
 
 #[async_trait(?Send)]
 impl Store for SnixStore {
-    fn uri(&self) -> &str {
-        "snix"
+    fn uri(&self) -> Result<String> {
+        bail!("SnixStore::uri is not yet implemented")
     }
 
     async fn add_gc_root(&self, _gc_root: &Path, _store_path: &StorePath) -> Result<()> {

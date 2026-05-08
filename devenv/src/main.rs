@@ -95,7 +95,7 @@ fn main_inner() -> Result<()> {
         // Handle commands that don't need config or runtime
         match &cli.command {
             Commands::Version => {
-                commands::version::run(cli.nix_args.system.as_deref());
+                commands::version::run();
                 return Ok(());
             }
             Commands::Direnvrc => {

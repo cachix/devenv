@@ -51,7 +51,9 @@ in
   config = lib.mkIf (hostContent != "") {
     tasks."devenv:hostctl:setup" = lib.mkIf isNative {
       exec = setupScript;
-      before = processTaskNames;
+      # Soft dependency: process tasks still start if hostctl fails
+      # (e.g. /etc/hosts is read-only on NixOS).
+      before = map (name: "${name}@completed") processTaskNames;
       description = "Configure /etc/hosts entries with hostctl";
     };
 

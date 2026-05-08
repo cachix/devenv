@@ -181,9 +181,11 @@ bindkey "${{DEVENV_RELOAD_KEYBIND:-\\e\\C-r}}" __devenv_reload_widget
 if [ -n "$_DEVENV_REAL_ZDOTDIR" ]; then
     ZDOTDIR="$_DEVENV_REAL_ZDOTDIR"
     unset _DEVENV_REAL_ZDOTDIR
+    [ -f "$ZDOTDIR/.zshenv" ] && source "$ZDOTDIR/.zshenv"
     [ -f "$ZDOTDIR/.zshrc" ] && source "$ZDOTDIR/.zshrc"
 else
     unset ZDOTDIR
+    [ -f "$HOME/.zshenv" ] && source "$HOME/.zshenv"
     [ -f "$HOME/.zshrc" ] && source "$HOME/.zshrc"
 fi
 

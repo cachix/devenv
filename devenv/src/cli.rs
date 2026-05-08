@@ -1,5 +1,5 @@
 use crate::tracing as devenv_tracing;
-use clap::{Parser, Subcommand, ValueEnum, crate_version};
+use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use devenv_core::config::NixBackendType;
 use devenv_core::settings::{
@@ -655,14 +655,14 @@ fn complete_task_names(current: &OsStr) -> Vec<CompletionCandidate> {
 #[derive(Parser)]
 #[command(
     name = "devenv",
-    version = crate_version!(),
+    version = env!("DEVENV_VERSION_STRING"),
     color = clap::ColorChoice::Auto,
     disable_help_flag = true,
     arg_required_else_help = true,
     // for --clean to work with subcommands
     subcommand_precedence_over_arg = true,
     dont_delimit_trailing_values = true,
-    about = format!("https://devenv.sh {}: Fast, Declarative, Reproducible, and Composable Developer Environments", crate_version!())
+    about = format!("https://devenv.sh {}: Fast, Declarative, Reproducible, and Composable Developer Environments", env!("DEVENV_VERSION_STRING"))
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -1073,7 +1073,7 @@ pub enum InputsCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::Parser;
+    use clap::{Parser, crate_version};
 
     #[test]
     fn verify_cli() {

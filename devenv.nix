@@ -35,24 +35,27 @@ in
         Release devenv version $ARGUMENTS
 
         1. Update version in Cargo.toml to $ARGUMENTS using `cargo set-version`
-        2. Run `cargo check` to update Cargo.lock
-        3. Run `devenv tasks run devenv:crate2nix` to regenerate Cargo.nix
-        4. Put today's date in CHANGELOG.md replacing "(unreleased)"
-        5. Create a new "## X.Y.Z (unreleased)" section above the released version in CHANGELOG.md
-        6. If this is a major version bump (X.Y.0, not X.Y.Z patch):
+        2. Bump secretspec to the latest release:
+           - Find the latest tag with `gh release view --repo cachix/secretspec --json tagName -q .tagName`
+           - Update the `tag = "vX.Y.Z"` in the `secretspec` dependency in Cargo.toml to that tag
+        3. Run `cargo check` to update Cargo.lock
+        4. Run `devenv tasks run devenv:crate2nix` to regenerate Cargo.nix
+        5. Put today's date in CHANGELOG.md replacing "(unreleased)"
+        6. Create a new "## X.Y.Z (unreleased)" section above the released version in CHANGELOG.md
+        7. If this is a major version bump (X.Y.0, not X.Y.Z patch):
            - Generate a blog post in docs/src/blog/posts/
            - Follow the naming convention: devenv-vX.Y-short-description.md
            - Use existing blog posts as reference for format and style
-        7. Commit the changes
-        8. Capture the release commit SHA with `git rev-parse HEAD`
-        9. Push the commit(s) to GitHub
-        10. Create a GitHub release with `gh release create v$ARGUMENTS --target <release-commit-sha> --title "v$ARGUMENTS" --latest --notes  "<changelog for this release>"`
-        11. Bump version to next patch with `cargo set-version --bump patch`
-        12. Run `cargo check` to update Cargo.lock
-        13. Run `devenv tasks run devenv:crate2nix` to regenerate Cargo.nix
-        14. Commit with message "Next release is <new version>"
-        15. Push to GitHub
-        16. At the end, tell the user that the package still needs to be bumped in nixpkgs:
+        8. Commit the changes
+        9. Capture the release commit SHA with `git rev-parse HEAD`
+        10. Push the commit(s) to GitHub
+        11. Create a GitHub release with `gh release create v$ARGUMENTS --target <release-commit-sha> --title "v$ARGUMENTS" --latest --notes  "<changelog for this release>"`
+        12. Bump version to next patch with `cargo set-version --bump patch`
+        13. Run `cargo check` to update Cargo.lock
+        14. Run `devenv tasks run devenv:crate2nix` to regenerate Cargo.nix
+        15. Commit with message "Next release is <new version>"
+        16. Push to GitHub
+        17. At the end, tell the user that the package still needs to be bumped in nixpkgs:
             - The package is at pkgs/by-name/de/devenv/package.nix
       '';
     };

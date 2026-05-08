@@ -14,8 +14,8 @@ use devenv_core::{
     cachix::{CachixManager, CachixPaths},
     config::{Input, NixBackendType, NixpkgsConfig},
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
-    nix_backend::DevenvPaths,
     nix_config::NixConfig,
+    paths::DevenvPaths,
     ports::PortAllocator,
     settings::{CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings},
 };
@@ -684,7 +684,7 @@ impl Devenv {
     /// `{nix_args}:port_allocation={enabled}:strict_ports={strict}:shell`
     pub fn shell_cache_key(&self) -> Option<devenv_eval_cache::EvalCacheKey> {
         let bootstrap_args = self.backend.bootstrap_args();
-        let cache_key_args = devenv_core::nix_backend::eval_cache_key_args(
+        let cache_key_args = devenv_core::evaluator::eval_cache_key_args(
             bootstrap_args.as_str(),
             self.port_allocator.is_enabled(),
             self.port_allocator.is_strict(),

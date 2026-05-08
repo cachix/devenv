@@ -66,12 +66,6 @@ opentelemetry_sdk = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 
-[build-dependencies]
-vergen-gitcl.workspace = true
-
-[package.metadata.cargo-machete]
-ignored = ["vergen-gitcl"]
-
 [dev-dependencies]
 devenv-nix-backend-macros.workspace = true
 

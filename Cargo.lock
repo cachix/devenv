@@ -1804,7 +1804,6 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "valuable",
- "vergen-gitcl",
  "which 8.0.2",
  "whoami 2.1.2",
  "xdg",
@@ -2298,15 +2297,6 @@ name = "endian-type"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "869b0adbda23651a9c5c0c3d270aac9fcb52e8622a8f2b17e57802d7791962f2"
-
-[[package]]
-name = "envy"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f47e0157f2cb54f5ae1bd371b30a2ae4311e1c028f575cd4e81de7353215965"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "equivalent"
@@ -3914,8 +3904,8 @@ dependencies = [
 
 [[package]]
 name = "iocraft"
-version = "0.8.0"
-source = "git+https://github.com/cachix/iocraft?branch=row-level-diff#8de1f645c2010d2ad0959017ea06f5be1a5c1030"
+version = "0.8.2"
+source = "git+https://github.com/ccbrown/iocraft?branch=main#dd287dcf6a320dd06d0749efe93de7b0e32c3d9c"
 dependencies = [
  "bitflags 2.11.1",
  "crossterm",
@@ -3929,8 +3919,8 @@ dependencies = [
 
 [[package]]
 name = "iocraft-macros"
-version = "0.2.3"
-source = "git+https://github.com/cachix/iocraft?branch=row-level-diff#8de1f645c2010d2ad0959017ea06f5be1a5c1030"
+version = "0.2.4"
+source = "git+https://github.com/ccbrown/iocraft?branch=main#dd287dcf6a320dd06d0749efe93de7b0e32c3d9c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5085,15 +5075,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "num_threads"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c7398b9c8b70908f6371f47ed36737907c87c52af34c268fed0bf0ceb92ead9"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -6786,8 +6767,8 @@ dependencies = [
 
 [[package]]
 name = "secretspec"
-version = "0.8.0"
-source = "git+https://github.com/cachix/secretspec?tag=v0.8.0#423da6356c76b33e2147ce577e0644a29d2615a5"
+version = "0.9.1"
+source = "git+https://github.com/cachix/secretspec?tag=v0.9.1#7b9fb014b1d095f854743eb642f18007396c95dc"
 dependencies = [
  "aws-config",
  "aws-sdk-secretsmanager",
@@ -6801,12 +6782,12 @@ dependencies = [
  "keyring",
  "linkme",
  "miette",
- "once_cell",
+ "percent-encoding",
  "rand 0.9.4",
  "reqwest 0.12.28",
+ "rsa",
  "secrecy",
  "serde",
- "serde-envfile",
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
@@ -6885,19 +6866,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3753ca04f350fa92d00b6146a3555e63c55388c9ef2e11e09bce2ff1c0b509c6"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "serde-envfile"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "891532ca829b3211b301e61c7bad9001b077de1c2da350240c492e684e60bd6d"
-dependencies = [
- "cfg-if",
- "dotenvy",
- "envy",
- "serde",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -8175,9 +8143,7 @@ checksum = "743bd48c283afc0388f9b8827b976905fb217ad9e647fae3a379a9283c4def2c"
 dependencies = [
  "deranged",
  "itoa",
- "libc",
  "num-conv",
- "num_threads",
  "powerfmt",
  "serde_core",
  "time-core",
@@ -9004,43 +8970,6 @@ name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
-
-[[package]]
-name = "vergen"
-version = "9.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b849a1f6d8639e8de261e81ee0fc881e3e3620db1af9f2e0da015d4382ceaf75"
-dependencies = [
- "anyhow",
- "derive_builder",
- "rustversion",
- "vergen-lib",
-]
-
-[[package]]
-name = "vergen-gitcl"
-version = "9.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77ff3b5300a085d6bcd8fc96a507f706a28ae3814693236c9b409db71a1d15b9"
-dependencies = [
- "anyhow",
- "derive_builder",
- "rustversion",
- "time",
- "vergen",
- "vergen-lib",
-]
-
-[[package]]
-name = "vergen-lib"
-version = "9.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b34a29ba7e9c59e62f229ae1932fb1b8fb8a6fdcc99215a641913f5f5a59a569"
-dependencies = [
- "anyhow",
- "derive_builder",
- "rustversion",
-]
 
 [[package]]
 name = "version_check"

@@ -9,26 +9,44 @@
 use crate::cli::HookShell;
 use miette::{IntoDiagnostic, Result};
 use std::path::{Path, PathBuf};
+use std::{env, fs};
+
+// ---- Hook scripts ----
+//
+// Generated at build time. See `build.rs`.
+
+const HOOK_BASH: &str = include_str!(concat!(env!("OUT_DIR"), "/hook.sh"));
+const HOOK_ZSH: &str = include_str!(concat!(env!("OUT_DIR"), "/hook.zsh"));
+const HOOK_FISH: &str = include_str!(concat!(env!("OUT_DIR"), "/hook.fish"));
+const HOOK_NU: &str = include_str!(concat!(env!("OUT_DIR"), "/hook.nu"));
 
 // ---- CLI entry points ----
 
+/// Print the shell hook script for `shell` to stdout.
 pub fn print(shell: &HookShell) {
-    match shell {
-        HookShell::Bash => print!("{HOOK_POSIX}\n{HOOK_BASH_REGISTER}"),
-        HookShell::Zsh => print!("{HOOK_POSIX}\n{HOOK_ZSH_REGISTER}"),
-        HookShell::Fish => print!("{}", include_str!("../../hook-fish.fish")),
-        HookShell::Nu => print!("{}", include_str!("../../hook-nu.nu")),
-    }
+    let script = match shell {
+        HookShell::Bash => HOOK_BASH,
+        HookShell::Zsh => HOOK_ZSH,
+        HookShell::Fish => HOOK_FISH,
+        HookShell::Nu => HOOK_NU,
+    };
+    print!("{script}");
 }
 
+/// Trust the current working directory for auto-activation.
 pub fn allow() -> Result<()> {
-    allow_path(&std::env::current_dir().into_diagnostic()?)
+    allow_path(&env::current_dir().into_diagnostic()?)
 }
 
+/// Revoke trust for the current working directory.
 pub fn revoke() -> Result<()> {
-    revoke_path(&std::env::current_dir().into_diagnostic()?)
+    revoke_path(&env::current_dir().into_diagnostic()?)
 }
 
+/// Check whether the shell hook should activate devenv in the current directory.
+///
+/// Prints the project directory on stdout when activation is wanted, exits with
+/// code 2 when a project is found but not trusted, and is silent otherwise.
 pub fn should_activate() -> Result<()> {
     match check_activation()? {
         ActivationCheck::Activate(dir) => println!("{dir}"),
@@ -41,7 +59,7 @@ pub fn should_activate() -> Result<()> {
 // ---- Helpers ----
 
 fn canonical_str(path: &Path) -> Result<String> {
-    let abs_path = std::fs::canonicalize(path).into_diagnostic()?;
+    let abs_path = fs::canonicalize(path).into_diagnostic()?;
     abs_path
         .to_str()
         .ok_or_else(|| miette::miette!("Path is not valid UTF-8: {}", abs_path.display()))
@@ -68,7 +86,7 @@ fn remove_path_entries(entries: &mut Vec<String>, abs_str: &str) {
 // ---- Trust database ----
 
 fn devenv_home() -> Result<PathBuf> {
-    if let Ok(home) = std::env::var("DEVENV_HOME") {
+    if let Ok(home) = env::var("DEVENV_HOME") {
         return Ok(PathBuf::from(home));
     }
     xdg::BaseDirectories::with_prefix("devenv")
@@ -83,7 +101,7 @@ fn trust_db_path() -> Result<PathBuf> {
 }
 
 fn read_trust_entries(db_path: &Path) -> Result<Vec<String>> {
-    match std::fs::read_to_string(db_path) {
+    match fs::read_to_string(db_path) {
         Ok(content) => Ok(content
             .lines()
             .filter(|l| !l.is_empty())
@@ -92,6 +110,18 @@ fn read_trust_entries(db_path: &Path) -> Result<Vec<String>> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(e) => Err(e).into_diagnostic(),
     }
+}
+
+fn write_trust_entries(db_path: &Path, entries: &[String]) -> Result<()> {
+    if let Some(parent) = db_path.parent() {
+        fs::create_dir_all(parent).into_diagnostic()?;
+    }
+    let content = if entries.is_empty() {
+        String::new()
+    } else {
+        entries.join("\n") + "\n"
+    };
+    fs::write(db_path, content).into_diagnostic()
 }
 
 fn is_trusted(abs_str: &str) -> Result<bool> {
@@ -108,17 +138,10 @@ fn allow_path(project_dir: &Path) -> Result<()> {
     }
 
     let db_path = trust_db_path()?;
-
-    if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).into_diagnostic()?;
-    }
-
     let mut entries = read_trust_entries(&db_path)?;
     remove_path_entries(&mut entries, &abs_str);
     entries.push(abs_str.clone());
-
-    let content = entries.join("\n") + "\n";
-    std::fs::write(&db_path, content).into_diagnostic()?;
+    write_trust_entries(&db_path, &entries)?;
 
     eprintln!("devenv: allowed {abs_str}");
     Ok(())
@@ -135,12 +158,7 @@ fn revoke_path(project_dir: &Path) -> Result<()> {
     if entries.len() == before {
         eprintln!("devenv: {abs_str} was not in the allow list");
     } else {
-        let content = if entries.is_empty() {
-            String::new()
-        } else {
-            entries.join("\n") + "\n"
-        };
-        std::fs::write(&db_path, content).into_diagnostic()?;
+        write_trust_entries(&db_path, &entries)?;
         eprintln!("devenv: revoked {abs_str}");
     }
 
@@ -171,9 +189,8 @@ enum ActivationCheck {
     Untrusted,
 }
 
-/// Check if the hook should activate devenv in the current directory.
 fn check_activation() -> Result<ActivationCheck> {
-    let cwd = std::env::current_dir().into_diagnostic()?;
+    let cwd = env::current_dir().into_diagnostic()?;
 
     let project_dir = match find_project(&cwd) {
         Some(dir) => dir,
@@ -190,30 +207,20 @@ fn check_activation() -> Result<ActivationCheck> {
     Ok(ActivationCheck::Activate(abs_str))
 }
 
-// ---- Hook script output ----
-
-const HOOK_POSIX: &str = include_str!("../../hook-posix.sh");
-
-const HOOK_BASH_REGISTER: &str = r#"# Register hook
-if [[ -z "${PROMPT_COMMAND:-}" ]]; then
-    PROMPT_COMMAND="_devenv_hook"
-else
-    PROMPT_COMMAND="_devenv_hook;${PROMPT_COMMAND}"
-fi
-"#;
-
-const HOOK_ZSH_REGISTER: &str = r#"# Register hook via precmd
-typeset -ag precmd_functions
-if (( ! ${precmd_functions[(I)_devenv_hook]} )); then
-    precmd_functions=(_devenv_hook $precmd_functions)
-fi
-"#;
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use tempfile::TempDir;
+
+    /// Set `DEVENV_HOME` for a test. Safe because cargo nextest runs each test
+    /// in its own process, so there is no concurrent env access.
+    fn set_devenv_home(dir: &Path) {
+        unsafe { env::set_var("DEVENV_HOME", dir) };
+    }
+
+    fn unset_devenv_home() {
+        unsafe { env::remove_var("DEVENV_HOME") };
+    }
 
     #[test]
     fn test_entry_path_current_format() {
@@ -253,8 +260,7 @@ mod tests {
         fs::write(project.join("devenv.yaml"), "inputs:\n  nixpkgs:\n").unwrap();
 
         let devenv_home_dir = dir.path().join("devenv-home");
-        // SAFETY: test runs single-threaded (cargo nextest runs each test in its own process)
-        unsafe { std::env::set_var("DEVENV_HOME", &devenv_home_dir) };
+        set_devenv_home(&devenv_home_dir);
 
         allow_path(&project).unwrap();
 
@@ -268,7 +274,7 @@ mod tests {
         let content = fs::read_to_string(&db_path).unwrap();
         assert!(!content.contains(&canonical));
 
-        unsafe { std::env::remove_var("DEVENV_HOME") };
+        unset_devenv_home();
     }
 
     #[test]
@@ -279,7 +285,7 @@ mod tests {
         fs::write(project.join("devenv.yaml"), "inputs:\n  nixpkgs:\n").unwrap();
 
         let devenv_home_dir = dir.path().join("devenv-home");
-        unsafe { std::env::set_var("DEVENV_HOME", &devenv_home_dir) };
+        set_devenv_home(&devenv_home_dir);
 
         let abs_str = canonical_str(&project).unwrap();
 
@@ -294,7 +300,7 @@ mod tests {
         fs::write(project.join("devenv.yaml"), "inputs:\n  nixpkgs:\n  new:\n").unwrap();
         assert!(is_trusted(&abs_str).unwrap());
 
-        unsafe { std::env::remove_var("DEVENV_HOME") };
+        unset_devenv_home();
     }
 
     #[test]
@@ -305,7 +311,7 @@ mod tests {
         fs::write(project.join("devenv.yaml"), "inputs:\n  nixpkgs:\n").unwrap();
 
         let devenv_home_dir = dir.path().join("devenv-home");
-        unsafe { std::env::set_var("DEVENV_HOME", &devenv_home_dir) };
+        set_devenv_home(&devenv_home_dir);
 
         let abs_str = canonical_str(&project).unwrap();
 
@@ -316,6 +322,6 @@ mod tests {
 
         assert!(is_trusted(&abs_str).unwrap());
 
-        unsafe { std::env::remove_var("DEVENV_HOME") };
+        unset_devenv_home();
     }
 }

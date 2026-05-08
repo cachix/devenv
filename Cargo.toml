@@ -99,7 +99,7 @@ schematic = { version = "0.19", features = [
 ] }
 secrecy = "0.10"
 # https://github.com/mikaelmello/inquire/pull/330
-secretspec = { git = "https://github.com/cachix/secretspec", tag = "v0.8.0", features = [
+secretspec = { git = "https://github.com/cachix/secretspec", tag = "v0.9.1", default-features = false, features = [
   "cli",
   "keyring",
   "gcsm",
@@ -159,7 +159,6 @@ signal-hook-tokio = { version = "0.4", features = ["futures-v0_3"] }
 socket2 = "0.6"
 process-wrap = { version = "9.1", features = ["tokio1"] }
 portable-pty = "0.9.0"
-vergen-gitcl = "9.1"
 ignore = "0.4.25"
 proptest = "1.11"
 libc = "0.2"
@@ -193,13 +192,13 @@ nix-compat = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a75
 nix-compat-derive = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
 
 # Ensure crossterm versions match between these
-iocraft = { version = "=0.8.0", features = ["unstable-output-streams"] }
+iocraft = { version = "=0.8.2", features = ["unstable-output-streams"] }
 crossterm = "0.29.0"
 
 [patch.crates-io]
 # Waiting on iocraft release with stderr rendering support
 # https://github.com/ccbrown/iocraft/pull/157
-iocraft = { git = "https://github.com/cachix/iocraft", branch = "row-level-diff" }
+iocraft = { git = "https://github.com/ccbrown/iocraft", branch = "main" }
 # https://github.com/crossterm-rs/crossterm/pull/1026
 crossterm = { git = "https://github.com/cachix/crossterm", branch = "0.29-cachix" }
 

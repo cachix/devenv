@@ -30,8 +30,10 @@ devenv is a Rust CLI tool that creates fast, declarative, reproducible developer
 
 - **devenv-core/** - Shared types and abstractions:
   - `config.rs` - Configuration parsing (`devenv.yaml`, `devenv.local.yaml`)
-  - `nix_backend.rs` - The `NixBackend` trait that abstracts Nix evaluation
-  - `cli.rs` - `GlobalOptions` used across the codebase
+  - `evaluator.rs` - The `Evaluator` trait that abstracts Nix evaluation
+  - `store.rs` - The `Store` trait for talking to a Nix store
+  - `backend.rs` - `Backend<E>`, devenv-shaped facade over an `Evaluator`
+  - `paths.rs` - `DevenvPaths` on-disk layout
 
 - **devenv-nix-backend/** - C FFI-based Nix backend using `nix-bindings-*` crates. Provides direct API access to Nix without subprocess spawning. This is the default backend.
 
