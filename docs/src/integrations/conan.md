@@ -8,7 +8,7 @@ Add `conan-flake` to your inputs:
 $ devenv inputs add conan-flake git+https://codeberg.org/tarcisio/conan-flake
 ```
 
-Check [the list of available options](/reference/options.md#conanenable). The [`conan.config`](/reference/options.md#conanconfig) option maps the whole of the options available in the [`conan-flake`](https://codeberg.org/tarcisio/conan-flake) module &mdash; see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to get a grasp on the available options.
+You can check [the list of available options](/reference/options.md#conanenable). The [`conan.config`](/reference/options.md#conanconfig) option, however, maps the whole of the options available in the [`conan-flake`](https://flake.parts/options/conan-flake.html) module &mdash; check the [official module documentation](https://flake.parts/options/conan-flake.html#options) and see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to help you setting up.
 
 Config the `devenv.nix` file accordingly. For example, the following code would configure Conan to use the same CMake available in the developmemnt shell:
 
