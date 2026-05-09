@@ -106,7 +106,7 @@
           # (nixpkgs' buildRustCrate uses Rust 1.73 which is too old for some deps)
           rustToolchain = pkgs.rust-bin.stable.latest.default;
           workspace = pkgs.callPackage ./nix/workspace.nix {
-            inherit pkgs gitRev;
+            inherit gitRev;
             rustc = rustToolchain;
             cargo = rustToolchain;
           };
