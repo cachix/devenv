@@ -42,6 +42,7 @@ use devenv_core::evaluator::eval_cache_key_args;
 use devenv_core::evaluator::{
     BuildOptions, DevEnvOutput, Evaluator, NixMetadata, PackageSearchResult, SearchResults,
 };
+use devenv_core::nix_args::NixpkgsConfigForNix;
 use devenv_core::nix_log_bridge::{EvalActivityGuard, NixLogBridge};
 use devenv_core::realized::RealizedPathsObserver;
 use devenv_core::store::Store as StoreTrait;
@@ -1512,7 +1513,7 @@ fn extract_bootstrap_files(dotfile_dir: &Path) -> Result<PathBuf> {
 }
 
 fn write_nixpkgs_config(nixpkgs_config: &NixpkgsConfig, dotfile_dir: &Path) -> Result<PathBuf> {
-    let nixpkgs_config_base = ser_nix::to_string(nixpkgs_config)
+    let nixpkgs_config_base = ser_nix::to_string(&NixpkgsConfigForNix::from(nixpkgs_config))
         .map_err(|e| miette!("Failed to serialize nixpkgs config: {}", e))?;
     let nixpkgs_config_nix = format!(
         r#"let

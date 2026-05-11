@@ -4,7 +4,7 @@
 //! when assembling the devenv environment. The struct is serialized to Nix syntax
 //! using the `ser_nix` crate and inserted into the flake template.
 
-use crate::config::{Input, NixpkgsConfig};
+use crate::config::{AndroidSdkConfig, Input, NixpkgsConfig};
 use miette::{Result, miette};
 use ser_nix::NixLiteral;
 use serde::Serialize;
@@ -393,6 +393,8 @@ pub struct NixArgs<'a> {
     /// Pre-merged nixpkgs configuration for the target system.
     /// This is computed by Config::nixpkgs_config() in Rust to avoid
     /// duplicating the merging logic in Nix (bootstrapLib.nix).
+    /// Serialized via `NixpkgsConfigForNix` so Nix sees the upstream casing.
+    #[serde(serialize_with = "serialize_nixpkgs_config_for_nix")]
     pub nixpkgs_config: NixpkgsConfig,
 
     /// Content fingerprint of the lock file computed from all inputs' narHashes.
@@ -407,6 +409,82 @@ pub struct NixArgs<'a> {
     pub devenv_state: Option<&'a Path>,
 }
 
+fn serialize_nixpkgs_config_for_nix<S: Serializer>(
+    c: &NixpkgsConfig,
+    s: S,
+) -> Result<S::Ok, S::Error> {
+    NixpkgsConfigForNix::from(c).serialize(s)
+}
+
+/// Wraps a [`NixpkgsConfig`] for serialization toward Nixpkgs upstream.
+///
+/// `NIXPKGS_CONFIG` (env var read by Nixpkgs stdenv) and `bootstrapLib.nix`
+/// expect camelCase keys (`allowUnfree`, `cudaSupport`, etc.), with the snake
+/// exception of `android_sdk` / `accept_license` which Nixpkgs defines as
+/// snake itself. `allowlisted_licenses` / `blocklisted_licenses` are
+/// intentionally omitted — they are applied in `bootstrapLib.nix` against
+/// `lib.licenses`, not passed through `NIXPKGS_CONFIG`.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NixpkgsConfigForNix<'a> {
+    #[serde(skip_serializing_if = "is_false_ref")]
+    allow_unfree: &'a bool,
+    #[serde(skip_serializing_if = "is_false_ref")]
+    allow_unsupported_system: &'a bool,
+    #[serde(skip_serializing_if = "is_false_ref")]
+    allow_broken: &'a bool,
+    #[serde(skip_serializing_if = "is_false_ref")]
+    allow_non_source: &'a bool,
+    #[serde(skip_serializing_if = "is_false_ref")]
+    cuda_support: &'a bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    cuda_capabilities: &'a Vec<String>,
+    #[serde(skip_serializing_if = "is_false_ref")]
+    rocm_support: &'a bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    permitted_insecure_packages: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    permitted_unfree_packages: &'a Vec<String>,
+    #[serde(rename = "android_sdk", skip_serializing_if = "Option::is_none")]
+    android_sdk: &'a Option<AndroidSdkConfig>,
+}
+
+impl<'a> From<&'a NixpkgsConfig> for NixpkgsConfigForNix<'a> {
+    fn from(c: &'a NixpkgsConfig) -> Self {
+        // Destructure so adding a field to NixpkgsConfig forces an update here.
+        let NixpkgsConfig {
+            allow_unfree,
+            allow_unsupported_system,
+            allow_broken,
+            allow_non_source,
+            cuda_support,
+            cuda_capabilities,
+            rocm_support,
+            permitted_insecure_packages,
+            permitted_unfree_packages,
+            allowlisted_licenses: _,
+            blocklisted_licenses: _,
+            android_sdk,
+        } = c;
+        Self {
+            allow_unfree,
+            allow_unsupported_system,
+            allow_broken,
+            allow_non_source,
+            cuda_support,
+            cuda_capabilities,
+            rocm_support,
+            permitted_insecure_packages,
+            permitted_unfree_packages,
+            android_sdk,
+        }
+    }
+}
+
+fn is_false_ref(b: &&bool) -> bool {
+    !**b
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -417,6 +495,37 @@ mod tests {
     /// Matches pattern: key = value (with possible whitespace variation)
     fn contains_key_value(output: &str, key: &str, value: &str) -> bool {
         output.contains(&format!("{} = {}", key, value))
+    }
+
+    // Nixpkgs upstream output contract: NixpkgsConfigForNix serializes as
+    // camelCase (with the android_sdk / accept_license snake exception).
+    #[test]
+    fn nixpkgs_config_serializes_for_upstream() {
+        let cfg = NixpkgsConfig {
+            allow_unfree: true,
+            cuda_support: true,
+            cuda_capabilities: vec!["8.0".to_string()],
+            permitted_insecure_packages: vec!["pkg1".to_string()],
+            permitted_unfree_packages: vec!["terraform".to_string()],
+            android_sdk: Some(AndroidSdkConfig {
+                accept_license: true,
+            }),
+            ..Default::default()
+        };
+        let expected: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+allowUnfree: true
+cudaSupport: true
+cudaCapabilities: ["8.0"]
+permittedInsecurePackages: ["pkg1"]
+permittedUnfreePackages: ["terraform"]
+android_sdk:
+  accept_license: true
+"#,
+        )
+        .unwrap();
+        let actual = serde_yaml::to_value(NixpkgsConfigForNix::from(&cfg)).unwrap();
+        assert_eq!(actual, expected);
     }
 
     #[test]

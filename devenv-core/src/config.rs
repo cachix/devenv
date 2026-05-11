@@ -38,106 +38,60 @@ pub enum NixBackendType {
 }
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[config(rename_all = "camelCase")]
 #[serde(rename_all = "snake_case")]
 pub struct AndroidSdkConfig {
-    #[serde(
-        alias = "acceptLicense",
-        skip_serializing_if = "is_false",
-        default = "false_default"
-    )]
-    #[setting(merge = schematic::merge::replace)]
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(alias = "acceptLicense", merge = schematic::merge::replace)]
     pub accept_license: bool,
 }
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[config(rename_all = "camelCase")]
-#[serde(rename_all(serialize = "camelCase", deserialize = "snake_case"))]
+#[serde(rename_all = "snake_case")]
 pub struct NixpkgsConfig {
-    #[serde(
-        alias = "allowUnfree",
-        skip_serializing_if = "is_false",
-        default = "false_default"
-    )]
-    #[setting(merge = schematic::merge::replace)]
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(alias = "allowUnfree", merge = schematic::merge::replace)]
     pub allow_unfree: bool,
-    #[serde(
-        alias = "allowUnsupportedSystem",
-        skip_serializing_if = "is_false",
-        default = "false_default"
-    )]
-    #[setting(merge = schematic::merge::replace)]
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(alias = "allowUnsupportedSystem", merge = schematic::merge::replace)]
     pub allow_unsupported_system: bool,
-    #[serde(
-        alias = "allowBroken",
-        skip_serializing_if = "is_false",
-        default = "false_default"
-    )]
-    #[setting(merge = schematic::merge::replace)]
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(alias = "allowBroken", merge = schematic::merge::replace)]
     pub allow_broken: bool,
-    #[serde(
-        alias = "allowNonSource",
-        skip_serializing_if = "is_false",
-        default = "false_default"
-    )]
-    #[setting(merge = schematic::merge::replace)]
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(alias = "allowNonSource", merge = schematic::merge::replace)]
     pub allow_non_source: bool,
-    #[serde(
-        alias = "cudaSupport",
-        skip_serializing_if = "is_false",
-        default = "false_default"
-    )]
-    #[setting(merge = schematic::merge::replace)]
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(alias = "cudaSupport", merge = schematic::merge::replace)]
     pub cuda_support: bool,
-    #[serde(
-        alias = "cudaCapabilities",
-        skip_serializing_if = "Vec::is_empty",
-        default
-    )]
-    #[setting(merge = schematic::merge::append_vec)]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[setting(alias = "cudaCapabilities", merge = schematic::merge::append_vec)]
     pub cuda_capabilities: Vec<String>,
-    #[serde(
-        alias = "rocmSupport",
-        skip_serializing_if = "is_false",
-        default = "false_default"
-    )]
-    #[setting(merge = schematic::merge::replace)]
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(alias = "rocmSupport", merge = schematic::merge::replace)]
     pub rocm_support: bool,
-    #[serde(
-        alias = "permittedInsecurePackages",
-        skip_serializing_if = "Vec::is_empty",
-        default
-    )]
-    #[setting(merge = schematic::merge::append_vec)]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[setting(alias = "permittedInsecurePackages", merge = schematic::merge::append_vec)]
     pub permitted_insecure_packages: Vec<String>,
-    #[serde(
-        alias = "permittedUnfreePackages",
-        skip_serializing_if = "Vec::is_empty",
-        default
-    )]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[setting(alias = "permittedUnfreePackages")]
     pub permitted_unfree_packages: Vec<String>,
     /// License names to allow (e.g. "mit", "gpl3Only").
     /// Only applied in bootstrapLib.nix where lib.licenses is available;
     /// not serialized to NIXPKGS_CONFIG since raw strings won't match license attrsets.
-    #[serde(alias = "allowlistedLicenses", skip_serializing, default)]
-    #[setting(merge = schematic::merge::append_vec)]
+    #[serde(skip_serializing, default)]
+    #[setting(alias = "allowlistedLicenses", merge = schematic::merge::append_vec)]
     pub allowlisted_licenses: Vec<String>,
     /// License names to block (e.g. "unfree", "bsl11").
     /// Only applied in bootstrapLib.nix; not serialized to NIXPKGS_CONFIG.
-    #[serde(alias = "blocklistedLicenses", skip_serializing, default)]
-    #[setting(merge = schematic::merge::append_vec)]
+    #[serde(skip_serializing, default)]
+    #[setting(alias = "blocklistedLicenses", merge = schematic::merge::append_vec)]
     pub blocklisted_licenses: Vec<String>,
-    #[serde(
-        rename = "android_sdk",
-        skip_serializing_if = "Option::is_none",
-        default
-    )]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(nested)]
     pub android_sdk: Option<AndroidSdkConfig>,
 }
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[config(rename_all = "camelCase")]
 #[serde(rename_all = "snake_case")]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -197,25 +151,6 @@ impl TryFrom<&Input> for FlakeInput {
     }
 }
 
-fn true_default() -> bool {
-    true
-}
-#[allow(dead_code)]
-fn false_default() -> bool {
-    false
-}
-fn is_true(b: &bool) -> bool {
-    *b
-}
-
-fn is_false(b: &bool) -> bool {
-    !*b
-}
-
-fn is_default<T: Default + PartialEq>(t: &T) -> bool {
-    t == &T::default()
-}
-
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Clean {
     pub enabled: bool,
@@ -241,23 +176,20 @@ impl Clean {
 }
 
 #[derive(schematic::Config, Clone, Serialize, Debug, JsonSchema)]
-#[config(rename_all = "camelCase", allow_unknown_fields)]
+#[config(allow_unknown_fields)]
 #[serde(rename_all = "snake_case")]
 pub struct Nixpkgs {
     #[serde(flatten)]
     #[setting(nested)]
     pub config_: NixpkgsConfig,
-    #[serde(
-        alias = "per-platform",
-        skip_serializing_if = "BTreeMap::is_empty",
-        default
-    )]
-    #[setting(merge = schematic::merge::merge_btreemap)]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    // TODO(v3.0): remove deprecated alias
+    #[setting(alias = "per-platform", nested, merge = schematic::merge::merge_btreemap)]
     pub per_platform: BTreeMap<String, NixpkgsConfig>,
 }
 
 #[derive(schematic::Config, Clone, Serialize, Debug, JsonSchema)]
-#[config(rename_all = "camelCase", allow_unknown_fields)]
+#[config(allow_unknown_fields)]
 #[serde(rename_all = "snake_case")]
 pub struct Config {
     /// Version requirement for the devenv CLI.
@@ -269,26 +201,14 @@ pub struct Config {
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     #[setting(nested, merge = schematic::merge::merge_btreemap)]
     pub inputs: BTreeMap<String, Input>,
-    #[serde(
-        alias = "allowUnfree",
-        skip_serializing_if = "is_false",
-        default = "false_default"
-    )]
-    #[setting(merge = schematic::merge::replace)]
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(alias = "allowUnfree", merge = schematic::merge::replace)]
     pub allow_unfree: bool,
-    #[serde(
-        alias = "allowUnsupportedSystem",
-        skip_serializing_if = "is_false",
-        default = "false_default"
-    )]
-    #[setting(merge = schematic::merge::replace)]
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(alias = "allowUnsupportedSystem", merge = schematic::merge::replace)]
     pub allow_unsupported_system: bool,
-    #[serde(
-        alias = "allowBroken",
-        skip_serializing_if = "is_false",
-        default = "false_default"
-    )]
-    #[setting(merge = schematic::merge::replace)]
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(alias = "allowBroken", merge = schematic::merge::replace)]
     pub allow_broken: bool,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(nested)]
@@ -296,12 +216,8 @@ pub struct Config {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     #[setting(merge = schematic::merge::append_vec)]
     pub imports: Vec<String>,
-    #[serde(
-        alias = "permittedInsecurePackages",
-        skip_serializing_if = "Vec::is_empty",
-        default
-    )]
-    #[setting(merge = schematic::merge::append_vec)]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[setting(alias = "permittedInsecurePackages", merge = schematic::merge::append_vec)]
     pub permitted_insecure_packages: Vec<String>,
     #[setting(nested)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -321,12 +237,8 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(merge = schematic::merge::replace)]
     pub reload: Option<bool>,
-    #[serde(
-        alias = "strictPorts",
-        skip_serializing_if = "Option::is_none",
-        default
-    )]
-    #[setting(merge = schematic::merge::replace)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[setting(alias = "strictPorts", merge = schematic::merge::replace)]
     pub strict_ports: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(merge = schematic::merge::replace)]
@@ -1141,9 +1053,31 @@ impl Config {
     }
 }
 
+// Clap helpers
+
+fn true_default() -> bool {
+    true
+}
+
+fn false_default() -> bool {
+    false
+}
+fn is_true(b: &bool) -> bool {
+    *b
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+fn is_default<T: Default + PartialEq>(t: &T) -> bool {
+    t == &T::default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn invalid_flake_input_from_input_with_url_and_follows() {
@@ -1338,7 +1272,7 @@ mod tests {
 
         // Create subdirectory for import
         let subdir = base_path.join("subproject");
-        std::fs::create_dir(&subdir).expect("Failed to create subdir");
+        fs::create_dir(&subdir).expect("Failed to create subdir");
 
         // Base config defines an input with path:.
         let base_config = r#"
@@ -1348,8 +1282,7 @@ inputs:
 imports:
   - ./subproject
 "#;
-        std::fs::write(base_path.join("devenv.yaml"), base_config)
-            .expect("Failed to write base config");
+        fs::write(base_path.join("devenv.yaml"), base_config).expect("Failed to write base config");
 
         // Subproject config defines a different input with path:.
         // This should resolve to ./subproject, not confuse with base path
@@ -1358,7 +1291,7 @@ inputs:
   sub-local:
     url: path:.
 "#;
-        std::fs::write(subdir.join("devenv.yaml"), sub_config).expect("Failed to write sub config");
+        fs::write(subdir.join("devenv.yaml"), sub_config).expect("Failed to write sub config");
 
         // Load the merged config
         let config = Config::load_from(base_path).expect("Failed to load config");
@@ -1393,11 +1326,11 @@ inputs:
 
         // Create the project directory
         let project_dir = base_path.join("project");
-        std::fs::create_dir(&project_dir).expect("Failed to create project dir");
+        fs::create_dir(&project_dir).expect("Failed to create project dir");
 
         // Create an external directory (sibling, not inside project)
         let external_dir = base_path.join("external");
-        std::fs::create_dir(&external_dir).expect("Failed to create external dir");
+        fs::create_dir(&external_dir).expect("Failed to create external dir");
 
         // Get the absolute path to the external directory
         let external_abs = external_dir
@@ -1414,7 +1347,7 @@ inputs:
 "#,
             external_abs.display()
         );
-        std::fs::write(project_dir.join("devenv.yaml"), &config_content)
+        fs::write(project_dir.join("devenv.yaml"), &config_content)
             .expect("Failed to write config");
 
         // Load the config
@@ -1457,8 +1390,8 @@ inputs:
 
         // Shared config defines nixpkgs with the default URL
         let shared_dir = root.join("shared");
-        std::fs::create_dir(&shared_dir).expect("Failed to create shared dir");
-        std::fs::write(
+        fs::create_dir(&shared_dir).expect("Failed to create shared dir");
+        fs::write(
             shared_dir.join("devenv.yaml"),
             r#"
 inputs:
@@ -1470,8 +1403,8 @@ inputs:
 
         // Sub project imports shared and overrides nixpkgs
         let sub_dir = root.join("sub");
-        std::fs::create_dir(&sub_dir).expect("Failed to create sub dir");
-        std::fs::write(
+        fs::create_dir(&sub_dir).expect("Failed to create sub dir");
+        fs::write(
             sub_dir.join("devenv.yaml"),
             r#"
 inputs:
@@ -1508,10 +1441,10 @@ imports:
             .expect("Failed to git init");
 
         let sub_dir = root.join("sub");
-        std::fs::create_dir(&sub_dir).expect("Failed to create sub dir");
-        std::fs::write(sub_dir.join("devenv.yaml"), "").expect("Failed to write sub yaml");
+        fs::create_dir(&sub_dir).expect("Failed to create sub dir");
+        fs::write(sub_dir.join("devenv.yaml"), "").expect("Failed to write sub yaml");
 
-        std::fs::write(
+        fs::write(
             root.join("devenv.yaml"),
             r#"
 imports:
@@ -1633,5 +1566,109 @@ imports:
         let parsed: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
         let rv: RequireVersion = serde_yaml::from_value(parsed["require_version"].clone()).unwrap();
         assert_eq!(rv, RequireVersion::Constraint(">=2.0.0".to_string()));
+    }
+
+    fn load_yaml(yaml: &str) -> Config {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        fs::write(temp_dir.path().join("devenv.yaml"), yaml).expect("Failed to write devenv.yaml");
+        Config::load_from(temp_dir.path()).expect("Failed to load config")
+    }
+
+    const SNAKE_CASE_INPUT: &str = r#"
+allow_unfree: true
+allow_broken: true
+allow_unsupported_system: true
+permitted_insecure_packages: ["pkg1"]
+strict_ports: true
+nixpkgs:
+  cuda_support: true
+  cuda_capabilities: ["8.0"]
+  rocm_support: true
+  allow_non_source: true
+  permitted_unfree_packages: ["terraform"]
+  allowlisted_licenses: ["mit"]
+  blocklisted_licenses: ["unfree"]
+  android_sdk:
+    accept_license: true
+  per_platform:
+    x86_64-linux:
+      allow_broken: true
+"#;
+
+    const CAMELCASE_INPUT: &str = r#"
+allowUnfree: true
+allowBroken: true
+allowUnsupportedSystem: true
+permittedInsecurePackages: ["pkg1"]
+strictPorts: true
+nixpkgs:
+  cudaSupport: true
+  cudaCapabilities: ["8.0"]
+  rocmSupport: true
+  allowNonSource: true
+  permittedUnfreePackages: ["terraform"]
+  allowlistedLicenses: ["mit"]
+  blocklistedLicenses: ["unfree"]
+  android_sdk:
+    acceptLicense: true
+  per-platform:
+    x86_64-linux:
+      allowBroken: true
+"#;
+
+    // devenv.yaml input contract: snake_case parses, serializes pure snake_case.
+    #[test]
+    fn devenv_yaml_snake_case_parses() {
+        let cfg = load_yaml(SNAKE_CASE_INPUT);
+        let expected: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+allow_unfree: true
+allow_unsupported_system: true
+allow_broken: true
+nixpkgs:
+  allow_non_source: true
+  cuda_support: true
+  cuda_capabilities: ["8.0"]
+  rocm_support: true
+  permitted_unfree_packages: ["terraform"]
+  android_sdk:
+    accept_license: true
+  per_platform:
+    x86_64-linux:
+      allow_broken: true
+permitted_insecure_packages: ["pkg1"]
+strict_ports: true
+"#,
+        )
+        .unwrap();
+        assert_eq!(serde_yaml::to_value(&cfg).unwrap(), expected);
+
+        // skip_serializing fields don't appear in Value; check directly.
+        let nixpkgs = cfg.nixpkgs.unwrap();
+        assert_eq!(nixpkgs.config_.allowlisted_licenses, vec!["mit"]);
+        assert_eq!(nixpkgs.config_.blocklisted_licenses, vec!["unfree"]);
+    }
+
+    // devenv.yaml input contract: camelCase aliases load equivalently to snake_case.
+    // TODO(v3.0): remove together with the camelCase aliases.
+    #[test]
+    fn devenv_yaml_camelcase_aliases_back_compat() {
+        let snake = load_yaml(SNAKE_CASE_INPUT);
+        let camel = load_yaml(CAMELCASE_INPUT);
+        assert_eq!(
+            serde_yaml::to_value(&camel).unwrap(),
+            serde_yaml::to_value(&snake).unwrap()
+        );
+        // skip_serializing fields don't appear in Value; check directly.
+        let snake_nixpkgs = snake.nixpkgs.unwrap();
+        let camel_nixpkgs = camel.nixpkgs.unwrap();
+        assert_eq!(
+            camel_nixpkgs.config_.allowlisted_licenses,
+            snake_nixpkgs.config_.allowlisted_licenses
+        );
+        assert_eq!(
+            camel_nixpkgs.config_.blocklisted_licenses,
+            snake_nixpkgs.config_.blocklisted_licenses
+        );
     }
 }
