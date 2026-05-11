@@ -3553,7 +3553,6 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.4",
  "tower-service",
- "webpki-roots 1.0.7",
 ]
 
 [[package]]
@@ -3905,7 +3904,7 @@ dependencies = [
 [[package]]
 name = "iocraft"
 version = "0.8.2"
-source = "git+https://github.com/ccbrown/iocraft?branch=main#dd287dcf6a320dd06d0749efe93de7b0e32c3d9c"
+source = "git+https://github.com/ccbrown/iocraft?branch=main#222abbd2ae3a6744df8e093632b8e6d272e8536d"
 dependencies = [
  "bitflags 2.11.1",
  "crossterm",
@@ -3920,7 +3919,7 @@ dependencies = [
 [[package]]
 name = "iocraft-macros"
 version = "0.2.4"
-source = "git+https://github.com/ccbrown/iocraft?branch=main#dd287dcf6a320dd06d0749efe93de7b0e32c3d9c"
+source = "git+https://github.com/ccbrown/iocraft?branch=main#222abbd2ae3a6744df8e093632b8e6d272e8536d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5744,7 +5743,7 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "itertools 0.14.0",
  "log",
  "multimap",
@@ -5764,7 +5763,7 @@ version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "343d3bd7056eda839b03204e68deff7d1b13aba7af2b2fd16890697274262ee7"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "itertools 0.14.0",
  "log",
  "multimap",
@@ -5844,7 +5843,7 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe500dc80e757a75e1e8fb7290e448d62dfba3105ece1d058579cb00b58151cd"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "prost 0.14.3",
  "prost-build 0.14.3",
  "prost-types 0.14.3",
@@ -6243,7 +6242,6 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams 0.4.2",
  "web-sys",
- "webpki-roots 1.0.7",
 ]
 
 [[package]]
@@ -6767,8 +6765,8 @@ dependencies = [
 
 [[package]]
 name = "secretspec"
-version = "0.9.1"
-source = "git+https://github.com/cachix/secretspec?tag=v0.9.1#7b9fb014b1d095f854743eb642f18007396c95dc"
+version = "0.10.1"
+source = "git+https://github.com/cachix/secretspec?tag=v0.10.1#04b3e183dc380ea9bb797ef79962b81041315c3b"
 dependencies = [
  "aws-config",
  "aws-sdk-secretsmanager",

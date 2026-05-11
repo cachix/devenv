@@ -32,8 +32,10 @@ _devenv_hook() {
 
     if [[ $exit_code -eq 0 && -n "$project_dir" ]]; then
         _DEVENV_HOOK_UNTRUSTED=""
+        # Cache PWD before launching so a SIGINT/failure inside devenv shell
+        # doesn't leave us re-launching on every prompt redraw.
+        _DEVENV_HOOK_PWD="$PWD"
         (cd "$project_dir" && devenv shell)
-        # If the devenv shell exited due to cd outside the project, follow the user there
         local exit_dir_file="$project_dir/.devenv/exit-dir"
         if [[ -f "$exit_dir_file" ]]; then
             local target_dir
@@ -41,10 +43,9 @@ _devenv_hook() {
             rm -f "$exit_dir_file"
             if [[ -d "$target_dir" ]]; then
                 cd "$target_dir"
+                _DEVENV_HOOK_PWD="$PWD"
             fi
         fi
-        # Cache PWD after any exit-dir cd so the early-return check reflects reality
-        _DEVENV_HOOK_PWD="$PWD"
     elif [[ $exit_code -eq 0 ]]; then
         # No project; cache to avoid rechecking
         _DEVENV_HOOK_PWD="$PWD"

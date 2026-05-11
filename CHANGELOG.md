@@ -8,10 +8,11 @@
 - Fixed `devenv --version` and `devenv -V` failing with `'devenv' requires a subcommand but one was not provided`. The flags now print the version and exit, matching the behavior of `devenv --help` ([#2791](https://github.com/cachix/devenv/issues/2791)).
 - Fixed `devenv hook fish` not activating when starting a new fish shell directly inside a project directory. The initial activation now runs on the first `fish_prompt` event instead of inline during `source`, so the spawned `devenv shell` inherits the real terminal as stdin instead of the closed pipe from `devenv hook fish | source` ([#2798](https://github.com/cachix/devenv/issues/2798)).
 - Fixed `devenv shell` skipping the user's `.zshenv` when launching zsh, which could mangle prompts and break `.zshrc` configurations that depend on env vars defined in `.zshenv`. The user's `.zshenv` is now sourced before `.zshrc` during shell init, matching zsh's documented startup order ([#2802](https://github.com/cachix/devenv/pull/2802)).
+- Fixed the bash/zsh shell hook (`devenv hook bash`/`zsh`) re-launching `devenv shell` on every prompt redraw after the user interrupted a slow eval with Ctrl-C. The hook now caches `$PWD` before launching the subshell, so an aborted or failed activation no longer retries until the user `cd`s away and back.
 
 ### Improvements
 
-- Bumped `secretspec` to `v0.9.1`. The new `bws` (Bitwarden Secrets Manager) feature is not enabled because its transitive `bitwarden` crate conflicts with `sqlx` 0.8 on `libsqlite3-sys` and pins `typenum` to 1.18.
+- Bumped `secretspec` to `v0.10.1`. The new `bws` (Bitwarden Secrets Manager) feature is not enabled because its transitive `bitwarden` crate conflicts with `sqlx` 0.8 on `libsqlite3-sys` and pins `typenum` to 1.18.
 - Bumped `iocraft` to `0.8.2` and switched the `[patch.crates-io]` entry from the `cachix/iocraft` fork to upstream `ccbrown/iocraft` `main`, now that the row-level diff and stderr rendering patches are merged upstream.
 
 ### Breaking Changes
