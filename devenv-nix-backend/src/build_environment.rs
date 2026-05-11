@@ -44,6 +44,7 @@ const IGNORED_VARS: &[&str] = &[
     "NIX_LOG_FD",
     "NIX_REMOTE",
     "PPID",
+    "SHELL",
     "SHELLOPTS",
     "SSL_CERT_FILE",
     "TEMP",
