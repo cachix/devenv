@@ -19,6 +19,7 @@ use devenv_core::{
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::collections::BTreeMap;
 use std::io::IsTerminal;
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
@@ -172,6 +173,7 @@ struct RunContext {
     log_level: devenv_tracing::Level,
     tracing_specs: Vec<TraceOutputSpec>,
     tracing_owns_terminal: bool,
+    discovered_root: Option<PathBuf>,
 }
 
 /// Detect whether we are running inside an AI coding agent.
@@ -227,6 +229,34 @@ impl RunContext {
         let tracing_owns_terminal = tracing_specs
             .iter()
             .any(|s| s.destination.targets_terminal());
+
+        // Walk up parent directories to find devenv.nix. Skip when the user has
+        // explicitly chosen a source (`--from`) or is constructing a project via
+        // module-option overrides (`-O`). Has to run before Config::load() reads
+        // "./devenv.yaml".
+        let discovered_root = if cli.from.is_none()
+            && cli.input_overrides.nix_module_options.is_empty()
+        {
+            std::env::current_dir()
+                .ok()
+                .and_then(|cwd| devenv_core::paths::find_project_root(&cwd).filter(|r| r != &cwd))
+        } else {
+            None
+        };
+        if let Some(root) = &discovered_root {
+            std::env::set_current_dir(root)
+                .into_diagnostic()
+                .wrap_err_with(|| {
+                    format!(
+                        "Failed to chdir to discovered project root: {}",
+                        root.display()
+                    )
+                })?;
+            // Safety: RunContext::build runs single-threaded before tokio starts.
+            unsafe {
+                std::env::set_var("PWD", root);
+            }
+        }
 
         let mut config = Config::load()?;
         config.check_version(crate_version!())?;
@@ -337,6 +367,7 @@ impl RunContext {
             log_level,
             tracing_specs,
             tracing_owns_terminal,
+            discovered_root,
         })
     }
 }
@@ -370,6 +401,10 @@ fn run(ctx: RunContext) -> Result<()> {
 
     let _tracing_guard =
         devenv_tracing::init_tracing(ctx.log_level, &ctx.tracing_specs, cli_output);
+
+    if let Some(root) = &ctx.discovered_root {
+        tracing::info!("Discovered devenv.nix in {}", root.display());
+    }
 
     let tui = ctx.tui;
     let needs_terminal_handoff = ctx.needs_terminal_handoff;
