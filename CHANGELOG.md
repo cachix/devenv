@@ -12,7 +12,7 @@
 
 ### Improvements
 
-- Bumped `secretspec` to `v0.9.1`. The new `bws` (Bitwarden Secrets Manager) feature is not enabled because its transitive `bitwarden` crate conflicts with `sqlx` 0.8 on `libsqlite3-sys` and pins `typenum` to 1.18.
+- Bumped `secretspec` to `v0.10.1`. The new `bws` (Bitwarden Secrets Manager) feature is not enabled because its transitive `bitwarden` crate conflicts with `sqlx` 0.8 on `libsqlite3-sys` and pins `typenum` to 1.18.
 - Bumped `iocraft` to `0.8.2` and switched the `[patch.crates-io]` entry from the `cachix/iocraft` fork to upstream `ccbrown/iocraft` `main`, now that the row-level diff and stderr rendering patches are merged upstream.
 
 ### Breaking Changes
