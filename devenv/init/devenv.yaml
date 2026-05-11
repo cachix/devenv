@@ -3,14 +3,14 @@ inputs:
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
 
-# If you're using non-OSS software, you can set allowUnfree to true.
-# allowUnfree: true
+# If you're using non-OSS software, you can set allow_unfree to true.
+# allow_unfree: true
 
 # If you're not willing to allow unsupported packages:
-# allowUnsupportedSystem: false
+# allow_unsupported_system: false
 
 # If you're willing to use a package that's vulnerable
-# permittedInsecurePackages:
+# permitted_insecure_packages:
 #  - "openssl-1.1.1w"
 
 # If you have more than one devenv you can merge them

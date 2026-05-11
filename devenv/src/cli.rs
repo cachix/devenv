@@ -908,7 +908,7 @@ pub struct UpArgs {
 
     #[arg(
         long,
-        help = "Disable strict port mode, overriding strictPorts from devenv.yaml."
+        help = "Disable strict port mode, overriding strict_ports from devenv.yaml."
     )]
     pub no_strict_ports: bool,
 }

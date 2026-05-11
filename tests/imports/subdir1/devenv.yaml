@@ -1,8 +1,8 @@
-allowUnfree: true
+allow_unfree: true
 
 inputs:
   flake-utils:
     url: github:numtide/flake-utils
 
-permittedInsecurePackages:
+permitted_insecure_packages:
 - curl-7.64.0

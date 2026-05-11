@@ -3,13 +3,13 @@ imports:
 - ./subdir2  
 - ./subdir3
 
-allowUnfree: false
-allowBroken: false
+allow_unfree: false
+allow_broken: false
 impure: false
 
 inputs:
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
 
-permittedInsecurePackages:
+permitted_insecure_packages:
 - openssl-1.0.2

@@ -320,7 +320,7 @@ This is particularly useful for:
 If you want devenv to fail when a port is already in use instead of automatically finding the next available port, you can set the default in `devenv.yaml`:
 
 ```yaml
-strictPorts: true
+strict_ports: true
 ```
 
 Or override it for a single run with CLI flags:

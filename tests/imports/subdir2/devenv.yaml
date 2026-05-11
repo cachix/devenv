@@ -1,11 +1,11 @@
-allowBroken: true
+allow_broken: true
 
 nixpkgs:
-  allowUnfree: true
-  cudaSupport: true
-  cudaCapabilities:
+  allow_unfree: true
+  cuda_support: true
+  cuda_capabilities:
   - "8.0"
   - "8.6"
 
-permittedInsecurePackages:
+permitted_insecure_packages:
 - zlib-1.2.11

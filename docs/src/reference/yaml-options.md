@@ -66,38 +66,38 @@ See [Supported URI formats](../inputs.md#supported-uri-formats).
 
 *Type:* `string`
 
-## nixpkgs.androidSdk.acceptLicense
+## nixpkgs.android_sdk.accept_license
 
 Accept the Android SDK license.
 Can also be set via the `NIXPKGS_ACCEPT_ANDROID_SDK_LICENSE=1` environment variable.
 
 *Type:* `boolean` · *Default:* `false`
 
-## nixpkgs.allowBroken
+## nixpkgs.allow_broken
 
 Allow packages marked as broken.
 
 *Type:* `boolean` · *Default:* `false` · *Added in 1.7*
 
-## nixpkgs.allowNonSource
+## nixpkgs.allow_non_source
 
 Allow packages not built from source.
 
 *Type:* `boolean` · *Default:* `true` (nixpkgs default)
 
-## nixpkgs.allowUnsupportedSystem
+## nixpkgs.allow_unsupported_system
 
 Allow packages that are not supported on the current system.
 
 *Type:* `boolean` · *Default:* `false` · *Added in 2.0.5*
 
-## nixpkgs.allowUnfree
+## nixpkgs.allow_unfree
 
 Allow unfree packages.
 
 *Type:* `boolean` · *Default:* `false` · *Added in 1.7*
 
-## nixpkgs.allowlistedLicenses
+## nixpkgs.allowlisted_licenses
 
 A list of license names to allow.
 Uses nixpkgs license attribute names (e.g. `gpl3Only`, `mit`, `asl20`).
@@ -105,7 +105,7 @@ See [nixpkgs license list](https://github.com/NixOS/nixpkgs/blob/master/lib/lice
 
 *Type:* `list of string` · *Default:* `[]`
 
-## nixpkgs.blocklistedLicenses
+## nixpkgs.blocklisted_licenses
 
 A list of license names to block.
 Uses nixpkgs license attribute names (e.g. `unfree`, `bsl11`).
@@ -113,37 +113,37 @@ See [nixpkgs license list](https://github.com/NixOS/nixpkgs/blob/master/lib/lice
 
 *Type:* `list of string` · *Default:* `[]`
 
-## nixpkgs.cudaCapabilities
+## nixpkgs.cuda_capabilities
 
 Select CUDA capabilities for nixpkgs.
 
 *Type:* `list of string` · *Default:* `[]` · *Added in 1.7*
 
-## nixpkgs.cudaSupport
+## nixpkgs.cuda_support
 
 Enable CUDA support for nixpkgs.
 
 *Type:* `boolean` · *Default:* `false` · *Added in 1.7*
 
-## nixpkgs.rocmSupport
+## nixpkgs.rocm_support
 
 Enable ROCm support for nixpkgs.
 
 *Type:* `boolean` · *Default:* `false` · *Added in 2.0.7*
 
-## nixpkgs.permittedInsecurePackages
+## nixpkgs.permitted_insecure_packages
 
 A list of insecure permitted packages.
 
 *Type:* `list of string` · *Default:* `[]` · *Added in 1.7*
 
-## nixpkgs.permittedUnfreePackages
+## nixpkgs.permitted_unfree_packages
 
 A list of unfree packages to allow by name.
 
 *Type:* `list of string` · *Default:* `[]` · *Added in 1.9*
 
-## nixpkgs.per-platform.\<system\>
+## nixpkgs.per_platform.\<system\>
 
 Per-platform nixpkgs configuration.
 Accepts the same options as `nixpkgs`.
@@ -183,7 +183,7 @@ Secretspec provider to use.
 
 *Type:* `string` · *Added in 1.8*
 
-## strictPorts
+## strict_ports
 
 Error if a port is already in use instead of auto-allocating the next available port.
 Can be overridden by `--strict-ports` or `--no-strict-ports` CLI flags.

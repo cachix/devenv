@@ -3,37 +3,37 @@ inputs:
     url: path:../../?dir=src/modules
 
 # This values are overridden in the platform-specific config below on purpose
-allowUnfree: false
-allowUnsupportedSystem: false
+allow_unfree: false
+allow_unsupported_system: false
 
 nixpkgs:
   # These values are overridden in the platform-specific config below on purpose
-  cudaSupport: false
-  cudaCapabilities: []
+  cuda_support: false
+  cuda_capabilities: []
 
-  per-platform:
+  per_platform:
     i386-linux:
-      allowUnfree: true
-      allowUnsupportedSystem: true
-      cudaSupport: true
-      cudaCapabilities: [ "8.0" ]
+      allow_unfree: true
+      allow_unsupported_system: true
+      cuda_support: true
+      cuda_capabilities: [ "8.0" ]
     x86_64-linux:
-      allowUnfree: true
-      allowUnsupportedSystem: true
-      cudaSupport: true
-      cudaCapabilities: [ "8.0" ]
+      allow_unfree: true
+      allow_unsupported_system: true
+      cuda_support: true
+      cuda_capabilities: [ "8.0" ]
     aarch64-linux:
-      allowUnfree: true
-      allowUnsupportedSystem: true
-      cudaSupport: true
-      cudaCapabilities: [ "8.0" ]
+      allow_unfree: true
+      allow_unsupported_system: true
+      cuda_support: true
+      cuda_capabilities: [ "8.0" ]
     aarch64-darwin:
-      allowUnfree: true
-      allowUnsupportedSystem: true
-      cudaSupport: true
-      cudaCapabilities: [ "8.0" ]
+      allow_unfree: true
+      allow_unsupported_system: true
+      cuda_support: true
+      cuda_capabilities: [ "8.0" ]
     x86_64-darmin:
-      allowUnfree: true
-      allowUnsupportedSystem: true
-      cudaSupport: true
-      cudaCapabilities: [ "8.0" ]
+      allow_unfree: true
+      allow_unsupported_system: true
+      cuda_support: true
+      cuda_capabilities: [ "8.0" ]
