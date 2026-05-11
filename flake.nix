@@ -169,6 +169,7 @@
         };
 
       nixosModules.default = import ./nix/nixos-module.nix;
+      darwinModules.default = import ./nix/nix-darwin-module.nix;
       homeManagerModules.default = import ./nix/home-manager-module.nix;
 
       flakeModule = self.flakeModules.default; # Backwards compatibility

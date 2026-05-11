@@ -33,11 +33,11 @@ Add one line to your shell configuration file:
     source ~/.cache/devenv/hook.nu
     ```
 
-## Setup via the NixOS or home-manager module
+## Setup via the NixOS, nix-darwin, or home-manager module
 
 !!! tip "New in version 2.2"
 
-[NixOS](https://nixos.org/) and [home-manager](https://github.com/nix-community/home-manager) users can import the flake modules that devenv ships, which install the package and source the shell hook for every shell you have enabled — no rc-file edits required.
+[NixOS](https://nixos.org/), [nix-darwin](https://github.com/nix-darwin/nix-darwin), and [home-manager](https://github.com/nix-community/home-manager) users can import the flake modules that devenv ships, which install the package and source the shell hook for every shell you have enabled — no rc-file edits required.
 
 Add devenv as a flake input:
 
@@ -53,6 +53,17 @@ Add devenv as a flake input:
     { inputs, ... }:
     {
       imports = [ inputs.devenv.nixosModules.default ];
+
+      programs.devenv.enable = true;
+    }
+    ```
+
+=== "nix-darwin"
+
+    ```nix title="configuration.nix"
+    { inputs, ... }:
+    {
+      imports = [ inputs.devenv.darwinModules.default ];
 
       programs.devenv.enable = true;
     }
