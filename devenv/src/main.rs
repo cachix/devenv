@@ -122,6 +122,11 @@ fn main_inner() -> Result<()> {
                 let verbosity = resolve_verbosity(&cli.cli_options);
                 return commands::init::run(target.as_deref(), verbosity);
             }
+            Commands::Inputs {
+                command: InputsCommand::Add { name, url, follows },
+            } => {
+                return commands::inputs::add(name, url, follows);
+            }
             _ => {}
         }
 
@@ -597,24 +602,7 @@ async fn run_backend(
         devenv_for_debugger: None,
     };
 
-    // Early-dispatch commands that only need Config (no Devenv construction required)
-    if let Commands::Inputs { ref command } = command {
-        match command {
-            InputsCommand::Add { name, url, follows } => {
-                let mut config = config;
-                if let Err(e) = config.add_input(name, url, follows) {
-                    return output(Err(e));
-                }
-                if let Err(e) = config.write().await {
-                    return output(Err(e));
-                }
-                return output(Ok(CommandResult::Done));
-            }
-        }
-    }
-
     let config_strict_ports = config.strict_ports.unwrap_or(false);
-
     let require_version_match = config.requires_version_match();
 
     let mut options = devenv::DevenvOptions {
@@ -1038,9 +1026,6 @@ async fn dispatch_command(
                 Ok(CommandResult::Print(format!("{output}\n")))
             }
         },
-        Commands::Inputs { .. } => {
-            unreachable!("Inputs::Add is dispatched in run_backend before Devenv construction")
-        }
         Commands::Changelogs {} => Ok(devenv
             .changelogs()
             .await?
@@ -1106,7 +1091,8 @@ async fn dispatch_command(
         | Commands::Revoke
         | Commands::HookShouldActivate
         | Commands::DaemonProcesses { .. }
-        | Commands::Init { .. } => {
+        | Commands::Init { .. }
+        | Commands::Inputs { .. } => {
             unreachable!("dispatched in main_inner before Devenv construction")
         }
     }

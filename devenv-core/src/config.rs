@@ -905,12 +905,11 @@ impl Config {
         Ok(())
     }
 
-    pub async fn write(&self) -> Result<()> {
+    pub fn write(&self) -> Result<()> {
         let yaml = serde_yaml::to_string(&self)
             .into_diagnostic()
             .wrap_err("Failed to serialize config to YAML")?;
-        tokio::fs::write(YAML_CONFIG, yaml)
-            .await
+        std::fs::write(YAML_CONFIG, yaml)
             .into_diagnostic()
             .wrap_err("Failed to write devenv.yaml")?;
         Ok(())
