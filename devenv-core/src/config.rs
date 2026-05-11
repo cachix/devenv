@@ -201,12 +201,21 @@ pub struct Config {
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     #[setting(nested, merge = schematic::merge::merge_btreemap)]
     pub inputs: BTreeMap<String, Input>,
+    // Deprecated top-level nixpkgs settings — deprecated since 2.0.
+    // Read inside `nixpkgs_config()` under `#[allow(deprecated)]`.
+    // TODO(v3.0): remove these fields and the `allow(deprecated)` shim.
+    #[deprecated(since = "2.0.0", note = "use `nixpkgs.allow_unfree` instead")]
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(alias = "allowUnfree", merge = schematic::merge::replace)]
     pub allow_unfree: bool,
+    #[deprecated(
+        since = "2.0.0",
+        note = "use `nixpkgs.allow_unsupported_system` instead"
+    )]
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(alias = "allowUnsupportedSystem", merge = schematic::merge::replace)]
     pub allow_unsupported_system: bool,
+    #[deprecated(since = "2.0.0", note = "use `nixpkgs.allow_broken` instead")]
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(alias = "allowBroken", merge = schematic::merge::replace)]
     pub allow_broken: bool,
@@ -216,6 +225,10 @@ pub struct Config {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     #[setting(merge = schematic::merge::append_vec)]
     pub imports: Vec<String>,
+    #[deprecated(
+        since = "2.0.0",
+        note = "use `nixpkgs.permitted_insecure_packages` instead"
+    )]
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     #[setting(alias = "permittedInsecurePackages", merge = schematic::merge::append_vec)]
     pub permitted_insecure_packages: Vec<String>,
@@ -949,107 +962,82 @@ impl Config {
 
     /// Returns the merged nixpkgs configuration for a given system.
     ///
-    /// Merges configuration with the following priority (highest to lowest):
-    /// 1. `nixpkgs.per_platform.{system}.{field}`
-    /// 2. `nixpkgs.{field}` (base nixpkgs config)
-    /// 3. Top-level `{field}` (for allow_unfree, allow_unsupported_system, allow_broken, permitted_insecure_packages)
-    /// 4. Default value
+    /// Layers (lowest to highest priority):
+    /// 1. Deprecated top-level fields (`allow_unfree`, etc.).
+    /// 2. `nixpkgs.<field>`.
+    /// 3. `nixpkgs.per_platform.<system>.<field>`.
     ///
-    /// This matches the logic in bootstrapLib.nix's getPlatformConfig helper.
+    /// Merging uses schematic's `#[setting(merge)]` strategies declared on
+    /// `NixpkgsConfig` — same policy as the import-time merge in
+    /// `ConfigLoader`. `Vec` fields accumulate via `append_vec`, scalars use
+    /// `replace`. No special platform-only semantics.
     pub fn nixpkgs_config(&self, system: &str) -> NixpkgsConfig {
-        // Apply top-level settings (lowest priority for these fields)
-        let mut config = NixpkgsConfig {
-            allow_unfree: self.allow_unfree,
-            allow_unsupported_system: self.allow_unsupported_system,
-            allow_broken: self.allow_broken,
-            permitted_insecure_packages: self.permitted_insecure_packages.clone(),
+        use schematic::{Config as _, PartialConfig as _};
+
+        // Layer 1: deprecated top-level fields.
+        #[allow(deprecated)]
+        let mut partial = PartialNixpkgsConfig {
+            allow_unfree: Some(self.allow_unfree),
+            allow_unsupported_system: Some(self.allow_unsupported_system),
+            allow_broken: Some(self.allow_broken),
+            permitted_insecure_packages: Some(self.permitted_insecure_packages.clone()),
             ..Default::default()
         };
 
-        // Apply base nixpkgs config (overrides top-level)
-        if let Some(ref nixpkgs) = self.nixpkgs {
-            let base = &nixpkgs.config_;
-            if base.allow_unfree {
-                config.allow_unfree = true;
-            }
-            if base.allow_unsupported_system {
-                config.allow_unsupported_system = true;
-            }
-            if base.allow_broken {
-                config.allow_broken = true;
-            }
-            if base.allow_non_source {
-                config.allow_non_source = true;
-            }
-            if base.cuda_support {
-                config.cuda_support = true;
-            }
-            if !base.cuda_capabilities.is_empty() {
-                config.cuda_capabilities = base.cuda_capabilities.clone();
-            }
-            if base.rocm_support {
-                config.rocm_support = true;
-            }
-            if !base.permitted_insecure_packages.is_empty() {
-                config.permitted_insecure_packages = base.permitted_insecure_packages.clone();
-            }
-            if !base.permitted_unfree_packages.is_empty() {
-                config.permitted_unfree_packages = base.permitted_unfree_packages.clone();
-            }
-            if !base.allowlisted_licenses.is_empty() {
-                config.allowlisted_licenses = base.allowlisted_licenses.clone();
-            }
-            if !base.blocklisted_licenses.is_empty() {
-                config.blocklisted_licenses = base.blocklisted_licenses.clone();
-            }
-            if base.android_sdk.is_some() {
-                config.android_sdk = base.android_sdk.clone();
-            }
-
-            // Apply per-platform config (highest priority)
-            if let Some(platform_config) = nixpkgs.per_platform.get(system) {
-                if platform_config.allow_unfree {
-                    config.allow_unfree = true;
-                }
-                if platform_config.allow_unsupported_system {
-                    config.allow_unsupported_system = true;
-                }
-                if platform_config.allow_broken {
-                    config.allow_broken = true;
-                }
-                if platform_config.allow_non_source {
-                    config.allow_non_source = true;
-                }
-                if platform_config.cuda_support {
-                    config.cuda_support = true;
-                }
-                if !platform_config.cuda_capabilities.is_empty() {
-                    config.cuda_capabilities = platform_config.cuda_capabilities.clone();
-                }
-                if platform_config.rocm_support {
-                    config.rocm_support = true;
-                }
-                if !platform_config.permitted_insecure_packages.is_empty() {
-                    config.permitted_insecure_packages =
-                        platform_config.permitted_insecure_packages.clone();
-                }
-                if !platform_config.permitted_unfree_packages.is_empty() {
-                    config.permitted_unfree_packages =
-                        platform_config.permitted_unfree_packages.clone();
-                }
-                if !platform_config.allowlisted_licenses.is_empty() {
-                    config.allowlisted_licenses = platform_config.allowlisted_licenses.clone();
-                }
-                if !platform_config.blocklisted_licenses.is_empty() {
-                    config.blocklisted_licenses = platform_config.blocklisted_licenses.clone();
-                }
-                if platform_config.android_sdk.is_some() {
-                    config.android_sdk = platform_config.android_sdk.clone();
-                }
+        if let Some(nixpkgs) = &self.nixpkgs {
+            // Layer 2: `nixpkgs.<field>`.
+            partial
+                .merge(&(), nixpkgs_to_partial(&nixpkgs.config_))
+                .expect("merge base nixpkgs config");
+            // Layer 3: `nixpkgs.per_platform.<system>.<field>`.
+            if let Some(platform) = nixpkgs.per_platform.get(system) {
+                partial
+                    .merge(&(), nixpkgs_to_partial(platform))
+                    .expect("merge per-platform nixpkgs config");
             }
         }
 
-        config
+        NixpkgsConfig::from_partial(
+            partial
+                .finalize(&())
+                .expect("finalize nixpkgs partial config"),
+        )
+    }
+}
+
+/// Project a [`NixpkgsConfig`] into its schematic Partial form so it can be
+/// merged via [`schematic::PartialConfig::merge`].
+fn nixpkgs_to_partial(c: &NixpkgsConfig) -> PartialNixpkgsConfig {
+    // Destructure so adding a field forces an update here.
+    let NixpkgsConfig {
+        allow_unfree,
+        allow_unsupported_system,
+        allow_broken,
+        allow_non_source,
+        cuda_support,
+        cuda_capabilities,
+        rocm_support,
+        permitted_insecure_packages,
+        permitted_unfree_packages,
+        allowlisted_licenses,
+        blocklisted_licenses,
+        android_sdk,
+    } = c.clone();
+    PartialNixpkgsConfig {
+        allow_unfree: Some(allow_unfree),
+        allow_unsupported_system: Some(allow_unsupported_system),
+        allow_broken: Some(allow_broken),
+        allow_non_source: Some(allow_non_source),
+        cuda_support: Some(cuda_support),
+        cuda_capabilities: Some(cuda_capabilities),
+        rocm_support: Some(rocm_support),
+        permitted_insecure_packages: Some(permitted_insecure_packages),
+        permitted_unfree_packages: Some(permitted_unfree_packages),
+        allowlisted_licenses: Some(allowlisted_licenses),
+        blocklisted_licenses: Some(blocklisted_licenses),
+        android_sdk: android_sdk.map(|sdk| PartialAndroidSdkConfig {
+            accept_license: Some(sdk.accept_license),
+        }),
     }
 }
 
@@ -1670,5 +1658,52 @@ strict_ports: true
             camel_nixpkgs.config_.blocklisted_licenses,
             snake_nixpkgs.config_.blocklisted_licenses
         );
+    }
+
+    // Platform merge: Vec fields accumulate across layers (deprecated top-level
+    // → nixpkgs base → per_platform.<system>). Same semantics as imports merge.
+    #[test]
+    fn nixpkgs_config_platform_merge_appends_vecs() {
+        let yaml = r#"
+permitted_insecure_packages: ["from-top"]
+nixpkgs:
+  cuda_capabilities: ["7.5"]
+  permitted_insecure_packages: ["from-base"]
+  per_platform:
+    x86_64-linux:
+      cuda_capabilities: ["8.0"]
+      permitted_insecure_packages: ["from-platform"]
+"#;
+        let cfg = load_yaml(yaml).nixpkgs_config("x86_64-linux");
+        assert_eq!(cfg.cuda_capabilities, vec!["7.5", "8.0"]);
+        assert_eq!(
+            cfg.permitted_insecure_packages,
+            vec!["from-top", "from-base", "from-platform"]
+        );
+    }
+
+    // Platform merge: bool fields OR across layers (any true wins).
+    #[test]
+    fn nixpkgs_config_platform_merge_ors_bools() {
+        let yaml = r#"
+nixpkgs:
+  allow_unfree: false
+  per_platform:
+    x86_64-linux:
+      allow_unfree: true
+"#;
+        assert!(load_yaml(yaml).nixpkgs_config("x86_64-linux").allow_unfree);
+    }
+
+    // Deprecated top-level fields still feed the platform merge (lowest layer).
+    #[test]
+    fn nixpkgs_config_reads_deprecated_top_level_fields() {
+        let yaml = r#"
+allow_unfree: true
+permitted_insecure_packages: ["from-top"]
+"#;
+        let cfg = load_yaml(yaml).nixpkgs_config("x86_64-linux");
+        assert!(cfg.allow_unfree);
+        assert_eq!(cfg.permitted_insecure_packages, vec!["from-top"]);
     }
 }

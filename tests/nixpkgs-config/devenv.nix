@@ -19,8 +19,9 @@
       echo "CUDA_SUPPORT ($CUDA_SUPPORT) != true"
       exit 1
     fi
-    if [[ "$CUDA_CAPABILITIES" != "8.0" ]]; then
-      echo "CUDA_CAPABILITIES ($CUDA_CAPABILITIES) != 8.0"
+    # Append semantics: base ["7.5"] ++ per_platform ["8.0"] = ["7.5" "8.0"].
+    if [[ "$CUDA_CAPABILITIES" != "7.5 8.0" ]]; then
+      echo "CUDA_CAPABILITIES ($CUDA_CAPABILITIES) != 7.5 8.0"
       exit 1
     fi
   '';
