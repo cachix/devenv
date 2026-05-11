@@ -120,6 +120,7 @@ struct UiOptions {
     log_level: devenv_tracing::Level,
     tracing_specs: Vec<TraceOutputSpec>,
     verbosity: VerbosityLevel,
+    discovered_root: Option<PathBuf>,
 }
 
 /// Options for the backend thread: resolved devenv config plus what to run.
@@ -211,6 +212,38 @@ impl TestDirs {
 fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptions)> {
     let command = cli.command;
 
+    // Walk up parent directories to find devenv.nix. Skip when the user has
+    // explicitly chosen a source (`--from`) or is constructing a project via
+    // module-option overrides (`-O`). Has to run before Config::load() reads
+    // "./devenv.yaml".
+    let original_cwd = env::current_dir().ok();
+    let discovered_root = if cli.from.is_none() && cli.input_overrides.nix_module_options.is_empty()
+    {
+        original_cwd.as_deref().and_then(|cwd| {
+            devenv_core::paths::find_project_root(cwd).filter(|r| r.as_path() != cwd)
+        })
+    } else {
+        None
+    };
+    // When discovery moves us into a parent root, remember the directory the
+    // user actually invoked from so the interactive shell and `-- cmd` still
+    // run there. The devenv environment is root-scoped; the cwd is not.
+    let shell_cwd = discovered_root.as_ref().and_then(|_| original_cwd.clone());
+    if let Some(root) = &discovered_root {
+        env::set_current_dir(root)
+            .into_diagnostic()
+            .wrap_err_with(|| {
+                format!(
+                    "Failed to chdir to discovered project root: {}",
+                    root.display()
+                )
+            })?;
+        // Safety: resolve() runs single-threaded before tokio starts.
+        unsafe {
+            env::set_var("PWD", root);
+        }
+    }
+
     // UI options: verbosity, log level, tracing, TUI. Pure CLI + env, no config.
     let verbosity = resolve_verbosity(&cli.cli_options);
     let quiet = matches!(verbosity, VerbosityLevel::Quiet);
@@ -247,6 +280,7 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
         log_level,
         tracing_specs,
         verbosity,
+        discovered_root,
     };
 
     // Backend options. Read before the `From` conversions consume `cli.nix_args`.
@@ -332,6 +366,7 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
         devenv_root: None,
         devenv_dotfile: test_dirs.dotfile.clone(),
         devenv_state: test_dirs.state.clone(),
+        shell_cwd,
         shutdown,
         is_testing,
     };
@@ -474,6 +509,10 @@ fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Resul
 
     let _tracing_guard = devenv_tracing::init_tracing(ui.log_level, &ui.tracing_specs);
 
+    if let Some(root) = &ui.discovered_root {
+        tracing::info!("Discovered devenv.nix in {}", root.display());
+    }
+
     let tui = ui.tui;
     let verbosity = ui.verbosity;
 
@@ -598,6 +637,7 @@ async fn run_backend(
         let bash_path = devenv.get_bash_path().await?;
         let clean = devenv.shell_settings.clean.clone();
         let shell = devenv.shell_settings.shell.clone();
+        let shell_cwd = devenv.shell_cwd().map(Path::to_path_buf);
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
 
         let (client, owner_handle) = devenv::reload::spawn_owner(devenv, verbosity);
@@ -615,6 +655,7 @@ async fn run_backend(
             task_exports,
             task_messages,
             shutdown: shutdown.clone(),
+            shell_cwd,
         })
         .await
         .map(|exit_code| {
@@ -1015,6 +1056,7 @@ struct ReloadShellArgs {
     task_exports: BTreeMap<String, String>,
     task_messages: Vec<String>,
     shutdown: Arc<Shutdown>,
+    shell_cwd: Option<PathBuf>,
 }
 
 /// Run shell with hot-reload.
@@ -1044,6 +1086,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         task_exports,
         task_messages,
         shutdown,
+        shell_cwd,
     } = args;
 
     // Watch files come from the eval cache during the first build.
@@ -1063,6 +1106,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         task_exports,
         task_messages,
         shell,
+        shell_cwd,
     };
 
     let (command_tx, command_rx) = tokio::sync::mpsc::channel(16);

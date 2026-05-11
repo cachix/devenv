@@ -35,6 +35,9 @@ pub struct DevenvShellBuilder {
     pub task_exports: BTreeMap<String, String>,
     pub task_messages: Vec<String>,
     pub shell: String,
+    /// Directory to start the interactive shell in. Set when the project root
+    /// was discovered in a parent directory; `None` uses the build context cwd.
+    pub shell_cwd: Option<PathBuf>,
 }
 
 impl ShellBuilder for DevenvShellBuilder {
@@ -118,7 +121,7 @@ impl DevenvShellBuilder {
             cmd_builder.arg(arg);
         }
 
-        cmd_builder.cwd(&ctx.cwd);
+        cmd_builder.cwd(self.shell_cwd.as_deref().unwrap_or(&ctx.cwd));
         set_reload_file_env(&mut cmd_builder, ctx);
 
         let shell_for_env = target_shell_path.as_deref().unwrap_or(bash);
