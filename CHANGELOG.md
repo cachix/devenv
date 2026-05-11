@@ -13,6 +13,7 @@
 
 ### Improvements
 
+`devenv shell` now registers zsh completions from packages in the devenv profile. A generated `.zshenv` prepends `$DEVENV_PROFILE/share/zsh/site-functions` to `fpath` before `/etc/zshrc` runs, so the system `compinit` picks up the new directory.
 - Bumped `secretspec` to `v0.10.1`. The new `bws` (Bitwarden Secrets Manager) feature is not enabled because its transitive `bitwarden` crate conflicts with `sqlx` 0.8 on `libsqlite3-sys` and pins `typenum` to 1.18.
 - Bumped `iocraft` to `0.8.2` and switched the `[patch.crates-io]` entry from the `cachix/iocraft` fork to upstream `ccbrown/iocraft` `main`, now that the row-level diff and stderr rendering patches are merged upstream.
 

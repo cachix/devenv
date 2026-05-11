@@ -176,8 +176,17 @@ bindkey "${{DEVENV_RELOAD_KEYBIND:-\\e\\C-r}}" __devenv_reload_widget
         let reload_hook = ctx.reload_hook;
         let prompt_prefix = self.prompt_prefix();
 
+        let zshenv_content = r#"# devenv zsh .zshenv - runs before /etc/zshrc.
+# Prepend devenv profile site-functions so the system compinit (often
+# called from /etc/zshrc on nix-darwin, Debian, etc.) picks them up.
+if [ -n "$DEVENV_PROFILE" ] && [ -d "$DEVENV_PROFILE/share/zsh/site-functions" ]; then
+    fpath=("$DEVENV_PROFILE/share/zsh/site-functions" $fpath)
+fi
+"#;
+
         let zshrc_content = format!(
             r#"# devenv zsh init - restore ZDOTDIR and source user's .zshrc
+
 if [ -n "$_DEVENV_REAL_ZDOTDIR" ]; then
     ZDOTDIR="$_DEVENV_REAL_ZDOTDIR"
     unset _DEVENV_REAL_ZDOTDIR
@@ -202,6 +211,7 @@ export PATH="$_DEVENV_PATH"
             reload_hook = reload_hook,
         );
 
+        std::fs::write(zsh_dir.join(".zshenv"), zshenv_content)?;
         std::fs::write(zsh_dir.join(".zshrc"), zshrc_content)?;
         Ok(())
     }
