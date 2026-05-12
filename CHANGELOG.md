@@ -10,6 +10,7 @@
 - Fixed `devenv hook fish` not activating when starting a new fish shell directly inside a project directory. The initial activation now runs on the first `fish_prompt` event instead of inline during `source`, so the spawned `devenv shell` inherits the real terminal as stdin instead of the closed pipe from `devenv hook fish | source` ([#2798](https://github.com/cachix/devenv/issues/2798)).
 - Fixed `devenv shell` skipping the user's `.zshenv` when launching zsh, which could mangle prompts and break `.zshrc` configurations that depend on env vars defined in `.zshenv`. The user's `.zshenv` is now sourced before `.zshrc` during shell init, matching zsh's documented startup order ([#2802](https://github.com/cachix/devenv/pull/2802)).
 - Fixed the bash/zsh shell hook (`devenv hook bash`/`zsh`) re-launching `devenv shell` on every prompt redraw after the user interrupted a slow eval with Ctrl-C. The hook now caches `$PWD` before launching the subshell, so an aborted or failed activation no longer retries until the user `cd`s away and back.
+- Fixed `devenv hook <shell>` panicking with `failed printing to stdout: Broken pipe (os error 32)` when its downstream reader (e.g. `source` in `devenv hook fish | source`) closes the pipe before the script is fully flushed.
 
 ### Improvements
 
