@@ -33,6 +33,64 @@ Add one line to your shell configuration file:
     source ~/.cache/devenv/hook.nu
     ```
 
+## Setup via the NixOS, nix-darwin, or home-manager module
+
+!!! tip "New in version 2.2"
+
+[NixOS](https://nixos.org/), [nix-darwin](https://github.com/nix-darwin/nix-darwin), and [home-manager](https://github.com/nix-community/home-manager) users can import the flake modules that devenv ships, which install the package and source the shell hook for every shell you have enabled — no rc-file edits required.
+
+Add devenv as a flake input:
+
+```nix title="flake.nix"
+{
+  inputs.devenv.url = "github:cachix/devenv";
+}
+```
+
+=== "NixOS"
+
+    ```nix title="configuration.nix"
+    { inputs, ... }:
+    {
+      imports = [ inputs.devenv.nixosModules.default ];
+
+      programs.devenv.enable = true;
+    }
+    ```
+
+=== "nix-darwin"
+
+    ```nix title="configuration.nix"
+    { inputs, ... }:
+    {
+      imports = [ inputs.devenv.darwinModules.default ];
+
+      programs.devenv.enable = true;
+    }
+    ```
+
+=== "home-manager"
+
+    ```nix title="home.nix"
+    { inputs, ... }:
+    {
+      imports = [ inputs.devenv.homeManagerModules.default ];
+
+      programs.devenv.enable = true;
+    }
+    ```
+
+By default, every supported shell that you have enabled also gets the hook sourced. Disable an individual integration with:
+
+```nix
+programs.devenv.enableBashIntegration = false;
+programs.devenv.enableZshIntegration = false;
+programs.devenv.enableFishIntegration = false;
+programs.devenv.enableNushellIntegration = false; # home-manager only
+```
+
+The exported hook scripts are also available directly under `${pkgs.devenv}/share/devenv/shell-integration/<shell>/hook.<ext>` if you want to wire them up by hand.
+
 ## Trusting a project
 
 Before a project can auto activate, you need to explicitly trust it. This is a security measure that prevents untrusted projects from modifying your shell.

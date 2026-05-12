@@ -101,6 +101,15 @@ let
           --bash $compdir/devenv.bash \
           --fish $compdir/devenv.fish \
           --zsh $compdir/_devenv
+
+        # Export shell hook scripts under $out/share/devenv/shell-integration/<shell>/
+        # for users (or home-manager modules) to source.
+        integration=$out/share/devenv/shell-integration
+        mkdir -p $integration/bash $integration/zsh $integration/fish $integration/nu
+        $out/bin/devenv hook bash > $integration/bash/hook.sh
+        $out/bin/devenv hook zsh  > $integration/zsh/hook.zsh
+        $out/bin/devenv hook fish > $integration/fish/hook.fish
+        $out/bin/devenv hook nu   > $integration/nu/hook.nu
       '';
 
     meta.mainProgram = "devenv";
