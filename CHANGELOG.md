@@ -4,6 +4,14 @@
 
 ### Bug Fixes
 
+### Improvements
+
+### Breaking Changes
+
+## 2.1.1 (2026-05-12)
+
+### Bug Fixes
+
 - Fixed gaps in terminal scrollback during heavy output with the auto-reloading shell. Increased the size of the internal VT scrollback buffer and clear it after each flush to the native terminal, so its cap is never reached and lines are no longer dropped mid-stream due to GC ([#2810](https://github.com/cachix/devenv/issues/2810)).
 - `$SHELL` is now set to the target shell before `enterShell` hooks run, so scripts that branch on `$SHELL` see the shell the user is actually entering.
 - Fixed `zoxide: infinite loop detected` in the fish hook when `cd` is overridden to behave like `z` (e.g. `zoxide init --cmd=cd`) ([#2801](https://github.com/cachix/devenv/issues/2801)).
@@ -14,9 +22,10 @@
 
 ### Improvements
 
-`devenv shell` now registers zsh completions from packages in the devenv profile. A generated `.zshenv` prepends `$DEVENV_PROFILE/share/zsh/site-functions` to `fpath` before `/etc/zshrc` runs, so the system `compinit` picks up the new directory.
+- `devenv shell` now registers zsh completions from packages in the devenv profile. A generated `.zshenv` prepends `$DEVENV_PROFILE/share/zsh/site-functions` to `fpath` before `/etc/zshrc` runs, so the system `compinit` picks up the new directory.
 - Bumped `secretspec` to `v0.10.1`. The new `bws` (Bitwarden Secrets Manager) feature is not enabled because its transitive `bitwarden` crate conflicts with `sqlx` 0.8 on `libsqlite3-sys` and pins `typenum` to 1.18.
 - Bumped `iocraft` to `0.8.2` and switched the `[patch.crates-io]` entry from the `cachix/iocraft` fork to upstream `ccbrown/iocraft` `main`, now that the row-level diff and stderr rendering patches are merged upstream.
+- `devenv.yaml` options are now documented in `snake_case` (e.g. `allow_unfree`, `clean_env`). The previous `camelCase` spellings remain supported for backward compatibility.
 
 ### Breaking Changes
 
