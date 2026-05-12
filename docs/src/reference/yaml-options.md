@@ -183,6 +183,16 @@ Secretspec provider to use.
 
 *Type:* `string` · *Added in 1.8*
 
+## shell
+
+Default interactive shell to use when entering the devenv environment.
+Can be overridden by the `--shell` CLI flag.
+Falls back to the `$SHELL` environment variable, then `bash`.
+
+Supported values: `bash`, `zsh`, `fish`, `nu`. Any other value falls back to `bash`.
+
+*Type:* `string` · *Default:* `$SHELL` or `bash` · *Added in 2.1*
+
 ## strict_ports
 
 Error if a port is already in use instead of auto-allocating the next available port.
