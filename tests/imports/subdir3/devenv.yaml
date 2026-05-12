@@ -7,8 +7,8 @@ clean:
   - "dist"
 
 nixpkgs:
-  cudaCapabilities:
+  cuda_capabilities:
   - "9.0"
 
-permittedInsecurePackages:
+permitted_insecure_packages:
 - node-14.0.0

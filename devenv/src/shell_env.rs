@@ -36,9 +36,6 @@ impl CommandEnv for devenv_reload::CommandBuilder {
 /// If `clean.enabled`, clears the env and re-sets only the kept vars from
 /// the current process.
 /// Always sets `SHELL` and `DEVENV_CMDLINE`.
-///
-/// `shell_path` should be the target shell binary (e.g., zsh or bash),
-/// not necessarily the bash used internally to source the devenv env.
 pub(crate) fn apply_shell_env(cmd: &mut impl CommandEnv, shell_path: &str, clean: &Clean) {
     if clean.enabled {
         cmd.clear_env();

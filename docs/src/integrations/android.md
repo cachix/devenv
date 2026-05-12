@@ -58,7 +58,7 @@ Since Android contains many unfree packages, you need to allow unfree packages i
 
 ```yaml title="devenv.yaml"
 nixpkgs:
-  allowUnfree: true
+  allow_unfree: true
 ```
 
 ## Emulators

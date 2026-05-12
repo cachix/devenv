@@ -1,10 +1,10 @@
 nixpkgs:
-  allowBroken: true
-  per-platform:
+  allow_broken: true
+  per_platform:
     x86_64-linux:
-      cudaSupport: true
-      cudaCapabilities: ["7.5"]
+      cuda_support: true
+      cuda_capabilities: ["7.5"]
     x86_64-darwin:
-      allowUnfree: true
+      allow_unfree: true
     aarch64-darwin:
-      allowBroken: true  # Should override base's cudaSupport: true
+      allow_broken: true  # Should override base's cuda_support: true

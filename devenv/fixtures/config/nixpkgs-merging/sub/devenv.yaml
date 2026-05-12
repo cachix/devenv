@@ -1,5 +1,5 @@
 nixpkgs:
-  allowBroken: true
-  cudaSupport: true
-  cudaCapabilities: ["8.0", "8.6"]
-  permittedInsecurePackages: ["openssl-1.0.2"]
+  allow_broken: true
+  cuda_support: true
+  cuda_capabilities: ["8.0", "8.6"]
+  permitted_insecure_packages: ["openssl-1.0.2"]

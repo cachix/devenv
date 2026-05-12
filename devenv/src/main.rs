@@ -122,10 +122,15 @@ fn main_inner() -> Result<()> {
                 let verbosity = resolve_verbosity(&cli.cli_options);
                 return commands::init::run(target.as_deref(), verbosity);
             }
+            Commands::Inputs {
+                command: InputsCommand::Add { name, url, follows },
+            } => {
+                return commands::inputs::add(name, url, follows);
+            }
             _ => {}
         }
 
-        let ctx = build_run_context(cli)?;
+        let ctx = RunContext::build(cli)?;
 
         let result = run(ctx);
 
@@ -147,7 +152,7 @@ fn main_inner() -> Result<()> {
     }
 }
 
-/// Everything resolved from CLI + config + environment, before any async runtime.
+/// Everything resolved from CLI + config + environment.
 struct RunContext {
     command: Commands,
     config: Config,
@@ -199,137 +204,141 @@ fn resolve_verbosity(cli_options: &devenv::cli::CliOptions) -> devenv::tasks::Ve
     }
 }
 
-/// Resolve all configuration from CLI + config files + environment.
-fn build_run_context(cli: Cli) -> Result<RunContext> {
-    // Extract values from CLI before consuming fields via From conversions
-    let nix_debugger = cli.nix_args.nix_debugger;
+impl RunContext {
+    /// Resolve all configuration from CLI + config files + environment.
+    fn build(cli: Cli) -> Result<Self> {
+        // Extract values from CLI before consuming fields via From conversions
+        let nix_debugger = cli.nix_args.nix_debugger;
 
-    let ai_agent = is_ai_agent();
-    let verbosity = resolve_verbosity(&cli.cli_options);
-    let quiet = matches!(verbosity, devenv::tasks::VerbosityLevel::Quiet);
-    let log_level = if quiet {
-        devenv_tracing::Level::Warn
-    } else {
-        cli.get_log_level()
-    };
-    let tracing_specs = cli
-        .tracing_args
-        .resolve_and_validate()
-        .map_err(|e| miette::miette!("{e}"))?;
-    // `resolve_and_validate()` folds legacy `--trace-output` into `tracing_specs`,
-    // so a single walk covers env, --trace-to, and --trace-output.
-    let tracing_owns_terminal = tracing_specs
-        .iter()
-        .any(|s| s.destination.targets_terminal());
-
-    let mut config = Config::load()?;
-    config.check_version(crate_version!())?;
-
-    let input_overrides = InputOverrides::from(cli.input_overrides);
-
-    for input in input_overrides.override_inputs.chunks_exact(2) {
-        config
-            .override_input_url(&input[0], &input[1])
-            .wrap_err_with(|| {
-                format!(
-                    "Failed to override input {} with URL {}",
-                    &input[0], &input[1]
-                )
-            })?;
-    }
-
-    // If --from is provided, create a new input and add it to imports
-    let from_external = cli.from.is_some();
-    if let Some(ref from) = cli.from {
-        let url = if let Some(path_str) = from.strip_prefix("path:") {
-            let path = std::path::Path::new(path_str);
-            let full_path = if path.is_relative() {
-                std::env::current_dir().unwrap_or_default().join(path)
-            } else {
-                path.to_path_buf()
-            };
-            let abs_path = std::fs::canonicalize(&full_path).unwrap_or(full_path);
-            format!("path:{}", abs_path.display())
+        let ai_agent = is_ai_agent();
+        let verbosity = resolve_verbosity(&cli.cli_options);
+        let quiet = matches!(verbosity, devenv::tasks::VerbosityLevel::Quiet);
+        let log_level = if quiet {
+            devenv_tracing::Level::Warn
         } else {
-            from.clone()
+            cli.get_log_level()
         };
+        let tracing_specs = cli
+            .tracing_args
+            .resolve_and_validate()
+            .map_err(|e| miette::miette!("{e}"))?;
+        // `resolve_and_validate()` folds legacy `--trace-output` into `tracing_specs`,
+        // so a single walk covers env, --trace-to, and --trace-output.
+        let tracing_owns_terminal = tracing_specs
+            .iter()
+            .any(|s| s.destination.targets_terminal());
 
-        let from_input = devenv_core::config::Input {
-            url: Some(url),
-            flake: true,
-            follows: None,
-            inputs: BTreeMap::new(),
-            overlays: Vec::new(),
-        };
-        config.inputs.insert("from".to_string(), from_input);
-        config.imports.push("from".to_string());
+        let mut config = Config::load()?;
+        config.check_version(crate_version!())?;
+
+        let input_overrides = InputOverrides::from(cli.input_overrides);
+
+        for input in input_overrides.override_inputs.chunks_exact(2) {
+            config
+                .override_input_url(&input[0], &input[1])
+                .wrap_err_with(|| {
+                    format!(
+                        "Failed to override input {} with URL {}",
+                        &input[0], &input[1]
+                    )
+                })?;
+        }
+
+        // If --from is provided, create a new input and add it to imports
+        let from_external = cli.from.is_some();
+        if let Some(ref from) = cli.from {
+            let url = if let Some(path_str) = from.strip_prefix("path:") {
+                let path = std::path::Path::new(path_str);
+                let full_path = if path.is_relative() {
+                    std::env::current_dir().unwrap_or_default().join(path)
+                } else {
+                    path.to_path_buf()
+                };
+                let abs_path = std::fs::canonicalize(&full_path).unwrap_or(full_path);
+                format!("path:{}", abs_path.display())
+            } else {
+                from.clone()
+            };
+
+            let from_input = devenv_core::config::Input {
+                url: Some(url),
+                flake: true,
+                follows: None,
+                inputs: BTreeMap::new(),
+                overlays: Vec::new(),
+            };
+            config.inputs.insert("from".to_string(), from_input);
+            config.imports.push("from".to_string());
+        }
+
+        let command = cli.command;
+
+        // Resolve settings from CLI + Config (pure functions, no mutation).
+        let mut nix_settings =
+            NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
+        if matches!(command, Commands::Update { .. }) {
+            nix_settings.refresh_fetchers = true;
+        }
+        let shell_settings =
+            ShellSettings::resolve(devenv_core::ShellOptions::from(cli.shell_args), &config);
+        let cache_settings =
+            CacheSettings::resolve(devenv_core::CacheOptions::from(cli.cache_args));
+        let secret_settings =
+            SecretSettings::resolve(devenv_core::SecretOptions::from(cli.secret_args), &config);
+        let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
+
+        // Resolve TUI flag: explicit --tui/--no-tui wins, otherwise default
+        // to TUI when running interactively outside CI and outside AI agents.
+        let tui_requested =
+            devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
+                .unwrap_or_else(|| {
+                    let is_ci = std::env::var_os("CI").is_some();
+                    let is_tty = std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+                    is_tty && !is_ci && !ai_agent
+                });
+
+        // Some commands don't support the TUI regardless of user options
+        let tui_unsupported = matches!(
+            &command,
+            Commands::Mcp { http: None } // stdio mode needs stderr for output
+                | Commands::Lsp { .. } // LSP needs direct stdout for protocol/config output
+                | Commands::PrintPaths // print output directly, no TUI needed
+        );
+
+        let tui = tui_requested && !tui_unsupported && !tracing_owns_terminal && !quiet;
+
+        // Determine use_pty from resolved settings (single source of truth)
+        let use_pty = shell_settings.reload
+            && matches!(&command, Commands::Shell { cmd: None, .. })
+            && std::io::stdin().is_terminal()
+            && std::io::stdout().is_terminal();
+
+        let is_testing = matches!(&command, Commands::Test { .. });
+
+        // Commands that do eval with TUI active, then take over the terminal
+        let needs_terminal_handoff = use_pty || matches!(&command, Commands::Repl {});
+
+        Ok(Self {
+            command,
+            config,
+            nix_settings,
+            shell_settings,
+            cache_settings,
+            secret_settings,
+            nixpkgs_config,
+            input_overrides,
+            from_external,
+            verbosity,
+            tui,
+            use_pty,
+            nix_debugger,
+            is_testing,
+            needs_terminal_handoff,
+            log_level,
+            tracing_specs,
+            tracing_owns_terminal,
+        })
     }
-
-    let command = cli.command;
-
-    // Resolve settings from CLI + Config (pure functions, no mutation).
-    let mut nix_settings =
-        NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
-    if matches!(command, Commands::Update { .. }) {
-        nix_settings.refresh_fetchers = true;
-    }
-    let shell_settings =
-        ShellSettings::resolve(devenv_core::ShellOptions::from(cli.shell_args), &config);
-    let cache_settings = CacheSettings::resolve(devenv_core::CacheOptions::from(cli.cache_args));
-    let secret_settings =
-        SecretSettings::resolve(devenv_core::SecretOptions::from(cli.secret_args), &config);
-    let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
-
-    // Resolve TUI flag: explicit --tui/--no-tui wins, otherwise default
-    // to TUI when running interactively outside CI and outside AI agents.
-    let tui_requested = devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
-        .unwrap_or_else(|| {
-            let is_ci = std::env::var_os("CI").is_some();
-            let is_tty = std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
-            is_tty && !is_ci && !ai_agent
-        });
-
-    // Some commands don't support the TUI regardless of user options
-    let tui_unsupported = matches!(
-        &command,
-        Commands::Mcp { http: None } // stdio mode needs stderr for output
-            | Commands::Lsp { .. } // LSP needs direct stdout for protocol/config output
-            | Commands::PrintPaths // print output directly, no TUI needed
-    );
-
-    let tui = tui_requested && !tui_unsupported && !tracing_owns_terminal && !quiet;
-
-    // Determine use_pty from resolved settings (single source of truth)
-    let use_pty = shell_settings.reload
-        && matches!(&command, Commands::Shell { cmd: None, .. })
-        && std::io::stdin().is_terminal()
-        && std::io::stdout().is_terminal();
-
-    let is_testing = matches!(&command, Commands::Test { .. });
-
-    // Commands that do eval with TUI active, then take over the terminal
-    let needs_terminal_handoff = use_pty || matches!(&command, Commands::Repl {});
-
-    Ok(RunContext {
-        command,
-        config,
-        nix_settings,
-        shell_settings,
-        cache_settings,
-        secret_settings,
-        nixpkgs_config,
-        input_overrides,
-        from_external,
-        verbosity,
-        tui,
-        use_pty,
-        nix_debugger,
-        is_testing,
-        needs_terminal_handoff,
-        log_level,
-        tracing_specs,
-        tracing_owns_terminal,
-    })
 }
 
 /// Single entry point for all command execution.
@@ -597,24 +606,7 @@ async fn run_backend(
         devenv_for_debugger: None,
     };
 
-    // Early-dispatch commands that only need Config (no Devenv construction required)
-    if let Commands::Inputs { ref command } = command {
-        match command {
-            InputsCommand::Add { name, url, follows } => {
-                let mut config = config;
-                if let Err(e) = config.add_input(name, url, follows) {
-                    return output(Err(e));
-                }
-                if let Err(e) = config.write().await {
-                    return output(Err(e));
-                }
-                return output(Ok(CommandResult::Done));
-            }
-        }
-    }
-
     let config_strict_ports = config.strict_ports.unwrap_or(false);
-
     let require_version_match = config.requires_version_match();
 
     let mut options = devenv::DevenvOptions {
@@ -1038,9 +1030,6 @@ async fn dispatch_command(
                 Ok(CommandResult::Print(format!("{output}\n")))
             }
         },
-        Commands::Inputs { .. } => {
-            unreachable!("Inputs::Add is dispatched in run_backend before Devenv construction")
-        }
         Commands::Changelogs {} => Ok(devenv
             .changelogs()
             .await?
@@ -1106,7 +1095,8 @@ async fn dispatch_command(
         | Commands::Revoke
         | Commands::HookShouldActivate
         | Commands::DaemonProcesses { .. }
-        | Commands::Init { .. } => {
+        | Commands::Init { .. }
+        | Commands::Inputs { .. } => {
             unreachable!("dispatched in main_inner before Devenv construction")
         }
     }

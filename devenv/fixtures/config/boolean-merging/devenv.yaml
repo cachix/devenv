@@ -1,5 +1,5 @@
-allowUnfree: false
-allowBroken: false
+allow_unfree: false
+allow_broken: false
 impure: false
 imports:
   - ./first

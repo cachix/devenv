@@ -279,9 +279,9 @@ impl ShellSettings {
 
         let reload = options.reload.combine(config.reload).unwrap_or(true);
 
-        let shell_from_cli = options.shell.is_some();
         let shell = options
             .shell
+            .to_owned()
             .or(config.shell.clone())
             .or_else(|| {
                 std::env::var("SHELL").ok().and_then(|s| {
@@ -302,7 +302,7 @@ impl ShellSettings {
         tracing::debug!(
             "Shell settings resolved: shell={} (source: {})",
             shell,
-            if shell_from_cli {
+            if options.shell.is_some() {
                 "CLI --shell"
             } else if config.shell.is_some() {
                 "devenv.yaml"

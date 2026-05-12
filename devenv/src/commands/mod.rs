@@ -7,4 +7,5 @@ pub mod daemon_processes;
 pub mod direnvrc;
 pub mod hook;
 pub mod init;
+pub mod inputs;
 pub mod version;

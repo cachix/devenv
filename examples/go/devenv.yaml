@@ -14,5 +14,5 @@ inputs:
     url: github:nix-community/gomod2nix
     overlays:
       - default
-# If you're using non-OSS software, you can set allowUnfree to true.
-# allowUnfree: true
+# If you're using non-OSS software, you can set allow_unfree to true.
+# allow_unfree: true

@@ -1,4 +1,4 @@
-allowUnfree: true
+allow_unfree: true
 inputs:
   subflake:
     url: path:./subflake

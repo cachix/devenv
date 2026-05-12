@@ -1,4 +1,4 @@
-allowUnfree: true
+allow_unfree: true
 
 inputs:
   purescript-overlay:

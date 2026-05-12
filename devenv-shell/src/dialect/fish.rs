@@ -37,10 +37,6 @@ __devenv_capture_env > "$_devenv_before_file"
 # Source the devenv environment
 source "{env_script_path}"
 
-# Restore SHELL to the target shell (Nix env sets it to /nix/store/.../bash).
-# Resolve to absolute path via PATH in case the devenv env provides the shell.
-export SHELL="$(command -v "{target_shell}")"
-
 # Compute and store the initial diff in _DEVENV_DIFF env var
 __devenv_compute_diff "$_devenv_before_file"
 rm -f "$_devenv_before_file"
