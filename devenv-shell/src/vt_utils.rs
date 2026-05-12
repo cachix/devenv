@@ -3,8 +3,14 @@
 use libghostty_vt::screen::{Cell, CellContentTag, CellWide, GridRef};
 use libghostty_vt::terminal::{Point, PointCoordinate, Terminal};
 
-/// Default scrollback limit used across devenv shell and reload.
-pub const DEFAULT_MAX_SCROLLBACK: usize = 10_000;
+/// Default scrollback storage budget in BYTES (not lines).
+///
+/// libghostty-vt's `max_scrollback` is byte-sized despite the doc string
+/// in its C header suggesting "lines" (see
+/// https://github.com/ghostty-org/ghostty/discussions/12587). 10 MB matches
+/// Ghostty's own `scrollback-limit` default and buys roughly 10k rows of
+/// scrollback at typical column widths.
+pub const DEFAULT_MAX_SCROLLBACK: usize = 10_000_000;
 
 /// Return a copy of `point` with the x coordinate changed.
 pub fn point_with_x(point: Point, x: u16) -> Point {

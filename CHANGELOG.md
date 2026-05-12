@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed gaps in terminal scrollback during heavy output with the auto-reloading shell. Increased the size of the internal VT scrollback buffer and clear it after each flush to the native terminal, so its cap is never reached and lines are no longer dropped mid-stream due to GC ([#2810](https://github.com/cachix/devenv/issues/2810)).
 - `$SHELL` is now set to the target shell before `enterShell` hooks run, so scripts that branch on `$SHELL` see the shell the user is actually entering.
 - Fixed `zoxide: infinite loop detected` in the fish hook when `cd` is overridden to behave like `z` (e.g. `zoxide init --cmd=cd`) ([#2801](https://github.com/cachix/devenv/issues/2801)).
 - Fixed `devenv --version` and `devenv -V` failing with `'devenv' requires a subcommand but one was not provided`. The flags now print the version and exit, matching the behavior of `devenv --help` ([#2791](https://github.com/cachix/devenv/issues/2791)).
