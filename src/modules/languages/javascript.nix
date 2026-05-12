@@ -30,13 +30,21 @@ let
 
       if [ "$ACTUAL_NPM_CHECKSUM" != "$EXPECTED_NPM_CHECKSUM" ]
       then
-        if ${cfg.npm.package}/bin/npm install ${
+        # Use 'clean-install' for reproducible installs from package-lock.json.
+        # Fall back to 'install' when no lockfile exists, since 'clean-install' requires one.
+        if [ -f "${dirPrefix}package-lock.json" ]
+        then
+          NPM_CMD="clean-install"
+        else
+          NPM_CMD="install"
+        fi
+        if ${lib.getExe' cfg.npm.package "npm"} "$NPM_CMD" ${
           lib.optionalString (cfg.directory != config.devenv.root) "--prefix ${cfg.directory}"
         }
         then
           echo "$ACTUAL_NPM_CHECKSUM" > "$NPM_CHECKSUM_FILE"
         else
-          echo "Install failed. Run 'npm install' manually."
+          echo "Install failed. Run 'npm $NPM_CMD' manually."
         fi
       fi
     }
@@ -312,6 +320,13 @@ in
 
   config = lib.mkIf cfg.enable {
     changelogs = [
+      {
+        date = "2026-05-12";
+        title = "languages.javascript.npm uses 'clean-install' when a lockfile exists";
+        description = ''
+          When `languages.javascript.npm.install.enable = true` and a `package-lock.json` is present, devenv now runs `npm clean-install` instead of `npm install`. This installs the exact versions from the lockfile and avoids silent semver bumps. Falls back to `npm install` when no lockfile exists.
+        '';
+      }
       {
         date = "2026-05-01";
         title = "languages.javascript.nodejs.enable makes Node.js optional";
