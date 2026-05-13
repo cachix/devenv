@@ -8,8 +8,9 @@
 
 use crate::cli::HookShell;
 use miette::{IntoDiagnostic, Result};
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::{env, fs};
+use std::{env, fs, io};
 
 // ---- Hook scripts ----
 //
@@ -30,7 +31,15 @@ pub fn print(shell: &HookShell) {
         HookShell::Fish => HOOK_FISH,
         HookShell::Nu => HOOK_NU,
     };
-    print!("{script}");
+    // `BrokenPipe` (e.g. `devenv hook fish | source` after `source` finishes
+    // reading) is a normal lifecycle event, not a panic.
+    let mut out = io::stdout().lock();
+    if let Err(e) = out.write_all(script.as_bytes()).and_then(|()| out.flush()) {
+        if e.kind() != io::ErrorKind::BrokenPipe {
+            eprintln!("devenv: failed to write hook script: {e}");
+            std::process::exit(1);
+        }
+    }
 }
 
 /// Trust the current working directory for auto-activation.

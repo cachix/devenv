@@ -9,6 +9,7 @@
 - Fixed the shell hook's "exit on cd-out" feature silently breaking under `clean.enabled = true`. `_DEVENV_HOOK_DIR` is now always preserved across env cleaning, so the hook-spawned shell still exits when the user `cd`s out of the project. Also aligned the fish hook's marker check with the posix one (non-empty value, not just "set").
 - Fixed TUI panic ("attempt to read state after owner was dropped") when pressing Esc with content that fits in the viewport. The Esc handler now only scrolls when the ScrollView is actually mounted, matching the existing guard on up/down navigation.
 - Fixed private cachix caches failing with HTTP 401 on `nix-cache-info` after the v2.1 lazy cachix refactor. `apply_store_settings` now sets the `netrc-file` global before adding substituters, so the authenticated probe Nix sends when registering a private substituter picks up the credentials written by the cachix manager.
+- Fixed `devenv hook <shell>` panicking with `failed printing to stdout: Broken pipe (os error 32)` when its downstream reader (e.g. `source` in `devenv hook fish | source`) closes the pipe before the script is fully flushed.
 
 ### Improvements
 
@@ -26,6 +27,7 @@
 - Fixed `devenv shell` skipping the user's `.zshenv` when launching zsh, which could mangle prompts and break `.zshrc` configurations that depend on env vars defined in `.zshenv`. The user's `.zshenv` is now sourced before `.zshrc` during shell init, matching zsh's documented startup order ([#2802](https://github.com/cachix/devenv/pull/2802)).
 - Fixed the bash/zsh shell hook (`devenv hook bash`/`zsh`) re-launching `devenv shell` on every prompt redraw after the user interrupted a slow eval with Ctrl-C. The hook now caches `$PWD` before launching the subshell, so an aborted or failed activation no longer retries until the user `cd`s away and back.
 - Fixed the shell hook closing the user's terminal when cd-ing out of a project directory while `DEVENV_ROOT` was exported into the outer shell (e.g. via direnv). The "exit on cd-out" path now keys off `_DEVENV_HOOK_DIR`, which is only set on shells the hook spawned, instead of `DEVENV_ROOT` alone ([#2805](https://github.com/cachix/devenv/issues/2805)).
+
 
 ### Improvements
 
