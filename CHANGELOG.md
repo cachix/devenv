@@ -8,6 +8,7 @@
 - Fixed Nix syntax errors in `devenv.nix` being reported as unrelated warnings (e.g. `warning: Ignoring the client-specified setting 'system'...`) instead of the actual syntax error. Warning-prefixed log entries emitted before the failing operation no longer shadow the real diagnostic ([#2820](https://github.com/cachix/devenv/issues/2820)).
 - Fixed the shell hook's "exit on cd-out" feature silently breaking under `clean.enabled = true`. `_DEVENV_HOOK_DIR` is now always preserved across env cleaning, so the hook-spawned shell still exits when the user `cd`s out of the project. Also aligned the fish hook's marker check with the posix one (non-empty value, not just "set").
 - Fixed TUI panic ("attempt to read state after owner was dropped") when pressing Esc with content that fits in the viewport. The Esc handler now only scrolls when the ScrollView is actually mounted, matching the existing guard on up/down navigation.
+- Fixed private cachix caches failing with HTTP 401 on `nix-cache-info` after the v2.1 lazy cachix refactor. `apply_store_settings` now sets the `netrc-file` global before adding substituters, so the authenticated probe Nix sends when registering a private substituter picks up the credentials written by the cachix manager.
 
 ### Improvements
 

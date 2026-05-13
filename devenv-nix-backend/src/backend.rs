@@ -1127,12 +1127,14 @@ impl NixCBackend {
         Ok(json_str)
     }
 
-    /// Apply substituters and trusted public keys to the open store.
+    /// Apply substituters, trusted public keys, and the netrc-file path
+    /// to the open store.
     ///
     /// Use after backend init when the cachix configuration has been
-    /// evaluated (the `netrc-file` global setting is the one piece that
-    /// must land before the store opens; everything else is additive
-    /// and can be applied here). Failures are logged warn but never
+    /// evaluated. The `netrc-file` global must land before
+    /// `add_substituter` runs — adding a substituter triggers an
+    /// authenticated `nix-cache-info` probe, and a private cache without
+    /// netrc would get 401. Failures are logged warn but never
     /// fatal — devenv continues without the cachix substituters.
     pub fn apply_store_settings(&self, store_settings: &StoreSettings) {
         // Open an eval scope on the bridge so substituter info fetches
@@ -1140,6 +1142,12 @@ impl NixCBackend {
         // inside the C call nest under the current TUI activity.
         let _eval_guard =
             devenv_activity::current_activity_id().map(|id| self.nix_log_bridge.begin_eval(id));
+        if let Some(netrc) = &store_settings.netrc_path
+            && let Some(s) = netrc.to_str()
+            && let Err(e) = settings::set("netrc-file", s).to_miette()
+        {
+            tracing::warn!("Failed to set netrc-file: {}", e);
+        }
         apply_substituters_and_keys(self.cnix_store.inner(), store_settings);
     }
 
