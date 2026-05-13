@@ -13,6 +13,8 @@
 
 ### Improvements
 
+- Long log lines (structured logs, stack traces, etc.) in the TUI now wrap onto continuation rows instead of being truncated at the terminal width. Applies to both the inline log view (shown for selected/failed activities and `devenv up` processes) and the expanded log view, matching the default behavior of `less` and `journalctl`. Carriage returns are also stripped from captured log lines so pty-induced CRLF endings no longer move the cursor mid-row and erase rendered content ([#2818](https://github.com/cachix/devenv/issues/2818)).
+
 ### Breaking Changes
 
 ## 2.1.1 (2026-05-12)
