@@ -25566,6 +25566,176 @@ true
 
 
 
+## processes.\<name>.urls
+
+
+
+Human-facing URLs for this process.
+
+These are intended for clickable local endpoints such as admin UIs,
+dashboards, or application dev servers, and can reference dynamically
+allocated process ports via ` config.processes.<name>.ports.<port>.value `.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  app = {
+    scheme = "http";
+    host = "127.0.0.1";
+    port = config.processes.myapp.ports.http.value;
+    path = "/";
+  };
+  admin = {
+    scheme = "http";
+    host = "127.0.0.1";
+    port = config.processes.myapp.ports.admin.value;
+    path = "/admin";
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.urls.\<name>.host
+
+
+
+URL host.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"127.0.0.1"
+```
+
+
+
+*Example:*
+
+```nix
+"localhost"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.urls.\<name>.path
+
+
+
+URL path.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"/"
+```
+
+
+
+*Example:*
+
+```nix
+"/admin"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.urls.\<name>.port
+
+
+
+URL port.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Example:*
+
+```nix
+8080
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.urls.\<name>.scheme
+
+
+
+URL scheme.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"http"
+```
+
+
+
+*Example:*
+
+```nix
+"https"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
 ## processes.\<name>.watch
 
 
@@ -37989,6 +38159,126 @@ boolean
 
 ```nix
 true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.urls.\<name>.host
+
+
+
+URL host.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"127.0.0.1"
+```
+
+
+
+*Example:*
+
+```nix
+"localhost"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.urls.\<name>.path
+
+
+
+URL path.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"/"
+```
+
+
+
+*Example:*
+
+```nix
+"/admin"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.urls.\<name>.port
+
+
+
+URL port.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Example:*
+
+```nix
+8080
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.urls.\<name>.scheme
+
+
+
+URL scheme.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"http"
+```
+
+
+
+*Example:*
+
+```nix
+"https"
 ```
 
 *Declared by:*

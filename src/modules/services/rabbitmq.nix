@@ -14,6 +14,10 @@ let
   allocatedManagementPort = config.processes.rabbitmq.ports.management.value;
   allocatedDistributionPort = config.processes.rabbitmq.ports.distribution.value;
   allocatedEpmdPort = config.processes.rabbitmq.ports.epmd.value;
+  urlHost =
+    if cfg.listenAddress == "" || cfg.listenAddress == "0.0.0.0" || cfg.listenAddress == "::"
+    then "127.0.0.1"
+    else cfg.listenAddress;
 
   config_file_content = lib.generators.toKeyValue { } cfg.configItems;
   config_file = pkgs.writeText "rabbitmq.conf" config_file_content;
@@ -196,6 +200,14 @@ in
         ports.management.allocate = baseManagementPort;
         ports.distribution.allocate = basePort + 20000;
         ports.epmd.allocate = 4369;
+        urls = optionalAttrs cfg.managementPlugin.enable {
+          admin = {
+            scheme = "http";
+            host = urlHost;
+            port = allocatedManagementPort;
+            path = "/";
+          };
+        };
         exec = "exec ${cfg.package}/bin/rabbitmq-server";
 
         ready = {

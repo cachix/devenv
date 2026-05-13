@@ -3,6 +3,7 @@ let
   types = lib.types;
   listenType = import ./lib/listen.nix { inherit lib; };
   readyType = import ./lib/ready.nix { inherit lib; };
+  urlType = import ./lib/url.nix { inherit lib; };
 
   # Attempt to evaluate devenv-tasks using the exact nixpkgs used by the root devenv flake.
   # If the locked input is not what we expect, fall back to evaluating with the user's nixpkgs.
@@ -284,6 +285,16 @@ let
                   description = ''
                     Allocated ports for this process (name -> port number).
                     Populated automatically from process port allocation.
+                  '';
+                };
+
+                urls = lib.mkOption {
+                  internal = true;
+                  type = types.attrsOf urlType;
+                  default = { };
+                  description = ''
+                    Human-facing URLs for this process (label -> URL parts),
+                    which can reference dynamically allocated process ports.
                   '';
                 };
 

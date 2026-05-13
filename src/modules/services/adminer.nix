@@ -11,6 +11,10 @@ let
   basePort = parsePort cfg.listen;
   allocatedPort = config.processes.adminer.ports.main.value;
   host = parseHost cfg.listen;
+  urlHost =
+    if host == "" || host == "0.0.0.0" || host == "::"
+    then "127.0.0.1"
+    else host;
   listenAddr = "${host}:${toString allocatedPort}";
 in
 {
@@ -37,6 +41,12 @@ in
 
   config = lib.mkIf cfg.enable {
     processes.adminer.ports.main.allocate = basePort;
+    processes.adminer.urls.ui = {
+      scheme = "http";
+      host = urlHost;
+      port = allocatedPort;
+      path = "/";
+    };
     processes.adminer.exec = "exec ${config.languages.php.package}/bin/php ${lib.optionalString config.services.mysql.enable "-dmysqli.default_socket=${config.env.MYSQL_UNIX_PORT}"} -S ${listenAddr} -t ${cfg.package} ${cfg.package}/adminer.php";
   };
 }

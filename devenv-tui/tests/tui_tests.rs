@@ -1654,6 +1654,7 @@ fn test_overflow_clips_top_keeps_bottom() {
         command: None,
         ports: vec![],
         ready_probe: None,
+        urls: vec![],
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -1712,6 +1713,7 @@ fn test_hide_stopped_processes_filters_manually_stopped_processes_but_keeps_fail
             command: None,
             ports: vec![],
             ready_probe: None,
+            urls: vec![],
             level: ActivityLevel::Info,
             timestamp: Timestamp::now(),
         }));
@@ -1781,6 +1783,7 @@ fn test_previous_hide_stopped_processes_coverage_used_completed_success() {
         command: None,
         ports: vec![],
         ready_probe: None,
+        urls: vec![],
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -1823,6 +1826,7 @@ fn test_toggle_hide_stopped_processes_clears_hidden_selection() {
         command: None,
         ports: vec![],
         ready_probe: None,
+        urls: vec![],
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -1864,6 +1868,7 @@ fn test_hide_stopped_processes_removes_hidden_processes_from_selection() {
         command: None,
         ports: vec![],
         ready_probe: None,
+        urls: vec![],
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -1880,6 +1885,7 @@ fn test_hide_stopped_processes_removes_hidden_processes_from_selection() {
         command: None,
         ports: vec![],
         ready_probe: None,
+        urls: vec![],
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -2047,6 +2053,7 @@ fn test_processes_alphabetical_order() {
         command: None,
         ports: vec![],
         ready_probe: None,
+        urls: vec![],
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -2057,6 +2064,7 @@ fn test_processes_alphabetical_order() {
         command: None,
         ports: vec![],
         ready_probe: None,
+        urls: vec![],
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -2077,6 +2085,7 @@ fn test_processes_alphabetical_order() {
         command: None,
         ports: vec![],
         ready_probe: None,
+        urls: vec![],
         level: ActivityLevel::Info,
         timestamp: Timestamp::now(),
     }));
@@ -2101,6 +2110,30 @@ fn test_processes_alphabetical_order() {
     );
 
     insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_process_urls_are_always_visible_inline() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(ActivityEvent::Process(Process::Start {
+        id: 1,
+        name: "rabbitmq".to_string(),
+        parent: None,
+        command: None,
+        ports: vec!["management:15672".to_string()],
+        ready_probe: None,
+        urls: vec!["admin: http://127.0.0.1:15672/".to_string()],
+        level: ActivityLevel::Info,
+        timestamp: Timestamp::now(),
+    }));
+
+    let output = render_to_string(&model, &ui_state);
+    assert!(
+        output.contains("admin: http://127.0.0.1:15672/"),
+        "Process should show URLs inline without selection.\nFull output:\n{}",
+        output
+    );
 }
 
 /// Test cachix push alongside other activities (build + push concurrent).

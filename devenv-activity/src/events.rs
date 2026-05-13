@@ -320,6 +320,9 @@ pub enum Process {
         /// Human-readable description of the readiness probe (e.g., "exec: pg_isready", "http: localhost:8080/health")
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ready_probe: Option<String>,
+        /// Human-facing URLs for this process (e.g., ["admin: http://127.0.0.1:15672/"])
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        urls: Vec<String>,
         #[serde(default)]
         level: ActivityLevel,
         timestamp: Timestamp,

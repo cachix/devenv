@@ -22,6 +22,54 @@ pub const SUMMARY_BAR_HEIGHT: u16 = 2;
 /// Map from activity_id to rendered height in lines.
 pub type ActivityHeights = Ref<HashMap<u64, i32>>;
 
+fn render_process_urls(urls: &[String], depth: usize, terminal_width: u16) -> AnyElement<'static> {
+    let indent = 2 + (depth * 2);
+    let mut line_elements = vec![];
+    let filler = " ".repeat(terminal_width as usize);
+
+    for entry in urls {
+        let (label, url) = entry.split_once(": ").unwrap_or(("", entry.as_str()));
+        let mut contents = vec![];
+        if !label.is_empty() {
+            contents
+                .push(MixedTextContent::new(format!(" {label}: ")).color(Color::AnsiValue(245)));
+        }
+        contents.push(
+            MixedTextContent::new(url.to_string())
+                .color(COLOR_INFO)
+                .decoration(TextDecoration::Underline),
+        );
+        contents.push(MixedTextContent::new(filler.clone()));
+        line_elements.push(
+            element! {
+                View(height: 1, overflow: Overflow::Hidden) {
+                    MixedText(
+                        contents: contents,
+                        wrap: TextWrap::NoWrap
+                    )
+                }
+            }
+            .into_any(),
+        );
+    }
+
+    element! {
+        View(
+            height: urls.len() as u32,
+            flex_direction: FlexDirection::Column,
+            overflow: Overflow::Hidden,
+            margin_left: indent as u32,
+            margin_right: 1,
+            border_style: BorderStyle::Single,
+            border_edges: Edges::Left,
+            border_color: Color::AnsiValue(245),
+        ) {
+            #(line_elements)
+        }
+    }
+    .into_any()
+}
+
 /// Scroll state and the display list the app already computed for this frame.
 ///
 /// Passing `display_activities` through avoids re-walking the activity tree
@@ -725,24 +773,39 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .render(terminal_width, *depth, prefix);
 
             // Show logs: always show LOG_VIEWPORT_SHOW_OUTPUT lines,
-            // expand when selected, show more when failed
+            // expand when selected, show more when failed.
+            // Human-facing URLs are always shown inline for instant clickability.
             let process_failed = *completed == Some(false);
-            if logs.is_some() {
-                let mut component = ExpandedContentComponent::new(logs.as_deref())
-                    .with_depth(*depth)
-                    .with_empty_message("→ no output yet (press 'e' to expand)");
-                if process_failed && *render_context == RenderContext::Final {
-                    component = component.with_max_lines(LOG_VIEWPORT_FAILED);
-                } else if !is_selected {
-                    component = component.with_max_lines(LOG_VIEWPORT_SHOW_OUTPUT);
+            let show_urls = !process_data.urls.is_empty();
+            if logs.is_some() || show_urls {
+                let mut elements = vec![main_line];
+                let mut total_height = 1usize;
+
+                if show_urls {
+                    elements.push(render_process_urls(
+                        &process_data.urls,
+                        *depth,
+                        terminal_width,
+                    ));
+                    total_height += process_data.urls.len();
                 }
 
-                let mut elements = vec![main_line];
-                let log_elements = component.render();
-                elements.extend(log_elements);
+                if logs.is_some() {
+                    let mut component = ExpandedContentComponent::new(logs.as_deref())
+                        .with_depth(*depth)
+                        .with_empty_message("→ no output yet (press 'e' to expand)");
+                    if process_failed && *render_context == RenderContext::Final {
+                        component = component.with_max_lines(LOG_VIEWPORT_FAILED);
+                    } else if !is_selected {
+                        component = component.with_max_lines(LOG_VIEWPORT_SHOW_OUTPUT);
+                    }
 
-                let log_viewport_height = component.calculate_height();
-                let total_height = (1 + log_viewport_height).min(50) as u32;
+                    let log_elements = component.render();
+                    total_height += component.calculate_height();
+                    elements.extend(log_elements);
+                }
+
+                let total_height = total_height.min(50) as u32;
                 return element! {
                     View(height: total_height, flex_direction: FlexDirection::Column) {
                         #(elements)
@@ -1381,6 +1444,7 @@ mod tests {
             command: None,
             ports: vec![],
             ready_probe: None,
+            urls: vec![],
             level: ActivityLevel::Info,
             timestamp: Timestamp::now(),
         }));
@@ -1440,6 +1504,7 @@ mod tests {
                 command: None,
                 ports: vec![],
                 ready_probe: None,
+                urls: vec![],
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),
             }));
@@ -1508,6 +1573,7 @@ mod tests {
                 command: None,
                 ports: vec![],
                 ready_probe: None,
+                urls: vec![],
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),
             }));
@@ -1563,6 +1629,7 @@ mod tests {
                 command: None,
                 ports: vec![],
                 ready_probe: None,
+                urls: vec![],
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),
             }));
