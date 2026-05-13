@@ -684,7 +684,9 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         if let Ok(mut ui) = ui_state.write() {
                             ui.selected_activity = None;
                         }
-                        scroll_handle.write().scroll_to_bottom();
+                        if *scroll_view_active.read() {
+                            scroll_handle.write().scroll_to_bottom();
+                        }
                     }
                     _ => {}
                 }
