@@ -4,19 +4,37 @@
 
 ### Bug Fixes
 
+- Fixed `devenv --profile <name> <subcommand>` failing when the profile name shadows a subcommand (e.g. `devenv --profile test test`). The profile value is now consumed before clap's subcommand precedence check ([#2821](https://github.com/cachix/devenv/issues/2821)).
+- Fixed Nix syntax errors in `devenv.nix` being reported as unrelated warnings (e.g. `warning: Ignoring the client-specified setting 'system'...`) instead of the actual syntax error. Warning-prefixed log entries emitted before the failing operation no longer shadow the real diagnostic ([#2820](https://github.com/cachix/devenv/issues/2820)).
+- Fixed the shell hook's "exit on cd-out" feature silently breaking under `clean.enabled = true`. `_DEVENV_HOOK_DIR` is now always preserved across env cleaning, so the hook-spawned shell still exits when the user `cd`s out of the project. Also aligned the fish hook's marker check with the posix one (non-empty value, not just "set").
+- Fixed TUI panic ("attempt to read state after owner was dropped") when pressing Esc with content that fits in the viewport. The Esc handler now only scrolls when the ScrollView is actually mounted, matching the existing guard on up/down navigation.
+- Fixed private cachix caches failing with HTTP 401 on `nix-cache-info` after the v2.1 lazy cachix refactor. `apply_store_settings` now sets the `netrc-file` global before adding substituters, so the authenticated probe Nix sends when registering a private substituter picks up the credentials written by the cachix manager.
+- Fixed `devenv hook <shell>` panicking with `failed printing to stdout: Broken pipe (os error 32)` when its downstream reader (e.g. `source` in `devenv hook fish | source`) closes the pipe before the script is fully flushed.
+
+### Improvements
+
+### Breaking Changes
+
+## 2.1.1 (2026-05-12)
+
+### Bug Fixes
+
+- Fixed gaps in terminal scrollback during heavy output with the auto-reloading shell. Increased the size of the internal VT scrollback buffer and clear it after each flush to the native terminal, so its cap is never reached and lines are no longer dropped mid-stream due to GC ([#2810](https://github.com/cachix/devenv/issues/2810)).
 - `$SHELL` is now set to the target shell before `enterShell` hooks run, so scripts that branch on `$SHELL` see the shell the user is actually entering.
 - Fixed `zoxide: infinite loop detected` in the fish hook when `cd` is overridden to behave like `z` (e.g. `zoxide init --cmd=cd`) ([#2801](https://github.com/cachix/devenv/issues/2801)).
 - Fixed `devenv --version` and `devenv -V` failing with `'devenv' requires a subcommand but one was not provided`. The flags now print the version and exit, matching the behavior of `devenv --help` ([#2791](https://github.com/cachix/devenv/issues/2791)).
 - Fixed `devenv hook fish` not activating when starting a new fish shell directly inside a project directory. The initial activation now runs on the first `fish_prompt` event instead of inline during `source`, so the spawned `devenv shell` inherits the real terminal as stdin instead of the closed pipe from `devenv hook fish | source` ([#2798](https://github.com/cachix/devenv/issues/2798)).
 - Fixed `devenv shell` skipping the user's `.zshenv` when launching zsh, which could mangle prompts and break `.zshrc` configurations that depend on env vars defined in `.zshenv`. The user's `.zshenv` is now sourced before `.zshrc` during shell init, matching zsh's documented startup order ([#2802](https://github.com/cachix/devenv/pull/2802)).
 - Fixed the bash/zsh shell hook (`devenv hook bash`/`zsh`) re-launching `devenv shell` on every prompt redraw after the user interrupted a slow eval with Ctrl-C. The hook now caches `$PWD` before launching the subshell, so an aborted or failed activation no longer retries until the user `cd`s away and back.
-- Fixed `devenv hook <shell>` panicking with `failed printing to stdout: Broken pipe (os error 32)` when its downstream reader (e.g. `source` in `devenv hook fish | source`) closes the pipe before the script is fully flushed.
+- Fixed the shell hook closing the user's terminal when cd-ing out of a project directory while `DEVENV_ROOT` was exported into the outer shell (e.g. via direnv). The "exit on cd-out" path now keys off `_DEVENV_HOOK_DIR`, which is only set on shells the hook spawned, instead of `DEVENV_ROOT` alone ([#2805](https://github.com/cachix/devenv/issues/2805)).
+
 
 ### Improvements
 
-`devenv shell` now registers zsh completions from packages in the devenv profile. A generated `.zshenv` prepends `$DEVENV_PROFILE/share/zsh/site-functions` to `fpath` before `/etc/zshrc` runs, so the system `compinit` picks up the new directory.
+- `devenv shell` now registers zsh completions from packages in the devenv profile. A generated `.zshenv` prepends `$DEVENV_PROFILE/share/zsh/site-functions` to `fpath` before `/etc/zshrc` runs, so the system `compinit` picks up the new directory.
 - Bumped `secretspec` to `v0.10.1`. The new `bws` (Bitwarden Secrets Manager) feature is not enabled because its transitive `bitwarden` crate conflicts with `sqlx` 0.8 on `libsqlite3-sys` and pins `typenum` to 1.18.
 - Bumped `iocraft` to `0.8.2` and switched the `[patch.crates-io]` entry from the `cachix/iocraft` fork to upstream `ccbrown/iocraft` `main`, now that the row-level diff and stderr rendering patches are merged upstream.
+- `devenv.yaml` options are now documented in `snake_case` (e.g. `allow_unfree`, `clean_env`). The previous `camelCase` spellings remain supported for backward compatibility.
 
 ### Breaking Changes
 

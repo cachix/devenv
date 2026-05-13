@@ -7,8 +7,12 @@ _devenv_hook() {
     local previous_exit_status=$?
     [[ "$_DEVENV_HOOK_PWD" == "$PWD" ]] && return $previous_exit_status
 
-    # Inside devenv shell: exit when leaving the project directory
-    if [[ -n "${DEVENV_ROOT:-}" ]]; then
+    # Inside a hook-spawned devenv shell: exit when leaving the project
+    # directory. `_DEVENV_HOOK_DIR` is the marker — set only on shells we
+    # spawned below. `DEVENV_ROOT` alone is not enough: direnv (and other
+    # tools) may export it into the user's outer shell, and an unguarded
+    # `exit` there closes the terminal.
+    if [[ -n "${_DEVENV_HOOK_DIR:-}" && -n "${DEVENV_ROOT:-}" ]]; then
         case "$PWD" in
             "${DEVENV_ROOT}"|"${DEVENV_ROOT}"/*) ;;
             *)
@@ -35,7 +39,7 @@ _devenv_hook() {
         # Cache PWD before launching so a SIGINT/failure inside devenv shell
         # doesn't leave us re-launching on every prompt redraw.
         _DEVENV_HOOK_PWD="$PWD"
-        (cd "$project_dir" && devenv shell)
+        (cd "$project_dir" && _DEVENV_HOOK_DIR="$project_dir" devenv shell)
         local exit_dir_file="$project_dir/.devenv/exit-dir"
         if [[ -f "$exit_dir_file" ]]; then
             local target_dir
