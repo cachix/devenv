@@ -2289,6 +2289,10 @@ open submodule of attribute set of (submodule)
       ask = [ "git:*" "npm:*" ];
       deny = [ "rm -rf:*" "sudo:*" ];
     };
+    # Use an empty string to emit a bare tool entry for tools
+    # without a matcher format (e.g. WebSearch, AskUserQuestion).
+    WebSearch.allow = [ "" ];
+    AskUserQuestion.deny = [ "" ];
   };
 }
 
@@ -2303,7 +2307,10 @@ open submodule of attribute set of (submodule)
 
 
 
-List of allowed patterns.
+List of allowed patterns. An empty string emits a bare tool entry
+(e.g. ` WebSearch ` rather than ` WebSearch(pattern) `), matching the
+tool regardless of input. Use this for tools without a matcher
+format such as ` WebSearch ` or ` AskUserQuestion `.
 
 
 
@@ -2324,7 +2331,8 @@ list of string
 
 
 
-List of patterns that require user approval.
+List of patterns that require user approval. An empty string emits
+a bare tool entry (e.g. ` WebSearch ` rather than ` WebSearch(pattern) `).
 
 
 
@@ -2345,7 +2353,9 @@ list of string
 
 
 
-List of denied patterns.
+List of denied patterns. An empty string emits a bare tool entry
+(e.g. ` AskUserQuestion ` rather than ` AskUserQuestion(pattern) `),
+which is required to deny tools without a matcher format outright.
 
 
 
@@ -2494,7 +2504,10 @@ attribute set of (submodule)
 
 
 
-List of allowed patterns.
+List of allowed patterns. An empty string emits a bare tool entry
+(e.g. ` WebSearch ` rather than ` WebSearch(pattern) `), matching the
+tool regardless of input. Use this for tools without a matcher
+format such as ` WebSearch ` or ` AskUserQuestion `.
 
 
 
@@ -2518,7 +2531,8 @@ list of string
 
 
 
-List of patterns that require user approval.
+List of patterns that require user approval. An empty string emits
+a bare tool entry (e.g. ` WebSearch ` rather than ` WebSearch(pattern) `).
 
 
 
@@ -2542,7 +2556,9 @@ list of string
 
 
 
-List of denied patterns.
+List of denied patterns. An empty string emits a bare tool entry
+(e.g. ` AskUserQuestion ` rather than ` AskUserQuestion(pattern) `),
+which is required to deny tools without a matcher format outright.
 
 
 
