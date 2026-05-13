@@ -4,6 +4,8 @@
 
 ### Bug Fixes
 
+- Fixed `devenv --profile <name> <subcommand>` failing when the profile name shadows a subcommand (e.g. `devenv --profile test test`). The profile value is now consumed before clap's subcommand precedence check ([#2821](https://github.com/cachix/devenv/issues/2821)).
+
 ### Improvements
 
 ### Breaking Changes

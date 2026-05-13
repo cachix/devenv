@@ -709,6 +709,49 @@ impl Cli {
             devenv_tracing::Level::default()
         }
     }
+
+    /// Parse from `std::env::args_os()` after merging `--profile <name>` / `-P <name>`
+    /// into the `=` form, so a profile whose name shadows a subcommand
+    /// (e.g. `devenv --profile test test`) isn't mistaken for the subcommand by
+    /// clap's `subcommand_precedence_over_arg`.
+    pub fn parse_preprocessed() -> Self {
+        Self::parse_from(preprocess_profile_args(std::env::args_os()))
+    }
+}
+
+/// Merge `--profile X` → `--profile=X` and `-P X` → `-PX` so clap's
+/// `subcommand_precedence_over_arg` doesn't steal the value when it matches a
+/// subcommand name. See https://github.com/cachix/devenv/issues/2821.
+fn preprocess_profile_args<I>(args: I) -> Vec<std::ffi::OsString>
+where
+    I: IntoIterator<Item = std::ffi::OsString>,
+{
+    let mut out = Vec::new();
+    let mut iter = args.into_iter().peekable();
+    while let Some(arg) = iter.next() {
+        let kind = match arg.to_str() {
+            Some("--profile") => Some(true), // long form, use `=`
+            Some("-P") => Some(false),       // short form, no separator
+            _ => None,
+        };
+        match kind {
+            Some(use_equals) if iter.peek().is_some_and(|n| !is_flag(n)) => {
+                let value = iter.next().expect("peeked");
+                let mut merged = arg;
+                if use_equals {
+                    merged.push("=");
+                }
+                merged.push(&value);
+                out.push(merged);
+            }
+            _ => out.push(arg),
+        }
+    }
+    out
+}
+
+fn is_flag(arg: &std::ffi::OsString) -> bool {
+    arg.to_str().is_some_and(|s| s.starts_with('-') && s != "-")
 }
 
 #[derive(Subcommand, Clone)]
@@ -1339,5 +1382,64 @@ mod tests {
             }
             _ => panic!("expected `devenv processes up` command"),
         }
+    }
+
+    fn osargs<const N: usize>(args: [&str; N]) -> Vec<std::ffi::OsString> {
+        args.iter().map(std::ffi::OsString::from).collect()
+    }
+
+    #[test]
+    fn preprocess_profile_long_form_with_subcommand_name() {
+        // https://github.com/cachix/devenv/issues/2821
+        let out = preprocess_profile_args(osargs(["devenv", "--profile", "test", "test"]));
+        assert_eq!(out, osargs(["devenv", "--profile=test", "test"]));
+    }
+
+    #[test]
+    fn preprocess_profile_short_form_with_subcommand_name() {
+        let out = preprocess_profile_args(osargs(["devenv", "-P", "test", "test"]));
+        assert_eq!(out, osargs(["devenv", "-Ptest", "test"]));
+    }
+
+    #[test]
+    fn preprocess_profile_already_uses_equals() {
+        let out = preprocess_profile_args(osargs(["devenv", "--profile=test", "test"]));
+        assert_eq!(out, osargs(["devenv", "--profile=test", "test"]));
+    }
+
+    #[test]
+    fn preprocess_profile_followed_by_flag_is_untouched() {
+        // Don't swallow the following flag as a value.
+        let out = preprocess_profile_args(osargs(["devenv", "--profile", "--verbose"]));
+        assert_eq!(out, osargs(["devenv", "--profile", "--verbose"]));
+    }
+
+    #[test]
+    fn preprocess_profile_at_end_is_untouched() {
+        let out = preprocess_profile_args(osargs(["devenv", "--profile"]));
+        assert_eq!(out, osargs(["devenv", "--profile"]));
+    }
+
+    #[test]
+    fn preprocess_handles_multiple_profile_flags() {
+        let out = preprocess_profile_args(osargs(["devenv", "--profile", "a", "-P", "b", "shell"]));
+        assert_eq!(out, osargs(["devenv", "--profile=a", "-Pb", "shell"]));
+    }
+
+    #[test]
+    fn cli_profile_before_subcommand_shadowing_name() {
+        // https://github.com/cachix/devenv/issues/2821
+        let argv = preprocess_profile_args(osargs(["devenv", "--profile", "test", "test"]));
+        let cli = Cli::parse_from(argv);
+        assert_eq!(cli.shell_args.profiles, vec!["test".to_string()]);
+        assert!(matches!(cli.command, Commands::Test { .. }));
+    }
+
+    #[test]
+    fn cli_profile_short_before_subcommand_shadowing_name() {
+        let argv = preprocess_profile_args(osargs(["devenv", "-P", "test", "test"]));
+        let cli = Cli::parse_from(argv);
+        assert_eq!(cli.shell_args.profiles, vec!["test".to_string()]);
+        assert!(matches!(cli.command, Commands::Test { .. }));
     }
 }

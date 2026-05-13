@@ -1,4 +1,4 @@
-use clap::{CommandFactory, Parser, crate_version};
+use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
     Devenv, RunMode,
@@ -90,7 +90,7 @@ fn main_inner() -> Result<()> {
     // Retry loop: if the backend discovers secrets need interactive prompting,
     // we prompt the user and re-run the entire command with secrets now available.
     loop {
-        let cli = Cli::parse();
+        let cli = Cli::parse_preprocessed();
 
         // Handle commands that don't need config or runtime
         match &cli.command {
