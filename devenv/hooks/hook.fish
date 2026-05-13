@@ -9,7 +9,7 @@ function _devenv_hook --on-variable PWD
     # spawned below. `DEVENV_ROOT` alone is not enough: direnv (and other
     # tools) may export it into the user's outer shell, and an unguarded
     # `exit` there closes the terminal.
-    if set -q _DEVENV_HOOK_DIR; and set -q DEVENV_ROOT
+    if test -n "$_DEVENV_HOOK_DIR" -a -n "$DEVENV_ROOT"
         switch $PWD
             case "$DEVENV_ROOT" "$DEVENV_ROOT/*"
                 return

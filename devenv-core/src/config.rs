@@ -236,14 +236,25 @@ pub struct Clean {
 }
 
 impl Clean {
+    /// Variables devenv requires internally and must survive env cleaning.
+    /// `_DEVENV_HOOK_DIR` marks shells spawned by `devenv hook`; the shell
+    /// hooks rely on its presence to know whether `cd`-ing out of the
+    /// project should exit the current shell.
+    const ALWAYS_KEEP: &'static [&'static str] = &["_DEVENV_HOOK_DIR"];
+
     /// Return host environment variables filtered by the clean/keep settings.
     ///
-    /// When `enabled`, only variables whose name appears in `keep` are
-    /// returned. Otherwise every host variable is returned.
+    /// When `enabled`, only variables whose name appears in `keep` or
+    /// `ALWAYS_KEEP` are returned. Otherwise every host variable is returned.
     pub fn kept_env_vars(&self) -> HashMap<String, String> {
         let vars = std::env::vars();
         if self.enabled {
-            let keep: HashSet<&str> = self.keep.iter().map(|s| s.as_str()).collect();
+            let keep: HashSet<&str> = self
+                .keep
+                .iter()
+                .map(|s| s.as_str())
+                .chain(Self::ALWAYS_KEEP.iter().copied())
+                .collect();
             vars.filter(|(key, _)| keep.contains(key.as_str()))
                 .collect()
         } else {
