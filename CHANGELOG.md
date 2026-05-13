@@ -5,6 +5,7 @@
 ### Bug Fixes
 
 - Fixed `devenv --profile <name> <subcommand>` failing when the profile name shadows a subcommand (e.g. `devenv --profile test test`). The profile value is now consumed before clap's subcommand precedence check ([#2821](https://github.com/cachix/devenv/issues/2821)).
+- Fixed Nix syntax errors in `devenv.nix` being reported as unrelated warnings (e.g. `warning: Ignoring the client-specified setting 'system'...`) instead of the actual syntax error. Warning-prefixed log entries emitted before the failing operation no longer shadow the real diagnostic ([#2820](https://github.com/cachix/devenv/issues/2820)).
 
 ### Improvements
 
