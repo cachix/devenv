@@ -829,6 +829,9 @@ pub enum Commands {
     #[clap(hide = true)]
     GenerateJSONSchema,
 
+    #[clap(hide = true)]
+    GenerateYamlOptionsDoc,
+
     /// Print computed paths (dotfile, gc, etc.) for shell integration
     #[clap(hide = true)]
     PrintPaths,

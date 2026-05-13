@@ -3,17 +3,34 @@
   "title": "Config",
   "type": "object",
   "properties": {
+    "require_version": {
+      "description": "Version requirement for the devenv CLI.\nSet to `true` to enforce CLI matches the modules version,\nor a constraint string like `\">=2.0.0\"`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RequireVersion"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "inputs": {
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/Input"
       }
     },
-    "allowUnfree": {
-      "type": "boolean"
+    "allow_unfree": {
+      "type": "boolean",
+      "deprecated": true
     },
-    "allowBroken": {
-      "type": "boolean"
+    "allow_unsupported_system": {
+      "type": "boolean",
+      "deprecated": true
+    },
+    "allow_broken": {
+      "type": "boolean",
+      "deprecated": true
     },
     "nixpkgs": {
       "anyOf": [
@@ -31,11 +48,12 @@
         "type": "string"
       }
     },
-    "permittedInsecurePackages": {
+    "permitted_insecure_packages": {
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "deprecated": true
     },
     "clean": {
       "anyOf": [
@@ -68,9 +86,40 @@
         "string",
         "null"
       ]
+    },
+    "reload": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "strict_ports": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "shell": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "$defs": {
+    "RequireVersion": {
+      "description": "Version requirement for the devenv CLI.\n\n- `true`: CLI version must match the modules version (checked during Nix evaluation)\n- A constraint string like `\">=2.0.0\"`: checked before Nix evaluation",
+      "anyOf": [
+        {
+          "description": "When true, CLI version must match the modules version",
+          "type": "boolean"
+        },
+        {
+          "description": "Version constraint string (e.g., \">=2.0.0\", \"2.0.7\")",
+          "type": "string"
+        }
+      ]
+    },
     "Input": {
       "type": "object",
       "properties": {
@@ -106,34 +155,69 @@
     "Nixpkgs": {
       "type": "object",
       "properties": {
-        "allowUnfree": {
+        "allow_unfree": {
           "type": "boolean"
         },
-        "allowBroken": {
+        "allow_unsupported_system": {
           "type": "boolean"
         },
-        "cudaSupport": {
+        "allow_broken": {
           "type": "boolean"
         },
-        "cudaCapabilities": {
+        "allow_non_source": {
+          "type": "boolean"
+        },
+        "cuda_support": {
+          "type": "boolean"
+        },
+        "cuda_capabilities": {
           "type": "array",
           "items": {
             "type": "string"
           }
         },
-        "permittedInsecurePackages": {
+        "rocm_support": {
+          "type": "boolean"
+        },
+        "permitted_insecure_packages": {
           "type": "array",
           "items": {
             "type": "string"
           }
         },
-        "permittedUnfreePackages": {
+        "permitted_unfree_packages": {
           "type": "array",
           "items": {
             "type": "string"
           }
         },
-        "per-platform": {
+        "allowlisted_licenses": {
+          "description": "License names to allow (e.g. \"mit\", \"gpl3Only\").\nOnly applied in bootstrapLib.nix where lib.licenses is available;\nnot serialized to NIXPKGS_CONFIG since raw strings won't match license attrsets.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "writeOnly": true
+        },
+        "blocklisted_licenses": {
+          "description": "License names to block (e.g. \"unfree\", \"bsl11\").\nOnly applied in bootstrapLib.nix; not serialized to NIXPKGS_CONFIG.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "writeOnly": true
+        },
+        "android_sdk": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AndroidSdkConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "per_platform": {
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/NixpkgsConfig"
@@ -141,35 +225,78 @@
         }
       }
     },
+    "AndroidSdkConfig": {
+      "type": "object",
+      "properties": {
+        "accept_license": {
+          "type": "boolean"
+        }
+      }
+    },
     "NixpkgsConfig": {
       "type": "object",
       "properties": {
-        "allowUnfree": {
+        "allow_unfree": {
           "type": "boolean"
         },
-        "allowBroken": {
+        "allow_unsupported_system": {
           "type": "boolean"
         },
-        "cudaSupport": {
+        "allow_broken": {
           "type": "boolean"
         },
-        "cudaCapabilities": {
+        "allow_non_source": {
+          "type": "boolean"
+        },
+        "cuda_support": {
+          "type": "boolean"
+        },
+        "cuda_capabilities": {
           "type": "array",
           "items": {
             "type": "string"
           }
         },
-        "permittedInsecurePackages": {
+        "rocm_support": {
+          "type": "boolean"
+        },
+        "permitted_insecure_packages": {
           "type": "array",
           "items": {
             "type": "string"
           }
         },
-        "permittedUnfreePackages": {
+        "permitted_unfree_packages": {
           "type": "array",
           "items": {
             "type": "string"
           }
+        },
+        "allowlisted_licenses": {
+          "description": "License names to allow (e.g. \"mit\", \"gpl3Only\").\nOnly applied in bootstrapLib.nix where lib.licenses is available;\nnot serialized to NIXPKGS_CONFIG since raw strings won't match license attrsets.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "writeOnly": true
+        },
+        "blocklisted_licenses": {
+          "description": "License names to block (e.g. \"unfree\", \"bsl11\").\nOnly applied in bootstrapLib.nix; not serialized to NIXPKGS_CONFIG.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "writeOnly": true
+        },
+        "android_sdk": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AndroidSdkConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },

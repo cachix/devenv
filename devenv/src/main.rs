@@ -1063,6 +1063,12 @@ async fn dispatch_command(
                 .wrap_err("Failed to generate JSON schema")?;
             Ok(CommandResult::Done)
         }
+        Commands::GenerateYamlOptionsDoc => {
+            config::write_yaml_options_doc()
+                .await
+                .wrap_err("Failed to generate yaml-options doc")?;
+            Ok(CommandResult::Done)
+        }
         Commands::PrintPaths => {
             let paths = devenv.paths();
             let output = format!(
