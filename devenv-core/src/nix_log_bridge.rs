@@ -22,8 +22,8 @@
 //! This guard-based API ensures eval scopes are always properly closed.
 
 use devenv_activity::{
-    Activity, ActivityLevel, ExpectedCategory, FetchKind, message, message_with_details,
-    op_to_evaluate, set_expected,
+    Activity, ActivityLevel, ExpectedCategory, FetchKind, log_to_evaluate, message,
+    message_with_details, op_to_evaluate, set_expected,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -324,7 +324,16 @@ impl NixLogBridge {
                         Verbosity::Debug => ActivityLevel::Debug,
                         Verbosity::Vomit => ActivityLevel::Trace,
                     };
-                    message(activity_level, msg);
+                    // Warn+ surface as top-level messages so they stand out.
+                    // Lower levels render as nested log lines under the
+                    // current activity (or as orphan indented lines when
+                    // there is no parent on the stack).
+                    if activity_level <= ActivityLevel::Warn {
+                        message(activity_level, msg);
+                    } else {
+                        let id = devenv_activity::current_activity_id().unwrap_or(0);
+                        log_to_evaluate(id, msg);
+                    }
                 }
             }
         }
@@ -627,14 +636,19 @@ impl NixLogBridge {
         }
     }
 
-    /// Emit a structured eval op to the current eval activity.
+    /// Emit a structured eval op to the current eval activity, or fall back
+    /// to the surrounding task-local activity when no eval scope is active.
     ///
-    /// Returns `true` if the op was emitted (we're in an eval scope),
-    /// `false` if there's no active eval scope (caller should fall back to `message()`).
+    /// Returns `true` if the op was attached to some activity, `false` if
+    /// there is nothing to attach to (caller should fall back to `message()`).
     fn op_to_current_eval(&self, op: EvalOp) -> bool {
-        let state = self.eval_state.lock().expect("eval_state mutex poisoned");
+        let id = {
+            let state = self.eval_state.lock().expect("eval_state mutex poisoned");
+            state.current_eval_id
+        };
+        let target = id.or_else(devenv_activity::current_activity_id);
 
-        let Some(id) = state.current_eval_id else {
+        let Some(id) = target else {
             return false;
         };
 

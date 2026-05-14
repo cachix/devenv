@@ -14,17 +14,17 @@
 //! let _gc = init_nix(&nix_settings, &store_settings)?;
 //! let store = open_store(&store_settings)?;
 //! let (flake_settings, fetchers_settings) = build_settings()?;
-//! let fingerprint = {
-//!     let lock_eval_state = build_lock_eval_state(&store, &root, &flake_settings)?;
-//!     crate::lock::validate_and_load(&lock_eval_state, &store, &fetchers_settings,
-//!         &flake_settings, &root, &inputs)?
-//!     // lock_eval_state dropped here
-//! };
+//! let logger_setup = logger::setup_nix_logger()?;
+//! let fingerprint = lock::with_lock_scope(&logger_setup.bridge, || {
+//!     let eval_state = lock::build_eval_state(&store, &root, &flake_settings)?;
+//!     lock::validate_and_load(&eval_state, &store, &fetchers_settings,
+//!         &flake_settings, &root, &inputs)
+//! })?;
 //! let bootstrap_args = build_bootstrap_args(..., &fingerprint)?;
 //! let backend = NixCBackend::new(
 //!     paths, nix_settings, cache_settings, nixpkgs_config,
 //!     store, flake_settings, fetchers_settings, _gc,
-//!     bootstrap_args, port_allocator, eval_cache_pool,
+//!     bootstrap_args, port_allocator, eval_cache_pool, logger_setup,
 //! )?;
 //! ```
 
@@ -122,31 +122,6 @@ pub fn build_settings() -> Result<(FlakeSettings, FetchersSettings)> {
         .to_miette()
         .wrap_err("Failed to create fetchers settings")?;
     Ok((flake_settings, fetchers_settings))
-}
-
-/// Build a transient `EvalState` for lock-file work. Caller drops it
-/// once locking is finished — it is *not* the long-lived eval state the
-/// backend uses for evaluation.
-pub fn build_lock_eval_state(
-    store: &Store,
-    root: &Path,
-    flake_settings: &FlakeSettings,
-) -> Result<EvalState> {
-    let root_str = root
-        .to_str()
-        .ok_or_else(|| miette!("Root path contains invalid UTF-8"))?;
-    EvalStateBuilder::new(store.clone())
-        .to_miette()
-        .wrap_err("Failed to create eval state builder")?
-        .base_directory(root_str)
-        .to_miette()
-        .wrap_err("Failed to set base directory")?
-        .flakes(flake_settings)
-        .to_miette()
-        .wrap_err("Failed to configure flakes")?
-        .build()
-        .to_miette()
-        .wrap_err("Failed to build eval state")
 }
 
 /// Specifies where the project root is located.
@@ -291,13 +266,18 @@ impl NixCBackend {
         let bootstrap_path = extract_bootstrap_files(&paths.dotfile)?;
         let nixpkgs_config_path = write_nixpkgs_config(nixpkgs_config, &paths.dotfile)?;
 
-        let eval_state = build_eval_state(
-            &store,
-            &paths.root,
-            &nixpkgs_config_path,
-            &flake_settings,
-            nix_settings.nix_debugger,
-        )?;
+        // Scope the lazy `«nix-internal»` load to the surrounding activity.
+        let eval_state = {
+            let _eval_guard =
+                devenv_activity::current_activity_id().map(|id| logger_setup.bridge.begin_eval(id));
+            build_eval_state(
+                &store,
+                &paths.root,
+                &nixpkgs_config_path,
+                &flake_settings,
+                nix_settings.nix_debugger,
+            )?
+        };
 
         let activity_logger = logger_setup.logger;
         let nix_log_bridge = logger_setup.bridge;

@@ -38,7 +38,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::process;
 use tokio::sync::OnceCell;
-use tracing::{Instrument, debug, info, info_span, instrument, trace};
+use tracing::{Instrument, debug, debug_span, info, info_span, instrument, trace, warn};
 
 pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
     include_str!("../../direnvrc").replace(
@@ -420,22 +420,22 @@ impl Devenv {
                 let logger_setup = devenv_nix_backend::logger::setup_nix_logger()
                     .wrap_err("Failed to set up activity logger")?;
 
-                let fingerprint = {
-                    let lock_eval_state = crate::backend::build_lock_eval_state(
-                        &store,
-                        &paths.root,
-                        &flake_settings,
-                    )?;
-                    devenv_nix_backend::lock::validate_and_load(
-                        &lock_eval_state,
-                        &store,
-                        &fetchers_settings,
-                        &flake_settings,
-                        &logger_setup.bridge,
-                        &paths.root,
-                        &options.inputs,
-                    )?
-                };
+                let fingerprint =
+                    devenv_nix_backend::lock::with_lock_scope(&logger_setup.bridge, || {
+                        let eval_state = devenv_nix_backend::lock::build_eval_state(
+                            &store,
+                            &paths.root,
+                            &flake_settings,
+                        )?;
+                        devenv_nix_backend::lock::validate_and_load(
+                            &eval_state,
+                            &store,
+                            &fetchers_settings,
+                            &flake_settings,
+                            &paths.root,
+                            &options.inputs,
+                        )
+                    })?;
 
                 let bootstrap_args = Arc::new(build_bootstrap_args(
                     &config,

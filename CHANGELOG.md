@@ -6,6 +6,8 @@
 
 ### Improvements
 
+- Cleaned up non-TUI console output: surfaces Nix eval/build progress, hides internal debug noise.
+
 ### Breaking Changes
 
 ## 2.1.2 (2026-05-13)
