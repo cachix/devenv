@@ -504,7 +504,7 @@ impl ActivityModel {
             }
             Evaluate::Op { id, op, .. } => {
                 // Log the op to the activity's log buffer
-                let line = format_eval_op(&op);
+                let line = op.to_string();
                 self.log_to_activity(id, line);
 
                 // Count file read operations for the progress display.
@@ -1558,25 +1558,6 @@ pub struct ActivitySummary {
     /// `running_processes` is a live gauge (can go down); this is a
     /// snapshot count of tracked processes, not cumulative progress.
     pub total_processes: usize,
-}
-
-/// Format an EvalOp as a display string for logging.
-fn format_eval_op(op: &EvalOp) -> String {
-    match op {
-        EvalOp::CopiedSource { source, target } => {
-            format!(
-                "copied source '{}' -> '{}'",
-                source.display(),
-                target.display()
-            )
-        }
-        EvalOp::EvaluatedFile { source } => format!("evaluating file '{}'", source.display()),
-        EvalOp::ReadFile { source } => format!("devenv readFile: '{}'", source.display()),
-        EvalOp::ReadDir { source } => format!("devenv readDir: '{}'", source.display()),
-        EvalOp::GetEnv { name } => format!("devenv getEnv: '{}'", name),
-        EvalOp::PathExists { source } => format!("devenv pathExists: '{}'", source.display()),
-        EvalOp::TrackedPath { source } => format!("devenv path: '{}'", source.display()),
-    }
 }
 
 #[cfg(test)]

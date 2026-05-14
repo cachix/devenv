@@ -135,11 +135,14 @@ impl ConsoleOutput {
 
             ActivityEvent::Evaluate(Evaluate::Start {
                 id, name, level, ..
-            }) => self.begin(id, name, level, Info),
+            }) => self.begin(id, name, level, Debug),
             ActivityEvent::Evaluate(Evaluate::Complete { id, outcome, .. }) => {
                 self.end(id, outcome)
             }
-            ActivityEvent::Evaluate(_) => {}
+            ActivityEvent::Evaluate(Evaluate::Log { id, line, .. }) => self.log(id, &line, false),
+            ActivityEvent::Evaluate(Evaluate::Op { id, op, .. }) => {
+                self.log(id, &op.to_string(), false)
+            }
 
             // Tasks announce their full hierarchy before any start, so we
             // cache names here and emit `begin` lazily on `Task::Start`.
