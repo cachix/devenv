@@ -661,7 +661,7 @@ impl ShellSession {
         } else {
             1
         };
-        tracing::debug!("session: cursor position after TUI: row {}", cursor_row);
+        tracing::trace!("session: cursor position after TUI: row {}", cursor_row);
 
         // TUI renderers may leave a non-default scroll region/origin mode.
         // Reset both before we start cursor-addressed rendering, otherwise
@@ -684,7 +684,7 @@ impl ShellSession {
                 pixel_height: 0,
             };
         }
-        tracing::debug!(
+        tracing::trace!(
             "session: terminal size: {}x{}",
             self.size.cols,
             self.size.rows
@@ -841,7 +841,7 @@ impl ShellSession {
 
         // Notify coordinator that shell exited
         if let Err(e) = event_tx.try_send(ShellEvent::Exited { exit_code }) {
-            tracing::debug!("failed to send Exited event: {e}");
+            tracing::trace!("failed to send Exited event: {e}");
         }
 
         Ok(exit_code)
@@ -915,13 +915,13 @@ impl ShellSession {
                 Event::Stdin(data) => {
                     if data.as_slice() == KEYBIND_TOGGLE_PAUSE {
                         if let Err(e) = coordinator_tx.try_send(ShellEvent::TogglePause) {
-                            tracing::debug!("failed to send TogglePause event: {e}");
+                            tracing::trace!("failed to send TogglePause event: {e}");
                         }
                         continue;
                     }
                     if data.as_slice() == KEYBIND_LIST_WATCHED {
                         if let Err(e) = coordinator_tx.try_send(ShellEvent::ListWatchedFiles) {
-                            tracing::debug!("failed to send ListWatchedFiles event: {e}");
+                            tracing::trace!("failed to send ListWatchedFiles event: {e}");
                         }
                         continue;
                     }
@@ -1132,7 +1132,7 @@ impl ShellSession {
                             cols: pty_size.cols,
                             rows: pty_size.rows,
                         }) {
-                            tracing::debug!("failed to send Resize event: {e}");
+                            tracing::trace!("failed to send Resize event: {e}");
                         }
                     }
                 }

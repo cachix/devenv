@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::{Mutex as AsyncMutex, mpsc};
 use tokio::task::JoinHandle;
-use tracing::{debug, warn};
+use tracing::{trace, warn};
 use watchexec::{Config, WatchedPath};
 use watchexec_events::{
     Tag,
@@ -322,7 +322,7 @@ impl FileWatcher {
         if !config.extensions.is_empty() {
             watch_info.push_str(&format!(" (extensions: {:?})", config.extensions));
         }
-        debug!("{}", watch_info);
+        trace!("{}", watch_info);
 
         // We use watchexec's fs::worker directly instead of Watchexec::main()
         // to avoid spawning its signal, keyboard, action, and error workers

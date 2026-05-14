@@ -270,14 +270,14 @@ impl ShellCoordinator {
                 Event::FileChange(path) => {
                     // Ignore file changes when paused
                     if paused {
-                        tracing::debug!("File watching paused, ignoring change: {:?}", path);
+                        tracing::trace!("File watching paused, ignoring change: {:?}", path);
                         continue;
                     }
                     let new_state = capture_watched_path_state(&path);
                     if let Some(old_state) = path_states.get(&path)
                         && *old_state == new_state
                     {
-                        tracing::debug!("Watched path unchanged: {:?}", path);
+                        tracing::trace!("Watched path unchanged: {:?}", path);
                         continue;
                     }
 

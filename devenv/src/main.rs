@@ -1149,7 +1149,7 @@ async fn run_reload_shell(
     // Get eval cache info (after print_dev_env set it up)
     let eval_cache_pool = devenv_guard.eval_cache_pool().cloned();
     let shell_cache_key = devenv_guard.shell_cache_key();
-    tracing::debug!(
+    tracing::trace!(
         "Reload setup: eval_cache_pool={}, shell_cache_key={}",
         eval_cache_pool.is_some(),
         shell_cache_key.is_some()
