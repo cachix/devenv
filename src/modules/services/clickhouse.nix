@@ -62,19 +62,19 @@ in
       description = "Which timezone to use for ClickHouse.";
     };
 
-    enableMacros = lib.mkOption {
+    macros.enable = lib.mkOption {
       type = types.bool;
       default = false;
       description = "Whether to enable macros in ClickHouse.";
     };
 
-    enableRemoteServers = lib.mkOption {
+    remoteServers.enable = lib.mkOption {
       type = types.bool;
       default = false;
       description = "Whether to enable remote_servers in ClickHouse.";
     };
 
-    enableKeeper = lib.mkOption {
+    keeper.enable = lib.mkOption {
       type = types.bool;
       default = false;
       description = "Whether to enable keeper_server in ClickHouse.";
@@ -131,13 +131,13 @@ in
         local_directory:
           path: ${config.env.DEVENV_STATE}/clickhouse/access
 
-      ${lib.optionalString cfg.enableMacros ''
+      ${lib.optionalString cfg.macros.enable ''
         macros:
           shard: 1
           replica: localhost
       ''}
 
-      ${lib.optionalString cfg.enableRemoteServers ''
+      ${lib.optionalString cfg.remoteServers.enable ''
         remote_servers:
           default:
             shard:
@@ -146,7 +146,7 @@ in
                 port: ${toString allocatedPort}
       ''}
 
-      ${lib.optionalString cfg.enableKeeper ''
+      ${lib.optionalString cfg.keeper.enable ''
         keeper_server:
           tcp_port: ${toString allocatedKeeperPort}
           server_id: 1
