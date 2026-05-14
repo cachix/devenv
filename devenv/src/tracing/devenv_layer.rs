@@ -188,16 +188,14 @@ where
     }
 }
 
-/// Renders plain `tracing` events to stderr.
+/// Renders WARN/ERROR `tracing` events to stderr with a status prefix.
 ///
 /// Activity start/complete output is emitted via the activity channel and
 /// rendered by [`crate::console::ConsoleOutput`] (or the TUI). Synthetic span
 /// events emitted by [`DevenvLayer`] are skipped here — they exist for the
 /// `--trace-to` exporters only.
 #[derive(Default)]
-pub struct DevenvFormat {
-    pub verbose: bool,
-}
+pub struct DevenvFormat;
 
 impl<S, F> FormatEvent<S, F> for DevenvFormat
 where
@@ -250,15 +248,14 @@ where
         };
         let level = *event.metadata().level();
 
-        // Only show errors/warnings by default; verbose mode shows everything.
         // User-facing one-shot messages go through `devenv_activity::message`,
-        // not via this formatter.
-        if !self.verbose && !matches!(level, tracing::Level::ERROR | tracing::Level::WARN) {
+        // not via this formatter. Only WARN/ERROR are surfaced as a fallback
+        // for backend-internal warnings without an activity channel companion.
+        if !matches!(level, tracing::Level::ERROR | tracing::Level::WARN) {
             return Ok(());
         }
 
-        let ansi = writer.has_ansi_escapes();
-        if ansi && !self.verbose {
+        if writer.has_ansi_escapes() {
             match level {
                 tracing::Level::ERROR => write!(writer, "{} ", style("✖").red())?,
                 tracing::Level::WARN => write!(writer, "{} ", style("•").yellow())?,

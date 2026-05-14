@@ -368,8 +368,7 @@ fn run(ctx: RunContext) -> Result<()> {
         (Renderer::None, None)
     };
 
-    let _tracing_guard =
-        devenv_tracing::init_tracing(ctx.log_level, &ctx.tracing_specs, cli_output);
+    let _tracing_guard = devenv_tracing::init_tracing(ctx.log_level, &ctx.tracing_specs);
 
     let tui = ctx.tui;
     let needs_terminal_handoff = ctx.needs_terminal_handoff;

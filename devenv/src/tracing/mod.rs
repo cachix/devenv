@@ -133,53 +133,29 @@ impl TracingGuard {
 }
 
 pub fn init_tracing_default() -> TracingGuard {
-    init_tracing(Level::default(), &[], true)
+    init_tracing(Level::default(), &[])
 }
 
 /// Initialize tracing with multiple output specs.
 ///
-/// When `cli_output` is true, a stderr layer renders plain `tracing` events
-/// (`info!`/`warn!`/`error!`). Activity start/complete output is produced
-/// separately by the activity channel consumers ([`crate::console::ConsoleOutput`]
-/// or the TUI), not by this layer stack — set `cli_output` to false when those
-/// consumers own the terminal.
+/// `tracing` events (`info!`/`warn!`/`error!`/`debug!`/`trace!`) are routed
+/// only to the explicit `TraceOutputSpec` sinks — they never write to stderr
+/// directly. Activity start/complete output is produced separately by the
+/// activity channel consumers ([`crate::console::ConsoleOutput`] or the TUI).
 ///
 /// Each `TraceOutputSpec` adds an export layer with its own format and destination.
 /// Multiple outputs can be active simultaneously (e.g. pretty to stderr + JSON to file).
 ///
 /// Returns a [`TracingGuard`] that must be held until program exit to ensure
 /// proper flushing of trace data.
-pub fn init_tracing(level: Level, specs: &[TraceOutputSpec], cli_output: bool) -> TracingGuard {
+pub fn init_tracing(level: Level, specs: &[TraceOutputSpec]) -> TracingGuard {
     let has_otlp = specs.iter().any(|s| s.format.is_otlp());
 
     if has_otlp {
-        return init_tracing_with_otlp(level, specs, cli_output);
+        return init_tracing_with_otlp(level, specs);
     }
 
-    init_tracing_local(level, specs, cli_output)
-}
-
-/// Renders plain `tracing` events (info!/warn!/error!) to stderr.
-/// Activity start/complete output is produced by the activity channel
-/// consumers, not here.
-pub(crate) fn build_cli_layer<S>(
-    level: Level,
-    cli_output: bool,
-) -> Option<Box<dyn Layer<S> + Send + Sync>>
-where
-    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
-{
-    if !cli_output {
-        return None;
-    }
-    let ansi = io::stderr().is_terminal();
-    let verbose = level >= Level::Debug;
-    Some(Box::new(
-        tracing_subscriber::fmt::layer()
-            .event_format(DevenvFormat { verbose })
-            .with_writer(io::stderr)
-            .with_ansi(ansi),
-    ))
+    init_tracing_local(level, specs)
 }
 
 /// Create a boxed local-format layer for a single spec.
@@ -212,13 +188,27 @@ where
     }
 }
 
+/// Renders WARN/ERROR `tracing` events to stderr alongside the activity
+/// channel. Lower levels never reach the terminal — `--trace-to` is the
+/// escape hatch for debug/trace output.
+pub(crate) fn build_cli_layer<S>() -> Box<dyn Layer<S> + Send + Sync>
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+{
+    let ansi = io::stderr().is_terminal();
+    Box::new(
+        tracing_subscriber::fmt::layer()
+            .event_format(DevenvFormat)
+            .with_writer(io::stderr)
+            .with_ansi(ansi),
+    )
+}
+
 /// Init tracing with only local-format specs (no OTLP).
-fn init_tracing_local(level: Level, specs: &[TraceOutputSpec], cli_output: bool) -> TracingGuard {
+fn init_tracing_local(level: Level, specs: &[TraceOutputSpec]) -> TracingGuard {
     let mut layers: Vec<Box<dyn Layer<_> + Send + Sync>> = Vec::new();
 
-    if let Some(cli_layer) = build_cli_layer(level, cli_output) {
-        layers.push(cli_layer);
-    }
+    layers.push(build_cli_layer());
 
     for spec in specs {
         if let Some(layer) = create_local_boxed_layer(spec) {
@@ -239,19 +229,15 @@ fn init_tracing_local(level: Level, specs: &[TraceOutputSpec], cli_output: bool)
     TracingGuard::empty()
 }
 
-fn init_tracing_with_otlp(
-    level: Level,
-    specs: &[TraceOutputSpec],
-    cli_output: bool,
-) -> TracingGuard {
+fn init_tracing_with_otlp(level: Level, specs: &[TraceOutputSpec]) -> TracingGuard {
     #[cfg(feature = "otlp")]
     {
-        otel::init_tracing_unified(level, specs, cli_output)
+        otel::init_tracing_unified(level, specs)
     }
 
     #[cfg(not(feature = "otlp"))]
     {
-        let _ = (level, cli_output);
+        let _ = level;
         use clap::ValueEnum;
         let otlp_formats: Vec<_> = specs
             .iter()
