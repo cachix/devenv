@@ -27178,78 +27178,6 @@ true
 
 
 
-## services.clickhouse.enableKeeper
-
-
-
-Whether to enable keeper_server in ClickHouse.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-
-```nix
-false
-```
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
-
-
-
-## services.clickhouse.enableMacros
-
-
-
-Whether to enable macros in ClickHouse.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-
-```nix
-false
-```
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
-
-
-
-## services.clickhouse.enableRemoteServers
-
-
-
-Whether to enable remote_servers in ClickHouse.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-
-```nix
-false
-```
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
-
-
-
 ## services.clickhouse.package
 
 
@@ -27314,6 +27242,30 @@ Which http port to run clickhouse on.
 
 
 
+## services.clickhouse.keeper.enable
+
+
+
+Whether to enable keeper_server in ClickHouse.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
 ## services.clickhouse.keeperPort
 
 
@@ -27331,6 +27283,30 @@ Which port to run clickhouse keeper service on.
 
 ```nix
 9181
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
+## services.clickhouse.macros.enable
+
+
+
+Whether to enable macros in ClickHouse.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
 ```
 
 *Declared by:*
@@ -27379,6 +27355,30 @@ Which http port to use clickhouse keeper for raft consensus.
 
 ```nix
 9234
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
+## services.clickhouse.remoteServers.enable
+
+
+
+Whether to enable remote_servers in ClickHouse.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
 ```
 
 *Declared by:*
