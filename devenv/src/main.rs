@@ -14,7 +14,7 @@ use devenv::{
 use devenv_activity::ActivityLevel;
 use devenv_core::{
     CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings,
-    config::{self, Config, NixpkgsConfig},
+    config::{self, Config},
 };
 use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
 use devenv_tui::{SessionIo, ShellSession, TuiHandoff};
@@ -24,7 +24,7 @@ use std::{
     env, fs,
     io::{self, IsTerminal},
     os, panic,
-    path::Path,
+    path::{Path, PathBuf},
     process::{self, Command},
     sync::Arc,
     time::Duration,
@@ -129,9 +129,10 @@ fn main_inner() -> Result<()> {
             _ => {}
         }
 
-        let ctx = RunContext::build(cli)?;
+        let shutdown = Shutdown::new();
+        let (ui, backend) = resolve(cli, shutdown.clone())?;
 
-        match run(ctx) {
+        match run(ui, backend, shutdown) {
             Err(err) => match err.downcast::<devenv::SecretsNeedPrompting>() {
                 Ok(secrets_err) => {
                     // Only prompt interactively when stdin is a terminal;
@@ -149,26 +150,99 @@ fn main_inner() -> Result<()> {
     }
 }
 
-/// Everything resolved from CLI + config + environment.
-struct RunContext {
-    command: Commands,
-    config: Config,
-    nix_settings: NixSettings,
-    shell_settings: ShellSettings,
-    cache_settings: CacheSettings,
-    secret_settings: SecretSettings,
-    nixpkgs_config: NixpkgsConfig,
-    input_overrides: InputOverrides,
-    from_external: bool,
-    verbosity: devenv::tasks::VerbosityLevel,
+/// Options for the main-thread UI/renderer.
+struct UiOptions {
     tui: bool,
-    use_pty: bool,
-    nix_debugger: bool,
-    is_testing: bool,
-    needs_terminal_handoff: bool,
+    tracing_owns_terminal: bool,
     log_level: devenv_tracing::Level,
     tracing_specs: Vec<TraceOutputSpec>,
-    tracing_owns_terminal: bool,
+    verbosity: devenv::tasks::VerbosityLevel,
+    needs_terminal_handoff: bool,
+}
+
+/// Options for the backend thread: resolved devenv config plus what to run.
+struct BackendOptions {
+    devenv: devenv::DevenvOptions,
+    command: Commands,
+    verbosity: devenv::tasks::VerbosityLevel,
+    use_pty: bool,
+    nix_debugger: bool,
+    strict_ports: bool,
+    /// Kept alive for the duration of the backend run; `Drop` removes the dirs.
+    test_dirs: TestDirs,
+}
+
+/// Temporary dotfile / state directories for `devenv test`.
+///
+/// The `TempDir` guards must outlive the command; dropping `TestDirs` removes
+/// the directories.
+struct TestDirs {
+    dotfile: Option<PathBuf>,
+    state: Option<PathBuf>,
+    _guards: (Option<TempDir>, Option<TempDir>),
+}
+
+impl TestDirs {
+    /// Resolve test directories for the given command.
+    ///
+    /// Non-`test` commands get no overrides (`Devenv` uses the default
+    /// `.devenv` layout). `devenv test` either runs fully isolated in temp
+    /// directories (`--override-dotfile`) or reuses the real `.devenv` with an
+    /// isolated `.devenv/test-state` so the eval cache survives across runs.
+    fn setup(command: &Commands) -> Result<Self> {
+        let Commands::Test {
+            override_dotfile, ..
+        } = command
+        else {
+            return Ok(Self {
+                dotfile: None,
+                state: None,
+                _guards: (None, None),
+            });
+        };
+
+        if *override_dotfile {
+            let pwd = env::current_dir()
+                .into_diagnostic()
+                .wrap_err("Failed to get current directory")?;
+            let dotfile_tmp = TempDir::with_prefix_in(".devenv.", pwd)
+                .into_diagnostic()
+                .wrap_err("Failed to create temporary directory")?;
+            let Some(file_name) = dotfile_tmp.path().file_name().and_then(|f| f.to_str()) else {
+                return Err(miette::miette!("Temporary directory path is invalid"));
+            };
+            info!("Overriding .devenv to {file_name}");
+
+            let state_tmp = TempDir::new()
+                .into_diagnostic()
+                .wrap_err("Failed to create temporary state directory")?;
+            info!(
+                "Using temporary state directory: {}",
+                state_tmp.path().display()
+            );
+
+            Ok(Self {
+                dotfile: Some(dotfile_tmp.path().to_path_buf()),
+                state: Some(state_tmp.path().to_path_buf()),
+                _guards: (Some(dotfile_tmp), Some(state_tmp)),
+            })
+        } else {
+            // Stable test state path: isolates test services from shell state
+            // while keeping the path consistent across runs so the eval cache
+            // is effective.
+            let test_state = env::current_dir()
+                .into_diagnostic()
+                .wrap_err("Failed to get current directory")?
+                .join(".devenv")
+                .join("test-state");
+            info!("Using test state directory: {}", test_state.display());
+            Ok(Self {
+                dotfile: None,
+                state: Some(test_state),
+                _guards: (None, None),
+            })
+        }
+    }
 }
 
 /// Detect whether we are running inside an AI coding agent.
@@ -201,134 +275,152 @@ fn resolve_verbosity(cli_options: &devenv::cli::CliOptions) -> devenv::tasks::Ve
     }
 }
 
-impl RunContext {
-    /// Resolve all configuration from CLI + config files + environment.
-    fn build(cli: Cli) -> Result<Self> {
-        // Extract values from CLI before consuming fields via From conversions
-        let nix_debugger = cli.nix_args.nix_debugger;
+/// Resolve CLI + config files + environment into UI and backend options.
+fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptions)> {
+    // Extract values from CLI before consuming fields via From conversions
+    let nix_debugger = cli.nix_args.nix_debugger;
 
-        let ai_agent = is_ai_agent();
-        let verbosity = resolve_verbosity(&cli.cli_options);
-        let quiet = matches!(verbosity, devenv::tasks::VerbosityLevel::Quiet);
-        let log_level = if quiet {
-            devenv_tracing::Level::Warn
-        } else {
-            cli.get_log_level()
+    let ai_agent = is_ai_agent();
+    let verbosity = resolve_verbosity(&cli.cli_options);
+    let quiet = matches!(verbosity, devenv::tasks::VerbosityLevel::Quiet);
+    let log_level = if quiet {
+        devenv_tracing::Level::Warn
+    } else {
+        cli.get_log_level()
+    };
+    let tracing_specs = cli.tracing_args.resolve().into_diagnostic()?;
+    // `resolve()` folds legacy `--trace-output` into `tracing_specs`,
+    // so a single walk covers env, --trace-to, and --trace-output.
+    let tracing_owns_terminal = tracing_specs.iter().any(|s| s.targets_terminal());
+
+    let mut config = Config::load()?;
+    config.check_version(crate_version!())?;
+
+    let input_overrides = InputOverrides::from(cli.input_overrides);
+
+    for chunk in input_overrides.override_inputs.chunks_exact(2) {
+        let [name, url] = chunk else {
+            unreachable!("chunks_exact(2)")
         };
-        let tracing_specs = cli.tracing_args.resolve().into_diagnostic()?;
-        // `resolve()` folds legacy `--trace-output` into `tracing_specs`,
-        // so a single walk covers env, --trace-to, and --trace-output.
-        let tracing_owns_terminal = tracing_specs.iter().any(|s| s.targets_terminal());
+        config
+            .override_input_url(name, url)
+            .wrap_err_with(|| format!("Failed to override input {name} with URL {url}"))?;
+    }
 
-        let mut config = Config::load()?;
-        config.check_version(crate_version!())?;
-
-        let input_overrides = InputOverrides::from(cli.input_overrides);
-
-        for chunk in input_overrides.override_inputs.chunks_exact(2) {
-            let [name, url] = chunk else {
-                unreachable!("chunks_exact(2)")
-            };
-            config
-                .override_input_url(name, url)
-                .wrap_err_with(|| format!("Failed to override input {name} with URL {url}"))?;
-        }
-
-        // If --from is provided, create a new input and add it to imports
-        let from_external = cli.from.is_some();
-        if let Some(from) = &cli.from {
-            let url = if let Some(path_str) = from.strip_prefix("path:") {
-                let path = Path::new(path_str);
-                let full_path = if path.is_relative() {
-                    env::current_dir().unwrap_or_default().join(path)
-                } else {
-                    path.to_path_buf()
-                };
-                let abs_path = fs::canonicalize(&full_path).unwrap_or(full_path);
-                format!("path:{}", abs_path.display())
+    // If --from is provided, create a new input and add it to imports
+    let from_external = cli.from.is_some();
+    if let Some(from) = &cli.from {
+        let url = if let Some(path_str) = from.strip_prefix("path:") {
+            let path = Path::new(path_str);
+            let full_path = if path.is_relative() {
+                env::current_dir().unwrap_or_default().join(path)
             } else {
-                from.clone()
+                path.to_path_buf()
             };
+            let abs_path = fs::canonicalize(&full_path).unwrap_or(full_path);
+            format!("path:{}", abs_path.display())
+        } else {
+            from.clone()
+        };
 
-            let from_input = devenv_core::config::Input {
-                url: Some(url),
-                flake: true,
-                follows: None,
-                inputs: BTreeMap::new(),
-                overlays: Vec::new(),
-            };
-            config.inputs.insert("from".to_string(), from_input);
-            config.imports.push("from".to_string());
-        }
+        let from_input = devenv_core::config::Input {
+            url: Some(url),
+            flake: true,
+            follows: None,
+            inputs: BTreeMap::new(),
+            overlays: Vec::new(),
+        };
+        config.inputs.insert("from".to_string(), from_input);
+        config.imports.push("from".to_string());
+    }
 
-        let command = cli.command;
+    let command = cli.command;
 
-        // Resolve settings from CLI + Config (pure functions, no mutation).
-        let mut nix_settings =
-            NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
-        if matches!(command, Commands::Update { .. }) {
-            nix_settings.refresh_fetchers = true;
-        }
-        let shell_settings =
-            ShellSettings::resolve(devenv_core::ShellOptions::from(cli.shell_args), &config);
-        let cache_settings =
-            CacheSettings::resolve(devenv_core::CacheOptions::from(cli.cache_args));
-        let secret_settings =
-            SecretSettings::resolve(devenv_core::SecretOptions::from(cli.secret_args), &config);
-        let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
+    // Resolve settings from CLI + Config (pure functions, no mutation).
+    let mut nix_settings =
+        NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
+    if matches!(command, Commands::Update { .. }) {
+        nix_settings.refresh_fetchers = true;
+    }
+    let shell_settings =
+        ShellSettings::resolve(devenv_core::ShellOptions::from(cli.shell_args), &config);
+    let cache_settings = CacheSettings::resolve(devenv_core::CacheOptions::from(cli.cache_args));
+    let secret_settings =
+        SecretSettings::resolve(devenv_core::SecretOptions::from(cli.secret_args), &config);
+    let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
 
-        // Resolve TUI flag: explicit --tui/--no-tui wins, otherwise default
-        // to TUI when running interactively outside CI and outside AI agents.
-        let tui_requested =
-            devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
-                .unwrap_or_else(|| {
-                    let is_ci = env::var_os("CI").is_some();
-                    let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
-                    is_tty && !is_ci && !ai_agent
-                });
+    // Resolve TUI flag: explicit --tui/--no-tui wins, otherwise default
+    // to TUI when running interactively outside CI and outside AI agents.
+    let tui_requested = devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
+        .unwrap_or_else(|| {
+            let is_ci = env::var_os("CI").is_some();
+            let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
+            is_tty && !is_ci && !ai_agent
+        });
 
-        // Some commands don't support the TUI regardless of user options
-        let tui_unsupported = matches!(
-            &command,
-            Commands::Mcp { http: None } // stdio mode needs stderr for output
+    // Some commands don't support the TUI regardless of user options
+    let tui_unsupported = matches!(
+        &command,
+        Commands::Mcp { http: None } // stdio mode needs stderr for output
                 | Commands::Lsp { .. } // LSP needs direct stdout for protocol/config output
                 | Commands::PrintPaths // print output directly, no TUI needed
-        );
+    );
 
-        let tui = tui_requested && !tui_unsupported && !tracing_owns_terminal && !quiet;
+    let tui = tui_requested && !tui_unsupported && !tracing_owns_terminal && !quiet;
 
-        // Determine use_pty from resolved settings (single source of truth)
-        let use_pty = shell_settings.reload
-            && matches!(&command, Commands::Shell { cmd: None, .. })
-            && io::stdin().is_terminal()
-            && io::stdout().is_terminal();
+    // Determine use_pty from resolved settings (single source of truth)
+    let use_pty = shell_settings.reload
+        && matches!(&command, Commands::Shell { cmd: None, .. })
+        && io::stdin().is_terminal()
+        && io::stdout().is_terminal();
 
-        let is_testing = matches!(&command, Commands::Test { .. });
+    let is_testing = matches!(&command, Commands::Test { .. });
 
-        // Commands that do eval with TUI active, then take over the terminal
-        let needs_terminal_handoff = use_pty || matches!(&command, Commands::Repl {});
+    // Commands that do eval with TUI active, then take over the terminal
+    let needs_terminal_handoff = use_pty || matches!(&command, Commands::Repl {});
 
-        Ok(Self {
-            command,
-            config,
-            nix_settings,
-            shell_settings,
-            cache_settings,
-            secret_settings,
-            nixpkgs_config,
-            input_overrides,
-            from_external,
-            verbosity,
-            tui,
-            use_pty,
-            nix_debugger,
-            is_testing,
-            needs_terminal_handoff,
-            log_level,
-            tracing_specs,
-            tracing_owns_terminal,
-        })
-    }
+    let test_dirs = TestDirs::setup(&command)?;
+    let strict_ports = config.strict_ports.unwrap_or(false);
+    let require_version_match = config.requires_version_match();
+
+    let devenv_options = devenv::DevenvOptions {
+        inputs: config.inputs,
+        imports: config.imports,
+        git_root: config.git_root,
+        nixpkgs_config,
+        nix_settings,
+        shell_settings,
+        cache_settings,
+        secret_settings,
+        input_overrides,
+        from_external,
+        require_version_match,
+        devenv_root: None,
+        devenv_dotfile: test_dirs.dotfile.clone(),
+        devenv_state: test_dirs.state.clone(),
+        shutdown,
+        is_testing,
+    };
+
+    let ui = UiOptions {
+        tui,
+        tracing_owns_terminal,
+        log_level,
+        tracing_specs,
+        verbosity,
+        needs_terminal_handoff,
+    };
+    let backend = BackendOptions {
+        devenv: devenv_options,
+        command,
+        verbosity,
+        use_pty,
+        nix_debugger,
+        strict_ports,
+        test_dirs,
+    };
+
+    Ok((ui, backend))
 }
 
 /// Single entry point for all command execution.
@@ -337,7 +429,7 @@ impl RunContext {
 /// 1. Common setup (activity, tracing, shutdown, channels)
 /// 2. Backend runs on a dedicated GC-registered thread
 /// 3. TUI runs on the main thread (if enabled), otherwise we just wait
-fn run(ctx: RunContext) -> Result<()> {
+fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Result<()> {
     // Three mutually exclusive activity sinks. `Renderer::None` means tracing
     // owns the terminal — `send_activity_event` then falls through to
     // `tracing::trace!` only, which is exactly what `--trace-to <terminal>` wants.
@@ -347,8 +439,8 @@ fn run(ctx: RunContext) -> Result<()> {
         None,
     }
 
-    let cli_output = !ctx.tui && !ctx.tracing_owns_terminal;
-    let (renderer, _activity_guard) = if ctx.tui {
+    let cli_output = !ui.tui && !ui.tracing_owns_terminal;
+    let (renderer, _activity_guard) = if ui.tui {
         let (rx, handle) = devenv_activity::init();
         (Renderer::Tui(rx), Some(handle.install()))
     } else if cli_output {
@@ -358,14 +450,11 @@ fn run(ctx: RunContext) -> Result<()> {
         (Renderer::None, None)
     };
 
-    let _tracing_guard = devenv_tracing::init_tracing(ctx.log_level, &ctx.tracing_specs);
+    let _tracing_guard = devenv_tracing::init_tracing(ui.log_level, &ui.tracing_specs);
 
-    let tui = ctx.tui;
-    let needs_terminal_handoff = ctx.needs_terminal_handoff;
-    let verbosity = ctx.verbosity;
-
-    // Shutdown coordination (shared between main thread and backend thread)
-    let shutdown = Shutdown::new();
+    let tui = ui.tui;
+    let needs_terminal_handoff = ui.needs_terminal_handoff;
+    let verbosity = ui.verbosity;
 
     // TUI terminal setup: save state before raw mode, install restore hooks
     // for panics and force-exit (second Ctrl+C)
@@ -400,7 +489,7 @@ fn run(ctx: RunContext) -> Result<()> {
                 shutdown_clone.install_signals().await;
 
                 let output = run_backend(
-                    ctx,
+                    backend,
                     shutdown_clone.clone(),
                     backend_done_clone,
                     Some(terminal_ready_rx),
@@ -541,65 +630,27 @@ impl Drop for BackendDoneGuard {
 /// Run the backend: construct Devenv and dispatch the command.
 #[instrument(name = "devenv", skip_all)]
 async fn run_backend(
-    ctx: RunContext,
+    backend: BackendOptions,
     shutdown: Arc<Shutdown>,
     backend_done: Arc<tokio::sync::Notify>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
 ) -> Result<CommandResult, BackendError> {
-    let RunContext {
+    let BackendOptions {
+        devenv: devenv_options,
         command,
-        config,
-        nix_settings,
-        shell_settings,
-        cache_settings,
-        secret_settings,
-        nixpkgs_config,
-        input_overrides,
-        from_external,
         verbosity,
         use_pty,
         nix_debugger,
-        is_testing,
-        ..
-    } = ctx;
+        strict_ports: config_strict_ports,
+        // Held until the backend run completes; `Drop` removes the temp dirs.
+        test_dirs: _test_dirs,
+    } = backend;
 
     // Ensure TUI is notified when backend exits, even on early return or panic.
     let mut backend_done_guard = BackendDoneGuard::new(backend_done);
 
-    let config_strict_ports = config.strict_ports.unwrap_or(false);
-    let require_version_match = config.requires_version_match();
-
-    let mut options = devenv::DevenvOptions {
-        inputs: config.inputs,
-        imports: config.imports,
-        git_root: config.git_root,
-        nixpkgs_config,
-        nix_settings,
-        shell_settings,
-        cache_settings,
-        secret_settings,
-        input_overrides,
-        from_external,
-        require_version_match,
-        devenv_root: None,
-        devenv_dotfile: None,
-        devenv_state: None,
-        shutdown: shutdown.clone(),
-        is_testing,
-    };
-
-    // we let Drop delete the dirs after all commands have ran
-    let (_tmpdir, _state_tmpdir) = if let Commands::Test {
-        override_dotfile, ..
-    } = &command
-    {
-        setup_test_dirs(*override_dotfile, &mut options)?
-    } else {
-        (None, None)
-    };
-
-    let devenv = Devenv::new(options).await?;
+    let devenv = Devenv::new(devenv_options).await?;
 
     // PTY shell hands Devenv off to an owner task; we reclaim it after the session.
     if use_pty && let Commands::Shell { cmd, args } = command {
@@ -672,63 +723,6 @@ fn attach_debugger_on_err(
         }),
         Err(err) => Err(err.into()),
     }
-}
-
-/// Set up temporary dotfile / state directories for `devenv test`.
-///
-/// Returned `TempDir` handles must be kept alive until the test completes so
-/// their drop guards clean up the directories.
-fn setup_test_dirs(
-    override_dotfile: bool,
-    options: &mut devenv::DevenvOptions,
-) -> Result<(Option<TempDir>, Option<TempDir>)> {
-    let dotfile_tmpdir = if override_dotfile {
-        let pwd = env::current_dir()
-            .into_diagnostic()
-            .wrap_err("Failed to get current directory")?;
-        let tmpdir = TempDir::with_prefix_in(".devenv.", pwd)
-            .into_diagnostic()
-            .wrap_err("Failed to create temporary directory")?;
-        let Some(file_name) = tmpdir.path().file_name().and_then(|f| f.to_str()) else {
-            return Err(miette::miette!("Temporary directory path is invalid"));
-        };
-        info!("Overriding .devenv to {file_name}");
-        options.devenv_dotfile = Some(tmpdir.path().to_path_buf());
-        Some(tmpdir)
-    } else {
-        None
-    };
-
-    // When using a temporary dotfile (--override-dotfile), also use a temporary state
-    // directory for full isolation. Otherwise, use a stable test-state path so the
-    // eval cache can be reused across test runs.
-    let state_tmpdir = if override_dotfile {
-        let state_tmpdir = TempDir::new()
-            .into_diagnostic()
-            .wrap_err("Failed to create temporary state directory")?;
-        info!(
-            "Using temporary state directory: {}",
-            state_tmpdir.path().display()
-        );
-        options.devenv_state = Some(state_tmpdir.path().to_path_buf());
-        Some(state_tmpdir)
-    } else {
-        // Stable test state path: isolates test services from shell state while
-        // keeping the path consistent across runs so the eval cache is effective.
-        let dotfile = match options.devenv_dotfile.clone() {
-            Some(p) => p,
-            None => env::current_dir()
-                .into_diagnostic()
-                .wrap_err("Failed to get current directory")?
-                .join(".devenv"),
-        };
-        let test_state = dotfile.join("test-state");
-        info!("Using test state directory: {}", test_state.display());
-        options.devenv_state = Some(test_state);
-        None
-    };
-
-    Ok((dotfile_tmpdir, state_tmpdir))
 }
 
 /// Result of a CLI command execution.
