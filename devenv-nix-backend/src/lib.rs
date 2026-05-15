@@ -29,6 +29,13 @@ thread_local! {
     static GC_REGISTRATION: RefCell<Option<nix_bindings_expr::eval_state::ThreadRegistrationGuard>> = const { RefCell::new(None) };
 }
 
+/// Stack size for threads that run Nix evaluation.
+///
+/// Nix evaluation can be deeply recursive (e.g. large nixpkgs traversals),
+/// and the default 8MB thread stack is not always enough. Match the 64MB
+/// stack that the Nix CLI itself uses.
+pub const NIX_STACK_SIZE: usize = 64 * 1024 * 1024;
+
 /// Trigger the Nix interrupt flag to abort any in-progress Nix evaluation.
 ///
 /// This sets a process-global flag that the Nix evaluator checks periodically.

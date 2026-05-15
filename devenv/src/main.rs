@@ -28,16 +28,8 @@ use std::{
     time::Duration,
 };
 use tempfile::TempDir;
-use tokio::sync::Mutex;
 use tokio_shutdown::Shutdown;
 use tracing::{info, instrument};
-
-/// Stack size for threads that run Nix evaluation.
-///
-/// Nix evaluation can be deeply recursive (e.g. large nixpkgs traversals),
-/// and the default 8MB thread stack is not always enough. Match the 64MB
-/// stack that the Nix CLI itself uses.
-const NIX_STACK_SIZE: usize = 64 * 1024 * 1024;
 
 /// Install a miette report hook with a custom theme.
 ///
@@ -402,7 +394,7 @@ fn run(ctx: RunContext) -> Result<()> {
     let backend_done_clone = backend_done.clone();
     let devenv_thread = std::thread::Builder::new()
         .name("devenv".into())
-        .stack_size(NIX_STACK_SIZE)
+        .stack_size(devenv_nix_backend::NIX_STACK_SIZE)
         .spawn(move || {
             build_gc_runtime().block_on(async {
                 shutdown_clone.install_signals().await;
@@ -519,7 +511,7 @@ fn launch_debugger(devenv: devenv::Devenv, err: miette::Report) -> Result<()> {
     eprintln!("{:?}", err);
     let handle = std::thread::Builder::new()
         .name("repl".into())
-        .stack_size(NIX_STACK_SIZE)
+        .stack_size(devenv_nix_backend::NIX_STACK_SIZE)
         .spawn(move || {
             // Skip prepare_repl() — the debugger already has eval context from
             // the failed command, and re-evaluating would likely fail again,
@@ -620,23 +612,40 @@ async fn run_backend(
 
     let devenv = Devenv::new(options).await?;
 
-    // PTY shell needs shared ownership for the reload coordinator
+    // PTY shell hands Devenv off to an owner task; we reclaim it after the session.
     if use_pty && let Commands::Shell { cmd, args } = command {
-        let devenv = Arc::new(Mutex::new(devenv));
-        let result = run_reload_shell(
-            devenv.clone(),
+        // Pre-compute shell environment while we still own Devenv directly.
+        // This must happen while TUI is active since get_dev_environment has #[activity].
+        let dotfile = devenv.dotfile().to_path_buf();
+        let initial_env_script = devenv.print_dev_env(false).await?;
+        let bash_path = devenv.get_bash_path().await?;
+        let clean = devenv.shell_settings.clean.clone();
+        let shell = devenv.shell_settings.shell.clone();
+        let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
+
+        let (client, owner_handle) = devenv::reload::owner::spawn_owner(devenv);
+        let result = run_reload_shell(ReloadShellArgs {
+            devenv: client,
             cmd,
             args,
-            backend_done_guard.take(),
+            backend_done: backend_done_guard.take(),
             terminal_ready_rx,
-            verbosity,
-        )
+            initial_env_script,
+            bash_path,
+            clean,
+            shell,
+            dotfile,
+            task_exports,
+            task_messages,
+        })
         .await
         .map(|exit_code| match exit_code {
             Some(code) => CommandResult::ExitCode(code as i32),
             None => CommandResult::Done,
         });
-        return attach_debugger_on_err(result, nix_debugger, unwrap_devenv_arc(devenv));
+        let devenv = tokio::task::block_in_place(|| owner_handle.join())
+            .map_err(|e| miette::miette!("Devenv owner thread panicked: {}", panic_message(e)))?;
+        return attach_debugger_on_err(result, nix_debugger, devenv);
     }
 
     // REPL: run assembly with TUI active, then hand off terminal for interactive REPL
@@ -657,16 +666,6 @@ async fn run_backend(
     drop(backend_done_guard);
 
     attach_debugger_on_err(result, nix_debugger, devenv)
-}
-
-/// Reclaim ownership of a `Devenv` from its sharing `Arc<Mutex<_>>`.
-///
-/// Invariant: by the time this is called, all other Arc holders (e.g. the
-/// reload coordinator) must have dropped their references.
-fn unwrap_devenv_arc(devenv: Arc<Mutex<devenv::Devenv>>) -> devenv::Devenv {
-    Arc::try_unwrap(devenv)
-        .unwrap_or_else(|_| panic!("all Arc references to Devenv should be dropped"))
-        .into_inner()
 }
 
 /// Convert a command result into a `Result<_, BackendError>`, optionally
@@ -1091,47 +1090,42 @@ async fn dispatch_command(
 /// Terminal handoff:
 /// - `backend_done`: Signals TUI to exit (notified after initial build completes)
 /// - `terminal_ready_rx`: Waits for TUI cleanup before ShellSession takes terminal (receives render height)
-async fn run_reload_shell(
-    devenv: Arc<Mutex<Devenv>>,
+struct ReloadShellArgs {
+    devenv: devenv::reload::owner::DevenvClient,
     cmd: Option<String>,
     args: Vec<String>,
     backend_done: Arc<tokio::sync::Notify>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
-    verbosity: devenv::tasks::VerbosityLevel,
-) -> Result<Option<u32>> {
+    initial_env_script: String,
+    bash_path: String,
+    clean: devenv_core::config::Clean,
+    shell: String,
+    dotfile: std::path::PathBuf,
+    task_exports: BTreeMap<String, String>,
+    task_messages: Vec<String>,
+}
+
+async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
+    let ReloadShellArgs {
+        devenv,
+        cmd,
+        args,
+        backend_done,
+        terminal_ready_rx,
+        initial_env_script,
+        bash_path,
+        clean,
+        shell,
+        dotfile,
+        task_exports,
+        task_messages,
+    } = args;
     use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
     use devenv_tui::{SessionIo, ShellSession, TuiHandoff};
     use tokio::sync::mpsc;
 
     // Guard ensures TUI is notified even if we return early from eval errors.
     let mut backend_done_guard = BackendDoneGuard::new(backend_done);
-
-    let devenv_guard = devenv.lock().await;
-    let dotfile = devenv_guard.dotfile().to_path_buf();
-
-    // Pre-compute shell environment BEFORE starting coordinator.
-    // This must happen while TUI is active since get_dev_environment has #[activity].
-    let initial_env_script = devenv_guard.print_dev_env(false).await?;
-    let bash_path = devenv_guard.get_bash_path().await?;
-    let clean = devenv_guard.shell_settings.clean.clone();
-    let shell = devenv_guard.shell_settings.shell.clone();
-
-    // Get eval cache info (after print_dev_env set it up)
-    let eval_cache_pool = devenv_guard.eval_cache_pool().cloned();
-    let shell_cache_key = devenv_guard.shell_cache_key();
-    tracing::trace!(
-        "Reload setup: eval_cache_pool={}, shell_cache_key={}",
-        eval_cache_pool.is_some(),
-        shell_cache_key.is_some()
-    );
-
-    // Run enterShell tasks with subprocess executor before spawning PTY.
-    // Task exports and messages are stored in devenv.task_exports / task_messages
-    // and injected into the bash script by prepare_shell().
-    let (task_exports, task_messages) = devenv_guard.run_enter_shell_tasks(None, verbosity).await?;
-
-    // Drop the lock before passing devenv to the builder
-    drop(devenv_guard);
 
     // Create reload config - watch files will be populated from eval cache
     // during the first build by DevenvShellBuilder
@@ -1140,10 +1134,7 @@ async fn run_reload_shell(
     // Disable status line for non-interactive commands to avoid escape codes in output
     let is_interactive = cmd.is_none();
 
-    // Create the shell builder with pre-computed environment
-    let handle = tokio::runtime::Handle::current();
-    let builder = DevenvShellBuilder::new(
-        handle,
+    let builder = DevenvShellBuilder {
         devenv,
         cmd,
         args,
@@ -1151,12 +1142,10 @@ async fn run_reload_shell(
         bash_path,
         clean,
         dotfile,
-        eval_cache_pool,
-        shell_cache_key,
         task_exports,
         task_messages,
         shell,
-    );
+    };
 
     // Set up communication channels between coordinator and shell runner
     let (command_tx, command_rx) = mpsc::channel(16);
@@ -1228,7 +1217,7 @@ fn build_gc_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .thread_name("devenv-worker")
-        .thread_stack_size(NIX_STACK_SIZE)
+        .thread_stack_size(devenv_nix_backend::NIX_STACK_SIZE)
         .on_thread_start(|| {
             let _ = devenv_nix_backend::gc_register_current_thread();
         })
