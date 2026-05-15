@@ -140,7 +140,7 @@ in
     unsetEnvVars = lib.mkOption {
       type = types.listOf types.str;
       description = "A list of removed environment variables to make the shell/direnv more lean.";
-      # manually determined with knowledge from https://nixos.wiki/wiki/C
+      # manually determined with knowledge from https://wiki.nixos.org/wiki/C
       default = [
         "HOST_PATH"
         "NIX_BUILD_CORES"
