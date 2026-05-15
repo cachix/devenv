@@ -16,6 +16,8 @@ use devenv_core::{
     CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings,
     config::{self, Config, NixpkgsConfig},
 };
+use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
+use devenv_tui::{SessionIo, ShellSession, TuiHandoff};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::{
     collections::BTreeMap,
@@ -79,7 +81,7 @@ fn main() {
 
     if let Err(err) = main_inner() {
         eprintln!("{err:?}");
-        std::process::exit(1);
+        process::exit(1);
     }
 }
 
@@ -134,7 +136,7 @@ fn main_inner() -> Result<()> {
                 Ok(secrets_err) => {
                     // Only prompt interactively when stdin is a terminal;
                     // in non-interactive contexts (e.g. direnv), fail with the error.
-                    if !std::io::stdin().is_terminal() {
+                    if !io::stdin().is_terminal() {
                         return Err(secrets_err.into());
                     }
                     prompt_secrets(secrets_err.provider, secrets_err.profile)?;
@@ -223,20 +225,18 @@ impl RunContext {
 
         let input_overrides = InputOverrides::from(cli.input_overrides);
 
-        for input in input_overrides.override_inputs.chunks_exact(2) {
+        for chunk in input_overrides.override_inputs.chunks_exact(2) {
+            let [name, url] = chunk else {
+                unreachable!("chunks_exact(2)")
+            };
             config
-                .override_input_url(&input[0], &input[1])
-                .wrap_err_with(|| {
-                    format!(
-                        "Failed to override input {} with URL {}",
-                        &input[0], &input[1]
-                    )
-                })?;
+                .override_input_url(name, url)
+                .wrap_err_with(|| format!("Failed to override input {name} with URL {url}"))?;
         }
 
         // If --from is provided, create a new input and add it to imports
         let from_external = cli.from.is_some();
-        if let Some(ref from) = cli.from {
+        if let Some(from) = &cli.from {
             let url = if let Some(path_str) = from.strip_prefix("path:") {
                 let path = Path::new(path_str);
                 let full_path = if path.is_relative() {
@@ -426,13 +426,7 @@ fn run(ctx: RunContext) -> Result<()> {
                 ActivityLevel::Info
             };
 
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .into_diagnostic()
-                .wrap_err("Failed to create TUI runtime")?;
-
-            rt.block_on(async {
+            current_thread_runtime("TUI")?.block_on(async {
                 devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
                     .with_command_sender(command_tx)
                     .filter_level(filter_level)
@@ -446,13 +440,7 @@ fn run(ctx: RunContext) -> Result<()> {
         }
         Renderer::Console(activity_rx) => {
             drop(command_tx);
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .into_diagnostic()
-                .wrap_err("Failed to create console runtime")?;
-
-            rt.block_on(async {
+            current_thread_runtime("console")?.block_on(async {
                 devenv::console::ConsoleOutput::new(activity_rx, verbosity)
                     .run(backend_done.clone())
                     .await;
@@ -508,7 +496,7 @@ impl From<miette::Report> for BackendError {
 
 /// Print the error and launch the Nix debugger REPL on a fresh GC-registered thread.
 fn launch_debugger(devenv: devenv::Devenv, err: miette::Report) -> Result<()> {
-    eprintln!("{:?}", err);
+    eprintln!("{err:?}");
     let handle = std::thread::Builder::new()
         .name("repl".into())
         .stack_size(devenv_nix_backend::NIX_STACK_SIZE)
@@ -602,12 +590,13 @@ async fn run_backend(
     };
 
     // we let Drop delete the dirs after all commands have ran
-    let (_tmpdir, _state_tmpdir) = match &command {
-        Commands::Test {
-            override_dotfile,
-            dont_override_dotfile: _,
-        } => setup_test_dirs(*override_dotfile, &mut options)?,
-        _ => (None, None),
+    let (_tmpdir, _state_tmpdir) = if let Commands::Test {
+        override_dotfile, ..
+    } = &command
+    {
+        setup_test_dirs(*override_dotfile, &mut options)?
+    } else {
+        (None, None)
     };
 
     let devenv = Devenv::new(options).await?;
@@ -623,7 +612,7 @@ async fn run_backend(
         let shell = devenv.shell_settings.shell.clone();
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
 
-        let (client, owner_handle) = devenv::reload::owner::spawn_owner(devenv);
+        let (client, owner_handle) = devenv::reload::spawn_owner(devenv);
         let result = run_reload_shell(ReloadShellArgs {
             devenv: client,
             cmd,
@@ -703,7 +692,7 @@ fn setup_test_dirs(
         let Some(file_name) = tmpdir.path().file_name().and_then(|f| f.to_str()) else {
             return Err(miette::miette!("Temporary directory path is invalid"));
         };
-        info!("Overriding .devenv to {}", file_name);
+        info!("Overriding .devenv to {file_name}");
         options.devenv_dotfile = Some(tmpdir.path().to_path_buf());
         Some(tmpdir)
     } else {
@@ -780,6 +769,40 @@ impl CommandResult {
     }
 }
 
+/// Start processes and map the run mode to a command result.
+async fn run_up(
+    devenv: &Devenv,
+    processes: Vec<String>,
+    mode: devenv::tasks::RunMode,
+    options: devenv::ProcessOptions,
+    verbosity: devenv::tasks::VerbosityLevel,
+) -> Result<CommandResult> {
+    match devenv.up(processes, mode, options, verbosity).await? {
+        RunMode::Detached => Ok(CommandResult::Done),
+        RunMode::Foreground(shell_command) => Ok(CommandResult::Exec(shell_command.command)),
+    }
+}
+
+/// Resolve `UpArgs` into `ProcessOptions` and start processes.
+async fn run_up_args(
+    devenv: &Devenv,
+    up_args: devenv::cli::UpArgs,
+    config_strict_ports: bool,
+    command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
+    verbosity: devenv::tasks::VerbosityLevel,
+) -> Result<CommandResult> {
+    let strict_ports = devenv_core::settings::flag(up_args.strict_ports, up_args.no_strict_ports)
+        .unwrap_or(config_strict_ports);
+    let options = devenv::ProcessOptions {
+        detach: up_args.detach,
+        log_to_file: up_args.detach,
+        strict_ports,
+        command_rx,
+        daemon: up_args.detach,
+    };
+    run_up(devenv, up_args.processes, up_args.mode, options, verbosity).await
+}
+
 /// Dispatch a CLI command to the appropriate Devenv method.
 #[instrument(skip_all)]
 async fn dispatch_command(
@@ -845,8 +868,7 @@ async fn dispatch_command(
             let (paths_deleted, bytes_freed) = devenv.gc().await?;
             let mb_freed = bytes_freed / (1024 * 1024);
             Ok(CommandResult::Print(format!(
-                "Done. Deleted {} store paths, freed {} MB.\n",
-                paths_deleted, mb_freed
+                "Done. Deleted {paths_deleted} store paths, freed {mb_freed} MB.\n"
             )))
         }
         Commands::Info {} => {
@@ -875,112 +897,66 @@ async fn dispatch_command(
             .update(&name)
             .await?
             .map_or(CommandResult::Done, CommandResult::Print)),
-        Commands::Up { up_args }
-        | Commands::Processes {
-            command: ProcessesCommand::Up { up_args },
-        } => {
-            let strict_ports =
-                devenv_core::settings::flag(up_args.strict_ports, up_args.no_strict_ports)
-                    .unwrap_or(config_strict_ports);
-            let options = devenv::ProcessOptions {
-                detach: up_args.detach,
-                log_to_file: up_args.detach,
-                strict_ports,
-                command_rx,
-                daemon: up_args.detach,
-            };
-            match devenv
-                .up(up_args.processes, up_args.mode, options, verbosity)
-                .await?
-            {
-                RunMode::Detached => Ok(CommandResult::Done),
-                RunMode::Foreground(shell_command) => {
-                    Ok(CommandResult::Exec(shell_command.command))
-                }
+        Commands::Up { up_args } => {
+            run_up_args(devenv, up_args, config_strict_ports, command_rx, verbosity).await
+        }
+        Commands::Processes { command } => match command {
+            ProcessesCommand::Up { up_args } => {
+                run_up_args(devenv, up_args, config_strict_ports, command_rx, verbosity).await
             }
-        }
-        Commands::Processes {
-            command: ProcessesCommand::Down {},
-        } => {
-            devenv.down().await?;
-            Ok(CommandResult::Done)
-        }
-        Commands::Processes {
-            command: ProcessesCommand::Wait { timeout },
-        } => {
-            devenv.wait_for_ready(Duration::from_secs(timeout)).await?;
-            Ok(CommandResult::Done)
-        }
-        Commands::Processes {
-            command: ProcessesCommand::List {},
-        } => {
-            let output = devenv.processes_list().await?;
-            Ok(CommandResult::Print(output))
-        }
-        Commands::Processes {
-            command: ProcessesCommand::Status { name },
-        } => {
-            let output = devenv.processes_status(&name).await?;
-            Ok(CommandResult::Print(output))
-        }
-        Commands::Processes {
-            command:
-                ProcessesCommand::Logs {
-                    name,
-                    lines,
-                    stdout,
-                    stderr,
-                },
-        } => {
-            let output = devenv.processes_logs(&name, lines, stdout, stderr).await?;
-            Ok(CommandResult::Print(output))
-        }
-        Commands::Processes {
-            command: ProcessesCommand::Restart { name },
-        } => {
-            devenv.processes_restart(&name).await?;
-            Ok(CommandResult::Done)
-        }
-        Commands::Processes {
-            command: ProcessesCommand::Start {
+            ProcessesCommand::Start { name: None, detach } => {
+                let options = devenv::ProcessOptions {
+                    detach,
+                    log_to_file: detach,
+                    strict_ports: config_strict_ports,
+                    command_rx,
+                    daemon: detach,
+                };
+                run_up(
+                    devenv,
+                    vec![],
+                    devenv::tasks::RunMode::All,
+                    options,
+                    verbosity,
+                )
+                .await
+            }
+            ProcessesCommand::Start {
                 name: Some(name), ..
-            },
-        } => {
-            devenv.processes_start(&name).await?;
-            Ok(CommandResult::Done)
-        }
-        Commands::Processes {
-            command: ProcessesCommand::Start { name: None, detach },
-        } => {
-            let options = devenv::ProcessOptions {
-                detach,
-                log_to_file: detach,
-                strict_ports: config_strict_ports,
-                command_rx,
-                daemon: detach,
-            };
-            match devenv
-                .up(vec![], devenv::tasks::RunMode::All, options, verbosity)
-                .await?
-            {
-                RunMode::Detached => Ok(CommandResult::Done),
-                RunMode::Foreground(shell_command) => {
-                    Ok(CommandResult::Exec(shell_command.command))
-                }
+            } => {
+                devenv.processes_start(&name).await?;
+                Ok(CommandResult::Done)
             }
-        }
-        Commands::Processes {
-            command: ProcessesCommand::Stop { name: Some(name) },
-        } => {
-            devenv.processes_stop(&name).await?;
-            Ok(CommandResult::Done)
-        }
-        Commands::Processes {
-            command: ProcessesCommand::Stop { name: None },
-        } => {
-            devenv.down().await?;
-            Ok(CommandResult::Done)
-        }
+            ProcessesCommand::Down {} | ProcessesCommand::Stop { name: None } => {
+                devenv.down().await?;
+                Ok(CommandResult::Done)
+            }
+            ProcessesCommand::Stop { name: Some(name) } => {
+                devenv.processes_stop(&name).await?;
+                Ok(CommandResult::Done)
+            }
+            ProcessesCommand::Wait { timeout } => {
+                devenv.wait_for_ready(Duration::from_secs(timeout)).await?;
+                Ok(CommandResult::Done)
+            }
+            ProcessesCommand::List {} => Ok(CommandResult::Print(devenv.processes_list().await?)),
+            ProcessesCommand::Status { name } => {
+                Ok(CommandResult::Print(devenv.processes_status(&name).await?))
+            }
+            ProcessesCommand::Logs {
+                name,
+                lines,
+                stdout,
+                stderr,
+            } => {
+                let output = devenv.processes_logs(&name, lines, stdout, stderr).await?;
+                Ok(CommandResult::Print(output))
+            }
+            ProcessesCommand::Restart { name } => {
+                devenv.processes_restart(&name).await?;
+                Ok(CommandResult::Done)
+            }
+        },
         Commands::Tasks { command } => match command {
             TasksCommand::Run {
                 tasks,
@@ -1077,21 +1053,8 @@ async fn dispatch_command(
     }
 }
 
-/// Run shell with hot-reload capability.
-///
-/// This function manages a shell session that automatically reloads
-/// when configuration files change. Uses the inverted architecture where:
-/// - ShellCoordinator handles file watching and build coordination
-/// - ShellSession owns the PTY and handles terminal I/O
-///
-/// Tasks are executed before the PTY starts as subprocesses,
-/// allowing parallel execution through the DAG task system.
-///
-/// Terminal handoff:
-/// - `backend_done`: Signals TUI to exit (notified after initial build completes)
-/// - `terminal_ready_rx`: Waits for TUI cleanup before ShellSession takes terminal (receives render height)
 struct ReloadShellArgs {
-    devenv: devenv::reload::owner::DevenvClient,
+    devenv: devenv::reload::DevenvClient,
     cmd: Option<String>,
     args: Vec<String>,
     backend_done: Arc<tokio::sync::Notify>,
@@ -1105,6 +1068,17 @@ struct ReloadShellArgs {
     task_messages: Vec<String>,
 }
 
+/// Run shell with hot-reload.
+///
+/// `ShellCoordinator` handles file watching and build coordination;
+/// `ShellSession` owns the PTY and terminal I/O. enterShell tasks have
+/// already been executed by the caller (so they can run in parallel via the
+/// DAG task system before the PTY starts).
+///
+/// Terminal handoff:
+/// - `backend_done`: signals TUI to exit (notified after initial build).
+/// - `terminal_ready_rx`: waits for TUI cleanup before `ShellSession` takes
+///   the terminal (receives render height).
 async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
     let ReloadShellArgs {
         devenv,
@@ -1120,18 +1094,14 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         task_exports,
         task_messages,
     } = args;
-    use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
-    use devenv_tui::{SessionIo, ShellSession, TuiHandoff};
-    use tokio::sync::mpsc;
 
     // Guard ensures TUI is notified even if we return early from eval errors.
     let mut backend_done_guard = BackendDoneGuard::new(backend_done);
 
-    // Create reload config - watch files will be populated from eval cache
-    // during the first build by DevenvShellBuilder
+    // Watch files come from the eval cache during the first build.
     let reload_config = ReloadConfig::new(vec![]);
 
-    // Disable status line for non-interactive commands to avoid escape codes in output
+    // Status line emits escape codes; disable when output is captured.
     let is_interactive = cmd.is_none();
 
     let builder = DevenvShellBuilder {
@@ -1147,16 +1117,14 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         shell,
     };
 
-    // Set up communication channels between coordinator and shell runner
-    let (command_tx, command_rx) = mpsc::channel(16);
-    let (event_tx, event_rx) = mpsc::channel(16);
+    let (command_tx, command_rx) = tokio::sync::mpsc::channel(16);
+    let (event_tx, event_rx) = tokio::sync::mpsc::channel(16);
 
-    // Spawn coordinator in background task
     let coordinator_handle = tokio::spawn(async move {
         ShellCoordinator::run(reload_config, builder, command_tx, event_rx).await
     });
 
-    // If no TUI, create a dummy channel that immediately signals ready with 0 height
+    // No TUI: synthesize a ready signal so the session doesn't wait forever.
     let terminal_ready_rx = terminal_ready_rx.unwrap_or_else(|| {
         let (tx, rx) = tokio::sync::oneshot::channel::<u16>();
         let _ = tx.send(0);
@@ -1167,7 +1135,6 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         terminal_ready_rx,
     });
 
-    // Run shell session on current thread (owns terminal)
     let shell_session = ShellSession::with_defaults().with_status_line(is_interactive);
     let exit_code = shell_session
         .run(command_rx, event_tx, handoff, SessionIo::default())
@@ -1175,7 +1142,6 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         .into_diagnostic()
         .wrap_err("Shell session error")?;
 
-    // Wait for coordinator to finish
     let _ = coordinator_handle.await;
 
     Ok(exit_code)
@@ -1207,6 +1173,15 @@ async fn run_repl(
     Ok(CommandResult::Done)
 }
 
+/// Build a single-threaded tokio runtime for a UI renderer.
+fn current_thread_runtime(ctx: &str) -> Result<tokio::runtime::Runtime> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to create {ctx} runtime"))
+}
+
 /// Create a tokio runtime with worker threads registered with Boehm GC.
 ///
 /// Nix uses Boehm GC with parallel marking. During stop-the-world collection,
@@ -1231,10 +1206,10 @@ fn prompt_secrets(provider: Option<String>, profile: Option<String>) -> Result<(
         .into_diagnostic()
         .wrap_err("Failed to load secretspec")?;
 
-    if let Some(ref p) = provider {
+    if let Some(p) = &provider {
         secrets.set_provider(p);
     }
-    if let Some(ref p) = profile {
+    if let Some(p) = &profile {
         secrets.set_profile(p);
     }
 
