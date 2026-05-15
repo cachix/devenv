@@ -34,7 +34,7 @@ use std::io::{self, IsTerminal, Read, Write};
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::{Notify, mpsc as tokio_mpsc, oneshot};
+use tokio::sync::{mpsc as tokio_mpsc, oneshot};
 
 /// Keybind byte sequences (ESC + Ctrl key).
 const KEYBIND_TOGGLE_PAUSE: [u8; 2] = [0x1b, 0x04]; // Ctrl-Alt-D
@@ -486,9 +486,12 @@ pub enum SessionError {
 /// When running with TUI, the shell session needs to coordinate
 /// terminal ownership with the TUI.
 pub struct TuiHandoff {
-    /// Signal when backend work is done (TUI can exit).
-    pub backend_done: Arc<Notify>,
-    /// Wait for TUI to release terminal. Receives the TUI's final render height.
+    /// Signal the renderer to stop. Sending — or dropping — the sender is the
+    /// signal (a closed channel is a delivered "stop", which makes the
+    /// panic/early-return path safe without a guard).
+    pub backend_done: oneshot::Sender<()>,
+    /// Wait for the renderer to release the terminal. The TUI's final render
+    /// height is carried but unused here.
     pub terminal_ready_rx: oneshot::Receiver<u16>,
 }
 
@@ -604,13 +607,13 @@ impl ShellSession {
             }
             Some(ShellCommand::Shutdown) | None => {
                 if let Some(h) = handoff {
-                    h.backend_done.notify_one();
+                    let _ = h.backend_done.send(());
                 }
                 return Ok(None);
             }
             Some(other) => {
                 if let Some(h) = handoff {
-                    h.backend_done.notify_one();
+                    let _ = h.backend_done.send(());
                 }
                 return Err(SessionError::UnexpectedCommand(format!("{:?}", other)));
             }
@@ -626,7 +629,7 @@ impl ShellSession {
         if let Some(handoff) = handoff {
             // Signal TUI that initial build is complete and we're ready for terminal
             tracing::trace!("session: sending backend_done");
-            handoff.backend_done.notify_one();
+            let _ = handoff.backend_done.send(());
 
             // Wait for TUI to release terminal
             tracing::trace!("session: waiting for terminal_ready_rx");

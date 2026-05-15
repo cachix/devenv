@@ -11,7 +11,7 @@ use devenv::{
     reload::DevenvShellBuilder,
     tracing as devenv_tracing,
 };
-use devenv_activity::ActivityLevel;
+use devenv_activity::{ActivityGuard, ActivityLevel};
 use devenv_core::{
     CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings,
     config::{self, Config},
@@ -157,7 +157,6 @@ struct UiOptions {
     log_level: devenv_tracing::Level,
     tracing_specs: Vec<TraceOutputSpec>,
     verbosity: devenv::tasks::VerbosityLevel,
-    needs_terminal_handoff: bool,
 }
 
 /// Options for the backend thread: resolved devenv config plus what to run.
@@ -376,9 +375,6 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
 
     let is_testing = matches!(&command, Commands::Test { .. });
 
-    // Commands that do eval with TUI active, then take over the terminal
-    let needs_terminal_handoff = use_pty || matches!(&command, Commands::Repl {});
-
     let test_dirs = TestDirs::setup(&command)?;
     let strict_ports = config.strict_ports.unwrap_or(false);
     let require_version_match = config.requires_version_match();
@@ -408,7 +404,6 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
         log_level,
         tracing_specs,
         verbosity,
-        needs_terminal_handoff,
     };
     let backend = BackendOptions {
         devenv: devenv_options,
@@ -423,6 +418,120 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
     Ok((ui, backend))
 }
 
+/// The main-thread activity sink for a run.
+///
+/// Three mutually exclusive variants. `None` means tracing owns the terminal —
+/// `send_activity_event` then falls through to `tracing::trace!` only, which is
+/// exactly what `--trace-to <terminal>` wants.
+enum Renderer {
+    Tui(tokio::sync::mpsc::UnboundedReceiver<devenv_activity::ActivityEvent>),
+    Console(tokio::sync::mpsc::UnboundedReceiver<devenv_activity::ActivityEvent>),
+    None,
+}
+
+impl Renderer {
+    /// Pick the renderer from the resolved UI options and install its activity
+    /// sink. The returned guard clears the sink on drop and must outlive the
+    /// backend (it produces the events).
+    fn init(ui: &UiOptions) -> (Self, Option<ActivityGuard>) {
+        if ui.tui {
+            let (rx, handle) = devenv_activity::init();
+            (Renderer::Tui(rx), Some(handle.install()))
+        } else if !ui.tracing_owns_terminal {
+            let (rx, handle) = devenv_activity::init();
+            (Renderer::Console(rx), Some(handle.install()))
+        } else {
+            (Renderer::None, None)
+        }
+    }
+
+    /// Drive the renderer to completion on the main thread.
+    ///
+    /// Owns its own current-thread runtime. Returns the TUI render height (0
+    /// when there is no TUI) so the backend can position its cursor. Only the
+    /// TUI consumes `command_tx` (process commands from the UI); the other
+    /// sinks drop it so the backend's receiver closes.
+    fn drive(
+        self,
+        shutdown: &Arc<Shutdown>,
+        backend_done_rx: tokio::sync::oneshot::Receiver<()>,
+        command_tx: tokio::sync::mpsc::Sender<ProcessCommand>,
+        verbosity: devenv::tasks::VerbosityLevel,
+    ) -> Result<u16> {
+        match self {
+            Renderer::Tui(activity_rx) => {
+                let filter_level = if matches!(verbosity, devenv::tasks::VerbosityLevel::Verbose) {
+                    ActivityLevel::Debug
+                } else {
+                    ActivityLevel::Info
+                };
+                current_thread_runtime("TUI")?.block_on(async {
+                    Ok(devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
+                        .with_command_sender(command_tx)
+                        .filter_level(filter_level)
+                        .run(backend_done_rx)
+                        .await
+                        .unwrap_or(0))
+                })
+            }
+            Renderer::Console(activity_rx) => {
+                drop(command_tx);
+                current_thread_runtime("console")?.block_on(async {
+                    devenv::console::ConsoleOutput::new(activity_rx, verbosity)
+                        .run(backend_done_rx)
+                        .await;
+                });
+                Ok(0)
+            }
+            Renderer::None => {
+                drop(command_tx);
+                drop(backend_done_rx);
+                Ok(0)
+            }
+        }
+    }
+}
+
+/// Coordination channels between the main-thread renderer and the backend
+/// thread, split into the half each side owns. Pairing tx/rx through one
+/// constructor makes mismatched wiring unrepresentable.
+///
+/// - `backend_done`: backend signals the renderer to stop. Sending — or
+///   dropping the sender — is the signal; a closed channel is a delivered
+///   "stop", so the panic/early-return path is safe with no guard.
+/// - `terminal_ready`: renderer tells the backend the terminal is free, with
+///   the TUI render height for cursor positioning.
+/// - `command`: process commands (restart, etc.) from the TUI to the backend.
+struct RenderSide {
+    backend_done_rx: tokio::sync::oneshot::Receiver<()>,
+    terminal_ready_tx: tokio::sync::oneshot::Sender<u16>,
+    command_tx: tokio::sync::mpsc::Sender<ProcessCommand>,
+}
+
+struct BackendSide {
+    backend_done_tx: tokio::sync::oneshot::Sender<()>,
+    terminal_ready_rx: tokio::sync::oneshot::Receiver<u16>,
+    command_rx: tokio::sync::mpsc::Receiver<ProcessCommand>,
+}
+
+fn handoff() -> (RenderSide, BackendSide) {
+    let (backend_done_tx, backend_done_rx) = tokio::sync::oneshot::channel();
+    let (command_tx, command_rx) = tokio::sync::mpsc::channel(16);
+    let (terminal_ready_tx, terminal_ready_rx) = tokio::sync::oneshot::channel();
+    (
+        RenderSide {
+            backend_done_rx,
+            terminal_ready_tx,
+            command_tx,
+        },
+        BackendSide {
+            backend_done_tx,
+            terminal_ready_rx,
+            command_rx,
+        },
+    )
+}
+
 /// Single entry point for all command execution.
 ///
 /// Both TUI and direct modes share the same structure:
@@ -430,30 +539,11 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
 /// 2. Backend runs on a dedicated GC-registered thread
 /// 3. TUI runs on the main thread (if enabled), otherwise we just wait
 fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Result<()> {
-    // Three mutually exclusive activity sinks. `Renderer::None` means tracing
-    // owns the terminal — `send_activity_event` then falls through to
-    // `tracing::trace!` only, which is exactly what `--trace-to <terminal>` wants.
-    enum Renderer {
-        Tui(tokio::sync::mpsc::UnboundedReceiver<devenv_activity::ActivityEvent>),
-        Console(tokio::sync::mpsc::UnboundedReceiver<devenv_activity::ActivityEvent>),
-        None,
-    }
-
-    let cli_output = !ui.tui && !ui.tracing_owns_terminal;
-    let (renderer, _activity_guard) = if ui.tui {
-        let (rx, handle) = devenv_activity::init();
-        (Renderer::Tui(rx), Some(handle.install()))
-    } else if cli_output {
-        let (rx, handle) = devenv_activity::init();
-        (Renderer::Console(rx), Some(handle.install()))
-    } else {
-        (Renderer::None, None)
-    };
+    let (renderer, _activity_guard) = Renderer::init(&ui);
 
     let _tracing_guard = devenv_tracing::init_tracing(ui.log_level, &ui.tracing_specs);
 
     let tui = ui.tui;
-    let needs_terminal_handoff = ui.needs_terminal_handoff;
     let verbosity = ui.verbosity;
 
     // TUI terminal setup: save state before raw mode, install restore hooks
@@ -470,17 +560,15 @@ fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Resul
         shutdown.set_pre_exit_hook(devenv_tui::app::restore_terminal);
     }
 
-    // Channels for backend ↔ TUI coordination:
-    // - backend_done: signals TUI when backend is fully done
-    // - command: process commands (restart, etc.) from TUI to process manager
-    // - terminal_ready: signals ShellSession when TUI has released the terminal
-    let backend_done = Arc::new(tokio::sync::Notify::new());
-    let (command_tx, command_rx) = tokio::sync::mpsc::channel::<ProcessCommand>(16);
-    let (terminal_ready_tx, terminal_ready_rx) = tokio::sync::oneshot::channel::<u16>();
+    let (render_side, backend_side) = handoff();
+    let RenderSide {
+        backend_done_rx,
+        terminal_ready_tx,
+        command_tx,
+    } = render_side;
 
     // Backend on dedicated thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
-    let backend_done_clone = backend_done.clone();
     let devenv_thread = std::thread::Builder::new()
         .name("devenv".into())
         .stack_size(devenv_nix_backend::NIX_STACK_SIZE)
@@ -488,14 +576,7 @@ fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Resul
             build_gc_runtime().block_on(async {
                 shutdown_clone.install_signals().await;
 
-                let output = run_backend(
-                    backend,
-                    shutdown_clone.clone(),
-                    backend_done_clone,
-                    Some(terminal_ready_rx),
-                    Some(command_rx),
-                )
-                .await;
+                let output = run_backend(backend, shutdown_clone.clone(), backend_side).await;
 
                 // Fallback for paths that didn't run cleanup themselves
                 // (PTY shell, REPL). No-op when run_backend already did it.
@@ -507,40 +588,7 @@ fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Resul
         .into_diagnostic()
         .wrap_err("Failed to spawn devenv thread")?;
 
-    let tui_render_height = match renderer {
-        Renderer::Tui(activity_rx) => {
-            let filter_level = if matches!(verbosity, devenv::tasks::VerbosityLevel::Verbose) {
-                ActivityLevel::Debug
-            } else {
-                ActivityLevel::Info
-            };
-
-            current_thread_runtime("TUI")?.block_on(async {
-                devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
-                    .with_command_sender(command_tx)
-                    .filter_level(filter_level)
-                    // When a command needs terminal handoff, don't shut down on backend_done —
-                    // it's used as a handoff signal (eval done), not a completion signal
-                    .shutdown_on_backend_done(!needs_terminal_handoff)
-                    .run(backend_done.clone())
-                    .await
-                    .unwrap_or(0)
-            })
-        }
-        Renderer::Console(activity_rx) => {
-            drop(command_tx);
-            current_thread_runtime("console")?.block_on(async {
-                devenv::console::ConsoleOutput::new(activity_rx, verbosity)
-                    .run(backend_done.clone())
-                    .await;
-            });
-            0
-        }
-        Renderer::None => {
-            drop(command_tx);
-            0
-        }
-    };
+    let tui_render_height = renderer.drive(&shutdown, backend_done_rx, command_tx, verbosity)?;
 
     // Signal backend that terminal is available (with TUI render height for cursor positioning)
     let _ = terminal_ready_tx.send(tui_render_height);
@@ -580,40 +628,20 @@ fn launch_debugger(devenv: devenv::Devenv, err: miette::Report) -> Result<()> {
         .map_err(|e| miette::miette!("REPL thread panicked: {}", panic_message(e)))?
 }
 
-/// Guard that ensures `backend_done.notify_one()` is called when the backend
-/// exits, even on early returns or panics. Without this, the TUI hangs forever
-/// waiting for a notification that never arrives.
-struct BackendDoneGuard(Option<Arc<tokio::sync::Notify>>);
-
-impl BackendDoneGuard {
-    fn new(notify: Arc<tokio::sync::Notify>) -> Self {
-        Self(Some(notify))
-    }
-
-    /// Take the inner Notify for passing to subsystems (e.g., PTY shell handoff).
-    /// After this, the guard no longer notifies on drop.
-    fn take(&mut self) -> Arc<tokio::sync::Notify> {
-        self.0.take().expect("backend_done already taken")
-    }
-}
-
-impl Drop for BackendDoneGuard {
-    fn drop(&mut self) {
-        if let Some(notify) = &self.0 {
-            notify.notify_one();
-        }
-    }
-}
-
 /// Run the backend: construct Devenv and dispatch the command.
 #[instrument(name = "devenv", skip_all)]
 async fn run_backend(
     backend: BackendOptions,
     shutdown: Arc<Shutdown>,
-    backend_done: Arc<tokio::sync::Notify>,
-    terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
-    command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
+    side: BackendSide,
 ) -> Result<CommandResult> {
+    let BackendSide {
+        backend_done_tx,
+        terminal_ready_rx,
+        command_rx,
+    } = side;
+    let command_rx = Some(command_rx);
+
     let BackendOptions {
         devenv: devenv_options,
         command,
@@ -625,9 +653,9 @@ async fn run_backend(
         test_dirs: _test_dirs,
     } = backend;
 
-    // Ensure TUI is notified when backend exits, even on early return or panic.
-    let mut backend_done_guard = BackendDoneGuard::new(backend_done);
-
+    // `backend_done_tx` is the renderer's stop signal: send at the right
+    // point, or — on early return / panic — its drop closes the channel,
+    // which the renderer also treats as "stop". No guard needed.
     let devenv = Devenv::new(devenv_options).await?;
 
     // PTY shell hands Devenv off to an owner task; we reclaim it after the session.
@@ -646,7 +674,7 @@ async fn run_backend(
             devenv: client,
             cmd,
             args,
-            backend_done: backend_done_guard.take(),
+            backend_done: backend_done_tx,
             terminal_ready_rx,
             initial_env_script,
             bash_path,
@@ -668,7 +696,7 @@ async fn run_backend(
 
     // REPL: run assembly with TUI active, then hand off terminal for interactive REPL
     if let Commands::Repl {} = command {
-        let result = run_repl(&devenv, &mut backend_done_guard, terminal_ready_rx).await;
+        let result = run_repl(&devenv, backend_done_tx, terminal_ready_rx).await;
         return debugger_or_err(result, nix_debugger, devenv);
     }
 
@@ -680,8 +708,10 @@ async fn run_backend(
     // still rendering, so its activity stays visible to the user.
     shutdown.shutdown_and_wait().await;
 
-    // Notify TUI before debugger check, so TUI shuts down before debugger takes the terminal.
-    drop(backend_done_guard);
+    // Signal the renderer to stop, after the drain, so its activity stayed
+    // visible. Done before the debugger check so the TUI releases the
+    // terminal before the debugger takes it.
+    let _ = backend_done_tx.send(());
 
     debugger_or_err(result, nix_debugger, devenv)
 }
@@ -1033,8 +1063,8 @@ struct ReloadShellArgs {
     devenv: devenv::reload::DevenvClient,
     cmd: Option<String>,
     args: Vec<String>,
-    backend_done: Arc<tokio::sync::Notify>,
-    terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
+    backend_done: tokio::sync::oneshot::Sender<()>,
+    terminal_ready_rx: tokio::sync::oneshot::Receiver<u16>,
     initial_env_script: String,
     bash_path: String,
     clean: devenv_core::config::Clean,
@@ -1052,9 +1082,10 @@ struct ReloadShellArgs {
 /// DAG task system before the PTY starts).
 ///
 /// Terminal handoff:
-/// - `backend_done`: signals TUI to exit (notified after initial build).
-/// - `terminal_ready_rx`: waits for TUI cleanup before `ShellSession` takes
-///   the terminal (receives render height).
+/// - `backend_done`: signals the renderer to stop (sent by `ShellSession`
+///   after the initial build, or its drop on error — both mean stop).
+/// - `terminal_ready_rx`: waits for the renderer to release the terminal
+///   before `ShellSession` takes it.
 async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
     let ReloadShellArgs {
         devenv,
@@ -1070,9 +1101,6 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         task_exports,
         task_messages,
     } = args;
-
-    // Guard ensures TUI is notified even if we return early from eval errors.
-    let mut backend_done_guard = BackendDoneGuard::new(backend_done);
 
     // Watch files come from the eval cache during the first build.
     let reload_config = ReloadConfig::new(vec![]);
@@ -1100,14 +1128,8 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         ShellCoordinator::run(reload_config, builder, command_tx, event_rx).await
     });
 
-    // No TUI: synthesize a ready signal so the session doesn't wait forever.
-    let terminal_ready_rx = terminal_ready_rx.unwrap_or_else(|| {
-        let (tx, rx) = tokio::sync::oneshot::channel::<u16>();
-        let _ = tx.send(0);
-        rx
-    });
     let handoff = Some(TuiHandoff {
-        backend_done: backend_done_guard.take(),
+        backend_done,
         terminal_ready_rx,
     });
 
@@ -1129,19 +1151,15 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
 /// then signals the TUI to release the terminal before launching the interactive REPL.
 async fn run_repl(
     devenv: &Devenv,
-    backend_done_guard: &mut BackendDoneGuard,
-    terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
+    backend_done_tx: tokio::sync::oneshot::Sender<()>,
+    terminal_ready_rx: tokio::sync::oneshot::Receiver<u16>,
 ) -> Result<CommandResult> {
     // Phase 1: Assemble and evaluate with TUI active (shows progress)
     devenv.prepare_repl().await?;
 
-    // Phase 2: TUI handoff — signal TUI to exit and wait for terminal release
-    let backend_done = backend_done_guard.take();
-    backend_done.notify_one();
-
-    if let Some(rx) = terminal_ready_rx {
-        let _ = rx.await;
-    }
+    // Phase 2: signal the renderer to stop, then wait for terminal release
+    let _ = backend_done_tx.send(());
+    let _ = terminal_ready_rx.await;
 
     // Phase 3: Terminal is ours — launch the interactive REPL
     devenv.launch_repl().await?;

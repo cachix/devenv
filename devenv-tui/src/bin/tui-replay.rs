@@ -6,7 +6,6 @@ use serde::Deserialize;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::signal;
@@ -177,17 +176,17 @@ async fn main() -> Result<()> {
     let (tx, rx) = mpsc::unbounded_channel();
     let shutdown = Shutdown::new();
 
-    // Signal TUI when replay is done
-    let backend_done = Arc::new(tokio::sync::Notify::new());
+    // Signal TUI when replay is done (send, or drop on the other branches).
+    let (backend_done_tx, backend_done_rx) = tokio::sync::oneshot::channel::<()>();
+    let mut backend_done_tx = Some(backend_done_tx);
 
     info!("Spawning TUI");
 
     let mut tui_task = tokio::spawn({
         let shutdown = shutdown.clone();
-        let backend_done = backend_done.clone();
         async move {
             match devenv_tui::TuiApp::new(rx, shutdown)
-                .run(backend_done)
+                .run(backend_done_rx)
                 .await
             {
                 Ok(_) => info!("TUI exited normally"),
@@ -206,7 +205,9 @@ async fn main() -> Result<()> {
                 warn!("Replay error: {e}");
             }
             // Signal TUI that replay is done
-            backend_done.notify_one();
+            if let Some(tx) = backend_done_tx.take() {
+                let _ = tx.send(());
+            }
         }
         _ = &mut tui_task => {
             info!("TUI exited");
@@ -215,7 +216,9 @@ async fn main() -> Result<()> {
             info!("Interrupted");
             shutdown.shutdown();
             // Signal TUI that we're done (after interrupt)
-            backend_done.notify_one();
+            if let Some(tx) = backend_done_tx.take() {
+                let _ = tx.send(());
+            }
         }
     }
 

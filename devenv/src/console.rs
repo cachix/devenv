@@ -13,7 +13,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io::{self, LineWriter, Write};
-use std::sync::Arc;
 use std::time::Instant;
 
 use console::style;
@@ -21,7 +20,7 @@ use devenv_activity::{
     ActivityEvent, ActivityGuard, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, Fetch,
     FetchKind, Operation, Process, Task,
 };
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::{mpsc, oneshot};
 
 use crate::tasks::VerbosityLevel;
 use crate::tracing::HumanReadableDuration;
@@ -74,15 +73,17 @@ impl ConsoleOutput {
         }
     }
 
-    /// Process events until `shutdown` is notified, then drain any buffered events.
-    pub async fn run(mut self, shutdown: Arc<Notify>) {
+    /// Process events until the backend signals stop (sent or sender dropped),
+    /// then drain any buffered events.
+    pub async fn run(mut self, backend_done: oneshot::Receiver<()>) {
+        let mut backend_done = backend_done;
         loop {
             tokio::select! {
                 event = self.rx.recv() => match event {
                     Some(event) => self.handle(event),
                     None => break,
                 },
-                _ = shutdown.notified() => {
+                _ = &mut backend_done => {
                     while let Ok(event) = self.rx.try_recv() {
                         self.handle(event);
                     }
