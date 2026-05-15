@@ -3649,7 +3649,7 @@ string
 *Default:*
 
 ```nix
-"2.1.0"
+"2.1.2"
 ```
 
 *Declared by:*
