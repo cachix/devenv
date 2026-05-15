@@ -3,7 +3,7 @@ use clap_complete::CompleteEnv;
 use devenv::{
     Devenv, RunMode,
     cli::{
-        Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
+        Cli, CliOptions, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
         TraceOutputSpec,
     },
     commands,
@@ -26,49 +26,12 @@ use std::{
     os, panic,
     path::{Path, PathBuf},
     process::{self, Command},
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::Duration,
 };
 use tempfile::TempDir;
 use tokio_shutdown::Shutdown;
 use tracing::{info, instrument};
-
-/// Install a miette report hook with a custom theme.
-///
-/// The default theme draws a continuous vertical bar down the left edge of
-/// every diagnostic, which makes copying error text awkward.
-fn install_miette_hook() {
-    miette::set_hook(Box::new(|_| {
-        let mut theme = miette::GraphicalTheme::unicode();
-        theme.characters.vbar = ' ';
-        theme.characters.vbar_break = ' ';
-        theme.characters.lbot = ' ';
-        theme.characters.ltop = ' ';
-        theme.characters.rbot = ' ';
-        theme.characters.rtop = ' ';
-        theme.characters.lcross = ' ';
-        theme.characters.rcross = ' ';
-        Box::new(
-            miette::MietteHandlerOpts::new()
-                .graphical_theme(theme)
-                .context_lines(2)
-                .wrap_lines(false)
-                .build(),
-        )
-    }))
-    .expect("miette hook already installed");
-}
-
-/// Extract a human readable message from a thread panic payload.
-fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
-    if let Some(s) = payload.downcast_ref::<&str>() {
-        s.to_string()
-    } else if let Some(s) = payload.downcast_ref::<String>() {
-        s.clone()
-    } else {
-        format!("{payload:?}")
-    }
-}
 
 fn main() {
     // Handle shell completion requests (COMPLETE=bash devenv)
@@ -150,7 +113,7 @@ fn main_inner() -> Result<()> {
     }
 }
 
-/// Options for the main-thread UI/renderer.
+/// Options for the UI/renderer thread.
 struct UiOptions {
     tui: bool,
     tracing_owns_terminal: bool,
@@ -254,16 +217,19 @@ impl TestDirs {
 /// Set `DEVENV_NO_AI_AGENT=1` to opt out of detection (forces normal output/TUI
 /// even when running under a detected agent).
 fn is_ai_agent() -> bool {
-    if env::var_os("DEVENV_NO_AI_AGENT").is_some() {
-        return false;
-    }
-    env::var_os("CLAUDECODE").is_some()
-        || env::var_os("OPENCODE_CLIENT").is_some()
-        || env::var_os("AI_AGENT").is_some()
+    static CACHED: OnceLock<bool> = OnceLock::new();
+    *CACHED.get_or_init(|| {
+        if env::var_os("DEVENV_NO_AI_AGENT").is_some() {
+            return false;
+        }
+        env::var_os("CLAUDECODE").is_some()
+            || env::var_os("OPENCODE_CLIENT").is_some()
+            || env::var_os("AI_AGENT").is_some()
+    })
 }
 
 /// Resolve `--quiet`/`--verbose` (with AI-agent auto-quiet) into a `VerbosityLevel`.
-fn resolve_verbosity(cli_options: &devenv::cli::CliOptions) -> devenv::tasks::VerbosityLevel {
+fn resolve_verbosity(cli_options: &CliOptions) -> devenv::tasks::VerbosityLevel {
     use devenv::tasks::VerbosityLevel;
     if cli_options.verbose {
         VerbosityLevel::Verbose
@@ -1213,4 +1179,43 @@ fn prompt_secrets(provider: Option<String>, profile: Option<String>) -> Result<(
         .wrap_err("Failed to set secrets")?;
 
     Ok(())
+}
+
+// Error formatting helpers
+
+/// Install a miette report hook with a custom theme.
+///
+/// The default theme draws a continuous vertical bar down the left edge of
+/// every diagnostic, which makes copying error text awkward.
+fn install_miette_hook() {
+    miette::set_hook(Box::new(|_| {
+        let mut theme = miette::GraphicalTheme::unicode();
+        theme.characters.vbar = ' ';
+        theme.characters.vbar_break = ' ';
+        theme.characters.lbot = ' ';
+        theme.characters.ltop = ' ';
+        theme.characters.rbot = ' ';
+        theme.characters.rtop = ' ';
+        theme.characters.lcross = ' ';
+        theme.characters.rcross = ' ';
+        Box::new(
+            miette::MietteHandlerOpts::new()
+                .graphical_theme(theme)
+                .context_lines(2)
+                .wrap_lines(false)
+                .build(),
+        )
+    }))
+    .expect("miette hook already installed");
+}
+
+/// Extract a human readable message from a thread panic payload.
+fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        s.to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        format!("{payload:?}")
+    }
 }
