@@ -477,71 +477,60 @@ fn run(ctx: RunContext) -> Result<()> {
     let _ = terminal_ready_tx.send(tui_render_height);
 
     // Wait for backend thread
-    let devenv_output = devenv_thread
+    let backend_result = devenv_thread
         .join()
         .map_err(|e| miette::miette!("devenv thread panicked: {}", panic_message(e)))?;
 
-    // Flush tracing before finish() — CommandResult::Exec replaces the
+    // Flush tracing before exec() — CommandResult::Exec replaces the
     // process via exec(), so destructors after that point never run.
     drop(_tracing_guard);
 
-    devenv_output.finish()
+    match backend_result {
+        Ok(cmd_result) => cmd_result.exec(),
+        Err(BackendError {
+            err,
+            devenv_for_debugger: Some(devenv),
+        }) => launch_debugger(devenv, err),
+        Err(BackendError { err, .. }) => Err(err),
+    }
 }
 
-/// Output from run_backend containing the command result.
-struct DevenvOutput {
-    result: Result<CommandResult>,
-    /// Devenv instance for debugger mode - kept alive when nix_debugger is enabled and error occurs
+/// Error returned from `run_backend`.
+///
+/// Carries an owned `Devenv` when the failure should drop the user into the
+/// Nix debugger REPL (`--nix-debugger`). All other failure paths leave
+/// `devenv_for_debugger` as `None`.
+struct BackendError {
+    err: miette::Report,
     devenv_for_debugger: Option<devenv::Devenv>,
 }
 
-/// Result of attempting to launch the debugger.
-enum DebuggerResult {
-    /// Debugger was launched and returned this result
-    Launched(Result<()>),
-    /// Debugger was not launched, proceed with normal command result
-    NotLaunched(Result<CommandResult>),
+impl From<miette::Report> for BackendError {
+    fn from(err: miette::Report) -> Self {
+        Self {
+            err,
+            devenv_for_debugger: None,
+        }
+    }
 }
 
-impl DevenvOutput {
-    /// If debugger mode is enabled and we have a devenv instance, launch the REPL.
-    fn try_launch_debugger(self) -> DebuggerResult {
-        if let Some(devenv) = self.devenv_for_debugger {
-            // Print the error first so user knows what went wrong
-            if let Err(ref err) = self.result {
-                eprintln!("{:?}", err);
-            }
-            // Run the REPL on a new thread with its own GC-registered runtime
-            let repl_result = std::thread::Builder::new()
-                .name("repl".into())
-                .stack_size(NIX_STACK_SIZE)
-                .spawn(move || {
-                    // Skip prepare_repl() — the debugger already has eval context from
-                    // the failed command, and re-evaluating would likely fail again,
-                    // preventing debugger_is_pending() from being checked in launch_repl().
-                    build_gc_runtime().block_on(async { devenv.launch_repl().await })
-                })
-                .into_diagnostic()
-                .wrap_err("Failed to spawn REPL thread")
-                .and_then(|handle| {
-                    handle
-                        .join()
-                        .map_err(|e| miette::miette!("REPL thread panicked: {}", panic_message(e)))
-                        .and_then(|r| r)
-                });
-            DebuggerResult::Launched(repl_result)
-        } else {
-            DebuggerResult::NotLaunched(self.result)
-        }
-    }
-
-    /// Handle debugger launch and execute the command result.
-    fn finish(self) -> Result<()> {
-        match self.try_launch_debugger() {
-            DebuggerResult::Launched(result) => result,
-            DebuggerResult::NotLaunched(result) => result?.exec(),
-        }
-    }
+/// Print the error and launch the Nix debugger REPL on a fresh GC-registered thread.
+fn launch_debugger(devenv: devenv::Devenv, err: miette::Report) -> Result<()> {
+    eprintln!("{:?}", err);
+    let handle = std::thread::Builder::new()
+        .name("repl".into())
+        .stack_size(NIX_STACK_SIZE)
+        .spawn(move || {
+            // Skip prepare_repl() — the debugger already has eval context from
+            // the failed command, and re-evaluating would likely fail again,
+            // preventing debugger_is_pending() from being checked in launch_repl().
+            build_gc_runtime().block_on(async { devenv.launch_repl().await })
+        })
+        .into_diagnostic()
+        .wrap_err("Failed to spawn REPL thread")?;
+    handle
+        .join()
+        .map_err(|e| miette::miette!("REPL thread panicked: {}", panic_message(e)))?
 }
 
 /// Guard that ensures `backend_done.notify_one()` is called when the backend
@@ -577,7 +566,7 @@ async fn run_backend(
     backend_done: Arc<tokio::sync::Notify>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
-) -> DevenvOutput {
+) -> Result<CommandResult, BackendError> {
     let RunContext {
         command,
         config,
@@ -597,12 +586,6 @@ async fn run_backend(
 
     // Ensure TUI is notified when backend exits, even on early return or panic.
     let mut backend_done_guard = BackendDoneGuard::new(backend_done);
-
-    // Helper to create output without debugger context
-    let output = |result| DevenvOutput {
-        result,
-        devenv_for_debugger: None,
-    };
 
     let config_strict_ports = config.strict_ports.unwrap_or(false);
     let require_version_match = config.requires_version_match();
@@ -631,76 +614,11 @@ async fn run_backend(
         Commands::Test {
             override_dotfile,
             dont_override_dotfile: _,
-        } => {
-            let dotfile_tmpdir = if *override_dotfile {
-                let setup_test_tmpdir = || -> Result<TempDir> {
-                    let pwd = env::current_dir()
-                        .into_diagnostic()
-                        .wrap_err("Failed to get current directory")?;
-                    let tmpdir = TempDir::with_prefix_in(".devenv.", pwd)
-                        .into_diagnostic()
-                        .wrap_err("Failed to create temporary directory")?;
-                    Ok(tmpdir)
-                };
-                let tmpdir = match setup_test_tmpdir() {
-                    Ok(t) => t,
-                    Err(e) => return output(Err(e)),
-                };
-                let Some(file_name) = tmpdir.path().file_name().and_then(|f| f.to_str()) else {
-                    return output(Err(miette::miette!("Temporary directory path is invalid")));
-                };
-                info!("Overriding .devenv to {}", file_name);
-                options.devenv_dotfile = Some(tmpdir.path().to_path_buf());
-                Some(tmpdir)
-            } else {
-                None
-            };
-
-            // When using a temporary dotfile (--override-dotfile), also use a temporary state
-            // directory for full isolation. Otherwise, use a stable test-state path so the
-            // eval cache can be reused across test runs.
-            let state_tmpdir = if *override_dotfile {
-                let state_tmpdir = match TempDir::new()
-                    .into_diagnostic()
-                    .wrap_err("Failed to create temporary state directory")
-                {
-                    Ok(t) => t,
-                    Err(e) => return output(Err(e)),
-                };
-                info!(
-                    "Using temporary state directory: {}",
-                    state_tmpdir.path().display()
-                );
-                options.devenv_state = Some(state_tmpdir.path().to_path_buf());
-                Some(state_tmpdir)
-            } else {
-                // Stable test state path: isolates test services from shell state while
-                // keeping the path consistent across runs so the eval cache is effective.
-                let dotfile = options.devenv_dotfile.clone().unwrap_or_else(|| {
-                    env::current_dir()
-                        .expect("Failed to get current directory")
-                        .join(".devenv")
-                });
-                let test_state = dotfile.join("test-state");
-                info!("Using test state directory: {}", test_state.display());
-                options.devenv_state = Some(test_state);
-                None
-            };
-
-            (dotfile_tmpdir, state_tmpdir)
-        }
+        } => setup_test_dirs(*override_dotfile, &mut options)?,
         _ => (None, None),
     };
 
-    let devenv = match Devenv::new(options).await {
-        Ok(d) => d,
-        Err(e) => {
-            return DevenvOutput {
-                result: Err(e),
-                devenv_for_debugger: None,
-            };
-        }
-    };
+    let devenv = Devenv::new(options).await?;
 
     // PTY shell needs shared ownership for the reload coordinator
     if use_pty && let Commands::Shell { cmd, args } = command {
@@ -718,31 +636,13 @@ async fn run_backend(
             Some(code) => CommandResult::ExitCode(code as i32),
             None => CommandResult::Done,
         });
-        return match result {
-            Err(e) if nix_debugger => {
-                // Recover owned Devenv for debugger REPL
-                let devenv = Arc::try_unwrap(devenv)
-                    .unwrap_or_else(|_| panic!("all Arc references to Devenv should be dropped"))
-                    .into_inner();
-                DevenvOutput {
-                    result: Err(e),
-                    devenv_for_debugger: Some(devenv),
-                }
-            }
-            _ => output(result),
-        };
+        return attach_debugger_on_err(result, nix_debugger, unwrap_devenv_arc(devenv));
     }
 
     // REPL: run assembly with TUI active, then hand off terminal for interactive REPL
     if let Commands::Repl {} = command {
         let result = run_repl(&devenv, &mut backend_done_guard, terminal_ready_rx).await;
-        return match result {
-            Err(e) if nix_debugger => DevenvOutput {
-                result: Err(e),
-                devenv_for_debugger: Some(devenv),
-            },
-            _ => output(result),
-        };
+        return attach_debugger_on_err(result, nix_debugger, devenv);
     }
 
     // All other commands
@@ -756,14 +656,91 @@ async fn run_backend(
     // Notify TUI before debugger check, so TUI shuts down before debugger takes the terminal.
     drop(backend_done_guard);
 
-    // Debugger on error
+    attach_debugger_on_err(result, nix_debugger, devenv)
+}
+
+/// Reclaim ownership of a `Devenv` from its sharing `Arc<Mutex<_>>`.
+///
+/// Invariant: by the time this is called, all other Arc holders (e.g. the
+/// reload coordinator) must have dropped their references.
+fn unwrap_devenv_arc(devenv: Arc<Mutex<devenv::Devenv>>) -> devenv::Devenv {
+    Arc::try_unwrap(devenv)
+        .unwrap_or_else(|_| panic!("all Arc references to Devenv should be dropped"))
+        .into_inner()
+}
+
+/// Convert a command result into a `Result<_, BackendError>`, optionally
+/// attaching an owned `Devenv` for the Nix debugger REPL on error.
+fn attach_debugger_on_err(
+    result: Result<CommandResult>,
+    nix_debugger: bool,
+    devenv: devenv::Devenv,
+) -> Result<CommandResult, BackendError> {
     match result {
-        Err(e) if nix_debugger => DevenvOutput {
-            result: Err(e),
+        Ok(r) => Ok(r),
+        Err(err) if nix_debugger => Err(BackendError {
+            err,
             devenv_for_debugger: Some(devenv),
-        },
-        _ => output(result),
+        }),
+        Err(err) => Err(err.into()),
     }
+}
+
+/// Set up temporary dotfile / state directories for `devenv test`.
+///
+/// Returned `TempDir` handles must be kept alive until the test completes so
+/// their drop guards clean up the directories.
+fn setup_test_dirs(
+    override_dotfile: bool,
+    options: &mut devenv::DevenvOptions,
+) -> Result<(Option<TempDir>, Option<TempDir>)> {
+    let dotfile_tmpdir = if override_dotfile {
+        let pwd = env::current_dir()
+            .into_diagnostic()
+            .wrap_err("Failed to get current directory")?;
+        let tmpdir = TempDir::with_prefix_in(".devenv.", pwd)
+            .into_diagnostic()
+            .wrap_err("Failed to create temporary directory")?;
+        let Some(file_name) = tmpdir.path().file_name().and_then(|f| f.to_str()) else {
+            return Err(miette::miette!("Temporary directory path is invalid"));
+        };
+        info!("Overriding .devenv to {}", file_name);
+        options.devenv_dotfile = Some(tmpdir.path().to_path_buf());
+        Some(tmpdir)
+    } else {
+        None
+    };
+
+    // When using a temporary dotfile (--override-dotfile), also use a temporary state
+    // directory for full isolation. Otherwise, use a stable test-state path so the
+    // eval cache can be reused across test runs.
+    let state_tmpdir = if override_dotfile {
+        let state_tmpdir = TempDir::new()
+            .into_diagnostic()
+            .wrap_err("Failed to create temporary state directory")?;
+        info!(
+            "Using temporary state directory: {}",
+            state_tmpdir.path().display()
+        );
+        options.devenv_state = Some(state_tmpdir.path().to_path_buf());
+        Some(state_tmpdir)
+    } else {
+        // Stable test state path: isolates test services from shell state while
+        // keeping the path consistent across runs so the eval cache is effective.
+        let dotfile = match options.devenv_dotfile.clone() {
+            Some(p) => p,
+            None => env::current_dir()
+                .into_diagnostic()
+                .wrap_err("Failed to get current directory")?
+                .join(".devenv"),
+        };
+        let test_state = dotfile.join("test-state");
+        info!("Using test state directory: {}", test_state.display());
+        options.devenv_state = Some(test_state);
+        None
+    };
+
+    Ok((dotfile_tmpdir, state_tmpdir))
 }
 
 /// Result of a CLI command execution.
