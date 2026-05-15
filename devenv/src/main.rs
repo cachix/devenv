@@ -1097,15 +1097,17 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
     });
 
     let shell_session = ShellSession::with_defaults().with_status_line(is_interactive);
-    let exit_code = shell_session
+    let session_result = shell_session
         .run(command_rx, event_tx, handoff, SessionIo::default())
         .await
         .into_diagnostic()
-        .wrap_err("Shell session error")?;
+        .wrap_err("Shell session error");
 
+    // Await the coordinator even on error: it owns the DevenvClient, and the
+    // owner thread's join() deadlocks until that client drops.
     let _ = coordinator_handle.await;
 
-    Ok(exit_code)
+    session_result
 }
 
 /// Run the REPL with TUI handoff.
