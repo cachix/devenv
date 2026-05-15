@@ -12,9 +12,10 @@ use tracing_subscriber::{Layer, Registry, layer::SubscriberExt, util::Subscriber
 use super::devenv_layer::DevenvLayer;
 use super::span_ids::SpanIdLayer;
 use super::{
-    Level, TraceFormat, TraceOutput, TraceOutputSpec, TracingGuard, build_cli_layer, create_filter,
+    Level, OtlpProtocol, TraceOutputSpec, TracingGuard, build_cli_layer, create_filter,
     create_local_boxed_layer,
 };
+use url::Url;
 
 /// Guard that shuts down an OTEL tracer provider on drop.
 ///
@@ -64,8 +65,11 @@ pub(super) fn init_tracing_unified(level: Level, specs: &[TraceOutputSpec]) -> T
 
     layers.push(build_cli_layer());
 
-    // Local format layers
-    for spec in specs.iter().filter(|s| !s.format.is_otlp()) {
+    // Render layers
+    for spec in specs
+        .iter()
+        .filter(|s| matches!(s, TraceOutputSpec::Render(_, _)))
+    {
         if let Some(layer) = create_local_boxed_layer(spec) {
             layers.push(layer);
         }
@@ -73,13 +77,13 @@ pub(super) fn init_tracing_unified(level: Level, specs: &[TraceOutputSpec]) -> T
 
     // OTLP layers — each gets its own provider but shares the runtime
     let resource = Resource::builder().with_service_name("devenv").build();
-    for spec in specs.iter().filter(|s| s.format.is_otlp()) {
-        let endpoint = match &spec.destination {
-            TraceOutput::Url(url) => Some(url.as_str()),
-            _ => None,
+    for spec in specs {
+        let (proto, url) = match spec {
+            TraceOutputSpec::Otlp(p, u) => (*p, u),
+            TraceOutputSpec::Render(_, _) => continue,
         };
 
-        let exporter = match create_exporter(spec.format, endpoint) {
+        let exporter = match create_exporter(proto, url) {
             Ok(exporter) => exporter,
             Err(e) => {
                 eprintln!("error: failed to create OTLP exporter: {e}");
@@ -131,54 +135,42 @@ pub(super) fn init_tracing_unified(level: Level, specs: &[TraceOutputSpec]) -> T
 }
 
 fn create_exporter(
-    trace_format: TraceFormat,
-    endpoint: Option<&str>,
+    protocol: OtlpProtocol,
+    endpoint: &Url,
 ) -> Result<SpanExporter, ExporterBuildError> {
-    match trace_format {
+    match protocol {
         #[cfg(feature = "otlp-grpc")]
-        TraceFormat::OtlpGrpc => {
-            let mut builder = SpanExporter::builder().with_tonic();
-            if let Some(url) = endpoint {
-                builder = builder.with_endpoint(url);
-            }
-            builder.build()
-        }
+        OtlpProtocol::Grpc => SpanExporter::builder()
+            .with_tonic()
+            .with_endpoint(endpoint.as_str())
+            .build(),
         #[cfg(not(feature = "otlp-grpc"))]
-        TraceFormat::OtlpGrpc => {
+        OtlpProtocol::Grpc => {
             let _ = endpoint;
-            eprintln!("error: otlp-grpc format requires the 'otlp-grpc' cargo feature");
+            eprintln!("error: otlp-grpc requires the 'otlp-grpc' cargo feature");
             std::process::exit(1);
         }
         #[cfg(feature = "otlp-http-protobuf")]
-        TraceFormat::OtlpHttpProtobuf => {
-            let mut builder = SpanExporter::builder().with_http();
-            if let Some(url) = endpoint {
-                builder = builder.with_endpoint(url);
-            }
-            builder.build()
-        }
+        OtlpProtocol::HttpProtobuf => SpanExporter::builder()
+            .with_http()
+            .with_endpoint(endpoint.as_str())
+            .build(),
         #[cfg(not(feature = "otlp-http-protobuf"))]
-        TraceFormat::OtlpHttpProtobuf => {
+        OtlpProtocol::HttpProtobuf => {
             let _ = endpoint;
-            eprintln!(
-                "error: otlp-http-protobuf format requires the 'otlp-http-protobuf' cargo feature"
-            );
+            eprintln!("error: otlp-http-protobuf requires the 'otlp-http-protobuf' cargo feature");
             std::process::exit(1);
         }
         #[cfg(feature = "otlp-http-json")]
-        TraceFormat::OtlpHttpJson => {
-            let mut builder = SpanExporter::builder().with_http();
-            if let Some(url) = endpoint {
-                builder = builder.with_endpoint(url);
-            }
-            builder.build()
-        }
+        OtlpProtocol::HttpJson => SpanExporter::builder()
+            .with_http()
+            .with_endpoint(endpoint.as_str())
+            .build(),
         #[cfg(not(feature = "otlp-http-json"))]
-        TraceFormat::OtlpHttpJson => {
+        OtlpProtocol::HttpJson => {
             let _ = endpoint;
-            eprintln!("error: otlp-http-json format requires the 'otlp-http-json' cargo feature");
+            eprintln!("error: otlp-http-json requires the 'otlp-http-json' cargo feature");
             std::process::exit(1);
         }
-        _ => unreachable!("non-OTLP format passed to create_exporter"),
     }
 }

@@ -17,11 +17,16 @@ use devenv_core::{
     config::{self, Config, NixpkgsConfig},
 };
 use miette::{IntoDiagnostic, Result, WrapErr};
-use std::collections::BTreeMap;
-use std::io::IsTerminal;
-use std::process::Command;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    collections::BTreeMap,
+    env, fs,
+    io::{self, IsTerminal},
+    os, panic,
+    path::Path,
+    process::{self, Command},
+    sync::Arc,
+    time::Duration,
+};
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio_shutdown::Shutdown;
@@ -132,9 +137,7 @@ fn main_inner() -> Result<()> {
 
         let ctx = RunContext::build(cli)?;
 
-        let result = run(ctx);
-
-        match result {
+        match run(ctx) {
             Err(err) => match err.downcast::<devenv::SecretsNeedPrompting>() {
                 Ok(secrets_err) => {
                     // Only prompt interactively when stdin is a terminal;
@@ -184,12 +187,12 @@ struct RunContext {
 /// Set `DEVENV_NO_AI_AGENT=1` to opt out of detection (forces normal output/TUI
 /// even when running under a detected agent).
 fn is_ai_agent() -> bool {
-    if std::env::var_os("DEVENV_NO_AI_AGENT").is_some() {
+    if env::var_os("DEVENV_NO_AI_AGENT").is_some() {
         return false;
     }
-    std::env::var_os("CLAUDECODE").is_some()
-        || std::env::var_os("OPENCODE_CLIENT").is_some()
-        || std::env::var_os("AI_AGENT").is_some()
+    env::var_os("CLAUDECODE").is_some()
+        || env::var_os("OPENCODE_CLIENT").is_some()
+        || env::var_os("AI_AGENT").is_some()
 }
 
 /// Resolve `--quiet`/`--verbose` (with AI-agent auto-quiet) into a `VerbosityLevel`.
@@ -218,15 +221,10 @@ impl RunContext {
         } else {
             cli.get_log_level()
         };
-        let tracing_specs = cli
-            .tracing_args
-            .resolve_and_validate()
-            .map_err(|e| miette::miette!("{e}"))?;
-        // `resolve_and_validate()` folds legacy `--trace-output` into `tracing_specs`,
+        let tracing_specs = cli.tracing_args.resolve().into_diagnostic()?;
+        // `resolve()` folds legacy `--trace-output` into `tracing_specs`,
         // so a single walk covers env, --trace-to, and --trace-output.
-        let tracing_owns_terminal = tracing_specs
-            .iter()
-            .any(|s| s.destination.targets_terminal());
+        let tracing_owns_terminal = tracing_specs.iter().any(|s| s.targets_terminal());
 
         let mut config = Config::load()?;
         config.check_version(crate_version!())?;
@@ -248,13 +246,13 @@ impl RunContext {
         let from_external = cli.from.is_some();
         if let Some(ref from) = cli.from {
             let url = if let Some(path_str) = from.strip_prefix("path:") {
-                let path = std::path::Path::new(path_str);
+                let path = Path::new(path_str);
                 let full_path = if path.is_relative() {
-                    std::env::current_dir().unwrap_or_default().join(path)
+                    env::current_dir().unwrap_or_default().join(path)
                 } else {
                     path.to_path_buf()
                 };
-                let abs_path = std::fs::canonicalize(&full_path).unwrap_or(full_path);
+                let abs_path = fs::canonicalize(&full_path).unwrap_or(full_path);
                 format!("path:{}", abs_path.display())
             } else {
                 from.clone()
@@ -292,8 +290,8 @@ impl RunContext {
         let tui_requested =
             devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
                 .unwrap_or_else(|| {
-                    let is_ci = std::env::var_os("CI").is_some();
-                    let is_tty = std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+                    let is_ci = env::var_os("CI").is_some();
+                    let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
                     is_tty && !is_ci && !ai_agent
                 });
 
@@ -310,8 +308,8 @@ impl RunContext {
         // Determine use_pty from resolved settings (single source of truth)
         let use_pty = shell_settings.reload
             && matches!(&command, Commands::Shell { cmd: None, .. })
-            && std::io::stdin().is_terminal()
-            && std::io::stdout().is_terminal();
+            && io::stdin().is_terminal()
+            && io::stdout().is_terminal();
 
         let is_testing = matches!(&command, Commands::Test { .. });
 
@@ -382,8 +380,8 @@ fn run(ctx: RunContext) -> Result<()> {
     if tui {
         devenv_tui::app::save_terminal_state();
 
-        let prev_hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(move |info| {
+        let prev_hook = panic::take_hook();
+        panic::set_hook(Box::new(move |info| {
             devenv_tui::app::restore_terminal();
             prev_hook(info);
         }));
@@ -523,7 +521,8 @@ impl DevenvOutput {
                     // preventing debugger_is_pending() from being checked in launch_repl().
                     build_gc_runtime().block_on(async { devenv.launch_repl().await })
                 })
-                .map_err(|_| miette::miette!("Failed to spawn REPL thread"))
+                .into_diagnostic()
+                .wrap_err("Failed to spawn REPL thread")
                 .and_then(|handle| {
                     handle
                         .join()
@@ -635,7 +634,7 @@ async fn run_backend(
         } => {
             let dotfile_tmpdir = if *override_dotfile {
                 let setup_test_tmpdir = || -> Result<TempDir> {
-                    let pwd = std::env::current_dir()
+                    let pwd = env::current_dir()
                         .into_diagnostic()
                         .wrap_err("Failed to get current directory")?;
                     let tmpdir = TempDir::with_prefix_in(".devenv.", pwd)
@@ -647,14 +646,8 @@ async fn run_backend(
                     Ok(t) => t,
                     Err(e) => return output(Err(e)),
                 };
-                let file_name = tmpdir
-                    .path()
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .ok_or_else(|| miette::miette!("Temporary directory path is invalid"));
-                let file_name = match file_name {
-                    Ok(f) => f,
-                    Err(e) => return output(Err(e)),
+                let Some(file_name) = tmpdir.path().file_name().and_then(|f| f.to_str()) else {
+                    return output(Err(miette::miette!("Temporary directory path is invalid")));
                 };
                 info!("Overriding .devenv to {}", file_name);
                 options.devenv_dotfile = Some(tmpdir.path().to_path_buf());
@@ -684,7 +677,7 @@ async fn run_backend(
                 // Stable test state path: isolates test services from shell state while
                 // keeping the path consistent across runs so the eval cache is effective.
                 let dotfile = options.devenv_dotfile.clone().unwrap_or_else(|| {
-                    std::env::current_dir()
+                    env::current_dir()
                         .expect("Failed to get current directory")
                         .join(".devenv")
                 });
@@ -800,12 +793,12 @@ impl CommandResult {
                 Ok(())
             }
             CommandResult::Exec(mut cmd) => {
-                use std::os::unix::process::CommandExt;
+                use os::unix::process::CommandExt;
                 let err = cmd.exec();
                 miette::bail!("Failed to exec: {}", err);
             }
             CommandResult::ExitCode(code) => {
-                std::process::exit(code);
+                process::exit(code);
             }
         }
     }
@@ -894,7 +887,8 @@ async fn dispatch_command(
                 .map(|(attr, path)| (attr, serde_json::Value::String(path.display().to_string())))
                 .collect();
             let json = serde_json::to_string_pretty(&json_map)
-                .map_err(|e| miette::miette!("Failed to serialize JSON: {}", e))?;
+                .into_diagnostic()
+                .wrap_err("Failed to serialize JSON")?;
             Ok(CommandResult::Print(format!("{json}\n")))
         }
         Commands::Eval { attributes } => {
@@ -1212,7 +1206,8 @@ async fn run_reload_shell(
     let exit_code = shell_session
         .run(command_rx, event_tx, handoff, SessionIo::default())
         .await
-        .map_err(|e| miette::miette!("Shell session error: {}", e))?;
+        .into_diagnostic()
+        .wrap_err("Shell session error")?;
 
     // Wait for coordinator to finish
     let _ = coordinator_handle.await;
@@ -1267,7 +1262,8 @@ fn build_gc_runtime() -> tokio::runtime::Runtime {
 /// Prompt for missing secretspec secrets interactively.
 fn prompt_secrets(provider: Option<String>, profile: Option<String>) -> Result<()> {
     let mut secrets = secretspec::Secrets::load()
-        .map_err(|e| miette::miette!("Failed to load secretspec: {}", e))?;
+        .into_diagnostic()
+        .wrap_err("Failed to load secretspec")?;
 
     if let Some(ref p) = provider {
         secrets.set_provider(p);
@@ -1278,7 +1274,8 @@ fn prompt_secrets(provider: Option<String>, profile: Option<String>) -> Result<(
 
     secrets
         .ensure_secrets(provider, profile, true)
-        .map_err(|e| miette::miette!("Failed to set secrets: {}", e))?;
+        .into_diagnostic()
+        .wrap_err("Failed to set secrets")?;
 
     Ok(())
 }

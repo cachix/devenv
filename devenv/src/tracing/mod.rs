@@ -8,7 +8,7 @@ mod span_timings;
 use devenv_layer::{DevenvFormat, DevenvLayer};
 use span_ids::{SpanContext, SpanIdLayer};
 
-pub use crate::cli::{TraceFormat, TraceOutput, TraceOutputSpec};
+pub use crate::cli::{OtlpProtocol, TraceFormat, TraceOutputSpec, TraceSink};
 pub use human_duration::HumanReadableDuration;
 
 use json_subscriber::JsonLayer;
@@ -67,13 +67,13 @@ impl Write for TraceWriter {
     }
 }
 
-fn create_trace_writer(output: &TraceOutput) -> Option<Mutex<TraceWriter>> {
-    match output {
-        TraceOutput::Stdout => Some(Mutex::new(TraceWriter::Stdout(io::stdout()))),
-        TraceOutput::Stderr => Some(Mutex::new(TraceWriter::Stderr(LineWriter::new(
+fn create_trace_writer(sink: &TraceSink) -> Option<Mutex<TraceWriter>> {
+    match sink {
+        TraceSink::Stdout => Some(Mutex::new(TraceWriter::Stdout(io::stdout()))),
+        TraceSink::Stderr => Some(Mutex::new(TraceWriter::Stderr(LineWriter::new(
             io::stderr(),
         )))),
-        TraceOutput::File(path) => match File::create(path) {
+        TraceSink::File(path) => match File::create(path) {
             Ok(f) => Some(Mutex::new(TraceWriter::File(LineWriter::new(f)))),
             Err(e) => {
                 eprintln!(
@@ -83,7 +83,6 @@ fn create_trace_writer(output: &TraceOutput) -> Option<Mutex<TraceWriter>> {
                 None
             }
         },
-        TraceOutput::Url(_) => None,
     }
 }
 
@@ -149,7 +148,9 @@ pub fn init_tracing_default() -> TracingGuard {
 /// Returns a [`TracingGuard`] that must be held until program exit to ensure
 /// proper flushing of trace data.
 pub fn init_tracing(level: Level, specs: &[TraceOutputSpec]) -> TracingGuard {
-    let has_otlp = specs.iter().any(|s| s.format.is_otlp());
+    let has_otlp = specs
+        .iter()
+        .any(|s| matches!(s, TraceOutputSpec::Otlp(_, _)));
 
     if has_otlp {
         return init_tracing_with_otlp(level, specs);
@@ -158,20 +159,24 @@ pub fn init_tracing(level: Level, specs: &[TraceOutputSpec]) -> TracingGuard {
     init_tracing_local(level, specs)
 }
 
-/// Create a boxed local-format layer for a single spec.
+/// Create a boxed render layer for a `Render` spec. Returns `None` for OTLP specs.
 pub(crate) fn create_local_boxed_layer<S>(
     spec: &TraceOutputSpec,
 ) -> Option<Box<dyn Layer<S> + Send + Sync>>
 where
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
 {
-    let writer = create_trace_writer(&spec.destination)?;
-    let ansi = match &spec.destination {
-        TraceOutput::Stdout => io::stdout().is_terminal(),
-        TraceOutput::Stderr => io::stderr().is_terminal(),
-        _ => false,
+    let (format, sink) = match spec {
+        TraceOutputSpec::Render(format, sink) => (format, sink),
+        TraceOutputSpec::Otlp(_, _) => return None,
     };
-    match spec.format {
+    let writer = create_trace_writer(sink)?;
+    let ansi = match sink {
+        TraceSink::Stdout => io::stdout().is_terminal(),
+        TraceSink::Stderr => io::stderr().is_terminal(),
+        TraceSink::File(_) => false,
+    };
+    match format {
         TraceFormat::Full => Some(Box::new(
             tracing_subscriber::fmt::layer()
                 .with_ansi(ansi)
@@ -184,7 +189,6 @@ where
                 .pretty(),
         )),
         TraceFormat::Json => Some(Box::new(create_json_layer(writer))),
-        _ => None, // OTLP handled elsewhere
     }
 }
 
@@ -238,21 +242,17 @@ fn init_tracing_with_otlp(level: Level, specs: &[TraceOutputSpec]) -> TracingGua
     #[cfg(not(feature = "otlp"))]
     {
         let _ = level;
-        use clap::ValueEnum;
-        let otlp_formats: Vec<_> = specs
+        let otlp_protocols: Vec<String> = specs
             .iter()
-            .filter(|s| s.format.is_otlp())
-            .map(|s| {
-                s.format
-                    .to_possible_value()
-                    .map(|v| v.get_name().to_string())
-                    .unwrap_or_else(|| format!("{:?}", s.format))
+            .filter_map(|s| match s {
+                TraceOutputSpec::Otlp(proto, _) => Some(proto.to_string()),
+                _ => None,
             })
             .collect();
         eprintln!(
-            "error: trace format(s) '{}' require the corresponding cargo feature \
+            "error: trace protocol(s) '{}' require the corresponding cargo feature \
              (otlp-grpc, otlp-http-protobuf, or otlp-http-json)",
-            otlp_formats.join(", ")
+            otlp_protocols.join(", ")
         );
         std::process::exit(1);
     }
