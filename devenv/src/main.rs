@@ -555,31 +555,9 @@ fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Resul
     drop(_tracing_guard);
 
     match backend_result {
+        Ok(CommandResult::Debugger(devenv, err)) => launch_debugger(*devenv, err),
         Ok(cmd_result) => cmd_result.exec(),
-        Err(BackendError {
-            err,
-            devenv_for_debugger: Some(devenv),
-        }) => launch_debugger(devenv, err),
-        Err(BackendError { err, .. }) => Err(err),
-    }
-}
-
-/// Error returned from `run_backend`.
-///
-/// Carries an owned `Devenv` when the failure should drop the user into the
-/// Nix debugger REPL (`--nix-debugger`). All other failure paths leave
-/// `devenv_for_debugger` as `None`.
-struct BackendError {
-    err: miette::Report,
-    devenv_for_debugger: Option<devenv::Devenv>,
-}
-
-impl From<miette::Report> for BackendError {
-    fn from(err: miette::Report) -> Self {
-        Self {
-            err,
-            devenv_for_debugger: None,
-        }
+        Err(err) => Err(err),
     }
 }
 
@@ -635,7 +613,7 @@ async fn run_backend(
     backend_done: Arc<tokio::sync::Notify>,
     terminal_ready_rx: Option<tokio::sync::oneshot::Receiver<u16>>,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
-) -> Result<CommandResult, BackendError> {
+) -> Result<CommandResult> {
     let BackendOptions {
         devenv: devenv_options,
         command,
@@ -685,13 +663,13 @@ async fn run_backend(
         });
         let devenv = tokio::task::block_in_place(|| owner_handle.join())
             .map_err(|e| miette::miette!("Devenv owner thread panicked: {}", panic_message(e)))?;
-        return attach_debugger_on_err(result, nix_debugger, devenv);
+        return debugger_or_err(result, nix_debugger, devenv);
     }
 
     // REPL: run assembly with TUI active, then hand off terminal for interactive REPL
     if let Commands::Repl {} = command {
         let result = run_repl(&devenv, &mut backend_done_guard, terminal_ready_rx).await;
-        return attach_debugger_on_err(result, nix_debugger, devenv);
+        return debugger_or_err(result, nix_debugger, devenv);
     }
 
     // All other commands
@@ -705,29 +683,26 @@ async fn run_backend(
     // Notify TUI before debugger check, so TUI shuts down before debugger takes the terminal.
     drop(backend_done_guard);
 
-    attach_debugger_on_err(result, nix_debugger, devenv)
+    debugger_or_err(result, nix_debugger, devenv)
 }
 
-/// Convert a command result into a `Result<_, BackendError>`, optionally
-/// attaching an owned `Devenv` for the Nix debugger REPL on error.
-fn attach_debugger_on_err(
+/// On error with `--nix-debugger`, defer to the debugger REPL by carrying the
+/// owned `Devenv` (and error) back out as a `CommandResult`. The caller, after
+/// joining the backend thread and tearing down the TUI, launches the REPL.
+/// Without the flag, errors propagate normally.
+fn debugger_or_err(
     result: Result<CommandResult>,
     nix_debugger: bool,
     devenv: devenv::Devenv,
-) -> Result<CommandResult, BackendError> {
+) -> Result<CommandResult> {
     match result {
-        Ok(r) => Ok(r),
-        Err(err) if nix_debugger => Err(BackendError {
-            err,
-            devenv_for_debugger: Some(devenv),
-        }),
-        Err(err) => Err(err.into()),
+        Err(err) if nix_debugger => Ok(CommandResult::Debugger(Box::new(devenv), err)),
+        other => other,
     }
 }
 
 /// Result of a CLI command execution.
 /// This is a CLI concern - the library returns domain types.
-#[derive(Debug)]
 enum CommandResult {
     /// Command completed normally
     Done,
@@ -737,6 +712,10 @@ enum CommandResult {
     Exec(Command),
     /// Exit with a specific code (e.g., from shell exit)
     ExitCode(i32),
+    /// Eval failed under `--nix-debugger`: launch the Nix debugger REPL with
+    /// the owned `Devenv`. Handled by the caller after TUI teardown, never
+    /// reaches `exec()`.
+    Debugger(Box<devenv::Devenv>, miette::Report),
 }
 
 impl CommandResult {
@@ -758,6 +737,9 @@ impl CommandResult {
             }
             CommandResult::ExitCode(code) => {
                 process::exit(code);
+            }
+            CommandResult::Debugger(..) => {
+                unreachable!("Debugger is handled in run() before exec()")
             }
         }
     }
