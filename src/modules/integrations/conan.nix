@@ -40,9 +40,9 @@ in
 
   config = lib.mkIf cfg.enable {
 
-    # conan-flake exposes an `outputs.devShell` devShell by default that can be
-    # used directly, or passed in the inputsFrom option as a means to compose
-    # with other devShell modules.
+    # conan-flake exposes `outputs.devShell` by default that can be used
+    # directly, or passed in the inputsFrom option as a means to compose with
+    # other devShell modules.
     inputsFrom = [ cfg.config.outputs.devShell ];
 
   };
