@@ -25,11 +25,15 @@ pub use devenv::{
 };
 pub use devenv_tasks as tasks;
 
+// Re-export common subsystem crates for convenience.
+pub use devenv_activity as activity;
+pub use devenv_tui as tui;
+
 // Re-export core types from devenv-core for convenience
 pub use devenv_core::{
-    Backend, BuildOptions, CachixCacheInfo, CachixManager, CachixPaths, Config, DevenvPaths,
-    Evaluator, NixArgs, NixSettings, SecretOptions, SecretSettings, SecretspecData, VerbosityLevel,
-    default_system,
+    Backend, BuildOptions, CacheSettings, CachixCacheInfo, CachixManager, CachixPaths, Config,
+    DevenvPaths, Evaluator, InputOverrides, NixArgs, NixSettings, SecretOptions, SecretSettings,
+    SecretspecData, ShellSettings, VerbosityLevel, config, default_system,
 };
 
 /// Returns true if this binary was NOT built from a release.

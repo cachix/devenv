@@ -1,23 +1,20 @@
 use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
-    Devenv, RunMode,
+    CacheSettings, Devenv, InputOverrides, NixSettings, RunMode, SecretSettings, ShellSettings,
+    VerbosityLevel,
+    activity::{ActivityGuard, ActivityLevel},
     cli::{
         Cli, CliOptions, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
         TraceOutputSpec,
     },
     commands,
-    processes::ProcessCommand,
-    reload::DevenvShellBuilder,
-    tracing as devenv_tracing,
-};
-use devenv_activity::{ActivityGuard, ActivityLevel};
-use devenv_core::{
-    CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings, VerbosityLevel,
     config::{self, Config},
+    processes::ProcessCommand,
+    reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
+    tracing as devenv_tracing,
+    tui::{SessionIo, ShellSession, TuiHandoff},
 };
-use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
-use devenv_tui::{SessionIo, ShellSession, TuiHandoff};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::{
     collections::BTreeMap,
@@ -204,38 +201,6 @@ impl TestDirs {
                 _guards: (None, None),
             })
         }
-    }
-}
-
-/// Detect whether we are running inside an AI coding agent.
-///
-/// LLM tools typically allocate a PTY so is_terminal() returns true,
-/// but their verbose TUI output wastes tokens. We check for well-known
-/// environment variables set by popular AI agents and the emerging
-/// AI_AGENT standard (https://github.com/anthropics/claude-code/blob/main/AI_AGENT.md).
-///
-/// Set `DEVENV_NO_AI_AGENT=1` to opt out of detection (forces normal output/TUI
-/// even when running under a detected agent).
-fn is_ai_agent() -> bool {
-    static CACHED: OnceLock<bool> = OnceLock::new();
-    *CACHED.get_or_init(|| {
-        if env::var_os("DEVENV_NO_AI_AGENT").is_some() {
-            return false;
-        }
-        env::var_os("CLAUDECODE").is_some()
-            || env::var_os("OPENCODE_CLIENT").is_some()
-            || env::var_os("AI_AGENT").is_some()
-    })
-}
-
-/// Resolve `--quiet`/`--verbose` (with AI-agent auto-quiet) into a `VerbosityLevel`.
-fn resolve_verbosity(cli_options: &CliOptions) -> VerbosityLevel {
-    if cli_options.verbose {
-        VerbosityLevel::Verbose
-    } else if cli_options.quiet || is_ai_agent() {
-        VerbosityLevel::Quiet
-    } else {
-        VerbosityLevel::Normal
     }
 }
 
@@ -1178,6 +1143,40 @@ fn prompt_secrets(provider: Option<String>, profile: Option<String>) -> Result<(
         .wrap_err("Failed to set secrets")?;
 
     Ok(())
+}
+
+// Logging helpers
+
+/// Detect whether we are running inside an AI coding agent.
+///
+/// LLM tools typically allocate a PTY so is_terminal() returns true,
+/// but their verbose TUI output wastes tokens. We check for well-known
+/// environment variables set by popular AI agents and the emerging
+/// AI_AGENT standard (https://github.com/anthropics/claude-code/blob/main/AI_AGENT.md).
+///
+/// Set `DEVENV_NO_AI_AGENT=1` to opt out of detection (forces normal output/TUI
+/// even when running under a detected agent).
+fn is_ai_agent() -> bool {
+    static CACHED: OnceLock<bool> = OnceLock::new();
+    *CACHED.get_or_init(|| {
+        if env::var_os("DEVENV_NO_AI_AGENT").is_some() {
+            return false;
+        }
+        env::var_os("CLAUDECODE").is_some()
+            || env::var_os("OPENCODE_CLIENT").is_some()
+            || env::var_os("AI_AGENT").is_some()
+    })
+}
+
+/// Resolve `--quiet`/`--verbose` (with AI-agent auto-quiet) into a `VerbosityLevel`.
+fn resolve_verbosity(cli_options: &CliOptions) -> VerbosityLevel {
+    if cli_options.verbose {
+        VerbosityLevel::Verbose
+    } else if cli_options.quiet || is_ai_agent() {
+        VerbosityLevel::Quiet
+    } else {
+        VerbosityLevel::Normal
+    }
 }
 
 // Error formatting helpers
