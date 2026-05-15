@@ -103,6 +103,8 @@ cargo run --bin tui-replay <(zstd -dc trace.jsonl.zst)
 - `Esc`: Clear selection
 
 ### Expanded Logs
+Long lines wrap onto continuation rows so their full content stays readable.
+
 - `↑/↓` or `j/k`: Scroll one line
 - `PgUp/PgDn` or `Space`: Scroll page
 - `g/G`: Jump to top/bottom

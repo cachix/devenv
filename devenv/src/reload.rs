@@ -108,11 +108,11 @@ impl ShellBuilder for DevenvShellBuilder {
                 .map_err(|e| BuildError::new(format!("Failed to write env script: {}", e)))?;
 
             // Select dialect based on configured shell
-            tracing::debug!("Shell setting: {:?}", self.shell);
+            tracing::trace!("Shell setting: {:?}", self.shell);
             let dialect = create_dialect(&self.shell);
             let target_shell_path = if dialect.name() != "bash" {
                 let path = resolve_shell_path(dialect.name());
-                tracing::debug!("Resolved {} shell path: {}", dialect.name(), path);
+                tracing::trace!("Resolved {} shell path: {}", dialect.name(), path);
                 Some(path)
             } else {
                 None
@@ -320,19 +320,19 @@ impl DevenvShellBuilder {
     /// Uses stored pool and cache key since the devenv instance may not have them set.
     async fn add_watch_paths_from_cache(&self, ctx: &BuildContext) {
         let Some(pool) = &self.eval_cache_pool else {
-            tracing::debug!("No eval cache pool available");
+            tracing::trace!("No eval cache pool available");
             return;
         };
 
         // First try: get files by specific shell cache key
         if let Some(cache_key) = &self.shell_cache_key {
-            tracing::debug!(
+            tracing::trace!(
                 "Looking up file inputs for key_hash: {}",
                 cache_key.key_hash
             );
             match devenv_eval_cache::get_file_inputs_by_key_hash(pool, &cache_key.key_hash).await {
                 Ok(inputs) if !inputs.is_empty() => {
-                    tracing::debug!("Found {} file inputs for shell key", inputs.len());
+                    tracing::trace!("Found {} file inputs for shell key", inputs.len());
                     let paths: Vec<_> = inputs
                         .into_iter()
                         .filter(|i| i.path.exists() && !i.path.starts_with("/nix/store"))
@@ -342,7 +342,7 @@ impl DevenvShellBuilder {
                     return;
                 }
                 Ok(_) => {
-                    tracing::debug!("No file inputs found for shell key, trying all tracked files");
+                    tracing::trace!("No file inputs found for shell key, trying all tracked files");
                 }
                 Err(e) => {
                     tracing::warn!("Failed to query by key_hash: {}", e);
@@ -353,7 +353,7 @@ impl DevenvShellBuilder {
         // Fallback: get all tracked files from any evaluation
         match devenv_eval_cache::get_all_tracked_file_paths(pool).await {
             Ok(paths) => {
-                tracing::debug!("Found {} total tracked files in eval cache", paths.len());
+                tracing::trace!("Found {} total tracked files in eval cache", paths.len());
                 let filtered: Vec<_> = paths
                     .into_iter()
                     .filter(|p| p.exists() && !p.starts_with("/nix/store"))

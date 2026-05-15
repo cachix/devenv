@@ -40,6 +40,10 @@ pub enum NixBackendType {
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct AndroidSdkConfig {
+    /// Accept the Android SDK license.
+    /// Can also be set via the `NIXPKGS_ACCEPT_ANDROID_SDK_LICENSE=1` environment variable.
+    ///
+    /// Default: `false`.
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(alias = "acceptLicense", merge = schematic::merge::replace)]
     pub accept_license: bool,
@@ -48,41 +52,89 @@ pub struct AndroidSdkConfig {
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct NixpkgsConfig {
+    /// Allow unfree packages.
+    ///
+    /// Default: `false`.
+    ///
+    /// Added in 1.7.
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(alias = "allowUnfree", merge = schematic::merge::replace)]
     pub allow_unfree: bool,
+    /// Allow packages that are not supported on the current system.
+    ///
+    /// Default: `false`.
+    ///
+    /// Added in 2.0.5.
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(alias = "allowUnsupportedSystem", merge = schematic::merge::replace)]
     pub allow_unsupported_system: bool,
+    /// Allow packages marked as broken.
+    ///
+    /// Default: `false`.
+    ///
+    /// Added in 1.7.
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(alias = "allowBroken", merge = schematic::merge::replace)]
     pub allow_broken: bool,
+    /// Allow packages not built from source.
+    ///
+    /// Default: `true` (nixpkgs default).
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(alias = "allowNonSource", merge = schematic::merge::replace)]
     pub allow_non_source: bool,
+    /// Enable CUDA support for nixpkgs.
+    ///
+    /// Default: `false`.
+    ///
+    /// Added in 1.7.
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(alias = "cudaSupport", merge = schematic::merge::replace)]
     pub cuda_support: bool,
+    /// Select CUDA capabilities for nixpkgs.
+    ///
+    /// Default: `[]`.
+    ///
+    /// Added in 1.7.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     #[setting(alias = "cudaCapabilities", merge = schematic::merge::append_vec)]
     pub cuda_capabilities: Vec<String>,
+    /// Enable ROCm support for nixpkgs.
+    ///
+    /// Default: `false`.
+    ///
+    /// Added in 2.0.7.
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(alias = "rocmSupport", merge = schematic::merge::replace)]
     pub rocm_support: bool,
+    /// A list of insecure permitted packages.
+    ///
+    /// Default: `[]`.
+    ///
+    /// Added in 1.7.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     #[setting(alias = "permittedInsecurePackages", merge = schematic::merge::append_vec)]
     pub permitted_insecure_packages: Vec<String>,
+    /// A list of unfree packages to allow by name.
+    ///
+    /// Default: `[]`.
+    ///
+    /// Added in 1.9.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     #[setting(alias = "permittedUnfreePackages")]
     pub permitted_unfree_packages: Vec<String>,
-    /// License names to allow (e.g. "mit", "gpl3Only").
-    /// Only applied in bootstrapLib.nix where lib.licenses is available;
-    /// not serialized to NIXPKGS_CONFIG since raw strings won't match license attrsets.
+    /// A list of license names to allow.
+    /// Uses nixpkgs license attribute names (e.g. `gpl3Only`, `mit`, `asl20`).
+    /// See [nixpkgs license list](https://github.com/NixOS/nixpkgs/blob/master/lib/licenses.nix).
+    ///
+    /// Default: `[]`.
     #[serde(skip_serializing, default)]
     #[setting(alias = "allowlistedLicenses", merge = schematic::merge::append_vec)]
     pub allowlisted_licenses: Vec<String>,
-    /// License names to block (e.g. "unfree", "bsl11").
-    /// Only applied in bootstrapLib.nix; not serialized to NIXPKGS_CONFIG.
+    /// A list of license names to block.
+    /// Uses nixpkgs license attribute names (e.g. `unfree`, `bsl11`).
+    /// See [nixpkgs license list](https://github.com/NixOS/nixpkgs/blob/master/lib/licenses.nix).
+    ///
+    /// Default: `[]`.
     #[serde(skip_serializing, default)]
     #[setting(alias = "blocklistedLicenses", merge = schematic::merge::append_vec)]
     pub blocklisted_licenses: Vec<String>,
@@ -94,15 +146,30 @@ pub struct NixpkgsConfig {
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct Input {
+    /// URI specification of the input.
+    /// See [Supported URI formats](../inputs.md#supported-uri-formats).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub url: Option<String>,
+    /// Does the input contain `flake.nix` or `devenv.nix`.
+    ///
+    /// Default: `true`.
     #[serde(skip_serializing_if = "is_true", default = "true_default")]
     #[setting(default = true)]
     pub flake: bool,
+    /// Another input to "inherit" from by name.
+    /// See [Following inputs](../inputs.md#following-inputs).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub follows: Option<String>,
+    /// Override nested inputs by name.
+    /// See [Following inputs](../inputs.md#following-inputs).
+    ///
+    /// Opaque.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub inputs: BTreeMap<String, Input>,
+    /// A list of overlays to include from the input.
+    /// See [Overlays](../overlays.md).
+    ///
+    /// Default: `[]`.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub overlays: Vec<String>,
 }
@@ -153,20 +220,41 @@ impl TryFrom<&Input> for FlakeInput {
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Clean {
+    /// Clean the environment when entering the shell.
+    ///
+    /// Default: `false`.
+    ///
+    /// Added in 1.0.
     pub enabled: bool,
+    /// A list of environment variables to keep when cleaning the environment.
+    ///
+    /// Default: `[]`.
+    ///
+    /// Added in 1.0.
     pub keep: Vec<String>,
     // TODO: executables?
 }
 
 impl Clean {
+    /// Variables devenv requires internally and must survive env cleaning.
+    /// `_DEVENV_HOOK_DIR` marks shells spawned by `devenv hook`; the shell
+    /// hooks rely on its presence to know whether `cd`-ing out of the
+    /// project should exit the current shell.
+    const ALWAYS_KEEP: &'static [&'static str] = &["_DEVENV_HOOK_DIR"];
+
     /// Return host environment variables filtered by the clean/keep settings.
     ///
-    /// When `enabled`, only variables whose name appears in `keep` are
-    /// returned. Otherwise every host variable is returned.
+    /// When `enabled`, only variables whose name appears in `keep` or
+    /// `ALWAYS_KEEP` are returned. Otherwise every host variable is returned.
     pub fn kept_env_vars(&self) -> HashMap<String, String> {
         let vars = std::env::vars();
         if self.enabled {
-            let keep: HashSet<&str> = self.keep.iter().map(|s| s.as_str()).collect();
+            let keep: HashSet<&str> = self
+                .keep
+                .iter()
+                .map(|s| s.as_str())
+                .chain(Self::ALWAYS_KEEP.iter().copied())
+                .collect();
             vars.filter(|(key, _)| keep.contains(key.as_str()))
                 .collect()
         } else {
@@ -182,6 +270,12 @@ pub struct Nixpkgs {
     #[serde(flatten)]
     #[setting(nested)]
     pub config_: NixpkgsConfig,
+    /// Per-platform nixpkgs configuration.
+    /// Accepts the same options as `nixpkgs`.
+    ///
+    /// Opaque.
+    ///
+    /// Added in 1.7.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     // TODO(v3.0): remove deprecated alias
     #[setting(alias = "per-platform", nested, merge = schematic::merge::merge_btreemap)]
@@ -193,11 +287,18 @@ pub struct Nixpkgs {
 #[serde(rename_all = "snake_case")]
 pub struct Config {
     /// Version requirement for the devenv CLI.
-    /// Set to `true` to enforce CLI matches the modules version,
-    /// or a constraint string like `">=2.0.0"`.
+    /// Set to `true` to enforce that the CLI version matches the modules version
+    /// (from the `devenv` input), or use a constraint string with operators
+    /// (`>=`, `<=`, `>`, `<`, `=`, or a bare version for an exact match).
+    ///
+    /// Added in 2.1.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(merge = schematic::merge::replace)]
     pub require_version: Option<RequireVersion>,
+    /// Map of Nix inputs.
+    /// See [Inputs](../inputs.md).
+    ///
+    /// Default: `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     #[setting(nested, merge = schematic::merge::merge_btreemap)]
     pub inputs: BTreeMap<String, Input>,
@@ -222,6 +323,10 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(nested)]
     pub nixpkgs: Option<Nixpkgs>,
+    /// A list of relative paths, absolute paths, or references to inputs to import `devenv.nix` and `devenv.yaml` files.
+    /// See [Composing using imports](../composing-using-imports.md).
+    ///
+    /// Default: `[]`.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     #[setting(merge = schematic::merge::append_vec)]
     pub imports: Vec<String>,
@@ -235,24 +340,56 @@ pub struct Config {
     #[setting(nested)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub clean: Option<Clean>,
+    /// Relax the hermeticity of the environment.
+    ///
+    /// Default: `false`.
+    ///
+    /// Added in 1.0.
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(merge = schematic::merge::replace)]
     pub impure: bool,
+    /// Select the Nix backend used to evaluate `devenv.nix`.
+    ///
+    /// Default: `nix`.
     #[serde(default, skip_serializing_if = "is_default")]
     #[setting(merge = schematic::merge::replace)]
     pub backend: NixBackendType,
     #[setting(nested)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub secretspec: Option<SecretspecConfig>,
+    /// Default profile to activate.
+    /// Can be overridden by `--profile` CLI flag.
+    /// See [Profiles](../profiles.md).
+    ///
+    /// Added in 1.11.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(merge = schematic::merge::replace)]
     pub profile: Option<String>,
+    /// Enable auto-reload of the shell when files change.
+    /// Can be overridden by `--reload` or `--no-reload` CLI flags.
+    ///
+    /// Default: `true`.
+    ///
+    /// Added in 2.0.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(merge = schematic::merge::replace)]
     pub reload: Option<bool>,
+    /// Error if a port is already in use instead of auto-allocating the next available port.
+    /// Can be overridden by `--strict-ports` or `--no-strict-ports` CLI flags.
+    ///
+    /// Default: `false`.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(alias = "strictPorts", merge = schematic::merge::replace)]
     pub strict_ports: Option<bool>,
+    /// Default interactive shell to use when entering the devenv environment.
+    /// Can be overridden by the `--shell` CLI flag.
+    /// Falls back to the `$SHELL` environment variable, then `bash`.
+    ///
+    /// Supported values: `bash`, `zsh`, `fish`, `nu`. Any other value falls back to `bash`.
+    ///
+    /// Default: `$SHELL` or `bash`.
+    ///
+    /// Added in 2.1.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(merge = schematic::merge::replace)]
     pub shell: Option<String>,
@@ -263,11 +400,22 @@ pub struct Config {
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SecretspecConfig {
+    /// Enable [secretspec integration](../integrations/secretspec.md).
+    ///
+    /// Default: `false`.
+    ///
+    /// Added in 1.8.
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(default = false)]
     pub enable: bool,
+    /// Secretspec profile name to use.
+    ///
+    /// Added in 1.8.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub profile: Option<String>,
+    /// Secretspec provider to use.
+    ///
+    /// Added in 1.8.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub provider: Option<String>,
 }
@@ -284,6 +432,381 @@ pub async fn write_json_schema() -> Result<()> {
         .into_diagnostic()
         .wrap_err_with(|| format!("Failed to write json schema to {}", path.display()))?;
     Ok(())
+}
+
+pub async fn write_yaml_options_doc() -> Result<()> {
+    let schema = schema_for!(Config);
+    let json: serde_json::Value = serde_json::to_value(&schema)
+        .into_diagnostic()
+        .wrap_err("Failed to serialize JSON schema")?;
+    let rendered = render_yaml_options(&json);
+    let path = Path::new("docs/src/reference/yaml-options.md");
+    tokio::fs::write(path, &rendered)
+        .await
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to write yaml-options to {}", path.display()))?;
+    Ok(())
+}
+
+struct OptionSection {
+    path: String,
+    description: String,
+    added_in: Option<String>,
+    default: Option<String>,
+    type_label: String,
+}
+
+struct ParsedMeta {
+    body: String,
+    added_in: Option<String>,
+    default: Option<String>,
+    opaque: bool,
+}
+
+fn render_yaml_options(schema: &serde_json::Value) -> String {
+    let defs = schema
+        .get("$defs")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+    let properties = schema
+        .get("properties")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut sections: Vec<OptionSection> = Vec::new();
+    let visited: HashSet<String> = HashSet::new();
+    for (name, prop) in properties.iter() {
+        collect_sections(name, prop, &defs, &visited, &mut sections);
+    }
+    sections.sort_by(|a, b| a.path.cmp(&b.path));
+
+    let mut out = String::from("# devenv.yaml\n\n");
+    out.push_str("<!-- This file is auto-generated from devenv-core/src/config.rs doc comments. Do not edit. -->\n\n");
+    for section in sections {
+        out.push_str(&render_section(&section));
+    }
+    out
+}
+
+/// Extract the `$ref` target name from a schema, considering direct `$ref` and `anyOf` wrappers.
+fn ref_target(schema: &serde_json::Value) -> Option<String> {
+    if let Some(r) = schema.get("$ref").and_then(|v| v.as_str())
+        && let Some(name) = r.strip_prefix("#/$defs/")
+    {
+        return Some(name.to_string());
+    }
+    if let Some(any) = schema.get("anyOf").and_then(|v| v.as_array()) {
+        let non_null: Vec<&serde_json::Value> = any
+            .iter()
+            .filter(|v| v.get("type").and_then(|t| t.as_str()) != Some("null"))
+            .collect();
+        if non_null.len() == 1 {
+            return ref_target(non_null[0]);
+        }
+    }
+    None
+}
+
+fn collect_sections(
+    path: &str,
+    schema: &serde_json::Value,
+    defs: &serde_json::Map<String, serde_json::Value>,
+    visited: &HashSet<String>,
+    out: &mut Vec<OptionSection>,
+) {
+    if schema.get("deprecated").and_then(|v| v.as_bool()) == Some(true) {
+        return;
+    }
+
+    let resolved = resolve_ref(schema, defs);
+    let description = description_of(schema).unwrap_or_default();
+    let opaque = parse_description(&description).opaque;
+
+    // Map types (BTreeMap<String, T>) -> emit "<path>.<name>.<sub>" sections via additionalProperties.
+    if let Some(additional) = resolved.get("additionalProperties") {
+        let wildcard_path = format!("{}.\\<name\\>", path);
+        let inner_ref = ref_target(additional);
+        let cycle = inner_ref
+            .as_ref()
+            .map(|name| visited.contains(name))
+            .unwrap_or(false);
+        let inner_resolved = resolve_ref(additional, defs);
+
+        if !opaque
+            && !cycle
+            && inner_resolved
+                .get("properties")
+                .and_then(|v| v.as_object())
+                .is_some()
+        {
+            if !description.is_empty() {
+                out.push(make_section(
+                    path,
+                    &type_label(&resolved, defs),
+                    description,
+                ));
+            }
+            let mut next = visited.clone();
+            if let Some(name) = inner_ref {
+                next.insert(name);
+            }
+            if let Some(props) = inner_resolved.get("properties").and_then(|v| v.as_object()) {
+                for (name, sub) in props {
+                    collect_sections(
+                        &format!("{}.{}", wildcard_path, name),
+                        sub,
+                        defs,
+                        &next,
+                        out,
+                    );
+                }
+            }
+            return;
+        }
+        // Cycle, opaque, scalar value type, or no struct properties -> single section.
+        out.push(make_section(
+            path,
+            &type_label(&resolved, defs),
+            description,
+        ));
+        return;
+    }
+
+    // Object with properties (via $ref or inline) -> recurse.
+    let inline_ref = ref_target(schema);
+    let cycle = inline_ref
+        .as_ref()
+        .map(|name| visited.contains(name))
+        .unwrap_or(false);
+    if !opaque
+        && !cycle
+        && let Some(props) = resolved.get("properties").and_then(|v| v.as_object())
+    {
+        if !description.is_empty() {
+            out.push(make_section(
+                path,
+                &type_label(&resolved, defs),
+                description,
+            ));
+        }
+        let mut next = visited.clone();
+        if let Some(name) = inline_ref {
+            next.insert(name);
+        }
+        for (name, sub) in props {
+            collect_sections(&format!("{}.{}", path, name), sub, defs, &next, out);
+        }
+        return;
+    }
+
+    // Leaf scalar / enum / cycle / opaque.
+    let desc = if description.is_empty() {
+        description_of(&resolved).unwrap_or_default()
+    } else {
+        description
+    };
+    out.push(make_section(path, &type_label(&resolved, defs), desc));
+}
+
+fn make_section(path: &str, type_label: &str, raw_description: String) -> OptionSection {
+    let meta = parse_description(&raw_description);
+    OptionSection {
+        path: path.to_string(),
+        description: meta.body,
+        added_in: meta.added_in,
+        default: meta.default,
+        type_label: type_label.to_string(),
+    }
+}
+
+fn parse_description(input: &str) -> ParsedMeta {
+    let mut lines: Vec<String> = input.lines().map(|l| l.to_string()).collect();
+    let mut added_in: Option<String> = None;
+    let mut default: Option<String> = None;
+    let mut opaque = false;
+    // Walk lines from the end, pulling off trailing metadata markers.
+    while let Some(last) = lines.last().cloned() {
+        let trimmed = last.trim();
+        if trimmed.is_empty() {
+            lines.pop();
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("Added in ") {
+            added_in = Some(rest.trim_end_matches('.').to_string());
+            lines.pop();
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("Default: ") {
+            default = Some(rest.trim_end_matches('.').to_string());
+            lines.pop();
+            continue;
+        }
+        if trimmed == "Opaque." {
+            opaque = true;
+            lines.pop();
+            continue;
+        }
+        break;
+    }
+    ParsedMeta {
+        body: lines.join("\n").trim().to_string(),
+        added_in,
+        default,
+        opaque,
+    }
+}
+
+fn render_section(s: &OptionSection) -> String {
+    let mut out = format!("## {}\n\n", s.path);
+    if !s.description.is_empty() {
+        out.push_str(&s.description);
+        out.push_str("\n\n");
+    }
+    let mut meta = vec![format!("*Type:* {}", s.type_label)];
+    if let Some(default) = &s.default {
+        meta.push(format!("*Default:* {}", default));
+    }
+    out.push_str(&meta.join(" · "));
+    out.push('\n');
+    if let Some(version) = &s.added_in {
+        out.push_str(&format!("\n!!! tip \"New in version {}\"\n", version));
+    }
+    out.push('\n');
+    out
+}
+
+fn description_of(schema: &serde_json::Value) -> Option<String> {
+    schema
+        .get("description")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
+fn resolve_ref(
+    schema: &serde_json::Value,
+    defs: &serde_json::Map<String, serde_json::Value>,
+) -> serde_json::Value {
+    // Direct $ref
+    if let Some(reference) = schema.get("$ref").and_then(|v| v.as_str())
+        && let Some(name) = reference.strip_prefix("#/$defs/")
+        && let Some(target) = defs.get(name)
+    {
+        return target.clone();
+    }
+    // anyOf with one $ref + null -> resolve the $ref.
+    if let Some(any) = schema.get("anyOf").and_then(|v| v.as_array()) {
+        let non_null: Vec<&serde_json::Value> = any
+            .iter()
+            .filter(|v| v.get("type").and_then(|t| t.as_str()) != Some("null"))
+            .collect();
+        if non_null.len() == 1 {
+            return resolve_ref(non_null[0], defs);
+        }
+    }
+    schema.clone()
+}
+
+/// Returns a markdown-ready type expression including outer backticks.
+fn type_label(
+    schema: &serde_json::Value,
+    defs: &serde_json::Map<String, serde_json::Value>,
+) -> String {
+    format!("`{}`", type_label_inner(schema, defs))
+}
+
+fn type_label_inner(
+    schema: &serde_json::Value,
+    defs: &serde_json::Map<String, serde_json::Value>,
+) -> String {
+    let ref_name = ref_target(schema);
+    let resolved = resolve_ref(schema, defs);
+
+    if let Some(enum_values) = resolved.get("enum").and_then(|v| v.as_array()) {
+        let values: Vec<String> = enum_values
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect();
+        return values.join(" | ");
+    }
+
+    if let Some(any) = resolved.get("anyOf").and_then(|v| v.as_array()) {
+        let parts: Vec<String> = any
+            .iter()
+            .filter(|v| v.get("type").and_then(|t| t.as_str()) != Some("null"))
+            .map(|v| type_label_inner(v, defs))
+            .collect();
+        if !parts.is_empty() {
+            return parts.join(" | ");
+        }
+    }
+
+    if let Some(types) = resolved.get("type").and_then(|v| v.as_array()) {
+        let non_null: Vec<&str> = types
+            .iter()
+            .filter_map(|t| t.as_str())
+            .filter(|s| *s != "null")
+            .collect();
+        if non_null.len() == 1 {
+            return scalar_label_inner(non_null[0], &resolved, defs, ref_name.as_deref());
+        }
+    }
+
+    if let Some(ty) = resolved.get("type").and_then(|v| v.as_str()) {
+        return scalar_label_inner(ty, &resolved, defs, ref_name.as_deref());
+    }
+
+    ref_name.unwrap_or_else(|| "unknown".to_string())
+}
+
+fn scalar_label_inner(
+    ty: &str,
+    schema: &serde_json::Value,
+    defs: &serde_json::Map<String, serde_json::Value>,
+    ref_name: Option<&str>,
+) -> String {
+    match ty {
+        "boolean" => "boolean".to_string(),
+        "string" => "string".to_string(),
+        "integer" => "integer".to_string(),
+        "number" => "number".to_string(),
+        "array" => {
+            let item_label = schema
+                .get("items")
+                .map(|i| type_label_inner(i, defs))
+                .unwrap_or_else(|| "any".to_string());
+            format!("list of {}", item_label)
+        }
+        "object" => {
+            if let Some(additional) = schema.get("additionalProperties") {
+                let inner_ref = ref_target(additional);
+                let inner = inner_ref
+                    .map(|n| humanize_ref_name(&n))
+                    .unwrap_or_else(|| type_label_inner(additional, defs));
+                format!("attribute set of {}", inner)
+            } else if let Some(name) = ref_name {
+                humanize_ref_name(name)
+            } else {
+                "attribute set".to_string()
+            }
+        }
+        other => other.to_string(),
+    }
+}
+
+/// `NixpkgsConfig` -> `nixpkgs config`, `Input` -> `input`.
+fn humanize_ref_name(name: &str) -> String {
+    let mut out = String::new();
+    for (i, ch) in name.chars().enumerate() {
+        if i > 0 && ch.is_uppercase() {
+            out.push(' ');
+        }
+        for low in ch.to_lowercase() {
+            out.push(low);
+        }
+    }
+    out
 }
 
 impl From<&Path> for Config {

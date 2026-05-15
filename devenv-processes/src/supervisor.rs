@@ -7,7 +7,7 @@ use devenv_event_sources::{
 use futures::future::Either;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 use watchexec_supervisor::job::CommandState;
 use watchexec_supervisor::{ProcessEnd, Signal};
@@ -291,7 +291,7 @@ pub fn spawn_supervisor(
                                     let _ = status_tx.send(state.status());
                                 }
                                 NotifyMessage::Watchdog => {
-                                    debug!("Watchdog ping from {}", name);
+                                    trace!("Watchdog ping from {}", name);
                                     let _ = state.on_event(Event::WatchdogPing, Instant::now());
                                     let _ = status_tx.send(state.status());
                                 }
@@ -323,14 +323,14 @@ pub fn spawn_supervisor(
                                     let _ = status_tx.send(state.status());
                                 }
                                 NotifyMessage::ExtendTimeout { usec } => {
-                                    debug!("Extend timeout from {}: {} usec", name, usec);
+                                    trace!("Extend timeout from {}: {} usec", name, usec);
                                     let _ = state.on_event(Event::ExtendTimeout { usec }, Instant::now());
                                     let _ = status_tx.send(state.status());
                                     // Eagerly refresh deadline since ExtendTimeout changes it
                                     refresh_deadline!(state, current_deadline, deadline_fut);
                                 }
                                 NotifyMessage::Status(status) => {
-                                    debug!("Status from {}: {}", name, status);
+                                    trace!("Status from {}: {}", name, status);
                                     activity.log(format!("Status: {}", status));
                                 }
                                 NotifyMessage::Stopping => {
@@ -444,7 +444,7 @@ pub fn spawn_supervisor(
             refresh_deadline!(state, current_deadline, deadline_fut);
         }
 
-        debug!("Supervision task for {} exiting", name);
+        trace!("Supervision task for {} exiting", name);
     })
 }
 

@@ -1,10 +1,9 @@
 //! Pre-bootstrap lock-file helpers.
 //!
 //! Free functions over an explicit `EvalState` + `Store` + settings.
-//! Lock helpers never open a store or build an eval state; the caller
-//! controls lifecycle. The expected pattern is to build a fresh
-//! transient `EvalState` via `NixCBackend::fresh_eval_state` (or
-//! analogous setup), pass it here, and drop it when done.
+//! Lock helpers never open a store; the caller controls eval-state lifecycle.
+//! Wrap construction + validation in [`with_lock_scope`] so the lazy
+//! `«nix-internal»/derivation-internal.nix` load nests under the activity.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -13,13 +12,50 @@ use std::sync::Arc;
 use devenv_activity::{Activity, ActivityLevel, instrument_activity};
 use devenv_core::config::Input;
 use devenv_core::nix_log_bridge::NixLogBridge;
-use miette::Result;
-use nix_bindings_expr::eval_state::EvalState;
+use miette::{Result, WrapErr};
+use nix_bindings_expr::eval_state::{EvalState, EvalStateBuilder};
 use nix_bindings_fetchers::FetchersSettings;
-use nix_bindings_flake::FlakeSettings;
+use nix_bindings_flake::{EvalStateBuilderExt, FlakeSettings};
 use nix_bindings_store::store::Store;
 
 use crate::anyhow_ext::AnyhowToMiette;
+
+/// Build a transient `EvalState` for lock-file work. Drop it when done.
+pub fn build_eval_state(
+    store: &Store,
+    root: &Path,
+    flake_settings: &FlakeSettings,
+) -> Result<EvalState> {
+    let root_str = root
+        .to_str()
+        .ok_or_else(|| miette::miette!("Root path contains invalid UTF-8"))?;
+    EvalStateBuilder::new(store.clone())
+        .to_miette()
+        .wrap_err("Failed to create eval state builder")?
+        .base_directory(root_str)
+        .to_miette()
+        .wrap_err("Failed to set base directory")?
+        .flakes(flake_settings)
+        .to_miette()
+        .wrap_err("Failed to configure flakes")?
+        .build()
+        .to_miette()
+        .wrap_err("Failed to build eval state")
+}
+
+/// Run `f` inside a "Validating lock" activity + `begin_eval` scope.
+///
+/// Wrap any `EvalState` construction and validation here so Nix's lazy
+/// `«nix-internal»` loads nest under the activity.
+pub fn with_lock_scope<F, T>(bridge: &Arc<NixLogBridge>, f: F) -> Result<T>
+where
+    F: FnOnce() -> Result<T>,
+{
+    let activity =
+        devenv_activity::start!(Activity::evaluate("Validating lock").level(ActivityLevel::Info));
+    let _eval_guard = bridge.begin_eval(activity.id());
+    activity.with_new_scope_sync(f)
+}
 
 /// Validate (and create or update if needed) `<root>/devenv.lock`,
 /// returning the fingerprint of the resulting lock graph.
@@ -28,20 +64,12 @@ pub fn validate_and_load(
     store: &Store,
     fetchers_settings: &FetchersSettings,
     flake_settings: &FlakeSettings,
-    bridge: &Arc<NixLogBridge>,
     root: &Path,
     inputs: &BTreeMap<String, Input>,
 ) -> Result<String> {
-    let activity =
-        devenv_activity::start!(Activity::evaluate("Validating lock").level(ActivityLevel::Info));
-    // Register as the current eval scope so Nix activities fired from
-    // worker threads (libgit2 fetch, etc.) nest under this activity.
-    let _eval_guard = bridge.begin_eval(activity.id());
-    activity.with_new_scope_sync(|| {
-        crate::validate_lock_file(eval_state, fetchers_settings, flake_settings, root, inputs)
-            .to_miette()?;
-        fingerprint(store, fetchers_settings, root)
-    })
+    crate::validate_lock_file(eval_state, fetchers_settings, flake_settings, root, inputs)
+        .to_miette()?;
+    fingerprint(store, fetchers_settings, root)
 }
 
 /// Compute the fingerprint of `<root>/devenv.lock` against `store`.

@@ -39,11 +39,7 @@ impl Drop for OtelGuard {
 ///
 /// All layers (CLI, local exports, OTLP exports) are collected into a single
 /// `Vec<Box<dyn Layer>>` and composed onto one `Registry`.
-pub(super) fn init_tracing_unified(
-    level: Level,
-    specs: &[TraceOutputSpec],
-    cli_output: bool,
-) -> TracingGuard {
+pub(super) fn init_tracing_unified(level: Level, specs: &[TraceOutputSpec]) -> TracingGuard {
     // The OTLP exporter and batch processor need a tokio runtime.
     // This is called before the application's main runtime exists, so we
     // create a lightweight dedicated runtime.
@@ -66,9 +62,7 @@ pub(super) fn init_tracing_unified(
 
     let mut layers: Vec<Box<dyn Layer<_> + Send + Sync>> = Vec::new();
 
-    if let Some(cli_layer) = build_cli_layer(level, cli_output) {
-        layers.push(cli_layer);
-    }
+    layers.push(build_cli_layer());
 
     // Local format layers
     for spec in specs.iter().filter(|s| !s.format.is_otlp()) {

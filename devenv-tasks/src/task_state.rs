@@ -112,14 +112,14 @@ impl TaskState {
     async fn get_cached_output(&self, cache: &TaskCache) -> Option<serde_json::Value> {
         match cache.get_task_output(&self.task.name).await {
             Ok(Some(output)) => {
-                tracing::debug!(
+                tracing::trace!(
                     "Found cached output for task {} in database",
                     self.task.name
                 );
                 Some(output)
             }
             Ok(None) => {
-                tracing::debug!("No cached output found for task {}", self.task.name);
+                tracing::trace!("No cached output found for task {}", self.task.name);
                 None
             }
             Err(e) => {
@@ -473,7 +473,7 @@ impl TaskState {
         refresh_task_cache: bool,
         shell_env: &std::collections::HashMap<String, String>,
     ) -> Result<TaskCompleted> {
-        tracing::debug!(
+        tracing::trace!(
             "Running task '{}' with exec_if_modified: {:?}, status: {}",
             self.task.name,
             self.task.exec_if_modified,
@@ -529,7 +529,7 @@ impl TaskState {
                                 }
                             }
                             let output = Output(Some(result));
-                            tracing::debug!(
+                            tracing::trace!(
                                 "Task {} skipped with output: {:?}",
                                 self.task.name,
                                 output
@@ -571,7 +571,7 @@ impl TaskState {
                         None => self.get_cached_output(cache).await,
                     };
 
-                    tracing::debug!(
+                    tracing::trace!(
                         "Skipping task {} due to unmodified files, output: {:?}",
                         self.task.name,
                         task_output

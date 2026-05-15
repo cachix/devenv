@@ -84,6 +84,12 @@ pub const LOG_VIEWPORT_COLLAPSED: usize = 10;
 pub const LOG_VIEWPORT_FAILED: usize = 20;
 /// Reduced viewport height for tasks with showOutput=true (expands to full when selected)
 pub const LOG_VIEWPORT_SHOW_OUTPUT: usize = 3;
+/// Hard cap on the inline log preview's visual-row footprint. Long log lines
+/// wrap onto continuation rows, so the visual height can exceed `max_lines`;
+/// without a cap, e.g. 20 long lines × several wrap rows each would push the
+/// surrounding activity tree off-screen. Pressing 'e' opens the expanded view
+/// for unconstrained scrolling.
+pub const INLINE_LOG_MAX_VISUAL_ROWS: u32 = 50;
 
 /// Format elapsed time for display: ms -> s -> m s -> h m
 /// When `high_resolution` is true, shows ms for sub-second durations.
@@ -737,49 +743,53 @@ impl<'a> ExpandedContentComponent<'a> {
         self
     }
 
+    /// The last `max_lines` log lines, preserving chronological order. Wrapping
+    /// is left to iocraft's `Text` widget so word boundaries and unicode width
+    /// are handled correctly.
+    fn visible_lines(&self) -> Vec<String> {
+        let Some(lines) = self.lines else {
+            return Vec::new();
+        };
+        lines
+            .iter()
+            .rev()
+            .take(self.max_lines)
+            .rev()
+            .cloned()
+            .collect()
+    }
+
     pub fn render(&self) -> Vec<AnyElement<'static>> {
-        // Calculate indentation based on depth (2 base + 2 per depth level)
         let indent = 2 + (self.depth * 2);
 
-        if let Some(lines) = &self.lines
-            && !lines.is_empty()
-        {
-            // Take the last N lines that fit in collapsed viewport
-            let visible_lines: Vec<_> = lines.iter().rev().take(self.max_lines).rev().collect();
-
-            if !visible_lines.is_empty() {
-                let actual_height = visible_lines.len();
-
-                let mut line_elements = vec![];
-                for line in visible_lines {
-                    line_elements.push(
-                        element! {
-                            View(height: 1, flex_direction: FlexDirection::Row) {
-                                Text(content: format!(" {line}"), color: Color::AnsiValue(245))
-                            }
-                        }
-                        .into_any(),
-                    );
-                }
-
-                return vec![
+        let lines = self.visible_lines();
+        if !lines.is_empty() {
+            let line_elements: Vec<AnyElement<'static>> = lines
+                .into_iter()
+                .map(|line| {
                     element! {
-                        View(
-                            height: actual_height as u32,
-                            flex_direction: FlexDirection::Column,
-                            overflow: Overflow::Hidden,
-                            margin_left: indent as u32,
-                            margin_right: 1,
-                            border_style: BorderStyle::Single,
-                            border_edges: Edges::Left,
-                            border_color: Color::AnsiValue(245),
-                        ) {
-                            #(line_elements)
-                        }
+                        Text(content: format!(" {line}"), color: Color::AnsiValue(245))
                     }
-                    .into_any(),
-                ];
-            }
+                    .into_any()
+                })
+                .collect();
+
+            return vec![
+                element! {
+                    View(
+                        flex_direction: FlexDirection::Column,
+                        overflow: Overflow::Hidden,
+                        margin_left: indent as u32,
+                        margin_right: 1,
+                        border_style: BorderStyle::Single,
+                        border_edges: Edges::Left,
+                        border_color: Color::AnsiValue(245),
+                    ) {
+                        #(line_elements)
+                    }
+                }
+                .into_any(),
+            ];
         }
 
         // Fallback: show empty message with minimal height
@@ -791,29 +801,27 @@ impl<'a> ExpandedContentComponent<'a> {
         .into_any()]
     }
 
-    /// Calculate the height this component will take
+    /// Approximate visible height: one row per log line. The actual height after
+    /// `Text` wrapping may be larger, so callers that bound the inline view should
+    /// rely on a flex `max_height` rather than treating this as an upper bound.
     pub fn calculate_height(&self) -> usize {
-        if let Some(lines) = &self.lines
-            && !lines.is_empty()
-        {
-            let visible_count = lines.len().min(self.max_lines);
-            if visible_count > 0 {
-                return visible_count;
-            }
-        }
-        1 // Minimal height for empty message
+        let count = self.visible_lines().len();
+        if count > 0 { count } else { 1 }
     }
 
-    /// Render the component with a main activity line, returning a single element
-    /// with proper height calculation for the combined content.
+    /// Render the component with a main activity line. Height is content-sized
+    /// up to `INLINE_LOG_MAX_VISUAL_ROWS` so wrapped log lines aren't clipped
+    /// but a runaway wrap can't push the rest of the activity tree off-screen.
     pub fn render_with_main_line(&self, main_line: AnyElement<'static>) -> AnyElement<'static> {
         let mut elements = vec![main_line];
         elements.extend(self.render());
 
-        let total_height = (1 + self.calculate_height()) as u32;
-
         element! {
-            View(height: total_height, flex_direction: FlexDirection::Column) {
+            View(
+                flex_direction: FlexDirection::Column,
+                max_height: INLINE_LOG_MAX_VISUAL_ROWS,
+                overflow: Overflow::Hidden,
+            ) {
                 #(elements)
             }
         }
@@ -1009,5 +1017,72 @@ mod tests {
         let (name, _suffix) =
             calculate_display_info("pkg", 80, "building", Some(suffix), "1.0s", 0);
         assert_eq!(name, "pkg");
+    }
+
+    #[test]
+    fn expanded_content_keeps_last_max_lines_in_chronological_order() {
+        let mut logs = VecDeque::new();
+        logs.push_back("one".to_string());
+        logs.push_back("two".to_string());
+        logs.push_back("three".to_string());
+        logs.push_back("four".to_string());
+
+        let component = ExpandedContentComponent::new(Some(&logs)).with_max_lines(2);
+
+        assert_eq!(
+            component.visible_lines(),
+            vec!["three".to_string(), "four".to_string()]
+        );
+    }
+
+    #[test]
+    fn expanded_content_passes_long_lines_through_unchanged() {
+        // Long lines are wrapped by iocraft's Text widget at render time, not
+        // shortened here; verify the full line survives `visible_lines`.
+        let long = "INFO    -  [12:00:00] Serving on http://127.0.0.1:8000/".to_string();
+        let mut logs = VecDeque::new();
+        logs.push_back(long.clone());
+
+        let component = ExpandedContentComponent::new(Some(&logs)).with_max_lines(3);
+
+        assert_eq!(component.visible_lines(), vec![long]);
+    }
+
+    #[test]
+    fn inline_log_view_wraps_long_url_at_narrow_terminal() {
+        // Reproduce the user's reported scenario: at a narrow terminal width a
+        // long mkdocs-style URL line should wrap onto continuation rows with
+        // every char of the original line still present.
+        let mut logs = VecDeque::new();
+        let line = "INFO    -  [13:23:16] Serving on http://127.0.0.1:8000/".to_string();
+        logs.push_back(line.clone());
+
+        let component = ExpandedContentComponent::new(Some(&logs))
+            .with_max_lines(3)
+            .with_depth(1);
+
+        let elements = component.render();
+        let mut elem = element! {
+            View(width: 40u32, flex_direction: FlexDirection::Column) {
+                #(elements)
+            }
+        };
+        let out = elem.render(Some(40)).to_string();
+
+        // No ellipsis truncation, and every char of the URL appears somewhere
+        // in the rendered output (possibly across wrap rows).
+        assert!(
+            !out.contains('…'),
+            "rendered output contained ellipsis:\n{}",
+            out
+        );
+        // The most distinctive tail of the URL should appear unmodified on
+        // some visual row (iocraft wraps at the last word boundary so "/"
+        // ends up on its own row after "Serving on").
+        assert!(
+            out.contains("http://127.0.0.1:8000/"),
+            "expected URL to appear intact in wrapped output:\n{}",
+            out
+        );
     }
 }

@@ -38,7 +38,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::process;
 use tokio::sync::OnceCell;
-use tracing::{Instrument, debug, info, instrument};
+use tracing::{Instrument, debug, debug_span, info, info_span, instrument, trace, warn};
 
 pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
     include_str!("../../direnvrc").replace(
@@ -420,22 +420,22 @@ impl Devenv {
                 let logger_setup = devenv_nix_backend::logger::setup_nix_logger()
                     .wrap_err("Failed to set up activity logger")?;
 
-                let fingerprint = {
-                    let lock_eval_state = crate::backend::build_lock_eval_state(
-                        &store,
-                        &paths.root,
-                        &flake_settings,
-                    )?;
-                    devenv_nix_backend::lock::validate_and_load(
-                        &lock_eval_state,
-                        &store,
-                        &fetchers_settings,
-                        &flake_settings,
-                        &logger_setup.bridge,
-                        &paths.root,
-                        &options.inputs,
-                    )?
-                };
+                let fingerprint =
+                    devenv_nix_backend::lock::with_lock_scope(&logger_setup.bridge, || {
+                        let eval_state = devenv_nix_backend::lock::build_eval_state(
+                            &store,
+                            &paths.root,
+                            &flake_settings,
+                        )?;
+                        devenv_nix_backend::lock::validate_and_load(
+                            &eval_state,
+                            &store,
+                            &fetchers_settings,
+                            &flake_settings,
+                            &paths.root,
+                            &options.inputs,
+                        )
+                    })?;
 
                 let bootstrap_args = Arc::new(build_bootstrap_args(
                     &config,
@@ -968,7 +968,7 @@ impl Devenv {
         match changelog.show_new().await {
             Ok(output) => Ok(output),
             Err(e) => {
-                tracing::warn!("Failed to show changelogs: {}", e);
+                warn!("Failed to show changelogs: {}", e);
                 Ok(None)
             }
         }
@@ -1172,7 +1172,7 @@ impl Devenv {
         let path = match self.backend.get_bash(&gc_root, false).await {
             Ok(p) => p,
             Err(e) => {
-                tracing::trace!("Failed to get bash: {}. Rebuilding.", e);
+                trace!("Failed to get bash: {}. Rebuilding.", e);
                 self.backend.get_bash(&gc_root, true).await?
             }
         };
@@ -1246,7 +1246,7 @@ impl Devenv {
                 .into_diagnostic()
                 .wrap_err("Failed to execute environment capture script")
         }
-        .instrument(tracing::info_span!("capture_env_subprocess"))
+        .instrument(info_span!("capture_env_subprocess"))
         .await?;
 
         if !output.status.success() {
@@ -1584,7 +1584,7 @@ impl Devenv {
                 bail!("No process tasks found to run");
             }
 
-            debug!(
+            trace!(
                 "Running {} process tasks with dependency ordering: {:?}",
                 roots.len(),
                 roots
@@ -1615,11 +1615,11 @@ impl Devenv {
             // Run process tasks under the Phase 4 activity.
             // Auto start off processes (start.enable = false) are handled by the
             // process manager: they appear in the TUI as stopped.
-            debug!("devenv.up: running process tasks (run_with_parent_activity)");
+            trace!("devenv.up: running process tasks (run_with_parent_activity)");
             let _outputs = tasks_runner
                 .run_with_parent_activity(Arc::new(phase4))
                 .await;
-            debug!("devenv.up: process tasks completed");
+            trace!("devenv.up: process tasks completed");
 
             // API server is started inside run_internal() so it's available
             // while processes are still starting up.
@@ -1630,7 +1630,7 @@ impl Devenv {
                 .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
 
             if !options.detach {
-                debug!(
+                trace!(
                     "devenv.up: calling run_foreground (native manager, detach=false), global_token_cancelled={}",
                     self.shutdown.is_cancelled()
                 );
@@ -1639,7 +1639,7 @@ impl Devenv {
                     .run_foreground(self.shutdown.cancellation_token(), None)
                     .await
                     .map_err(|e| miette!("Process manager error: {}", e));
-                debug!("devenv.up: run_foreground returned");
+                trace!("devenv.up: run_foreground returned");
 
                 let _ = tokio::fs::remove_file(&pid_file).await;
                 result?;
@@ -2007,7 +2007,7 @@ impl Devenv {
                     .map(|p| (p.process_name, p.port_name, p.port))
                     .collect();
                 if !seeds.is_empty() {
-                    tracing::debug!(
+                    trace!(
                         count = seeds.len(),
                         "Seeded port allocator from native manager"
                     );
@@ -2016,10 +2016,10 @@ impl Devenv {
                 }
             }
             Ok(_) => {
-                tracing::debug!("Unexpected response from native manager ports query");
+                trace!("Unexpected response from native manager ports query");
             }
             Err(e) => {
-                tracing::debug!("Could not query native manager for ports: {}", e);
+                trace!("Could not query native manager for ports: {}", e);
             }
         }
     }
@@ -2034,7 +2034,7 @@ impl Devenv {
     async fn get_dev_environment_inner(&self, json: bool) -> Result<DevEnv> {
         self.setup_cachix().await?;
         let gc_root = self.devenv_dot_gc.join("shell");
-        let span = tracing::debug_span!("evaluating_dev_env");
+        let span = debug_span!("evaluating_dev_env");
         let cnix = self.require_cnix()?;
         let env = cnix.dev_env(json, &gc_root).instrument(span).await?;
 
@@ -2180,7 +2180,7 @@ pub fn resolve_shell_path(shell_name: &str) -> String {
     if let Ok(shell_env) = std::env::var("SHELL") {
         let path = Path::new(&shell_env);
         if path.is_absolute() && path.file_name().and_then(|n| n.to_str()) == Some(shell_name) {
-            tracing::debug!("resolve_shell_path: using $SHELL={}", shell_env);
+            trace!("resolve_shell_path: using $SHELL={}", shell_env);
             return shell_env;
         }
     }
@@ -2188,11 +2188,11 @@ pub fn resolve_shell_path(shell_name: &str) -> String {
     match which::which(shell_name) {
         Ok(p) => {
             let resolved = p.to_string_lossy().to_string();
-            tracing::debug!("resolve_shell_path: found {} at {}", shell_name, resolved);
+            trace!("resolve_shell_path: found {} at {}", shell_name, resolved);
             resolved
         }
         Err(_) => {
-            tracing::warn!(
+            warn!(
                 "resolve_shell_path: could not find '{}' in PATH, using bare name",
                 shell_name
             );

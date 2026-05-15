@@ -107,7 +107,7 @@ impl CachingEvalService {
     ) -> Result<Option<CachedEvalResult>, CacheError> {
         // Force refresh bypasses cache
         if self.config.force_refresh {
-            debug!(key_hash = %key.key_hash, "Force refresh enabled, skipping cache");
+            trace!(key_hash = %key.key_hash, "Force refresh enabled, skipping cache");
             return Ok(None);
         }
 
@@ -137,7 +137,7 @@ impl CachingEvalService {
         // Update timestamp
         db::update_eval_updated_at(&self.pool, eval_row.id).await?;
 
-        debug!(
+        trace!(
             key_hash = %key.key_hash,
             attr_name = %key.attr_name,
             "Cache hit"
@@ -171,7 +171,7 @@ impl CachingEvalService {
         )
         .await?;
 
-        debug!(
+        trace!(
             key_hash = %key.key_hash,
             attr_name = %key.attr_name,
             num_inputs = inputs.len(),
@@ -517,7 +517,7 @@ impl CachedEval {
             })
             .collect::<Result<Vec<_>, serde_json::Error>>()?;
 
-        debug!(
+        trace!(
             eval_id = eval_id,
             num_specs = specs.len(),
             "Replaying resource allocations from cache"
@@ -536,7 +536,7 @@ impl CachedEval {
     ) {
         let specs = rm.snapshot_all();
         if !specs.is_empty() {
-            debug!(
+            trace!(
                 eval_id = eval_id,
                 num_specs = specs.len(),
                 "Storing resource allocations in cache"

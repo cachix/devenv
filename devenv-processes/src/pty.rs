@@ -5,7 +5,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use tracing::{debug, error};
+use tracing::{debug, error, trace};
 
 /// PTY process wrapper
 pub struct PtyProcess {
@@ -63,7 +63,7 @@ impl PtyProcess {
             .slave
             .spawn_command(cmd)
             .map_err(|e| miette!("Failed to spawn command: {}", e))?;
-        debug!("PTY process spawned successfully");
+        trace!("PTY process spawned successfully");
 
         // Set up a reader thread to forward PTY output to stdout
         let mut reader = pair
@@ -89,7 +89,7 @@ impl PtyProcess {
                     match reader.read(&mut buffer) {
                         Ok(0) => {
                             // EOF reached
-                            debug!("PTY reader: EOF");
+                            trace!("PTY reader: EOF");
                             break;
                         }
                         Ok(n) => {
@@ -106,7 +106,7 @@ impl PtyProcess {
                         }
                     }
                 }
-                debug!("PTY reader thread exiting");
+                trace!("PTY reader thread exiting");
             })
             .expect("failed to spawn pty-reader thread");
 

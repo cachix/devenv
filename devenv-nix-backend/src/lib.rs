@@ -450,7 +450,7 @@ pub fn compute_lock_fingerprint(
         loop {
             let attr_path = iter.attr_path()?;
             if let Some(fingerprint) = iter.fingerprint(fetch_settings, store)? {
-                tracing::debug!("attr_path: {}, fingerprint: {}", attr_path, fingerprint);
+                tracing::trace!("attr_path: {}, fingerprint: {}", attr_path, fingerprint);
                 parts.push(format!("{}={}", attr_path, fingerprint));
             }
             if !iter.next() {

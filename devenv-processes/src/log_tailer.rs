@@ -54,10 +54,13 @@ pub fn spawn_file_tailer(path: PathBuf, activity: ActivityRef, is_stderr: bool) 
                     // Otherwise the file just hasn't grown yet; loop will re-read.
                 }
                 Ok(_) => {
-                    // Strip trailing newline before emitting
-                    if line.ends_with('\n') {
-                        line.pop();
-                    }
+                    // Drop CR/LF. Under a pty the OS translates "\n" writes to
+                    // "\r\n", so log files commonly have CRLF line endings; any
+                    // bare "\r" surviving into the TUI moves the terminal cursor
+                    // back to column 0 mid-row and erases rendered content.
+                    // Progress-style writers also emit mid-line "\r" between
+                    // updates, which get bundled into one read_line record.
+                    line.retain(|c| c != '\r' && c != '\n');
                     if is_stderr {
                         activity.error(&line);
                     } else {

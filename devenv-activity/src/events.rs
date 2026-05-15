@@ -1,5 +1,7 @@
 //! Activity event types for the devenv activity tracking system.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 use valuable::Valuable;
 
@@ -181,6 +183,29 @@ pub enum EvalOp {
     PathExists { source: std::path::PathBuf },
     /// Used a tracked devenv string path.
     TrackedPath { source: std::path::PathBuf },
+}
+
+impl fmt::Display for EvalOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EvalOp::CopiedSource { source, target } => write!(
+                f,
+                "copied source '{}' -> '{}'",
+                source.display(),
+                target.display()
+            ),
+            EvalOp::EvaluatedFile { source } => {
+                write!(f, "evaluating file '{}'", source.display())
+            }
+            EvalOp::ReadFile { source } => write!(f, "readFile: '{}'", source.display()),
+            EvalOp::ReadDir { source } => write!(f, "readDir: '{}'", source.display()),
+            EvalOp::GetEnv { name } => write!(f, "getEnv: '{}'", name),
+            EvalOp::PathExists { source } => {
+                write!(f, "pathExists: '{}'", source.display())
+            }
+            EvalOp::TrackedPath { source } => write!(f, "path: '{}'", source.display()),
+        }
+    }
 }
 
 /// Evaluate activity events.

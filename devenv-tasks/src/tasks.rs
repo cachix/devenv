@@ -672,7 +672,7 @@ impl Tasks {
 
             for (dep_state, dep_kind) in deps {
                 let dep_guard = dep_state.read().await;
-                tracing::debug!(
+                tracing::trace!(
                     "  dep {} status={:?} kind={:?}",
                     dep_guard.task.name,
                     dep_guard.status,

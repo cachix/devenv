@@ -4,8 +4,12 @@
 set -q _DEVENV_HOOK_UNTRUSTED; or set -g _DEVENV_HOOK_UNTRUSTED ""
 
 function _devenv_hook --on-variable PWD
-    # Inside devenv shell: exit when leaving the project directory
-    if set -q DEVENV_ROOT
+    # Inside a hook-spawned devenv shell: exit when leaving the project
+    # directory. `_DEVENV_HOOK_DIR` is the marker — set only in shells we
+    # spawned below. `DEVENV_ROOT` alone is not enough: direnv (and other
+    # tools) may export it into the user's outer shell, and an unguarded
+    # `exit` there closes the terminal.
+    if test -n "$_DEVENV_HOOK_DIR" -a -n "$DEVENV_ROOT"
         switch $PWD
             case "$DEVENV_ROOT" "$DEVENV_ROOT/*"
                 return

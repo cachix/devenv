@@ -1,4 +1,4 @@
-use clap::{CommandFactory, Parser, crate_version};
+use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
     Devenv, RunMode,
@@ -90,7 +90,7 @@ fn main_inner() -> Result<()> {
     // Retry loop: if the backend discovers secrets need interactive prompting,
     // we prompt the user and re-run the entire command with secrets now available.
     loop {
-        let cli = Cli::parse();
+        let cli = Cli::parse_preprocessed();
 
         // Handle commands that don't need config or runtime
         match &cli.command {
@@ -368,8 +368,7 @@ fn run(ctx: RunContext) -> Result<()> {
         (Renderer::None, None)
     };
 
-    let _tracing_guard =
-        devenv_tracing::init_tracing(ctx.log_level, &ctx.tracing_specs, cli_output);
+    let _tracing_guard = devenv_tracing::init_tracing(ctx.log_level, &ctx.tracing_specs);
 
     let tui = ctx.tui;
     let needs_terminal_handoff = ctx.needs_terminal_handoff;
@@ -1063,6 +1062,12 @@ async fn dispatch_command(
                 .wrap_err("Failed to generate JSON schema")?;
             Ok(CommandResult::Done)
         }
+        Commands::GenerateYamlOptionsDoc => {
+            config::write_yaml_options_doc()
+                .await
+                .wrap_err("Failed to generate yaml-options doc")?;
+            Ok(CommandResult::Done)
+        }
         Commands::PrintPaths => {
             let paths = devenv.paths();
             let output = format!(
@@ -1143,7 +1148,7 @@ async fn run_reload_shell(
     // Get eval cache info (after print_dev_env set it up)
     let eval_cache_pool = devenv_guard.eval_cache_pool().cloned();
     let shell_cache_key = devenv_guard.shell_cache_key();
-    tracing::debug!(
+    tracing::trace!(
         "Reload setup: eval_cache_pool={}, shell_cache_key={}",
         eval_cache_pool.is_some(),
         shell_cache_key.is_some()

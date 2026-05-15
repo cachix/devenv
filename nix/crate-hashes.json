@@ -2,8 +2,6 @@
   "git+https://github.com/Uzaaft/libghostty-rs.git?rev=5ac47e9eb166add2c00c432bc65c279133629712#libghostty-vt-sys@0.1.1": "0cigbv2jfzckd6fcvrv4n9zsq38mj2arvbqjnz9n20dpkh4kv6xi",
   "git+https://github.com/Uzaaft/libghostty-rs.git?rev=5ac47e9eb166add2c00c432bc65c279133629712#libghostty-vt@0.1.1": "0cigbv2jfzckd6fcvrv4n9zsq38mj2arvbqjnz9n20dpkh4kv6xi",
   "git+https://github.com/cachix/crossterm?rev=91e3df5ccee39f142acefb9e99de1bf43c2fea67#crossterm@0.29.0": "0wn6n3znzv1jxw9ghl6qgsancd2myafs7kxpvn3lm3wsxhpvv76l",
-  "git+https://github.com/cachix/iocraft?rev=8de1f645c2010d2ad0959017ea06f5be1a5c1030#iocraft-macros@0.2.3": "1cb7wir29b9dp2v793hqs856824nvw98y60ksnwskk79pb510hy9",
-  "git+https://github.com/cachix/iocraft?rev=8de1f645c2010d2ad0959017ea06f5be1a5c1030#iocraft@0.8.0": "1cb7wir29b9dp2v793hqs856824nvw98y60ksnwskk79pb510hy9",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=c4058fc16f5d6c56ca0d4951de1f70490d1ca209#nix-bindings-bindgen-raw@0.1.0": "1lh6vama31na5q96jjn1z4l9hj3y76cdympk1960h6b89613yv4p",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=c4058fc16f5d6c56ca0d4951de1f70490d1ca209#nix-bindings-expr@0.1.0": "1lh6vama31na5q96jjn1z4l9hj3y76cdympk1960h6b89613yv4p",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=c4058fc16f5d6c56ca0d4951de1f70490d1ca209#nix-bindings-fetchers@0.1.0": "1lh6vama31na5q96jjn1z4l9hj3y76cdympk1960h6b89613yv4p",
@@ -11,7 +9,7 @@
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=c4058fc16f5d6c56ca0d4951de1f70490d1ca209#nix-bindings-store@0.1.0": "1lh6vama31na5q96jjn1z4l9hj3y76cdympk1960h6b89613yv4p",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=c4058fc16f5d6c56ca0d4951de1f70490d1ca209#nix-bindings-util@0.1.0": "1lh6vama31na5q96jjn1z4l9hj3y76cdympk1960h6b89613yv4p",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=c4058fc16f5d6c56ca0d4951de1f70490d1ca209#nix-cmd@0.1.0": "1lh6vama31na5q96jjn1z4l9hj3y76cdympk1960h6b89613yv4p",
-  "git+https://github.com/cachix/secretspec?rev=7b9fb014b1d095f854743eb642f18007396c95dc#secretspec@0.9.1": "1ps6f3s9pc5xr8gc4jyfblqqx6piv2j51cpjgyf54jppkf38g6bh",
+  "git+https://github.com/cachix/secretspec?rev=04b3e183dc380ea9bb797ef79962b81041315c3b#secretspec@0.10.1": "1mjprj6v33ap66307b6mxqcb7yg37svskk3vkm4z8qsszfrmv7nc",
   "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#nix-compat-derive@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
   "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#nix-compat@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
   "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-build@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
@@ -21,5 +19,7 @@
   "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-glue@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
   "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-store@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
   "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-tracing@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
+  "git+https://github.com/ccbrown/iocraft?rev=222abbd2ae3a6744df8e093632b8e6d272e8536d#iocraft-macros@0.2.4": "1zmzh2aga97923vzq37ax25lxzzik73b4jx4qhzcf9ylh3k79i5a",
+  "git+https://github.com/ccbrown/iocraft?rev=222abbd2ae3a6744df8e093632b8e6d272e8536d#iocraft@0.8.2": "1zmzh2aga97923vzq37ax25lxzzik73b4jx4qhzcf9ylh3k79i5a",
   "git+https://github.com/tvlfyi/wu-manber.git?rev=0d5b22bea136659f7de60b102a7030e0daaa503d#wu-manber@0.1.0": "1zhk83lbq99xzyjwphv2qrb8f8qgfqwa5bbbvyzm0z0bljsjv0pd"
 }

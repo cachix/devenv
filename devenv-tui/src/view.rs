@@ -741,10 +741,12 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 let log_elements = component.render();
                 elements.extend(log_elements);
 
-                let log_viewport_height = component.calculate_height();
-                let total_height = (1 + log_viewport_height).min(50) as u32;
                 return element! {
-                    View(height: total_height, flex_direction: FlexDirection::Column) {
+                    View(
+                        flex_direction: FlexDirection::Column,
+                        max_height: INLINE_LOG_MAX_VISUAL_ROWS,
+                        overflow: Overflow::Hidden,
+                    ) {
                         #(elements)
                     }
                 }

@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 /// Commands that can be sent to control processes
 #[derive(Debug, Clone)]
@@ -584,7 +584,7 @@ impl NativeProcessManager {
         config: &ProcessConfig,
         parent_id: Option<u64>,
     ) -> Result<Option<Arc<Job>>> {
-        debug!("Starting command '{}': {}", config.name, config.exec);
+        trace!("Starting command '{}': {}", config.name, config.exec);
 
         let activity = self.create_process_activity(config, parent_id);
 
@@ -820,7 +820,7 @@ impl NativeProcessManager {
 
         let grace_period = Duration::from_secs(5);
 
-        debug!("Stopping process: {}", name);
+        trace!("Stopping process: {}", name);
 
         // Abort the supervisor task first to prevent restarts
         supervisor_task.abort();
@@ -925,7 +925,7 @@ impl NativeProcessManager {
         let grace_period = Duration::from_secs(5);
         let ports = declared_ports(&handle.resources.config);
 
-        debug!("Stopping process (keeping visible): {}", name);
+        trace!("Stopping process (keeping visible): {}", name);
         handle
             .resources
             .activity
@@ -1025,13 +1025,13 @@ impl NativeProcessManager {
 
     /// Stop all processes and clear not-started/waiting entries
     pub async fn stop_all(&self) -> Result<()> {
-        debug!("stop_all: shutting down supervisors");
+        trace!("stop_all: shutting down supervisors");
         // Signal supervisors first so they exit gracefully
         self.shutdown_supervisors();
 
         let names = active_names(&*self.processes.read().await);
 
-        debug!("stop_all: stopping {} processes: {:?}", names.len(), names);
+        trace!("stop_all: stopping {} processes: {:?}", names.len(), names);
         for (name, result) in names
             .iter()
             .zip(futures::future::join_all(names.iter().map(|name| self.stop(name))).await)
@@ -1396,7 +1396,7 @@ impl NativeProcessManager {
                                 continue;
                             }
                         }
-                        debug!("API: waiting for process {} to become ready", name);
+                        trace!("API: waiting for process {} to become ready", name);
                         while rx.changed().await.is_ok() {
                             let status = rx.borrow();
                             if status.is_ready() || status.is_gave_up() {
@@ -1601,7 +1601,7 @@ impl NativeProcessManager {
                 // Add a small sleep to avoid busy loop
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {
                     if self.processes.read().await.is_empty() {
-                        debug!("No jobs running, exiting");
+                        trace!("No jobs running, exiting");
                         break;
                     }
                 }
@@ -1663,7 +1663,7 @@ impl NativeProcessManager {
         cancellation_token: tokio_util::sync::CancellationToken,
         mut command_rx: Option<mpsc::Receiver<ProcessCommand>>,
     ) -> Result<()> {
-        debug!(
+        trace!(
             "run_foreground: ENTERED, token_cancelled={}",
             cancellation_token.is_cancelled()
         );
@@ -1674,10 +1674,10 @@ impl NativeProcessManager {
             tokio::select! {
                 biased;
                 _ = cancellation_token.cancelled() => {
-                    debug!("run_foreground: cancellation detected, calling stop_all");
+                    trace!("run_foreground: cancellation detected, calling stop_all");
                     info!("Shutdown requested, stopping all processes");
                     self.stop_all().await?;
-                    debug!("run_foreground: stop_all completed");
+                    trace!("run_foreground: stop_all completed");
                     break;
                 }
                 Some(cmd) = async {
@@ -1694,7 +1694,7 @@ impl NativeProcessManager {
                         saw_processes = true;
                     }
                     if is_empty && saw_processes {
-                        debug!("All processes exited, shutting down");
+                        trace!("All processes exited, shutting down");
                         break;
                     }
                 }

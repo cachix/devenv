@@ -93,7 +93,7 @@ impl ConsoleOutput {
     }
 
     fn handle(&mut self, event: ActivityEvent) {
-        use ActivityLevel::{Debug, Info};
+        use ActivityLevel::{Debug, Info, Trace};
         match event {
             ActivityEvent::Build(Build::Start { id, name, .. }) => {
                 self.begin(id, format!("Building {name}"), Info, Info);
@@ -135,11 +135,14 @@ impl ConsoleOutput {
 
             ActivityEvent::Evaluate(Evaluate::Start {
                 id, name, level, ..
-            }) => self.begin(id, name, level, Info),
+            }) => self.begin(id, name, level, Debug),
             ActivityEvent::Evaluate(Evaluate::Complete { id, outcome, .. }) => {
                 self.end(id, outcome)
             }
-            ActivityEvent::Evaluate(_) => {}
+            ActivityEvent::Evaluate(Evaluate::Log { id, line, .. }) => self.log(id, &line, false),
+            ActivityEvent::Evaluate(Evaluate::Op { id, op, .. }) => {
+                self.log(id, &op.to_string(), false)
+            }
 
             // Tasks announce their full hierarchy before any start, so we
             // cache names here and emit `begin` lazily on `Task::Start`.
@@ -167,9 +170,10 @@ impl ConsoleOutput {
 
             // Commands wrap the actual shell invocation inside a task; the
             // parent task already prints a user-facing line, so the wrapper
-            // sits at Debug. Logs from the wrapped command still flow at Info.
+            // start/end is hidden at Trace. Logs from the wrapped command
+            // still flow at Info via the entry's log_level.
             ActivityEvent::Command(Command::Start { id, name, .. }) => {
-                self.begin(id, name, Debug, Info);
+                self.begin(id, name, Trace, Info);
             }
             ActivityEvent::Command(Command::Complete { id, outcome, .. }) => self.end(id, outcome),
             ActivityEvent::Command(Command::Log {
@@ -252,7 +256,11 @@ impl ConsoleOutput {
                 .unwrap_or(ActivityLevel::Info)
         };
         let sink = if is_error { Sink::Stderr } else { Sink::Stdout };
-        self.write(level, sink, format_args!("{line}"));
+        // Indent so multi-line log output reads as nested under its activity
+        // rather than blending in with top-level activity start/end lines.
+        for chunk in line.split('\n') {
+            self.write(level, sink, format_args!("  {chunk}"));
+        }
     }
 
     fn message(&mut self, level: ActivityLevel, text: &str) {

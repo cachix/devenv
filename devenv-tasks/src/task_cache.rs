@@ -14,7 +14,7 @@ use serde_json::Value;
 use sqlx::Row;
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
-use tracing::{debug, warn};
+use tracing::{trace, warn};
 
 const GLOB_SPECIAL_CHARS: &[char] = &['*', '?', '[', '{'];
 
@@ -358,7 +358,7 @@ impl TaskCache {
         let current_set: HashSet<&str> = current_paths.iter().map(|s| s.as_str()).collect();
         for db_path in &db_paths {
             if !current_set.contains(db_path.as_str()) {
-                debug!(
+                trace!(
                     "Previously tracked file '{}' for task '{}' no longer matches glob patterns",
                     db_path, task_name
                 );
@@ -384,7 +384,7 @@ impl TaskCache {
         let current_set: HashSet<&str> = current_paths.iter().map(|s| s.as_str()).collect();
         for db_path in &db_paths {
             if !current_set.contains(db_path.as_str()) {
-                debug!(
+                trace!(
                     "Removing stale watched_file entry '{}' for task '{}'",
                     db_path, task_name
                 );
@@ -473,7 +473,7 @@ impl TaskCache {
 
     /// Update the file state in the database.
     pub async fn update_file_state(&self, task_name: &str, path: &str) -> CacheResult<()> {
-        debug!(
+        trace!(
             "Updating file state for task '{}', path '{}'",
             task_name, path
         );
@@ -505,7 +505,7 @@ impl TaskCache {
 
     /// Check if a file has been modified since the last time the task was run.
     async fn is_file_modified(&self, task_name: &str, path: &str) -> CacheResult<bool> {
-        debug!(
+        trace!(
             "Checking if file '{}' is modified for task '{}'",
             path, task_name
         );
@@ -515,7 +515,7 @@ impl TaskCache {
 
         // If file not in database, consider it modified (first run)
         if file_info.is_none() {
-            debug!(
+            trace!(
                 "File {} not found in cache for task {} - considering it modified (first time)",
                 path, task_name
             );
@@ -538,7 +538,7 @@ impl TaskCache {
                     time::system_time_to_unix_seconds(current_file.modified_at);
                 let current_hash = current_file.content_hash.clone();
 
-                debug!(
+                trace!(
                     "File '{}' for task '{}': stored_hash={:?}, current_hash={:?}, stored_time={}, current_time={}, is_dir={}",
                     path,
                     task_name,
@@ -554,7 +554,7 @@ impl TaskCache {
                     current_file.is_directory != is_directory || current_hash != stored_hash;
 
                 if content_changed {
-                    debug!(
+                    trace!(
                         "File {} changed for task {}: type or content changed (is_dir: {} -> {}, hash: {:?} -> {:?})",
                         path,
                         task_name,
@@ -570,7 +570,7 @@ impl TaskCache {
                 // If only timestamp changed but hash didn't, we can update the timestamp
                 // since it doesn't affect caching logic (content hash is the same)
                 if current_modified_time > stored_modified_time {
-                    debug!(
+                    trace!(
                         "File {} timestamp changed for task {} but content is the same (time: {} -> {})",
                         path, task_name, stored_modified_time, current_modified_time
                     );
@@ -579,7 +579,7 @@ impl TaskCache {
                         .await?;
                 }
 
-                debug!("File '{}' for task '{}' is unchanged", path, task_name);
+                trace!("File '{}' for task '{}' is unchanged", path, task_name);
                 Ok(false)
             }
             Err(e) => {

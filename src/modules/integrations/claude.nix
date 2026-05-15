@@ -13,17 +13,29 @@ let
       allow = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
-        description = "List of allowed patterns.";
+        description = ''
+          List of allowed patterns. An empty string emits a bare tool entry
+          (e.g. `WebSearch` rather than `WebSearch(pattern)`), matching the
+          tool regardless of input. Use this for tools without a matcher
+          format such as `WebSearch` or `AskUserQuestion`.
+        '';
       };
       ask = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
-        description = "List of patterns that require user approval.";
+        description = ''
+          List of patterns that require user approval. An empty string emits
+          a bare tool entry (e.g. `WebSearch` rather than `WebSearch(pattern)`).
+        '';
       };
       deny = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
-        description = "List of denied patterns.";
+        description = ''
+          List of denied patterns. An empty string emits a bare tool entry
+          (e.g. `AskUserQuestion` rather than `AskUserQuestion(pattern)`),
+          which is required to deny tools without a matcher format outright.
+        '';
       };
     };
   };
@@ -147,7 +159,7 @@ let
         lib.flatten (
           lib.mapAttrsToList
             (tool: toolPerms:
-              map (pattern: "${tool}(${pattern})") (toolPerms.${tier} or [ ])
+              map (pattern: if pattern == "" then tool else "${tool}(${pattern})") (toolPerms.${tier} or [ ])
             )
             toolPerms
         );
@@ -534,6 +546,10 @@ in
               ask = [ "git:*" "npm:*" ];
               deny = [ "rm -rf:*" "sudo:*" ];
             };
+            # Use an empty string to emit a bare tool entry for tools
+            # without a matcher format (e.g. WebSearch, AskUserQuestion).
+            WebSearch.allow = [ "" ];
+            AskUserQuestion.deny = [ "" ];
           };
         }
       '';

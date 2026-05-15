@@ -27,7 +27,7 @@ use crossterm::{
 };
 use libghostty_vt::screen::{Cell, CellContentTag, CellWide, GridRef};
 use libghostty_vt::style::{Style, StyleColor, Underline};
-use libghostty_vt::terminal::{Options as TerminalOptions, Point, PointCoordinate, Terminal};
+use libghostty_vt::terminal::{Options as TerminalOptions, Point, Terminal};
 use portable_pty::PtySize;
 use std::fmt::Write as FmtWrite;
 use std::io::{self, IsTerminal, Read, Write};
@@ -189,14 +189,15 @@ fn dump_color(s: &mut String, color: &StyleColor, base: u8) {
 }
 
 /// Feed text into VT and return the scroll count (lines that scrolled off the viewport).
+///
+/// Scroll count is the delta of `total_rows()`, which is exact as long as VT
+/// scrollback hasn't hit its `max_scrollback` cap. We keep VT scrollback well
+/// below the cap by wiping it via CSI 3J after every successful flush in
+/// `render_with_scroll`, so the delta stays accurate in practice.
 fn feed_vt(vt: &mut Terminal<'_, '_>, text: &str) -> usize {
     let total_before = vt.total_rows().unwrap_or(0);
     vt.vt_write(text.as_bytes());
     let total_after = vt.total_rows().unwrap_or(0);
-    // When scrollback is at the limit, GC trims old lines and total_rows
-    // stays constant (delta = 0). This underestimates scroll_count in that
-    // case. The render_with_scroll method detects this via a fingerprint
-    // check on the last flushed scrollback line and corrects accordingly.
     total_after.saturating_sub(total_before)
 }
 
@@ -220,10 +221,8 @@ struct Renderer {
     content_rows: u16,
     /// Number of VT scrollback lines already pushed to native terminal scrollback.
     /// Used to flush only new (unflushed) scrollback lines in `render_with_scroll`.
+    /// Reset to 0 after each flush.
     scrollback_flushed: usize,
-    /// Fingerprint of the last flushed scrollback line, used to detect when
-    /// scrollback GC shifts screen coordinates (making scrollback_flushed stale).
-    last_flushed_fingerprint: Option<[u32; 4]>,
     /// Reusable buffer for SGR line rendering (avoids per-line allocation).
     line_buf: String,
 }
@@ -240,35 +239,15 @@ impl Renderer {
             row_offset: 0,
             content_rows,
             scrollback_flushed: 0,
-            last_flushed_fingerprint: None,
             line_buf: String::new(),
         }
     }
 
-    /// Mark all current VT scrollback as already flushed (e.g., after resize).
-    fn mark_scrollback_flushed(&mut self, vt: &Terminal<'_, '_>) {
-        self.scrollback_flushed = vt.scrollback_rows().unwrap_or(0);
-        self.last_flushed_fingerprint = self.scrollback_fingerprint(vt);
-    }
-
-    /// Sample codepoints from the last flushed scrollback line for GC detection.
-    fn scrollback_fingerprint(&self, vt: &Terminal<'_, '_>) -> Option<[u32; 4]> {
-        if self.scrollback_flushed == 0 {
-            return None;
-        }
-        let cols = vt.cols().unwrap_or(0);
-        let y = (self.scrollback_flushed - 1) as u32;
-        let sample_xs = [0, cols / 4, cols / 2, 3 * cols / 4];
-        let mut fp = [0u32; 4];
-        for (i, &x) in sample_xs.iter().enumerate() {
-            fp[i] = vt
-                .grid_ref(Point::Screen(PointCoordinate { x, y }))
-                .ok()
-                .and_then(|gr| gr.cell().ok())
-                .and_then(|c| c.codepoint().ok())
-                .unwrap_or(0);
-        }
-        Some(fp)
+    /// Discard any VT scrollback without emitting it to the native terminal
+    /// (e.g., after resize where the post-resize state is the new baseline).
+    fn discard_vt_scrollback(&mut self, vt: &mut Terminal<'_, '_>) {
+        vt.vt_write(b"\x1b[3J");
+        self.scrollback_flushed = 0;
     }
 
     /// Number of VT rows that fit on-screen given the current offset.
@@ -360,27 +339,10 @@ impl Renderer {
     fn render_with_scroll(
         &mut self,
         stdout: &mut impl Write,
-        vt: &Terminal<'_, '_>,
+        vt: &mut Terminal<'_, '_>,
     ) -> io::Result<()> {
         let vt_scrollback = vt.scrollback_rows().unwrap_or(0);
-        let mut unflushed = vt_scrollback.saturating_sub(self.scrollback_flushed);
-
-        // Detect scrollback GC: when scrollback is at capacity, old lines are
-        // trimmed and new ones added, but scrollback_rows() stays constant.
-        // This makes unflushed = 0 even though new lines exist. Detect this
-        // by checking whether the content at the last flushed position changed
-        // (indicating screen coordinates shifted due to GC).
-        if unflushed == 0 && self.scrollback_flushed > 0 {
-            let current_fp = self.scrollback_fingerprint(vt);
-            if current_fp != self.last_flushed_fingerprint {
-                // GC shifted coordinates. Re-flush the last content_rows worth
-                // of scrollback. This may duplicate some lines in native
-                // scrollback but ensures new content is not lost.
-                let correction = (self.content_rows as usize).min(self.scrollback_flushed);
-                self.scrollback_flushed -= correction;
-                unflushed = correction;
-            }
-        }
+        let unflushed = vt_scrollback.saturating_sub(self.scrollback_flushed);
 
         if unflushed > 0 && self.content_rows > 0 {
             let batch_size = self.content_rows as usize;
@@ -432,8 +394,17 @@ impl Renderer {
             }
 
             queue!(stdout, ResetScrollRegion)?;
-            self.scrollback_flushed = vt_scrollback;
-            self.last_flushed_fingerprint = self.scrollback_fingerprint(vt);
+
+            // Wipe VT scrollback so it never approaches `max_scrollback` and
+            // triggers internal GC. The user-visible scrollback lives in the
+            // native terminal we just flushed to; VT scrollback is only an
+            // internal staging area for not-yet-flushed lines. CSI 3J
+            // (`EraseDisplay::scrollback`) preserves viewport, cursor, styles,
+            // and modes — it only frees the history pages. See
+            // `ghostty/src/terminal/Terminal.zig::eraseDisplay` and
+            // `Screen.zig::eraseHistory`.
+            vt.vt_write(b"\x1b[3J");
+            self.scrollback_flushed = 0;
             self.prev_lines.clear();
         }
         self.render(stdout, vt)
@@ -690,7 +661,7 @@ impl ShellSession {
         } else {
             1
         };
-        tracing::debug!("session: cursor position after TUI: row {}", cursor_row);
+        tracing::trace!("session: cursor position after TUI: row {}", cursor_row);
 
         // TUI renderers may leave a non-default scroll region/origin mode.
         // Reset both before we start cursor-addressed rendering, otherwise
@@ -713,7 +684,7 @@ impl ShellSession {
                 pixel_height: 0,
             };
         }
-        tracing::debug!(
+        tracing::trace!(
             "session: terminal size: {}x{}",
             self.size.cols,
             self.size.rows
@@ -870,7 +841,7 @@ impl ShellSession {
 
         // Notify coordinator that shell exited
         if let Err(e) = event_tx.try_send(ShellEvent::Exited { exit_code }) {
-            tracing::debug!("failed to send Exited event: {e}");
+            tracing::trace!("failed to send Exited event: {e}");
         }
 
         Ok(exit_code)
@@ -944,13 +915,13 @@ impl ShellSession {
                 Event::Stdin(data) => {
                     if data.as_slice() == KEYBIND_TOGGLE_PAUSE {
                         if let Err(e) = coordinator_tx.try_send(ShellEvent::TogglePause) {
-                            tracing::debug!("failed to send TogglePause event: {e}");
+                            tracing::trace!("failed to send TogglePause event: {e}");
                         }
                         continue;
                     }
                     if data.as_slice() == KEYBIND_LIST_WATCHED {
                         if let Err(e) = coordinator_tx.try_send(ShellEvent::ListWatchedFiles) {
-                            tracing::debug!("failed to send ListWatchedFiles event: {e}");
+                            tracing::trace!("failed to send ListWatchedFiles event: {e}");
                         }
                         continue;
                     }
@@ -1150,7 +1121,7 @@ impl ShellSession {
                         if let Err(e) = vt.resize(pty_size.cols, pty_size.rows, 0, 0) {
                             tracing::warn!("failed to resize terminal: {e}");
                         }
-                        renderer.mark_scrollback_flushed(vt);
+                        renderer.discard_vt_scrollback(vt);
                         renderer.render_full(stdout, vt)?;
                         if self.config.show_status_line && !esc.in_alternate_screen {
                             self.status_line.draw(stdout, cols, rows)?;
@@ -1161,7 +1132,7 @@ impl ShellSession {
                             cols: pty_size.cols,
                             rows: pty_size.rows,
                         }) {
-                            tracing::debug!("failed to send Resize event: {e}");
+                            tracing::trace!("failed to send Resize event: {e}");
                         }
                     }
                 }
