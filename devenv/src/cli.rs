@@ -1,4 +1,3 @@
-use crate::tracing as devenv_tracing;
 use clap::{Parser, Subcommand};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use devenv_core::config::NixBackendType;
@@ -671,16 +670,6 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn get_log_level(&self) -> devenv_tracing::Level {
-        if self.cli_options.verbose {
-            devenv_tracing::Level::Debug
-        } else if self.cli_options.quiet {
-            devenv_tracing::Level::Warn
-        } else {
-            devenv_tracing::Level::default()
-        }
-    }
-
     /// Parse from `env::args_os()` after merging `--profile <name>` / `-P <name>`
     /// into the `=` form, so a profile whose name shadows a subcommand
     /// (e.g. `devenv --profile test test`) isn't mistaken for the subcommand by

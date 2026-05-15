@@ -30,11 +30,14 @@ pub fn run(config_file: &Path) -> Result<()> {
 
         let _ = tokio::fs::remove_file(config_file).await;
 
-        let tasks_runner =
-            tasks::Tasks::builder(config, tasks::VerbosityLevel::Normal, shutdown.clone())
-                .build()
-                .await
-                .map_err(|e| miette::miette!("Failed to build task runner: {}", e))?;
+        let tasks_runner = tasks::Tasks::builder(
+            config,
+            devenv_core::VerbosityLevel::Normal,
+            shutdown.clone(),
+        )
+        .build()
+        .await
+        .map_err(|e| miette::miette!("Failed to build task runner: {}", e))?;
 
         let phase = devenv_activity::start!(
             devenv_activity::Activity::operation("Running processes").parent(None)

@@ -6,8 +6,9 @@ use std::time::Instant;
 use devenv_activity::{ActivityEvent, ActivityOutcome, Process as ProcessEvent, Task as TaskEvent};
 use tokio::sync::mpsc;
 
+use crate::types::VerbosityLevel;
 use crate::types::{ProcessPhase, ProcessTaskStatus, TaskCompleted, TaskStatus, TasksStatus};
-use crate::{Error, Outputs, Tasks, VerbosityLevel};
+use crate::{Error, Outputs, Tasks};
 
 /// Line-buffered console output
 struct Console {

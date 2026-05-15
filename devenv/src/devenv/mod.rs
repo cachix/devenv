@@ -9,7 +9,7 @@ use devenv_activity::{
 };
 use devenv_cache_core::compute_string_hash;
 use devenv_core::{
-    Backend, BuildOptions, Evaluator,
+    Backend, BuildOptions, Evaluator, VerbosityLevel,
     bootstrap_args::BootstrapArgs,
     cachix::{CachixManager, CachixPaths},
     config::{Input, NixBackendType, NixpkgsConfig},
@@ -1037,7 +1037,7 @@ impl Devenv {
         show_output: bool,
         cli_inputs: Vec<String>,
         input_json: Option<String>,
-        verbosity: tasks::VerbosityLevel,
+        verbosity: VerbosityLevel,
     ) -> Result<String> {
         self.reserve_running_ports().await;
         self.setup_cachix().await?;
@@ -1109,7 +1109,7 @@ impl Devenv {
     pub async fn run_enter_shell_tasks(
         &self,
         pre_captured_envs: Option<HashMap<String, String>>,
-        verbosity: tasks::VerbosityLevel,
+        verbosity: VerbosityLevel,
     ) -> Result<(BTreeMap<String, String>, Vec<String>)> {
         let envs = match pre_captured_envs {
             Some(e) => e,
@@ -1135,7 +1135,7 @@ impl Devenv {
         roots: Vec<String>,
         task_configs: Vec<tasks::TaskConfig>,
         envs: HashMap<String, String>,
-        verbosity: tasks::VerbosityLevel,
+        verbosity: VerbosityLevel,
     ) -> Result<(tasks::TasksStatus, BTreeMap<String, String>, Vec<String>)> {
         let bash = self.get_bash_path().await?;
         let config = tasks::Config {
@@ -1288,7 +1288,7 @@ impl Devenv {
         .await
     }
 
-    pub async fn test(&self, verbosity: tasks::VerbosityLevel) -> Result<()> {
+    pub async fn test(&self, verbosity: VerbosityLevel) -> Result<()> {
         // Enable port allocation before assemble so that ports resolved
         // during Nix evaluation (e.g. in enterTest) are properly allocated.
         self.port_allocator.set_enabled(true);
@@ -1497,7 +1497,7 @@ impl Devenv {
         processes: Vec<String>,
         task_mode: devenv_tasks::RunMode,
         options: ProcessOptions,
-        verbosity: tasks::VerbosityLevel,
+        verbosity: VerbosityLevel,
     ) -> Result<RunMode> {
         // Set strict port mode before backend init triggers port allocation.
         self.port_allocator.set_strict(options.strict_ports);
@@ -1600,7 +1600,7 @@ impl Devenv {
             }
 
             let tasks_runner =
-                tasks::Tasks::builder(config, tasks::VerbosityLevel::Normal, self.shutdown.clone())
+                tasks::Tasks::builder(config, VerbosityLevel::Normal, self.shutdown.clone())
                     .build()
                     .await
                     .map_err(|e| miette!("Failed to build task runner: {}", e))?;

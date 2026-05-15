@@ -2,6 +2,8 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use tokio::time::{Duration, Instant};
 
+pub(crate) use devenv_core::VerbosityLevel;
+
 /// Task type: oneshot (run once) or process (long-running)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -46,27 +48,6 @@ pub struct DependencySpec {
     /// Dependency kind, or None for default behavior.
     /// Default: Ready for process tasks, Succeeded for oneshot tasks
     pub kind: Option<DependencyKind>,
-}
-
-/// Verbosity levels for task execution
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum VerbosityLevel {
-    /// Minimal output, only errors
-    Quiet,
-    /// Standard output level
-    Normal,
-    /// Detailed output including debug information
-    Verbose,
-}
-
-impl std::fmt::Display for VerbosityLevel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            VerbosityLevel::Quiet => write!(f, "quiet"),
-            VerbosityLevel::Normal => write!(f, "normal"),
-            VerbosityLevel::Verbose => write!(f, "verbose"),
-        }
-    }
 }
 
 /// Current status counters for all tasks in execution

@@ -22,8 +22,8 @@ use devenv_activity::{
 };
 use tokio::sync::{mpsc, oneshot};
 
-use crate::tasks::VerbosityLevel;
 use crate::tracing::HumanReadableDuration;
+use devenv_core::VerbosityLevel;
 
 struct Entry {
     name: String,

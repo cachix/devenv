@@ -11,7 +11,7 @@ use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use similar::{ChangeTag, TextDiff};
 
 use crate::console as devenv_console;
-use crate::tasks::VerbosityLevel;
+use devenv_core::VerbosityLevel;
 
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
 

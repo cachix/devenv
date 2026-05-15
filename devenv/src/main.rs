@@ -13,7 +13,7 @@ use devenv::{
 };
 use devenv_activity::{ActivityGuard, ActivityLevel};
 use devenv_core::{
-    CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings,
+    CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings, VerbosityLevel,
     config::{self, Config},
 };
 use devenv_reload::{Config as ReloadConfig, ShellCoordinator};
@@ -119,14 +119,14 @@ struct UiOptions {
     tracing_owns_terminal: bool,
     log_level: devenv_tracing::Level,
     tracing_specs: Vec<TraceOutputSpec>,
-    verbosity: devenv::tasks::VerbosityLevel,
+    verbosity: VerbosityLevel,
 }
 
 /// Options for the backend thread: resolved devenv config plus what to run.
 struct BackendOptions {
     devenv: devenv::DevenvOptions,
     command: Commands,
-    verbosity: devenv::tasks::VerbosityLevel,
+    verbosity: VerbosityLevel,
     use_pty: bool,
     nix_debugger: bool,
     strict_ports: bool,
@@ -229,8 +229,7 @@ fn is_ai_agent() -> bool {
 }
 
 /// Resolve `--quiet`/`--verbose` (with AI-agent auto-quiet) into a `VerbosityLevel`.
-fn resolve_verbosity(cli_options: &CliOptions) -> devenv::tasks::VerbosityLevel {
-    use devenv::tasks::VerbosityLevel;
+fn resolve_verbosity(cli_options: &CliOptions) -> VerbosityLevel {
     if cli_options.verbose {
         VerbosityLevel::Verbose
     } else if cli_options.quiet || is_ai_agent() {
@@ -242,27 +241,53 @@ fn resolve_verbosity(cli_options: &CliOptions) -> devenv::tasks::VerbosityLevel 
 
 /// Resolve CLI + config files + environment into UI and backend options.
 fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptions)> {
-    // Extract values from CLI before consuming fields via From conversions
-    let nix_debugger = cli.nix_args.nix_debugger;
+    let command = cli.command;
 
-    let ai_agent = is_ai_agent();
+    // UI options: verbosity, log level, tracing, TUI. Pure CLI + env, no config.
     let verbosity = resolve_verbosity(&cli.cli_options);
-    let quiet = matches!(verbosity, devenv::tasks::VerbosityLevel::Quiet);
-    let log_level = if quiet {
-        devenv_tracing::Level::Warn
-    } else {
-        cli.get_log_level()
+    let quiet = matches!(verbosity, VerbosityLevel::Quiet);
+    let log_level = match verbosity {
+        VerbosityLevel::Verbose => devenv_tracing::Level::Debug,
+        VerbosityLevel::Quiet => devenv_tracing::Level::Warn,
+        VerbosityLevel::Normal => devenv_tracing::Level::default(),
     };
-    let tracing_specs = cli.tracing_args.resolve().into_diagnostic()?;
     // `resolve()` folds legacy `--trace-output` into `tracing_specs`,
     // so a single walk covers env, --trace-to, and --trace-output.
+    let tracing_specs = cli.tracing_args.resolve().into_diagnostic()?;
     let tracing_owns_terminal = tracing_specs.iter().any(|s| s.targets_terminal());
+
+    // Explicit --tui/--no-tui wins, otherwise default to TUI when running
+    // interactively outside CI and outside AI agents.
+    let tui_requested = devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
+        .unwrap_or_else(|| {
+            let is_ci = env::var_os("CI").is_some();
+            let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
+            is_tty && !is_ci && !is_ai_agent()
+        });
+    // Some commands don't support the TUI regardless of user options.
+    let tui_unsupported = matches!(
+        &command,
+        Commands::Mcp { http: None } // stdio mode needs stderr for output
+                | Commands::Lsp { .. } // LSP needs direct stdout for protocol/config output
+                | Commands::PrintPaths // print output directly, no TUI needed
+    );
+    let tui = tui_requested && !tui_unsupported && !tracing_owns_terminal && !quiet;
+
+    let ui = UiOptions {
+        tui,
+        tracing_owns_terminal,
+        log_level,
+        tracing_specs,
+        verbosity,
+    };
+
+    // Backend options. Read before the `From` conversions consume `cli.nix_args`.
+    let nix_debugger = cli.nix_args.nix_debugger;
 
     let mut config = Config::load()?;
     config.check_version(crate_version!())?;
 
     let input_overrides = InputOverrides::from(cli.input_overrides);
-
     for chunk in input_overrides.override_inputs.chunks_exact(2) {
         let [name, url] = chunk else {
             unreachable!("chunks_exact(2)")
@@ -272,7 +297,7 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
             .wrap_err_with(|| format!("Failed to override input {name} with URL {url}"))?;
     }
 
-    // If --from is provided, create a new input and add it to imports
+    // If --from is provided, create a new input and add it to imports.
     let from_external = cli.from.is_some();
     if let Some(from) = &cli.from {
         let url = if let Some(path_str) = from.strip_prefix("path:") {
@@ -299,8 +324,6 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
         config.imports.push("from".to_string());
     }
 
-    let command = cli.command;
-
     // Resolve settings from CLI + Config (pure functions, no mutation).
     let mut nix_settings =
         NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
@@ -314,34 +337,15 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
         SecretSettings::resolve(devenv_core::SecretOptions::from(cli.secret_args), &config);
     let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
 
-    // Resolve TUI flag: explicit --tui/--no-tui wins, otherwise default
-    // to TUI when running interactively outside CI and outside AI agents.
-    let tui_requested = devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
-        .unwrap_or_else(|| {
-            let is_ci = env::var_os("CI").is_some();
-            let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
-            is_tty && !is_ci && !ai_agent
-        });
-
-    // Some commands don't support the TUI regardless of user options
-    let tui_unsupported = matches!(
-        &command,
-        Commands::Mcp { http: None } // stdio mode needs stderr for output
-                | Commands::Lsp { .. } // LSP needs direct stdout for protocol/config output
-                | Commands::PrintPaths // print output directly, no TUI needed
-    );
-
-    let tui = tui_requested && !tui_unsupported && !tracing_owns_terminal && !quiet;
-
-    // Determine use_pty from resolved settings (single source of truth)
+    // Per-command backend flags.
+    let is_testing = matches!(&command, Commands::Test { .. });
+    let test_dirs = TestDirs::setup(&command)?;
     let use_pty = shell_settings.reload
         && matches!(&command, Commands::Shell { cmd: None, .. })
         && io::stdin().is_terminal()
         && io::stdout().is_terminal();
 
-    let is_testing = matches!(&command, Commands::Test { .. });
-
-    let test_dirs = TestDirs::setup(&command)?;
+    // Read off `config` before its fields are moved into `DevenvOptions`.
     let strict_ports = config.strict_ports.unwrap_or(false);
     let require_version_match = config.requires_version_match();
 
@@ -364,13 +368,6 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
         is_testing,
     };
 
-    let ui = UiOptions {
-        tui,
-        tracing_owns_terminal,
-        log_level,
-        tracing_specs,
-        verbosity,
-    };
     let backend = BackendOptions {
         devenv: devenv_options,
         command,
@@ -422,11 +419,11 @@ impl Renderer {
         shutdown: &Arc<Shutdown>,
         backend_done_rx: tokio::sync::oneshot::Receiver<()>,
         command_tx: tokio::sync::mpsc::Sender<ProcessCommand>,
-        verbosity: devenv::tasks::VerbosityLevel,
+        verbosity: VerbosityLevel,
     ) -> Result<u16> {
         match self {
             Renderer::Tui(activity_rx) => {
-                let filter_level = if matches!(verbosity, devenv::tasks::VerbosityLevel::Verbose) {
+                let filter_level = if matches!(verbosity, VerbosityLevel::Verbose) {
                     ActivityLevel::Debug
                 } else {
                     ActivityLevel::Info
@@ -747,7 +744,7 @@ async fn run_up(
     processes: Vec<String>,
     mode: devenv::tasks::RunMode,
     options: devenv::ProcessOptions,
-    verbosity: devenv::tasks::VerbosityLevel,
+    verbosity: VerbosityLevel,
 ) -> Result<CommandResult> {
     match devenv.up(processes, mode, options, verbosity).await? {
         RunMode::Detached => Ok(CommandResult::Done),
@@ -761,7 +758,7 @@ async fn run_up_args(
     up_args: devenv::cli::UpArgs,
     config_strict_ports: bool,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
-    verbosity: devenv::tasks::VerbosityLevel,
+    verbosity: VerbosityLevel,
 ) -> Result<CommandResult> {
     let strict_ports = devenv_core::settings::flag(up_args.strict_ports, up_args.no_strict_ports)
         .unwrap_or(config_strict_ports);
@@ -780,7 +777,7 @@ async fn run_up_args(
 async fn dispatch_command(
     devenv: &Devenv,
     command: Commands,
-    verbosity: devenv::tasks::VerbosityLevel,
+    verbosity: VerbosityLevel,
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
     config_strict_ports: bool,
 ) -> Result<CommandResult> {
