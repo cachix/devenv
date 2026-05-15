@@ -1,6 +1,7 @@
 mod cachix;
 mod container;
 mod gc;
+mod preflight;
 mod search;
 
 use super::{processes, tasks, util};
@@ -663,6 +664,7 @@ impl Devenv {
                 let Some(cnix) = self.cnix() else {
                     return Ok(None);
                 };
+                preflight::run(cnix).await?;
                 cachix::CachixIntegration::init(
                     cnix,
                     &self.cachix_manager,

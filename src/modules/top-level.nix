@@ -225,6 +225,33 @@ in
     };
 
     devenv = {
+      preFlight = lib.mkOption {
+        type = types.attrsOf (types.submodule {
+          options.command = lib.mkOption {
+            type = types.str;
+            description = ''
+              Shell command run during devenv startup, before its internal
+              subsystems (cachix, substituter netrc, etc.) initialize.
+              Lines of `KEY=value` written to stdout are merged into
+              devenv's process environment and become visible to those
+              subsystems.
+            '';
+          };
+        });
+        default = { };
+        description = ''
+          Pre-flight commands run during devenv startup, before its
+          internal subsystems initialize. Useful for fetching tokens or
+          other values that devenv-core itself reads from the environment
+          early. Commands run in dependency-key alphabetical order.
+        '';
+        example = lib.literalExpression ''
+          {
+            cachix-auth.command = "echo CACHIX_AUTH_TOKEN=$(get-token-somehow)";
+          }
+        '';
+      };
+
       root = lib.mkOption {
         type = types.str;
         internal = true;
