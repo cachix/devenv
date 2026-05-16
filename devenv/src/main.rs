@@ -230,12 +230,13 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
             is_tty && !is_ci && !is_ai_agent()
         });
     // Some commands don't support the TUI regardless of user options.
-    let tui_unsupported = matches!(
-        &command,
-        Commands::Mcp { http: None } // stdio mode needs stderr for output
-                | Commands::Lsp { .. } // LSP needs direct stdout for protocol/config output
-                | Commands::PrintPaths // print output directly, no TUI needed
-    );
+    let tui_unsupported = match &command {
+        Commands::Mcp { http: None } => true,// stdio mode needs stderr for output
+        #[cfg(feature = "lsp")]
+        Commands::Lsp { .. } => true, // LSP needs direct stdout for protocol/config output
+        | Commands::PrintPaths // print output directly, no TUI needed
+        | _ => false,
+    };
     let tui = tui_requested && !tui_unsupported && !tracing_owns_terminal && !quiet;
 
     let ui = UiOptions {
@@ -969,6 +970,7 @@ async fn dispatch_command(
             devenv::mcp::run_mcp_server(mcp_options, http.map(|p| p.unwrap_or(8080))).await?;
             Ok(CommandResult::Done)
         }
+        #[cfg(feature = "lsp")]
         Commands::Lsp { print_config } => {
             devenv::lsp::run(devenv, print_config).await?;
             Ok(CommandResult::Done)

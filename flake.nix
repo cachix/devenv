@@ -119,7 +119,7 @@
         // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
           devenv-image = import ./containers/devenv/image.nix {
             inherit pkgs;
-            inherit (self.packages.${system}) devenv;
+            devenv = workspace.crates.devenv-for-container;
           };
         }
       );

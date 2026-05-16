@@ -7,6 +7,7 @@ pub mod cli;
 pub mod commands;
 pub mod console;
 mod devenv;
+#[cfg(feature = "lsp")]
 pub mod lsp;
 pub mod mcp;
 pub mod nix_log_bridge;
