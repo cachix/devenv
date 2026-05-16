@@ -224,6 +224,10 @@ pub struct NativeProcessManager {
     /// Optional notify handle fired when a process lifecycle changes (e.g. not-started
     /// process is manually started). The task system uses this to re-check dependencies.
     task_notify: Option<Arc<Notify>>,
+    /// Whether this instance owns the runtime files (socket, pid file) and should
+    /// clean them up on drop. Set to false for control-client instances that
+    /// connect to an existing daemon — they should not delete the daemon's files.
+    owns_runtime_files: bool,
 }
 
 /// Build a human-readable description of the readiness probe for TUI display.
@@ -438,7 +442,14 @@ impl NativeProcessManager {
             shutdown: CancellationToken::new(),
             processes_activity: Arc::new(RwLock::new(None)),
             task_notify: None,
+            owns_runtime_files: true,
         })
+    }
+
+    /// Mark this instance as a control client that should not clean up
+    /// runtime files (socket, pid file) on drop.
+    pub fn set_control_client(&mut self) {
+        self.owns_runtime_files = false;
     }
 
     /// Set the notify handle used to wake the task dependency loop
@@ -1927,8 +1938,13 @@ impl Drop for NativeProcessManager {
     fn drop(&mut self) {
         // Signal supervisors to exit so they don't keep running after the manager is gone
         self.shutdown_supervisors();
-        let _ = std::fs::remove_file(self.api_socket_path());
-        let _ = std::fs::remove_file(self.manager_pid_file());
+        // Only clean up runtime files if this instance owns them. Control-client
+        // instances (used by `devenv processes down`) should not delete the
+        // daemon's socket and pid file, as the daemon may still be shutting down.
+        if self.owns_runtime_files {
+            let _ = std::fs::remove_file(self.api_socket_path());
+            let _ = std::fs::remove_file(self.manager_pid_file());
+        }
     }
 }
 
