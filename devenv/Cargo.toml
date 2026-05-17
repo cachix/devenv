@@ -70,7 +70,7 @@ tracing-opentelemetry = { workspace = true, optional = true }
 devenv-nix-backend-macros.workspace = true
 
 [features]
-default = ["otlp-grpc"]
+default = ["otlp-grpc","lsp"]
 otlp = [
   "dep:opentelemetry",
   "dep:opentelemetry_sdk",
@@ -80,6 +80,7 @@ otlp = [
 otlp-grpc = ["otlp", "opentelemetry-otlp/grpc-tonic"]
 otlp-http-protobuf = ["otlp", "opentelemetry-otlp/http-proto"]
 otlp-http-json = ["otlp", "opentelemetry-otlp/http-json"]
+lsp = []
 test-all = [
   "test-mcp",
   "devenv-processes/test-all",

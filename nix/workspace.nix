@@ -56,7 +56,7 @@ let
   xtask = cargoNix.workspaceMembers.xtask.build;
 
   # Wrap the devenv binary with required paths
-  wrapDevenv = drv: stdenv.mkDerivation {
+  mkWrapDevenv = { withLsp ? true }: drv: stdenv.mkDerivation {
     pname = "devenv-wrapped";
     inherit version;
     src = drv;
@@ -71,6 +71,7 @@ let
         setDefaultLocaleArchive = lib.optionalString (glibcLocalesUtf8 != null) ''
           --set-default LOCALE_ARCHIVE ${glibcLocalesUtf8}/lib/locale/locale-archive
         '';
+        nixdPath = lib.optionalString withLsp ":${lib.getBin nixd}/bin";
       in
       ''
         mkdir -p $out/bin
@@ -79,11 +80,11 @@ let
         cp $devenvRunTests/bin/devenv-run-tests $out/bin/
 
         wrapProgram $out/bin/devenv \
-          --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
+          --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin${nixdPath}" \
           ${setDefaultLocaleArchive}
 
         wrapProgram $out/bin/devenv-run-tests \
-          --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
+          --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin${nixdPath}" \
           ${setDefaultLocaleArchive}
 
         # Generate manpages
@@ -105,6 +106,8 @@ let
 
     meta.mainProgram = "devenv";
   };
+
+  wrapDevenv = mkWrapDevenv { };
 in
 {
   inherit version;
@@ -115,6 +118,10 @@ in
   crates = {
     # Main devenv package with wrapping and shell completions
     devenv = wrapDevenv cargoNix.workspaceMembers.devenv.build;
+
+    # devenv built without LSP support for use in container images
+    devenv-for-container = (mkWrapDevenv { withLsp = false; })
+      (cargoNix.workspaceMembers.devenv.build.override { features = [ ]; });
 
     # devenv-tasks standalone
     devenv-tasks = cargoNix.workspaceMembers.devenv-tasks.build;
