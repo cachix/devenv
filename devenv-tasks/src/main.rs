@@ -1,8 +1,7 @@
 use clap::{Parser, Subcommand};
+use devenv_core::VerbosityLevel;
 use devenv_processes::get_process_runtime_dir;
-use devenv_tasks::{
-    Config, RunMode, SudoContext, TaskConfig, Tasks, TasksUi, VerbosityLevel, is_tty,
-};
+use devenv_tasks::{Config, RunMode, SudoContext, TaskConfig, Tasks, TasksUi, is_tty};
 use std::{env, fmt::Display, fs, path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tokio_shutdown::Shutdown;

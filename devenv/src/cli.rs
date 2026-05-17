@@ -1,5 +1,4 @@
-use crate::tracing as devenv_tracing;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use devenv_core::config::NixBackendType;
 use devenv_core::settings::{
@@ -9,8 +8,10 @@ use devenv_tasks::RunMode;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::{env, fmt, fs};
 use url::Url;
 
+/// Rendering format for tracing-subscriber layers writing to a `TraceSink`.
 #[derive(clap::ValueEnum, Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TraceFormat {
@@ -21,106 +22,163 @@ pub enum TraceFormat {
     Json,
     /// A pretty human-readable log format used for debugging.
     Pretty,
-    /// OpenTelemetry OTLP export over gRPC.
-    #[value(name = "otlp-grpc")]
-    OtlpGrpc,
-    /// OpenTelemetry OTLP export over HTTP with Protocol Buffers.
-    #[value(name = "otlp-http-protobuf")]
-    OtlpHttpProtobuf,
-    /// OpenTelemetry OTLP export over HTTP with JSON.
-    #[value(name = "otlp-http-json")]
-    OtlpHttpJson,
 }
 
-/// Specifies where trace output should be written.
+impl fmt::Display for TraceFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Full => f.write_str("full"),
+            Self::Json => f.write_str("json"),
+            Self::Pretty => f.write_str("pretty"),
+        }
+    }
+}
+
+impl FromStr for TraceFormat {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, ()> {
+        match s {
+            "full" => Ok(Self::Full),
+            "json" => Ok(Self::Json),
+            "pretty" => Ok(Self::Pretty),
+            _ => Err(()),
+        }
+    }
+}
+
+/// OpenTelemetry OTLP wire protocol.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OtlpProtocol {
+    Grpc,
+    HttpProtobuf,
+    HttpJson,
+}
+
+impl fmt::Display for OtlpProtocol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Grpc => f.write_str("otlp-grpc"),
+            Self::HttpProtobuf => f.write_str("otlp-http-protobuf"),
+            Self::HttpJson => f.write_str("otlp-http-json"),
+        }
+    }
+}
+
+impl FromStr for OtlpProtocol {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, ()> {
+        match s {
+            "otlp-grpc" => Ok(Self::Grpc),
+            "otlp-http-protobuf" => Ok(Self::HttpProtobuf),
+            "otlp-http-json" => Ok(Self::HttpJson),
+            _ => Err(()),
+        }
+    }
+}
+
+impl OtlpProtocol {
+    /// Default endpoint when none is specified in the spec.
+    pub fn default_endpoint(&self) -> Url {
+        let s = match self {
+            Self::Grpc => "http://localhost:4317",
+            Self::HttpProtobuf | Self::HttpJson => "http://localhost:4318",
+        };
+        s.parse()
+            .expect("hard-coded OTLP default endpoint must parse")
+    }
+}
+
+/// A byte sink for rendered trace output.
 ///
-/// Accepts the following formats:
+/// Accepts the following syntax:
 /// - `stdout` - write to standard output
 /// - `stderr` - write to standard error
 /// - `file:/path/to/file` - write to the specified file path
-/// - `http://host:port` or `https://host:port` - send to an OTLP collector (for otlp-* formats)
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub enum TraceOutput {
+pub enum TraceSink {
     #[default]
     Stderr,
     Stdout,
     File(PathBuf),
-    Url(Url),
 }
 
-impl std::fmt::Display for TraceOutput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for TraceSink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TraceOutput::Stdout => f.write_str("stdout"),
-            TraceOutput::Stderr => f.write_str("stderr"),
-            TraceOutput::File(p) => write!(f, "file:{}", p.display()),
-            TraceOutput::Url(u) => write!(f, "{u}"),
+            TraceSink::Stdout => f.write_str("stdout"),
+            TraceSink::Stderr => f.write_str("stderr"),
+            TraceSink::File(p) => write!(f, "file:{}", p.display()),
         }
     }
 }
 
-impl TraceOutput {
-    /// Returns true if this output targets the terminal (stdout or stderr).
-    pub fn targets_terminal(&self) -> bool {
-        matches!(self, TraceOutput::Stdout | TraceOutput::Stderr)
-    }
-}
-
-impl FromStr for TraceOutput {
+impl FromStr for TraceSink {
     type Err = ParseTraceOutputError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "stderr" => Ok(TraceOutput::Stderr),
-            "stdout" => Ok(TraceOutput::Stdout),
-            s if s.starts_with("file:") => Ok(TraceOutput::File(PathBuf::from(&s[5..]))),
-            s if s.starts_with("http://") || s.starts_with("https://") => s
-                .parse::<Url>()
-                .map(TraceOutput::Url)
-                .map_err(|e| ParseTraceOutputError::InvalidUrl(e.to_string())),
+            "stderr" => Ok(TraceSink::Stderr),
+            "stdout" => Ok(TraceSink::Stdout),
+            s if s.starts_with("file:") => Ok(TraceSink::File(PathBuf::from(&s[5..]))),
             _ => Err(ParseTraceOutputError::UnsupportedFormat(s.to_string())),
-        }
-    }
-}
-
-impl TraceFormat {
-    /// Returns true if this format is an OTLP export format.
-    pub fn is_otlp(&self) -> bool {
-        matches!(
-            self,
-            TraceFormat::OtlpGrpc | TraceFormat::OtlpHttpProtobuf | TraceFormat::OtlpHttpJson
-        )
-    }
-
-    /// Returns the default OTLP endpoint for this format, if applicable.
-    pub fn default_otlp_endpoint(&self) -> Option<&'static str> {
-        match self {
-            TraceFormat::OtlpGrpc => Some("http://localhost:4317"),
-            TraceFormat::OtlpHttpProtobuf | TraceFormat::OtlpHttpJson => {
-                Some("http://localhost:4318")
-            }
-            _ => None,
         }
     }
 }
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ParseTraceOutputError {
-    #[error(
-        "unsupported trace output format '{0}', expected 'stdout', 'stderr', 'file:<path>', or 'http(s)://<host>:<port>'"
-    )]
+    #[error("unsupported trace output format '{0}', expected 'stdout', 'stderr', or 'file:<path>'")]
     UnsupportedFormat(String),
     #[error("invalid URL: {0}")]
     InvalidUrl(String),
+    #[error("bare format name '{0}' is not a destination; use '{0}:<destination>'")]
+    BareFormatName(String),
 }
 
-/// A trace output specification: format + destination.
+#[derive(Debug, thiserror::Error)]
+pub enum TracingArgsError {
+    #[error("DEVENV_TRACE_TO: {0}")]
+    EnvParse(#[source] ParseTraceOutputError),
+    #[error("duplicate trace destination '{spec}' (would interleave output)")]
+    DuplicateDestination { spec: TraceOutputSpec },
+}
+
+/// A trace output specification.
 ///
 /// Parsed from `[format:]destination` syntax. When format is omitted, defaults to JSON.
+/// The two variants reflect different tracing subsystems:
+/// - `Render`: tracing-subscriber Layer that writes formatted text to a `TraceSink`.
+/// - `Otlp`: OpenTelemetry exporter sending spans over a wire protocol to a URL.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TraceOutputSpec {
-    pub format: TraceFormat,
-    pub destination: TraceOutput,
+pub enum TraceOutputSpec {
+    Render(TraceFormat, TraceSink),
+    Otlp(OtlpProtocol, Url),
+}
+
+impl TraceOutputSpec {
+    /// Returns true if this spec writes to a terminal (stdout/stderr).
+    pub fn targets_terminal(&self) -> bool {
+        matches!(self, Self::Render(_, TraceSink::Stdout | TraceSink::Stderr))
+    }
+
+    /// Returns true if two specs would write to the same destination
+    /// (and therefore produce interleaved output).
+    fn same_destination(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Render(_, a), Self::Render(_, b)) => a == b,
+            (Self::Otlp(_, a), Self::Otlp(_, b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl fmt::Display for TraceOutputSpec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Render(format, sink) => write!(f, "{format}:{sink}"),
+            Self::Otlp(proto, url) => write!(f, "{proto}:{url}"),
+        }
+    }
 }
 
 impl FromStr for TraceOutputSpec {
@@ -128,81 +186,33 @@ impl FromStr for TraceOutputSpec {
 
     /// Parse `[format:]destination`.
     ///
-    /// Format names (`json`, `pretty`, `full`, `otlp-*`) never collide with
-    /// destination prefixes (`file`, `http`, `https`, `stdout`, `stderr`).
+    /// Dispatch is "try each kind in turn": OTLP protocol → render format → bare sink.
+    /// Format names never collide with sink prefixes (`file:`, `stdout`, `stderr`).
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Try splitting at first ':' to check for a format prefix.
-        if let Some(colon_pos) = s.find(':') {
-            let prefix = &s[..colon_pos];
-            if let Ok(format) = TraceFormat::from_str(prefix, true) {
-                let rest = &s[colon_pos + 1..];
-                if rest.is_empty() {
-                    // "otlp-grpc:" with no destination — use OTLP default endpoint
-                    if let Some(endpoint) = format.default_otlp_endpoint() {
-                        let url = endpoint
-                            .parse::<Url>()
-                            .map_err(|e| ParseTraceOutputError::InvalidUrl(e.to_string()))?;
-                        return Ok(Self {
-                            format,
-                            destination: TraceOutput::Url(url),
-                        });
-                    }
-                    return Err(ParseTraceOutputError::UnsupportedFormat(format!(
-                        "{s} (format specified but no destination)"
-                    )));
-                }
-                let destination = TraceOutput::from_str(rest)?;
-                return Ok(Self {
-                    format,
-                    destination,
-                });
-            }
-            // prefix wasn't a valid format — treat entire string as a bare destination
+        let (prefix, rest) = match s.split_once(':') {
+            Some((p, r)) => (p, r),
+            None => (s, ""),
+        };
+
+        if let Ok(proto) = prefix.parse::<OtlpProtocol>() {
+            let url = if rest.is_empty() {
+                proto.default_endpoint()
+            } else {
+                rest.parse::<Url>()
+                    .map_err(|e| ParseTraceOutputError::InvalidUrl(e.to_string()))?
+            };
+            return Ok(Self::Otlp(proto, url));
         }
 
-        // No colon or prefix wasn't a format. Try as a bare OTLP format name (e.g. "otlp-grpc").
-        if let Ok(format) = TraceFormat::from_str(s, true) {
-            if let Some(endpoint) = format.default_otlp_endpoint() {
-                let url = endpoint
-                    .parse::<Url>()
-                    .map_err(|e| ParseTraceOutputError::InvalidUrl(e.to_string()))?;
-                return Ok(Self {
-                    format,
-                    destination: TraceOutput::Url(url),
-                });
+        if let Ok(format) = prefix.parse::<TraceFormat>() {
+            if rest.is_empty() {
+                return Err(ParseTraceOutputError::BareFormatName(prefix.to_string()));
             }
-            // Non-OTLP bare format name like "json" alone — not a valid destination
-            return Err(ParseTraceOutputError::UnsupportedFormat(format!(
-                "'{s}' is a format name, not a destination. Use '{s}:<destination>' instead"
-            )));
+            return Ok(Self::Render(format, rest.parse()?));
         }
 
-        // Bare destination — default to JSON
-        let destination = TraceOutput::from_str(s)?;
-        Ok(Self {
-            format: TraceFormat::Json,
-            destination,
-        })
-    }
-}
-
-impl TraceOutputSpec {
-    /// Validate that the format and destination combination is valid.
-    pub fn validate(&self) -> Result<(), String> {
-        let is_otlp = self.format.is_otlp();
-        match (is_otlp, &self.destination) {
-            (true, TraceOutput::Stdout | TraceOutput::Stderr | TraceOutput::File(_)) => {
-                Err(format!(
-                    "OTLP format '{}' requires an http(s):// endpoint URL",
-                    self.format.to_possible_value().unwrap().get_name()
-                ))
-            }
-            (false, TraceOutput::Url(_)) => Err(format!(
-                "Local format '{}' requires stdout, stderr, or file:<path>",
-                self.format.to_possible_value().unwrap().get_name()
-            )),
-            _ => Ok(()),
-        }
+        // Bare destination (no recognized format prefix) — default to JSON.
+        Ok(Self::Render(TraceFormat::Json, s.parse()?))
     }
 }
 
@@ -479,7 +489,7 @@ pub struct TracingCliArgs {
         hide = true,
         help = "Legacy: use --trace-to instead."
     )]
-    pub trace_output: Option<TraceOutput>,
+    pub trace_output: Option<TraceSink>,
 
     #[arg(
         long,
@@ -530,8 +540,8 @@ pub struct CliOptions {
 
 impl TracingCliArgs {
     /// Parse `DEVENV_TRACE_TO` env var (comma-separated `[format:]destination` specs).
-    fn specs_from_env() -> Result<Vec<TraceOutputSpec>, String> {
-        let val = match std::env::var("DEVENV_TRACE_TO") {
+    fn specs_from_env() -> Result<Vec<TraceOutputSpec>, TracingArgsError> {
+        let val = match env::var("DEVENV_TRACE_TO") {
             Ok(v) if !v.is_empty() => v,
             _ => return Ok(Vec::new()),
         };
@@ -539,77 +549,37 @@ impl TracingCliArgs {
             .map(|s| {
                 s.trim()
                     .parse::<TraceOutputSpec>()
-                    .map_err(|e| format!("DEVENV_TRACE_TO: {e}"))
+                    .map_err(TracingArgsError::EnvParse)
             })
             .collect()
     }
 
-    /// Validate and merge all trace sources: `DEVENV_TRACE_TO` env var,
-    /// `--trace-to` CLI flags, and legacy `--trace-output`/`--trace-format`.
-    pub fn resolve_and_validate(&self) -> Result<Vec<TraceOutputSpec>, String> {
-        // Legacy --trace-output doesn't support URLs
-        if let Some(TraceOutput::Url(_)) = self.trace_output {
-            return Err(
-                "--trace-output does not support URLs. Use --trace-to instead.".to_string(),
-            );
-        }
-        // Legacy --trace-format doesn't support OTLP
-        if self.trace_output.is_some() && self.trace_format.is_otlp() {
-            return Err(
-                "--trace-format does not support OTLP formats. Use --trace-to instead.".to_string(),
-            );
-        }
-
+    /// Merge all trace sources: `DEVENV_TRACE_TO` env var, `--trace-to` CLI flags,
+    /// and legacy `--trace-output`/`--trace-format`.
+    ///
+    /// No validation step — specs are valid by construction (the type system
+    /// rules out incompatible format/destination combinations).
+    pub fn resolve(&self) -> Result<Vec<TraceOutputSpec>, TracingArgsError> {
         let mut specs = Self::specs_from_env()?;
 
         // CLI --trace-to flags append after env var specs
         specs.extend(self.trace_to.iter().cloned());
 
-        if let Some(ref output) = self.trace_output {
-            specs.push(TraceOutputSpec {
-                format: self.trace_format,
-                destination: output.clone(),
-            });
+        // Legacy --trace-output/--trace-format: local-only by type, no validation needed.
+        if let Some(ref sink) = self.trace_output {
+            specs.push(TraceOutputSpec::Render(self.trace_format, sink.clone()));
         }
 
-        for spec in &specs {
-            spec.validate()?;
-        }
-
-        // Reject duplicate destinations (e.g. json:stderr + pretty:stderr)
+        // Reject duplicate destinations (e.g. json:stderr + pretty:stderr).
         for (i, a) in specs.iter().enumerate() {
             for b in &specs[i + 1..] {
-                if a.destination == b.destination {
-                    return Err(format!(
-                        "duplicate trace destination '{}' (would interleave output)",
-                        a.destination
-                    ));
+                if a.same_destination(b) {
+                    return Err(TracingArgsError::DuplicateDestination { spec: a.clone() });
                 }
             }
         }
 
         Ok(specs)
-    }
-
-    /// Returns true if tracing-only mode should be used (disables TUI).
-    ///
-    /// Prefer deriving this from the resolved specs returned by
-    /// `resolve_and_validate()` to avoid double-parsing `DEVENV_TRACE_TO`.
-    /// This method remains for cases where validation hasn't run yet.
-    pub fn use_tracing_mode(&self) -> bool {
-        let env_targets_terminal = Self::specs_from_env()
-            .ok()
-            .is_some_and(|specs| specs.iter().any(|s| s.destination.targets_terminal()));
-
-        env_targets_terminal
-            || self
-                .trace_to
-                .iter()
-                .any(|s| s.destination.targets_terminal())
-            || self
-                .trace_output
-                .as_ref()
-                .is_some_and(|d| d.targets_terminal())
     }
 }
 
@@ -620,13 +590,13 @@ fn complete_task_names(current: &OsStr) -> Vec<CompletionCandidate> {
     let current_str = current.to_str().unwrap_or("");
 
     // Walk up from current directory to find .devenv directory or devenv.nix/devenv.yaml
-    let mut dir = std::env::current_dir().ok();
+    let mut dir = env::current_dir().ok();
     while let Some(d) = dir {
         let cache_path = d.join(".devenv").join("task-names.txt");
         let is_devenv_project = d.join("devenv.nix").exists() || d.join("devenv.yaml").exists();
 
         if cache_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&cache_path) {
+            if let Ok(content) = fs::read_to_string(&cache_path) {
                 return content
                     .lines()
                     .filter(|name| !name.is_empty() && name.starts_with(current_str))
@@ -700,22 +670,12 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn get_log_level(&self) -> devenv_tracing::Level {
-        if self.cli_options.verbose {
-            devenv_tracing::Level::Debug
-        } else if self.cli_options.quiet {
-            devenv_tracing::Level::Warn
-        } else {
-            devenv_tracing::Level::default()
-        }
-    }
-
-    /// Parse from `std::env::args_os()` after merging `--profile <name>` / `-P <name>`
+    /// Parse from `env::args_os()` after merging `--profile <name>` / `-P <name>`
     /// into the `=` form, so a profile whose name shadows a subcommand
     /// (e.g. `devenv --profile test test`) isn't mistaken for the subcommand by
     /// clap's `subcommand_precedence_over_arg`.
     pub fn parse_preprocessed() -> Self {
-        Self::parse_from(preprocess_profile_args(std::env::args_os()))
+        Self::parse_from(preprocess_profile_args(env::args_os()))
     }
 }
 
@@ -1130,54 +1090,60 @@ mod tests {
     #[test]
     fn trace_output_spec_bare_destination_defaults_to_json() {
         let spec: TraceOutputSpec = "stderr".parse().unwrap();
-        assert_eq!(spec.format, TraceFormat::Json);
-        assert_eq!(spec.destination, TraceOutput::Stderr);
+        assert_eq!(
+            spec,
+            TraceOutputSpec::Render(TraceFormat::Json, TraceSink::Stderr)
+        );
     }
 
     #[test]
     fn trace_output_spec_format_prefix() {
         let spec: TraceOutputSpec = "pretty:stderr".parse().unwrap();
-        assert_eq!(spec.format, TraceFormat::Pretty);
-        assert_eq!(spec.destination, TraceOutput::Stderr);
+        assert_eq!(
+            spec,
+            TraceOutputSpec::Render(TraceFormat::Pretty, TraceSink::Stderr)
+        );
     }
 
     #[test]
     fn trace_output_spec_json_file() {
         let spec: TraceOutputSpec = "json:file:/tmp/trace.json".parse().unwrap();
-        assert_eq!(spec.format, TraceFormat::Json);
         assert_eq!(
-            spec.destination,
-            TraceOutput::File(PathBuf::from("/tmp/trace.json"))
+            spec,
+            TraceOutputSpec::Render(
+                TraceFormat::Json,
+                TraceSink::File(PathBuf::from("/tmp/trace.json"))
+            )
         );
     }
 
     #[test]
     fn trace_output_spec_bare_file_destination() {
         let spec: TraceOutputSpec = "file:/tmp/trace.json".parse().unwrap();
-        assert_eq!(spec.format, TraceFormat::Json);
         assert_eq!(
-            spec.destination,
-            TraceOutput::File(PathBuf::from("/tmp/trace.json"))
+            spec,
+            TraceOutputSpec::Render(
+                TraceFormat::Json,
+                TraceSink::File(PathBuf::from("/tmp/trace.json"))
+            )
         );
     }
 
     #[test]
     fn trace_output_spec_bare_otlp() {
         let spec: TraceOutputSpec = "otlp-grpc".parse().unwrap();
-        assert_eq!(spec.format, TraceFormat::OtlpGrpc);
         assert_eq!(
-            spec.destination,
-            TraceOutput::Url("http://localhost:4317".parse().unwrap())
+            spec,
+            TraceOutputSpec::Otlp(OtlpProtocol::Grpc, "http://localhost:4317".parse().unwrap())
         );
     }
 
     #[test]
     fn trace_output_spec_otlp_with_url() {
         let spec: TraceOutputSpec = "otlp-grpc:http://collector:4317".parse().unwrap();
-        assert_eq!(spec.format, TraceFormat::OtlpGrpc);
         assert_eq!(
-            spec.destination,
-            TraceOutput::Url("http://collector:4317".parse().unwrap())
+            spec,
+            TraceOutputSpec::Otlp(OtlpProtocol::Grpc, "http://collector:4317".parse().unwrap())
         );
     }
 
@@ -1194,8 +1160,11 @@ mod tests {
             trace_output: None,
             trace_format: TraceFormat::Pretty, // should NOT affect --trace-to
         };
-        let specs = args.resolve_and_validate().unwrap();
-        assert_eq!(specs[0].format, TraceFormat::Json);
+        let specs = args.resolve().unwrap();
+        assert_eq!(
+            specs[0],
+            TraceOutputSpec::Render(TraceFormat::Json, TraceSink::Stderr)
+        );
     }
 
     #[test]
@@ -1205,52 +1174,45 @@ mod tests {
             trace_output: None,
             trace_format: TraceFormat::Json,
         };
-        let specs = args.resolve_and_validate().unwrap();
-        assert_eq!(specs[0].format, TraceFormat::Pretty);
+        let specs = args.resolve().unwrap();
+        assert_eq!(
+            specs[0],
+            TraceOutputSpec::Render(TraceFormat::Pretty, TraceSink::Stderr)
+        );
     }
 
     #[test]
     fn legacy_trace_output_uses_trace_format() {
         let args = TracingCliArgs {
             trace_to: vec![],
-            trace_output: Some(TraceOutput::Stderr),
+            trace_output: Some(TraceSink::Stderr),
             trace_format: TraceFormat::Pretty,
         };
-        let specs = args.resolve_and_validate().unwrap();
+        let specs = args.resolve().unwrap();
         assert_eq!(specs.len(), 1);
-        assert_eq!(specs[0].format, TraceFormat::Pretty);
-        assert_eq!(specs[0].destination, TraceOutput::Stderr);
+        assert_eq!(
+            specs[0],
+            TraceOutputSpec::Render(TraceFormat::Pretty, TraceSink::Stderr)
+        );
     }
 
     #[test]
     fn legacy_and_new_merge_different_destinations() {
         let args = TracingCliArgs {
             trace_to: vec!["json:file:/tmp/t.json".parse().unwrap()],
-            trace_output: Some(TraceOutput::Stderr),
+            trace_output: Some(TraceSink::Stderr),
             trace_format: TraceFormat::Pretty,
         };
-        let specs = args.resolve_and_validate().unwrap();
+        let specs = args.resolve().unwrap();
         assert_eq!(specs.len(), 2);
-        assert_eq!(specs[0].format, TraceFormat::Json);
-        assert_eq!(specs[1].format, TraceFormat::Pretty);
-    }
-
-    #[test]
-    fn trace_output_spec_validate_otlp_with_file_fails() {
-        let spec = TraceOutputSpec {
-            format: TraceFormat::OtlpGrpc,
-            destination: TraceOutput::File(PathBuf::from("/tmp/x")),
-        };
-        assert!(spec.validate().is_err());
-    }
-
-    #[test]
-    fn trace_output_spec_validate_json_with_url_fails() {
-        let spec = TraceOutputSpec {
-            format: TraceFormat::Json,
-            destination: TraceOutput::Url("http://localhost:4317".parse().unwrap()),
-        };
-        assert!(spec.validate().is_err());
+        assert!(matches!(
+            specs[0],
+            TraceOutputSpec::Render(TraceFormat::Json, _)
+        ));
+        assert!(matches!(
+            specs[1],
+            TraceOutputSpec::Render(TraceFormat::Pretty, _)
+        ));
     }
 
     #[test]
@@ -1263,19 +1225,25 @@ mod tests {
             trace_output: None,
             trace_format: TraceFormat::Json,
         };
-        let err = args.resolve_and_validate().unwrap_err();
-        assert!(err.contains("duplicate"), "{err}");
+        let err = args.resolve().unwrap_err();
+        assert!(
+            matches!(err, TracingArgsError::DuplicateDestination { .. }),
+            "{err}"
+        );
     }
 
     #[test]
     fn duplicate_destination_legacy_and_new() {
         let args = TracingCliArgs {
             trace_to: vec!["json:stderr".parse().unwrap()],
-            trace_output: Some(TraceOutput::Stderr),
+            trace_output: Some(TraceSink::Stderr),
             trace_format: TraceFormat::Pretty,
         };
-        let err = args.resolve_and_validate().unwrap_err();
-        assert!(err.contains("duplicate"), "{err}");
+        let err = args.resolve().unwrap_err();
+        assert!(
+            matches!(err, TracingArgsError::DuplicateDestination { .. }),
+            "{err}"
+        );
     }
 
     #[test]
@@ -1288,11 +1256,16 @@ mod tests {
             "pretty:stderr",
             "shell",
         ]);
-        let specs = cli.tracing_args.resolve_and_validate().unwrap();
+        let specs = cli.tracing_args.resolve().unwrap();
         assert_eq!(specs.len(), 2);
-        assert_eq!(specs[0].format, TraceFormat::Json);
-        assert_eq!(specs[1].format, TraceFormat::Pretty);
-        assert_eq!(specs[1].destination, TraceOutput::Stderr);
+        assert!(matches!(
+            specs[0],
+            TraceOutputSpec::Render(TraceFormat::Json, TraceSink::File(_))
+        ));
+        assert_eq!(
+            specs[1],
+            TraceOutputSpec::Render(TraceFormat::Pretty, TraceSink::Stderr)
+        );
     }
 
     #[test]
@@ -1305,10 +1278,12 @@ mod tests {
             "pretty",
             "shell",
         ]);
-        let specs = cli.tracing_args.resolve_and_validate().unwrap();
+        let specs = cli.tracing_args.resolve().unwrap();
         assert_eq!(specs.len(), 1);
-        assert_eq!(specs[0].format, TraceFormat::Pretty);
-        assert_eq!(specs[0].destination, TraceOutput::Stderr);
+        assert_eq!(
+            specs[0],
+            TraceOutputSpec::Render(TraceFormat::Pretty, TraceSink::Stderr)
+        );
     }
 
     #[test]
@@ -1318,12 +1293,16 @@ mod tests {
             .map(|s| s.trim().parse().unwrap())
             .collect();
         assert_eq!(specs.len(), 2);
-        assert_eq!(specs[0].format, TraceFormat::Pretty);
-        assert_eq!(specs[0].destination, TraceOutput::Stderr);
-        assert_eq!(specs[1].format, TraceFormat::Json);
         assert_eq!(
-            specs[1].destination,
-            TraceOutput::File(PathBuf::from("/tmp/t.json"))
+            specs[0],
+            TraceOutputSpec::Render(TraceFormat::Pretty, TraceSink::Stderr)
+        );
+        assert_eq!(
+            specs[1],
+            TraceOutputSpec::Render(
+                TraceFormat::Json,
+                TraceSink::File(PathBuf::from("/tmp/t.json"))
+            )
         );
     }
 
@@ -1334,8 +1313,14 @@ mod tests {
             .map(|s| s.trim().parse().unwrap())
             .collect();
         assert_eq!(specs.len(), 2);
-        assert_eq!(specs[0].format, TraceFormat::OtlpGrpc);
-        assert_eq!(specs[1].format, TraceFormat::Pretty);
+        assert!(matches!(
+            specs[0],
+            TraceOutputSpec::Otlp(OtlpProtocol::Grpc, _)
+        ));
+        assert!(matches!(
+            specs[1],
+            TraceOutputSpec::Render(TraceFormat::Pretty, TraceSink::Stderr)
+        ));
     }
 
     #[test]

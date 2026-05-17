@@ -3,7 +3,7 @@ use std::sync::Arc;
 use devenv_core::BuildOptions;
 use miette::{Result, bail, miette};
 
-use super::tasks::{self, Tasks};
+use super::tasks::Tasks;
 use super::{Devenv, ShellCommand, run_tasks};
 
 fn sanitize_container_name(name: &str) -> String {
@@ -49,7 +49,7 @@ impl Devenv {
         name: &str,
         copy_args: &[String],
         registry: Option<&str>,
-        verbosity: tasks::VerbosityLevel,
+        verbosity: devenv_core::VerbosityLevel,
     ) -> Result<()> {
         let spec = self.container_build(name).await?;
 
@@ -112,7 +112,7 @@ impl Devenv {
         &self,
         name: &str,
         copy_args: &[String],
-        verbosity: tasks::VerbosityLevel,
+        verbosity: devenv_core::VerbosityLevel,
     ) -> Result<ShellCommand> {
         self.container_copy(name, copy_args, Some("docker-daemon:"), verbosity)
             .await?;

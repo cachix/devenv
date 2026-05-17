@@ -787,3 +787,24 @@ mod tests {
         assert_eq!(sc.profile, Some("prod".into()));
     }
 }
+
+/// Process-wide output verbosity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum VerbosityLevel {
+    /// Minimal output, only errors
+    Quiet,
+    /// Standard output level
+    Normal,
+    /// Detailed output including debug information
+    Verbose,
+}
+
+impl std::fmt::Display for VerbosityLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VerbosityLevel::Quiet => write!(f, "quiet"),
+            VerbosityLevel::Normal => write!(f, "normal"),
+            VerbosityLevel::Verbose => write!(f, "verbose"),
+        }
+    }
+}

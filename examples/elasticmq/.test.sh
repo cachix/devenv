@@ -5,11 +5,9 @@ wait_for_port 9324 60
 
 curl -sf http://localhost:9324/health
 
-wait_for_port 9325 60
+QUEUE_URL=$(curl -s "http://localhost:9324/?Action=ListQueues" | grep -o '<QueueUrl>[^<]*</QueueUrl>' | sed 's/<[^>]*>//g')
 
-QUEUE_NAME=$(curl http://localhost:9325/statistics/queues -s | jq .[].name -r)
-
-if [[ "$QUEUE_NAME" != "test-queue" ]]; then
+if [[ "$QUEUE_URL" != *"/test-queue" ]]; then
   echo "The queue is not created"
   exit 1
 fi

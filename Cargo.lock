@@ -2059,6 +2059,7 @@ dependencies = [
  "console",
  "devenv-activity",
  "devenv-cache-core",
+ "devenv-core",
  "devenv-processes",
  "ignore",
  "miette",

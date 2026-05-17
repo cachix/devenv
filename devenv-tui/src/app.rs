@@ -14,7 +14,7 @@ use iocraft::prelude::*;
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::{Notify, mpsc, oneshot};
 use tokio_shutdown::Shutdown;
 use tracing::debug;
 
@@ -97,7 +97,6 @@ pub struct TuiApp {
     activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
     shutdown: Arc<Shutdown>,
     command_tx: Option<mpsc::Sender<ProcessCommand>>,
-    shutdown_on_backend_done: bool,
 }
 
 impl TuiApp {
@@ -111,7 +110,6 @@ impl TuiApp {
             activity_rx,
             shutdown,
             command_tx: None,
-            shutdown_on_backend_done: true,
         }
     }
 
@@ -152,20 +150,13 @@ impl TuiApp {
         self
     }
 
-    /// Control whether backend completion should trigger global shutdown.
-    /// Disable for shell reload handoff where the backend must keep running.
-    pub fn shutdown_on_backend_done(mut self, enabled: bool) -> Self {
-        self.shutdown_on_backend_done = enabled;
-        self
-    }
-
     /// Run the TUI application until the backend completes.
     ///
-    /// The `backend_done` notify signals when the backend has completed its
-    /// initial phase (or fully completed). The TUI will drain any remaining
-    /// events and then exit.
-    /// Run the TUI and return the final render height (for cursor positioning after handoff).
-    pub async fn run(self, backend_done: Arc<Notify>) -> std::io::Result<u16> {
+    /// `backend_done` resolves when the backend signals the render phase is
+    /// over — either by sending or by dropping the sender (a closed channel is
+    /// a delivered "stop"). The TUI drains remaining events and exits, then
+    /// returns the final render height for post-handoff cursor positioning.
+    pub async fn run(self, backend_done: oneshot::Receiver<()>) -> std::io::Result<u16> {
         let config = Arc::new(self.config);
         let activity_model = Arc::new(RwLock::new(ActivityModel::with_config(config.clone())));
         let notify = Arc::new(Notify::new());
@@ -175,7 +166,6 @@ impl TuiApp {
         let render_shutdown = Arc::new(Notify::new());
         let shutdown = self.shutdown;
         let command_tx = self.command_tx;
-        let shutdown_on_backend_done = self.shutdown_on_backend_done;
 
         let exit_flag = ExitFlag::new();
 
@@ -186,14 +176,12 @@ impl TuiApp {
             let activity_model = activity_model.clone();
             let notify = notify.clone();
             let render_shutdown = render_shutdown.clone();
-            let shutdown = shutdown.clone();
             let exit_flag = exit_flag.clone();
             let event_batch_size = config.event_batch_size;
             let mut activity_rx = self.activity_rx;
             async move {
                 let mut batch = Vec::with_capacity(event_batch_size);
-                let backend_notified = backend_done.notified();
-                tokio::pin!(backend_notified);
+                let mut backend_notified = backend_done;
 
                 loop {
                     tokio::select! {
@@ -203,9 +191,6 @@ impl TuiApp {
                                 exit_flag.set();
                                 notify.notify_waiters();
                                 render_shutdown.notify_waiters();
-                                if shutdown_on_backend_done {
-                                    shutdown.shutdown();
-                                }
                                 break;
                             };
 
@@ -227,7 +212,8 @@ impl TuiApp {
                         }
 
                         _ = &mut backend_notified => {
-                            // Backend is done - drain any remaining events
+                            // Backend signaled stop (sent or sender dropped) -
+                            // drain any remaining events
                             while let Ok(event) = activity_rx.try_recv() {
                                 batch.push(event);
                             }
@@ -247,10 +233,6 @@ impl TuiApp {
                             // Bypass render throttle so the exit flag is observed
                             // on the next frame instead of after another throttle tick.
                             render_shutdown.notify_waiters();
-
-                            if shutdown_on_backend_done {
-                                shutdown.shutdown();
-                            }
                             break;
                         }
                     }

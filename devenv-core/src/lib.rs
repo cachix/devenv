@@ -38,7 +38,7 @@ pub use realized::RealizedPathsObserver;
 pub use resource::{ReplayError, ReplayableResource};
 pub use settings::{
     CacheOptions, CacheSettings, InputOverrides, NixOptions, NixSettings, SecretOptions,
-    SecretSettings, ShellOptions, ShellSettings, default_system, flag,
+    SecretSettings, ShellOptions, ShellSettings, VerbosityLevel, default_system, flag,
 };
 pub use store::{GcOptions, GcStats, PathInfo, Store, StorePath};
 pub use store_settings::StoreSettings;
